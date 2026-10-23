@@ -39,8 +39,6 @@ func (a *API) createTool(c *gin.Context) {
 		return
 	}
 
-	fmt.Printf("Received tool input: %+v\n", input)
-
 	if input.Data.Attributes.Name == "" {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {

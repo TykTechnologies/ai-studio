@@ -24,6 +24,7 @@ Administrators can configure connections to different LLM providers through the 
     *   **API Key/Credentials:** Securely provide the necessary authentication credentials. Use the **Secrets Management** system (`$SECRET/YourSecretName`) for best practice.
         AI Studio and the Microgateway never read a vendor key, base URL or host from their own environment (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `HF_TOKEN`, `OLLAMA_HOST` and the like). A provider that needs a key and has none is refused rather than filled in from the host. The same applies to embedders and to Pinecone and Chroma data sources. Vertex AI is unchanged: it authenticates with the host's Google Cloud credentials.
     *   **Base URL (Optional):** Override the default API endpoint if needed (e.g., for self-hosted models or custom endpoints).
+        Since 2.3 the gateway refuses a Base URL on an internal address (a local Ollama at `http://localhost:11434`, a model server on a private IP or in the cluster) unless its host is named in `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` or `LLM_UPSTREAM_BLOCK_INTERNAL=false`, on AI Studio and on every edge. See [Outbound network policy](./proxy.md#outbound-network-policy).
 
 4.  **Model Selection:**
     *   **Allowed Models:** Specify the exact model names from the vendor that can be used via this configuration (e.g., `gpt-4-turbo`, `claude-3-opus-20240229`).

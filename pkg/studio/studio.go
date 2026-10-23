@@ -260,6 +260,7 @@ func New(opts Options) (_ *Studio, err error) {
 	if err := opts.Config.Err(); err != nil {
 		return nil, fmt.Errorf("studio: invalid configuration: %w", err)
 	}
+	applyNetguard(opts.Config)
 	if opts.HostTykConnection != nil {
 		if err := opts.HostTykConnection.Validate(); err != nil {
 			return nil, fmt.Errorf("studio: Options.HostTykConnection: %w", err)

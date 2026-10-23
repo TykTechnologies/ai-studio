@@ -19,7 +19,7 @@ func mustParseURL(t *testing.T, raw string) *url.URL {
 }
 
 func TestInternalLiteralBlockedWithoutExemption(t *testing.T) {
-	t.Setenv(EnvBlockInternal, "true")
+	setBlockInternal(t, "true")
 
 	err := ValidateUpstreamURL(mustParseURL(t, "http://10.42.1.7:8000/v1"))
 	if err == nil {
@@ -28,7 +28,7 @@ func TestInternalLiteralBlockedWithoutExemption(t *testing.T) {
 }
 
 func TestInternalHostExemptionPermitsClusterUpstream(t *testing.T) {
-	t.Setenv(EnvBlockInternal, "true")
+	setBlockInternal(t, "true")
 	t.Setenv(EnvAllowedInternalHosts, ".svc.cluster.local")
 
 	for _, raw := range []string{
@@ -42,7 +42,7 @@ func TestInternalHostExemptionPermitsClusterUpstream(t *testing.T) {
 }
 
 func TestInternalHostExemptionDoesNotMatchLookalikes(t *testing.T) {
-	t.Setenv(EnvBlockInternal, "true")
+	setBlockInternal(t, "true")
 	t.Setenv(EnvAllowedInternalHosts, ".svc.cluster.local")
 
 	// The suffix must match on a label boundary, not as a bare string suffix.
@@ -57,7 +57,7 @@ func TestInternalHostExemptionDoesNotMatchLookalikes(t *testing.T) {
 func TestInternalExemptionLeavesExternalEgressAlone(t *testing.T) {
 	// The whole point of the separate variable: naming a cluster host must not
 	// silently restrict external providers the way EnvAllowedHosts would.
-	t.Setenv(EnvBlockInternal, "true")
+	setBlockInternal(t, "true")
 	t.Setenv(EnvAllowedInternalHosts, ".svc.cluster.local")
 
 	if err := ValidateUpstreamURL(mustParseURL(t, "https://api.anthropic.com/v1/messages")); err != nil {
@@ -69,7 +69,7 @@ func TestInternalExemptionLeavesExternalEgressAlone(t *testing.T) {
 }
 
 func TestInternalExemptionOverridesGlobalAllowlist(t *testing.T) {
-	t.Setenv(EnvBlockInternal, "true")
+	setBlockInternal(t, "true")
 	t.Setenv(EnvAllowedHosts, ".anthropic.com")
 	t.Setenv(EnvAllowedInternalHosts, ".svc.cluster.local")
 
@@ -98,7 +98,7 @@ func TestDialGuardAgreesWithValidate(t *testing.T) {
 	}
 
 	t.Run("blocked without exemption", func(t *testing.T) {
-		t.Setenv(EnvBlockInternal, "true")
+		setBlockInternal(t, "true")
 
 		client := &http.Client{Transport: HTTPTransport()}
 		_, err := client.Get(upstream.URL)
@@ -108,7 +108,7 @@ func TestDialGuardAgreesWithValidate(t *testing.T) {
 	})
 
 	t.Run("permitted when the host is exempted", func(t *testing.T) {
-		t.Setenv(EnvBlockInternal, "true")
+		setBlockInternal(t, "true")
 		t.Setenv(EnvAllowedInternalHosts, "127.0.0.1")
 
 		target := "http://127.0.0.1:" + port

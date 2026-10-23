@@ -1,12 +1,15 @@
 package grpc
 
 import (
+	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
 
 // The hub resolves guardrail connection references into the edge snapshot.
@@ -56,7 +59,19 @@ func TestControlServer_SnapshotGuardrailEnvReferences(t *testing.T) {
 		assert.Contains(t, f.Config, `"endpoint":"$ENV/"`, "a refused endpoint ships as a bare $ENV/")
 		assert.NotContains(t, f.Config, "unlisted-prefixed-value", "a GUARDRAIL_ prefix is not an exemption")
 		assert.NotContains(t, f.Config, "GUARDRAIL_SNAPSHOT_KEY")
-		assert.Contains(t, f.Config, "listed-key-value", "an allowlisted variable resolves")
+		// An allowlisted variable resolves, and as a secret field travels
+		// encrypted with the edge key (vgi), never in clear.
+		assert.NotContains(t, f.Config, "listed-key-value", "a resolved secret travels in clear")
+		var cfg struct {
+			Connection          map[string]string `json:"connection"`
+			ConnectionEncrypted map[string]string `json:"connection_encrypted"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(f.Config), &cfg))
+		assert.Equal(t, secrets.RefusedCredential, cfg.Connection["key2"], "edges before 2.3 get the dud key")
+		assert.Equal(t, "listed-key-value", decryptLikeMicrogateway(t, os.Getenv("MICROGATEWAY_ENCRYPTION_KEY"), cfg.ConnectionEncrypted["key2"]))
 	}
 	require.True(t, found, "filter missing from the snapshot")
+	b, err := proto.Marshal(snapshot)
+	require.NoError(t, err)
+	assert.NotContains(t, string(b), "listed-key-value", "the serialized snapshot carries a resolved guardrail secret")
 }

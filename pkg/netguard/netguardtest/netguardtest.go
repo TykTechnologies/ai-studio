@@ -45,3 +45,27 @@ func StubLookupIP(t testing.TB, hosts map[string]string) {
 	}
 	t.Cleanup(func() { netguard.LookupIP = orig })
 }
+
+// AllowInternal turns internal-range blocking off (LLM_UPSTREAM_BLOCK_INTERNAL
+// =false) for the rest of the test, for tests whose upstreams are httptest
+// servers on 127.0.0.1. Blocking is on by default.
+func AllowInternal(t testing.TB) {
+	t.Helper()
+	prev := netguard.SetBlockInternal(false)
+	t.Cleanup(func() { netguard.SetBlockInternal(prev) })
+}
+
+// AllowInternalForPackage turns internal-range blocking off until restore is
+// called. For a TestMain whose package runs upstreams on 127.0.0.1.
+func AllowInternalForPackage() (restore func()) {
+	prev := netguard.SetBlockInternal(false)
+	return func() { netguard.SetBlockInternal(prev) }
+}
+
+// BlockInternal turns internal-range blocking on for the rest of the test,
+// for a test of the default in a package whose other tests turn it off.
+func BlockInternal(t testing.TB) {
+	t.Helper()
+	prev := netguard.SetBlockInternal(true)
+	t.Cleanup(func() { netguard.SetBlockInternal(prev) })
+}

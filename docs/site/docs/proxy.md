@@ -327,4 +327,27 @@ The behavior of the Proxy for a specific route is determined by the correspondin
 
 By centralizing LLM access through the Proxy, Tyk AI Studio provides a robust layer for security, control, and observability over AI interactions.
 
+### Outbound network policy
+
+Since 2.3, AI Studio and the Microgateway refuse outbound connections to internal network addresses by default: loopback (`localhost`, `127.0.0.0/8`, `::1`), private ranges (`10/8`, `172.16/12`, `192.168/16`, `fc00::/7`), shared address space (`100.64/10`), link-local and cloud metadata addresses (`169.254/16`, `fe80::/10`), multicast, reserved and benchmarking ranges, and IPv6 prefixes that embed an IPv4 address (NAT64, 6to4). The check runs on the address actually dialled, after DNS resolution, so a hostname that resolves to an internal address, or is re-pointed at one later, is refused too, and so is a redirect to one.
+
+| Setting | Effect |
+|---|---|
+| `LLM_UPSTREAM_BLOCK_INTERNAL` | Unset or `true`: internal addresses are refused. `false`: allowed. Any other value stops AI Studio or the Microgateway at startup. |
+| `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` | Comma-separated hosts that may be internal while blocking stays on for everything else. `.suffix` matches a domain and its subdomains (`.svc.cluster.local`). Use it for a local Ollama (`ollama`, `localhost`), an in-cluster model server or classifier. |
+| `LLM_UPSTREAM_ALLOWED_HOSTS` | Optional global allowlist: when set, every other host is refused. |
+| `ALLOW_INTERNAL_NETWORK_ACCESS` | `true` lifts every internal-address check in the process, plugin hosts included. For development only. |
+
+AI Studio and the Microgateway log a warning at startup whenever internal addresses are allowed. Each process applies its own setting: an edge refuses an internal upstream that the hub configured when blocking is on at the edge, whatever the hub's setting.
+
+**What the policy covers:**
+
+- LLM upstreams on every gateway route (`/llm/`, `/ai/`, `/anthropic/`, `/v1`, native and Bedrock routes), in AI Studio's embedded gateway and the Microgateway;
+- guardrail providers (Enterprise);
+- `tyk.makeHTTPRequest` in filter scripts (Enterprise).
+
+OCI plugin registries, their signatures and token servers, and `grpc://` plugin hosts follow the plugin host rule, which refuses internal addresses whatever `LLM_UPSTREAM_BLOCK_INTERNAL` says (see [Plugin Security](./plugins-security.md)). Webhooks and Tyk Gateway connections (Enterprise) have their own always-on URL policies.
+
+**What it does not cover yet:** Studio chat's own calls to an LLM (chat uses the vendor clients directly, not the gateway), embedders and datasource or vector store connections, tool (OpenAPI) calls, MCP servers, SSO and identity providers, SMTP, the hub-to-edge gRPC connection and marketplace index fetches. Restrict those with network policy (a Kubernetes `NetworkPolicy`, firewall rules or an egress proxy).
+
 For the metrics and traces the Proxy emits — request latency, time to first token, token usage, cost and policy blocks — see [Observability](./observability.md).

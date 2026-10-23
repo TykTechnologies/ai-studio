@@ -1,8 +1,10 @@
 // Package netguard provides SSRF safeguards for outbound requests whose
 // destination is derived from stored configuration (LLM upstream endpoints,
-// OCI registries). Enforcement is opt-in via environment variables so that
-// deployments proxying to internal LLMs (a first-class use case) keep working
-// unchanged.
+// OCI registries). Internal-range blocking is on by default (since 2.3):
+// LLM_UPSTREAM_BLOCK_INTERNAL=false turns it off, and
+// LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS exempts named hosts, for deployments
+// proxying to internal LLMs. The setting is parsed once, at startup
+// (Configure).
 //
 // Internal-range blocking is enforced at dial time, on the exact IP address
 // being connected (via net.Dialer.Control). This closes the DNS-rebinding
@@ -18,14 +20,18 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
 
 const (
-	// EnvBlockInternal ("LLM_UPSTREAM_BLOCK_INTERNAL") enables blocking of
-	// connections to internal/reserved IP ranges at dial time.
+	// EnvBlockInternal ("LLM_UPSTREAM_BLOCK_INTERNAL") controls blocking of
+	// connections to internal/reserved IP ranges at dial time. Unset or empty
+	// means true; "false" turns blocking off; any other value is a
+	// configuration error (Configure).
 	EnvBlockInternal = "LLM_UPSTREAM_BLOCK_INTERNAL"
 
 	// EnvAllowedHosts ("LLM_UPSTREAM_ALLOWED_HOSTS") is a comma-separated
@@ -60,7 +66,12 @@ const (
 // internalCIDRs covers loopback, RFC1918, shared address space (CGNAT, which
 // also holds some cloud metadata endpoints such as 100.100.100.200),
 // link-local (incl. cloud metadata endpoints), "this network",
-// unique-local and unspecified addresses.
+// unique-local and unspecified addresses, IETF protocol assignments and
+// benchmarking ranges (often routed internally), multicast, reserved and
+// broadcast addresses, deprecated site-local IPv6, and the IPv6 prefixes
+// that embed an IPv4 address (NAT64, 6to4), which on such a network reach
+// internal IPv4. IPv4-mapped IPv6 (::ffff:10.0.0.1) needs no entry:
+// net.IPNet.Contains matches it against the IPv4 ranges.
 var internalCIDRs = func() []*net.IPNet {
 	cidrs := []string{
 		"10.0.0.0/8",
@@ -70,9 +81,18 @@ var internalCIDRs = func() []*net.IPNet {
 		"127.0.0.0/8",
 		"169.254.0.0/16",
 		"0.0.0.0/8",
+		"192.0.0.0/24",
+		"198.18.0.0/15",
+		"224.0.0.0/4",
+		"240.0.0.0/4", // includes 255.255.255.255
 		"::1/128",
 		"fc00::/7",
 		"fe80::/10",
+		"fec0::/10",
+		"ff00::/8",
+		"64:ff9b::/96",
+		"64:ff9b:1::/48",
+		"2002::/16",
 		"::/128",
 	}
 	nets := make([]*net.IPNet, 0, len(cidrs))
@@ -126,9 +146,62 @@ func IsInternalIP(ip net.IP) bool {
 	return false
 }
 
+// blockInternal is LLM_UPSTREAM_BLOCK_INTERNAL as Configure parsed it. It is
+// true until then, so a process that never configures netguard blocks.
+var blockInternal atomic.Bool
+
+func init() { blockInternal.Store(true) }
+
+// ParseBlockInternal parses a LLM_UPSTREAM_BLOCK_INTERNAL value: unset or
+// empty is true, otherwise strconv.ParseBool after trimming spaces. Any other
+// value is an error, never a silent default, since it is a security setting.
+func ParseBlockInternal(v string) (bool, error) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return true, nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return false, fmt.Errorf("invalid %s %q: must be true or false", EnvBlockInternal, v)
+	}
+	return b, nil
+}
+
+// Configure reads LLM_UPSTREAM_BLOCK_INTERNAL through getenv and stores it
+// for every later check. Call it once at startup and refuse to start on an
+// error; netguard is consulted lazily from many places, so the environment is
+// not read again per request.
+func Configure(getenv func(string) string) error {
+	b, err := ParseBlockInternal(getenv(EnvBlockInternal))
+	if err != nil {
+		return err
+	}
+	blockInternal.Store(b)
+	return nil
+}
+
+// SetBlockInternal sets the stored setting directly and returns the previous
+// one. For tests (netguardtest.AllowInternal) and hosts that configure
+// netguard themselves.
+func SetBlockInternal(b bool) (previous bool) {
+	return blockInternal.Swap(b)
+}
+
+// DisabledWarning is the warning to log at startup when internal-range
+// blocking is off, naming the setting that turned it off; "" when it is on.
+func DisabledWarning() string {
+	switch {
+	case os.Getenv(EnvAllowInternal) == "true":
+		return fmt.Sprintf("%s=true: outbound connections to internal network addresses are allowed for LLM upstreams, guardrail providers, filter HTTP calls and plugin hosts. Use %s to allow named hosts instead", EnvAllowInternal, EnvAllowedInternalHosts)
+	case !blockInternal.Load():
+		return fmt.Sprintf("%s=false: outbound connections to internal network addresses are allowed for LLM upstreams, guardrail providers and filter HTTP calls. Use %s to allow named hosts instead", EnvBlockInternal, EnvAllowedInternalHosts)
+	}
+	return ""
+}
+
 // blockInternalEnabled reports whether internal-range blocking is active.
 func blockInternalEnabled() bool {
-	return os.Getenv(EnvBlockInternal) == "true" && os.Getenv(EnvAllowInternal) != "true"
+	return blockInternal.Load() && os.Getenv(EnvAllowInternal) != "true"
 }
 
 // ValidateUpstreamURL validates an outbound upstream URL against the
@@ -149,6 +222,13 @@ func blockInternalEnabled() bool {
 // This function performs no DNS resolution, so it is cheap on the request
 // path and cannot be raced against a later lookup.
 func ValidateUpstreamURL(u *url.URL) error {
+	return validateUpstreamURL(u, true)
+}
+
+// validateUpstreamURL is ValidateUpstreamURL; checkInternal false leaves the
+// internal-address decision to the dialer (the plugin transport, whose
+// PluginDialControl applies the plugin host rule instead).
+func validateUpstreamURL(u *url.URL, checkInternal bool) error {
 	if u == nil {
 		return fmt.Errorf("upstream URL is nil")
 	}
@@ -177,7 +257,7 @@ func ValidateUpstreamURL(u *url.URL) error {
 		return nil
 	}
 
-	if blockInternalEnabled() {
+	if checkInternal && blockInternalEnabled() {
 		if ip := net.ParseIP(strings.Trim(host, "[]")); ip != nil && IsInternalIP(ip) {
 			return fmt.Errorf("upstream host %q is an internal address — blocked by %s", host, EnvBlockInternal)
 		}
@@ -300,10 +380,13 @@ func HTTPTransport() *http.Transport {
 // delegating to an inner (dial-guarded) transport.
 type validatingTransport struct {
 	inner http.RoundTripper
+	// pluginHosts leaves internal addresses to the inner transport's
+	// PluginDialControl (PluginHTTPTransport).
+	pluginHosts bool
 }
 
 func (t validatingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if err := ValidateUpstreamURL(req.URL); err != nil {
+	if err := validateUpstreamURL(req.URL, !t.pluginHosts); err != nil {
 		return nil, err
 	}
 	return t.inner.RoundTrip(req)

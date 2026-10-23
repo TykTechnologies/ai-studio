@@ -277,6 +277,14 @@ type Config struct {
 	// fail open or closed. ParseConfig folds it back into OnDetect; it is
 	// never stored.
 	OnDetectExt string `json:"on_detect_ext,omitempty"`
+	// ConnectionEncrypted is the edge snapshot's carrier for secret
+	// connection values, encrypted with the edge encryption key
+	// (ConfigJSONForEdge); Connection then holds secrets.RefusedCredential
+	// for them, so an edge before v2.3 sends the provider a key it refuses
+	// rather than the ciphertext. The edge decrypts them back into
+	// Connection where it loads the config (DecryptEdgeConnection).
+	// ParseConfig drops it; it is never stored.
+	ConnectionEncrypted map[string]string `json:"connection_encrypted,omitempty"`
 }
 
 // Evidence configures what a compliance event says about the text a
@@ -368,6 +376,7 @@ func ParseConfig(raw map[string]any) (Config, error) {
 		cfg.OnDetect = cfg.OnDetectExt
 	}
 	cfg.OnDetectExt = ""
+	cfg.ConnectionEncrypted = nil
 	return cfg, nil
 }
 

@@ -94,7 +94,7 @@ func TestToolResultsScanSurvivesTheEdgeSnapshot(t *testing.T) {
 		"true":   {map[string]any{"scan": true}, true},
 		"false":  {map[string]any{"scan": false}, false},
 	} {
-		js, err := ConfigJSONForEdge(toolResultsRaw(c.tr), nil)
+		js, err := ConfigJSONForEdge(toolResultsRaw(c.tr), nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

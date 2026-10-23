@@ -38,6 +38,11 @@ data:
   {{- if .Values.config.pluginAllowedSources }}
   AI_STUDIO_PLUGIN_ALLOWED_SOURCES: {{ .Values.config.pluginAllowedSources | quote }}
   {{- end }}
+  {{- /* On unless explicitly false (boolean or string) */}}
+  LLM_UPSTREAM_BLOCK_INTERNAL: {{ ternary "false" "true" (eq (toString .Values.config.blockInternalUpstreams) "false") | quote }}
+  {{- with .Values.config.allowedInternalHosts }}
+  LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS: {{ . | quote }}
+  {{- end }}
   {{- /* Hub-Spoke: Control Plane Mode */}}
   {{- if .Values.config.gatewayMode }}
   GATEWAY_MODE: {{ .Values.config.gatewayMode | quote }}

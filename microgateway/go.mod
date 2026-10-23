@@ -2,6 +2,8 @@ module github.com/TykTechnologies/midsommar/microgateway
 
 go 1.26.6
 
+toolchain go1.26.10
+
 require github.com/stretchr/testify v1.12.1
 
 require (

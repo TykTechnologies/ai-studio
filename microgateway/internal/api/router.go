@@ -165,9 +165,9 @@ func SetupRouter(config *RouterConfig) *gin.Engine {
 
 	// Use gin.New() instead of gin.Default() to control middleware
 	// gin.Default() adds Logger and Recovery middleware automatically
-	// We only want Recovery (handles panics) - no request logging
+	// We only want Recovery (handles panics, without logging headers) - no request logging
 	router := gin.New()
-	router.Use(gin.Recovery())
+	router.Use(middleware.Recovery())
 
 	// CRITICAL: Add request ID middleware FIRST (before all other routes)
 	// This ensures ALL requests (gateway, API, health checks) get a canonical request ID

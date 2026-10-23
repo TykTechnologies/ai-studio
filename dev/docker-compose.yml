@@ -113,6 +113,10 @@ services:
       AI_STUDIO_OCI_CACHE_DIR: /app/oci-cache
       # Allow internal network access for local plugin development
       ALLOW_INTERNAL_NETWORK_ACCESS: "true"
+      # Outbound calls to internal addresses (a local Ollama, in-cluster
+      # guardrails) are blocked by default since 2.3; the dev stack opts out.
+      # See dev/.env.dev for the allow-list alternative.
+      LLM_UPSTREAM_BLOCK_INTERNAL: "false"
     depends_on:
       postgres:
         condition: service_healthy

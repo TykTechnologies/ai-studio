@@ -172,7 +172,7 @@ func PluginHTTPTransport() http.RoundTripper {
 		}
 		return guarded.DialContext(ctx, network, address)
 	}
-	return validatingTransport{inner: transport}
+	return validatingTransport{inner: transport, pluginHosts: true}
 }
 
 // proxyAddress is the "host:port" the transport dials for proxyURL.

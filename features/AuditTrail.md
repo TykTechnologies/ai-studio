@@ -131,7 +131,7 @@ Actor: `c.Get("user")` after the chain, plus `auth_method` from the context; on 
 
 Request id: inbound `X-Request-ID` (≤ 64 chars, no whitespace/quotes) or a UUID; set on the response (Go canonicalises it to `X-Request-Id`) and in the gin context as `audit_request_id`.
 
-Panics: the middleware defers a recover that records the request as `500` with `error: "panic: ..."` and then re-panics so `gin.Recovery` (registered above it) still produces the 500 response. Without this a crashed handler would leave no trace, because Recovery unwinds past the audit frame.
+Panics: the middleware defers a recover that records the request as `500` with `error: "panic: ..."` and then re-panics so the Recovery middleware (`pkg/middleware.Recovery`, registered above it; it logs the method, route, request id and panic but never the headers) still produces the 500 response. Without this a crashed handler would leave no trace, because Recovery unwinds past the audit frame.
 
 ### Service (`service.go`)
 

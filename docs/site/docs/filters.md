@@ -665,7 +665,7 @@ With `FILTER_SCRIPT_ALLOW_OS` on, every filter script can:
 Anyone who can create or edit a filter then controls the host. Leave it unset. None of the shipped configurations (quick start, development environment, Docker and package examples) set it. When it is on, AI Studio and the microgateway log a `SECURITY WARNING` at startup. Accepted values are `1`, `true`, `yes` and `on`; anything else leaves it off.
 :::
 
-`tyk.makeHTTPRequest` follows the same outbound policy as LLM upstreams: only `http` and `https`, the `LLM_UPSTREAM_ALLOWED_HOSTS` allowlist when set, and internal-address blocking at dial time when `LLM_UPSTREAM_BLOCK_INTERNAL=true` (with `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` for in-cluster classifiers). Redirects are checked against the same policy.
+`tyk.makeHTTPRequest` follows the same outbound policy as LLM upstreams: only `http` and `https`, the `LLM_UPSTREAM_ALLOWED_HOSTS` allowlist when set, and internal-address blocking at dial time, on by default since 2.3 unless `LLM_UPSTREAM_BLOCK_INTERNAL=false` (name in-cluster classifiers in `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS`). Guardrail providers follow the same policy. See [Outbound network policy](./proxy.md#outbound-network-policy). Redirects are checked against the same policy.
 
 `tyk.llm` resolves the target LLM's credential the way the gateway does, so an LLM whose key is stored as a `$SECRET/...` reference, or as an `$ENV/...` reference to a variable listed in `AI_STUDIO_ENV_REF_ALLOWLIST`, works from a script.
 

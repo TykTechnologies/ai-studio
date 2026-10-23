@@ -61,7 +61,7 @@ PLUGIN_ENV_PASSTHROUGH="GITHUB_RAG_*,SSH_KNOWN_HOSTS"
 
 ## Plugin configuration and secrets
 
-Plugin configuration is stored in AI Studio's database and sent to the plugin process in plaintext when the plugin starts (`Initialize`, `InitRequest.Config`). Every value is passed as a string; arrays and objects are JSON-encoded.
+**Plugin configuration is not a secret store.** AI Studio treats it as non-secret and does not encrypt it. It is stored in AI Studio's database, shown to administrators with plugin access in the UI and the API, carried in the configuration snapshot to every edge gateway (protected only by the connection, so the edge token alone is enough to read it) and stored in each edge's database, and sent to the plugin process in plaintext when the plugin starts (`Initialize`, `InitRequest.Config`). Every value is passed as a string; arrays and objects are JSON-encoded. Put credentials in the secret store and reference them with a top-level `$SECRET/NAME` value, as described below, or keep them out of plugin configuration altogether.
 
 **Secret references.** A top-level string value that is exactly `$SECRET/NAME` is resolved from AI Studio's secret store before it is passed to a plugin running in AI Studio (since 2.3). The database and the configuration snapshot keep the reference. A reference inside a longer string, or inside an array or object, is not resolved, and a reference that cannot be resolved is passed through unchanged (and logged).
 
