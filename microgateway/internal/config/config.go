@@ -10,6 +10,7 @@ import (
 	"time"
 
 	aiconfig "github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/caarlos0/env/v9"
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog/log"
@@ -397,6 +398,9 @@ func Load(envFile string) (*Config, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
+	if cfg.OCIPlugins.TlogPolicy == ociplugins.TlogPolicyDisabled {
+		log.Warn().Msg("OCI_PLUGINS_TLOG_POLICY=disabled: OCI plugin signatures are verified against the key only, with no transparency-log check")
+	}
 
 	return cfg, nil
 }
@@ -461,6 +465,10 @@ func (c *Config) Validate() error {
 
 	if len(c.Security.EncryptionKey) != 32 {
 		return fmt.Errorf("encryption key must be exactly 32 characters")
+	}
+
+	if err := c.OCIPlugins.validateVerification(); err != nil {
+		return err
 	}
 
 	// Validate BCrypt cost

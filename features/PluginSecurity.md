@@ -597,11 +597,38 @@ ALLOW_INTERNAL_NETWORK_ACCESS=false  # false=enforced, true=bypassed (dev only)
 AI_STUDIO_OCI_REQUIRE_SIGNATURE=false     # AI Studio default (permissive)
 OCI_PLUGINS_REQUIRE_SIGNATURE=true        # Microgateway default (strict)
 
+# Transparency-log (Rekor) policy (ENT): required | optional | disabled
+AI_STUDIO_OCI_TLOG_POLICY=required        # AI Studio (default required)
+OCI_PLUGINS_TLOG_POLICY=required          # Microgateway (default required)
+
+# Sigstore trusted root override (ENT): a trusted_root.json replacing the
+# embedded Sigstore public-good root (private Sigstore, Rekor key rotation)
+AI_STUDIO_OCI_TRUSTED_ROOT_FILE=/etc/ai-studio/trusted_root.json
+OCI_PLUGINS_TRUSTED_ROOT_FILE=/etc/microgateway/trusted_root.json
+
 # Public keys (ENT)
 OCI_PLUGINS_PUBKEY_1="-----BEGIN PUBLIC KEY-----..."
 OCI_PLUGINS_PUBKEY_CI="-----BEGIN PUBLIC KEY-----..."
 OCI_PLUGINS_PUBKEY_FILE_COSIGN=/etc/keys/cosign.pub
 ```
+
+**Transparency-log policy** (`ociplugins.OCIConfig.TlogPolicy`, read through
+`EffectiveTlogPolicy()`, which treats empty as `required`):
+
+| Policy | Meaning |
+|--------|---------|
+| `required` (default) | The signature must have a transparency-log (Rekor) entry, checked offline against the trusted root's Rekor key. Matches `cosign verify --key`. |
+| `optional` | A transparency-log entry is checked when the signature has one; a signature without one is accepted. |
+| `disabled` | Key-only verification, for air-gapped signing (`cosign sign --tlog-upload=false`). A WARN is logged once at startup. |
+
+**Trusted root** (`TrustedRootFile`): empty uses the Sigstore public-good
+trusted root embedded in the Enterprise verifier. When set, the file must be
+readable.
+
+Both settings are security settings: an unknown policy or an unreadable
+trusted-root file refuses to start (Studio: `AppConf.ConfigErrors`, checked by
+`studio.New`; gateway: `Config.Validate`), with an error naming the variable.
+So does an invalid `AI_STUDIO_OCI_REQUIRE_SIGNATURE` / `OCI_PLUGINS_REQUIRE_SIGNATURE`.
 
 ### Code Configuration
 

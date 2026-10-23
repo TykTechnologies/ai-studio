@@ -14,6 +14,8 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
+
+	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 )
 
 // cfgLog is initialized early with a console writer for config loading
@@ -1484,6 +1486,21 @@ func getOCIConfig(getenv func(string) string) (OCIConfig, error) {
 			return OCIConfig{}, fmt.Errorf("invalid AI_STUDIO_OCI_REQUIRE_SIGNATURE value %q: must be true or false", requireSigStr)
 		}
 		config.RequireSignature = requireSig
+	}
+
+	// Transparency-log policy and trusted-root override, security settings
+	// too: invalid values refuse to start.
+	tlogPolicy, err := ociplugins.ParseTlogPolicy(getenv("AI_STUDIO_OCI_TLOG_POLICY"))
+	if err != nil {
+		return OCIConfig{}, fmt.Errorf("invalid AI_STUDIO_OCI_TLOG_POLICY: %w", err)
+	}
+	config.TlogPolicy = tlogPolicy
+	config.TrustedRootFile = strings.TrimSpace(getenv("AI_STUDIO_OCI_TRUSTED_ROOT_FILE"))
+	if err := ociplugins.ValidateTrustedRootFile(config.TrustedRootFile); err != nil {
+		return OCIConfig{}, fmt.Errorf("invalid AI_STUDIO_OCI_TRUSTED_ROOT_FILE: %w", err)
+	}
+	if config.TlogPolicy == ociplugins.TlogPolicyDisabled {
+		cfgLog.Warn().Msg("AI_STUDIO_OCI_TLOG_POLICY=disabled: OCI plugin signatures are verified against the key only, with no transparency-log check")
 	}
 
 	// Network timeout

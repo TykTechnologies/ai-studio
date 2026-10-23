@@ -3,6 +3,7 @@ package config
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
@@ -62,12 +63,31 @@ type OCIPluginConfig struct {
 	// Security settings
 	RequireSignature bool `env:"OCI_PLUGINS_REQUIRE_SIGNATURE" envDefault:"true"`
 
+	// Transparency-log policy (required|optional|disabled) and Sigstore
+	// trusted-root override for signature verification
+	TlogPolicy      string `env:"OCI_PLUGINS_TLOG_POLICY" envDefault:"required"`
+	TrustedRootFile string `env:"OCI_PLUGINS_TRUSTED_ROOT_FILE"`
+
 	// Registry connection settings
 	InsecureRegistries []string `env:"OCI_PLUGINS_INSECURE_REGISTRIES" envSeparator:","`
 
 	// Garbage collection
 	GCInterval   time.Duration `env:"OCI_PLUGINS_GC_INTERVAL" envDefault:"24h"`
 	KeepVersions int          `env:"OCI_PLUGINS_KEEP_VERSIONS" envDefault:"3"`
+}
+
+// validateVerification checks the signature-verification settings and
+// normalizes the transparency-log policy.
+func (c *OCIPluginConfig) validateVerification() error {
+	policy, err := ociplugins.ParseTlogPolicy(c.TlogPolicy)
+	if err != nil {
+		return fmt.Errorf("invalid OCI_PLUGINS_TLOG_POLICY: %w", err)
+	}
+	c.TlogPolicy = policy
+	if err := ociplugins.ValidateTrustedRootFile(c.TrustedRootFile); err != nil {
+		return fmt.Errorf("invalid OCI_PLUGINS_TRUSTED_ROOT_FILE: %w", err)
+	}
+	return nil
 }
 
 // ToOCIConfig converts microgateway OCI config to the library config format
@@ -82,6 +102,8 @@ func (c *OCIPluginConfig) ToOCIConfig() *ociplugins.OCIConfig {
 		Timeout:            c.Timeout,
 		RetryAttempts:      c.RetryAttempts,
 		RequireSignature:   c.RequireSignature,
+		TlogPolicy:         c.TlogPolicy,
+		TrustedRootFile:    c.TrustedRootFile,
 		InsecureRegistries: c.InsecureRegistries,
 		GCInterval:         c.GCInterval,
 		KeepVersions:       c.KeepVersions,

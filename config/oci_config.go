@@ -20,6 +20,10 @@ type OCIConfig struct {
 	// Security settings
 	AllowedRegistries []string `env:"AI_STUDIO_OCI_ALLOWED_REGISTRIES" envSeparator:","`
 	RequireSignature  bool     `env:"AI_STUDIO_OCI_REQUIRE_SIGNATURE" envDefault:"false"` // More permissive default for AI Studio
+	// Transparency-log policy (required|optional|disabled) and Sigstore
+	// trusted-root override for signature verification
+	TlogPolicy      string `env:"AI_STUDIO_OCI_TLOG_POLICY" envDefault:"required"`
+	TrustedRootFile string `env:"AI_STUDIO_OCI_TRUSTED_ROOT_FILE"`
 
 	// Network settings
 	Timeout       time.Duration `env:"AI_STUDIO_OCI_TIMEOUT" envDefault:"30s"`
@@ -100,6 +104,22 @@ func (c *OCIConfig) Validate() error {
 		return fmt.Errorf("AI_STUDIO_OCI_KEEP_VERSIONS must be positive")
 	}
 
+	if err := c.validateVerification(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateVerification checks the signature-verification settings, which
+// must not fall back to a default when invalid.
+func (c *OCIConfig) validateVerification() error {
+	if _, err := ociplugins.ParseTlogPolicy(c.TlogPolicy); err != nil {
+		return fmt.Errorf("invalid AI_STUDIO_OCI_TLOG_POLICY: %w", err)
+	}
+	if err := ociplugins.ValidateTrustedRootFile(c.TrustedRootFile); err != nil {
+		return fmt.Errorf("invalid AI_STUDIO_OCI_TRUSTED_ROOT_FILE: %w", err)
+	}
 	return nil
 }
 
@@ -123,6 +143,8 @@ func (c *OCIConfig) ToOCILibConfig() *ociplugins.OCIConfig {
 		Timeout:            c.Timeout,
 		RetryAttempts:      c.RetryAttempts,
 		RequireSignature:   c.RequireSignature,
+		TlogPolicy:         c.TlogPolicy,
+		TrustedRootFile:    c.TrustedRootFile,
 		InsecureRegistries: c.InsecureRegistries,
 		GCInterval:         c.GCInterval,
 		KeepVersions:       c.KeepVersions,
