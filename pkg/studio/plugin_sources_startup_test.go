@@ -1,3 +1,8 @@
+//go:build !enterprise
+
+// This test starts a Studio, which an Enterprise build cannot do without a
+// licence (as in studio_test.go).
+
 package studio
 
 import (
