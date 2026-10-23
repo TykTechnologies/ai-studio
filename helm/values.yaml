@@ -181,7 +181,7 @@ microgateway:
     dbAutoMigrate: "true"
     pluginsConfigPath: "/opt/tyk-microgateway/config/analytics-pulse.yaml"
     ociPluginsCacheDir: "/var/lib/microgateway/plugins"
-    ociPluginsRequireSignature: "false"
+    ociPluginsRequireSignature: "true"
     logLevel: "info"
   # Secrets — MUST match AI Studio config values
   secrets:

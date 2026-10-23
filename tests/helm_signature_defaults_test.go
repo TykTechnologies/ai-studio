@@ -36,7 +36,6 @@ func readValues(t *testing.T, path string) map[string]any {
 }
 
 func TestHelmDefaultsRequireOCISignatures(t *testing.T) {
-	t.Skip("fails until midsommar-clean-c1g.28 is fixed (gateway chart defaults to false); remove this skip with the fix")
 	umbrella := readValues(t, "../helm/values.yaml")
 	require.Equal(t, "true", lookup(t, umbrella, "config", "ociRequireSignature"), "Studio")
 	require.Equal(t, "true", lookup(t, umbrella, "microgateway", "config", "ociPluginsRequireSignature"),

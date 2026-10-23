@@ -159,7 +159,7 @@ config:
   # Plugins
   pluginsConfigPath: "/opt/tyk-microgateway/config/analytics-pulse.yaml"
   ociPluginsCacheDir: "/var/lib/microgateway/plugins"
-  ociPluginsRequireSignature: "false"
+  ociPluginsRequireSignature: "true"
 
   # Upstream network policy. Turn blockInternalUpstreams on to stop LLM configs
   # reaching cluster-internal or link-local addresses, then name the exceptions
