@@ -299,7 +299,7 @@ func (a *API) createPlugin(c *gin.Context) {
 		return
 	}
 
-	if !a.requireAdminForInternalHost(c, &req.AllowInternalHost, false) {
+	if _, ok := allowInternalHostUpdate(c, false, &req.AllowInternalHost); !ok {
 		return
 	}
 	// Perform API-level security validation on the command field
@@ -541,7 +541,7 @@ func (a *API) updatePlugin(c *gin.Context) {
 	if !requireSecretReadForReferences(c, originalPlugin.Config, req.Config) {
 		return
 	}
-	if !a.requireAdminForInternalHost(c, req.AllowInternalHost, originalPlugin.AllowInternalHost) {
+	if _, ok := allowInternalHostUpdate(c, originalPlugin.AllowInternalHost, req.AllowInternalHost); !ok {
 		return
 	}
 	allowInternalHost := originalPlugin.AllowInternalHost
@@ -1250,7 +1250,7 @@ func (a *API) createOCIPlugin(c *gin.Context) {
 	if !requireSecretReadForReferences(c, nil, req.Config) {
 		return
 	}
-	if !a.requireAdminForInternalHost(c, &req.AllowInternalHost, false) {
+	if _, ok := allowInternalHostUpdate(c, false, &req.AllowInternalHost); !ok {
 		return
 	}
 

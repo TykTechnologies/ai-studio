@@ -2759,7 +2759,7 @@ func (p *Proxy) getParsedOpenAPISpec(toolModel *models.Tool) (*universalclient.C
 			return nil, nil, fmt.Errorf("failed to decode Base64 OpenAPI spec: %w", err)
 		}
 
-		client, err := universalclient.NewClient(decodedSpec, "")
+		client, err := universalclient.NewClient(decodedSpec, "", universalclient.WithAllowInternalHost(toolModel.AllowInternalHost))
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create universalclient: %w", err)
 		}
@@ -2773,7 +2773,7 @@ func (p *Proxy) getParsedOpenAPISpec(toolModel *models.Tool) (*universalclient.C
 		return nil, nil, fmt.Errorf("failed to decode Base64 OpenAPI spec: %w", err)
 	}
 
-	client, err := universalclient.NewClient(decodedSpec, "")
+	client, err := universalclient.NewClient(decodedSpec, "", universalclient.WithAllowInternalHost(toolModel.AllowInternalHost))
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create universalclient: %w", err)
 	}

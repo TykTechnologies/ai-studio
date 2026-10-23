@@ -56,6 +56,11 @@ func (a *API) createDatasource(c *gin.Context) {
 		return
 	}
 
+	allowInternal, ok := allowInternalHostUpdate(c, false, input.Data.Attributes.AllowInternalHost)
+	if !ok {
+		return
+	}
+
 	// Creating a datasource already active is the publish action, and needs
 	// every "required to publish" metadata field.
 	if !a.requirePublishToCreateLive(c, "datasources", input.Data.Attributes.Active) {
@@ -104,6 +109,10 @@ func (a *API) createDatasource(c *gin.Context) {
 	if err == nil && input.Data.Attributes.TracingContentModeMax != nil {
 		err = a.service.SetDatasourceTracingContentModeMax(datasource.ID, *input.Data.Attributes.TracingContentModeMax)
 		datasource.TracingContentModeMax = *input.Data.Attributes.TracingContentModeMax
+	}
+	if err == nil && allowInternal {
+		err = a.service.SetDatasourceAllowInternalHost(datasource.ID, true)
+		datasource.AllowInternalHost = true
 	}
 	if err != nil {
 		status := datasourceWriteStatus(err)
@@ -257,6 +266,25 @@ func (a *API) updateDatasource(c *gin.Context) {
 
 	if !a.requireTracingWrite(c, tracingCapChanged(input.Data.Attributes.TracingContentModeMax, existingDS.TracingContentModeMax)) {
 		return
+	}
+	allowInternal, ok := allowInternalHostUpdate(c, existingDS.AllowInternalHost, input.Data.Attributes.AllowInternalHost)
+	if !ok {
+		return
+	}
+
+	// Written first: UpdateDatasource reloads and saves the row, so its
+	// change event already carries the switch.
+	if allowInternal != existingDS.AllowInternalHost {
+		if err := a.service.SetDatasourceAllowInternalHost(uint(id), allowInternal); err != nil {
+			status := datasourceWriteStatus(err)
+			c.JSON(status, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: http.StatusText(status), Detail: err.Error()}},
+			})
+			return
+		}
 	}
 
 	// Written first: UpdateDatasource reloads and saves the row, so its
@@ -717,6 +745,9 @@ func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
 			Files            []FileStoreResponse `json:"files"`
 			// Agent tracing content mode cap (Enterprise); "" is no cap.
 			TracingContentModeMax string `json:"tracing_content_mode_max"`
+			// AllowInternalHost: the datasource's own host may be an
+			// internal address (an administrator's switch).
+			AllowInternalHost bool `json:"allow_internal_host"`
 		}{
 			Name:             datasource.Name,
 			ShortDescription: datasource.ShortDescription,
@@ -742,6 +773,7 @@ func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
 			Namespace:        datasource.Namespace,
 			Files:            serializeFileStores(datasource.Files),
 			TracingContentModeMax: datasource.TracingContentModeMax,
+			AllowInternalHost:     datasource.AllowInternalHost,
 		},
 	}
 }

@@ -3,6 +3,7 @@ package qdrant
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/url"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/embeddings"
@@ -16,6 +17,9 @@ type Store struct {
 	qdrantURL      url.URL
 	apiKey         string
 	contentKey     string
+	// Tyk: httpClient makes the REST calls (WithHTTPClient); nil is the
+	// package's default client.
+	httpClient *http.Client
 }
 
 var _ vectorstores.VectorStore = Store{}

@@ -987,7 +987,7 @@ const LLMForm = () => {
                   <AllowInternalHostSwitch
                     checked={llm.allow_internal_host}
                     onChange={(v) => setLLM((prev) => ({ ...prev, allow_internal_host: v }))}
-                    hostLabel="LLM's endpoint (and its linked embedders)"
+                    target="the LLM's endpoint (and its linked embedders)"
                   />
                 </Grid>
               </Grid>

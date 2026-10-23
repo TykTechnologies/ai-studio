@@ -647,7 +647,7 @@ func (cs *ChatSession) prepareTools() ([]llms.Tool, error) {
 
 		switch t.ToolType {
 		case models.ToolTypeREST:
-			opts := []universalclient.ClientOption{}
+			opts := []universalclient.ClientOption{universalclient.WithAllowInternalHost(t.AllowInternalHost)}
 			if t.AuthKey != "" {
 				// API Key only at the moment
 				schemaName := t.AuthSchemaName
@@ -1725,7 +1725,7 @@ func (cs *ChatSession) executeRESTToolCall(ctx context.Context, t llms.ToolCall,
 	)
 	defer span.End()
 
-	opts := make([]universalclient.ClientOption, 0)
+	opts := []universalclient.ClientOption{universalclient.WithAllowInternalHost(toolDef.AllowInternalHost)}
 	// The tool is loaded with its secret references kept (they are what API
 	// responses show); the call resolves them, here and only here.
 	if authKey := secrets.GetValue(toolDef.AuthKey, false); authKey != "" {

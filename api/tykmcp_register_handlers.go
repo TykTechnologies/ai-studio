@@ -74,6 +74,9 @@ func (a *API) discoverMCPServerTools(c *gin.Context) {
 		webhookBadRequest(c, "upstream_url is required")
 		return
 	}
+	if _, ok := allowInternalHostUpdate(c, false, &in.AllowInternalHost); !ok {
+		return
+	}
 	res, err := a.tykMCPService().DiscoverUpstreamTools(c.Request.Context(), in)
 	if err != nil {
 		tykMCPErrorResponse(c, err, "Failed to list the MCP server's tools")

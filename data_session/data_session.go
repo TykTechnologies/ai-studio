@@ -11,14 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
 	"github.com/go-openapi/strfmt"
 	"github.com/google/uuid"
 	pgvectorDriver "github.com/pgvector/pgvector-go"
 	pineconeSDK "github.com/pinecone-io/go-pinecone/pinecone"
 	redis "github.com/redis/go-redis/v9"
 	weaviateSDK "github.com/weaviate/weaviate-go-client/v5/weaviate"
-	"github.com/weaviate/weaviate-go-client/v5/weaviate/auth"
 	"github.com/weaviate/weaviate-go-client/v5/weaviate/graphql"
 	weaviateModels "github.com/weaviate/weaviate/entities/models"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -344,7 +342,9 @@ func (ds *DataSession) getStore(d *models.Datasource, embedder *embeddings.Embed
 			pinecone.WithHost(d.DBConnString),
 			pinecone.WithEmbedder(embedder),
 			pinecone.WithAPIKey(d.DBConnAPIKey),
-			pinecone.WithNameSpace(d.DBName))
+			pinecone.WithNameSpace(d.DBName),
+			pinecone.WithHTTPClient(httpClient(d)),
+			pinecone.WithGRPCDialOptions(grpcDialer(d)))
 
 	case VECTOR_PGVECTOR:
 		store, err = pgvector.New(
@@ -352,6 +352,7 @@ func (ds *DataSession) getStore(d *models.Datasource, embedder *embeddings.Embed
 			pgvector.WithConnectionURL(d.DBConnString),
 			pgvector.WithEmbedder(embedder),
 			pgvector.WithCollectionName(d.DBName),
+			pgvector.WithDialFunc(exemption(d).DialContext),
 		)
 
 	case VECTOR_CHROMA:
@@ -362,6 +363,7 @@ func (ds *DataSession) getStore(d *models.Datasource, embedder *embeddings.Embed
 			redisvector.WithConnectionURL(d.DBConnString),
 			redisvector.WithEmbedder(embedder),
 			redisvector.WithIndexName(d.DBName, false),
+			redisvector.WithDialFn(rueidisDial(d)),
 		)
 
 	case VECTOR_QDRANT:
@@ -375,6 +377,7 @@ func (ds *DataSession) getStore(d *models.Datasource, embedder *embeddings.Embed
 			qdrant.WithCollectionName(d.DBName),
 			qdrant.WithEmbedder(embedder),
 			qdrant.WithURL(*url),
+			qdrant.WithHTTPClient(httpClient(d)),
 		)
 
 	case VECTOR_WEAVIATE:
@@ -398,6 +401,7 @@ func (ds *DataSession) getStore(d *models.Datasource, embedder *embeddings.Embed
 			weaviate.WithNameSpace(namespace),
 			weaviate.WithScheme(url.Scheme),
 			weaviate.WithIndexName(indexName),
+			weaviate.WithHTTPClient(httpClient(d)),
 		)
 
 	default:
@@ -466,9 +470,7 @@ func (ds *DataSession) StoreDocumentsWithVectors(dsID uint, contents []string, v
 
 func (ds *DataSession) storeToPinecone(ctx context.Context, store vectorstores.VectorStore, d *models.Datasource, contents []string, vectors [][]float32, metadatas []map[string]any) error {
 	// Create Pinecone client directly
-	pc, err := pineconeSDK.NewClient(pineconeSDK.NewClientParams{
-		ApiKey: d.DBConnAPIKey,
-	})
+	pc, err := pineconeClient(d)
 	if err != nil {
 		return fmt.Errorf("failed to create pinecone client: %w", err)
 	}
@@ -488,7 +490,7 @@ func (ds *DataSession) storeToPinecone(ctx context.Context, store vectorstores.V
 	indexName := hostParts[0]
 
 	// Get index connection
-	idx, err := pc.Index(pineconeSDK.NewIndexConnParams{Host: d.DBConnString})
+	idx, err := pc.Index(pineconeSDK.NewIndexConnParams{Host: d.DBConnString}, grpcDialer(d))
 	if err != nil {
 		return fmt.Errorf("failed to connect to pinecone index: %w", err)
 	}
@@ -546,7 +548,7 @@ func (ds *DataSession) storeToQdrant(ctx context.Context, store vectorstores.Vec
 func (ds *DataSession) storeToPGVector(ctx context.Context, store vectorstores.VectorStore, d *models.Datasource, contents []string, vectors [][]float32, metadatas []map[string]any) error {
 	// Get the underlying database connection from the pgvector store
 	// Since langchaingo doesn't expose it, we need to create our own connection
-	db, err := gorm.Open(postgres.Open(d.DBConnString), &gorm.Config{})
+	db, err := openPostgres(d)
 	if err != nil {
 		return fmt.Errorf("failed to connect to postgres: %w", err)
 	}
@@ -594,6 +596,7 @@ func (ds *DataSession) storeToRedis(ctx context.Context, store vectorstores.Vect
 	if err != nil {
 		return fmt.Errorf("failed to parse redis URL: %w", err)
 	}
+	redisDialer(d, opt)
 
 	client := redis.NewClient(opt)
 	defer client.Close()
@@ -655,13 +658,7 @@ func (ds *DataSession) storeToWeaviate(ctx context.Context, store vectorstores.V
 	}
 
 	// Create Weaviate client
-	cfg := weaviateSDK.Config{
-		Host:   parsedURL.Host,
-		Scheme: parsedURL.Scheme,
-	}
-	if d.DBConnAPIKey != "" {
-		cfg.AuthConfig = auth.ApiKey{Value: d.DBConnAPIKey}
-	}
+	cfg := weaviateConfig(d, parsedURL)
 
 	client, err := weaviateSDK.NewClient(cfg)
 	if err != nil {
@@ -718,15 +715,13 @@ func (ds *DataSession) storeToWeaviate(ctx context.Context, store vectorstores.V
 
 func (ds *DataSession) searchPineconeByVector(ctx context.Context, d *models.Datasource, vector []float32, topK int) ([]schema.Document, error) {
 	// Create Pinecone client
-	pc, err := pineconeSDK.NewClient(pineconeSDK.NewClientParams{
-		ApiKey: d.DBConnAPIKey,
-	})
+	pc, err := pineconeClient(d)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create pinecone client: %w", err)
 	}
 
 	// Get index connection
-	idx, err := pc.Index(pineconeSDK.NewIndexConnParams{Host: d.DBConnString})
+	idx, err := pc.Index(pineconeSDK.NewIndexConnParams{Host: d.DBConnString}, grpcDialer(d))
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to pinecone index: %w", err)
 	}
@@ -780,7 +775,7 @@ func (ds *DataSession) searchQdrantByVector(ctx context.Context, d *models.Datas
 
 func (ds *DataSession) searchPGVectorByVector(ctx context.Context, d *models.Datasource, vector []float32, topK int) ([]schema.Document, error) {
 	// Connect to PostgreSQL
-	db, err := gorm.Open(postgres.Open(d.DBConnString), &gorm.Config{})
+	db, err := openPostgres(d)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to postgres: %w", err)
 	}
@@ -848,13 +843,7 @@ func (ds *DataSession) searchWeaviateByVector(ctx context.Context, d *models.Dat
 	}
 
 	// Create client
-	cfg := weaviateSDK.Config{
-		Host:   parsedURL.Host,
-		Scheme: parsedURL.Scheme,
-	}
-	if d.DBConnAPIKey != "" {
-		cfg.AuthConfig = auth.ApiKey{Value: d.DBConnAPIKey}
-	}
+	cfg := weaviateConfig(d, parsedURL)
 
 	client, err := weaviateSDK.NewClient(cfg)
 	if err != nil {

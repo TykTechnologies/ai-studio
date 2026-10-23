@@ -99,7 +99,7 @@ func (a *API) createEmbedder(c *gin.Context) {
 	if !requireSecretReadForCredentials(c, nil, embedderCredentialFields(e)) {
 		return
 	}
-	if !a.requireAdminForInternalHost(c, input.Data.Attributes.AllowInternalHost, false) {
+	if _, ok := allowInternalHostUpdate(c, false, input.Data.Attributes.AllowInternalHost); !ok {
 		return
 	}
 	if allow, ok := internalHostRequested(input.Data.Attributes.AllowInternalHost); ok {
@@ -175,7 +175,7 @@ func (a *API) updateEmbedder(c *gin.Context) {
 	if !requireSecretReadForCredentials(c, embedderCredentialFields(current), embedderCredentialFields(changes)) {
 		return
 	}
-	if !a.requireAdminForInternalHost(c, input.Data.Attributes.AllowInternalHost, current.AllowInternalHost) {
+	if _, ok := allowInternalHostUpdate(c, current.AllowInternalHost, input.Data.Attributes.AllowInternalHost); !ok {
 		return
 	}
 	changes.AllowInternalHost = current.AllowInternalHost

@@ -128,8 +128,7 @@ const Step1BasicInfo = ({ data, onComplete, onBack, loading, disabled }) => {
           <AllowInternalHostSwitch
             checked={formData.allowInternalHost}
             onChange={(v) => setFormData((prev) => ({ ...prev, allowInternalHost: v }))}
-            hostLabel="plugin's registry or gRPC host"
-            disabled={disabled}
+            target="the plugin's registry or gRPC host"
           />
         </Grid>
       </Grid>

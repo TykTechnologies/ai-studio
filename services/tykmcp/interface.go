@@ -366,6 +366,10 @@ type DiscoverToolsInput struct {
 	UpstreamURL            string `json:"upstream_url"`
 	UpstreamAuthHeaderName string `json:"upstream_auth_header_name"`
 	UpstreamAuthToken      string `json:"upstream_auth_token"`
+	// AllowInternalHost lets this call reach the upstream on an internal
+	// address (its host only), as the server's "Allow internal host"
+	// switch does. Administrators only (w4e).
+	AllowInternalHost bool `json:"allow_internal_host"`
 }
 
 // DiscoverToolsResult is what the upstream server reported in tools/list.

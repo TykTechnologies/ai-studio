@@ -53,7 +53,7 @@ func (a *API) createLLM(c *gin.Context) {
 	if !a.requireTracingWrite(c, input.Data.Attributes.TracingContentModeMax != "" || input.Data.Attributes.TracingPropagationOptOut) {
 		return
 	}
-	if !a.requireAdminForInternalHost(c, input.Data.Attributes.AllowInternalHost, false) {
+	if _, ok := allowInternalHostUpdate(c, false, input.Data.Attributes.AllowInternalHost); !ok {
 		return
 	}
 	llmOpts := []services.LLMOption{
@@ -256,7 +256,7 @@ func (a *API) updateLLM(c *gin.Context) {
 		input.Data.Attributes.TracingPropagationOptOut != thisLLM.TracingPropagationOptOut) {
 		return
 	}
-	if !a.requireAdminForInternalHost(c, input.Data.Attributes.AllowInternalHost, thisLLM.AllowInternalHost) {
+	if _, ok := allowInternalHostUpdate(c, thisLLM.AllowInternalHost, input.Data.Attributes.AllowInternalHost); !ok {
 		return
 	}
 	llmOpts := []services.LLMOption{

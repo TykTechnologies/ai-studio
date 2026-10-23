@@ -109,6 +109,7 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 				Namespace        string   `json:"namespace"`
 				TracingContentModeMax *string `json:"tracing_content_mode_max,omitempty"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
+				AllowInternalHost *bool `json:"allow_internal_host,omitempty"`
 			} `json:"attributes"`
 		}{
 			Type: "datasources",
@@ -134,6 +135,7 @@ func TestDatasourceWithSecretReference(t *testing.T) {
 				Namespace        string   `json:"namespace"`
 				TracingContentModeMax *string `json:"tracing_content_mode_max,omitempty"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
+				AllowInternalHost *bool `json:"allow_internal_host,omitempty"`
 			}{
 				Name:             "Test Datasource",
 				ShortDescription: "Test datasource with secret refs",

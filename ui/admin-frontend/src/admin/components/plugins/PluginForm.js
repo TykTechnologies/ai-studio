@@ -574,7 +574,7 @@ const PluginForm = ({ mode = 'create' }) => {
               <AllowInternalHostSwitch
                 checked={formData.allowInternalHost}
                 onChange={(v) => setFormData((prev) => ({ ...prev, allowInternalHost: v }))}
-                hostLabel="plugin's registry or gRPC host"
+                target="the plugin's registry or gRPC host"
               />
             </Grid>
             <Grid item xs={12}>

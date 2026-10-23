@@ -5,6 +5,7 @@ package chroma
 import (
 	"errors"
 	"fmt"
+	"net/http"
 
 	lcembeddings "github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/embeddings"
 	chromav2 "github.com/amikos-tech/chroma-go/pkg/api/v2"
@@ -30,6 +31,14 @@ type Option func(p *Store)
 func WithNameSpace(nameSpace string) Option {
 	return func(p *Store) {
 		p.nameSpace = nameSpace
+	}
+}
+
+// WithHTTPClient sets the client of the API calls (Tyk: an outbound network
+// policy).
+func WithHTTPClient(c *http.Client) Option {
+	return func(p *Store) {
+		p.httpClient = c
 	}
 }
 

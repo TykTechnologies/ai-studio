@@ -3,9 +3,11 @@ package pinecone
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/embeddings"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -18,6 +20,22 @@ var ErrInvalidOptions = errors.New("invalid options")
 
 // Option is a function type that can be used to modify the client.
 type Option func(p *Store)
+
+// WithHTTPClient sets the client of the REST API calls (Tyk: an outbound
+// network policy).
+func WithHTTPClient(c *http.Client) Option {
+	return func(p *Store) {
+		p.httpClient = c
+	}
+}
+
+// WithGRPCDialOptions adds options to the index's gRPC connection (Tyk: a
+// context dialer applying an outbound network policy).
+func WithGRPCDialOptions(opts ...grpc.DialOption) Option {
+	return func(p *Store) {
+		p.dialOptions = append(p.dialOptions, opts...)
+	}
+}
 
 // WithHost is an option for setting the host to use. Must be set.
 func WithHost(host string) Option {

@@ -164,7 +164,7 @@ const EmbedderFormFields = ({ draft, onChange, errors = {}, llms = [], vendors =
             <AllowInternalHostSwitch
               checked={draft.allow_internal_host}
               onChange={(v) => onChange({ ...draft, allow_internal_host: v })}
-              hostLabel="embedder's endpoint"
+              target="the embedder's endpoint"
             />
           </Grid>
           <Grid item xs={12}>

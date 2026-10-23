@@ -63,6 +63,8 @@ type Store struct {
 	preDeleteCollection bool
 	vectorDimensions    int
 	hnswIndex           *HNSWIndex
+	// Tyk: dialFunc dials the connection New makes from connURL (WithDialFunc).
+	dialFunc pgconn.DialFunc
 }
 
 type HNSWIndex struct {
@@ -80,7 +82,15 @@ func New(ctx context.Context, opts ...Option) (Store, error) {
 		return Store{}, err
 	}
 	if store.conn == nil {
-		store.conn, err = pgx.Connect(ctx, store.connURL)
+		// Tyk: connect through the caller's dialer when one is set.
+		cfg, perr := pgx.ParseConfig(store.connURL)
+		if perr != nil {
+			return Store{}, perr
+		}
+		if store.dialFunc != nil {
+			cfg.DialFunc = store.dialFunc
+		}
+		store.conn, err = pgx.ConnectConfig(ctx, cfg)
 		if err != nil {
 			return Store{}, err
 		}

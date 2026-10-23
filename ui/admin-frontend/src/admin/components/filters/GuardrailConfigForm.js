@@ -419,7 +419,7 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
                 <AllowInternalHostSwitch
                   checked={!!config.allow_internal_host}
                   onChange={(v) => update({ allow_internal_host: v })}
-                  hostLabel="guardrail's endpoints"
+                  target="the guardrail's endpoints"
                 />
               </Grid>
             </Grid>

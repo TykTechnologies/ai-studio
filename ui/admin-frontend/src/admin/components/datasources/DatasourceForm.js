@@ -65,6 +65,7 @@ import { isValidPrivacyScore } from "../common/privacy/privacyLevels";
 import { P } from "../../rbac/permissions";
 import { listAll } from "../../utils/listAll";
 import { ResourceTracingSection } from "../common/TracingSettingsSection";
+import AllowInternalHostSwitch from "../common/AllowInternalHostSwitch";
 
 const SectionTitle = ({ children }) => (
   <Typography variant="h6" gutterBottom sx={{ mt: 3, mb: 2 }}>
@@ -91,6 +92,7 @@ const DatasourceForm = () => {
     user_id: "",
     namespace: "",
     tracing_content_mode_max: "", // Agent tracing content cap (Enterprise); "" = no cap
+    allow_internal_host: false, // administrators only (w4e)
   });
 
   const [users, setUsers] = useState([]);
@@ -319,6 +321,7 @@ const DatasourceForm = () => {
       db_name: datasource.db_name,
       user_id: datasource.user_id,
       namespace: datasource.namespace,
+      allow_internal_host: datasource.allow_internal_host,
       governed_metadata: governedMetadata,
     },
     { ready: !id || loaded }
@@ -652,6 +655,13 @@ const DatasourceForm = () => {
                         </InputAdornment>
                       ),
                     }}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <AllowInternalHostSwitch
+                    checked={datasource.allow_internal_host}
+                    onChange={(v) => setDatasource((prev) => ({ ...prev, allow_internal_host: v }))}
+                    target="this data source's vector store host (from its connection string)"
                   />
                 </Grid>
               </Grid>

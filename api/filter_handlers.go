@@ -61,7 +61,8 @@ func (a *API) createFilter(c *gin.Context) {
 	if !requireSecretReadForGuardrailReferences(c, nil, input.Data.Attributes.Config) {
 		return
 	}
-	if allow := guardrailAllowInternalHost(input.Data.Attributes.Config); !a.requireAdminForInternalHost(c, &allow, false) {
+	allow := guardrailAllowInternalHost(input.Data.Attributes.Config)
+	if _, ok := allowInternalHostUpdate(c, false, &allow); !ok {
 		return
 	}
 
@@ -273,12 +274,12 @@ func (a *API) updateFilter(c *gin.Context) {
 		if !requireSecretReadForGuardrailReferences(c, existing.Config, input.Data.Attributes.Config) {
 			return
 		}
-		if !a.requireAdminForInternalHost(c, &allow, guardrailAllowInternalHost(existing.Config)) {
+		if _, ok := allowInternalHostUpdate(c, guardrailAllowInternalHost(existing.Config), &allow); !ok {
 			return
 		}
 	} else if !requireSecretReadForGuardrailReferences(c, nil, input.Data.Attributes.Config) {
 		return
-	} else if !a.requireAdminForInternalHost(c, &allow, false) {
+	} else if _, ok := allowInternalHostUpdate(c, false, &allow); !ok {
 		return
 	}
 
@@ -438,7 +439,8 @@ func (a *API) testFilter(c *gin.Context) {
 		}
 		// Only an administrator may test with the "Allow internal host"
 		// switch on, as only one may save it.
-		if allow := guardrailAllowInternalHost(input.Config); !a.requireAdminForInternalHost(c, &allow, false) {
+		allow := guardrailAllowInternalHost(input.Config)
+		if _, ok := allowInternalHostUpdate(c, false, &allow); !ok {
 			return
 		}
 		// A socket endpoint is tested only when the operator allows it,
