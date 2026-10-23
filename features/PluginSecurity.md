@@ -149,9 +149,9 @@ if calculatedChecksum != plugin.Checksum {
 - API create/update (`plugin_security.ValidateCommand`, gateway `handlers/validation.go`), and the service layer (`plugin_security.CheckCommandHosts`: create, update, upgrade, management gRPC, marketplace install).
 - Load of a stored plugin (`validateCommandForLoad`), and the gateway's `createPluginClient` for `grpc://` (the host and the address it resolved to, c1g.31).
 - Every OCI client entry point: `ociplugins.CheckRegistryHost` in `FetchPlugin`, `GetPlugin` (cache hits included) and `NewRemoteRepository` (pulls, manifests, signature reads); gateway pre-fetch and pre-warm.
-- At dial time for registry requests (`netguard.PluginHTTPTransport` / `PluginDialControl`), against DNS rebinding.
+- At dial time for every OCI client connection (registry, signatures, token server) via `netguard.PluginHTTPTransport` / `PluginDialControl`, whatever `LLM_UPSTREAM_BLOCK_INTERNAL` says, against DNS rebinding.
 
-`LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` does not exempt a plugin host. `ALLOW_INTERNAL_NETWORK_ACCESS=true` (read at call time) allows every internal plugin host and also lifts `LLM_UPSTREAM_BLOCK_INTERNAL`.
+**Opt-outs**: a host named in `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` (`netguard.PluginHostExempt`) is exempt from the check and dialled unguarded (preferred). `ALLOW_INTERNAL_NETWORK_ACCESS=true` (read at call time) is platform-wide: it allows every internal plugin host and OCI registry, on every path in AI Studio and the Microgateway; it turns off `LLM_UPSTREAM_BLOCK_INTERNAL`, so LLM upstreams, guardrail provider calls (Enterprise) and script HTTP calls (Enterprise) may reach internal addresses again; and it skips the internal-address check on submitted embed URLs. `PLUGIN_BLOCK_INTERNAL_URLS` is deprecated: still accepted, it only adds refusals for literals (including `host:port` arguments).
 
 **Example**:
 ```bash
@@ -518,7 +518,7 @@ if err := pluginService.ValidatePluginChecksum(pluginID, filePath); err != nil {
 
 **Error Messages** (both editions; name the host and the setting):
 ```
-plugin host "registry.corp.internal" is an internal address, resolves to one, or does not resolve; set ALLOW_INTERNAL_NETWORK_ACCESS=true to allow internal plugin hosts and registries
+plugin host "registry.corp.internal" is an internal address, resolves to one, or does not resolve; add it to LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS to allow this host, or set ALLOW_INTERNAL_NETWORK_ACCESS=true to allow every internal host
 ```
 
 ---
@@ -757,7 +757,7 @@ When upgrading from Community Edition to Enterprise Edition:
 - **Cause**: The plugin's gRPC host or OCI registry is, or resolves to, an internal address, or does not resolve (both editions)
 - **Solution**:
   - Use a host or registry with a public address
-  - Set `ALLOW_INTERNAL_NETWORK_ACCESS=true` (allows every internal plugin host and registry)
+  - Name the host in `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS`, or set `ALLOW_INTERNAL_NETWORK_ACCESS=true` (platform-wide)
 
 **ENT: "signature verification failed ... no signatures found"**
 - **Cause**: Plugin image not signed (neither a cosign v3 bundle nor a cosign v2 `.sig` tag)

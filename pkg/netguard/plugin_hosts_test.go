@@ -60,6 +60,22 @@ func TestCheckPluginHost(t *testing.T) {
 		}
 	}
 
+	// The per-host opt-out exempts the hosts it names, and only those.
+	t.Setenv(EnvAllowedInternalHosts, "registry.corp.internal,.svc.cluster.local,10.0.0.5")
+	for host, refused := range map[string]bool{
+		"registry.corp.internal":        false,
+		"REGISTRY.corp.internal.":       false,
+		"zot.plugins.svc.cluster.local": false,
+		"10.0.0.5":                      false,
+		"10.0.0.6":                      true,
+		"other.corp.internal":           true,
+	} {
+		if err := CheckPluginHost(host); refused != (err != nil) {
+			t.Errorf("with %s set, CheckPluginHost(%q) = %v, want refused %v", EnvAllowedInternalHosts, host, err, refused)
+		}
+	}
+	t.Setenv(EnvAllowedInternalHosts, "")
+
 	t.Setenv(EnvAllowInternal, "true")
 	for _, host := range []string{"10.0.0.5", "registry.corp.internal", "unresolvable.example"} {
 		if err := CheckPluginHost(host); err != nil {
@@ -81,8 +97,24 @@ func TestPluginHTTPTransport_RefusesInternalDial(t *testing.T) {
 		t.Fatalf("dial to %s = %v, want ErrInternalPluginHost", server.URL, err)
 	}
 
-	t.Setenv(EnvAllowInternal, "true")
+	// Guarded whatever LLM_UPSTREAM_BLOCK_INTERNAL says.
+	t.Setenv(EnvBlockInternal, "false")
+	if _, err := client.Get(server.URL); !errors.Is(err, ErrInternalPluginHost) {
+		t.Fatalf("with %s=false, dial = %v, want ErrInternalPluginHost", EnvBlockInternal, err)
+	}
+
+	// A host named in LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS is dialled.
+	t.Setenv(EnvAllowedInternalHosts, "127.0.0.1")
 	resp, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatalf("with the host exempt: %v", err)
+	}
+	resp.Body.Close()
+	t.Setenv(EnvAllowedInternalHosts, "")
+	client.CloseIdleConnections()
+
+	t.Setenv(EnvAllowInternal, "true")
+	resp, err = client.Get(server.URL)
 	if err != nil {
 		t.Fatalf("with internal hosts allowed: %v", err)
 	}

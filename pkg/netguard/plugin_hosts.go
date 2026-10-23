@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"syscall"
 )
 
@@ -14,8 +15,10 @@ import (
 // follow one rule on every path, Studio and gateway: unless
 // ALLOW_INTERNAL_NETWORK_ACCESS=true, a host that is, or resolves to, an
 // internal address is refused, and so is a hostname that does not resolve.
-// Unlike the LLM upstream policy it is on by default, and
-// LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS does not exempt a plugin host from it.
+// Unlike the LLM upstream policy it is on by default. A host named in
+// LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS is exempt, the same per-host opt-out
+// LLM upstreams use, so one internal registry does not need the
+// platform-wide flag.
 
 // LookupIP resolves hostnames for the plugin host checks. A variable so tests
 // in any package can stub DNS (the plugin security services resolve through
@@ -32,7 +35,7 @@ type InternalPluginHostError struct {
 }
 
 func (e *InternalPluginHostError) Error() string {
-	return fmt.Sprintf("plugin host %q is an internal address, resolves to one, or does not resolve; set %s=true to allow internal plugin hosts and registries", e.Host, EnvAllowInternal)
+	return fmt.Sprintf("plugin host %q is an internal address, resolves to one, or does not resolve; add it to %s to allow this host, or set %s=true to allow every internal host", e.Host, EnvAllowedInternalHosts, EnvAllowInternal)
 }
 
 // Is makes errors.Is(err, ErrInternalPluginHost) true.
@@ -46,11 +49,18 @@ func PluginInternalHostsAllowed() bool {
 	return os.Getenv(EnvAllowInternal) == "true"
 }
 
+// PluginHostExempt reports whether host is named in
+// LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS (exact, or a ".suffix" entry), which
+// exempts it from the plugin host rule.
+func PluginHostExempt(host string) bool {
+	return internalHostExempt(strings.TrimSuffix(strings.ToLower(strings.Trim(host, "[]")), "."))
+}
+
 // CheckPluginHost applies the plugin host rule to host (an IP literal or a
 // hostname, without a port). No DNS lookup is made when internal hosts are
-// allowed.
+// allowed or the host is exempt.
 func CheckPluginHost(host string) error {
-	if PluginInternalHostsAllowed() {
+	if PluginInternalHostsAllowed() || PluginHostExempt(host) {
 		return nil
 	}
 	if HostIsInternal(host, lookupIP) {
@@ -86,17 +96,29 @@ func PluginDialControl(network, address string, _ syscall.RawConn) error {
 	return nil
 }
 
-// PluginHTTPTransport returns the transport for plugin registry requests: the
-// upstream URL policy (scheme, LLM_UPSTREAM_ALLOWED_HOSTS) on every request,
-// and every dial guarded by PluginDialControl. When internal plugin hosts are
-// allowed, ALLOW_INTERNAL_NETWORK_ACCESS also lifts LLM_UPSTREAM_BLOCK_INTERNAL,
-// so PluginDialControl is the only internal-range guard needed.
+// PluginHTTPTransport returns the transport for OCI client requests
+// (registry, signature and token-server connections): the upstream URL policy
+// (scheme, LLM_UPSTREAM_ALLOWED_HOSTS) on every request, and every dial
+// guarded by PluginDialControl whatever LLM_UPSTREAM_BLOCK_INTERNAL says. A
+// host named in LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS is dialled unguarded, as
+// HTTPTransport does, keyed on the name the request set out to reach. When
+// internal plugin hosts are allowed, ALLOW_INTERNAL_NETWORK_ACCESS also lifts
+// LLM_UPSTREAM_BLOCK_INTERNAL, so PluginDialControl is the only internal-range
+// guard needed.
 func PluginHTTPTransport() http.RoundTripper {
-	dialer := NewDialer()
-	dialer.Control = PluginDialControl
+	guarded := NewDialer()
+	guarded.Control = PluginDialControl
+	unguarded := newUnguardedDialer()
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
-		return dialer.DialContext(ctx, network, address)
+		host, _, err := net.SplitHostPort(address)
+		if err != nil {
+			host = address
+		}
+		if PluginHostExempt(host) {
+			return unguarded.DialContext(ctx, network, address)
+		}
+		return guarded.DialContext(ctx, network, address)
 	}
 	return validatingTransport{inner: transport}
 }

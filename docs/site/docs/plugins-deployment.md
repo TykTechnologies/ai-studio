@@ -425,9 +425,11 @@ In short, for production:
 
 ```bash
 # Refuse internal plugin hosts and OCI registries, resolved names included
-# (the default; true allows every internal plugin host and registry)
+# (the default; true is platform-wide, see the Plugin Security Model)
 ALLOW_INTERNAL_NETWORK_ACCESS=false
-# Also refuse internal addresses that the advisory check finds in host:port arguments
+# Allow one internal registry (or plugin host) by name instead
+LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS=registry.corp.internal
+# Deprecated: also refuse internal addresses in host:port arguments
 PLUGIN_BLOCK_INTERNAL_URLS=true
 # Only load OCI plugins from these registries; signatures are required by default (Enterprise Edition)
 AI_STUDIO_OCI_ALLOWED_REGISTRIES=registry.example.com

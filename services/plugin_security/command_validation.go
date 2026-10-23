@@ -76,7 +76,7 @@ func ValidateCommand(command string, securityService Service) error {
 				if securityService != nil && parsedURL.Hostname() != "" {
 					host := parsedURL.Hostname()
 					if err := securityService.ValidateGRPCHost(host); err != nil {
-						return fmt.Errorf("🔒 SECURITY: plugin host %q in %s is an internal address, resolves to one, or does not resolve; set ALLOW_INTERNAL_NETWORK_ACCESS=true to allow internal plugin hosts and registries: %w", sanitizeForLogging(host), sanitizeForLogging(command), err)
+						return fmt.Errorf("🔒 SECURITY: plugin host %q in %s is an internal address, resolves to one, or does not resolve; add it to LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS to allow this host, or set ALLOW_INTERNAL_NETWORK_ACCESS=true to allow every internal host: %w", sanitizeForLogging(host), sanitizeForLogging(command), err)
 					}
 				}
 
@@ -102,7 +102,8 @@ func ValidateCommand(command string, securityService Service) error {
 // CheckCommandHosts applies the plugin host rule (netguard.CheckPluginHost)
 // to the host of every URL in command (grpc://, oci://, http(s)://): unless
 // ALLOW_INTERNAL_NETWORK_ACCESS=true, a host that is, or resolves to, an
-// internal address, or does not resolve, is refused. It is the host check of
+// internal address, or does not resolve, is refused (a host named in
+// LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS is exempt). It is the host check of
 // ValidateCommand for paths that have no security service at hand (service
 // layer creates and upgrades).
 func CheckCommandHosts(command string) error {

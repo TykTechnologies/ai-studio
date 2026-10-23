@@ -345,12 +345,17 @@ func (pm *PluginManager) checkGRPCHost(command string, addr net.Addr) error {
 	if err != nil {
 		return fmt.Errorf("invalid gRPC address in %q: %w", command, err)
 	}
+	// A host named in LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS may resolve
+	// internally: the operator said so for this name.
+	if netguard.PluginHostExempt(host) {
+		return nil
+	}
 	if err := validator.ValidateGRPCHost(host); err != nil {
-		return fmt.Errorf("gRPC plugin host %q refused (set %s=true to allow internal plugin hosts): %w", host, netguard.EnvAllowInternal, err)
+		return fmt.Errorf("gRPC plugin host %q refused (add it to %s, or set %s=true to allow every internal host): %w", host, netguard.EnvAllowedInternalHosts, netguard.EnvAllowInternal, err)
 	}
 	if tcpAddr, ok := addr.(*net.TCPAddr); ok && tcpAddr.IP.String() != host {
 		if err := validator.ValidateGRPCHost(tcpAddr.IP.String()); err != nil {
-			return fmt.Errorf("gRPC plugin host %q resolves to a refused address (set %s=true to allow internal plugin hosts): %w", host, netguard.EnvAllowInternal, err)
+			return fmt.Errorf("gRPC plugin host %q resolves to a refused address (add it to %s, or set %s=true to allow every internal host): %w", host, netguard.EnvAllowedInternalHosts, netguard.EnvAllowInternal, err)
 		}
 	}
 	return nil

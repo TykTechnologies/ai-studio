@@ -194,7 +194,7 @@ func validatePluginCommand(command string, securityService plugin_security.Servi
 				if parsedURL.Hostname() != "" {
 					host := parsedURL.Hostname()
 					if err := securityService.ValidateGRPCHost(host); err != nil {
-						return fmt.Errorf("🔒 SECURITY: plugin host %q in %s is an internal address, resolves to one, or does not resolve; set ALLOW_INTERNAL_NETWORK_ACCESS=true to allow internal plugin hosts and registries", sanitizeStringForLogging(host), sanitizeStringForLogging(command))
+						return fmt.Errorf("🔒 SECURITY: plugin host %q in %s is an internal address, resolves to one, or does not resolve; add it to LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS to allow this host, or set ALLOW_INTERNAL_NETWORK_ACCESS=true to allow every internal host", sanitizeStringForLogging(host), sanitizeStringForLogging(command))
 					}
 				}
 

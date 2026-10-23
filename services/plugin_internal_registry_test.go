@@ -83,7 +83,15 @@ func TestOCIPaths_InternalRegistryRefused(t *testing.T) {
 
 	assert.Equal(t, requestsBefore, reg.Requests("GET", "manifests"), "no request reached the registry")
 
-	// The documented opt-out allows them again.
+	// The per-host opt-out allows the registry it names (and no other).
+	t.Setenv("LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS", "registry.corp.internal")
+	_, err = svc.PluginService.CreatePlugin(&CreatePluginRequest{Name: "exempt", Command: internalName, HookType: "post_auth"})
+	require.NoError(t, err)
+	_, err = svc.AIStudioPluginManager.LoadPlugin(cached.ID)
+	requireInternalHostError(t, err, "127.0.0.1")
+	t.Setenv("LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS", "")
+
+	// The platform-wide opt-out allows them all.
 	t.Setenv("ALLOW_INTERNAL_NETWORK_ACCESS", "true")
 	_, err = svc.PluginService.CreatePlugin(&CreatePluginRequest{Name: "new", Command: internalName, HookType: "post_auth"})
 	require.NoError(t, err)

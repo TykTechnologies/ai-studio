@@ -52,7 +52,8 @@ const (
 	// This is an additive exemption. It is consulted before EnvAllowedHosts and
 	// widens the policy only for the hosts named, so an operator can run an
 	// InferencePool-backed upstream alongside SaaS providers with egress
-	// blocking left on.
+	// blocking left on. It also exempts the hosts named from the plugin host
+	// rule (PluginHostExempt), for an internal registry or gRPC plugin.
 	EnvAllowedInternalHosts = "LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS"
 )
 

@@ -54,9 +54,18 @@ func TestCreatePluginClient_GRPCInternalIPRefusedByDefault(t *testing.T) {
 		assert.Contains(t, err.Error(), "refused", command)
 	}
 
+	// A host named in LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS is let through.
+	t.Setenv("LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS", "10.0.0.5")
+	client, err := pm.createPluginClient("grpc://10.0.0.5:50051")
+	require.NoError(t, err)
+	client.Kill()
+	_, err = pm.createPluginClient("grpc://10.0.0.6:50051")
+	require.Error(t, err)
+	t.Setenv("LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS", "")
+
 	// The development bypass lets them through.
 	t.Setenv("ALLOW_INTERNAL_NETWORK_ACCESS", "true")
-	client, err := pm.createPluginClient("grpc://10.0.0.5:50051")
+	client, err = pm.createPluginClient("grpc://10.0.0.5:50051")
 	require.NoError(t, err)
 	client.Kill()
 }

@@ -11,7 +11,8 @@ import (
 )
 
 // The plugin API refuses an OCI plugin whose registry resolves to an
-// internal address, naming the host and the setting, and accepts it with
+// internal address, naming the host and the settings, and accepts it when the
+// host is named in LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS or with
 // ALLOW_INTERNAL_NETWORK_ACCESS=true (midsommar-clean-c1g.32).
 func TestPluginAPI_InternalRegistryRefused(t *testing.T) {
 	netguardtest.StubLookupIP(t, map[string]string{"registry.corp.internal": "10.0.0.5"})
@@ -26,7 +27,15 @@ func TestPluginAPI_InternalRegistryRefused(t *testing.T) {
 	assert.Contains(t, w.Body.String(), "registry.corp.internal")
 	assert.Contains(t, w.Body.String(), "ALLOW_INTERNAL_NETWORK_ACCESS")
 
+	assert.Contains(t, w.Body.String(), "LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS")
+
+	t.Setenv("LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS", "registry.corp.internal")
+	w = performRequest(api.router, "POST", "/api/v1/plugins", create)
+	assert.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	t.Setenv("LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS", "")
+
 	t.Setenv("ALLOW_INTERNAL_NETWORK_ACCESS", "true")
+	create.Name = "corp-2"
 	w = performRequest(api.router, "POST", "/api/v1/plugins", create)
 	assert.Equal(t, http.StatusCreated, w.Code, w.Body.String())
 }

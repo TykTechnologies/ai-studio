@@ -41,7 +41,8 @@ func requireInternalHostRefused(t *testing.T, err error, host string) {
 }
 
 // Pre-fetch (the pre-warm path) refuses an OCI registry that resolves to an
-// internal address before any request is made, and allows it with
+// internal address before any request is made, and allows it when the host is
+// named in LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS or with
 // ALLOW_INTERNAL_NETWORK_ACCESS=true (midsommar-clean-c1g.32).
 func TestPreFetchOCIPlugin_InternalRegistryRefused(t *testing.T) {
 	pm, reg, loopback, internalName := internalRegistryFixture(t)
@@ -52,6 +53,12 @@ func TestPreFetchOCIPlugin_InternalRegistryRefused(t *testing.T) {
 	for _, method := range []string{"GET", "HEAD"} {
 		assert.Zero(t, reg.Requests(method, "manifests"), "%s manifests reached the registry", method)
 	}
+
+	// Exempt by name: allowed, and the dial is not guarded.
+	t.Setenv("LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS", "127.0.0.1")
+	require.NoError(t, pm.PreFetchOCIPlugin(loopback))
+	requireInternalHostRefused(t, pm.PreFetchOCIPlugin(internalName), "registry.corp.internal")
+	t.Setenv("LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS", "")
 
 	t.Setenv("ALLOW_INTERNAL_NETWORK_ACCESS", "true")
 	require.NoError(t, pm.PreFetchOCIPlugin(loopback))

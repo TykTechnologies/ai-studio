@@ -26,7 +26,10 @@ type communityService struct {
 // AllowInternalNetworkAccess config option or the
 // ALLOW_INTERNAL_NETWORK_ACCESS=true environment variable.
 func (s *communityService) ValidateGRPCHost(host string) error {
-	if s.IsInternalIP(host) && !s.allowInternalAccess() {
+	if s.allowInternalAccess() || netguard.PluginHostExempt(host) {
+		return nil // no DNS lookup for an allowed or exempt host
+	}
+	if s.IsInternalIP(host) {
 		return ErrInternalNetworkBlocked
 	}
 	return nil
