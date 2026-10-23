@@ -1982,8 +1982,20 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		}
 		if filter.IsGuardrail() {
 			// Edges have no secret store: resolve connection references here,
-			// as the LLM API keys above are.
-			configJSON, err := guardrails.ConfigJSONForEdge(filter.Config, resolveRef)
+			// as the LLM API keys above are, and send the secret ones
+			// encrypted the same way (deterministic, so the checksum is
+			// stable). One that cannot be encrypted goes out as the refused
+			// key, never in clear.
+			filterID := filter.ID
+			encrypt := func(v string) string {
+				c, err := s.encryptForMicrogateway(v)
+				if err != nil {
+					logger.Log.Error().Err(err).Uint("filter_id", filterID).Msg("Failed to encrypt guardrail connection secret - edges get a refused key")
+					return ""
+				}
+				return c
+			}
+			configJSON, err := guardrails.ConfigJSONForEdge(filter.Config, resolveRef, encrypt)
 			if err != nil {
 				logger.Log.Warn().Err(err).Uint("filter_id", filter.ID).Msg("Skipping guardrail filter with invalid config in snapshot")
 				continue

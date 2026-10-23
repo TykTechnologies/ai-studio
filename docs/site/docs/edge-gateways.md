@@ -305,10 +305,12 @@ The snapshot carries the namespace's secrets. Most are encrypted with `MICROGATE
 - LLM provider API keys, each LLM's resource-signing secrets, and from 2.3.0 the credentials in an LLM's metadata (fields whose name contains `key`, `secret` or `token`, such as a Bedrock LLM's AWS keys). Edges store them encrypted too. In the metadata itself those fields read `refused-credential-reference`, so an edge older than 2.3.0, which reads only the metadata, fails Bedrock calls instead of using another credential: upgrade edges with AI Studio;
 - tool authentication keys;
 - datasource connection strings, vector store keys and embedder API keys, including semantic router embedders;
+- from 2.3.0, guardrail provider credentials (the connection fields a provider marks secret, such as `api_key`; unknown fields count as secret). In the guardrail's configuration those fields read `refused-credential-reference`, so an edge older than 2.3.0 sends the provider a key it refuses and the guardrail's fail mode applies;
+- top-level `$SECRET/` references in the configuration of a plugin that runs on edges, resolved;
 - OAuth access tokens issued to MCP clients;
 - while agent tracing runs, the tracing fingerprint (HMAC) key.
 
-Guardrail provider credentials and plugin configuration travel without that encryption, protected only by the connection, so the token alone is enough for them. OAuth client secrets (stored as hashes) and App API tokens are not in the snapshot.
+**Plugin configuration is not treated as secret.** Apart from the resolved `$SECRET/` references above, every active plugin's configuration travels in the snapshot without that encryption, protected only by the connection, so the token alone is enough to read it. It is also stored as is in AI Studio's database and each edge's database, shown to administrators with plugin access in the UI and the API, and passed to the plugin process. Never put a literal credential in plugin configuration: store it in the secret store and reference it with a top-level `$SECRET/NAME` value (see [Plugin Security](./plugins-security.md#plugin-configuration-and-secrets)). OAuth client secrets (stored as hashes) and App API tokens are not in the snapshot.
 
 Treat the token and `MICROGATEWAY_ENCRYPTION_KEY` as secrets for the whole hub, not for one edge: give them only to edges you control, and store them like a database password.
 

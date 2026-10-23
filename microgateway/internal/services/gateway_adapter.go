@@ -644,14 +644,15 @@ func (a *GatewayServiceAdapter) GetFilterByID(id uint) (*models.Filter, error) {
 		return nil, err
 	}
 
-	return convertDatabaseFilterToModel(dbFilter), nil
+	return convertDatabaseFilterToModel(a.crypto, dbFilter), nil
 }
 
 // convertDatabaseFilterToModel maps an edge filter row onto the shared
 // models.Filter the proxy's filter chain runs. Kind and Config are what make
 // a guardrail filter a guardrail filter at the edge; an invalid Config is
 // logged and left nil, which the runner reports as a misconfigured filter.
-func convertDatabaseFilterToModel(dbFilter *database.Filter) *models.Filter {
+// crypto decrypts the guardrail's secret connection values.
+func convertDatabaseFilterToModel(crypto CryptoServiceInterface, dbFilter *database.Filter) *models.Filter {
 	f := &models.Filter{
 		ID:             dbFilter.ID,
 		Name:           dbFilter.Name,
@@ -669,7 +670,7 @@ func convertDatabaseFilterToModel(dbFilter *database.Filter) *models.Filter {
 		f.Kind = models.FilterKindScript
 	}
 	if f.Kind == models.FilterKindGuardrail {
-		f.Config = parsedGuardrailConfig(dbFilter)
+		f.Config = parsedGuardrailConfig(crypto, dbFilter)
 	}
 	return f
 }
@@ -680,15 +681,31 @@ func convertDatabaseFilterToModel(dbFilter *database.Filter) *models.Filter {
 // parse. The map is read-only downstream (the runner marshals it back out).
 // The key is the text's digest, not the filter's version: the hub resolves
 // secret references into the text on every snapshot, so a rotated secret
-// changes the text without changing the filter's UpdatedAt.
+// changes the text without changing the filter's UpdatedAt. The secret
+// connection values travel encrypted in the text (connection_encrypted) and
+// are decrypted here, as an LLM's API key is where the gateway builds it.
 const parsedConfigsMax = 1024
 
 var parsedConfigs = lrucache.New[map[string]any](parsedConfigsMax)
 
-func parsedGuardrailConfig(dbFilter *database.Filter) map[string]any {
+func parsedGuardrailConfig(crypto CryptoServiceInterface, dbFilter *database.Filter) map[string]any {
 	key := guardrails.CacheDigest([]byte(dbFilter.Config))
 	cfg, err := parsedConfigs.Do(key, func() (map[string]any, error) {
-		return guardrails.ConfigFromJSON(dbFilter.Config)
+		cfg, err := guardrails.ConfigFromJSON(dbFilter.Config)
+		if err != nil || cfg == nil {
+			return cfg, err
+		}
+		decrypt := func(c string) (string, error) {
+			if crypto == nil {
+				return "", fmt.Errorf("no decrypter")
+			}
+			return crypto.Decrypt(c)
+		}
+		if failed := guardrails.DecryptEdgeConnection(cfg, decrypt); len(failed) > 0 {
+			log.Error().Uint("filter_id", dbFilter.ID).Strs("fields", failed).
+				Msg("Failed to decrypt guardrail connection secrets - the provider gets a refused key")
+		}
+		return cfg, nil
 	})
 	if err != nil {
 		log.Error().Err(err).Uint("filter_id", dbFilter.ID).Msg("Guardrail filter config from hub is not valid JSON")
@@ -713,7 +730,7 @@ func (a *GatewayServiceAdapter) GetAllFilters(pageSize int, pageNumber int, all 
 	// Convert database filters to models
 	modelFilters := make([]models.Filter, len(dbFilters))
 	for i := range dbFilters {
-		modelFilters[i] = *convertDatabaseFilterToModel(&dbFilters[i])
+		modelFilters[i] = *convertDatabaseFilterToModel(a.crypto, &dbFilters[i])
 	}
 
 	totalPages := 1
@@ -741,7 +758,7 @@ func (a *GatewayServiceAdapter) convertDatabaseLLMToModel(dbLLM *database.LLM) m
 	// Convert associated filters
 	filters := make([]*models.Filter, len(dbLLM.Filters))
 	for i := range dbLLM.Filters {
-		filters[i] = convertDatabaseFilterToModel(&dbLLM.Filters[i])
+		filters[i] = convertDatabaseFilterToModel(a.crypto, &dbLLM.Filters[i])
 	}
 
 	// Convert allowed models from JSON
