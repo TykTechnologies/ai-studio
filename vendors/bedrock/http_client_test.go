@@ -139,3 +139,27 @@ func TestSDKHTTPClientRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "ping", string(got))
 }
+
+// An LLM whose endpoint is a plain region gets the SDK's default endpoint
+// for that region, not a BaseEndpoint of the bare region, which made every
+// call fail with "unsupported protocol scheme".
+func TestNewBedrockClientPlainRegion(t *testing.T) {
+	llm := &models.LLM{APIEndpoint: "ap-southeast-2", Metadata: models.JSONMap{
+		"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "secret"}}
+	llm.ID = 987655
+	t.Cleanup(func() { InvalidateClientCache(llm.ID) })
+	client, err := NewBedrockClient(llm)
+	require.NoError(t, err)
+	assert.Equal(t, "ap-southeast-2", client.Options().Region)
+	assert.Nil(t, client.Options().BaseEndpoint, "a plain region is not a base endpoint")
+
+	// A URL endpoint is still used as the base endpoint.
+	urlLLM := &models.LLM{APIEndpoint: "https://vpce-1.bedrock.example.com/v1", Metadata: models.JSONMap{
+		"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "secret", "aws_region": "eu-west-1"}}
+	urlLLM.ID = 987656
+	t.Cleanup(func() { InvalidateClientCache(urlLLM.ID) })
+	client, err = NewBedrockClient(urlLLM)
+	require.NoError(t, err)
+	require.NotNil(t, client.Options().BaseEndpoint)
+	assert.Equal(t, "https://vpce-1.bedrock.example.com", *client.Options().BaseEndpoint)
+}
