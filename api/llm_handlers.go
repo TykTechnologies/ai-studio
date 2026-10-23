@@ -774,25 +774,22 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 }
 
 // redactMetadataSecrets returns a copy of metadata with sensitive values redacted.
-// Keys containing "secret", "token", or "key" are redacted to "[redacted]" in API
-// responses, while showing the $SECRET/ or $ENV/ reference format if present.
+// Credential keys (models.IsCredentialMetadataKey) are redacted to "[redacted]" in
+// API responses, while showing the $SECRET/ or $ENV/ reference format if present.
 func redactMetadataSecrets(metadata models.JSONMap) map[string]interface{} {
 	if metadata == nil {
 		return nil
 	}
 	result := make(map[string]interface{}, len(metadata))
 	for k, v := range metadata {
-		if strVal, ok := v.(string); ok {
-			lk := strings.ToLower(k)
-			if strings.Contains(lk, "secret") || strings.Contains(lk, "token") || strings.Contains(lk, "key") {
-				// Show $SECRET/ references as-is, redact plain values
-				if strings.HasPrefix(strVal, "$SECRET/") || strings.HasPrefix(strVal, "$ENV/") {
-					result[k] = strVal
-				} else if strVal != "" {
-					result[k] = services.REDACTED_VALUE
-				}
-				continue
+		if strVal, ok := v.(string); ok && models.IsCredentialMetadataKey(k) {
+			// Show $SECRET/ references as-is, redact plain values
+			if _, literal := models.LLMCredentialValue(strVal); literal || strVal == models.CredentialRedacted {
+				result[k] = services.REDACTED_VALUE
+			} else if strVal != "" {
+				result[k] = strVal
 			}
+			continue
 		}
 		result[k] = v
 	}

@@ -114,6 +114,13 @@ func (m *HookManager) ExecuteHooks(
 				logger.Error(fmt.Sprintf("Failed to unmarshal modified object: plugin=%s error=%v", hookReg.PluginName, err))
 				result.Errors = append(result.Errors, fmt.Errorf("failed to unmarshal modified object: %w", err))
 			} else {
+				// The hook saw the LLM's credentials redacted: what it
+				// left redacted is unchanged, so the originals go back.
+				if modified, ok := modifiedObj.(*models.LLM); ok {
+					if current, ok := currentObject.(*models.LLM); ok {
+						models.RestoreLLMCredentials(current, modified)
+					}
+				}
 				currentObject = modifiedObj
 				result.ModifiedObject = modifiedObj
 			}
@@ -148,8 +155,8 @@ func (m *HookManager) executeHook(
 	operationID string,
 	hookType HookType,
 ) (*pb.ObjectHookResponse, error) {
-	// Serialize object to JSON
-	objectJSON, err := json.Marshal(object)
+	// Serialize object to JSON, without what plugins must not see
+	objectJSON, err := json.Marshal(m.sanitizeObject(hookReg.ObjectType, object, hookType))
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal object: %w", err)
 	}
@@ -218,17 +225,19 @@ func (m *HookManager) unmarshalObject(objectType ObjectType, jsonStr string) (in
 	}
 }
 
-// Helper function to sanitize sensitive fields before passing to hooks
+// Helper function to sanitize sensitive fields before passing to hooks.
+// An LLM's credentials are redacted for every hook (models.
+// RedactLLMCredentials, references kept); a before-hook's result gets them
+// back where it left them redacted (ExecuteHooks).
 func (m *HookManager) sanitizeObject(objectType ObjectType, object interface{}, hookType HookType) interface{} {
+	if objectType == ObjectTypeLLM {
+		if llm, ok := object.(*models.LLM); ok {
+			return models.RedactLLMCredentials(llm)
+		}
+	}
 	// For "after_*" hooks, remove sensitive fields
 	if hookType == HookAfterCreate || hookType == HookAfterUpdate || hookType == HookAfterDelete {
 		switch objectType {
-		case ObjectTypeLLM:
-			if llm, ok := object.(*models.LLM); ok {
-				sanitized := *llm
-				sanitized.APIKey = "[REDACTED]"
-				return &sanitized
-			}
 
 		case ObjectTypeDatasource:
 			if ds, ok := object.(*models.Datasource); ok {

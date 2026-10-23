@@ -760,6 +760,9 @@ func (a *GatewayServiceAdapter) convertDatabaseLLMToModel(dbLLM *database.LLM) m
 			log.Error().Err(err).Uint("llm_id", dbLLM.ID).Msg("Failed to unmarshal LLM metadata")
 		}
 	}
+	// Its credentials are stored encrypted apart; decrypt them for the
+	// vendor client
+	metadata = overlayLLMMetadataSecrets(a.crypto, dbLLM.ID, metadata, dbLLM.MetadataSecretsEncrypted)
 
 	// Convert the failover waterfall from JSON. This is what the shared proxy
 	// reads, so once it is set the edge fails over exactly as the hub does.

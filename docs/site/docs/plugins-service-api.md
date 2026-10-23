@@ -533,6 +533,8 @@ type ObjectEventPayload struct {
 }
 ```
 
+For `system.llm.*` events, the object's API key and the values of its metadata fields whose name contains `key`, `secret` or `token` (a Bedrock LLM's AWS keys) are `[redacted]` from 2.3.0; `$SECRET/` and `$ENV/` references are shown as written. The same payload is what other Studio replicas read from the cluster event log.
+
 #### Subscribing to System Events
 
 > **Topics match exactly.** The bus has no wildcard support: `Subscribe("system.app.*", ...)` never fires. Subscribe to each topic you need (`system.app.created`, `system.app.updated`, ...) or use `SubscribeAll` and filter on `ev.Topic`.

@@ -57,13 +57,10 @@ func (s *ManagementService) CreateLLM(req *CreateLLMRequest) (*database.LLM, err
 		}
 	}
 
-	// Marshal metadata
-	var metadata []byte
-	if req.Metadata != nil {
-		metadata, err = json.Marshal(req.Metadata)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal metadata: %w", err)
-		}
+	// Marshal metadata, its credentials encrypted apart
+	metadata, metadataSecrets, err := splitLLMMetadataSecrets(s.crypto, req.Metadata, nil)
+	if err != nil {
+		return nil, err
 	}
 
 	// Marshal allowed models
@@ -91,6 +88,8 @@ func (s *ManagementService) CreateLLM(req *CreateLLMRequest) (*database.LLM, err
 		RateLimitRPM:    req.RateLimitRPM,
 		Metadata:        metadata,
 		AllowedModels:   allowedModels,
+
+		MetadataSecretsEncrypted: metadataSecrets,
 	}
 
 	// Save to database
@@ -169,11 +168,14 @@ func (s *ManagementService) UpdateLLM(id uint, req *UpdateLLMRequest) (*database
 		llm.RateLimitRPM = *req.RateLimitRPM
 	}
 	if req.Metadata != nil {
-		metadata, err := json.Marshal(req.Metadata)
+		// Its credentials are encrypted apart; one sent back redacted keeps
+		// the stored value
+		metadata, metadataSecrets, err := splitLLMMetadataSecrets(s.crypto, req.Metadata, llm.MetadataSecretsEncrypted)
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal metadata: %w", err)
+			return nil, err
 		}
 		llm.Metadata = metadata
+		llm.MetadataSecretsEncrypted = metadataSecrets
 	}
 	if req.AllowedModels != nil {
 		allowedModels, err := json.Marshal(req.AllowedModels)

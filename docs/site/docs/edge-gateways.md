@@ -85,7 +85,7 @@ Any create, update, or delete operation on these objects triggers a checksum rec
 
 Two properties keep the checksum meaningful:
 
-- **Deterministic encryption.** Secrets in the snapshot (LLM API keys, tool auth keys, datasource credentials) are encrypted for the edge with AES-GCM using a nonce derived from the secret itself, so regenerating an unchanged configuration produces byte-identical ciphertext and the same checksum. A random nonce would make every regeneration look like a change.
+- **Deterministic encryption.** Secrets in the snapshot (LLM API keys and metadata credentials, tool auth keys, datasource credentials) are encrypted for the edge with AES-GCM using a nonce derived from the secret itself, so regenerating an unchanged configuration produces byte-identical ciphertext and the same checksum. A random nonce would make every regeneration look like a change.
 - **Change detection.** When a recalculation yields the same checksum the control plane leaves the namespace status and edge sync states untouched and writes no audit entry. Only a change that alters the snapshot (including governed metadata fields marked *Sent to gateways*) marks edges as pending.
 
 ### Apps and Credentials
@@ -298,7 +298,7 @@ Every edge authenticates to AI Studio with the same token: `EDGE_AUTH_TOKEN` on 
 
 The snapshot carries the namespace's secrets. Most are encrypted with `MICROGATEWAY_ENCRYPTION_KEY`, which every edge also holds, so the token plus that key decrypts them:
 
-- LLM provider API keys, and each LLM's resource-signing secrets;
+- LLM provider API keys, each LLM's resource-signing secrets, and from 2.3.0 the credentials in an LLM's metadata (fields whose name contains `key`, `secret` or `token`, such as a Bedrock LLM's AWS keys). Edges store them encrypted too. In the metadata itself those fields read `refused-credential-reference`, so an edge older than 2.3.0, which reads only the metadata, fails Bedrock calls instead of using another credential: upgrade edges with AI Studio;
 - tool authentication keys;
 - datasource connection strings, vector store keys and embedder API keys, including semantic router embedders;
 - OAuth access tokens issued to MCP clients;

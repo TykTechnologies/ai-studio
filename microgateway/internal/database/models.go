@@ -51,6 +51,12 @@ type LLM struct {
 	MonthlyBudget   float64        `json:"monthly_budget"`
 	RateLimitRPM    int            `json:"rate_limit_rpm"`
 	Metadata        JSON `gorm:"type:json" json:"metadata"`
+	// MetadataSecretsEncrypted holds the values of Metadata's credential keys
+	// (models.IsCredentialMetadataKey: Bedrock's AWS keys), encrypted like
+	// APIKeyEncrypted, as a JSON object by key. Metadata holds the
+	// refused-credential placeholder for those keys; the gateway lays these
+	// values over it (overlayLLMMetadataSecrets). NULL when there are none.
+	MetadataSecretsEncrypted JSON `gorm:"type:json" json:"-"`
 	// GovernedMetadata holds gateway-visible governed metadata from the control plane (Enterprise).
 	GovernedMetadata JSON `gorm:"type:json" json:"governed_metadata"`
 	AllowedModels   JSON `gorm:"type:json" json:"allowed_models"` // JSON array of regex patterns for allowed models

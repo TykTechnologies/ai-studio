@@ -1,6 +1,7 @@
 package models
 
 import (
+	"reflect"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -106,12 +107,24 @@ func (l *LLM) HasRequestFilters() bool {
 }
 
 // BeforeSave refuses a name whose slug another LLM already has
-// (*SlugConflictError), when the LLM itself is created or saved.
+// (*SlugConflictError), when the LLM itself is created or saved, and puts
+// its literal credentials in their stored form (encrypted with
+// TYK_AI_SECRET_KEY; AfterSave decrypts them again).
 func (l *LLM) BeforeSave(tx *gorm.DB) error {
 	if dest, ok := tx.Statement.Dest.(*LLM); !ok || dest != l {
+		// A batch save of several LLMs writes the credentials and is
+		// encrypted too; a column or map update (Update("active", ...))
+		// writes neither, and leaves the struct alone.
+		if reflect.Indirect(reflect.ValueOf(tx.Statement.Dest)).Kind() != reflect.Map {
+			encryptLLMCredentials(l)
+		}
 		return nil
 	}
-	return checkLLMSlug(hookDB(tx), l)
+	if err := checkLLMSlug(hookDB(tx), l); err != nil {
+		return err
+	}
+	encryptLLMCredentials(l)
+	return nil
 }
 
 func (l *LLM) Create(db *gorm.DB) error {

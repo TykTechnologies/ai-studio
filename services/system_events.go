@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 )
 
@@ -137,12 +138,25 @@ func (e *SystemEventEmitter) EmitObjectEvent(topic string, objectType string, ac
 
 // EmitLLMCreated emits an event when an LLM is created
 func (e *SystemEventEmitter) EmitLLMCreated(llm interface{}, objectID uint, userID uint) {
-	e.EmitObjectEvent(TopicLLMCreated, "llm", "created", objectID, userID, llm)
+	e.EmitObjectEvent(TopicLLMCreated, "llm", "created", objectID, userID, redactLLMForEvent(llm))
 }
 
 // EmitLLMUpdated emits an event when an LLM is updated
 func (e *SystemEventEmitter) EmitLLMUpdated(llm interface{}, objectID uint, userID uint) {
-	e.EmitObjectEvent(TopicLLMUpdated, "llm", "updated", objectID, userID, llm)
+	e.EmitObjectEvent(TopicLLMUpdated, "llm", "updated", objectID, userID, redactLLMForEvent(llm))
+}
+
+// redactLLMForEvent is the LLM an event carries: its credentials redacted
+// (models.RedactLLMCredentials), since the payload reaches every subscribed
+// plugin and the cluster_events table. Done here so no caller can forget.
+func redactLLMForEvent(llm interface{}) interface{} {
+	switch l := llm.(type) {
+	case *models.LLM:
+		return models.RedactLLMCredentials(l)
+	case models.LLM:
+		return models.RedactLLMCredentials(&l)
+	}
+	return llm
 }
 
 // EmitLLMDeleted emits an event when an LLM is deleted
