@@ -49,7 +49,7 @@ func TestLLMBudget_EnforcedOnEdge(t *testing.T) {
 		return services.AppBudgetData{Usage: usage, PeriodStart: start, PeriodEnd: end}
 	}
 	sync := func(seq uint64, p services.BudgetSyncPayload) {
-		p.SequenceNumber, p.BlocksIncluded = seq, true
+		p.SequenceNumber, p.BlocksIncluded, p.LLMIncluded = seq, true, true
 		ev, err := eventbridge.NewEvent(services.BudgetSyncTopic, "control", eventbridge.DirDown, p)
 		require.NoError(t, err)
 		services.NewBudgetSyncHandler(db).HandleBudgetSync(ev)

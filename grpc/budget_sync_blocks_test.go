@@ -185,6 +185,7 @@ func TestBudgetSyncService_LLMBudgets(t *testing.T) {
 		t.Fatal("no budget sync published")
 	}
 	require.True(t, p.BlocksIncluded)
+	require.True(t, p.LLMIncluded)
 	assert.InDelta(t, 0.011, p.LLMBudgets[1].Usage, 1e-9)
 	assert.InDelta(t, 1.0, p.LLMBudgets[2].Usage, 1e-9)
 	assert.NotContains(t, p.LLMBudgets, uint32(4), "an LLM without a budget is not tracked")

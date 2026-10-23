@@ -59,9 +59,12 @@ type BudgetSyncPayload struct {
 	// LLMBudgets maps llm_id to the spend of an LLM with a monthly budget
 	// in its period, across Studio and every edge; LLMBlocks maps llm_id to
 	// the reason the LLM must be refused (its budget is 0 or spent). Both
-	// come with BlocksIncluded, which makes LLMBlocks the complete set (ap6).
-	LLMBudgets map[uint32]AppBudgetData `json:"llm_budgets,omitempty"`
-	LLMBlocks  map[uint32]string        `json:"llm_blocks,omitempty"`
+	// come with LLMIncluded, which makes LLMBlocks the complete set (ap6).
+	// A control plane without LLM budgets (before 2.3, or Community) sends
+	// none of them, and the gateway's LLM blocks and spend are left alone.
+	LLMBudgets  map[uint32]AppBudgetData `json:"llm_budgets,omitempty"`
+	LLMBlocks   map[uint32]string        `json:"llm_blocks,omitempty"`
+	LLMIncluded bool                     `json:"llm_included,omitempty"`
 }
 
 // BudgetSyncTopic is re-exported from eventbridge for convenience
@@ -200,7 +203,9 @@ func (h *BudgetSyncHandler) HandleBudgetSync(event eventbridge.Event) {
 				h.blocksUnsaved = false
 			}
 		}
+	}
 
+	if payload.LLMIncluded {
 		llmBlocks := make(map[uint]string, len(payload.LLMBlocks))
 		for llmID, reason := range payload.LLMBlocks {
 			llmBlocks[uint(llmID)] = reason

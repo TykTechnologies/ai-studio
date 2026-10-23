@@ -67,8 +67,11 @@ type BudgetSyncPayload struct {
 	// LLMBlocks maps llm_id to the reason edges must refuse it: its budget
 	// is 0 or spent. Both come with BlocksIncluded, and LLMBlocks is then
 	// the complete set.
-	LLMBudgets map[uint32]AppBudgetData `json:"llm_budgets,omitempty"`
-	LLMBlocks  map[uint32]string        `json:"llm_blocks,omitempty"`
+	// LLMIncluded says the sync carries LLM budgets at all, so an edge can
+	// tell "no LLM is blocked" from a control plane that sends none.
+	LLMBudgets  map[uint32]AppBudgetData `json:"llm_budgets,omitempty"`
+	LLMBlocks   map[uint32]string        `json:"llm_blocks,omitempty"`
+	LLMIncluded bool                     `json:"llm_included,omitempty"`
 }
 
 // EdgeBudgetSource is the Enterprise budget service as the budget sync sees
@@ -385,6 +388,7 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 		BlocksIncluded:   blocksIncluded,
 		LLMBudgets:       llmBudgets,
 		LLMBlocks:        llmBlocks,
+		LLMIncluded:      blocksIncluded,
 		AppUsages:        appUsages,           // Legacy field
 		AppBudgets:       appBudgets,          // New per-app periods
 		PeriodStart:      calendarPeriodStart, // Legacy field
