@@ -176,7 +176,7 @@ func TestCheckBudgetStatus_LLMSpendAtBudget(t *testing.T) {
 	svc, h, app := newLLMBudgetTestService(t)
 	llm := &database.LLM{Name: "l", Slug: "l", Vendor: "openai", MonthlyBudget: 1, IsActive: true}
 	require.NoError(t, svc.db.Create(llm).Error)
-	llmBudgetSync(t, h, 1, BudgetSyncPayload{})
+	llmBudgetSync(t, h, 1, BudgetSyncPayload{LLMBudgets: map[uint32]AppBudgetData{uint32(llm.ID): {Limit: limitOf(1)}}})
 	require.NoError(t, svc.RecordUsage(app.ID, &llm.ID, 10, 1*10000, 5, 5))
 	_, _, err := svc.CheckBudgetStatus(app.ID, &llm.ID, 0)
 	assert.ErrorContains(t, err, "LLM monthly budget exceeded: current=1.00, estimated=0.00, limit=1.00")
@@ -231,4 +231,39 @@ func TestLLMBudgetBlocks_LoadedAfterRestart(t *testing.T) {
 	reason, blocked := restarted.Reason(9)
 	assert.True(t, blocked)
 	assert.Equal(t, "LLM monthly budget exceeded", reason)
+}
+
+func limitOf(v float64) *float64 { return &v }
+
+// A budget changed in Studio takes effect on the edge with the next sync,
+// not the next config push: the sync carries each budgeted LLM's limit,
+// which the edge prefers to its LLM config. Raising, lowering, setting 0
+// (with its llm_blocks entry) and removing the budget all follow.
+func TestCheckBudgetStatus_LLMLimitFollowsSync(t *testing.T) {
+	svc, h, app := newLLMBudgetTestService(t)
+	llm := &database.LLM{Name: "l", Slug: "l", Vendor: "openai", MonthlyBudget: 1, IsActive: true}
+	require.NoError(t, svc.db.Create(llm).Error)
+	now := time.Now()
+	start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	entry := func(limit *float64) map[uint32]AppBudgetData {
+		return map[uint32]AppBudgetData{uint32(llm.ID): {Usage: 2, PeriodStart: start, PeriodEnd: start.AddDate(0, 1, 0).Add(-time.Second), Limit: limit}}
+	}
+	check := func() error { _, _, err := svc.CheckBudgetStatus(app.ID, &llm.ID, 0); return err }
+
+	// Before any sync: the LLM config's $1.
+	require.NoError(t, svc.RecordUsage(app.ID, &llm.ID, 10, 2*10000, 5, 5))
+	assert.ErrorContains(t, check(), "limit=1.00")
+
+	llmBudgetSync(t, h, 1, BudgetSyncPayload{LLMBudgets: entry(limitOf(5))})
+	assert.NoError(t, check(), "raised to $5 in Studio; the LLM config still says $1")
+
+	llmBudgetSync(t, h, 2, BudgetSyncPayload{LLMBudgets: entry(limitOf(1.5))})
+	assert.ErrorContains(t, check(), "limit=1.50", "lowered")
+
+	llmBudgetSync(t, h, 3, BudgetSyncPayload{LLMBudgets: entry(limitOf(0)),
+		LLMBlocks: map[uint32]string{uint32(llm.ID): "LLM monthly budget exceeded (budget is 0)"}})
+	assert.ErrorContains(t, check(), "budget is 0", "set to 0")
+
+	llmBudgetSync(t, h, 4, BudgetSyncPayload{})
+	assert.NoError(t, check(), "removed: a budgeted LLM is always in the sync, so one it leaves out has none")
 }
