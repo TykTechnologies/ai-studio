@@ -45,6 +45,10 @@ type Registry struct {
 	requests map[string]int
 	// username and password, when set, are required as basic auth.
 	username, password string
+	// noReferrersAPI makes the referrers endpoint answer 404, as registries
+	// without the OCI 1.1 referrers API do; clients then fall back to the
+	// referrers tag schema (an index tagged sha256-<hex>).
+	noReferrersAPI bool
 }
 
 // RequireBasicAuth makes every request after it need these basic-auth
@@ -53,6 +57,14 @@ func (r *Registry) RequireBasicAuth(username, password string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.username, r.password = username, password
+}
+
+// DisableReferrersAPI makes the registry behave like one without the
+// referrers API.
+func (r *Registry) DisableReferrersAPI() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.noReferrersAPI = true
 }
 
 // NewRegistry starts a registry that is shut down when the test ends.
@@ -210,6 +222,13 @@ func (r *Registry) serveBlob(w http.ResponseWriter, req *http.Request, ref strin
 // serveReferrers answers the referrers API from the manifests whose subject
 // is the given digest, filtered by the artifactType query parameter.
 func (r *Registry) serveReferrers(w http.ResponseWriter, req *http.Request, repo, subject string) {
+	r.mu.Lock()
+	noAPI := r.noReferrersAPI
+	r.mu.Unlock()
+	if noAPI {
+		http.NotFound(w, req)
+		return
+	}
 	filter := req.URL.Query().Get("artifactType")
 	index := ocispec.Index{
 		Versioned: specs.Versioned{SchemaVersion: 2},

@@ -23,6 +23,8 @@ import (
 type SecurityService interface {
 	VerifySignature(ctx context.Context, ref *OCIReference, pubKeyID string) error
 	VerifyBundle(ctx context.Context, ref *OCIReference, issuer, subject string) error
+	// Deprecated: cosign policy files are not supported by the in-process
+	// verifier; use VerifySignature.
 	VerifyWithPolicy(ctx context.Context, ref *OCIReference, policyPath string) error
 }
 
