@@ -386,6 +386,7 @@ Two images, released with 2.3 from [TykTechnologies/ai-studio-guardrail-wolf](ht
   - **SQL logs:** statements are logged without their values.
 
   See the upgrade notes.
+- **Tool, datasource and user credentials no longer travel whole in events and object hooks.** `system.tool.*`, `system.datasource.*` and `system.user.*` events, which reach every subscribed plugin and the cluster event log, and `before_*` object hooks for those types, carried a tool's auth key, a datasource's connection string, connection API key and embedder key, and a user's password hash, API key and tokens. They now carry `[redacted]` (references kept), as LLM events and hooks do; a `before_*` hook that leaves a value `[redacted]` keeps the stored one. `after_*` hooks already redacted these fields, as `[REDACTED]`, and now use `[redacted]` and show references as written.
 
 ## Breaking changes and upgrade notes
 
