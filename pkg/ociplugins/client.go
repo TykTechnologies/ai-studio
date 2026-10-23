@@ -47,8 +47,7 @@ type OCIPluginClient struct {
 	config          *OCIConfig
 	storage         *ContentStorage
 	fetcher         pluginPuller
-	verifier        *SignatureVerifier  // Deprecated: use securityService instead
-	securityService SecurityService     // Enterprise security service (optional)
+	securityService SecurityService // verifies signatures; required when signatures are required
 
 	// Background processing
 	gcCancel  context.CancelFunc
@@ -73,17 +72,10 @@ func NewOCIPluginClient(config *OCIConfig) (*OCIPluginClient, error) {
 		return nil, fmt.Errorf("failed to initialize ORAS fetcher: %w", err)
 	}
 
-	// Initialize signature verifier
-	verifier, err := NewSignatureVerifier(config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize signature verifier: %w", err)
-	}
-
 	client := &OCIPluginClient{
 		config:    config,
 		storage:   storage,
 		fetcher:   fetcher,
-		verifier:  verifier,
 		gcStopped: make(chan struct{}),
 	}
 
@@ -97,8 +89,9 @@ func NewOCIPluginClient(config *OCIConfig) (*OCIPluginClient, error) {
 	return client, nil
 }
 
-// SetSecurityService sets the enterprise security service for signature verification
-// If not set, falls back to the built-in verifier (CE mode)
+// SetSecurityService sets the security service that verifies signatures. A
+// client with signatures required and no security service refuses every
+// fetch ("no signature verifier configured").
 func (c *OCIPluginClient) SetSecurityService(service SecurityService) {
 	c.securityService = service
 	log.Debug().Msg("Enterprise security service configured for OCI plugin client")
@@ -239,9 +232,8 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 		version = pluginConfig.Version
 	}
 
-	// Track whether signature was actually verified
+	// Verified means the signature check ran and passed, whichever key it used.
 	enforced := c.signaturesEnforced()
-	signatureVerified := enforced && params.PublicKey != ""
 	binarySum := sha256.Sum256(binaryData)
 
 	metadata := &PluginMetadata{
@@ -249,7 +241,7 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 		Params:       params,
 		FetchTime:    fetchTime,
 		Config:       pluginConfig,
-		Verified:     signatureVerified,
+		Verified:     enforced,
 		Size:         int64(len(binaryData)),
 		LastAccessed: fetchTime,
 		Version:      version,
@@ -311,6 +303,9 @@ func (c *OCIPluginClient) verifySignature(ctx context.Context, ref *OCIReference
 	fail := func(reason string) error {
 		return &ErrSignatureVerificationFailed{Reference: ref.FullReference(), Reason: reason}
 	}
+	if c.securityService == nil {
+		return "", fail("no signature verifier configured")
+	}
 
 	var resolved string
 	if pulled.Resolved != nil {
@@ -363,13 +358,7 @@ func (c *OCIPluginClient) verifySignature(ctx context.Context, ref *OCIReference
 func (c *OCIPluginClient) verifyDigest(ctx context.Context, ref *OCIReference, digest, publicKey string) error {
 	pinned := *ref
 	pinned.Digest = digest
-	// Use enterprise security service if available, otherwise fall back to built-in verifier
-	if c.securityService != nil {
-		log.Debug().Msg("Using enterprise security service for signature verification")
-		return c.securityService.VerifySignature(ctx, &pinned, publicKey)
-	}
-	log.Debug().Msg("Using built-in verifier for signature verification (CE mode)")
-	return c.verifier.Verify(ctx, &pinned, publicKey)
+	return c.securityService.VerifySignature(ctx, &pinned, publicKey)
 }
 
 // isSHA256Digest reports whether d is a well-formed "sha256:<64 hex>" digest.

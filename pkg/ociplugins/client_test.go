@@ -61,7 +61,6 @@ func TestNewOCIPluginClient(t *testing.T) {
 				assert.NotNil(t, client.config)
 				assert.NotNil(t, client.storage)
 				assert.NotNil(t, client.fetcher)
-				assert.NotNil(t, client.verifier)
 			}
 		})
 	}
