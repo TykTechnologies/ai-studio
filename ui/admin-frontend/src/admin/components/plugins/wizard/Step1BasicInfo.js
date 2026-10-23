@@ -6,8 +6,17 @@ import {
   Grid,
 } from '@mui/material';
 import { PrimaryButton, SecondaryOutlineButton } from '../../../styles/sharedStyles';
+import useConfig from '../../../hooks/useConfig';
+import {
+  allowedPluginSources,
+  pluginSourceError,
+  pluginCommandHelp,
+  pluginCommandPlaceholder,
+} from '../../../services/pluginService';
 
 const Step1BasicInfo = ({ data, onComplete, onBack, loading, disabled }) => {
+  const { config } = useConfig();
+  const allowedSources = allowedPluginSources(config);
   const [formData, setFormData] = useState({
     name: data.name || '',
     description: data.description || '',
@@ -35,6 +44,11 @@ const Step1BasicInfo = ({ data, onComplete, onBack, loading, disabled }) => {
 
     if (!formData.command.trim()) {
       newErrors.command = 'Plugin command is required';
+    } else {
+      const sourceError = pluginSourceError(formData.command, allowedSources);
+      if (sourceError) {
+        newErrors.command = sourceError;
+      }
     }
 
     setErrors(newErrors);
@@ -99,9 +113,9 @@ const Step1BasicInfo = ({ data, onComplete, onBack, loading, disabled }) => {
             error={!!errors.command}
             helperText={
               errors.command ||
-              'Plugin command - use oci:// for OCI artifacts, grpc:// for external services, or local path for binaries'
+              pluginCommandHelp(allowedSources, Boolean(config?.oci_require_signature))
             }
-            placeholder="e.g., oci://registry.com/my-plugin:latest or /path/to/plugin-binary"
+            placeholder={pluginCommandPlaceholder(allowedSources)}
             disabled={disabled}
             required
           />

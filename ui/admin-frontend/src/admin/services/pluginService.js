@@ -582,6 +582,57 @@ class PluginService {
   }
 }
 
+// Plugin deployment types (sources), in the order the backend lists them.
+export const PLUGIN_SOURCES = ['oci', 'file', 'grpc'];
+
+// pluginSourceOf classifies a plugin command exactly as the backend does
+// (plugin_security.SourceOf): a case-sensitive "oci://" prefix is oci,
+// "grpc://" is grpc, and anything else runs as a local executable (file).
+// The command is not trimmed or lower-cased.
+export const pluginSourceOf = (command) => {
+  const value = command || '';
+  if (value.startsWith('oci://')) return 'oci';
+  if (value.startsWith('grpc://')) return 'grpc';
+  return 'file';
+};
+
+// allowedPluginSources returns the sources this installation accepts, from
+// /auth/config; all of them when the config does not say.
+export const allowedPluginSources = (config) => {
+  const sources = config?.plugin_allowed_sources;
+  return Array.isArray(sources) && sources.length > 0 ? sources : PLUGIN_SOURCES;
+};
+
+// pluginSourceError returns the backend's refusal for a command whose source
+// is not allowed, or null.
+export const pluginSourceError = (command, allowed) => {
+  const source = pluginSourceOf(command);
+  if (allowed.includes(source)) return null;
+  return `🔒 SECURITY: plugin source "${source}" is not allowed by this installation (allowed: ${allowed.join(', ')}). Set AI_STUDIO_PLUGIN_ALLOWED_SOURCES to change this.`;
+};
+
+// pluginCommandHelp is the command field's helper text, naming only the
+// allowed sources and, when OCI artifacts must be signed, saying so.
+export const pluginCommandHelp = (allowed, requireSignature = false) => {
+  const parts = [];
+  if (allowed.includes('oci')) {
+    parts.push(requireSignature ? 'oci:// for OCI artifacts (they must be signed)' : 'oci:// for OCI artifacts');
+  }
+  if (allowed.includes('grpc')) parts.push('grpc:// for external services');
+  if (allowed.includes('file')) parts.push('local path for binaries');
+  if (parts.length > 1) parts[parts.length - 1] = `or ${parts[parts.length - 1]}`;
+  return `Plugin command - use ${parts.join(', ')}`;
+};
+
+// pluginCommandPlaceholder is an example command of an allowed source.
+export const pluginCommandPlaceholder = (allowed) => {
+  const examples = [];
+  if (allowed.includes('oci')) examples.push('oci://registry.com/my-plugin:latest');
+  if (allowed.includes('file')) examples.push('/path/to/plugin-binary');
+  if (allowed.includes('grpc')) examples.push('grpc://plugin-host:50051');
+  return `e.g., ${examples.slice(0, 2).join(' or ')}`;
+};
+
 // Export both the class and a default instance
 export { PluginService };
 export default new PluginService();

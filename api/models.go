@@ -1326,6 +1326,15 @@ type FrontendConfig struct {
 	// Chrome is "none" when the host application draws the navigation, and
 	// the console then leaves out its top bar and drawers; "full" otherwise.
 	Chrome string `json:"chrome"`
+	// PluginAllowedSources lists the plugin deployment types ("oci",
+	// "file", "grpc") this installation accepts
+	// (AI_STUDIO_PLUGIN_ALLOWED_SOURCES), so the console offers only those.
+	PluginAllowedSources []string `json:"plugin_allowed_sources"`
+	// OCIEnabled reports that OCI plugins can be fetched (an OCI cache
+	// directory is configured), and OCIRequireSignature that they must be
+	// signed.
+	OCIEnabled          bool `json:"oci_enabled"`
+	OCIRequireSignature bool `json:"oci_require_signature"`
 }
 
 // BrandingConfig holds branding customization settings for the frontend

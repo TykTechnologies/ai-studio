@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
@@ -67,4 +68,33 @@ func TestPluginAPI_SourcePolicy(t *testing.T) {
 	var count int64
 	require.NoError(t, db.Model(&models.Plugin{}).Where("id = ?", existing.ID).Count(&count).Error)
 	assert.Zero(t, count)
+}
+
+// /auth/config tells the console which plugin sources it may offer and
+// whether OCI plugins must be signed.
+func TestAuthConfig_PluginSourcesAndSignature(t *testing.T) {
+	api, _ := setupTestAPI(t)
+	get := func() FrontendConfig {
+		t.Helper()
+		w := performRequest(api.router, "GET", "/auth/config", nil)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		var cfg FrontendConfig
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &cfg))
+		return cfg
+	}
+
+	assert.Equal(t, []string{"oci", "file", "grpc"}, get().PluginAllowedSources)
+
+	withPluginSourcePolicy(t, "oci")
+	saved := appconfig.Get("")
+	conf := *saved
+	conf.OCIPlugins.CacheDir = t.TempDir()
+	conf.OCIPlugins.RequireSignature = true
+	appconfig.Set(&conf)
+	t.Cleanup(func() { appconfig.Set(saved) })
+
+	cfg := get()
+	assert.Equal(t, []string{"oci"}, cfg.PluginAllowedSources)
+	assert.True(t, cfg.OCIEnabled)
+	assert.True(t, cfg.OCIRequireSignature)
 }

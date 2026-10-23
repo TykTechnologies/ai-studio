@@ -1446,6 +1446,11 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		DocsEnabled:          !config.Get("").DocsDisabled,
 		DocsURL:              config.Get("").DocsURL,
 		AllowSSOUserAPIKeys:  config.Get("").AllowSSOUserAPIKeys,
+		OCIEnabled:           config.Get("").OCIPlugins.IsEnabled(),
+		OCIRequireSignature:  config.Get("").OCIPlugins.IsEnabled() && config.Get("").OCIPlugins.RequireSignature,
+	}
+	for _, source := range config.Get("").PluginSourcePolicy.Allowed() {
+		cfg.PluginAllowedSources = append(cfg.PluginAllowedSources, string(source))
 	}
 	boot := a.frontendBootstrap()
 	cfg.BasePath = boot.BasePath
