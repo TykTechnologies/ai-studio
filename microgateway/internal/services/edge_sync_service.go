@@ -497,6 +497,14 @@ func (s *EdgeSyncService) syncLLMs(tx *gorm.DB, llms []*pb.LLMConfig) error {
 		if pbLLM.Metadata != "" {
 			llm.Metadata = database.JSON(pbLLM.Metadata)
 		}
+		// Metadata credentials stay encrypted at rest, as the hub sent them
+		if len(pbLLM.MetadataSecretsEncrypted) > 0 {
+			encrypted, err := json.Marshal(pbLLM.MetadataSecretsEncrypted)
+			if err != nil {
+				return fmt.Errorf("failed to encode metadata credentials of LLM %d: %w", pbLLM.Id, err)
+			}
+			llm.MetadataSecretsEncrypted = database.JSON(encrypted)
+		}
 		if pbLLM.AllowedModels != "" {
 			llm.AllowedModels = database.JSON(pbLLM.AllowedModels)
 		}

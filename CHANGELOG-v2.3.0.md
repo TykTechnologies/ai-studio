@@ -370,9 +370,31 @@ Two images, released with 2.3 from [TykTechnologies/ai-studio-guardrail-wolf](ht
 - **`pdftotext` runs only from the `PATH`, with a minimal environment** ([#765](https://github.com/TykTechnologies/ai-studio/pull/765)).
 - **Secret fields stay masked in plugin config forms** ([#769](https://github.com/TykTechnologies/ai-studio/pull/769)), including the Redis passwords of advanced-llm-cache ([ai-studio-enterprise#78](https://github.com/TykTechnologies/ai-studio-enterprise/pull/78)) and rate-limiter ([ai-studio-community-plugins#27](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/27)).
 
+- **LLM credentials are no longer stored or passed on in plaintext.** An LLM's API key, and the values of its metadata fields whose name contains `key`, `secret` or `token` (a Bedrock LLM's `aws_access_key_id`, `aws_secret_access_key` and `aws_session_token`), were stored as typed when they were not a `$SECRET/` reference. They were also copied in plaintext into places that should never hold them:
+  - every `system.llm.*` event, which reaches plugins and the cluster event log;
+  - every object hook;
+  - the SQL log, at `debug` and on slow or failed queries at any level;
+  - and, for metadata, the configuration sent to edges and the edge database.
+
+  Now:
+  - **At rest:** they are stored encrypted with `TYK_AI_SECRET_KEY`, existing rows included.
+  - **To edges:** metadata credentials travel and are stored encrypted with `MICROGATEWAY_ENCRYPTION_KEY`, as API keys already were.
+  - **Events and hooks:** they carry `[redacted]`.
+  - **SQL logs:** statements are logged without their values.
+
+  See the upgrade notes.
+
 ## Breaking changes and upgrade notes
 
 - **Edge gateways answer `404` on every `/api/v1` path**, and the `mgw` CLI no longer works against an edge. Configure edges from AI Studio. A standalone microgateway keeps its authenticated management API, but `POST /api/v1/auth/token` is removed: create tokens with `POST /api/v1/tokens` (admin token) or `microgateway -create-admin-token`.
+- **LLM credentials are encrypted at rest, and a rollback needs a restore** (schema version 23).
+  - **Rollback and mixed replicas.** On first start, AI Studio encrypts every literal LLM API key and metadata credential with `TYK_AI_SECRET_KEY`. The schema is unchanged, but `MinReaderSchemaVersion` rises to 23. An AI Studio older than 2.3.0, including a headless replica sharing the database, then refuses the database instead of sending ciphertext as a key. To roll back past 2.3.0, restore a backup taken before the upgrade.
+  - **No `TYK_AI_SECRET_KEY`.** The values stay as written and AI Studio logs a security warning at startup. Setting the key later encrypts them at the next start.
+  - **A changed or missing key.** The stored LLM credentials become unreadable. They are refused (`refused-credential-reference` goes to the provider, which rejects the call) and the error is logged. Re-enter them, or set the key back. `$SECRET/` references are unaffected by this change.
+- **Upgrade edges with AI Studio.** An LLM's metadata credentials (a Bedrock LLM's AWS keys) now reach edges only encrypted, in a new snapshot field. Edges older than 2.3.0 read only the plain metadata, which holds `refused-credential-reference` for those fields. Their Bedrock calls then fail closed: AWS refuses the credential, and the edge never falls back to its own AWS credentials.
+- **Edges show pending once after the upgrade.** The configuration of LLMs with metadata credentials changes, so the namespace's checksum changes once. Push the configuration after upgrading; unchanged LLMs keep a stable checksum afterwards.
+- **Plugins no longer see LLM credentials.** `system.llm.*` events and every object hook (before and after) carry `[redacted]` for an LLM's API key and metadata credentials; `$SECRET/` and `$ENV/` references are shown as written. A `before_*` hook that returns the object with those values still `[redacted]` keeps the stored credentials. `after_*` hooks for datasources, tools and users also get their credentials redacted now (a datasource's connection key, connection string and embedder key, a tool's auth key, a user's password, API key and tokens); their `before_*` hooks and events are unchanged.
+- **SQL logs carry no values.** AI Studio and the Microgateway log SQL statements with placeholders only. Set `DB_LOG_SQL_PARAMS=true` to log the values for local debugging; never in production.
 - **Edges must run 2.3.0 to serve decision models.** Older edges do not know the `systemone` vendor and refuse that LLM. OpenAI decision calls pass through older edges but are not recorded there.
 - **Price decision models.** Decision models are billed by input tokens, and output is usually free. Add a model price with the provider's input price and an output price of `0`. You can price the alias (`jev-latest`) or the version it resolves to (`jev-1.13.0`). An unpriced call is recorded at zero cost.
 - **Edge response plugins now receive the LLM's `vendor`** in their context. It used to be sent empty.
@@ -398,7 +420,7 @@ Two images, released with 2.3 from [TykTechnologies/ai-studio-guardrail-wolf](ht
     - `llm_chat_records.decision_questions` and `decision_refusals`.
   - The edge's `analytics_events` gains `request_kind`, `decision_questions` and `decision_refusals`.
 
-  Every change is additive, and `MinReaderSchemaVersion` stays 1, so a 2.2.1 binary still runs on a 2.3.0 database. After a rollback, System One LLMs stop working (their vendor is unknown), and Gateway connections need 2.3.0.
+  Every change is additive, and `MinReaderSchemaVersion` stays 1 for these versions. Schema version 23 later raises it to 23 (see **LLM credentials are encrypted at rest**), so a 2.2.1 binary does not run on a 2.3.0 database. After a rollback, System One LLMs stop working (their vendor is unknown), and Gateway connections need 2.3.0.
 - **Schema versions 9 and 10** (9 for [#730](https://github.com/TykTechnologies/ai-studio/pull/730), 10 for [#737](https://github.com/TykTechnologies/ai-studio/pull/737)).
   - New table: `native_resources` (the native API ledger; each edge keeps its own).
   - New columns: `llms.vendor_workspace_id`, `price_multipliers` and the `resource_signing_*` columns; `llm_chat_records.service_tier` and `proxy_logs.service_tier`. The edge's `llms` and `analytics_events` gain the matching columns.
@@ -444,7 +466,7 @@ Two images, released with 2.3 from [TykTechnologies/ai-studio-guardrail-wolf](ht
 - **MCP analytics need traffic logs on the proxy.** The Gateway writes analytics for an MCP proxy only when `x-tyk-api-gateway.middleware.global.trafficLogs.enabled` is true (and the Gateway has `enable_analytics`). Proxies AI Studio registers have it; proxies created on the Dashboard or the nodes by the platform team record nothing until they set it.
 - **Tyk Pump 1.16.0 fails at start without an uptime store.** Its uptime pump defaults to MongoDB: set `dont_purge_uptime_data: true` (`TYK_PMP_DONTPURGEUPTIMEDATA=true`) in the Pump that feeds AI Studio unless you run one.
 - **Embedding hosts.** `AppConf.FilterLimits` (and the filter limits of `pkg/studio`) apply only to the names in `config.FilterLimitNames`, which now include the `GUARDRAIL_*` tuning variables; other names fall back to the environment.
-- **Protocol.** The plugin, management and config-sync protos change additively: new fields and the new `CallDecision` RPC. [#737](https://github.com/TykTechnologies/ai-studio/pull/737) adds `LLMConfig` fields 27 to 31 (signing keys, workspace, price multipliers), `AnalyticsEvent.service_tier` and the plugin `AnalyticsRequest.service_tier`.
+- **Protocol.** The plugin, management and config-sync protos change additively: new fields and the new `CallDecision` RPC. [#737](https://github.com/TykTechnologies/ai-studio/pull/737) adds `LLMConfig` fields 27 to 31 (signing keys, workspace, price multipliers), `AnalyticsEvent.service_tier` and the plugin `AnalyticsRequest.service_tier`. `LLMConfig.metadata_secrets_encrypted` (field 34) carries an LLM's metadata credentials encrypted. The edge database gains `llms.metadata_secrets_encrypted`.
 - **Go embedders and plugin authors.** `models.LLMVendorProvider` gains `ProvidesChat()` and `DecisionEndpoint()`, so a custom vendor implementation must add them. The plugin `StudioServices` interface is unchanged: `CallDecision` is a package-level SDK function, so custom fakes keep compiling.
 
 - **`$ENV/` references resolve only for allowlisted names** ([#794](https://github.com/TykTechnologies/ai-studio/pull/794), [#789](https://github.com/TykTechnologies/ai-studio/pull/789)). List the environment variables your configuration names in `AI_STUDIO_ENV_REF_ALLOWLIST` (comma-separated, empty by default), or move those credentials to the secret store as `$SECRET/` references.

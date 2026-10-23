@@ -1018,6 +1018,15 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		if llm.ResourceSigningPrevExpiresAt != nil {
 			snapshot.Llms[i].ResourceSigningPrevExpiresAt = timestamppb.New(*llm.ResourceSigningPrevExpiresAt)
 		}
+		// Metadata credentials travel as they are stored, encrypted
+		if len(llm.MetadataSecretsEncrypted) > 0 {
+			var metadataSecrets map[string]string
+			if err := json.Unmarshal([]byte(llm.MetadataSecretsEncrypted), &metadataSecrets); err == nil {
+				snapshot.Llms[i].MetadataSecretsEncrypted = metadataSecrets
+			} else {
+				log.Error().Err(err).Uint("llm_id", llm.ID).Msg("Failed to decode LLM metadata credentials; they are not sent")
+			}
+		}
 
 		log.Debug().
 			Uint("llm_id", llm.ID).

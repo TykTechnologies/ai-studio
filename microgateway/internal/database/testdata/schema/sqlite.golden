@@ -299,6 +299,7 @@ TABLE llms
   column `monthly_budget` real
   column `rate_limit_rpm` integer
   column `metadata` JSON
+  column `metadata_secrets_encrypted` JSON
   column `governed_metadata` JSON
   column `allowed_models` JSON
   column `failover` JSON

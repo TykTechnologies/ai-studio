@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -192,6 +193,10 @@ func getGormLogger(logLevel string) logger.Interface {
 			LogLevel:                  level,
 			IgnoreRecordNotFoundError: true,
 			Colorful:                  false,
+			// Statements are logged with placeholders, never their values
+			// (rows' contents: credentials, payloads), unless
+			// DB_LOG_SQL_PARAMS=true asks for them in local debugging.
+			ParameterizedQueries: !strings.EqualFold(os.Getenv("DB_LOG_SQL_PARAMS"), "true"),
 		},
 	)
 }

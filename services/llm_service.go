@@ -478,7 +478,9 @@ func (s *Service) UpdateLLMMetadata(id uint, metadata models.JSONMap) error {
 	if err := s.DB.Select("id").First(&llm, id).Error; err != nil {
 		return err
 	}
-	return s.DB.Model(&llm).Update("metadata", metadata).Error
+	// A column update runs no struct hook: the credentials are put in their
+	// stored form here (encrypted at rest, see models/llm_credentials.go).
+	return s.DB.Model(&llm).Update("metadata", models.EncryptLLMMetadata(id, metadata)).Error
 }
 
 // The following functions remain unchanged

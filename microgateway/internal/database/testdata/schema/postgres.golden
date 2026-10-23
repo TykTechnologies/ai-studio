@@ -326,6 +326,7 @@ TABLE llms
   column monthly_budget numeric(numeric) nullable=YES
   column rate_limit_rpm bigint(int8) nullable=YES precision=64 scale=0
   column metadata jsonb(jsonb) nullable=YES
+  column metadata_secrets_encrypted jsonb(jsonb) nullable=YES
   column governed_metadata jsonb(jsonb) nullable=YES
   column allowed_models jsonb(jsonb) nullable=YES
   column failover jsonb(jsonb) nullable=YES

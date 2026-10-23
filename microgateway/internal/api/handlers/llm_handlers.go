@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/gin-gonic/gin"
 )
@@ -41,7 +42,7 @@ func ListLLMs(serviceContainer *services.ServiceContainer) gin.HandlerFunc {
 		totalPages := (total + int64(limit) - 1) / int64(limit)
 
 		c.JSON(http.StatusOK, gin.H{
-			"data": llms,
+			"data": redactLLMs(llms),
 			"pagination": gin.H{
 				"page":        page,
 				"limit":       limit,
@@ -82,7 +83,7 @@ func CreateLLM(serviceContainer *services.ServiceContainer) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusCreated, gin.H{
-			"data":    llm,
+			"data":    services.RedactLLMForResponse(llm),
 			"message": "LLM created successfully",
 		})
 	}
@@ -117,7 +118,7 @@ func GetLLM(serviceContainer *services.ServiceContainer) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"data": llm,
+			"data": services.RedactLLMForResponse(llm),
 		})
 	}
 }
@@ -160,7 +161,7 @@ func UpdateLLM(serviceContainer *services.ServiceContainer) gin.HandlerFunc {
 		}
 
 		c.JSON(http.StatusOK, gin.H{
-			"data":    llm,
+			"data":    services.RedactLLMForResponse(llm),
 			"message": "LLM updated successfully",
 		})
 	}
@@ -270,4 +271,13 @@ func isNotFoundError(err error) bool {
 func isConflictError(err error) bool {
 	return err != nil && (err.Error() == "LLM with this name already exists" ||
 		err.Error() == "app with this name already exists")
+}
+// redactLLMs is a page of LLMs as the API returns them, each with its
+// metadata credentials redacted.
+func redactLLMs(llms []database.LLM) []database.LLM {
+	out := make([]database.LLM, len(llms))
+	for i := range llms {
+		out[i] = *services.RedactLLMForResponse(&llms[i])
+	}
+	return out
 }

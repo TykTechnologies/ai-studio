@@ -340,6 +340,13 @@ func New(opts Options) (_ *Studio, err error) {
 	} else if n > 0 {
 		logger.Infof("Generated native API resource signing secrets for %d LLM(s)", n)
 	}
+	// LLM credentials written before they were encrypted at rest, or while
+	// TYK_AI_SECRET_KEY was unset, are encrypted now (nothing without a key).
+	if n, err := models.BackfillLLMCredentialEncryption(s.db); err != nil {
+		return nil, fmt.Errorf("studio: encrypt LLM credentials at rest: %w", err)
+	} else if n > 0 {
+		logger.Infof("Encrypted the stored credentials of %d LLM(s)", n)
+	}
 	s.background.Add(1)
 	safe.Go("legacy secret re-encryption", func() {
 		defer s.background.Done()
