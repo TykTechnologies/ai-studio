@@ -1247,6 +1247,7 @@ TABLE mcp_servers
   column endpoint_url character varying(varchar) nullable=YES len=2048
   column endpoint_urls text(text) nullable=YES
   column upstream_url character varying(varchar) nullable=YES len=2048
+  column allow_internal_host boolean(bool) nullable=NO default=false
   column source_api_id character varying(varchar) nullable=YES len=64
   column auth_mode character varying(varchar) nullable=NO len=32 default='custom'::character varying
   column auth_details text(text) nullable=YES

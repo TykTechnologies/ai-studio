@@ -1161,6 +1161,7 @@ TABLE mcp_servers
   column `endpoint_url` text
   column `endpoint_urls` text
   column `upstream_url` text
+  column `allow_internal_host` numeric NOT NULL DEFAULT false
   column `source_api_id` text
   column `auth_mode` text NOT NULL DEFAULT "custom"
   column `auth_details` text

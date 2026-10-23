@@ -148,6 +148,11 @@ type MCPServer struct {
 	EndpointURLsJSON string `gorm:"column:endpoint_urls;type:text" json:"-"`
 	// UpstreamURL is admin-only; never in portal responses.
 	UpstreamURL string `gorm:"size:2048" json:"-"`
+	// AllowInternalHost is the admin-only "Allow internal host" switch
+	// (w4e): Studio's own calls to the upstream (wizard tool discovery) may
+	// reach an internal address. Admin-only like UpstreamURL; never set from
+	// a submission.
+	AllowInternalHost bool `gorm:"not null;default:false" json:"-"`
 	SourceAPIID string `gorm:"size:64" json:"source_api_id"`
 
 	AuthMode        string `gorm:"size:32;not null;default:custom" json:"auth_mode"`
