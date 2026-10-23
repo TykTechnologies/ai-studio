@@ -136,3 +136,63 @@ func TestBudgetSyncService_HandsSpendToSpendAnalyzer(t *testing.T) {
 	wantStart, _ := calculateBudgetPeriod(nil, now)
 	assert.True(t, got.PeriodStart.Equal(wantStart))
 }
+
+// ap6: the sync carries the spend of every LLM with a monthly budget in its
+// own period, across every App, and the LLMs edges must refuse: a budget of
+// 0, or one spent, as Studio's check refuses them.
+func TestBudgetSyncService_LLMBudgets(t *testing.T) {
+	db := setupBudgetSyncTestDB(t)
+	bus := eventbridge.NewBus()
+	got := make(chan BudgetSyncPayload, 4)
+	bus.Subscribe(BudgetSyncTopic, func(event eventbridge.Event) {
+		var p BudgetSyncPayload
+		require.NoError(t, json.Unmarshal(event.Payload, &p))
+		got <- p
+	})
+	svc := NewBudgetSyncService(db, bus)
+	svc.SetEdgeBudgetSource(&fakeEdgeBudget{blocks: map[uint]string{}})
+
+	budget := func(v float64) *float64 { return &v }
+	now := time.Now()
+	resetAt := now.Add(-time.Hour).Truncate(time.Second)
+	llms := []models.LLM{
+		{ID: 1, Name: "over", MonthlyBudget: budget(0.0005)},
+		{ID: 2, Name: "under", MonthlyBudget: budget(5)},
+		{ID: 3, Name: "zero", MonthlyBudget: budget(0)},
+		{ID: 4, Name: "unbudgeted"},
+		// Reset an hour ago: earlier spend is not in its period.
+		{ID: 5, Name: "reset", MonthlyBudget: budget(1), BudgetStartDate: &resetAt},
+	}
+	for i := range llms {
+		require.NoError(t, db.Create(&llms[i]).Error)
+	}
+	for _, r := range []models.LLMChatRecord{
+		{AppID: 1, LLMID: 1, Cost: 50, TimeStamp: now}, // $0.005, across two Apps
+		{AppID: 2, LLMID: 1, Cost: 60, TimeStamp: now},
+		{AppID: 1, LLMID: 2, Cost: 10000, TimeStamp: now},
+		{AppID: 1, LLMID: 4, Cost: 10000, TimeStamp: now},
+		{AppID: 1, LLMID: 5, Cost: 90000, TimeStamp: now.Add(-2 * time.Hour)},
+		{AppID: 1, LLMID: 5, Cost: 1000, TimeStamp: now},
+	} {
+		require.NoError(t, db.Create(&r).Error)
+	}
+
+	svc.aggregateAndPublish()
+	var p BudgetSyncPayload
+	select {
+	case p = <-got:
+	case <-time.After(time.Second):
+		t.Fatal("no budget sync published")
+	}
+	require.True(t, p.BlocksIncluded)
+	require.True(t, p.LLMIncluded)
+	assert.InDelta(t, 0.011, p.LLMBudgets[1].Usage, 1e-9)
+	assert.InDelta(t, 1.0, p.LLMBudgets[2].Usage, 1e-9)
+	assert.NotContains(t, p.LLMBudgets, uint32(4), "an LLM without a budget is not tracked")
+	assert.InDelta(t, 0.1, p.LLMBudgets[5].Usage, 1e-9)
+	assert.True(t, p.LLMBudgets[5].PeriodStart.Equal(resetAt), "the LLM's own period")
+	assert.Equal(t, map[uint32]string{
+		1: "LLM monthly budget exceeded",
+		3: "LLM monthly budget exceeded (budget is 0)",
+	}, p.LLMBlocks)
+}

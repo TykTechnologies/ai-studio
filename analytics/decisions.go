@@ -64,7 +64,7 @@ func GetDecisionUsage(db *gorm.DB, startDate, endDate time.Time, llmID, appID *u
 	base := func() *gorm.DB {
 		q := db.Model(&models.LLMChatRecord{}).
 			Where("request_kind = ?", models.DecisionRequest).
-			Where("time_stamp BETWEEN ? AND ?", startDate, endDate)
+			Where("time_stamp >= ? AND time_stamp < ?", startDate, endDate)
 		if llmID != nil {
 			q = q.Where("llm_id = ?", *llmID)
 		}

@@ -132,7 +132,7 @@ func NewHFWrapper(modelName string, opts ...huggingface.Option) (*HFWrapper, err
 		return nil, err
 	}
 
-	return &HFWrapper{hdLLM: x}, nil
+	return &HFWrapper{hdLLM: x, ModelName: modelName}, nil
 }
 
 type HFWrapper struct {

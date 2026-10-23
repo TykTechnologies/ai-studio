@@ -54,8 +54,8 @@ func (a *API) getChatRecordsPerDay(c *gin.Context) {
 			})
 			return
 		}
-		// Set end date to end of day (23:59:59)
-		endOfDay := time.Date(parsedDate.Year(), parsedDate.Month(), parsedDate.Day(), 23, 59, 59, 0, parsedDate.Location())
+		// The end day is inclusive: the range ends (exclusively) at the next midnight
+		endOfDay := nextMidnight(parsedDate)
 		endDate = &endOfDay
 	}
 
@@ -166,7 +166,9 @@ func parseDateParam(c *gin.Context, name string) (time.Time, error) {
 	return value, nil
 }
 
-// Helper function to parse date range from query parameters
+// getDateRange parses start_date and end_date (YYYY-MM-DD, end inclusive).
+// The end it returns is exclusive, the midnight after end_date: callers
+// query time_stamp >= start AND time_stamp < end.
 func getDateRange(c *gin.Context) (time.Time, time.Time, error) {
 	startDate, err := parseDateParam(c, "start_date")
 	if err != nil {
@@ -178,10 +180,17 @@ func getDateRange(c *gin.Context) (time.Time, time.Time, error) {
 		return time.Time{}, time.Time{}, err
 	}
 
-	// Set end date to end of day (23:59:59)
-	endDate = time.Date(endDate.Year(), endDate.Month(), endDate.Day(), 23, 59, 59, 0, endDate.Location())
+	// end_date is inclusive: the range ends (exclusively) at the next
+	// midnight, so a call at 23:59:59.5 still counts.
+	endDate = nextMidnight(endDate)
 
 	return startDate, endDate, nil
+}
+
+// nextMidnight is the start of the day after t's, the exclusive end of a
+// range whose last day is t's.
+func nextMidnight(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location()).AddDate(0, 0, 1)
 }
 
 // Helper function to get interaction type from query parameters

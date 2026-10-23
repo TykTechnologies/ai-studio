@@ -283,6 +283,12 @@ TABLE filters
   column kind text(text) nullable=YES default='script'::text
   column config text(text) nullable=YES
   column namespace text(text) nullable=YES default=''::text
+TABLE llm_budget_blocks
+  constraint llm_budget_blocks_pkey PRIMARY KEY (llm_id)
+  index CREATE UNIQUE INDEX llm_budget_blocks_pkey ON llm_budget_blocks USING btree (llm_id)
+  column llm_id bigint(int8) nullable=NO precision=64 scale=0
+  column reason character varying(varchar) nullable=YES len=255
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
 TABLE llm_filters
   constraint llm_filters_pkey PRIMARY KEY (llm_id, filter_id)
   index CREATE UNIQUE INDEX llm_filters_pkey ON llm_filters USING btree (llm_id, filter_id)

@@ -101,7 +101,9 @@ func NewBedrockClient(llm *models.LLM) (*bedrockruntime.Client, error) {
 	var opts []func(*bedrockruntime.Options)
 	endpoint := strings.TrimSuffix(llm.APIEndpoint, "/v1")
 	endpoint = strings.TrimSuffix(endpoint, "/")
-	if endpoint != "" && !strings.Contains(endpoint, "bedrock-runtime") {
+	// A plain region (ap-southeast-2) is not a URL: the SDK resolves its
+	// default endpoint from the region set above.
+	if endpoint != "" && !isPlainRegion(endpoint) && !strings.Contains(endpoint, "bedrock-runtime") {
 		opts = append(opts, func(o *bedrockruntime.Options) {
 			o.BaseEndpoint = &endpoint
 		})
@@ -150,10 +152,16 @@ func RuntimeBaseURLFor(endpoint string) (string, error) {
 	switch {
 	case endpoint == "":
 		return "", fmt.Errorf("bedrock endpoint is empty")
-	case !strings.Contains(endpoint, ".") && !strings.Contains(endpoint, "/") && !strings.Contains(endpoint, ":"):
+	case isPlainRegion(endpoint):
 		return "https://bedrock-runtime." + endpoint + ".amazonaws.com", nil
 	}
 	return strings.TrimSuffix(endpoint, "/"), nil
+}
+
+// isPlainRegion reports whether endpoint is a bare region such as
+// us-east-1 rather than a URL or host.
+func isPlainRegion(endpoint string) bool {
+	return !strings.Contains(endpoint, ".") && !strings.Contains(endpoint, "/") && !strings.Contains(endpoint, ":")
 }
 
 // InvalidateClientCache removes a cached client for the given LLM ID.

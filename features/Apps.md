@@ -65,7 +65,7 @@ The Apps feature in Midsommar provides a way to create, configure, and manage AI
 * **App Management:**
   * `POST /apps`: Create a new app.
   * `GET /apps/{id}`: Get an app by ID.
-  * `PUT /apps/{id}`: Update an app.
+  * `PATCH /apps/{id}`: Update an app. Only the `data.attributes` keys the body holds change; an omitted key (name, description, user_id, llm_ids, datasource_ids, tool_ids, metadata, monthly_budget, budget_start_date, and the optional switches and router/MCP lists) keeps its stored value, so a metadata-only PATCH leaves the App's name, owner and access alone. A key that is present replaces the stored value: `metadata` replaces the whole object (governance flags excepted), and an empty list clears that access. To change one metadata key without resending the rest, plugins use `PatchAppMetadata`.
   * `DELETE /apps/{id}`: Delete an app.
   * `GET /apps`: List all apps (filtered by user).
 
