@@ -1,0 +1,73 @@
+# c1g.15 e2e: ENT (or CE) distroless Studio in control mode and an edge
+# microgateway. The plugin registry joins this network as "registry" (run.sh).
+# Ports are published on 127.0.0.1 only. Signature and source settings come
+# from the environment of `docker compose up` (run.sh sets them per scenario).
+name: c1g-e2e
+
+x-common: &common
+  ALLOW_INTERNAL_NETWORK_ACCESS: "true" # the registry is on a private docker network
+  OCI_PLUGINS_PUBKEY_FILE_E2E: /keys/e2e-good.pub
+  LOG_LEVEL: debug
+
+services:
+  studio:
+    image: c1g-e2e/studio:${EDITION:-ent}
+    ports: ["127.0.0.1:18080:8080"]
+    tmpfs: ["/data:uid=65532,gid=65532,exec"] # plugin binaries run from /data/oci
+    volumes: ["${KEYS_DIR:?}:/keys:ro"]
+    environment:
+      <<: *common
+      TYK_AI_LICENSE: ${TYK_AI_LICENSE:-}
+      DEVMODE: "false"
+      SITE_URL: http://localhost:18080
+      DOCS_DISABLED: "true"
+      TELEMETRY_ENABLED: "false"
+      MARKETPLACE_ENABLED: ${MARKETPLACE_ENABLED:-false}
+      MARKETPLACE_INDEX_URL: ${MARKETPLACE_INDEX_URL:-}
+      ALLOW_REGISTRATIONS: "true"
+      DATABASE_TYPE: sqlite
+      DATABASE_URL: /data/studio.db
+      TYK_AI_SECRET_KEY: c1g-e2e-secret-key-0123456789abcdef
+      MICROGATEWAY_ENCRYPTION_KEY: c1ge2eencryptionkey0123456789abc
+      GATEWAY_MODE: control
+      GRPC_PORT: "50051"
+      GRPC_HOST: 0.0.0.0
+      GRPC_TLS_INSECURE: "true"
+      GRPC_AUTH_TOKEN: c1g-e2e-grpc-token-0123456789abcdef
+      AI_STUDIO_OCI_CACHE_DIR: /data/oci
+      AI_STUDIO_OCI_INSECURE_REGISTRIES: registry:5000
+      AI_STUDIO_OCI_TLOG_POLICY: ${STUDIO_TLOG_POLICY:-required}
+      AI_STUDIO_PLUGIN_ALLOWED_SOURCES: ${STUDIO_ALLOWED_SOURCES:-}
+      # AI_STUDIO_OCI_REQUIRE_SIGNATURE deliberately unset: the default (true) is under test
+
+  gateway:
+    image: c1g-e2e/microgateway:${EDITION:-ent}
+    depends_on: [studio]
+    # An edge exits when the control plane is not reachable yet; retry.
+    restart: on-failure
+    ports: ["127.0.0.1:18081:8080"]
+    tmpfs: ["/data:uid=65532,gid=65532,exec"] # plugin binaries run from /data/oci
+    volumes: ["${KEYS_DIR:?}:/keys:ro"]
+    environment:
+      <<: *common
+      TYK_AI_LICENSE: ${TYK_AI_LICENSE:-}
+      PORT: "8080"
+      GATEWAY_MODE: edge
+      CONTROL_ENDPOINT: studio:50051
+      EDGE_ID: c1g-e2e-edge
+      EDGE_AUTH_TOKEN: c1g-e2e-grpc-token-0123456789abcdef
+      EDGE_ALLOW_INSECURE: "true"
+      EDGE_TLS_ENABLED: "false"
+      ENCRYPTION_KEY: c1ge2eencryptionkey0123456789abc
+      DATABASE_TYPE: sqlite
+      DATABASE_DSN: file:/data/edge.db?mode=rwc
+      PLUGINS_CONFIG_PATH: ""
+      OCI_PLUGINS_CACHE_DIR: /data/oci
+      OCI_PLUGINS_INSECURE_REGISTRIES: registry:5000
+      OCI_PLUGINS_REQUIRE_SIGNATURE: "true"
+      OCI_PLUGINS_TLOG_POLICY: ${GATEWAY_TLOG_POLICY:-required}
+      PLUGINS_ALLOWED_SOURCES: ${GATEWAY_ALLOWED_SOURCES:-}
+
+networks:
+  default:
+    name: c1g-e2e
