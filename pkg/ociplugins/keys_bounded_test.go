@@ -47,7 +47,6 @@ func makeFIFO(t *testing.T) string {
 // the hub for gateways). Naming a device, a FIFO or a huge file must fail
 // fast, not read forever or block (midsommar-clean-c1g.21).
 func TestResolvePublicKey_RejectsNonRegularAndOversizedFiles(t *testing.T) {
-	t.Skip("fails until midsommar-clean-c1g.21 is fixed (unbounded read of /dev/zero exhausts memory); remove this skip with the fix")
 	fifo := makeFIFO(t)
 
 	big := filepath.Join(t.TempDir(), "big.pem")
@@ -85,7 +84,6 @@ func TestResolvePublicKey_RejectsNonRegularAndOversizedFiles(t *testing.T) {
 // A named key file from the environment (OCI_PLUGINS_PUBKEY_FILE_<NAME>)
 // gets the same bound.
 func TestResolvePublicKey_NamedFileEnvIsBounded(t *testing.T) {
-	t.Skip("fails until midsommar-clean-c1g.21 is fixed (unbounded read of /dev/zero exhausts memory); remove this skip with the fix")
 	fifo := makeFIFO(t)
 	t.Setenv("OCI_PLUGINS_PUBKEY_FILE_FIFO", fifo)
 	t.Setenv("OCI_PLUGINS_PUBKEY_FILE_ZERO", "/dev/zero")
@@ -103,7 +101,6 @@ func TestResolvePublicKey_NamedFileEnvIsBounded(t *testing.T) {
 
 // The trusted-root override has the same shape and gets the same bound.
 func TestValidateTrustedRootFile_RejectsNonRegularFiles(t *testing.T) {
-	t.Skip("fails until midsommar-clean-c1g.21 is fixed (unbounded read of /dev/zero exhausts memory); remove this skip with the fix")
 	fifo := makeFIFO(t)
 	for _, path := range []string{"/dev/zero", fifo} {
 		t.Run(path, func(t *testing.T) {

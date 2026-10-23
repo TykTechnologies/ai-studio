@@ -149,9 +149,10 @@ func pemKey(pemContent, keyName string) ([]byte, string, error) {
 	return []byte(pemContent), "", nil
 }
 
-// pemKeyFile reads a PEM key file.
+// pemKeyFile reads a PEM key file: a regular file of at most
+// maxKeyFileSize bytes, so a key ID naming a device or FIFO fails fast.
 func pemKeyFile(path string) ([]byte, string, error) {
-	content, err := os.ReadFile(path)
+	content, err := readRegularFile(path, maxKeyFileSize)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to read public key file %s: %w", path, err)
 	}

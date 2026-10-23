@@ -94,24 +94,13 @@ func ParseTlogPolicy(value string) (string, error) {
 }
 
 // ValidateTrustedRootFile checks that a trusted-root override, if set, is a
-// readable file.
+// readable regular file of bounded size (see ReadTrustedRootFile).
 func ValidateTrustedRootFile(path string) error {
 	if path == "" {
 		return nil
 	}
-	f, err := os.Open(path)
-	if err != nil {
-		return fmt.Errorf("trusted root file is not readable: %w", err)
-	}
-	defer f.Close()
-	info, err := f.Stat()
-	if err != nil {
-		return fmt.Errorf("trusted root file is not readable: %w", err)
-	}
-	if info.IsDir() {
-		return fmt.Errorf("trusted root file %s is a directory", path)
-	}
-	return nil
+	_, err := ReadTrustedRootFile(path)
+	return err
 }
 
 // RegistryAuth holds authentication configuration for a specific registry
