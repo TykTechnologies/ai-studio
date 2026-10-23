@@ -537,14 +537,34 @@ func (v *Bedrock) ProxySetAuthHeader(r *http.Request, llm *models.LLM) error {
 		SessionToken:    sessionToken,
 	}
 
+	// The signer sees a copy without the headers a proxy on the way may
+	// change, so they go out unsigned: AWS's own front end appends the
+	// caller's address to X-Forwarded-For, and a signature covering it never
+	// matches (403 SignatureDoesNotMatch on every request that carried one).
+	toSign := r.Clone(r.Context())
+	for _, h := range unsignedHeaders {
+		toSign.Header.Del(h)
+	}
 	signer := v4signer.NewSigner()
-	err = signer.SignHTTP(r.Context(), creds, r, payloadHash, "bedrock", region, time.Now())
+	err = signer.SignHTTP(r.Context(), creds, toSign, payloadHash, "bedrock", region, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to sign request with SigV4: %w", err)
+	}
+	for _, h := range signatureHeaders {
+		if v := toSign.Header.Values(h); len(v) > 0 {
+			r.Header[h] = v
+		}
 	}
 
 	return nil
 }
+
+// unsignedHeaders are left out of a request's SigV4 signature: proxies,
+// AWS's front end included, append to or rewrite them in transit.
+var unsignedHeaders = []string{"X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto", "X-Forwarded-Port", "Forwarded", "X-Real-Ip", "Via"}
+
+// signatureHeaders are what SignHTTP adds to the request it signs.
+var signatureHeaders = []string{"Authorization", "X-Amz-Date", "X-Amz-Security-Token"}
 
 func (v *Bedrock) ProxyScreenRequest(_ *models.LLM, _ *http.Request, _ bool) error {
 	return nil
