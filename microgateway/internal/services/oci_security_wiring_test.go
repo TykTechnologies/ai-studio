@@ -32,7 +32,6 @@ func TestServiceContainers_OCIClientHasSecurityService(t *testing.T) {
 	})
 
 	t.Run("hub-spoke container", func(t *testing.T) {
-		t.Skip("fails until midsommar-clean-c1g.22 is fixed; remove this skip with the fix")
 		c, err := NewHubSpokeServiceContainer(setupEdgeSyncTestDB(t), newConfig(t))
 		require.NoError(t, err)
 		t.Cleanup(c.Cleanup)

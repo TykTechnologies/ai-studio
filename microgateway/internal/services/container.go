@@ -80,14 +80,7 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 	pluginService := NewPluginService(db, repo)
 
 	// Initialize Plugin Security service (ENT: full security enforcement, CE: stub allowing all operations)
-	var ociLibConfig *ociplugins.OCIConfig
-	if cfg.OCIPlugins.CacheDir != "" {
-		ociLibConfig = cfg.OCIPlugins.ToOCIConfig()
-	}
-	pluginSecurityService := plugin_security.NewService(&plugin_security.Config{
-		OCIConfig:                  ociLibConfig,
-		AllowInternalNetworkAccess: os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") == "true",
-	})
+	pluginSecurityService := newPluginSecurityService(cfg)
 
 	// Create plugin service adapter to break circular dependency
 	pluginServiceAdapter := NewPluginServiceAdapter(pluginService)
@@ -101,7 +94,7 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 	if cfg.OCIPlugins.CacheDir != "" {
 		// OCI support enabled
 		ociConfig := cfg.OCIPlugins.ToOCIConfig()
-		pluginManager, err = plugins.NewPluginManagerWithOCI(pluginServiceAdapter, ociConfig)
+		pluginManager, err = plugins.NewPluginManagerWithOCI(pluginServiceAdapter, ociConfig, pluginSecurityService)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to initialize OCI plugin support, using standard plugin manager")
 			pluginManager = plugins.NewPluginManager(pluginServiceAdapter)
@@ -390,4 +383,17 @@ func (sc *ServiceContainer) startTokenCleanup(ctx context.Context, provider *aut
 			}
 		}
 	}
+}
+// newPluginSecurityService builds the plugin security service (ENT: full
+// security enforcement, CE: the community stub) every service container
+// gives its plugin manager.
+func newPluginSecurityService(cfg *config.Config) plugin_security.Service {
+	var ociLibConfig *ociplugins.OCIConfig
+	if cfg.OCIPlugins.CacheDir != "" {
+		ociLibConfig = cfg.OCIPlugins.ToOCIConfig()
+	}
+	return plugin_security.NewService(&plugin_security.Config{
+		OCIConfig:                  ociLibConfig,
+		AllowInternalNetworkAccess: os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") == "true",
+	})
 }

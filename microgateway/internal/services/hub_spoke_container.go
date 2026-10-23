@@ -99,6 +99,10 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 	pluginServiceAdapter.SetCrypto(crypto)
 	pluginServiceAdapter.SetManagementService(management) // Enable LLM-based plugin pre-warming
 
+	// The plugin security service verifies OCI plugin signatures (ENT; CE
+	// loads them recorded as unverified).
+	pluginSecurityService := newPluginSecurityService(cfg)
+
 	// Initialize plugin manager with OCI support if configured
 	var pluginManager *plugins.PluginManager
 	var err error
@@ -106,7 +110,7 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 	if cfg.OCIPlugins.CacheDir != "" {
 		// OCI support enabled
 		ociConfig := cfg.OCIPlugins.ToOCIConfig()
-		pluginManager, err = plugins.NewPluginManagerWithOCI(pluginServiceAdapter, ociConfig)
+		pluginManager, err = plugins.NewPluginManagerWithOCI(pluginServiceAdapter, ociConfig, pluginSecurityService)
 		if err != nil {
 			log.Error().Err(err).Msg("Failed to initialize OCI plugin support, using standard plugin manager")
 			pluginManager = plugins.NewPluginManager(pluginServiceAdapter)
@@ -207,8 +211,9 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 		AuthProvider: authProvider,
 		Crypto:       crypto,
 
-		PluginManager:      pluginManager,
-		ModelRouterService: modelRouterService,
+		PluginManager:         pluginManager,
+		PluginSecurityService: pluginSecurityService,
+		ModelRouterService:    modelRouterService,
 		SemanticRouterService: semanticRouterService,
 
 		// Edge identity from config

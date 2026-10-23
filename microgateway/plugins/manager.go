@@ -234,16 +234,22 @@ func NewPluginManager(pluginService PluginServiceInterface) *PluginManager {
 	}
 }
 
-// NewPluginManagerWithOCI creates a new plugin manager with OCI support
-func NewPluginManagerWithOCI(pluginService PluginServiceInterface, ociConfig *ociplugins.OCIConfig) (*PluginManager, error) {
+// NewPluginManagerWithOCI creates a new plugin manager with OCI support. The
+// security service verifies OCI plugin signatures and is required: an OCI
+// client without one refuses every plugin when signatures are required.
+func NewPluginManagerWithOCI(pluginService PluginServiceInterface, ociConfig *ociplugins.OCIConfig, securityService ociplugins.SecurityService) (*PluginManager, error) {
 	pm := NewPluginManager(pluginService)
 
 	if ociConfig != nil {
+		if securityService == nil {
+			return nil, fmt.Errorf("an OCI plugin manager needs a plugin security service")
+		}
 		// Initialize OCI client
 		ociClient, err := ociplugins.NewOCIPluginClient(ociConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create OCI plugin client: %w", err)
 		}
+		ociClient.SetSecurityService(securityService)
 		pm.ociClient = ociClient
 	}
 
