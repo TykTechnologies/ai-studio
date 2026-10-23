@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	appconfig "github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
@@ -2554,4 +2555,20 @@ func respondPluginSourceNotAllowed(c *gin.Context, err error) bool {
 		}{{Title: "Plugin Source Not Allowed", Detail: notAllowed.Error()}},
 	})
 	return true
+}
+
+// getPluginPolicy returns the plugin deployment types this installation
+// accepts and whether OCI plugins must be signed, for the plugin wizard,
+// form and marketplace.
+func (a *API) getPluginPolicy(c *gin.Context) {
+	conf := appconfig.Get("")
+	resp := PluginPolicyResponse{
+		PluginAllowedSources: []string{},
+		OCIEnabled:           conf.OCIPlugins.IsEnabled(),
+		OCIRequireSignature:  conf.OCIPlugins.IsEnabled() && conf.OCIPlugins.RequireSignature,
+	}
+	for _, source := range conf.PluginSourcePolicy.Allowed() {
+		resp.PluginAllowedSources = append(resp.PluginAllowedSources, string(source))
+	}
+	c.JSON(http.StatusOK, gin.H{"data": resp})
 }

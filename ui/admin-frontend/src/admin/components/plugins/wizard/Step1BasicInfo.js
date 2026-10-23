@@ -6,7 +6,7 @@ import {
   Grid,
 } from '@mui/material';
 import { PrimaryButton, SecondaryOutlineButton } from '../../../styles/sharedStyles';
-import useConfig from '../../../hooks/useConfig';
+import usePluginPolicy from '../../../hooks/usePluginPolicy';
 import {
   allowedPluginSources,
   pluginSourceError,
@@ -15,8 +15,8 @@ import {
 } from '../../../services/pluginService';
 
 const Step1BasicInfo = ({ data, onComplete, onBack, loading, disabled }) => {
-  const { config } = useConfig();
-  const allowedSources = allowedPluginSources(config);
+  const { policy } = usePluginPolicy();
+  const allowedSources = allowedPluginSources(policy);
   const [formData, setFormData] = useState({
     name: data.name || '',
     description: data.description || '',
@@ -113,7 +113,7 @@ const Step1BasicInfo = ({ data, onComplete, onBack, loading, disabled }) => {
             error={!!errors.command}
             helperText={
               errors.command ||
-              pluginCommandHelp(allowedSources, Boolean(config?.oci_require_signature))
+              pluginCommandHelp(allowedSources, Boolean(policy?.oci_require_signature))
             }
             placeholder={pluginCommandPlaceholder(allowedSources)}
             disabled={disabled}

@@ -917,6 +917,7 @@ func (a *API) setupRoutes() error {
 	v1.DELETE("/plugins/:id", authz.Delete("plugins"), a.deletePlugin)
 	v1.DELETE("/plugins/:id/data", authz.Delete("plugins"), a.clearPluginData)
 	v1.GET("/plugins", authz.Read("plugins"), a.listPlugins)
+	v1.GET("/plugin-policy", authz.Read("plugins"), a.getPluginPolicy)
 	v1.POST("/plugins/:id/test", authz.Execute("plugins"), a.testPlugin)
 
 	// OCI Plugin routes
@@ -1446,11 +1447,6 @@ func (a *API) handleGetConfig(c *gin.Context) {
 		DocsEnabled:          !config.Get("").DocsDisabled,
 		DocsURL:              config.Get("").DocsURL,
 		AllowSSOUserAPIKeys:  config.Get("").AllowSSOUserAPIKeys,
-		OCIEnabled:           config.Get("").OCIPlugins.IsEnabled(),
-		OCIRequireSignature:  config.Get("").OCIPlugins.IsEnabled() && config.Get("").OCIPlugins.RequireSignature,
-	}
-	for _, source := range config.Get("").PluginSourcePolicy.Allowed() {
-		cfg.PluginAllowedSources = append(cfg.PluginAllowedSources, string(source))
 	}
 	boot := a.frontendBootstrap()
 	cfg.BasePath = boot.BasePath

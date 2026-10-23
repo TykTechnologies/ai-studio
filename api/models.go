@@ -1326,9 +1326,16 @@ type FrontendConfig struct {
 	// Chrome is "none" when the host application draws the navigation, and
 	// the console then leaves out its top bar and drawers; "full" otherwise.
 	Chrome string `json:"chrome"`
+}
+
+// PluginPolicyResponse tells the console which plugin deployment types it
+// may offer and whether OCI plugins must be signed. It is served to users
+// who can read plugins, not on the public /auth/config: it describes the
+// installation's supply-chain posture.
+type PluginPolicyResponse struct {
 	// PluginAllowedSources lists the plugin deployment types ("oci",
 	// "file", "grpc") this installation accepts
-	// (AI_STUDIO_PLUGIN_ALLOWED_SOURCES), so the console offers only those.
+	// (AI_STUDIO_PLUGIN_ALLOWED_SOURCES).
 	PluginAllowedSources []string `json:"plugin_allowed_sources"`
 	// OCIEnabled reports that OCI plugins can be fetched (an OCI cache
 	// directory is configured), and OCIRequireSignature that they must be

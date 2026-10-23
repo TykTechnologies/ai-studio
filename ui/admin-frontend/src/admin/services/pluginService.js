@@ -597,9 +597,9 @@ export const pluginSourceOf = (command) => {
 };
 
 // allowedPluginSources returns the sources this installation accepts, from
-// /auth/config; all of them when the config does not say.
-export const allowedPluginSources = (config) => {
-  const sources = config?.plugin_allowed_sources;
+// the plugin policy (GET /plugin-policy); all of them when it does not say.
+export const allowedPluginSources = (policy) => {
+  const sources = policy?.plugin_allowed_sources;
   return Array.isArray(sources) && sources.length > 0 ? sources : PLUGIN_SOURCES;
 };
 

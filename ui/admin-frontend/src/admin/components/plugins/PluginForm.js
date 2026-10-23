@@ -45,7 +45,7 @@ import pluginService, {
   pluginCommandHelp,
   pluginCommandPlaceholder,
 } from '../../services/pluginService';
-import useConfig from '../../hooks/useConfig';
+import usePluginPolicy from '../../hooks/usePluginPolicy';
 import EdgeAvailabilitySection from '../common/EdgeAvailabilitySection';
 import PublishSwitch from "../rbac/PublishSwitch";
 import { P } from "../../rbac/permissions";
@@ -53,8 +53,8 @@ import PluginConfigurationSection from './PluginConfigurationSection';
 import ScopeReviewSection from './ScopeReviewSection';
 
 const PluginForm = ({ mode = 'create' }) => {
-  const { config } = useConfig();
-  const allowedSources = allowedPluginSources(config);
+  const { policy } = usePluginPolicy();
+  const allowedSources = allowedPluginSources(policy);
   const { id } = useParams();
   const navigate = useNavigate();
   const isEdit = mode === 'edit' && id;
@@ -560,7 +560,7 @@ const PluginForm = ({ mode = 'create' }) => {
                 error={!!errors.command}
                 helperText={
                   errors.command ||
-                  pluginCommandHelp(allowedSources, Boolean(config?.oci_require_signature))
+                  pluginCommandHelp(allowedSources, Boolean(policy?.oci_require_signature))
                 }
                 placeholder={pluginCommandPlaceholder(allowedSources)}
                 required

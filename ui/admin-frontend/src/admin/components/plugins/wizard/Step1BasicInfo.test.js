@@ -4,9 +4,9 @@ import '@testing-library/jest-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import testTheme from '../../../utils/testTheme';
 import Step1BasicInfo from './Step1BasicInfo';
-import useConfig from '../../../hooks/useConfig';
+import usePluginPolicy from '../../../hooks/usePluginPolicy';
 
-jest.mock('../../../hooks/useConfig', () => jest.fn());
+jest.mock('../../../hooks/usePluginPolicy', () => jest.fn());
 jest.mock('../../../utils/apiClient');
 
 const renderStep = (onComplete = jest.fn()) => {
@@ -24,7 +24,7 @@ const fill = (label, value) => {
 
 describe('Step1BasicInfo plugin sources', () => {
   test('offers every source by default', () => {
-    useConfig.mockReturnValue({ config: { plugin_allowed_sources: ['oci', 'file', 'grpc'], oci_require_signature: false } });
+    usePluginPolicy.mockReturnValue({ policy: { plugin_allowed_sources: ['oci', 'file', 'grpc'], oci_require_signature: false } });
     renderStep();
     expect(
       screen.getByText('Plugin command - use oci:// for OCI artifacts, grpc:// for external services, or local path for binaries')
@@ -32,7 +32,7 @@ describe('Step1BasicInfo plugin sources', () => {
   });
 
   test('mentions only oci:// and signing when only oci is allowed', () => {
-    useConfig.mockReturnValue({ config: { plugin_allowed_sources: ['oci'], oci_require_signature: true } });
+    usePluginPolicy.mockReturnValue({ policy: { plugin_allowed_sources: ['oci'], oci_require_signature: true } });
     renderStep();
     expect(screen.getByText('Plugin command - use oci:// for OCI artifacts (they must be signed)')).toBeInTheDocument();
     expect(screen.queryByText(/grpc:\/\//)).not.toBeInTheDocument();
@@ -40,7 +40,7 @@ describe('Step1BasicInfo plugin sources', () => {
   });
 
   test("rejects a file path with the backend's wording", () => {
-    useConfig.mockReturnValue({ config: { plugin_allowed_sources: ['oci'] } });
+    usePluginPolicy.mockReturnValue({ policy: { plugin_allowed_sources: ['oci'] } });
     const onComplete = renderStep();
     fill('Plugin Name', 'demo');
     fill('Command', '/usr/local/bin/demo');
@@ -54,7 +54,7 @@ describe('Step1BasicInfo plugin sources', () => {
   });
 
   test('accepts an allowed source', () => {
-    useConfig.mockReturnValue({ config: { plugin_allowed_sources: ['oci'] } });
+    usePluginPolicy.mockReturnValue({ policy: { plugin_allowed_sources: ['oci'] } });
     const onComplete = renderStep();
     fill('Plugin Name', 'demo');
     fill('Command', 'oci://registry.example.com/plugins/demo:1.0.0');

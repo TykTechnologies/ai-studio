@@ -70,17 +70,19 @@ func TestPluginAPI_SourcePolicy(t *testing.T) {
 	assert.Zero(t, count)
 }
 
-// /auth/config tells the console which plugin sources it may offer and
-// whether OCI plugins must be signed.
-func TestAuthConfig_PluginSourcesAndSignature(t *testing.T) {
+// The plugin policy (allowed sources, signature requirement) is served to
+// users who can read plugins, not on the public /auth/config.
+func TestPluginPolicy_SourcesAndSignature(t *testing.T) {
 	api, _ := setupTestAPI(t)
-	get := func() FrontendConfig {
+	get := func() PluginPolicyResponse {
 		t.Helper()
-		w := performRequest(api.router, "GET", "/auth/config", nil)
+		w := performRequest(api.router, "GET", "/api/v1/plugin-policy", nil)
 		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-		var cfg FrontendConfig
-		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &cfg))
-		return cfg
+		var body struct {
+			Data PluginPolicyResponse `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		return body.Data
 	}
 
 	assert.Equal(t, []string{"oci", "file", "grpc"}, get().PluginAllowedSources)
@@ -93,8 +95,15 @@ func TestAuthConfig_PluginSourcesAndSignature(t *testing.T) {
 	appconfig.Set(&conf)
 	t.Cleanup(func() { appconfig.Set(saved) })
 
-	cfg := get()
-	assert.Equal(t, []string{"oci"}, cfg.PluginAllowedSources)
-	assert.True(t, cfg.OCIEnabled)
-	assert.True(t, cfg.OCIRequireSignature)
+	policy := get()
+	assert.Equal(t, []string{"oci"}, policy.PluginAllowedSources)
+	assert.True(t, policy.OCIEnabled)
+	assert.True(t, policy.OCIRequireSignature)
+
+	// The public bootstrap config does not disclose it.
+	w := performRequest(api.router, "GET", "/auth/config", nil)
+	require.Equal(t, http.StatusOK, w.Code)
+	for _, field := range []string{"plugin_allowed_sources", "oci_enabled", "oci_require_signature"} {
+		assert.NotContains(t, w.Body.String(), field)
+	}
 }
