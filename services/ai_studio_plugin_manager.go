@@ -1265,18 +1265,6 @@ func (m *AIStudioPluginManager) CallPluginRPC(pluginID uint, method string, payl
 // issuing the call. Plugins implementing plugin_sdk.UserAwareRPCHandler receive
 // it; others ignore it. userCtx may be nil.
 func (m *AIStudioPluginManager) CallPluginRPCAs(pluginID uint, method string, payload map[string]interface{}, userCtx *pb.PortalUserContext) (interface{}, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	loadedPlugin, exists := m.loadedPlugins[pluginID]
-	if !exists {
-		return nil, fmt.Errorf("plugin %d is not loaded", pluginID)
-	}
-
-	if !loadedPlugin.IsHealthy {
-		return nil, fmt.Errorf("plugin %d is not healthy", pluginID)
-	}
-
 	// Convert payload to JSON string
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -1285,7 +1273,10 @@ func (m *AIStudioPluginManager) CallPluginRPCAs(pluginID uint, method string, pa
 
 	// The long-lived session broker serves RPC calls, once the plugin has
 	// connected to a broker (rpcBrokerID)
-	serviceBrokerID := loadedPlugin.rpcBrokerID("ui rpc")
+	client, serviceBrokerID, err := m.rpcTarget(pluginID, "ui rpc")
+	if err != nil {
+		return nil, err
+	}
 
 	log.Debug().
 		Uint("plugin_id", pluginID).
@@ -1303,7 +1294,7 @@ func (m *AIStudioPluginManager) CallPluginRPCAs(pluginID uint, method string, pa
 		Uint32("service_broker_id", serviceBrokerID).
 		Msg("Calling plugin RPC")
 
-	resp, err := loadedPlugin.GRPCClient.Call(ctx, &pb.CallRequest{
+	resp, err := client.Call(ctx, &pb.CallRequest{
 		Method:          method,
 		Payload:         string(payloadBytes),
 		ServiceBrokerId: serviceBrokerID,
@@ -1335,27 +1326,36 @@ func (m *AIStudioPluginManager) CallPluginRPCAs(pluginID uint, method string, pa
 	return responseData, nil
 }
 
-// CallPluginPortalRPC calls a plugin's portal RPC method via gRPC with user context.
-// This is the portal-scoped equivalent of CallPluginRPC, using PortalCall instead of Call.
-func (m *AIStudioPluginManager) CallPluginPortalRPC(pluginID uint, method string, payload map[string]interface{}, userCtx *pb.PortalUserContext) (interface{}, error) {
+// rpcTarget reads, under the manager's read lock, the client and broker ID
+// a UI or portal RPC to pluginID needs. The call itself runs without the
+// lock: it can take up to its 30 s timeout, and holding the lock for it
+// stalled session renewals and plugin loads behind a slow plugin (bqo).
+func (m *AIStudioPluginManager) rpcTarget(pluginID uint, purpose string) (pb.PluginServiceClient, uint32, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	loadedPlugin, exists := m.loadedPlugins[pluginID]
 	if !exists {
-		return nil, fmt.Errorf("plugin %d is not loaded", pluginID)
+		return nil, 0, fmt.Errorf("plugin %d is not loaded", pluginID)
 	}
-
 	if !loadedPlugin.IsHealthy {
-		return nil, fmt.Errorf("plugin %d is not healthy", pluginID)
+		return nil, 0, fmt.Errorf("plugin %d is not healthy", pluginID)
 	}
+	return loadedPlugin.GRPCClient, loadedPlugin.rpcBrokerID(purpose), nil
+}
 
+// CallPluginPortalRPC calls a plugin's portal RPC method via gRPC with user context.
+// This is the portal-scoped equivalent of CallPluginRPC, using PortalCall instead of Call.
+func (m *AIStudioPluginManager) CallPluginPortalRPC(pluginID uint, method string, payload map[string]interface{}, userCtx *pb.PortalUserContext) (interface{}, error) {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal portal RPC payload: %w", err)
 	}
 
-	serviceBrokerID := loadedPlugin.rpcBrokerID("portal rpc")
+	client, serviceBrokerID, err := m.rpcTarget(pluginID, "portal rpc")
+	if err != nil {
+		return nil, err
+	}
 
 	log.Debug().
 		Uint("plugin_id", pluginID).
@@ -1367,7 +1367,7 @@ func (m *AIStudioPluginManager) CallPluginPortalRPC(pluginID uint, method string
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	resp, err := loadedPlugin.GRPCClient.PortalCall(ctx, &pb.PortalCallRequest{
+	resp, err := client.PortalCall(ctx, &pb.PortalCallRequest{
 		Method:          method,
 		Payload:         string(payloadBytes),
 		ServiceBrokerId: serviceBrokerID,
