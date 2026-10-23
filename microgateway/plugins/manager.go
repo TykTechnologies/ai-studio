@@ -1231,7 +1231,7 @@ func (pm *PluginManager) parseGRPCReattachConfig(grpcURL string) (*plugin.Reatta
 
 // connectWithRetry connects to a plugin with retry logic for external services
 func (pm *PluginManager) connectWithRetry(client *plugin.Client, command string) (plugin.ClientProtocol, error) {
-	isExternal := strings.HasPrefix(command, "grpc://")
+	isExternal := plugin_security.SourceOf(command) == plugin_security.SourceGRPC
 
 	if !isExternal {
 		// For local plugins, use standard connection
@@ -2386,7 +2386,7 @@ func (pm *PluginManager) PreWarmOCIPlugins(ctx context.Context) error {
 
 	// Pre-warm OCI plugins that have gateway-supported hook types
 	for _, plugin := range allPlugins {
-		if !strings.HasPrefix(plugin.Command, "oci://") {
+		if plugin_security.SourceOf(plugin.Command) != plugin_security.SourceOCI {
 			continue
 		}
 
@@ -2471,7 +2471,7 @@ func (pm *PluginManager) updatePluginHealthUnsafe(pluginID uint, pluginData Plug
 		HookType:    pluginData.HookType,
 		Status:      status,
 		LastAttempt: time.Now(),
-		IsOCI:       strings.HasPrefix(pluginData.Command, "oci://"),
+		IsOCI:       plugin_security.SourceOf(pluginData.Command) == plugin_security.SourceOCI,
 		LoadTime:    loadTime,
 	}
 

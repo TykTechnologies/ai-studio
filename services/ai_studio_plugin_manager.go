@@ -1613,10 +1613,14 @@ func (m *AIStudioPluginManager) createConfigOnlyPluginClient(command string) (*g
 		return nil, err
 	}
 
-	if strings.HasPrefix(command, "oci://") {
+	// Dispatch on plugin_security.SourceOf, as createPluginClient does.
+	switch plugin_security.SourceOf(command) {
+	case plugin_security.SourceOCI:
 		// OCI plugin - fetch from registry first, then create config-only client
 		return m.createConfigOnlyOCIPluginClient(command)
-	} else {
+	case plugin_security.SourceGRPC:
+		return nil, fmt.Errorf("grpc plugins have no config-only mode")
+	default:
 		// Local executable - create config-only client
 		return m.createConfigOnlyLocalPluginClient(command)
 	}
