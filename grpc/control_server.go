@@ -1376,11 +1376,13 @@ func (s *ControlServer) SendPluginControlBatch(ctx context.Context, req *pb.Plug
 		if err := s.edgePayloads.ForwardEdgePayloads(ctx, req.Payloads); err != nil {
 			logger.Log.Warn().Err(err).Str("edge_id", req.EdgeId).Int("payloads", len(req.Payloads)).
 				Msg("Failed to queue edge payloads for the plugin host")
-			for _, payload := range req.Payloads {
+			for i, payload := range req.Payloads {
 				errors = append(errors, &pb.PluginPayloadError{
 					PluginId:      payload.PluginId,
 					CorrelationId: payload.CorrelationId,
 					ErrorMessage:  fmt.Sprintf("could not queue the payload for the plugin host: %v", err),
+					Retry:         true,
+					PayloadIndex:  uint32(i),
 				})
 			}
 		} else {
@@ -1389,7 +1391,7 @@ func (s *ControlServer) SendPluginControlBatch(ctx context.Context, req *pb.Plug
 		}
 	} else {
 		// Process each payload - route to corresponding plugin
-		for _, payload := range req.Payloads {
+		for i, payload := range req.Payloads {
 			err := s.routeEdgePayloadToPlugin(ctx, payload)
 			if err != nil {
 				logger.Log.Warn().
@@ -1398,10 +1400,14 @@ func (s *ControlServer) SendPluginControlBatch(ctx context.Context, req *pb.Plug
 					Str("correlation_id", payload.CorrelationId).
 					Msg("Failed to route edge payload to plugin")
 
+				// A failure that may pass (rlk) keeps the payload queued on
+				// the edge; the plugin's own refusal is final.
 				errors = append(errors, &pb.PluginPayloadError{
 					PluginId:      payload.PluginId,
 					CorrelationId: payload.CorrelationId,
 					ErrorMessage:  err.Error(),
+					Retry:         edgePayloadRetryable(err),
+					PayloadIndex:  uint32(i),
 				})
 			} else {
 				processedCount++
@@ -1431,6 +1437,12 @@ func (s *ControlServer) SendPluginControlBatch(ctx context.Context, req *pb.Plug
 		ProcessedAt:    timestamppb.Now(),
 		Errors:         errors,
 	}, nil
+}
+
+// edgePayloadRetryable reports whether a payload's failure may pass, so its
+// edge sends it again (services.ErrEdgePayloadRetry).
+func edgePayloadRetryable(err error) bool {
+	return errors.Is(err, services.ErrEdgePayloadRetry)
 }
 
 // routeEdgePayloadToPlugin routes an edge payload to the corresponding AI

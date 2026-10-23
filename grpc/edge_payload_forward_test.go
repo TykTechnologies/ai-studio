@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/TykTechnologies/midsommar/v2/services"
 )
 
 type recordingPayloads struct {
@@ -111,4 +113,44 @@ func TestSendPluginControlBatch_ForwardFailureIsPerPayload(t *testing.T) {
 	require.Len(t, resp.Errors, 2)
 	assert.Contains(t, resp.Errors[0].ErrorMessage, "cluster log unavailable")
 	assert.Equal(t, "c1", resp.Errors[0].CorrelationId)
+}
+
+// routingByPayload answers each payload with the error its body names.
+type routingByPayload map[string]error
+
+func (r routingByPayload) RouteEdgePayload(_ context.Context, p *pb.PluginControlPayload) error {
+	return r[string(p.Payload)]
+}
+
+// rlk: a payload the plugin could not take for a reason that may pass (a
+// service scope awaiting approval, the plugin unavailable) is flagged for
+// the edge to send again; the plugin's own refusal is final. Errors name the
+// payload's position in the batch.
+func TestSendPluginControlBatch_FlagsRetryableFailures(t *testing.T) {
+	server, _ := setupTestServer(t, nil)
+	t.Cleanup(server.Stop)
+	server.SetPluginManager(routingByPayload{
+		"one": fmt.Errorf("%w: plugin 7 could not handle edge payload: rpc error: code = PermissionDenied", services.ErrEdgePayloadRetry),
+		"two": errors.New("plugin 7 rejected edge payload: bad payload"),
+	})
+	batch := pluginBatch()
+	batch.Payloads = append(batch.Payloads, &pb.PluginControlPayload{PluginId: 7, Payload: []byte("three"), CorrelationId: "c3"})
+
+	resp, err := server.SendPluginControlBatch(context.Background(), batch)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(1), resp.ProcessedCount)
+	require.Len(t, resp.Errors, 2)
+	assert.True(t, resp.Errors[0].Retry)
+	assert.Equal(t, uint32(0), resp.Errors[0].PayloadIndex)
+	assert.False(t, resp.Errors[1].Retry, "the plugin's own refusal is final")
+	assert.Equal(t, uint32(1), resp.Errors[1].PayloadIndex)
+
+	// A batch the forwarder cannot take may be sent again too.
+	server.pluginManager = nil
+	server.SetEdgePayloadForwarder(&recordingPayloads{err: errors.New("cluster log unavailable")})
+	resp, err = server.SendPluginControlBatch(context.Background(), pluginBatch())
+	require.NoError(t, err)
+	require.Len(t, resp.Errors, 2)
+	assert.True(t, resp.Errors[1].Retry)
+	assert.Equal(t, uint32(1), resp.Errors[1].PayloadIndex)
 }

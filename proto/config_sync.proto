@@ -600,4 +600,10 @@ message PluginPayloadError {
   uint32 plugin_id = 1;                        // Plugin ID that failed
   string correlation_id = 2;                   // Correlation ID from the payload
   string error_message = 3;                    // Error description
+  // The payload was not delivered for a reason that may pass (the plugin not
+  // loaded or unreachable, a service scope awaiting approval): the edge keeps
+  // it queued and sends it again within its retention. Otherwise the plugin
+  // refused the payload itself, which is final.
+  bool retry = 4;
+  uint32 payload_index = 5;                    // The payload's position in the batch
 }

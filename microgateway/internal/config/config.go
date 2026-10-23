@@ -276,7 +276,8 @@ type ControlPayloadConfig struct {
 	// BatchThreshold is the number of payloads that triggers an immediate send
 	BatchThreshold int `env:"CONTROL_PAYLOAD_BATCH_THRESHOLD" envDefault:"100"`
 
-	// RetentionHours is how long to keep sent payloads in the database
+	// RetentionHours is how long to keep sent payloads in the database, and how
+	// long an undelivered payload is retried before it is dropped
 	RetentionHours int `env:"CONTROL_PAYLOAD_RETENTION_HOURS" envDefault:"24"`
 }
 

@@ -26,6 +26,7 @@ import (
 	goplugin "github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 )
 
 // Global service reference for GRPCServer access
@@ -2180,6 +2181,21 @@ func DetectMimeType(filename string) string {
 	return mimeType
 }
 
+// ErrEdgePayloadRetry marks an edge payload that was not delivered for a
+// reason that may pass: the plugin is not loaded, healthy or reachable, or a
+// service API call it made was refused (PermissionDenied while its scopes
+// await approval) or unavailable. The edge keeps such a payload queued and
+// sends it again; only the plugin's own refusal of the payload is final (rlk).
+var ErrEdgePayloadRetry = errors.New("edge payload can be retried")
+
+// edgePayloadRejectionRetryable reports whether a plugin's rejection message
+// carries a service API refusal that may pass, as the SDK passes the
+// plugin's error on as text.
+func edgePayloadRejectionRetryable(msg string) bool {
+	return strings.Contains(msg, "code = "+codes.PermissionDenied.String()) ||
+		strings.Contains(msg, "code = "+codes.Unavailable.String())
+}
+
 // RouteEdgePayload routes a payload from an edge instance to the corresponding AI Studio plugin
 // This implements the EdgePayloadRouter interface required by the control server
 func (m *AIStudioPluginManager) RouteEdgePayload(ctx context.Context, payload *pb.PluginControlPayload) error {
@@ -2198,12 +2214,12 @@ func (m *AIStudioPluginManager) RouteEdgePayload(ctx context.Context, payload *p
 		var err error
 		loadedPlugin, err = m.LoadPlugin(pluginID)
 		if err != nil {
-			return fmt.Errorf("plugin %d is not loaded and could not be loaded: %w", pluginID, err)
+			return fmt.Errorf("%w: plugin %d is not loaded and could not be loaded: %w", ErrEdgePayloadRetry, pluginID, err)
 		}
 	}
 
 	if !loadedPlugin.IsHealthy {
-		return fmt.Errorf("plugin %d is not healthy", pluginID)
+		return fmt.Errorf("%w: plugin %d is not healthy", ErrEdgePayloadRetry, pluginID)
 	}
 
 	// Set up per-request broker for service API access
@@ -2255,7 +2271,7 @@ func (m *AIStudioPluginManager) RouteEdgePayload(ctx context.Context, payload *p
 			Uint("plugin_id", pluginID).
 			Str("edge_id", payload.EdgeId).
 			Msg("Failed to call AcceptEdgePayload on plugin")
-		return fmt.Errorf("failed to route edge payload to plugin %d: %w", pluginID, err)
+		return fmt.Errorf("%w: failed to route edge payload to plugin %d: %w", ErrEdgePayloadRetry, pluginID, err)
 	}
 
 	if !resp.Success {
@@ -2265,6 +2281,9 @@ func (m *AIStudioPluginManager) RouteEdgePayload(ctx context.Context, payload *p
 			Str("error", resp.ErrorMessage).
 			Bool("handled", resp.Handled).
 			Msg("Plugin rejected edge payload")
+		if edgePayloadRejectionRetryable(resp.ErrorMessage) {
+			return fmt.Errorf("%w: plugin %d could not handle edge payload: %s", ErrEdgePayloadRetry, pluginID, resp.ErrorMessage)
+		}
 		return fmt.Errorf("plugin %d rejected edge payload: %s", pluginID, resp.ErrorMessage)
 	}
 
