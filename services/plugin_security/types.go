@@ -14,6 +14,10 @@ type Config struct {
 
 	// Development mode settings
 	AllowInternalNetworkAccess bool
+
+	// SourcePolicy limits the plugin deployment types (oci, file, grpc) the
+	// installation accepts. The zero value allows all.
+	SourcePolicy SourcePolicy
 }
 
 // OCIReference is re-exported from ociplugins for convenience

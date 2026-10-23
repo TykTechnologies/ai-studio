@@ -1494,13 +1494,16 @@ func (m *AIStudioPluginManager) createPluginClient(command string) (*goplugin.Cl
 		return nil, err
 	}
 
-	if strings.HasPrefix(command, "oci://") {
+	// Dispatch on plugin_security.SourceOf, so the source policy classifies
+	// a command exactly as it is run.
+	switch plugin_security.SourceOf(command) {
+	case plugin_security.SourceOCI:
 		// OCI plugin - fetch from registry first
 		return m.createOCIPluginClient(command)
-	} else if strings.HasPrefix(command, "grpc://") {
+	case plugin_security.SourceGRPC:
 		// External gRPC service - use ReattachConfig (for testing)
 		return m.createGRPCPluginClient(command)
-	} else {
+	default:
 		// Local executable - use exec.Command
 		return m.createLocalPluginClient(command)
 	}

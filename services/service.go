@@ -285,6 +285,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		secService = plugin_security.NewService(&plugin_security.Config{
 			OCIConfig:                  ociConfig,
 			AllowInternalNetworkAccess: os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") == "true",
+			SourcePolicy:               appConf.PluginSourcePolicy,
 		})
 	}
 

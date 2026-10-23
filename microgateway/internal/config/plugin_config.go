@@ -8,6 +8,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 )
 
 // PluginConfigLoader defines how plugin configurations are loaded
@@ -28,6 +29,12 @@ type PluginConfigLoader interface {
 type PluginConfig struct {
 	// File-based configuration
 	ConfigPath string `env:"PLUGINS_CONFIG_PATH" envDefault:""`
+
+	// AllowedSources limits the plugin deployment types (oci, file, grpc)
+	// this gateway accepts, whoever configures them (the hub included).
+	// Empty allows all. SourcePolicy is the parsed value (see Validate).
+	AllowedSources string                       `env:"PLUGINS_ALLOWED_SOURCES" envDefault:""`
+	SourcePolicy   plugin_security.SourcePolicy `env:"-"`
 
 	// Service-based configuration
 	ConfigServiceURL   string        `env:"PLUGINS_CONFIG_SERVICE_URL" envDefault:""`
@@ -74,6 +81,16 @@ type OCIPluginConfig struct {
 	// Garbage collection
 	GCInterval   time.Duration `env:"OCI_PLUGINS_GC_INTERVAL" envDefault:"24h"`
 	KeepVersions int          `env:"OCI_PLUGINS_KEEP_VERSIONS" envDefault:"3"`
+}
+
+// parseSourcePolicy parses PLUGINS_ALLOWED_SOURCES into SourcePolicy.
+func (c *PluginConfig) parseSourcePolicy() error {
+	policy, err := plugin_security.ParseSourcePolicy(c.AllowedSources)
+	if err != nil {
+		return fmt.Errorf("invalid PLUGINS_ALLOWED_SOURCES: %w", err)
+	}
+	c.SourcePolicy = policy.WithSetting("PLUGINS_ALLOWED_SOURCES")
+	return nil
 }
 
 // validateVerification checks the signature-verification settings and

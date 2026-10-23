@@ -22,6 +22,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pluginenv"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pluginlimits"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
@@ -1026,10 +1027,13 @@ func isPathInAllowedDirectories(absPath string) bool {
 
 // createPluginClient creates a plugin client based on command scheme
 func (pm *PluginManager) createPluginClient(command string) (*plugin.Client, error) {
-	if strings.HasPrefix(command, "oci://") {
+	// Dispatch on plugin_security.SourceOf, so the source policy classifies
+	// a command exactly as it is run.
+	source := plugin_security.SourceOf(command)
+	if source == plugin_security.SourceOCI {
 		// OCI plugin - fetch from registry first
 		return pm.createOCIPluginClient(command)
-	} else if strings.HasPrefix(command, "grpc://") {
+	} else if source == plugin_security.SourceGRPC {
 		// External gRPC service - use ReattachConfig
 		reattachConfig, err := pm.parseGRPCReattachConfig(command)
 		if err != nil {

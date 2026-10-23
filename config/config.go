@@ -16,6 +16,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 )
 
 // cfgLog is initialized early with a console writer for config loading
@@ -37,6 +38,9 @@ type AppConf struct {
 	// back to a default (security settings). studio.New refuses to start
 	// while there are any; see Err.
 	ConfigErrors []error `json:"-"`
+	// PluginSourcePolicy limits the plugin deployment types (oci, file,
+	// grpc) Studio accepts (AI_STUDIO_PLUGIN_ALLOWED_SOURCES; all when unset).
+	PluginSourcePolicy plugin_security.SourcePolicy `json:"-"`
 	SMTPServer           string
 	SMTPPort             int
 	SMTPUser             string
@@ -831,6 +835,18 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 	}
 	conf.GRPCMaxConnectionAge = parseDurationWithDefault(getenv, "GRPC_MAX_CONNECTION_AGE", 0)
 	conf.GRPCMaxConnectionAgeGrace = parseDurationWithDefault(getenv, "GRPC_MAX_CONNECTION_AGE_GRACE", 0)
+
+	// Plugin source lockdown: the deployment types this installation
+	// accepts. A security setting, so an invalid value refuses to start.
+	sourcePolicy, err := plugin_security.ParseSourcePolicy(getenv("AI_STUDIO_PLUGIN_ALLOWED_SOURCES"))
+	if err != nil {
+		conf.ConfigErrors = append(conf.ConfigErrors, fmt.Errorf("invalid AI_STUDIO_PLUGIN_ALLOWED_SOURCES: %w", err))
+	} else {
+		conf.PluginSourcePolicy = sourcePolicy.WithSetting("AI_STUDIO_PLUGIN_ALLOWED_SOURCES")
+		if !sourcePolicy.AllowsAll() {
+			cfgLog.Info().Msgf("Plugin sources limited by AI_STUDIO_PLUGIN_ALLOWED_SOURCES: %s", sourcePolicy)
+		}
+	}
 
 	// OCI Plugin configuration
 	var ociErr error

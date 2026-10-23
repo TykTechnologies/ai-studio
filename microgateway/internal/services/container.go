@@ -395,5 +395,6 @@ func newPluginSecurityService(cfg *config.Config) plugin_security.Service {
 	return plugin_security.NewService(&plugin_security.Config{
 		OCIConfig:                  ociLibConfig,
 		AllowInternalNetworkAccess: os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") == "true",
+		SourcePolicy:               cfg.Plugins.SourcePolicy,
 	})
 }

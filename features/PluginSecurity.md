@@ -267,6 +267,45 @@ OCI_PLUGINS_PUBKEY_FILE_COSIGN=/etc/ai-studio/cosign.pub
 
 ---
 
+## Plugin Source Lockdown (CE and ENT)
+
+Hardened installations can limit which plugin deployment types they accept.
+Each process enforces its own setting: a gateway refuses a source it does not
+allow even when the hub pushes it.
+
+| Process | Setting | Default |
+|---------|---------|---------|
+| AI Studio | `AI_STUDIO_PLUGIN_ALLOWED_SOURCES` | empty = all sources |
+| Microgateway | `PLUGINS_ALLOWED_SOURCES` | empty = all sources |
+
+The value is a comma-separated list of `oci`, `file` and `grpc` (case and
+spaces ignored, duplicates dropped), e.g. `PLUGINS_ALLOWED_SOURCES=oci`.
+An unknown source (`ocii`) or a list naming none (`,`) stops startup with an
+error naming the setting, so a typo never opens everything up or locks
+everything out. A restricted policy is logged at INFO on startup.
+
+**Classification** (`plugin_security.SourceOf`) matches how the plugin
+managers dispatch a command, and both managers now dispatch through it:
+
+| Command | Source |
+|---------|--------|
+| `oci://...` (case-sensitive prefix) | `oci` |
+| `grpc://...` (case-sensitive prefix) | `grpc` |
+| anything else: paths, `file://`, `http(s)://` | `file` (run as a local executable) |
+
+Commands are not trimmed, lower-cased or parsed before classification, so
+`OCI://x` or ` oci://x` are `file`, as they would be run.
+
+**Types** ([services/plugin_security/sources.go](../services/plugin_security/sources.go)):
+`ParseSourcePolicy(csv)`, `SourcePolicy.Check(command)` (returns
+`*ErrPluginSourceNotAllowed`: `🔒 SECURITY: plugin source "file" is not
+allowed by this installation (allowed: oci). Set <SETTING> to change this.`),
+`Allowed()` (order oci, file, grpc), `AllowsAll()`. The zero `SourcePolicy`
+allows all. The parsed policy travels on `plugin_security.Config.SourcePolicy`
+(Studio: `AppConf.PluginSourcePolicy`; gateway: `PluginConfig.SourcePolicy`).
+
+---
+
 ## Architecture
 
 ### Service Layer Pattern

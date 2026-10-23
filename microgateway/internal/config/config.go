@@ -398,6 +398,9 @@ func Load(envFile string) (*Config, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
+	if !cfg.Plugins.SourcePolicy.AllowsAll() {
+		log.Info().Str("allowed_sources", cfg.Plugins.SourcePolicy.String()).Msg("Plugin sources limited by PLUGINS_ALLOWED_SOURCES")
+	}
 	if cfg.OCIPlugins.TlogPolicy == ociplugins.TlogPolicyDisabled {
 		log.Warn().Msg("OCI_PLUGINS_TLOG_POLICY=disabled: OCI plugin signatures are verified against the key only, with no transparency-log check")
 	}
@@ -468,6 +471,9 @@ func (c *Config) Validate() error {
 	}
 
 	if err := c.OCIPlugins.validateVerification(); err != nil {
+		return err
+	}
+	if err := c.Plugins.parseSourcePolicy(); err != nil {
 		return err
 	}
 

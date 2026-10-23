@@ -1,6 +1,31 @@
 package plugin_security
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+	"strings"
+)
+
+// ErrPluginSourceNotAllowed reports a plugin whose deployment type the
+// installation's source policy does not accept.
+type ErrPluginSourceNotAllowed struct {
+	Source  PluginSource
+	Allowed []PluginSource
+	// Setting is the configuration setting that changes the policy.
+	Setting string
+}
+
+func (e *ErrPluginSourceNotAllowed) Error() string {
+	allowed := make([]string, 0, len(e.Allowed))
+	for _, s := range e.Allowed {
+		allowed = append(allowed, string(s))
+	}
+	msg := fmt.Sprintf("🔒 SECURITY: plugin source %q is not allowed by this installation (allowed: %s).", e.Source, strings.Join(allowed, ", "))
+	if e.Setting != "" {
+		msg += fmt.Sprintf(" Set %s to change this.", e.Setting)
+	}
+	return msg
+}
 
 var (
 	// ErrSecurityNotAvailable indicates advanced security features require Enterprise Edition
