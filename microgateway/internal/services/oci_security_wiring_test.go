@@ -14,13 +14,7 @@ import (
 // refuses every OCI plugin, and an Enterprise gateway never runs its
 // verifier. The hub-spoke container is the one control and edge gateways run.
 func TestServiceContainers_OCIClientHasSecurityService(t *testing.T) {
-	newConfig := func(t *testing.T) *config.Config {
-		cfg := &config.Config{Security: config.SecurityConfig{EncryptionKey: agentTracingTestEncKey}}
-		cfg.HubSpoke.Mode = "standalone"
-		cfg.OCIPlugins.CacheDir = t.TempDir()
-		cfg.OCIPlugins.RequireSignature = true
-		return cfg
-	}
+	newConfig := newOCIContainerConfig
 
 	t.Run("standalone container", func(t *testing.T) {
 		c, err := NewServiceContainer(setupEdgeSyncTestDB(t), newConfig(t))
@@ -40,4 +34,14 @@ func TestServiceContainers_OCIClientHasSecurityService(t *testing.T) {
 		assert.NotNil(t, client.SecurityService(),
 			"edge and control gateways must verify OCI plugins through the plugin security service")
 	})
+}
+
+// newOCIContainerConfig is a gateway config with OCI plugins enabled and
+// signatures required.
+func newOCIContainerConfig(t *testing.T) *config.Config {
+	cfg := &config.Config{Security: config.SecurityConfig{EncryptionKey: agentTracingTestEncKey}}
+	cfg.HubSpoke.Mode = "standalone"
+	cfg.OCIPlugins.CacheDir = t.TempDir()
+	cfg.OCIPlugins.RequireSignature = true
+	return cfg
 }
