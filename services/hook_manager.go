@@ -117,6 +117,8 @@ func (m *HookManager) ExecuteHooks(
 				// The hook saw the object's credentials redacted: what it
 				// left redacted is unchanged, so the originals go back.
 				models.RestoreObjectCredentials(currentObject, modifiedObj)
+				// Nor may a hook change the "Allow internal host" switch.
+				models.KeepAllowInternalHost(currentObject, modifiedObj)
 				currentObject = modifiedObj
 				result.ModifiedObject = modifiedObj
 			}

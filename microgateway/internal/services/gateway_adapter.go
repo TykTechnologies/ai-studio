@@ -554,8 +554,9 @@ func (a *GatewayServiceAdapter) CallToolOperationContext(ctx context.Context, to
 		return nil, fmt.Errorf("failed to decode tool OpenAPI spec: %w", err)
 	}
 
-	// Build client options with auth if configured
-	opts := []universalclient.ClientOption{}
+	// Build client options with auth if configured; the hub's "Allow
+	// internal host" switch exempts the tool's own host.
+	opts := []universalclient.ClientOption{universalclient.WithAllowInternalHost(tool.AllowInternalHost)}
 	if tool.AuthKey != "" {
 		schemaName := tool.AuthSchemaName
 		if schemaName == "" {
