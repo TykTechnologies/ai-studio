@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 )
 
 // Provider names. The catalogue in providers.go describes each one for the
@@ -239,7 +241,12 @@ type Stream struct {
 type Config struct {
 	Provider   string            `json:"provider"`
 	Connection map[string]string `json:"connection,omitempty"`
-	Detectors  []DetectorConfig  `json:"detectors"`
+	// AllowInternalHost is the admin-only "Allow internal host" switch
+	// (w4e): the provider's own endpoints (the connection's URL values) may
+	// be internal addresses. It travels in the config to edges; edges
+	// released before it ignore it and keep blocking.
+	AllowInternalHost bool             `json:"allow_internal_host,omitempty"`
+	Detectors         []DetectorConfig `json:"detectors"`
 	// Exclude names detectors to leave out when a category is enabled, e.g.
 	// "pii.ipv4" while "pii" is on. Built-in provider only.
 	Exclude     []string    `json:"exclude,omitempty"`
@@ -670,4 +677,20 @@ func (c Config) EvaluateEvery(caps Capabilities) int {
 		return DefaultStreamEveryLocal
 	}
 	return DefaultStreamEvery
+}
+
+// Exemption is the guardrail's "Allow internal host" exemption: the hosts of
+// its connection's URL values (endpoints), when AllowInternalHost is on.
+// Keys and other values are never hosts.
+func (c Config) Exemption() netguard.Exemption {
+	if !c.AllowInternalHost {
+		return netguard.Exemption{}
+	}
+	var urls []string
+	for _, v := range c.Connection {
+		if strings.Contains(v, "://") {
+			urls = append(urls, v)
+		}
+	}
+	return netguard.ExemptionFor(true, urls...)
 }

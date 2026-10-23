@@ -29,6 +29,10 @@ type EmbedderAttributes struct {
 	APIKey       string `json:"api_key"`
 	Model        string `json:"model"`
 	PrivacyScore int    `json:"privacy_score"`
+	// AllowInternalHost is the admin-only "Allow internal host" switch of a
+	// standalone embedder (a linked one uses its LLM's). Absent keeps the
+	// stored value; a change by a non-admin is refused (403).
+	AllowInternalHost *bool `json:"allow_internal_host"`
 }
 
 // EmbedderInput is the JSON:API body of an embedder create or update.
@@ -94,6 +98,12 @@ func (a *API) createEmbedder(c *gin.Context) {
 	}
 	if !requireSecretReadForCredentials(c, nil, embedderCredentialFields(e)) {
 		return
+	}
+	if !a.requireAdminForInternalHost(c, input.Data.Attributes.AllowInternalHost, false) {
+		return
+	}
+	if allow, ok := internalHostRequested(input.Data.Attributes.AllowInternalHost); ok {
+		e.AllowInternalHost = allow
 	}
 	e, err := a.service.CreateEmbedder(e, currentUserID(c))
 	if err != nil {
@@ -164,6 +174,13 @@ func (a *API) updateEmbedder(c *gin.Context) {
 	}
 	if !requireSecretReadForCredentials(c, embedderCredentialFields(current), embedderCredentialFields(changes)) {
 		return
+	}
+	if !a.requireAdminForInternalHost(c, input.Data.Attributes.AllowInternalHost, current.AllowInternalHost) {
+		return
+	}
+	changes.AllowInternalHost = current.AllowInternalHost
+	if allow, ok := internalHostRequested(input.Data.Attributes.AllowInternalHost); ok {
+		changes.AllowInternalHost = allow
 	}
 	e, err := a.service.UpdateEmbedder(id, changes, currentUserID(c))
 	if err != nil {
@@ -283,18 +300,19 @@ func (a *API) requireLLMReadToLink(c *gin.Context) bool {
 func serializeEmbedder(e *models.Embedder) map[string]interface{} {
 	r := services.RedactedEmbedder(e)
 	attrs := map[string]interface{}{
-		"name":          e.Name,
-		"description":   e.Description,
-		"llm_id":        e.LLMID,
-		"linked":        e.IsLinked(),
-		"vendor":        string(e.Vendor),
-		"endpoint":      e.Endpoint,
-		"api_key":       r.APIKey,
-		"has_api_key":   e.APIKey != "",
-		"model":         e.ModelName,
-		"privacy_score": e.EffectivePrivacyScore(),
-		"created_at":    e.CreatedAt,
-		"updated_at":    e.UpdatedAt,
+		"name":                e.Name,
+		"description":         e.Description,
+		"llm_id":              e.LLMID,
+		"linked":              e.IsLinked(),
+		"vendor":              string(e.Vendor),
+		"endpoint":            e.Endpoint,
+		"api_key":             r.APIKey,
+		"has_api_key":         e.APIKey != "",
+		"model":               e.ModelName,
+		"privacy_score":       e.EffectivePrivacyScore(),
+		"allow_internal_host": e.AllowInternalHost,
+		"created_at":          e.CreatedAt,
+		"updated_at":          e.UpdatedAt,
 	}
 	if e.IsLinked() {
 		attrs["privacy_score"] = e.EffectivePrivacyScore()

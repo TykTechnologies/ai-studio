@@ -92,7 +92,7 @@ func TestCreatePluginClient_OCIInternalRegistryRefusedEvenWhenCached(t *testing.
 
 	t.Setenv("ALLOW_INTERNAL_NETWORK_ACCESS", "")
 	for host, command := range map[string]string{"127.0.0.1": loopback, "registry.corp.internal": internalName} {
-		client, err := pm.createPluginClient(command)
+		client, err := pm.createPluginClient(command, netguard.Exemption{})
 		assert.Nil(t, client, command)
 		requireInternalHostRefused(t, err, host)
 	}

@@ -97,12 +97,13 @@ func (c *Clients) embedder(llm *models.LLM, model string) (*embeddings.EmbedderI
 	if !SupportsEmbeddings(llm.Vendor) {
 		return nil, ErrNoEmbeddings
 	}
-	key := fmt.Sprintf("%d|%d|%s|%s|%s", llm.ID, llm.UpdatedAt.UnixNano(), llm.APIEndpoint, model, llm.APIKey)
+	key := fmt.Sprintf("%d|%d|%s|%s|%s|%t", llm.ID, llm.UpdatedAt.UnixNano(), llm.APIEndpoint, model, llm.APIKey, llm.AllowInternalHost)
 	return c.cached(key, &models.EmbedderSpec{
-		Vendor:   llm.Vendor,
-		Endpoint: llm.APIEndpoint,
-		APIKey:   llm.APIKey,
-		Model:    model,
+		Vendor:            llm.Vendor,
+		Endpoint:          llm.APIEndpoint,
+		APIKey:            llm.APIKey,
+		Model:             model,
+		AllowInternalHost: llm.AllowInternalHost,
 	})
 }
 
@@ -123,13 +124,15 @@ func (c *Clients) inlineEmbedder(ref sr.ModelRef) (*embeddings.EmbedderImpl, err
 		}
 		apiKey = k
 	}
-	key := fmt.Sprintf("e|%d|%s|%s|%s|%s", ref.EmbedderID, ref.Vendor, ref.Endpoint, ref.Model, apiKey)
+	key := fmt.Sprintf("e|%d|%s|%s|%s|%s|%t", ref.EmbedderID, ref.Vendor, ref.Endpoint, ref.Model, apiKey, ref.AllowInternalHost)
 	return c.cached(key, &models.EmbedderSpec{
 		EmbedderID: ref.EmbedderID,
 		Vendor:     models.Vendor(ref.Vendor),
 		Endpoint:   ref.Endpoint,
 		APIKey:     apiKey,
 		Model:      ref.Model,
+
+		AllowInternalHost: ref.AllowInternalHost,
 	})
 }
 

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	appconfig "github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
@@ -39,6 +40,7 @@ type PluginResponse struct {
 		Manifest     map[string]interface{} `json:"manifest"`      // Plugin manifest for UI extensions
 		CreatedAt    string                 `json:"created_at"`
 		UpdatedAt    string                 `json:"updated_at"`
+		AllowInternalHost bool `json:"allow_internal_host"`
 	} `json:"attributes"`
 	// PermissionKey is the RBAC resource that stands for this plugin
 	// ("plugin:<manifest id>"); omitted for plugins with no admin surface.
@@ -196,6 +198,7 @@ func (a *API) listPlugins(c *gin.Context) {
 				Manifest     map[string]interface{} `json:"manifest"`      // Plugin manifest for UI extensions
 				CreatedAt    string                 `json:"created_at"`
 				UpdatedAt    string                 `json:"updated_at"`
+				AllowInternalHost bool `json:"allow_internal_host"`
 			}{
 				Name:         plugin.Name,
 				Description:  plugin.Description,
@@ -210,6 +213,7 @@ func (a *API) listPlugins(c *gin.Context) {
 				Manifest:     plugin.Manifest,
 				CreatedAt:    plugin.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 				UpdatedAt:    plugin.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+				AllowInternalHost: plugin.AllowInternalHost,
 			},
 		}
 
@@ -295,8 +299,11 @@ func (a *API) createPlugin(c *gin.Context) {
 		return
 	}
 
+	if !a.requireAdminForInternalHost(c, &req.AllowInternalHost, false) {
+		return
+	}
 	// Perform API-level security validation on the command field
-	if err := validatePluginCommand(req.Command, a.pluginSecurityService); err != nil {
+	if err := validatePluginCommand(req.Command, a.pluginSecurityService, netguard.CommandExemption(req.AllowInternalHost, req.Command)); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -519,19 +526,6 @@ func (a *API) updatePlugin(c *gin.Context) {
 		}
 	}
 
-	// Perform API-level security validation on the command field if it's being updated
-	if req.Command != nil {
-		if err := validatePluginCommand(*req.Command, a.pluginSecurityService); err != nil {
-			c.JSON(http.StatusBadRequest, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Security Validation Failed", Detail: err.Error()}},
-			})
-			return
-		}
-	}
-
 	// Get original plugin state to detect activation changes
 	originalPlugin, err := a.service.PluginService.GetPlugin(uint(id))
 	if err != nil {
@@ -546,6 +540,27 @@ func (a *API) updatePlugin(c *gin.Context) {
 
 	if !requireSecretReadForReferences(c, originalPlugin.Config, req.Config) {
 		return
+	}
+	if !a.requireAdminForInternalHost(c, req.AllowInternalHost, originalPlugin.AllowInternalHost) {
+		return
+	}
+	allowInternalHost := originalPlugin.AllowInternalHost
+	if req.AllowInternalHost != nil {
+		allowInternalHost = *req.AllowInternalHost
+	}
+
+	// Perform API-level security validation on the command field if it's
+	// being updated, with the plugin's own "Allow internal host" exemption.
+	if req.Command != nil {
+		if err := validatePluginCommand(*req.Command, a.pluginSecurityService, netguard.CommandExemption(allowInternalHost, *req.Command)); err != nil {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Security Validation Failed", Detail: err.Error()}},
+			})
+			return
+		}
 	}
 
 	// Enabling or disabling a plugin is the publish action on plugins.
@@ -1131,6 +1146,7 @@ func serializePlugin(plugin *models.Plugin) PluginResponse {
 			Manifest     map[string]interface{} `json:"manifest"`      // Plugin manifest for UI extensions
 			CreatedAt    string                 `json:"created_at"`
 			UpdatedAt    string                 `json:"updated_at"`
+			AllowInternalHost bool `json:"allow_internal_host"`
 		}{
 			Name:         plugin.Name,
 			Description:  plugin.Description,
@@ -1145,6 +1161,7 @@ func serializePlugin(plugin *models.Plugin) PluginResponse {
 			Manifest:     plugin.Manifest,
 			CreatedAt:    plugin.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			UpdatedAt:    plugin.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			AllowInternalHost: plugin.AllowInternalHost,
 		},
 	}
 	if plugin.HasAdminSurface() {
@@ -1231,6 +1248,9 @@ func (a *API) createOCIPlugin(c *gin.Context) {
 	}
 
 	if !requireSecretReadForReferences(c, nil, req.Config) {
+		return
+	}
+	if !a.requireAdminForInternalHost(c, &req.AllowInternalHost, false) {
 		return
 	}
 

@@ -132,7 +132,7 @@ func (l *PluginMetadataLoader) LoadPluginMetadataByID(ctx context.Context, plugi
 		return nil, fmt.Errorf("plugin %d is not active", pluginID)
 	}
 
-	return l.LoadPluginMetadata(ctx, plugin.Command)
+	return l.LoadPluginMetadata(plugin.Exemption().WithContext(ctx), plugin.Command)
 }
 
 // ExtractScopesFromMetadata extracts all permission scopes from metadata (if manifest is available)

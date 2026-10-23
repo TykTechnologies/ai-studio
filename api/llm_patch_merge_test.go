@@ -174,8 +174,9 @@ func TestMergeLLMPatch_EveryFieldIsRestored(t *testing.T) {
 	// mergeMetadataPreservingRedacted, which returns the stored value when the
 	// incoming map is nil, so leaving it nil here is already correct.
 	exempt := map[string]string{
-		"metadata":          "preserved by mergeMetadataPreservingRedacted when nil",
-		"governed_metadata": "nil pointer means untouched; persistGovernedMetadata skips nil",
+		"metadata":            "preserved by mergeMetadataPreservingRedacted when nil",
+		"governed_metadata":   "nil pointer means untouched; persistGovernedMetadata skips nil",
+		"allow_internal_host": "nil pointer means untouched; no option is passed and the stored value stays",
 	}
 
 	attrs := reflect.ValueOf(input.Data.Attributes)

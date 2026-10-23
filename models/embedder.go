@@ -62,6 +62,9 @@ type EmbedderSpec struct {
 	APIKey       string
 	Model        string
 	PrivacyScore int
+	// AllowInternalHost is the embedder's effective "Allow internal host"
+	// switch (Embedder.AllowsInternalHost): its endpoint may be internal.
+	AllowInternalHost bool
 }
 
 var (
@@ -112,7 +115,7 @@ func (e *Embedder) Validate() error {
 // With resolveSecrets, $SECRET/ and $ENV/ references in the key and endpoint
 // are replaced by their values; without, they are returned as stored.
 func (e *Embedder) Spec(resolveSecrets bool) (*EmbedderSpec, error) {
-	s := &EmbedderSpec{EmbedderID: e.ID, Model: e.ModelName}
+	s := &EmbedderSpec{EmbedderID: e.ID, Model: e.ModelName, AllowInternalHost: e.AllowsInternalHost()}
 	if e.IsLinked() {
 		if e.LLM == nil || e.LLM.ID == 0 || e.LLM.DeletedAt.Valid {
 			return nil, ErrEmbedderLLMMissing

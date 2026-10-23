@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -48,7 +49,7 @@ func TestCreatePluginClient_GRPCInternalIPRefusedByDefault(t *testing.T) {
 	t.Setenv("ALLOW_INTERNAL_NETWORK_ACCESS", "")
 	pm := NewPluginManager(&mockPluginService{})
 	for _, command := range []string{"grpc://10.0.0.5:50051", "grpc://127.0.0.1:50051", "grpc://localhost:50051"} {
-		client, err := pm.createPluginClient(command)
+		client, err := pm.createPluginClient(command, netguard.Exemption{})
 		assert.Nil(t, client, command)
 		require.Error(t, err, command)
 		assert.Contains(t, err.Error(), "refused", command)
@@ -56,16 +57,16 @@ func TestCreatePluginClient_GRPCInternalIPRefusedByDefault(t *testing.T) {
 
 	// A host named in LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS is let through.
 	t.Setenv("LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS", "10.0.0.5")
-	client, err := pm.createPluginClient("grpc://10.0.0.5:50051")
+	client, err := pm.createPluginClient("grpc://10.0.0.5:50051", netguard.Exemption{})
 	require.NoError(t, err)
 	client.Kill()
-	_, err = pm.createPluginClient("grpc://10.0.0.6:50051")
+	_, err = pm.createPluginClient("grpc://10.0.0.6:50051", netguard.Exemption{})
 	require.Error(t, err)
 	t.Setenv("LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS", "")
 
 	// The development bypass lets them through.
 	t.Setenv("ALLOW_INTERNAL_NETWORK_ACCESS", "true")
-	client, err = pm.createPluginClient("grpc://10.0.0.5:50051")
+	client, err = pm.createPluginClient("grpc://10.0.0.5:50051", netguard.Exemption{})
 	require.NoError(t, err)
 	client.Kill()
 }
@@ -91,14 +92,31 @@ func TestCreatePluginClient_GRPCHostnameResolvingToInternalRefused(t *testing.T)
 	validator := &ipOnlyValidator{}
 	pm.SetGRPCHostValidator(validator)
 
-	client, err := pm.createPluginClient("grpc://internal.example.com:50051")
+	client, err := pm.createPluginClient("grpc://internal.example.com:50051", netguard.Exemption{})
 	assert.Nil(t, client)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "resolves to a refused address")
 	assert.Equal(t, []string{"internal.example.com", "10.0.0.5"}, validator.checked)
 
-	client, err = pm.createPluginClient("grpc://public.example.com:50051")
+	client, err = pm.createPluginClient("grpc://public.example.com:50051", netguard.Exemption{})
 	require.NoError(t, err)
 	client.Kill()
 	assert.True(t, strings.HasPrefix(strings.Join(validator.checked, ","), "internal.example.com,10.0.0.5,public.example.com,93.184.216.34"))
+}
+
+// The plugin's own "Allow internal host" switch (w4e) lets its grpc:// host
+// through, and only that host.
+func TestCreatePluginClient_GRPCAllowInternalHost(t *testing.T) {
+	t.Setenv("ALLOW_INTERNAL_NETWORK_ACCESS", "")
+	t.Setenv("LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS", "")
+	pm := NewPluginManager(&mockPluginService{})
+	plugin := PluginData{Command: "grpc://10.0.0.5:50051", AllowInternalHost: true}
+	client, err := pm.createPluginClient(plugin.Command, plugin.exemption())
+	require.NoError(t, err)
+	client.Kill()
+	_, err = pm.createPluginClient("grpc://10.0.0.6:50051", plugin.exemption())
+	require.Error(t, err, "another internal host is still refused")
+	plugin.AllowInternalHost = false
+	_, err = pm.createPluginClient(plugin.Command, plugin.exemption())
+	require.Error(t, err)
 }

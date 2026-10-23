@@ -118,3 +118,86 @@ func (e Exemption) DialContext(ctx context.Context, network, address string) (ne
 	}
 	return NewDialer().DialContext(ctx, network, address)
 }
+
+type exemptionKey struct{}
+
+// WithContext returns ctx carrying the exemption, for a client that serves
+// many assets through one RoundTripper (the gateway's upstream pool): only
+// PooledByExemption reads it, so a connection dialled under one asset's
+// exemption is never reused for another asset's request.
+func (e Exemption) WithContext(ctx context.Context) context.Context {
+	if len(e.hosts) == 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, exemptionKey{}, e)
+}
+
+// ExemptionFromContext is the exemption WithContext stored in ctx, or the
+// zero Exemption.
+func ExemptionFromContext(ctx context.Context) Exemption {
+	if ctx == nil {
+		return Exemption{}
+	}
+	e, _ := ctx.Value(exemptionKey{}).(Exemption)
+	return e
+}
+
+// Transport is HTTPTransport without the URL check: the dial-time check
+// with the exemption, as an *http.Transport whose pool settings a caller
+// may tune.
+func (e Exemption) Transport() *http.Transport { return httpTransport(e) }
+
+// pooledTransport sends each request through the pool of the exemption in
+// its context.
+type pooledTransport struct {
+	build func(Exemption) http.RoundTripper
+	pools sync.Map // host-set key -> http.RoundTripper
+}
+
+// PooledByExemption returns a RoundTripper for a client shared by many
+// assets: each request goes through a transport of its own for the
+// exemption its context carries (Exemption.WithContext), built by build and
+// kept for reuse. Connections are pooled per exemption, so one dialled under
+// an asset's exemption is never reused for a request without it, which a
+// single pool would allow (the dial-time check runs once per connection).
+func PooledByExemption(build func(Exemption) http.RoundTripper) http.RoundTripper {
+	return &pooledTransport{build: build}
+}
+
+func (p *pooledTransport) pool(e Exemption) http.RoundTripper {
+	key := strings.Join(e.hosts, ",")
+	if rt, ok := p.pools.Load(key); ok {
+		return rt.(http.RoundTripper)
+	}
+	rt, _ := p.pools.LoadOrStore(key, p.build(e))
+	return rt.(http.RoundTripper)
+}
+
+func (p *pooledTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return p.pool(ExemptionFromContext(req.Context())).RoundTrip(req)
+}
+
+// CloseIdleConnections closes the idle connections of every pool.
+func (p *pooledTransport) CloseIdleConnections() {
+	p.pools.Range(func(_, v any) bool {
+		if c, ok := v.(interface{ CloseIdleConnections() }); ok {
+			c.CloseIdleConnections()
+		}
+		return true
+	})
+}
+
+// CommandExemption is a plugin's "Allow internal host" exemption: the hosts
+// of the URLs in its command (oci:// registry, grpc:// host), when allow.
+func CommandExemption(allow bool, command string) Exemption {
+	if !allow {
+		return Exemption{}
+	}
+	var urls []string
+	for _, part := range strings.Fields(command) {
+		if strings.Contains(part, "://") && !strings.HasPrefix(part, "file://") {
+			urls = append(urls, part)
+		}
+	}
+	return ExemptionFor(true, urls...)
+}

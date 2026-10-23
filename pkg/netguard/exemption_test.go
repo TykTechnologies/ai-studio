@@ -97,3 +97,36 @@ func TestExemption_DialContext(t *testing.T) {
 	}
 	c.Close()
 }
+
+// A transport shared by many assets pools connections per exemption: a
+// connection dialled for an exempted asset is never reused for a request
+// without the exemption, whose dial is refused.
+func TestPooledByExemption_NoReuseAcrossExemptions(t *testing.T) {
+	t.Setenv(EnvAllowedHosts, "")
+	t.Setenv(EnvAllowInternal, "")
+	t.Setenv(EnvAllowedInternalHosts, "")
+	setBlockInternal(t, "true")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
+	target := "http://localhost:" + mustURL(t, srv.URL).Port()
+
+	client := &http.Client{Transport: PooledByExemption(func(e Exemption) http.RoundTripper { return e.Transport() })}
+	get := func(ctx context.Context) error {
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+		resp, err := client.Do(req)
+		if err == nil {
+			resp.Body.Close()
+		}
+		return err
+	}
+	exempt := ExemptionFor(true, target).WithContext(context.Background())
+	if err := get(exempt); err != nil {
+		t.Fatalf("the exempted request failed: %v", err)
+	}
+	if err := get(context.Background()); err == nil {
+		t.Fatal("a request without the exemption reused the exempted connection")
+	}
+	if err := get(exempt); err != nil {
+		t.Fatalf("the exempted request failed the second time: %v", err)
+	}
+}

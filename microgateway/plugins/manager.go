@@ -58,6 +58,14 @@ type PluginData struct {
 	Config    []byte // JSON-encoded config (matches database.JSON from database)
 	Checksum  string
 	IsActive  bool
+	// AllowInternalHost is the hub's "Allow internal host" switch for the
+	// plugin: its own hosts (OCI registry, grpc:// host) may be internal.
+	AllowInternalHost bool
+}
+
+// exemption is the plugin's "Allow internal host" exemption.
+func (pd *PluginData) exemption() netguard.Exemption {
+	return netguard.CommandExemption(pd.AllowInternalHost, pd.Command)
 }
 
 // SupportsHookType checks if plugin data supports a specific hook type
@@ -339,7 +347,7 @@ func (defaultGRPCHostValidator) ValidateGRPCHost(host string) error {
 // and to the address it resolved to, from this gateway's network position:
 // the hub checked the host from its own, and a name can resolve differently
 // here (split-horizon DNS) or have reached the gateway without the hub's API.
-func (pm *PluginManager) checkGRPCHost(command string, addr net.Addr) error {
+func (pm *PluginManager) checkGRPCHost(command string, addr net.Addr, exempt netguard.Exemption) error {
 	validator := pm.grpcHostValidatorOrDefault()
 	host, _, err := net.SplitHostPort(strings.TrimPrefix(command, "grpc://"))
 	if err != nil {
@@ -347,7 +355,8 @@ func (pm *PluginManager) checkGRPCHost(command string, addr net.Addr) error {
 	}
 	// A host named in LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS may resolve
 	// internally: the operator said so for this name.
-	if netguard.PluginHostExempt(host) {
+	// The plugin's own "Allow internal host" switch exempts its host too.
+	if netguard.PluginHostExempt(host) || exempt.Has(host) {
 		return nil
 	}
 	if err := validator.ValidateGRPCHost(host); err != nil {
@@ -407,7 +416,7 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	}
 
 	// Create plugin client based on command scheme
-	client, err := pm.createPluginClient(pluginData.Command)
+	client, err := pm.createPluginClient(pluginData.Command, pluginData.exemption())
 	if err != nil {
 		var notAllowed *plugin_security.ErrPluginSourceNotAllowed
 		if errors.As(err, &notAllowed) {
@@ -1128,7 +1137,7 @@ func isPathInAllowedDirectories(absPath string) bool {
 }
 
 // createPluginClient creates a plugin client based on command scheme
-func (pm *PluginManager) createPluginClient(command string) (*plugin.Client, error) {
+func (pm *PluginManager) createPluginClient(command string, exempt netguard.Exemption) (*plugin.Client, error) {
 	// This gateway's source policy, before any OCI fetch, reattach or exec.
 	// It is the only gate for commands the hub pushes.
 	if err := pm.SourcePolicy().Check(command); err != nil {
@@ -1140,7 +1149,7 @@ func (pm *PluginManager) createPluginClient(command string) (*plugin.Client, err
 	source := plugin_security.SourceOf(command)
 	if source == plugin_security.SourceOCI {
 		// OCI plugin - fetch from registry first
-		return pm.createOCIPluginClient(command)
+		return pm.createOCIPluginClient(command, exempt)
 	} else if source == plugin_security.SourceGRPC {
 		// External gRPC service - use ReattachConfig
 		reattachConfig, err := pm.parseGRPCReattachConfig(command)
@@ -1149,7 +1158,7 @@ func (pm *PluginManager) createPluginClient(command string) (*plugin.Client, err
 		}
 		// The same internal-network rule as the management API, for every
 		// load path (hub-pushed, global data-collection, local config).
-		if err := pm.checkGRPCHost(command, reattachConfig.Addr); err != nil {
+		if err := pm.checkGRPCHost(command, reattachConfig.Addr, exempt); err != nil {
 			return nil, err
 		}
 
@@ -1196,7 +1205,7 @@ func (pm *PluginManager) createPluginClient(command string) (*plugin.Client, err
 }
 
 // createOCIPluginClient fetches an OCI plugin and creates a client
-func (pm *PluginManager) createOCIPluginClient(command string) (*plugin.Client, error) {
+func (pm *PluginManager) createOCIPluginClient(command string, exempt netguard.Exemption) (*plugin.Client, error) {
 	if pm.ociClient == nil {
 		return nil, fmt.Errorf("OCI client not initialized - microgateway must be configured with OCI support")
 	}
@@ -1206,6 +1215,7 @@ func (pm *PluginManager) createOCIPluginClient(command string) (*plugin.Client, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse OCI command: %w", err)
 	}
+	ref.Exemption = exempt
 
 	var localPlugin *ociplugins.LocalPlugin
 
@@ -1493,7 +1503,8 @@ func (pm *PluginManager) LoadGlobalDataCollectionPlugins(configs []DataCollectio
 // loadGlobalPluginFromConfig loads a global plugin from configuration
 func (pm *PluginManager) loadGlobalPluginFromConfig(cfg DataCollectionPluginConfig) (*GlobalPlugin, error) {
 	// Create plugin client based on path scheme
-	client, err := pm.createPluginClient(cfg.Path)
+	// Local configuration: the environment settings alone decide.
+	client, err := pm.createPluginClient(cfg.Path, netguard.Exemption{})
 	if err != nil {
 		var notAllowed *plugin_security.ErrPluginSourceNotAllowed
 		if errors.As(err, &notAllowed) {

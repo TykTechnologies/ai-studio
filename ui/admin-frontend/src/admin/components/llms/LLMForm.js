@@ -74,6 +74,7 @@ import LLMFailoverSection, { validateFailover } from "./LLMFailoverSection";
 import { listAll } from "../../utils/listAll";
 import BudgetField from "../common/BudgetField";
 import { ResourceTracingSection } from "../common/TracingSettingsSection";
+import AllowInternalHostSwitch from "../common/AllowInternalHostSwitch";
 import LLMPriceMultipliersField, {
   rowsFromPriceMultipliers,
   validatePriceMultipliers,
@@ -111,6 +112,7 @@ const LLMForm = () => {
     vendor_workspace_id: "", // Anthropic only: pins every call to this workspace
     tracing_content_mode_max: "", // Agent tracing content cap (Enterprise); "" = no cap
     tracing_propagation_opt_out: false, // true: no traceparent to this provider
+    allow_internal_host: false, // admin-only: the endpoint may be an internal address
   });
   const [vendors, setVendors] = useState([]);
   // Every other LLM, for the failover picker (id, name, allowed models...).
@@ -302,6 +304,7 @@ const LLMForm = () => {
         vendor_workspace_id: llmData.vendor_workspace_id || "",
         tracing_content_mode_max: llmData.tracing_content_mode_max || "",
         tracing_propagation_opt_out: Boolean(llmData.tracing_propagation_opt_out),
+        allow_internal_host: Boolean(llmData.allow_internal_host),
       });
       setOriginalName(llmData.name);
       setPriceMultiplierRows(rowsFromPriceMultipliers(llmData.price_multipliers));
@@ -979,6 +982,13 @@ const LLMForm = () => {
                     Otherwise the log stores the request as it left the request filters (a redaction is logged
                     redacted), but a request a filter blocks is logged as it was sent.
                   </Typography>
+                </Grid>
+                <Grid item xs={12}>
+                  <AllowInternalHostSwitch
+                    checked={llm.allow_internal_host}
+                    onChange={(v) => setLLM((prev) => ({ ...prev, allow_internal_host: v }))}
+                    hostLabel="LLM's endpoint (and its linked embedders)"
+                  />
                 </Grid>
               </Grid>
             </AccordionDetails>

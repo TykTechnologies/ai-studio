@@ -785,7 +785,9 @@ func respondBudgetDenial(w http.ResponseWriter, r *http.Request, status int, msg
 // being connected (post-DNS), so a DNS answer that changes between validation
 // and connection cannot bypass the SSRF protection. Shared so connection
 // pooling behaves like the default transport it replaces.
-var upstreamGuardedTransport = newUpstreamTransport()
+var upstreamGuardedTransport = netguard.PooledByExemption(func(e netguard.Exemption) http.RoundTripper {
+	return newUpstreamTransport(e)
+})
 
 // upstreamTransport is what upstream requests are sent through: the guarded
 // pool wrapped in timedTransport, a passthrough unless Server-Timing is on for
@@ -803,8 +805,21 @@ const (
 	upstreamMaxIdleConnsPerHost = 512
 )
 
-func newUpstreamTransport() *http.Transport {
-	t := netguard.HTTPTransport()
+// llmExemption is the LLM's "Allow internal host" exemption for its own
+// upstream (netguard.ExemptionFor). The shared upstream transport reads it
+// from the request context (netguard.Exemption.WithContext), so it covers
+// every route to the LLM: /llm/, /ai/, /anthropic/, routers and native APIs.
+func llmExemption(llm *models.LLM) netguard.Exemption {
+	if llm == nil {
+		return netguard.Exemption{}
+	}
+	return netguard.ExemptionFor(llm.AllowInternalHost, switches.UpstreamEndpoint(llm))
+}
+
+// newUpstreamTransport is the upstream pool for one exemption (an LLM's
+// "Allow internal host" switch; the zero Exemption for every other LLM).
+func newUpstreamTransport(e netguard.Exemption) *http.Transport {
+	t := e.Transport()
 	t.MaxIdleConns = upstreamMaxIdleConns
 	t.MaxIdleConnsPerHost = upstreamMaxIdleConnsPerHost
 	return t
@@ -1147,12 +1162,14 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := netguard.ValidateUpstreamURL(upstreamURL); err != nil {
+	exempt := llmExemption(llm)
+	if err := exempt.ValidateURL(upstreamURL); err != nil {
 		logger.Errorf("Upstream URL blocked by SSRF policy: %v", err)
 		respStatus = http.StatusBadGateway
 		respondWithError(w, http.StatusBadGateway, "upstream endpoint not permitted", err, false)
 		return
 	}
+	r = r.WithContext(exempt.WithContext(r.Context()))
 	logger.Debugf("LLM proxy upstream host: %s (llm=%s)", upstreamURL.Host, llm.Name)
 
 	proxyDirector := func(req *http.Request) {
@@ -2028,12 +2045,14 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := netguard.ValidateUpstreamURL(upstreamURL); err != nil {
+	exempt := llmExemption(llm)
+	if err := exempt.ValidateURL(upstreamURL); err != nil {
 		logger.Errorf("Streaming upstream URL blocked by SSRF policy: %v", err)
 		respStatus = http.StatusBadGateway
 		respondWithError(w, http.StatusBadGateway, "upstream endpoint not permitted", err, false)
 		return
 	}
+	r = r.WithContext(exempt.WithContext(r.Context()))
 	logger.Debugf("LLM streaming proxy upstream host: %s (llm=%s)", upstreamURL.Host, llm.Name)
 
 	// Strip the gateway prefix to get the remaining path, then compose it with

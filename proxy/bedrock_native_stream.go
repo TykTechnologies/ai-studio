@@ -12,7 +12,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
-	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	bedrockVendor "github.com/TykTechnologies/midsommar/v2/vendors/bedrock"
 	"github.com/rs/zerolog/log"
@@ -102,12 +101,13 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 		respondWithError(w, http.StatusInternalServerError, "invalid Bedrock endpoint", err, false)
 		return
 	}
-	if err := netguard.ValidateUpstreamURL(upstream); err != nil {
+	exempt := llmExemption(llm)
+	if err := exempt.ValidateURL(upstream); err != nil {
 		log.Error().Err(err).Msg("Bedrock streaming upstream URL blocked by SSRF policy")
 		respondWithError(w, http.StatusBadGateway, "upstream endpoint not permitted", err, false)
 		return
 	}
-	upReq, err := http.NewRequestWithContext(r.Context(), http.MethodPost, upstream.String(), bytes.NewReader(body))
+	upReq, err := http.NewRequestWithContext(exempt.WithContext(r.Context()), http.MethodPost, upstream.String(), bytes.NewReader(body))
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "failed to create Bedrock request", err, false)
 		return

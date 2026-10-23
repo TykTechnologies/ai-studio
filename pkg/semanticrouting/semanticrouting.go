@@ -100,6 +100,10 @@ type ModelRef struct {
 	Endpoint        string `json:"endpoint,omitempty"`
 	APIKeyEncrypted string `json:"api_key_encrypted,omitempty"`
 	APIKey          string `json:"-"`
+	// AllowInternalHost is a standalone embedder's "Allow internal host"
+	// switch: its endpoint may be internal (netguard.ExemptionFor). A
+	// reference to an LLM uses the LLM's own switch.
+	AllowInternalHost bool `json:"allow_internal_host,omitempty"`
 }
 
 // Inline reports whether the reference carries its own connection (a

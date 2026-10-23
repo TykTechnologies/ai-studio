@@ -53,6 +53,17 @@ func (a *API) createLLM(c *gin.Context) {
 	if !a.requireTracingWrite(c, input.Data.Attributes.TracingContentModeMax != "" || input.Data.Attributes.TracingPropagationOptOut) {
 		return
 	}
+	if !a.requireAdminForInternalHost(c, input.Data.Attributes.AllowInternalHost, false) {
+		return
+	}
+	llmOpts := []services.LLMOption{
+		services.WithVendorWorkspaceID(input.Data.Attributes.VendorWorkspaceID),
+		services.WithPriceMultipliers(input.Data.Attributes.PriceMultipliers),
+		services.WithLLMTracing(input.Data.Attributes.TracingContentModeMax, input.Data.Attributes.TracingPropagationOptOut),
+	}
+	if allow, ok := internalHostRequested(input.Data.Attributes.AllowInternalHost); ok {
+		llmOpts = append(llmOpts, services.WithAllowInternalHost(allow))
+	}
 
 	// Creating a provider already active is the publish action on llms, and
 	// needs every "required to publish" metadata field.
@@ -92,9 +103,7 @@ func (a *API) createLLM(c *gin.Context) {
 			input.Data.Attributes.DontLogBodies,
 			models.JSONMap(input.Data.Attributes.Metadata),
 			input.Data.Attributes.Failover,
-			services.WithVendorWorkspaceID(input.Data.Attributes.VendorWorkspaceID),
-			services.WithPriceMultipliers(input.Data.Attributes.PriceMultipliers),
-			services.WithLLMTracing(input.Data.Attributes.TracingContentModeMax, input.Data.Attributes.TracingPropagationOptOut),
+			llmOpts...,
 		)
 	} else {
 		llm, err = a.service.CreateLLM(
@@ -115,9 +124,7 @@ func (a *API) createLLM(c *gin.Context) {
 			input.Data.Attributes.DontLogBodies,
 			models.JSONMap(input.Data.Attributes.Metadata),
 			input.Data.Attributes.Failover,
-			services.WithVendorWorkspaceID(input.Data.Attributes.VendorWorkspaceID),
-			services.WithPriceMultipliers(input.Data.Attributes.PriceMultipliers),
-			services.WithLLMTracing(input.Data.Attributes.TracingContentModeMax, input.Data.Attributes.TracingPropagationOptOut),
+			llmOpts...,
 		)
 	}
 	if err != nil {
@@ -249,6 +256,18 @@ func (a *API) updateLLM(c *gin.Context) {
 		input.Data.Attributes.TracingPropagationOptOut != thisLLM.TracingPropagationOptOut) {
 		return
 	}
+	if !a.requireAdminForInternalHost(c, input.Data.Attributes.AllowInternalHost, thisLLM.AllowInternalHost) {
+		return
+	}
+	llmOpts := []services.LLMOption{
+		services.WithVendorWorkspaceID(input.Data.Attributes.VendorWorkspaceID),
+		services.WithPriceMultipliers(input.Data.Attributes.PriceMultipliers),
+		services.WithLLMTracing(input.Data.Attributes.TracingContentModeMax, input.Data.Attributes.TracingPropagationOptOut),
+	}
+	allowInternalHost, allowInternalHostSet := internalHostRequested(input.Data.Attributes.AllowInternalHost)
+	if allowInternalHostSet {
+		llmOpts = append(llmOpts, services.WithAllowInternalHost(allowInternalHost))
+	}
 
 	// Flipping the active switch is the publish action on llms; editing an
 	// already-active provider without touching the switch is plain write.
@@ -291,9 +310,7 @@ func (a *API) updateLLM(c *gin.Context) {
 		input.Data.Attributes.DontLogBodies,
 		models.JSONMap(input.Data.Attributes.Metadata),
 		input.Data.Attributes.Failover,
-		services.WithVendorWorkspaceID(input.Data.Attributes.VendorWorkspaceID),
-		services.WithPriceMultipliers(input.Data.Attributes.PriceMultipliers),
-		services.WithLLMTracing(input.Data.Attributes.TracingContentModeMax, input.Data.Attributes.TracingPropagationOptOut),
+		llmOpts...,
 	)
 	if err != nil {
 		respondLLMServiceError(c, err)
@@ -317,6 +334,7 @@ func (a *API) updateLLM(c *gin.Context) {
 			!maps.Equal(thisLLM.PriceMultipliers, input.Data.Attributes.PriceMultipliers) ||
 			thisLLM.TracingContentModeMax != input.Data.Attributes.TracingContentModeMax ||
 			thisLLM.TracingPropagationOptOut != input.Data.Attributes.TracingPropagationOptOut ||
+			(allowInternalHostSet && thisLLM.AllowInternalHost != allowInternalHost) ||
 			metadataChanged)
 
 		if activeStateChanged || (input.Data.Attributes.Active && hasChanges) {
@@ -690,6 +708,7 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 				Manifest     map[string]interface{} `json:"manifest"`      // Plugin manifest for UI extensions
 				CreatedAt    string                 `json:"created_at"`
 				UpdatedAt    string                 `json:"updated_at"`
+				AllowInternalHost bool `json:"allow_internal_host"`
 			}{
 				Name:         plugin.Name,
 				Description:  plugin.Description,
@@ -704,6 +723,7 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 				Namespace:   plugin.Namespace,
 				CreatedAt:   plugin.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 				UpdatedAt:   plugin.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+				AllowInternalHost: plugin.AllowInternalHost,
 			},
 		}
 	}
@@ -741,6 +761,7 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 			PriceMultipliers  models.LLMPriceMultipliers `json:"price_multipliers"`
 			TracingContentModeMax    string `json:"tracing_content_mode_max"`
 			TracingPropagationOptOut bool   `json:"tracing_propagation_opt_out"`
+			AllowInternalHost        bool   `json:"allow_internal_host"`
 		}{
 			Name:             llm.Name,
 			APIKey:           services.REDACTED_VALUE,
@@ -769,6 +790,7 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 			PriceMultipliers:  llm.PriceMultipliers,
 			TracingContentModeMax:    llm.TracingContentModeMax,
 			TracingPropagationOptOut: llm.TracingPropagationOptOut,
+			AllowInternalHost:        llm.AllowInternalHost,
 		},
 	}
 }
@@ -819,6 +841,7 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 					Manifest     map[string]interface{} `json:"manifest"`      // Plugin manifest for UI extensions
 					CreatedAt    string                 `json:"created_at"`
 					UpdatedAt    string                 `json:"updated_at"`
+					AllowInternalHost bool `json:"allow_internal_host"`
 				}{
 					Name:         plugin.Name,
 					Description:  plugin.Description,
@@ -833,6 +856,7 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 					Manifest:     plugin.Manifest,
 					CreatedAt:    plugin.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 					UpdatedAt:    plugin.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+					AllowInternalHost: plugin.AllowInternalHost,
 				},
 			}
 		}
@@ -870,6 +894,7 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 				PriceMultipliers  models.LLMPriceMultipliers `json:"price_multipliers"`
 				TracingContentModeMax    string `json:"tracing_content_mode_max"`
 				TracingPropagationOptOut bool   `json:"tracing_propagation_opt_out"`
+				AllowInternalHost        bool   `json:"allow_internal_host"`
 			}{
 				Name:             llm.Name,
 				APIKey:           services.REDACTED_VALUE,
@@ -898,6 +923,7 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 				PriceMultipliers:  llm.PriceMultipliers,
 				TracingContentModeMax:    llm.TracingContentModeMax,
 				TracingPropagationOptOut: llm.TracingPropagationOptOut,
+				AllowInternalHost:        llm.AllowInternalHost,
 			},
 		}
 	}

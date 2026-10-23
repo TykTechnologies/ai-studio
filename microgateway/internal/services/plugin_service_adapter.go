@@ -53,6 +53,8 @@ func (a *PluginServiceAdapter) convertDBPlugin(dbPlugin database.Plugin) plugins
 		Config:    configBytes,
 		Checksum:  dbPlugin.Checksum,
 		IsActive:  dbPlugin.IsActive,
+
+		AllowInternalHost: dbPlugin.AllowInternalHost,
 	}
 }
 

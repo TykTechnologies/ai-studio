@@ -245,6 +245,7 @@ func (s *Service) UpdateEmbedder(id uint, changes *models.Embedder, userID uint)
 	}
 	next.ModelName = changes.ModelName
 	next.PrivacyScore = changes.PrivacyScore
+	next.AllowInternalHost = changes.AllowInternalHost
 	if next.IsLinked() {
 		// A linked embedder carries no connection fields of its own.
 		next.Vendor, next.Endpoint, next.APIKey = "", "", ""

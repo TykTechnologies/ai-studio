@@ -195,6 +195,10 @@ type LLMInput struct {
 			// TracingPropagationOptOut stops traceparent reaching this LLM's
 			// upstream (default false: it is sent).
 			TracingPropagationOptOut bool `json:"tracing_propagation_opt_out"`
+			// AllowInternalHost is the admin-only "Allow internal host"
+			// switch (its endpoint may be an internal address). Absent keeps
+			// the stored value; a change by a non-admin is refused (403).
+			AllowInternalHost *bool `json:"allow_internal_host"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -258,6 +262,7 @@ type LLMResponse struct {
 		PriceMultipliers  models.LLMPriceMultipliers `json:"price_multipliers"`
 		TracingContentModeMax    string `json:"tracing_content_mode_max"`
 		TracingPropagationOptOut bool   `json:"tracing_propagation_opt_out"`
+		AllowInternalHost        bool   `json:"allow_internal_host"`
 	} `json:"attributes"`
 }
 

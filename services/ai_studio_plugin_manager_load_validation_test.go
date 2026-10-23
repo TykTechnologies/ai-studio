@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 )
 
 // TestCreatePluginClient_RejectsDangerousCommands verifies that plugin
@@ -29,7 +31,7 @@ func TestCreatePluginClient_RejectsDangerousCommands(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			client, err := m.createPluginClient(tc.command)
+			client, err := m.createPluginClient(tc.command, netguard.Exemption{})
 			if err == nil {
 				if client != nil {
 					client.Kill()
@@ -57,7 +59,7 @@ func TestCreatePluginClient_AllowsSafeLocalCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	client, err := m.createPluginClient(exe)
+	client, err := m.createPluginClient(exe, netguard.Exemption{})
 	if err != nil {
 		t.Fatalf("expected safe command to be accepted, got: %v", err)
 	}
@@ -72,7 +74,7 @@ func TestCreatePluginClient_AllowsSafeLocalCommand(t *testing.T) {
 func TestCreateConfigOnlyPluginClient_RejectsDangerousCommands(t *testing.T) {
 	m := NewAIStudioPluginManager(nil, nil)
 
-	client, err := m.createConfigOnlyPluginClient("./plugins/x; rm -rf /")
+	client, err := m.createConfigOnlyPluginClient("./plugins/x; rm -rf /", netguard.Exemption{})
 	if err == nil {
 		if client != nil {
 			client.Kill()
@@ -108,7 +110,7 @@ func TestValidateCommandForLoad_NoDataRace(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < 50; j++ {
-				_ = m.validateCommandForLoad(exe)
+				_ = m.validateCommandForLoad(exe, netguard.Exemption{})
 			}
 		}()
 	}

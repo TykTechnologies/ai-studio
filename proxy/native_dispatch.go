@@ -20,7 +20,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/nativeapi"
-	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/pkg/requestformat"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
@@ -595,9 +594,11 @@ func (p *Proxy) nativeUpstreamRequest(ctx context.Context, llm *models.LLM, meth
 	if err != nil {
 		return nil, fmt.Errorf("invalid upstream URL: %w", err)
 	}
-	if err := netguard.ValidateUpstreamURL(endpoint); err != nil {
+	exempt := llmExemption(llm)
+	if err := exempt.ValidateURL(endpoint); err != nil {
 		return nil, fmt.Errorf("upstream endpoint not permitted: %w", err)
 	}
+	ctx = exempt.WithContext(ctx)
 	u := &url.URL{Scheme: endpoint.Scheme, Host: endpoint.Host}
 	u.RawPath = joinUpstreamPath(endpoint.EscapedPath(), path)
 	if p, err := url.PathUnescape(u.RawPath); err == nil {

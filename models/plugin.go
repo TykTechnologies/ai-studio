@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -603,3 +604,9 @@ const (
 	// App governance scope: suspend/reactivate Apps and flag them, never edit them
 	ServiceScopeAppsLifecycle = "apps.lifecycle"
 )
+
+// Exemption is the plugin's "Allow internal host" exemption: the hosts in
+// its command (OCI registry, grpc:// host), when AllowInternalHost is on.
+func (p *Plugin) Exemption() netguard.Exemption {
+	return netguard.CommandExemption(p.AllowInternalHost, p.Command)
+}
