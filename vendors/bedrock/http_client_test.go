@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -162,4 +163,41 @@ func TestNewBedrockClientPlainRegion(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, client.Options().BaseEndpoint)
 	assert.Equal(t, "https://vpce-1.bedrock.example.com", *client.Options().BaseEndpoint)
+}
+
+// recordingHTTPClient answers every request with a canned Converse response
+// and keeps the URL it was sent to.
+type recordingHTTPClient struct{ urls []string }
+
+func (c *recordingHTTPClient) Do(r *http.Request) (*http.Response, error) {
+	c.urls = append(c.urls, r.URL.String())
+	body := `{"output":{"message":{"role":"assistant","content":[{"text":"hi"}]}},"stopReason":"end_turn","usage":{"inputTokens":1,"outputTokens":1,"totalTokens":2}}`
+	return &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": []string{"application/json"}},
+		Body: io.NopCloser(bytes.NewBufferString(body)), Request: r}, nil
+}
+
+// A call through a plain-region LLM's client goes to that region's
+// bedrock-runtime host. With the bare region as BaseEndpoint it went to
+// "/ap-southeast-2/model/..." and failed with "unsupported protocol scheme".
+func TestNewBedrockClientPlainRegionCallsRegionalHost(t *testing.T) {
+	llm := &models.LLM{APIEndpoint: "ap-southeast-2", Metadata: models.JSONMap{
+		"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "secret"}}
+	llm.ID = 987657
+	t.Cleanup(func() { InvalidateClientCache(llm.ID) })
+	client, err := NewBedrockClient(llm)
+	require.NoError(t, err)
+
+	rec := &recordingHTTPClient{}
+	_, err = client.Converse(context.Background(), &bedrockruntime.ConverseInput{
+		ModelId: aws.String("anthropic.claude-3-haiku-20240307-v1:0"),
+		Messages: []types.Message{{Role: types.ConversationRoleUser,
+			Content: []types.ContentBlock{&types.ContentBlockMemberText{Value: "hi"}}}},
+	}, func(o *bedrockruntime.Options) {
+		o.HTTPClient = rec
+		o.RetryMaxAttempts = 1
+	})
+	require.NoError(t, err)
+	require.Len(t, rec.urls, 1)
+	assert.True(t, strings.HasPrefix(rec.urls[0], "https://bedrock-runtime.ap-southeast-2.amazonaws.com/model/"), rec.urls[0])
+	assert.True(t, strings.HasSuffix(rec.urls[0], "/converse"), rec.urls[0])
 }
