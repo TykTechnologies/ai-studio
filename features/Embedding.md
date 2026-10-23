@@ -549,7 +549,7 @@ embeds Studio as a headless control plane:
   down (2026-09-30: TIB 1.8, libopenapi 0.36, gorilla/sessions 1.4,
   go-redis 9.18, nats 1.49, the AWS and Google SDKs and more up;
   gosimple/slug and mergo down). The `go` directive matches the Dashboard's
-  (`go 1.26.5`, `toolchain go1.26.6` for Studio's own builds).
+  (`go 1.26.5`, `toolchain go1.26.10` for Studio's own builds).
 - Where a Studio dependency needs a newer version, the module is in the
   host's allowlist, `scripts/host-compat-allow.<repo>.txt`
   (`tyk-analytics`, `tyk-sink`), with the dependency that needs it (the

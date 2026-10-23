@@ -145,7 +145,7 @@ func New(service *services.Service, disableCORS bool, authService *auth.AuthServ
 	router := gin.New()
 
 	// Always add recovery middleware (handles panics)
-	router.Use(gin.Recovery())
+	router.Use(middleware.Recovery())
 
 	// Only add Gin's request logger if debug logging is enabled
 	if logger.IsDebugEnabled() {
@@ -366,7 +366,7 @@ func getPaginationParams(c *gin.Context) (int, int, bool) {
 
 func (a *API) setupRoutes() error {
 	// Add global panic recovery middleware
-	a.router.Use(gin.Recovery())
+	a.router.Use(middleware.Recovery())
 
 	if a.disableCORS {
 		a.router.Use(a.devCorsMiddleware())

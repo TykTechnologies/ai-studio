@@ -24,7 +24,7 @@ func quarantineRaw() map[string]any {
 }
 
 func TestEdgeSnapshot_OldEdgeBlocksOnQuarantine(t *testing.T) {
-	js, err := ConfigJSONForEdge(quarantineRaw(), nil)
+	js, err := ConfigJSONForEdge(quarantineRaw(), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestEdgeSnapshot_OldEdgeBlocksOnQuarantine(t *testing.T) {
 }
 
 func TestEdgeSnapshot_NewEdgeQuarantines(t *testing.T) {
-	js, err := ConfigJSONForEdge(quarantineRaw(), nil)
+	js, err := ConfigJSONForEdge(quarantineRaw(), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestEdgeSnapshot_LegacyActionsUnchanged(t *testing.T) {
 	for _, action := range []string{ActionBlock, ActionRedact, ActionLog} {
 		raw := quarantineRaw()
 		raw["on_detect"] = action
-		js, err := ConfigJSONForEdge(raw, nil)
+		js, err := ConfigJSONForEdge(raw, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

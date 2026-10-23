@@ -533,7 +533,7 @@ type ObjectEventPayload struct {
 }
 ```
 
-For `system.llm.*` events, the object's API key and the values of its metadata fields whose name contains `key`, `secret` or `token` (a Bedrock LLM's AWS keys) are `[redacted]` from 2.3.0; `$SECRET/` and `$ENV/` references are shown as written. The same payload is what other Studio replicas read from the cluster event log.
+For `system.llm.*` events, the object's API key and the values of its metadata fields whose name contains `key`, `secret` or `token` (a Bedrock LLM's AWS keys) are `[redacted]` from 2.3.0. So are a tool's auth key (and its dependencies' auth keys) in `system.tool.*` events, a datasource's connection string, connection API key and embedder key (`embed_api_key`, shown as `[REDACTED]`) in `system.datasource.*` events, and a user's password hash, API key and session, reset and verification tokens in `system.user.*` events. `$SECRET/` and `$ENV/` references are shown as written. The same payload is what other Studio replicas read from the cluster event log.
 
 #### Subscribing to System Events
 

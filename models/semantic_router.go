@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	sr "github.com/TykTechnologies/midsommar/v2/pkg/semanticrouting"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -115,8 +116,10 @@ func (r *SemanticRouter) CompiledConfig(db *gorm.DB, encrypt func(string) (strin
 	}
 	if encrypt == nil {
 		ref.APIKey = spec.APIKey
-	} else if spec.APIKey != "" {
-		enc, err := encrypt(spec.APIKey)
+	} else if key := secrets.CredentialRefForEdge(e.APIKey); key != "" {
+		// For an edge: a reference that is refused, unresolvable or empty
+		// goes out as secrets.RefusedCredential, never empty.
+		enc, err := encrypt(key)
 		if err != nil {
 			return cfg, fmt.Errorf("encrypt embedder key: %w", err)
 		}

@@ -69,7 +69,7 @@ func TestBudgetConfigRoundTripsToTheEdge(t *testing.T) {
 		"provider": ProviderBuiltin, "detectors": []any{map[string]any{"name": CategoryInjection}}, "on_detect": ActionBlock,
 		"budget": map[string]any{"max_scan_chars": 1000, "max_pieces": 7, "time_ms": 9000, "single_call_chars": 500}, "cache": false,
 	}
-	js, err := ConfigJSONForEdge(raw, nil)
+	js, err := ConfigJSONForEdge(raw, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
