@@ -26,10 +26,11 @@ func (v *signedDigestsVerifier) VerifySignature(_ context.Context, ref *OCIRefer
 	return nil
 }
 
-// A signature on the platform manifest alone does not admit a plugin pulled
-// through a tag to an unsigned index: the index is what binds the platform
-// manifests, so it is what must be signed (midsommar-clean-c1g.2).
-func TestFetchPlugin_TagToUnsignedIndexIsRejectedEvenIfPlatformManifestSigned(t *testing.T) {
+// A signature on another platform's manifest does not admit a plugin pulled
+// through a tag to an unsigned index: the index is checked first, and the
+// only fallback is the platform manifest actually pulled (midsommar-clean-c1g.2,
+// c1g.20 case d).
+func TestFetchPlugin_TagToUnsignedIndexIsRejectedWhenOnlyAnotherPlatformIsSigned(t *testing.T) {
 	client, _, reg := bindingFixture(t)
 	amd64 := reg.PushPlugin("plugins/demo", "", "linux/amd64", []byte("amd64 binary"))
 	arm64 := reg.PushPlugin("plugins/demo", "", "linux/arm64", []byte("arm64 binary"))
@@ -39,12 +40,15 @@ func TestFetchPlugin_TagToUnsignedIndexIsRejectedEvenIfPlatformManifestSigned(t 
 	client.SetSecurityService(verifier)
 
 	ref := &OCIReference{Registry: reg.Host(), Repository: "plugins/demo", Tag: "1.0.0"}
-	_, err := client.FetchPlugin(context.Background(), ref, &OCIPluginParams{Architecture: "linux/amd64"})
+	_, err := client.FetchPlugin(context.Background(), ref, &OCIPluginParams{Architecture: "linux/arm64"})
 
 	var verr *ErrSignatureVerificationFailed
 	require.True(t, errors.As(err, &verr), "want ErrSignatureVerificationFailed, got %v", err)
-	assert.Equal(t, []string{index.Digest.String()}, verifier.asked)
-	assert.False(t, client.HasPlugin(amd64.Digest.String(), "linux/amd64"),
+	require.NotEmpty(t, verifier.asked)
+	assert.Equal(t, index.Digest.String(), verifier.asked[0], "the index is verified first")
+	assert.NotContains(t, verifier.asked, amd64.Digest.String(),
+		"another platform's manifest must never be consulted")
+	assert.False(t, client.HasPlugin(arm64.Digest.String(), "linux/arm64"),
 		"a plugin that failed verification must not be cached")
 }
 
