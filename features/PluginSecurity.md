@@ -149,7 +149,8 @@ if calculatedChecksum != plugin.Checksum {
 - API create/update (`plugin_security.ValidateCommand`, gateway `handlers/validation.go`), and the service layer (`plugin_security.CheckCommandHosts`: create, update, upgrade, management gRPC, marketplace install).
 - Load of a stored plugin (`validateCommandForLoad`), and the gateway's `createPluginClient` for `grpc://` (the host and the address it resolved to, c1g.31).
 - Every OCI client entry point: `ociplugins.CheckRegistryHost` in `FetchPlugin`, `GetPlugin` (cache hits included) and `NewRemoteRepository` (pulls, manifests, signature reads); gateway pre-fetch and pre-warm.
-- At dial time for every OCI client connection (registry, signatures, token server) via `netguard.PluginHTTPTransport` / `PluginDialControl`, whatever `LLM_UPSTREAM_BLOCK_INTERNAL` says, against DNS rebinding.
+- At dial time for every OCI client connection (registry, signatures, token server) via `netguard.PluginHTTPTransport` / `PluginDialControl`, whatever `LLM_UPSTREAM_BLOCK_INTERNAL` says, against DNS rebinding. Behind a proxy the proxy endpoint is dialled unguarded and each request's target is name-checked (`CheckPluginHost`) in the transport's `Proxy` hook; no connect-time protection for the target then (c1g.33).
+- Cache hits: `GetPlugin` loads a verified cache hit when the registry name only fails to resolve (`netguard.IsUnresolvedPluginHost`), with a warning; a positive internal resolution, a failed cache check or any fallthrough to `FetchPlugin` is refused. Studio's load-time `ValidateCommand` therefore skips the host check for `oci://` commands and leaves it to the OCI client (c1g.33).
 
 **Opt-outs**: a host named in `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` (`netguard.PluginHostExempt`) is exempt from the check and dialled unguarded (preferred). `ALLOW_INTERNAL_NETWORK_ACCESS=true` (read at call time) is platform-wide: it allows every internal plugin host and OCI registry, on every path in AI Studio and the Microgateway; it turns off `LLM_UPSTREAM_BLOCK_INTERNAL`, so LLM upstreams, guardrail provider calls (Enterprise) and script HTTP calls (Enterprise) may reach internal addresses again; and it skips the internal-address check on submitted embed URLs. `PLUGIN_BLOCK_INTERNAL_URLS` is deprecated: still accepted, it only adds refusals for literals (including `host:port` arguments).
 
@@ -514,7 +515,7 @@ if err := pluginService.ValidatePluginChecksum(pluginID, filePath); err != nil {
 - **SSRF (Server-Side Request Forgery)**: Prevents malicious plugins from accessing internal services
 - **Cloud Metadata Attacks**: Blocks access to cloud provider metadata endpoints (169.254.169.254, 100.100.100.200)
 - **Internal Service Discovery**: Prevents scanning of internal networks
-- **DNS rebinding**: registry connections are checked on the address being dialled
+- **DNS rebinding**: registry connections are checked on the address being dialled (not behind a proxy, where the proxy controls egress)
 
 **Error Messages** (both editions; name the host and the setting):
 ```

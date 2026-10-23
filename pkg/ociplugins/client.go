@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/rs/zerolog/log"
@@ -385,15 +386,36 @@ func (c *OCIPluginClient) HasPlugin(digest, arch string) bool {
 // GetPlugin returns a local plugin if it exists in cache
 func (c *OCIPluginClient) GetPlugin(ref *OCIReference, params *OCIPluginParams) (*LocalPlugin, error) {
 	// A cached copy is not loaded from a registry the host rule refuses, so
-	// installed plugins follow the rule as well as new fetches.
-	if err := CheckRegistryHost(ref); err != nil {
-		return nil, err
+	// installed plugins follow the rule as well as new fetches. The one
+	// exception: a registry name that does not resolve (DNS down) does not
+	// stop a cache hit that passes the integrity, signature and key checks,
+	// since no request is made. Anything else, including a fallthrough to
+	// FetchPlugin, is refused.
+	hostErr := CheckRegistryHost(ref)
+	if hostErr != nil && !netguard.IsUnresolvedPluginHost(hostErr) {
+		return nil, hostErr
 	}
 	if !c.HasPlugin(ref.Digest, params.Architecture) {
+		if hostErr != nil {
+			return nil, hostErr
+		}
 		return nil, &ErrPluginNotFound{Reference: ref.FullReference()}
 	}
 
-	return c.getLocalPlugin(ref, params)
+	local, err := c.getLocalPlugin(ref, params)
+	if err != nil {
+		if hostErr != nil {
+			return nil, hostErr
+		}
+		return nil, err
+	}
+	if hostErr != nil {
+		log.Warn().
+			Str("registry", ref.Registry).
+			Str("reference", ref.FullReference()).
+			Msg("Plugin registry name does not resolve; loading the verified cached copy. A fetch from this registry would be refused until it resolves to a public address.")
+	}
+	return local, nil
 }
 
 // getLocalPlugin returns a cached plugin after checking the executable

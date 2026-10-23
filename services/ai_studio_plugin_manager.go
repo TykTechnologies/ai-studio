@@ -1486,6 +1486,13 @@ func (m *AIStudioPluginManager) validateCommandForLoad(command string) error {
 			AllowInternalNetworkAccess: os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") == "true",
 		})
 	}
+	// An OCI plugin's registry is checked by the OCI client when the plugin
+	// is fetched or taken from the cache (ociplugins.CheckRegistryHost),
+	// which lets a verified cache hit load while the registry name does not
+	// resolve; every other check still runs here.
+	if plugin_security.SourceOf(command) == plugin_security.SourceOCI {
+		svc = nil
+	}
 	if err := plugin_security.ValidateCommand(command, svc); err != nil {
 		return fmt.Errorf("plugin command failed load-time validation: %w", err)
 	}

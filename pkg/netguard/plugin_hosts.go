@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"syscall"
 )
 
@@ -32,6 +34,9 @@ var ErrInternalPluginHost = errors.New("plugin host is an internal address")
 // it, so an operator can act on the log line or API error alone.
 type InternalPluginHostError struct {
 	Host string
+	// Unresolved is set when Host is a name whose lookup failed, rather
+	// than one that resolved to an internal address.
+	Unresolved bool
 }
 
 func (e *InternalPluginHostError) Error() string {
@@ -63,10 +68,33 @@ func CheckPluginHost(host string) error {
 	if PluginInternalHostsAllowed() || PluginHostExempt(host) {
 		return nil
 	}
-	if HostIsInternal(host, lookupIP) {
+	lower := strings.TrimSuffix(strings.ToLower(strings.Trim(host, "[]")), ".")
+	if IsInternalHost(lower) {
 		return &InternalPluginHostError{Host: host}
 	}
+	if ip := net.ParseIP(lower); ip != nil {
+		if IsInternalIP(ip) {
+			return &InternalPluginHostError{Host: host}
+		}
+		return nil
+	}
+	ips, err := lookupIP(lower)
+	if err != nil {
+		return &InternalPluginHostError{Host: host, Unresolved: true}
+	}
+	for _, ip := range ips {
+		if IsInternalIP(ip) {
+			return &InternalPluginHostError{Host: host}
+		}
+	}
 	return nil
+}
+
+// IsUnresolvedPluginHost reports whether err refuses a plugin host only
+// because its name did not resolve (as opposed to resolving internally).
+func IsUnresolvedPluginHost(err error) bool {
+	var hostErr *InternalPluginHostError
+	return errors.As(err, &hostErr) && hostErr.Unresolved
 }
 
 // lookupIP calls LookupIP at call time, so a stub installed after a caller
@@ -96,6 +124,11 @@ func PluginDialControl(network, address string, _ syscall.RawConn) error {
 	return nil
 }
 
+// proxyFromEnvironment picks the proxy for a plugin transport request; a
+// variable so tests can set a proxy (http.ProxyFromEnvironment reads the
+// environment once per process).
+var proxyFromEnvironment = http.ProxyFromEnvironment
+
 // PluginHTTPTransport returns the transport for OCI client requests
 // (registry, signature and token-server connections): the upstream URL policy
 // (scheme, LLM_UPSTREAM_ALLOWED_HOSTS) on every request, and every dial
@@ -105,20 +138,55 @@ func PluginDialControl(network, address string, _ syscall.RawConn) error {
 // internal plugin hosts are allowed, ALLOW_INTERNAL_NETWORK_ACCESS also lifts
 // LLM_UPSTREAM_BLOCK_INTERNAL, so PluginDialControl is the only internal-range
 // guard needed.
+//
+// Behind a proxy (HTTPS_PROXY / HTTP_PROXY, NO_PROXY honoured) the dial goes
+// to the proxy, which is operator configuration, not a plugin host: the proxy
+// endpoint is dialled unguarded, and the request's target is checked by name
+// (CheckPluginHost) before it is handed to the proxy. Connect-time rebinding
+// protection does not apply to the target then; the proxy is responsible for
+// egress. A target that bypasses the proxy (NO_PROXY) is dial-guarded.
 func PluginHTTPTransport() http.RoundTripper {
 	guarded := NewDialer()
 	guarded.Control = PluginDialControl
 	unguarded := newUnguardedDialer()
+	var proxies sync.Map // "host:port" of each proxy endpoint in use
 	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = func(req *http.Request) (*url.URL, error) {
+		proxyURL, err := proxyFromEnvironment(req)
+		if err != nil || proxyURL == nil {
+			return proxyURL, err
+		}
+		if err := CheckPluginHost(req.URL.Hostname()); err != nil {
+			return nil, err
+		}
+		proxies.Store(proxyAddress(proxyURL), true)
+		return proxyURL, nil
+	}
 	transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
 		host, _, err := net.SplitHostPort(address)
 		if err != nil {
 			host = address
 		}
-		if PluginHostExempt(host) {
+		if _, isProxy := proxies.Load(address); isProxy || PluginHostExempt(host) {
 			return unguarded.DialContext(ctx, network, address)
 		}
 		return guarded.DialContext(ctx, network, address)
 	}
 	return validatingTransport{inner: transport}
+}
+
+// proxyAddress is the "host:port" the transport dials for proxyURL.
+func proxyAddress(proxyURL *url.URL) string {
+	port := proxyURL.Port()
+	if port == "" {
+		switch proxyURL.Scheme {
+		case "https":
+			port = "443"
+		case "socks5", "socks5h":
+			port = "1080"
+		default:
+			port = "80"
+		}
+	}
+	return net.JoinHostPort(proxyURL.Hostname(), port)
 }
