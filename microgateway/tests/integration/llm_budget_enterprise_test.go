@@ -75,6 +75,14 @@ func TestLLMBudget_EnforcedOnEdge(t *testing.T) {
 	assert.Contains(t, string(body), `"budget_exceeded"`)
 	assert.Contains(t, string(body), "LLM monthly budget exceeded")
 	assert.Contains(t, string(body), "limit=0.0005")
+	// Streaming requests are refused the same way, before any upstream call.
+	streamChat := `{"model":"gpt-4","stream":true,"messages":[{"role":"user","content":"hello"}]}`
+	status, body = gatewayPost(t, baseURL+"/llm/stream/over-budget/v1/chat/completions", overToken, streamChat)
+	assert.Equal(t, 403, status, string(body))
+	assert.Contains(t, string(body), "LLM monthly budget exceeded")
+	status, body = gatewayPost(t, baseURL+"/ai/over-budget/v1/chat/completions", overToken, streamChat)
+	assert.Equal(t, 403, status, string(body))
+	assert.Contains(t, string(body), `"budget_exceeded"`)
 	assert.Equal(t, before, backend.GetRequestCount(), "a refused request never reaches the vendor")
 
 	status, body = gatewayPost(t, baseURL+"/ai/mock-openai/v1/chat/completions", overToken, chat)
