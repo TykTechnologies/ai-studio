@@ -73,13 +73,14 @@ func TestNewRemoteRepository_GuardsInternalRegistries(t *testing.T) {
 			}
 			ref := &OCIReference{Registry: reg.Host(), Repository: "plugins/demo", Tag: "1.0.0"}
 
-			t.Setenv(netguard.EnvBlockInternal, "true")
-			t.Setenv(netguard.EnvAllowInternal, "")
+			// Internal hosts allowed while building, refused when dialling.
 			repo, err := NewRemoteRepository(cfg, ref, authName)
 			require.NoError(t, err)
 			assert.True(t, repo.PlainHTTP, "a 127.0.0.1 registry is reached over plain HTTP")
+			t.Setenv(netguard.EnvAllowInternal, "")
+			registryHTTPClient.CloseIdleConnections() // the guard runs when a connection is dialled
 			_, err = repo.Resolve(context.Background(), "1.0.0")
-			require.Error(t, err, "an internal registry must be refused while internal blocking is on")
+			require.Error(t, err, "an internal registry must be refused unless internal hosts are allowed")
 
 			t.Setenv(netguard.EnvAllowInternal, "true")
 			repo, err = NewRemoteRepository(cfg, ref, authName)

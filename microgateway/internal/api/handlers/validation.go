@@ -188,13 +188,13 @@ func validatePluginCommand(command string, securityService plugin_security.Servi
 					return fmt.Errorf("🔒 SECURITY: plugin command contains invalid URL: %s", sanitizeStringForLogging(command))
 				}
 
-				// Check for internal/private network addresses using plugin security service
-				// ENT: Blocks internal IPs unless development bypass is enabled
-				// CE: Always allows (no-op)
+				// Check for internal/private network addresses using plugin security service:
+				// hosts (registries included) that are, or resolve to, internal
+				// addresses are refused unless internal access is allowed (CE and ENT)
 				if parsedURL.Hostname() != "" {
 					host := parsedURL.Hostname()
 					if err := securityService.ValidateGRPCHost(host); err != nil {
-						return fmt.Errorf("🔒 SECURITY: plugin command targets internal network address: %s", sanitizeStringForLogging(command))
+						return fmt.Errorf("🔒 SECURITY: plugin host %q in %s is an internal address, resolves to one, or does not resolve; set ALLOW_INTERNAL_NETWORK_ACCESS=true to allow internal plugin hosts and registries", sanitizeStringForLogging(host), sanitizeStringForLogging(command))
 					}
 				}
 

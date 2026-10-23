@@ -325,20 +325,14 @@ func (pm *PluginManager) grpcHostValidatorOrDefault() GRPCHostValidator {
 	return defaultGRPCHostValidator{}
 }
 
-// defaultGRPCHostValidator refuses hosts that are, or resolve to, internal
-// addresses unless ALLOW_INTERNAL_NETWORK_ACCESS=true. It does not go through
+// defaultGRPCHostValidator applies the plugin host rule
+// (netguard.CheckPluginHost). It does not go through
 // plugin_security.NewService, which needs the enterprise factory registered
 // in an enterprise build.
 type defaultGRPCHostValidator struct{}
 
 func (defaultGRPCHostValidator) ValidateGRPCHost(host string) error {
-	if os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") == "true" {
-		return nil
-	}
-	if netguard.HostIsInternal(host, net.LookupIP) {
-		return plugin_security.ErrInternalNetworkBlocked
-	}
-	return nil
+	return netguard.CheckPluginHost(host)
 }
 
 // checkGRPCHost applies the internal-network rule to a grpc:// plugin's host
@@ -352,11 +346,11 @@ func (pm *PluginManager) checkGRPCHost(command string, addr net.Addr) error {
 		return fmt.Errorf("invalid gRPC address in %q: %w", command, err)
 	}
 	if err := validator.ValidateGRPCHost(host); err != nil {
-		return fmt.Errorf("gRPC plugin host %q refused: %w", host, err)
+		return fmt.Errorf("gRPC plugin host %q refused (set %s=true to allow internal plugin hosts): %w", host, netguard.EnvAllowInternal, err)
 	}
 	if tcpAddr, ok := addr.(*net.TCPAddr); ok && tcpAddr.IP.String() != host {
 		if err := validator.ValidateGRPCHost(tcpAddr.IP.String()); err != nil {
-			return fmt.Errorf("gRPC plugin host %q resolves to a refused address: %w", host, err)
+			return fmt.Errorf("gRPC plugin host %q resolves to a refused address (set %s=true to allow internal plugin hosts): %w", host, netguard.EnvAllowInternal, err)
 		}
 	}
 	return nil
@@ -2255,18 +2249,22 @@ func (pm *PluginManager) PreFetchOCIPlugin(command string) error {
 		return err
 	}
 
+	// Parse OCI reference
+	ref, params, err := ociplugins.ParseOCICommand(command)
+	if err != nil {
+		return fmt.Errorf("failed to parse OCI command: %w", err)
+	}
+	// Nor for a registry the plugin host rule refuses.
+	if err := ociplugins.CheckRegistryHost(ref); err != nil {
+		return err
+	}
+
 	pm.mu.RLock()
 	ociClient := pm.ociClient
 	pm.mu.RUnlock()
 
 	if ociClient == nil {
 		return fmt.Errorf("OCI client not available")
-	}
-
-	// Parse OCI reference
-	ref, params, err := ociplugins.ParseOCICommand(command)
-	if err != nil {
-		return fmt.Errorf("failed to parse OCI command: %w", err)
 	}
 
 	// Fetch plugin (this will cache it)

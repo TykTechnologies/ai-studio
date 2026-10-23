@@ -131,6 +131,9 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 	if err := ValidateOCIReference(ref, c.config); err != nil {
 		return nil, fmt.Errorf("reference validation failed: %w", err)
 	}
+	if err := CheckRegistryHost(ref); err != nil {
+		return nil, err
+	}
 
 	// Normalize architecture if not specified
 	if params.Architecture == "" {
@@ -381,6 +384,11 @@ func (c *OCIPluginClient) HasPlugin(digest, arch string) bool {
 
 // GetPlugin returns a local plugin if it exists in cache
 func (c *OCIPluginClient) GetPlugin(ref *OCIReference, params *OCIPluginParams) (*LocalPlugin, error) {
+	// A cached copy is not loaded from a registry the host rule refuses, so
+	// installed plugins follow the rule as well as new fetches.
+	if err := CheckRegistryHost(ref); err != nil {
+		return nil, err
+	}
 	if !c.HasPlugin(ref.Digest, params.Architecture) {
 		return nil, &ErrPluginNotFound{Reference: ref.FullReference()}
 	}

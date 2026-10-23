@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"runtime"
@@ -24,10 +25,24 @@ import (
 
 // registryHTTPClient is the shared HTTP client for OCI registry requests,
 // used by every authentication path. Its transport applies the full URL
-// policy (scheme + host allowlist) to each request and enforces the
-// internal-network policy at dial time (post-DNS), so a rebinding DNS answer
-// cannot bypass the SSRF protection.
-var registryHTTPClient = &http.Client{Transport: netguard.ValidatingHTTPTransport()}
+// policy (scheme + host allowlist) to each request and the plugin host rule
+// at dial time (post-DNS), so a rebinding DNS answer cannot bypass it.
+var registryHTTPClient = &http.Client{Transport: netguard.PluginHTTPTransport()}
+
+// CheckRegistryHost applies the plugin host rule (netguard.CheckPluginHost)
+// to ref's registry: unless ALLOW_INTERNAL_NETWORK_ACCESS=true, a registry
+// that is, or resolves to, an internal address, or does not resolve, is
+// refused. Every fetch, signature read and cache lookup goes through it.
+func CheckRegistryHost(ref *OCIReference) error {
+	host := ref.Registry
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	if err := netguard.CheckPluginHost(host); err != nil {
+		return fmt.Errorf("plugin registry %s refused: %w", ref.Registry, err)
+	}
+	return nil
+}
 
 // DefaultMaxPluginSize bounds a single plugin binary when the configuration
 // does not set MaxPluginSize. Plugin binaries are statically linked Go
@@ -53,6 +68,9 @@ func NewORASFetcher(config *OCIConfig) (*ORASFetcher, error) {
 // authenticated or anonymous. The Enterprise signature verifier uses it to
 // read signatures, so they are fetched under the same SSRF policy.
 func NewRemoteRepository(cfg *OCIConfig, ref *OCIReference, authConfigName string) (*remote.Repository, error) {
+	if err := CheckRegistryHost(ref); err != nil {
+		return nil, err
+	}
 	repo, err := remote.NewRepository(ref.FullRepo())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create remote repository: %w", err)

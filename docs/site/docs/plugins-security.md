@@ -95,7 +95,7 @@ A plugin's **command** says where the host gets the plugin: a local executable (
 
 ### Enforced checks (always on)
 
-These run when a plugin is created or updated through the API, and again when AI Studio loads a plugin, so a command that reached the database another way is checked before a process starts. A command that fails is **refused**.
+These run when a plugin is created or updated through the API, and again when AI Studio loads a plugin, so a command that reached the database another way is checked before a process starts. A command that fails is **refused**. The internal-hosts check runs on more paths still; see the table.
 
 | Check | Rule |
 |---|---|
@@ -104,7 +104,7 @@ These run when a plugin is created or updated through the API, and again when AI
 | Shell metacharacters | No `;`, `\|`, `&`, `` ` ``, `$(`, newlines or NUL. |
 | Executable location | Local executables must be under `/usr/bin/`, `/bin/`, `/usr/local/bin/` or `/opt/plugins/`, or a relative path under `plugins/`. Add directories with `AI_STUDIO_PLUGIN_ALLOWED_DIRS` (a path list, `:`-separated on Linux). The Microgateway allows `/opt/microgateway/plugins` and `./plugins`, refuses symbolic links, and requires the file to be executable. |
 | URL scheme | Only `grpc`, `oci`, `http` and `https` URLs. |
-| Internal hosts | The host of a URL in the command must not be internal. The host is resolved, and a name that does not resolve is treated as internal (fail closed). Internal means loopback, RFC 1918 private ranges, shared address space (`100.64.0.0/10`, including the `100.100.100.200` cloud metadata endpoint), link-local (including `169.254.169.254` cloud metadata), `0.0.0.0/8`, IPv6 unique-local and `localhost`. Community and Enterprise editions classify hosts the same way. Set `ALLOW_INTERNAL_NETWORK_ACCESS=true` to allow internal hosts, for local development only. |
+| Internal hosts | The host of a URL in the command must not be internal: a `grpc://` plugin's host and an `oci://` plugin's registry alike. The host is resolved, and a name that does not resolve is treated as internal (fail closed). Internal means loopback, RFC 1918 private ranges, shared address space (`100.64.0.0/10`, including the `100.100.100.200` cloud metadata endpoint), link-local (including `169.254.169.254` cloud metadata), `0.0.0.0/8`, the unspecified address (`::`), IPv6 unique-local and `localhost`. Community and Enterprise editions classify hosts the same way. The check runs on every path, in AI Studio and the Microgateway: create and update (API, management gRPC, marketplace install, upgrade), loading a stored plugin (even from the OCI cache), pre-warm and manifest reads, plugins an edge receives from AI Studio, and every connection to an OCI registry (checked on the address being dialled, so a DNS answer that changes later cannot reach an internal address). The error names the host and the setting. Set `ALLOW_INTERNAL_NETWORK_ACCESS=true` to allow internal hosts and registries; it allows all of them, `grpc://` hosts included. `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` does not exempt a plugin host. |
 
 ### Advisory checks (warning-only by default)
 
@@ -120,12 +120,13 @@ Making the advisory checks blocking by default is a product decision tracked in 
 
 ### Edge gateways
 
-A Microgateway in edge mode has no management API: it receives plugins from AI Studio through configuration sync, so a plugin reaches an edge only after it has passed AI Studio's API validation. A standalone Microgateway (no AI Studio) has its own management API, which runs the same enforced checks. In both modes the Microgateway validates local executable paths again when it loads a plugin.
+A Microgateway in edge mode has no management API: it receives plugins from AI Studio through configuration sync, so a plugin reaches an edge only after it has passed AI Studio's API validation. A standalone Microgateway (no AI Studio) has its own management API, which runs the same enforced checks. In both modes the Microgateway validates local executable paths again when it loads a plugin, and applies the internal-hosts check to `grpc://` hosts and OCI registries from its own network position (a name can resolve differently there than on AI Studio). A refused plugin is marked failed in plugin health with the reason.
 
 ## OCI plugins: registries, digests and signatures
 
 For production, OCI is the recommended way to distribute plugins.
 
+- **Internal registries are refused** unless `ALLOW_INTERNAL_NETWORK_ACCESS=true`: a registry that is, or resolves to, an internal address, or does not resolve, is refused before any request (see the internal-hosts check under [Command validation](#command-validation)). This includes plugins already installed and cached. To use a registry inside your network, set the variable on AI Studio and on every Microgateway that loads its plugins, knowing that it allows every internal plugin host.
 - **Restrict registries.** Set `AI_STUDIO_OCI_ALLOWED_REGISTRIES` (AI Studio) and `OCI_PLUGINS_ALLOWED_REGISTRIES` (Microgateway) to a comma-separated list of registry hosts. An `oci://` command for any other registry is refused. With the variable unset, any registry is allowed.
 - **Pin by digest.** `oci://registry.example.com/plugins/my-plugin@sha256:…` always loads the same bytes. A tag (`:v1.2.3`) can be moved to different content by anyone who can push to the repository.
 - **Require signatures (Enterprise Edition).** AI Studio and the Microgateway require signatures by default (`AI_STUDIO_OCI_REQUIRE_SIGNATURE`, `OCI_PLUGINS_REQUIRE_SIGNATURE`, both default `true`; AI Studio's default was `false` before 2.3.0). Signatures are verified in-process, without the `cosign` binary, against the digest that was pulled: cosign v2 signatures (the `.sig` tag) and cosign v3 Sigstore bundles (OCI referrers) are both accepted, and an attestation signed with the same key is not. The Tyk signing key is always trusted. Add your own keys as `OCI_PLUGINS_PUBKEY_1`, `OCI_PLUGINS_PUBKEY_2`, … or `OCI_PLUGINS_PUBKEY_<NAME>` (key content), or `OCI_PLUGINS_PUBKEY_FILE_<NAME>` (a file path), and select one per plugin with `?pubkey=` on the command (`?pubkey=2`, `?pubkey=CI`).
@@ -176,7 +177,7 @@ The source policy decides which deployment types are accepted at all. Within an 
 ## Production checklist
 
 1. Install only plugins you trust; prefer OCI artifacts pinned by digest from an allowlisted registry, with signatures required (Enterprise Edition).
-2. Keep `ALLOW_INTERNAL_NETWORK_ACCESS` unset (or `false`).
+2. Keep `ALLOW_INTERNAL_NETWORK_ACCESS` unset (or `false`), and publish plugins to a registry with a public address.
 3. Set `PLUGIN_BLOCK_INTERNAL_URLS=true`.
 4. Keep `AI_STUDIO_PLUGIN_ALLOWED_DIRS` to the directories you actually deploy plugins into, and allow only the plugin sources you use (`AI_STUDIO_PLUGIN_ALLOWED_SOURCES`, `PLUGINS_ALLOWED_SOURCES`; see [Hardening: restrict plugin sources](#hardening-restrict-plugin-sources)).
 5. Review the scopes a plugin's manifest requests before approving them.

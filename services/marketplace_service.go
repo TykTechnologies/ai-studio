@@ -12,6 +12,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/marketplace"
 	"github.com/TykTechnologies/midsommar/v2/pkg/replicas"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	"github.com/rs/zerolog/log"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -448,6 +449,10 @@ func (s *MarketplaceService) InstallFromMarketplace(ctx context.Context, req *ma
 	// Build OCI reference
 	ociRef := marketplacePlugin.OCIReference()
 	if err := s.checkSource(ociRef); err != nil {
+		return nil, err
+	}
+	// Nor from a registry that is, or resolves to, an internal address.
+	if err := plugin_security.CheckCommandHosts(ociRef); err != nil {
 		return nil, err
 	}
 

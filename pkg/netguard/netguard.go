@@ -91,7 +91,9 @@ var internalCIDRs = func() []*net.IPNet {
 // dialer cannot slip past. lookup is net.LookupIP outside tests.
 func HostIsInternal(host string, lookup func(string) ([]net.IP, error)) bool {
 	lower := strings.TrimSuffix(strings.ToLower(strings.Trim(host, "[]")), ".")
-	if lower == "localhost" || strings.HasSuffix(lower, ".localhost") {
+	// Localhost names and internal literals, including the legacy IPv4
+	// spellings (0x7f000001) a resolver may accept but net.ParseIP does not.
+	if IsInternalHost(lower) {
 		return true
 	}
 	if ip := net.ParseIP(lower); ip != nil {
@@ -304,6 +306,14 @@ func (t validatingTransport) RoundTrip(req *http.Request) (*http.Response, error
 		return nil, err
 	}
 	return t.inner.RoundTrip(req)
+}
+
+// CloseIdleConnections forwards to the inner transport, so
+// http.Client.CloseIdleConnections reaches the pooled connections.
+func (t validatingTransport) CloseIdleConnections() {
+	if c, ok := t.inner.(interface{ CloseIdleConnections() }); ok {
+		c.CloseIdleConnections()
+	}
 }
 
 // ValidatingHTTPTransport returns a RoundTripper that applies the full URL

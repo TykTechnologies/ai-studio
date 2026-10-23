@@ -13,8 +13,11 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins/ocitest"
 )
 
-// A refused internal registry is refused by the netguard dialer, before any
-// request reaches it, for every auth mode (midsommar-clean-c1g.3).
+// An internal registry is refused before any request reaches it, for every
+// auth mode: by name when the repository is built, and by the dial guard when
+// the name passed but the address dialled is internal (a rebinding answer;
+// simulated here by allowing internal hosts only while building the
+// repository) (midsommar-clean-c1g.3, c1g.32).
 func TestNewRemoteRepository_InternalRegistryGetsNoRequest(t *testing.T) {
 	t.Setenv("TEST_REGISTRY_SECRET", "secret")
 	auths := map[string]RegistryAuth{
@@ -41,15 +44,20 @@ func TestNewRemoteRepository_InternalRegistryGetsNoRequest(t *testing.T) {
 				cfg.RegistryAuth[name] = regAuth
 				authName = name
 			}
-			t.Setenv(netguard.EnvBlockInternal, "true")
-			t.Setenv(netguard.EnvAllowInternal, "")
-
 			ref := &OCIReference{Registry: reg.Host(), Repository: "plugins/demo", Tag: "1.0.0"}
+
+			t.Setenv(netguard.EnvAllowInternal, "")
+			_, err := NewRemoteRepository(cfg, ref, authName)
+			require.ErrorIs(t, err, netguard.ErrInternalPluginHost)
+			assert.Contains(t, err.Error(), netguard.EnvAllowInternal, "the error names the setting")
+
+			t.Setenv(netguard.EnvAllowInternal, "true")
 			repo, err := NewRemoteRepository(cfg, ref, authName)
 			require.NoError(t, err)
+			t.Setenv(netguard.EnvAllowInternal, "")
 			_, err = repo.Resolve(context.Background(), "1.0.0")
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "blocked", "the refusal must come from the netguard guard")
+			assert.Contains(t, err.Error(), "internal address", "the refusal must come from the dial guard")
 			for _, method := range []string{"HEAD", "GET"} {
 				assert.Zero(t, reg.Requests(method, "manifests"), "%s manifests reached the registry", method)
 			}

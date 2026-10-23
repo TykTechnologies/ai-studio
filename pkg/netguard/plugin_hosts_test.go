@@ -1,0 +1,90 @@
+package netguard
+
+import (
+	"errors"
+	"fmt"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
+
+func stubPluginLookup(t *testing.T, hosts map[string]string) {
+	t.Helper()
+	orig := LookupIP
+	LookupIP = func(host string) ([]net.IP, error) {
+		if ip, ok := hosts[host]; ok {
+			return []net.IP{net.ParseIP(ip)}, nil
+		}
+		return nil, fmt.Errorf("lookup %s: no such host", host)
+	}
+	t.Cleanup(func() { LookupIP = orig })
+}
+
+// The plugin host rule refuses internal literals (legacy spellings and the
+// "this network" and unspecified ranges included), names that resolve to an
+// internal address and names that do not resolve, unless
+// ALLOW_INTERNAL_NETWORK_ACCESS=true; the error names the host and the
+// setting (midsommar-clean-c1g.32).
+func TestCheckPluginHost(t *testing.T) {
+	stubPluginLookup(t, map[string]string{
+		"registry.corp.internal": "10.0.0.5",
+		"registry.example.com":   "203.0.113.10",
+	})
+	t.Setenv(EnvAllowInternal, "")
+	for host, refused := range map[string]bool{
+		"10.0.0.5":               true,
+		"0.0.0.0":                true,
+		"::":                     true,
+		"0x7f000001":             true, // 127.0.0.1
+		"localhost":              true,
+		"registry.corp.internal": true,
+		"unresolvable.example":   true,
+		"registry.example.com":   false,
+		"203.0.113.10":           false,
+	} {
+		err := CheckPluginHost(host)
+		if refused != (err != nil) {
+			t.Errorf("CheckPluginHost(%q) = %v, want refused %v", host, err, refused)
+			continue
+		}
+		if err == nil {
+			continue
+		}
+		if !errors.Is(err, ErrInternalPluginHost) {
+			t.Errorf("CheckPluginHost(%q) = %v, want ErrInternalPluginHost", host, err)
+		}
+		var hostErr *InternalPluginHostError
+		if !errors.As(err, &hostErr) || hostErr.Host != host {
+			t.Errorf("CheckPluginHost(%q) names host %v", host, hostErr)
+		}
+	}
+
+	t.Setenv(EnvAllowInternal, "true")
+	for _, host := range []string{"10.0.0.5", "registry.corp.internal", "unresolvable.example"} {
+		if err := CheckPluginHost(host); err != nil {
+			t.Errorf("with internal hosts allowed, CheckPluginHost(%q) = %v", host, err)
+		}
+	}
+}
+
+// PluginHTTPTransport refuses the dial itself when the address is internal,
+// whatever name led there, and connects when internal hosts are allowed.
+func TestPluginHTTPTransport_RefusesInternalDial(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	t.Cleanup(server.Close)
+	client := &http.Client{Transport: PluginHTTPTransport()}
+
+	t.Setenv(EnvAllowInternal, "")
+	_, err := client.Get(server.URL)
+	if !errors.Is(err, ErrInternalPluginHost) {
+		t.Fatalf("dial to %s = %v, want ErrInternalPluginHost", server.URL, err)
+	}
+
+	t.Setenv(EnvAllowInternal, "true")
+	resp, err := client.Get(server.URL)
+	if err != nil {
+		t.Fatalf("with internal hosts allowed: %v", err)
+	}
+	resp.Body.Close()
+}

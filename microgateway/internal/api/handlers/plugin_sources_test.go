@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard/netguardtest"
 	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 )
 
@@ -27,6 +28,7 @@ func jsonRequest(t *testing.T, method, path string, body interface{}) *http.Requ
 // With PLUGINS_ALLOWED_SOURCES=oci the management API refuses file and grpc
 // plugins (create, update and pre-warm) with 400.
 func TestPluginHandlers_SourcePolicy(t *testing.T) {
+	netguardtest.StubLookupIP(t, nil) // registry.example.com resolves to a public address
 	container, router := setupTestHandlers(t)
 	policy, err := plugin_security.ParseSourcePolicy("oci")
 	require.NoError(t, err)

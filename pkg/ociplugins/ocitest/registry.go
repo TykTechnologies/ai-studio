@@ -67,9 +67,13 @@ func (r *Registry) DisableReferrersAPI() {
 	r.noReferrersAPI = true
 }
 
-// NewRegistry starts a registry that is shut down when the test ends.
+// NewRegistry starts a registry that is shut down when the test ends. It
+// listens on loopback, an internal address, so it sets
+// ALLOW_INTERNAL_NETWORK_ACCESS=true for the test, as a deployment with an
+// internal registry must.
 func NewRegistry(t testing.TB) *Registry {
 	t.Helper()
+	t.Setenv("ALLOW_INTERNAL_NETWORK_ACCESS", "true")
 	r := &Registry{
 		blobs:     make(map[digest.Digest][]byte),
 		manifests: make(map[string]map[string]manifestEntry),

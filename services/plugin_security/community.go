@@ -33,8 +33,9 @@ func (s *communityService) ValidateGRPCHost(host string) error {
 }
 
 // lookupIPFunc resolves hostnames to IPs. A variable so tests can stub DNS
-// and stay hermetic.
-var lookupIPFunc = net.LookupIP
+// and stay hermetic; by default it goes through netguard.LookupIP, the seam
+// every plugin host check shares.
+var lookupIPFunc = func(host string) ([]net.IP, error) { return netguard.LookupIP(host) }
 
 // IsInternalIP reports whether a hostname or IP is internal (see
 // netguard.HostIsInternal): hostnames are resolved and classified by every

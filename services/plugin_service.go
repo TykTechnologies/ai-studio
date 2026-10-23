@@ -11,6 +11,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	"github.com/rs/zerolog/log"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -232,6 +233,9 @@ func (s *PluginService) UpdatePlugin(id uint, req *UpdatePluginRequest) (*models
 		if err := s.checkSource(*req.Command); err != nil {
 			return nil, err
 		}
+		if err := plugin_security.CheckCommandHosts(*req.Command); err != nil {
+			return nil, err
+		}
 		plugin.Command = *req.Command
 	}
 	if req.Checksum != nil {
@@ -257,6 +261,9 @@ func (s *PluginService) UpdatePlugin(id uint, req *UpdatePluginRequest) (*models
 	if req.OCIReference != nil {
 		if *req.OCIReference != "" {
 			if err := s.checkSource(*req.OCIReference); err != nil {
+				return nil, err
+			}
+			if err := plugin_security.CheckCommandHosts(*req.OCIReference); err != nil {
 				return nil, err
 			}
 		}
@@ -543,6 +550,11 @@ func isValidHookType(hookType string) bool {
 func (s *PluginService) validatePluginCommand(command string) error {
 	// The installation's plugin source policy (AI_STUDIO_PLUGIN_ALLOWED_SOURCES)
 	if err := s.checkSource(command); err != nil {
+		return err
+	}
+	// Plugin and registry hosts that are, or resolve to, internal addresses
+	// (create, update, upgrade, marketplace install, management gRPC).
+	if err := plugin_security.CheckCommandHosts(command); err != nil {
 		return err
 	}
 

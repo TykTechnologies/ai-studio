@@ -137,53 +137,34 @@ if calculatedChecksum != plugin.Checksum {
 
 ## Enterprise Edition Features
 
-### 3. GRPC Host Whitelisting (Tier 3 - Network Security)
+### 3. Internal plugin hosts and registries (Tier 3 - Network Security)
 
-**⚠️ ENTERPRISE EDITION ONLY**
+**Both editions** (midsommar-clean-c1g.32; before 2.3 only Community AI Studio resolved hostnames).
 
-**Purpose**: Prevents plugins from targeting internal network addresses (SSRF protection)
+**Purpose**: Prevents plugins from targeting internal network addresses (SSRF protection), whether the plugin is a `grpc://` server or an `oci://` artifact on a registry.
 
-**Implementation**: [enterprise/features/plugin_security/grpc_validator.go](../enterprise/features/plugin_security/grpc_validator.go)
+**Rule** (`netguard.CheckPluginHost`; the security services' `ValidateGRPCHost` classify hosts the same way): unless `ALLOW_INTERNAL_NETWORK_ACCESS=true`, a host is refused when it is `localhost`/`*.localhost`, an internal IP literal (legacy IPv4 spellings such as `0x7f000001` included), a hostname that resolves to any internal address, or a hostname that does not resolve. Internal ranges (`netguard.IsInternalIP`): `10/8`, `172.16/12`, `192.168/16`, `100.64/10`, `127/8`, `169.254/16`, `0/8`, `::1`, `::`, `fc00::/7`, `fe80::/10`. Hostname lookups go through `netguard.LookupIP` (tests stub it with `netguardtest.StubLookupIP`).
 
-**Blocked IP Ranges**:
-```
-10.0.0.0/8          Private Class A (10.x.x.x)
-172.16.0.0/12       Private Class B (172.16-31.x.x)
-192.168.0.0/16      Private Class C (192.168.x.x)
-127.0.0.0/8         IPv4 loopback (127.x.x.x)
-169.254.0.0/16      IPv4 link-local
-::1/128             IPv6 loopback
-fc00::/7            IPv6 unique local
-fe80::/10           IPv6 link-local
-```
+**Where it applies** (Studio and Microgateway):
+- API create/update (`plugin_security.ValidateCommand`, gateway `handlers/validation.go`), and the service layer (`plugin_security.CheckCommandHosts`: create, update, upgrade, management gRPC, marketplace install).
+- Load of a stored plugin (`validateCommandForLoad`), and the gateway's `createPluginClient` for `grpc://` (the host and the address it resolved to, c1g.31).
+- Every OCI client entry point: `ociplugins.CheckRegistryHost` in `FetchPlugin`, `GetPlugin` (cache hits included) and `NewRemoteRepository` (pulls, manifests, signature reads); gateway pre-fetch and pre-warm.
+- At dial time for registry requests (`netguard.PluginHTTPTransport` / `PluginDialControl`), against DNS rebinding.
 
-**Blocked Hostnames**:
-- `localhost`
-- `::1`
-- Any hostname containing "localhost"
+`LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` does not exempt a plugin host. `ALLOW_INTERNAL_NETWORK_ACCESS=true` (read at call time) allows every internal plugin host and also lifts `LLM_UPSTREAM_BLOCK_INTERNAL`.
 
 **Example**:
 ```bash
 # ✅ ALLOWED (public addresses)
 grpc://plugins.company.com:50051
-grpc://35.123.45.67:8080
+oci://ghcr.io/org/plugin@sha256:...
 
 # ❌ BLOCKED (internal addresses)
 grpc://localhost:50051
-grpc://127.0.0.1:8080
-grpc://192.168.1.100:50051
 grpc://10.0.0.5:8080
-grpc://::1:50051
+oci://registry.corp.internal/plugin:1   # resolves to 10.x
+oci://localhost:5000/plugin:1
 ```
-
-**Development Bypass**:
-```bash
-ALLOW_INTERNAL_NETWORK_ACCESS=true  # Allows internal IPs (development only)
-```
-
-**Community Edition Behavior**:
-- ⚠️ All hosts allowed (no blocking)
-- Logs one-time warning: "Plugin Security: GRPC host whitelisting is disabled in Community Edition"
 
 ---
 
@@ -525,44 +506,19 @@ if err := pluginService.ValidatePluginChecksum(pluginID, filePath); err != nil {
 
 ## Enterprise Edition Features
 
-### GRPC Host Whitelisting
+### Internal plugin hosts and registries
 
-**File**: [enterprise/features/plugin_security/grpc_validator.go](../enterprise/features/plugin_security/grpc_validator.go)
-
-**CIDR Range Detection**:
-```go
-func (v *GRPCValidator) isInternalIP(host string) bool {
-    privateCIDRs := []string{
-        "10.0.0.0/8",        // Private Class A
-        "172.16.0.0/12",     // Private Class B
-        "192.168.0.0/16",    // Private Class C
-        "127.0.0.0/8",       // IPv4 loopback
-        "169.254.0.0/16",    // IPv4 link-local
-        "::1/128",           // IPv6 loopback
-        "fc00::/7",          // IPv6 unique local
-        "fe80::/10",         // IPv6 link-local
-    }
-
-    // Check if IP falls within any private CIDR range
-    for _, cidrStr := range privateCIDRs {
-        _, cidr, _ := net.ParseCIDR(cidrStr)
-        if cidr.Contains(ip) {
-            return true
-        }
-    }
-    return false
-}
-```
+**Files**: [pkg/netguard/plugin_hosts.go](../pkg/netguard/plugin_hosts.go), [pkg/ociplugins/fetcher.go](../pkg/ociplugins/fetcher.go) (`CheckRegistryHost`), [services/plugin_security/command_validation.go](../services/plugin_security/command_validation.go), [enterprise/features/plugin_security/grpc_validator.go](../enterprise/features/plugin_security/grpc_validator.go)
 
 **Attack Prevention**:
 - **SSRF (Server-Side Request Forgery)**: Prevents malicious plugins from accessing internal services
-- **Cloud Metadata Attacks**: Blocks access to cloud provider metadata endpoints (169.254.169.254)
+- **Cloud Metadata Attacks**: Blocks access to cloud provider metadata endpoints (169.254.169.254, 100.100.100.200)
 - **Internal Service Discovery**: Prevents scanning of internal networks
+- **DNS rebinding**: registry connections are checked on the address being dialled
 
-**Error Messages**:
+**Error Messages** (both editions; name the host and the setting):
 ```
-CE: No error (allowed)
-ENT: "🔒 SECURITY: plugin command targets internal network address: grpc://127.0.0.1:50051"
+plugin host "registry.corp.internal" is an internal address, resolves to one, or does not resolve; set ALLOW_INTERNAL_NETWORK_ACCESS=true to allow internal plugin hosts and registries
 ```
 
 ---
@@ -797,11 +753,11 @@ When upgrading from Community Edition to Enterprise Edition:
 - **Cause**: Using Community Edition
 - **Solution**: Upgrade to Enterprise Edition or accept reduced security
 
-**ENT: "plugin command targets internal network address"**
-- **Cause**: Plugin trying to access internal IP
+**"plugin host ... is an internal address, resolves to one, or does not resolve"**
+- **Cause**: The plugin's gRPC host or OCI registry is, or resolves to, an internal address, or does not resolve (both editions)
 - **Solution**:
-  - Use public IP/hostname instead
-  - Set `ALLOW_INTERNAL_NETWORK_ACCESS=true` (development only)
+  - Use a host or registry with a public address
+  - Set `ALLOW_INTERNAL_NETWORK_ACCESS=true` (allows every internal plugin host and registry)
 
 **ENT: "signature verification failed ... no signatures found"**
 - **Cause**: Plugin image not signed (neither a cosign v3 bundle nor a cosign v2 `.sig` tag)

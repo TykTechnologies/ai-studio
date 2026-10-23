@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	"github.com/gin-gonic/gin"
 )
@@ -106,6 +107,13 @@ func TriggerPluginPreWarm(serviceContainer *services.ServiceContainer) gin.Handl
 			if errors.As(err, &notAllowed) {
 				c.JSON(http.StatusBadRequest, gin.H{
 					"error":   "Plugin source not allowed",
+					"message": err.Error(),
+				})
+				return
+			}
+			if errors.Is(err, netguard.ErrInternalPluginHost) {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error":   "Plugin registry is an internal address",
 					"message": err.Error(),
 				})
 				return

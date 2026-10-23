@@ -424,7 +424,8 @@ Plugins run as separate processes with the host's privileges, so install only pl
 In short, for production:
 
 ```bash
-# Refuse internal hosts in plugin commands (the default; never set to true in production)
+# Refuse internal plugin hosts and OCI registries, resolved names included
+# (the default; true allows every internal plugin host and registry)
 ALLOW_INTERNAL_NETWORK_ACCESS=false
 # Also refuse internal addresses that the advisory check finds in host:port arguments
 PLUGIN_BLOCK_INTERNAL_URLS=true
