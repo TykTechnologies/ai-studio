@@ -720,14 +720,32 @@ func failureReason(budget context.Context, r callResult, small, request, local b
 	return unscannedProviderError
 }
 
+// pieceEvidence is what every finding on one piece shares: its SHA-256 and
+// the text prepared for excerpts. A verdict can carry hundreds of thousands
+// of findings on one multi-megabyte piece, so both are made once per piece
+// (4qm: hashing the piece per finding made a flood scan quadratic).
+type pieceEvidence struct {
+	sha256    string
+	excerpter *guardrails.Excerpter
+}
+
 // evidence is what a finding's compliance event may say about the piece of
 // text the provider flagged: the piece's SHA-256 (the text exactly as sent,
 // which providers that log by hash key their records on) and, when the
-// filter asks for it, a masked excerpt around span (piece-relative).
-func (j *scanJob) evidence(text string, span *guardrails.Span) *guardrails.FindingEvidence {
-	ev := &guardrails.FindingEvidence{SHA256: guardrails.TextSHA256(text)}
-	if j.excerptChars > 0 {
-		ev.Excerpt, _ = guardrails.Excerpt(text, span, j.excerptChars)
+// filter asks for it, a masked excerpt around span (piece-relative). memo
+// holds the call's pieces by index.
+func (j *scanJob) evidence(memo map[int]*pieceEvidence, index int, text string, span *guardrails.Span) *guardrails.FindingEvidence {
+	pe, ok := memo[index]
+	if !ok {
+		pe = &pieceEvidence{sha256: guardrails.TextSHA256(text)}
+		if j.excerptChars > 0 {
+			pe.excerpter = guardrails.NewExcerpter(text)
+		}
+		memo[index] = pe
+	}
+	ev := &guardrails.FindingEvidence{SHA256: pe.sha256}
+	if pe.excerpter != nil {
+		ev.Excerpt, _ = pe.excerpter.Excerpt(span, j.excerptChars)
 	}
 	return ev
 }
@@ -742,9 +760,10 @@ func (j *scanJob) addVerdict(c call, v guardrails.Verdict) {
 	if v.Flagged && len(findings) == 0 {
 		findings = []guardrails.Finding{{Detector: "flagged", Category: guardrails.CategoryOther, Label: "Flagged by provider", Score: 1, Severity: "warning", SegmentIndex: -1}}
 	}
+	memo := map[int]*pieceEvidence{}
 	for _, f := range findings {
 		if f.SegmentIndex >= 0 && f.SegmentIndex < len(c) {
-			f.Evidence = j.evidence(c[f.SegmentIndex].text, f.Span)
+			f.Evidence = j.evidence(memo, f.SegmentIndex, c[f.SegmentIndex].text, f.Span)
 		}
 		f.Span = nil // piece-relative; meaningless on the whole segment
 		if f.SegmentIndex < 0 || f.SegmentIndex >= len(c) {
@@ -851,10 +870,11 @@ func (j *scanJob) scanSeams(ctx context.Context, todo []int, pieceMax int) {
 			reason = unscannedSeam
 		}
 		flagged := map[int]bool{}
+		memo := map[int]*pieceEvidence{}
 		for _, f := range r.verdict.Findings {
 			if f.SegmentIndex >= 0 && f.SegmentIndex < len(c) {
 				flagged[c[f.SegmentIndex].parent] = true
-				f.Evidence = j.evidence(c[f.SegmentIndex].text, f.Span)
+				f.Evidence = j.evidence(memo, f.SegmentIndex, c[f.SegmentIndex].text, f.Span)
 				f.Span = nil
 				f.SegmentIndex = c[f.SegmentIndex].parent
 				j.res.findings = append(j.res.findings, f)
