@@ -109,10 +109,16 @@ func (s *DatabaseBudgetService) checkLLMBudget(llmID *uint, estimatedCost float6
 	if reason, blocked := s.llmBudgetBlocks().Reason(*llmID); blocked {
 		return 0, 0, fmt.Errorf("budget exceeded: %s", reason)
 	}
-	limit, err := s.llmMonthlyBudget(*llmID)
-	if err != nil {
-		return 0, 0, fmt.Errorf("%w: reading LLM %d: %v", services.ErrBudgetCheckUnavailable, *llmID, err)
+	// The budget the last sync carried, which follows a change in Studio at
+	// once; the LLM config only after the next config push.
+	limit, synced := s.llmBudgetSpend().Limit(*llmID)
+	if !synced {
+		var err error
+		if limit, err = s.llmMonthlyBudget(*llmID); err != nil {
+			return 0, 0, fmt.Errorf("%w: reading LLM %d: %v", services.ErrBudgetCheckUnavailable, *llmID, err)
+		}
 	}
+	// 0 is no limit here; a budget of 0 is refused through llm_blocks.
 	if limit <= 0 {
 		return 0, 0, nil
 	}

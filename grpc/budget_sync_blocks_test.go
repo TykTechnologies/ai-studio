@@ -191,6 +191,12 @@ func TestBudgetSyncService_LLMBudgets(t *testing.T) {
 	require.True(t, p.LLMIncluded)
 	assert.InDelta(t, 0.011, p.LLMBudgets[1].Usage, 1e-9)
 	assert.InDelta(t, 1.0, p.LLMBudgets[2].Usage, 1e-9)
+	// Each entry carries the LLM's budget, so a change in Studio reaches
+	// edges with the next sync.
+	require.NotNil(t, p.LLMBudgets[2].Limit)
+	assert.Equal(t, 5.0, *p.LLMBudgets[2].Limit)
+	require.NotNil(t, p.LLMBudgets[3].Limit)
+	assert.Zero(t, *p.LLMBudgets[3].Limit)
 	assert.NotContains(t, p.LLMBudgets, uint32(4), "an LLM without a budget is not tracked")
 	require.Contains(t, p.LLMBudgets, uint32(3), "an unspent LLM is sent too, with its period")
 	assert.Zero(t, p.LLMBudgets[3].Usage)

@@ -22,6 +22,11 @@ type AppBudgetData struct {
 
 	// PeriodEnd is the end of this app's budget period
 	PeriodEnd time.Time `json:"period_end"`
+
+	// Limit is an LLM's monthly budget in dollars, set on llm_budgets entries
+	// only, so a budget changed in Studio reaches edges with the next sync
+	// rather than the next config push (ap6). App entries leave it out.
+	Limit *float64 `json:"limit,omitempty"`
 }
 
 // BudgetSyncPayload matches the control server's payload structure

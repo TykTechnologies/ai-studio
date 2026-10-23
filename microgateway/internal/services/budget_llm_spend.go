@@ -14,6 +14,10 @@ type LLMBudgetSpend struct {
 	mu   sync.Mutex
 	llms map[uint]*llmSpend
 	now  func() time.Time
+	// synced is set once a sync with LLM budgets has arrived; limits are
+	// then the budgets it carried, for every budgeted LLM (nil: not sent).
+	synced bool
+	limits map[uint]*float64
 }
 
 // llmSpend is one LLM's spend in dollars in the period [start, end].
@@ -60,12 +64,37 @@ func (s *LLMBudgetSpend) Record(llmID uint, dollars float64) {
 	s.current(llmID, s.now()).local += dollars
 }
 
+// Limit returns an LLM's monthly budget as the last sync gave it (0: none,
+// as for an LLM the sync does not name, which has no budget in Studio), and
+// whether a sync has given one; until then the gateway's LLM config holds.
+func (s *LLMBudgetSpend) Limit(llmID uint) (float64, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.synced {
+		return 0, false
+	}
+	limit, named := s.limits[llmID]
+	if !named {
+		return 0, true
+	}
+	if limit == nil {
+		return 0, false
+	}
+	return *limit, true
+}
+
 // Sync takes the control plane's figures. An LLM it does not name has spent
-// nothing in its period as far as the control plane knows. A new period
-// (a new month, a budget reset) starts the local spend again.
+// nothing in its period as far as the control plane knows, and has no
+// budget. A new period (a new month, a budget reset) starts the local spend
+// again.
 func (s *LLMBudgetSpend) Sync(budgets map[uint32]AppBudgetData) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.synced = true
+	s.limits = make(map[uint]*float64, len(budgets))
+	for id, b := range budgets {
+		s.limits[uint(id)] = b.Limit
+	}
 	for _, e := range s.llms {
 		e.control = 0
 	}

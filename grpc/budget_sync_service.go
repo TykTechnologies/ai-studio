@@ -25,6 +25,11 @@ type AppBudgetData struct {
 
 	// PeriodEnd is the end of this app's budget period
 	PeriodEnd time.Time `json:"period_end"`
+
+	// Limit is an LLM's monthly budget in dollars, set on llm_budgets entries
+	// only, so a budget changed in Studio reaches edges with the next sync
+	// rather than the next config push (ap6). App entries leave it out.
+	Limit *float64 `json:"limit,omitempty"`
 }
 
 // BudgetSyncPayload is the JSON payload for budget.sync events
@@ -435,7 +440,8 @@ func (s *BudgetSyncService) llmBudgets(now time.Time) (map[uint32]AppBudgetData,
 		dollars := u.cost / 10000.0
 		// Every budgeted LLM, unspent ones too: its period tells edges
 		// when it starts again (a new month, a budget reset).
-		usages[uint32(llm.ID)] = AppBudgetData{Usage: dollars, PeriodStart: u.start, PeriodEnd: u.end}
+		limit := *llm.MonthlyBudget
+		usages[uint32(llm.ID)] = AppBudgetData{Usage: dollars, PeriodStart: u.start, PeriodEnd: u.end, Limit: &limit}
 		switch budget := *llm.MonthlyBudget; {
 		case budget <= 0:
 			blocks[uint32(llm.ID)] = "LLM monthly budget exceeded (budget is 0)"
