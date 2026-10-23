@@ -101,9 +101,14 @@ func sanitizeStringForLogging(input string) string {
 // validatePluginCommand performs API-level security validation on plugin commands
 // This replicates key validations from the service layer to catch attacks at source
 // securityService is used for enterprise features like GRPC host whitelisting
-func validatePluginCommand(command string, securityService plugin_security.Service) error {
+func validatePluginCommand(command string, securityService plugin_security.Service, sourcePolicy plugin_security.SourcePolicy) error {
 	if command == "" {
 		return fmt.Errorf("🔒 SECURITY: plugin command cannot be empty")
+	}
+
+	// This gateway's plugin source policy (PLUGINS_ALLOWED_SOURCES)
+	if err := sourcePolicy.Check(command); err != nil {
+		return err
 	}
 
 	// Length limit to prevent extremely long commands

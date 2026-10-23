@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	"github.com/gin-gonic/gin"
 )
 
@@ -65,7 +66,7 @@ func CreatePlugin(serviceContainer *services.ServiceContainer) gin.HandlerFunc {
 		}
 
 		// Perform API-level security validation on the command field
-		if err := validatePluginCommand(req.Command, serviceContainer.PluginSecurityService); err != nil {
+		if err := validatePluginCommand(req.Command, serviceContainer.PluginSecurityService, pluginSourcePolicy(serviceContainer)); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"error":   "Security validation failed",
 				"message": err.Error(),
@@ -154,7 +155,7 @@ func UpdatePlugin(serviceContainer *services.ServiceContainer) gin.HandlerFunc {
 
 		// Perform API-level security validation on the command field if it's being updated
 		if req.Command != nil {
-			if err := validatePluginCommand(*req.Command, serviceContainer.PluginSecurityService); err != nil {
+			if err := validatePluginCommand(*req.Command, serviceContainer.PluginSecurityService, pluginSourcePolicy(serviceContainer)); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{
 					"error":   "Security validation failed",
 					"message": err.Error(),
@@ -350,4 +351,12 @@ func isNotFoundPluginError(err error) bool {
 func isConflictPluginError(err error) bool {
 	return err != nil && (strings.Contains(err.Error(), "already exists") ||
 		strings.Contains(err.Error(), "slug") && strings.Contains(err.Error(), "exists"))
+}
+// pluginSourcePolicy returns the plugin source policy the gateway's plugin
+// manager enforces (PLUGINS_ALLOWED_SOURCES).
+func pluginSourcePolicy(serviceContainer *services.ServiceContainer) plugin_security.SourcePolicy {
+	if serviceContainer == nil || serviceContainer.PluginManager == nil {
+		return plugin_security.AllowAllSources()
+	}
+	return serviceContainer.PluginManager.SourcePolicy()
 }

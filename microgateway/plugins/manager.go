@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"net"
@@ -167,6 +168,12 @@ type PluginManager struct {
 	// OCI plugin support
 	ociClient *ociplugins.OCIPluginClient // OCI plugin client for fetching
 
+	// sourcePolicy limits the plugin deployment types this gateway runs
+	// (PLUGINS_ALLOWED_SOURCES), whoever configured the plugin. The zero
+	// value allows all. Its own lock: createPluginClient runs under mu.
+	sourcePolicyMu sync.RWMutex
+	sourcePolicy   plugin_security.SourcePolicy
+
 	// Plugin health tracking
 	pluginHealth         map[uint]*PluginHealthStatus // Plugin ID -> health status
 	preWarmingInProgress map[uint]bool                // Plugin ID -> pre-warming status
@@ -257,6 +264,21 @@ func NewPluginManagerWithOCI(pluginService PluginServiceInterface, ociConfig *oc
 	return pm, nil
 }
 
+// SetSourcePolicy sets the plugin source policy (PLUGINS_ALLOWED_SOURCES)
+// this gateway enforces at load time and for OCI pre-fetches.
+func (pm *PluginManager) SetSourcePolicy(policy plugin_security.SourcePolicy) {
+	pm.sourcePolicyMu.Lock()
+	defer pm.sourcePolicyMu.Unlock()
+	pm.sourcePolicy = policy
+}
+
+// SourcePolicy returns the plugin source policy this gateway enforces.
+func (pm *PluginManager) SourcePolicy() plugin_security.SourcePolicy {
+	pm.sourcePolicyMu.RLock()
+	defer pm.sourcePolicyMu.RUnlock()
+	return pm.sourcePolicy
+}
+
 // SetSecurityService sets the enterprise security service for OCI signature verification
 func (pm *PluginManager) SetSecurityService(securityService ociplugins.SecurityService) {
 	pm.mu.Lock()
@@ -315,6 +337,14 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	// Create plugin client based on command scheme
 	client, err := pm.createPluginClient(pluginData.Command)
 	if err != nil {
+		var notAllowed *plugin_security.ErrPluginSourceNotAllowed
+		if errors.As(err, &notAllowed) {
+			log.Warn().
+				Uint("plugin_id", pluginID).
+				Str("plugin_name", pluginData.Name).
+				Str("source", string(notAllowed.Source)).
+				Msg("Plugin not loaded: its source is not allowed by PLUGINS_ALLOWED_SOURCES")
+		}
 		pm.updatePluginHealth(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
 		return nil, fmt.Errorf("failed to create plugin client: %w", err)
 	}
@@ -1027,6 +1057,12 @@ func isPathInAllowedDirectories(absPath string) bool {
 
 // createPluginClient creates a plugin client based on command scheme
 func (pm *PluginManager) createPluginClient(command string) (*plugin.Client, error) {
+	// This gateway's source policy, before any OCI fetch, reattach or exec.
+	// It is the only gate for commands the hub pushes.
+	if err := pm.SourcePolicy().Check(command); err != nil {
+		return nil, err
+	}
+
 	// Dispatch on plugin_security.SourceOf, so the source policy classifies
 	// a command exactly as it is run.
 	source := plugin_security.SourceOf(command)
@@ -1461,6 +1497,13 @@ func (pm *PluginManager) loadGlobalPluginFromConfig(cfg DataCollectionPluginConf
 	// Create plugin client based on path scheme
 	client, err := pm.createPluginClient(cfg.Path)
 	if err != nil {
+		var notAllowed *plugin_security.ErrPluginSourceNotAllowed
+		if errors.As(err, &notAllowed) {
+			log.Warn().
+				Str("plugin_name", cfg.Name).
+				Str("source", string(notAllowed.Source)).
+				Msg("Global data collection plugin not loaded: its source is not allowed by PLUGINS_ALLOWED_SOURCES")
+		}
 		return nil, fmt.Errorf("failed to create plugin client for global plugin: %w", err)
 	}
 
@@ -2208,6 +2251,11 @@ func (pm *PluginManager) ListCachedOCIPlugins() ([]*ociplugins.LocalPlugin, erro
 
 // PreFetchOCIPlugin pre-fetches an OCI plugin without loading it
 func (pm *PluginManager) PreFetchOCIPlugin(command string) error {
+	// No registry request for a source this gateway does not allow.
+	if err := pm.SourcePolicy().Check(command); err != nil {
+		return err
+	}
+
 	pm.mu.RLock()
 	ociClient := pm.ociClient
 	pm.mu.RUnlock()
@@ -2319,6 +2367,10 @@ func (pm *PluginManager) PreWarmOCIPlugins(ctx context.Context) error {
 
 	if pm.ociClient == nil {
 		log.Debug().Msg("OCI client not available, skipping OCI plugin pre-warming")
+		return nil
+	}
+	if pm.SourcePolicy().Check("oci://") != nil {
+		log.Info().Msg("OCI plugins are not allowed by PLUGINS_ALLOWED_SOURCES, skipping OCI plugin pre-warming")
 		return nil
 	}
 

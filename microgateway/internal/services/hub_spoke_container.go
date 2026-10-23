@@ -9,7 +9,6 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/providers"
-	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 	"github.com/rs/zerolog/log"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -104,28 +103,8 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 	pluginSecurityService := newPluginSecurityService(cfg)
 
 	// Initialize plugin manager with OCI support if configured
-	var pluginManager *plugins.PluginManager
+	pluginManager := newPluginManager(cfg, pluginServiceAdapter, pluginSecurityService)
 	var err error
-
-	if cfg.OCIPlugins.CacheDir != "" {
-		// OCI support enabled
-		ociConfig := cfg.OCIPlugins.ToOCIConfig()
-		pluginManager, err = plugins.NewPluginManagerWithOCI(pluginServiceAdapter, ociConfig, pluginSecurityService)
-		if err != nil {
-			log.Error().Err(err).Msg("Failed to initialize OCI plugin support, using standard plugin manager")
-			pluginManager = plugins.NewPluginManager(pluginServiceAdapter)
-		} else {
-			log.Debug().
-				Str("cache_dir", ociConfig.CacheDir).
-				Int("public_keys", len(ociConfig.DefaultPublicKeys)).
-				Bool("require_signature", ociConfig.RequireSignature).
-				Msg("OCI plugin support enabled in hub-spoke container")
-		}
-	} else {
-		// Standard plugin manager
-		pluginManager = plugins.NewPluginManager(pluginServiceAdapter)
-		log.Debug().Msg("OCI plugin support disabled in hub-spoke container")
-	}
 	
 	// Load global data collection plugins if configured
 	if cfg.Plugins.ConfigPath != "" || cfg.Plugins.ConfigServiceURL != "" {
