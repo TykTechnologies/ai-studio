@@ -111,7 +111,9 @@ func (a *API) startExport(c *gin.Context) {
 		return
 	}
 
-	// End date should include the full day
+	// End date should include the full day. This is what the export records
+	// and shows; the export queries end at the following midnight
+	// (exclusive), so the last second of the day counts too.
 	endDate = endDate.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
 
 	// Convert source type
