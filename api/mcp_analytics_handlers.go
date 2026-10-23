@@ -3,7 +3,6 @@ package api
 import (
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/logger"
@@ -47,9 +46,7 @@ func mcpStatsFilter(c *gin.Context) (analytics.MCPStatsFilter, bool) {
 		webhookBadRequest(c, err.Error())
 		return analytics.MCPStatsFilter{}, false
 	}
-	// getDateRange ends the range at 23:59:59; the MCP filter's end is
-	// exclusive, so it is the start of the next day.
-	end = time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, end.Location()).AddDate(0, 0, 1)
+	// getDateRange's end is already exclusive: the start of the next day.
 	return analytics.MCPStatsFilter{Start: start, End: end}, true
 }
 
