@@ -174,3 +174,72 @@ func isSecretField(spec Spec, name string) bool {
 	}
 	return true
 }
+
+// A guardrail whose secrets travel encrypted fails closed on an edge before
+// v2.3, which cannot decrypt them: fail_mode reads closed there, whatever the
+// admin chose, so a response guardrail (fail open by default) never stops
+// screening silently. A current edge gets the admin's fail mode back from
+// fail_mode_ext, including the per-direction default (vgi).
+func TestConfigJSONForEdge_OldEdgeFailsClosedWithEncryptedSecrets(t *testing.T) {
+	// The built-in provider, which a v2.2.2 edge offers too; a connection
+	// field it does not declare counts as secret.
+	builtinRaw := func() map[string]any {
+		return map[string]any{
+			"provider":   ProviderBuiltin,
+			"connection": map[string]any{"api_key": "$SECRET/CS_KEY"},
+			"detectors":  []any{map[string]any{"name": CategoryInjection}},
+			"on_detect":  ActionBlock,
+		}
+	}
+	for _, mode := range []string{"", FailOpen, FailClosed} {
+		raw := builtinRaw()
+		if mode != "" {
+			raw["fail_mode"] = mode
+		}
+		js, err := ConfigJSONForEdge(raw, resolveFake, fakeEncrypt)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		oldRaw, err := v222.ConfigFromJSON(js)
+		if err != nil {
+			t.Fatal(err)
+		}
+		old, err := v222.ParseConfig(oldRaw)
+		if err != nil {
+			t.Fatalf("a v2.2.2 edge cannot parse the snapshot: %v", err)
+		}
+		old, err = v222.Normalize(old, true)
+		if err != nil {
+			t.Fatalf("a v2.2.2 edge rejects the snapshot: %v", err)
+		}
+		if old.FailMode != v222.FailClosed {
+			t.Errorf("mode %q: a v2.2.2 response guardrail fails %q, want closed", mode, old.FailMode)
+		}
+
+		cur, _ := ConfigFromJSON(js)
+		DecryptEdgeConnection(cur, fakeDecrypt)
+		cfg, err := ParseConfig(cur)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.FailMode != mode {
+			t.Errorf("a current edge reads fail_mode %q, want the admin's %q", cfg.FailMode, mode)
+		}
+		if cfg, _ = Normalize(cfg, true); mode == "" && cfg.FailMode != FailOpen {
+			t.Errorf("the response default became %q", cfg.FailMode)
+		}
+	}
+
+	// Without encrypted secrets nothing changes.
+	raw := builtinRaw()
+	raw["connection"] = map[string]any{}
+	raw["fail_mode"] = FailOpen
+	js, err := ConfigJSONForEdge(raw, resolveFake, fakeEncrypt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(js, "fail_mode_ext") || !strings.Contains(js, `"fail_mode":"open"`) {
+		t.Errorf("a guardrail without secrets changed its fail mode: %s", js)
+	}
+}

@@ -305,7 +305,7 @@ The snapshot carries the namespace's secrets. Most are encrypted with `MICROGATE
 - LLM provider API keys, each LLM's resource-signing secrets, and from 2.3.0 the credentials in an LLM's metadata (fields whose name contains `key`, `secret` or `token`, such as a Bedrock LLM's AWS keys). Edges store them encrypted too. In the metadata itself those fields read `refused-credential-reference`, so an edge older than 2.3.0, which reads only the metadata, fails Bedrock calls instead of using another credential: upgrade edges with AI Studio;
 - tool authentication keys;
 - datasource connection strings, vector store keys and embedder API keys, including semantic router embedders;
-- from 2.3.0, guardrail provider credentials (the connection fields a provider marks secret, such as `api_key`; unknown fields count as secret). In the guardrail's configuration those fields read `refused-credential-reference`, so an edge older than 2.3.0 sends the provider a key it refuses and the guardrail's fail mode applies;
+- from 2.3.0, guardrail provider credentials (the connection fields a provider marks secret, such as `api_key`; unknown fields count as secret). In the guardrail's configuration those fields read `refused-credential-reference` and the fail mode reads `closed`, so an edge older than 2.3.0 blocks the traffic such a guardrail screens rather than passing it unscreened. Upgrade edges together with the hub: pre-2.3 edges block guardrailed traffic until upgraded;
 - top-level `$SECRET/` references in the configuration of a plugin that runs on edges, resolved;
 - OAuth access tokens issued to MCP clients;
 - while agent tracing runs, the tracing fingerprint (HMAC) key.

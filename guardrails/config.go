@@ -285,6 +285,13 @@ type Config struct {
 	// Connection where it loads the config (DecryptEdgeConnection).
 	// ParseConfig drops it; it is never stored.
 	ConnectionEncrypted map[string]string `json:"connection_encrypted,omitempty"`
+	// FailModeExt is the edge snapshot's carrier for the admin's fail_mode
+	// when the connection secrets travel encrypted: fail_mode then holds
+	// closed, so an edge before v2.3, which cannot decrypt them and sends the
+	// provider a refused key, blocks the traffic instead of passing it
+	// unscreened under fail open. ParseConfig folds it back into FailMode
+	// ("" keeps the per-direction default); it is never stored.
+	FailModeExt *string `json:"fail_mode_ext,omitempty"`
 }
 
 // Evidence configures what a compliance event says about the text a
@@ -376,6 +383,10 @@ func ParseConfig(raw map[string]any) (Config, error) {
 		cfg.OnDetect = cfg.OnDetectExt
 	}
 	cfg.OnDetectExt = ""
+	if ext := cfg.FailModeExt; ext != nil && (*ext == "" || *ext == FailOpen || *ext == FailClosed) {
+		cfg.FailMode = *ext
+	}
+	cfg.FailModeExt = nil
 	cfg.ConnectionEncrypted = nil
 	return cfg, nil
 }

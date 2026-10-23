@@ -47,10 +47,12 @@ func ConfigJSONForEdge(raw map[string]any, resolve func(string) string, encrypt 
 		}
 	}
 	if encrypt != nil {
+		refused := false
 		for k, v := range cfg.Connection {
 			if v == "" || v == secrets.RefusedCredential || !isSecretConnectionField(cfg.Provider, k) {
 				continue
 			}
+			refused = true
 			cfg.Connection[k] = secrets.RefusedCredential
 			if c := encrypt(v); c != "" {
 				if cfg.ConnectionEncrypted == nil {
@@ -58,6 +60,14 @@ func ConfigJSONForEdge(raw map[string]any, resolve func(string) string, encrypt 
 				}
 				cfg.ConnectionEncrypted[k] = c
 			}
+		}
+		// An edge before v2.3 reads only connection, so it sends the refused
+		// key and its guardrail fails; make that fail block, whatever the
+		// admin's fail mode, and carry the real one for current edges.
+		if refused {
+			mode := cfg.FailMode
+			cfg.FailModeExt = &mode
+			cfg.FailMode = FailClosed
 		}
 	}
 	// An edge older than this hub rejects an action it does not know. Send
