@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"net"
@@ -21,7 +22,9 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pluginenv"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pluginlimits"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
@@ -166,6 +169,15 @@ type PluginManager struct {
 	// OCI plugin support
 	ociClient *ociplugins.OCIPluginClient // OCI plugin client for fetching
 
+	// sourcePolicy limits the plugin deployment types this gateway runs
+	// (PLUGINS_ALLOWED_SOURCES), whoever configured the plugin. The zero
+	// value allows all. Its own lock: createPluginClient runs under mu.
+	sourcePolicyMu sync.RWMutex
+	sourcePolicy   plugin_security.SourcePolicy
+	// grpcHostValidator applies this gateway's internal-network rule to
+	// grpc:// plugin hosts at load time (guarded by sourcePolicyMu).
+	grpcHostValidator GRPCHostValidator
+
 	// Plugin health tracking
 	pluginHealth         map[uint]*PluginHealthStatus // Plugin ID -> health status
 	preWarmingInProgress map[uint]bool                // Plugin ID -> pre-warming status
@@ -234,30 +246,119 @@ func NewPluginManager(pluginService PluginServiceInterface) *PluginManager {
 	}
 }
 
-// NewPluginManagerWithOCI creates a new plugin manager with OCI support
-func NewPluginManagerWithOCI(pluginService PluginServiceInterface, ociConfig *ociplugins.OCIConfig) (*PluginManager, error) {
+// NewPluginManagerWithOCI creates a new plugin manager with OCI support. The
+// security service verifies OCI plugin signatures and is required: an OCI
+// client without one refuses every plugin when signatures are required.
+func NewPluginManagerWithOCI(pluginService PluginServiceInterface, ociConfig *ociplugins.OCIConfig, securityService ociplugins.SecurityService) (*PluginManager, error) {
 	pm := NewPluginManager(pluginService)
 
 	if ociConfig != nil {
+		if securityService == nil {
+			return nil, fmt.Errorf("an OCI plugin manager needs a plugin security service")
+		}
 		// Initialize OCI client
 		ociClient, err := ociplugins.NewOCIPluginClient(ociConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create OCI plugin client: %w", err)
 		}
+		ociClient.SetSecurityService(securityService)
 		pm.ociClient = ociClient
 	}
 
 	return pm, nil
 }
 
-// SetSecurityService sets the enterprise security service for OCI signature verification
+// SetSourcePolicy sets the plugin source policy (PLUGINS_ALLOWED_SOURCES)
+// this gateway enforces at load time and for OCI pre-fetches.
+func (pm *PluginManager) SetSourcePolicy(policy plugin_security.SourcePolicy) {
+	pm.sourcePolicyMu.Lock()
+	defer pm.sourcePolicyMu.Unlock()
+	pm.sourcePolicy = policy
+}
+
+// SourcePolicy returns the plugin source policy this gateway enforces.
+func (pm *PluginManager) SourcePolicy() plugin_security.SourcePolicy {
+	pm.sourcePolicyMu.RLock()
+	defer pm.sourcePolicyMu.RUnlock()
+	return pm.sourcePolicy
+}
+
+// SetSecurityService sets the enterprise security service for OCI signature
+// verification, and for gRPC host checks when it provides them.
 func (pm *PluginManager) SetSecurityService(securityService ociplugins.SecurityService) {
+	if validator, ok := securityService.(GRPCHostValidator); ok {
+		pm.SetGRPCHostValidator(validator)
+	}
+
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
 	if pm.ociClient != nil {
 		pm.ociClient.SetSecurityService(securityService)
 	}
+}
+
+// GRPCHostValidator decides whether a grpc:// plugin host may be dialled
+// (plugin_security.Service implements it).
+type GRPCHostValidator interface {
+	ValidateGRPCHost(host string) error
+}
+
+// SetGRPCHostValidator sets the internal-network rule for grpc:// plugin
+// hosts at load time.
+func (pm *PluginManager) SetGRPCHostValidator(validator GRPCHostValidator) {
+	pm.sourcePolicyMu.Lock()
+	defer pm.sourcePolicyMu.Unlock()
+	pm.grpcHostValidator = validator
+}
+
+// grpcHostValidatorOrDefault returns the configured validator, else the
+// Community Edition's internal-network rule, so a manager built without one
+// still refuses internal hosts.
+func (pm *PluginManager) grpcHostValidatorOrDefault() GRPCHostValidator {
+	pm.sourcePolicyMu.RLock()
+	validator := pm.grpcHostValidator
+	pm.sourcePolicyMu.RUnlock()
+	if validator != nil {
+		return validator
+	}
+	return defaultGRPCHostValidator{}
+}
+
+// defaultGRPCHostValidator applies the plugin host rule
+// (netguard.CheckPluginHost). It does not go through
+// plugin_security.NewService, which needs the enterprise factory registered
+// in an enterprise build.
+type defaultGRPCHostValidator struct{}
+
+func (defaultGRPCHostValidator) ValidateGRPCHost(host string) error {
+	return netguard.CheckPluginHost(host)
+}
+
+// checkGRPCHost applies the internal-network rule to a grpc:// plugin's host
+// and to the address it resolved to, from this gateway's network position:
+// the hub checked the host from its own, and a name can resolve differently
+// here (split-horizon DNS) or have reached the gateway without the hub's API.
+func (pm *PluginManager) checkGRPCHost(command string, addr net.Addr) error {
+	validator := pm.grpcHostValidatorOrDefault()
+	host, _, err := net.SplitHostPort(strings.TrimPrefix(command, "grpc://"))
+	if err != nil {
+		return fmt.Errorf("invalid gRPC address in %q: %w", command, err)
+	}
+	// A host named in LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS may resolve
+	// internally: the operator said so for this name.
+	if netguard.PluginHostExempt(host) {
+		return nil
+	}
+	if err := validator.ValidateGRPCHost(host); err != nil {
+		return fmt.Errorf("gRPC plugin host %q refused (add it to %s, or set %s=true to allow every internal host): %w", host, netguard.EnvAllowedInternalHosts, netguard.EnvAllowInternal, err)
+	}
+	if tcpAddr, ok := addr.(*net.TCPAddr); ok && tcpAddr.IP.String() != host {
+		if err := validator.ValidateGRPCHost(tcpAddr.IP.String()); err != nil {
+			return fmt.Errorf("gRPC plugin host %q resolves to a refused address (add it to %s, or set %s=true to allow every internal host): %w", host, netguard.EnvAllowedInternalHosts, netguard.EnvAllowInternal, err)
+		}
+	}
+	return nil
 }
 
 // LoadPlugin loads a plugin by ID
@@ -308,6 +409,14 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	// Create plugin client based on command scheme
 	client, err := pm.createPluginClient(pluginData.Command)
 	if err != nil {
+		var notAllowed *plugin_security.ErrPluginSourceNotAllowed
+		if errors.As(err, &notAllowed) {
+			log.Warn().
+				Uint("plugin_id", pluginID).
+				Str("plugin_name", pluginData.Name).
+				Str("source", string(notAllowed.Source)).
+				Msg("Plugin not loaded: its source is not allowed by PLUGINS_ALLOWED_SOURCES")
+		}
 		pm.updatePluginHealth(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
 		return nil, fmt.Errorf("failed to create plugin client: %w", err)
 	}
@@ -1020,14 +1129,28 @@ func isPathInAllowedDirectories(absPath string) bool {
 
 // createPluginClient creates a plugin client based on command scheme
 func (pm *PluginManager) createPluginClient(command string) (*plugin.Client, error) {
-	if strings.HasPrefix(command, "oci://") {
+	// This gateway's source policy, before any OCI fetch, reattach or exec.
+	// It is the only gate for commands the hub pushes.
+	if err := pm.SourcePolicy().Check(command); err != nil {
+		return nil, err
+	}
+
+	// Dispatch on plugin_security.SourceOf, so the source policy classifies
+	// a command exactly as it is run.
+	source := plugin_security.SourceOf(command)
+	if source == plugin_security.SourceOCI {
 		// OCI plugin - fetch from registry first
 		return pm.createOCIPluginClient(command)
-	} else if strings.HasPrefix(command, "grpc://") {
+	} else if source == plugin_security.SourceGRPC {
 		// External gRPC service - use ReattachConfig
 		reattachConfig, err := pm.parseGRPCReattachConfig(command)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse gRPC address: %w", err)
+		}
+		// The same internal-network rule as the management API, for every
+		// load path (hub-pushed, global data-collection, local config).
+		if err := pm.checkGRPCHost(command, reattachConfig.Addr); err != nil {
+			return nil, err
 		}
 
 		log.Debug().
@@ -1170,7 +1293,7 @@ func (pm *PluginManager) parseGRPCReattachConfig(grpcURL string) (*plugin.Reatta
 
 	// If host is not an IP, resolve it
 	if tcpAddr.IP == nil {
-		tcpAddr, err = net.ResolveTCPAddr("tcp", address)
+		tcpAddr, err = resolveTCPAddr("tcp", address)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve gRPC address '%s': %w", address, err)
 		}
@@ -1183,9 +1306,12 @@ func (pm *PluginManager) parseGRPCReattachConfig(grpcURL string) (*plugin.Reatta
 	}, nil
 }
 
+// resolveTCPAddr resolves gRPC plugin addresses; a variable so tests can stub DNS.
+var resolveTCPAddr = net.ResolveTCPAddr
+
 // connectWithRetry connects to a plugin with retry logic for external services
 func (pm *PluginManager) connectWithRetry(client *plugin.Client, command string) (plugin.ClientProtocol, error) {
-	isExternal := strings.HasPrefix(command, "grpc://")
+	isExternal := plugin_security.SourceOf(command) == plugin_security.SourceGRPC
 
 	if !isExternal {
 		// For local plugins, use standard connection
@@ -1266,88 +1392,6 @@ func (pm *PluginManager) connectWithRetry(client *plugin.Client, command string)
 	}
 
 	return nil, fmt.Errorf("failed to connect to external gRPC plugin after %d attempts: %w", maxRetries, lastErr)
-}
-
-// ReattachPlugin reattaches to an existing plugin process
-func (pm *PluginManager) ReattachPlugin(pluginID uint, config *plugin.ReattachConfig) error {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-
-	// Check if plugin is already loaded
-	if _, exists := pm.loadedPlugins[pluginID]; exists {
-		return fmt.Errorf("plugin %d is already loaded", pluginID)
-	}
-
-	// Get plugin from database
-	pluginData, err := pm.service.GetPlugin(pluginID)
-	if err != nil {
-		return fmt.Errorf("failed to get plugin from database: %w", err)
-	}
-
-	// Create client with reattach config
-	client := plugin.NewClient(&plugin.ClientConfig{
-		HandshakeConfig:  pm.handshakeConfig,
-		Plugins:          pm.pluginMap,
-		Reattach:         config,
-		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
-		Logger:           pluginLogger(),
-	})
-
-	// Connect via gRPC
-	rpcClient, err := client.Client()
-	if err != nil {
-		client.Kill()
-		return fmt.Errorf("failed to connect to plugin: %w", err)
-	}
-
-	// Request the plugin interface
-	raw, err := rpcClient.Dispense("plugin")
-	if err != nil {
-		client.Kill()
-		return fmt.Errorf("failed to dispense plugin: %w", err)
-	}
-
-	grpcClient, ok := raw.(pb.PluginServiceClient)
-	if !ok {
-		client.Kill()
-		return fmt.Errorf("plugin does not implement PluginServiceClient interface")
-	}
-
-	// Parse plugin config
-	var pluginConfig map[string]interface{}
-	if pluginData.Config != nil {
-		if err := json.Unmarshal(pluginData.Config, &pluginConfig); err != nil {
-			client.Kill()
-			return fmt.Errorf("failed to parse plugin config: %w", err)
-		}
-	}
-
-	// Create loaded plugin instance
-	loadedPlugin := &LoadedPlugin{
-		ID:         pluginData.ID,
-		Name:       pluginData.Name,
-		HookType:   interfaces.HookType(pluginData.HookType),
-		Client:     client,
-		GRPCClient: grpcClient,
-		Config:     pluginConfig,
-		Checksum:   pluginData.Checksum,
-		IsHealthy:  true,
-	}
-
-	// Store references
-	pm.loadedPlugins[pluginID] = loadedPlugin
-	pm.pluginClients[pluginID] = client
-	pm.reattachConfigs[pluginID] = config
-
-	// Start health monitoring
-	go pm.monitorPluginHealth(pluginID)
-
-	log.Debug().
-		Uint("plugin_id", pluginID).
-		Str("plugin_name", pluginData.Name).
-		Msg("Plugin reattached successfully")
-
-	return nil
 }
 
 // GetLoadedPlugins returns a list of all loaded plugins
@@ -1451,6 +1495,13 @@ func (pm *PluginManager) loadGlobalPluginFromConfig(cfg DataCollectionPluginConf
 	// Create plugin client based on path scheme
 	client, err := pm.createPluginClient(cfg.Path)
 	if err != nil {
+		var notAllowed *plugin_security.ErrPluginSourceNotAllowed
+		if errors.As(err, &notAllowed) {
+			log.Warn().
+				Str("plugin_name", cfg.Name).
+				Str("source", string(notAllowed.Source)).
+				Msg("Global data collection plugin not loaded: its source is not allowed by PLUGINS_ALLOWED_SOURCES")
+		}
 		return nil, fmt.Errorf("failed to create plugin client for global plugin: %w", err)
 	}
 
@@ -2198,18 +2249,27 @@ func (pm *PluginManager) ListCachedOCIPlugins() ([]*ociplugins.LocalPlugin, erro
 
 // PreFetchOCIPlugin pre-fetches an OCI plugin without loading it
 func (pm *PluginManager) PreFetchOCIPlugin(command string) error {
-	pm.mu.RLock()
-	ociClient := pm.ociClient
-	pm.mu.RUnlock()
-
-	if ociClient == nil {
-		return fmt.Errorf("OCI client not available")
+	// No registry request for a source this gateway does not allow.
+	if err := pm.SourcePolicy().Check(command); err != nil {
+		return err
 	}
 
 	// Parse OCI reference
 	ref, params, err := ociplugins.ParseOCICommand(command)
 	if err != nil {
 		return fmt.Errorf("failed to parse OCI command: %w", err)
+	}
+	// Nor for a registry the plugin host rule refuses.
+	if err := ociplugins.CheckRegistryHost(ref); err != nil {
+		return err
+	}
+
+	pm.mu.RLock()
+	ociClient := pm.ociClient
+	pm.mu.RUnlock()
+
+	if ociClient == nil {
+		return fmt.Errorf("OCI client not available")
 	}
 
 	// Fetch plugin (this will cache it)
@@ -2311,6 +2371,10 @@ func (pm *PluginManager) PreWarmOCIPlugins(ctx context.Context) error {
 		log.Debug().Msg("OCI client not available, skipping OCI plugin pre-warming")
 		return nil
 	}
+	if pm.SourcePolicy().Check("oci://") != nil {
+		log.Info().Msg("OCI plugins are not allowed by PLUGINS_ALLOWED_SOURCES, skipping OCI plugin pre-warming")
+		return nil
+	}
 
 	// Get all plugins from database
 	allPlugins, err := pm.service.GetAllPlugins()
@@ -2324,7 +2388,7 @@ func (pm *PluginManager) PreWarmOCIPlugins(ctx context.Context) error {
 
 	// Pre-warm OCI plugins that have gateway-supported hook types
 	for _, plugin := range allPlugins {
-		if !strings.HasPrefix(plugin.Command, "oci://") {
+		if plugin_security.SourceOf(plugin.Command) != plugin_security.SourceOCI {
 			continue
 		}
 
@@ -2409,7 +2473,7 @@ func (pm *PluginManager) updatePluginHealthUnsafe(pluginID uint, pluginData Plug
 		HookType:    pluginData.HookType,
 		Status:      status,
 		LastAttempt: time.Now(),
-		IsOCI:       strings.HasPrefix(pluginData.Command, "oci://"),
+		IsOCI:       plugin_security.SourceOf(pluginData.Command) == plugin_security.SourceOCI,
 		LoadTime:    loadTime,
 	}
 

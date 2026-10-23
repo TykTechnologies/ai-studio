@@ -36,7 +36,7 @@ config:
   tykAiSecretKey: "production-secret-key"
   tykAiLicense: "production-license"
   ociCacheDir: "./data/cache/plugins"
-  ociRequireSignature: "false"
+  ociRequireSignature: "true"
   gatewayMode: "control"
   grpcPort: "50051"
   grpcHost: "0.0.0.0"

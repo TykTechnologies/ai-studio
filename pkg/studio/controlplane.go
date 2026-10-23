@@ -131,6 +131,9 @@ func NewControlPlane(opts ControlPlaneOptions) (_ *ControlPlane, err error) {
 	if opts.Config == nil || opts.DB == nil {
 		return nil, errors.New("studio: ControlPlaneOptions.Config and ControlPlaneOptions.DB are required")
 	}
+	if err := opts.Config.Err(); err != nil {
+		return nil, fmt.Errorf("studio: invalid configuration: %w", err)
+	}
 	if opts.DB.Dialector.Name() != "postgres" {
 		return nil, ErrControlPlaneNeedsPostgres
 	}

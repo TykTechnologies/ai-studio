@@ -80,14 +80,7 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 	pluginService := NewPluginService(db, repo)
 
 	// Initialize Plugin Security service (ENT: full security enforcement, CE: stub allowing all operations)
-	var ociLibConfig *ociplugins.OCIConfig
-	if cfg.OCIPlugins.CacheDir != "" {
-		ociLibConfig = cfg.OCIPlugins.ToOCIConfig()
-	}
-	pluginSecurityService := plugin_security.NewService(&plugin_security.Config{
-		OCIConfig:                  ociLibConfig,
-		AllowInternalNetworkAccess: os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") == "true",
-	})
+	pluginSecurityService := newPluginSecurityService(cfg)
 
 	// Create plugin service adapter to break circular dependency
 	pluginServiceAdapter := NewPluginServiceAdapter(pluginService)
@@ -95,31 +88,8 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 	pluginServiceAdapter.SetManagementService(management) // Enable LLM-based plugin pre-warming
 
 	// Initialize plugin manager with OCI support if configured
-	var pluginManager *plugins.PluginManager
+	pluginManager := newPluginManager(cfg, pluginServiceAdapter, pluginSecurityService)
 	var err error
-
-	if cfg.OCIPlugins.CacheDir != "" {
-		// OCI support enabled
-		ociConfig := cfg.OCIPlugins.ToOCIConfig()
-		pluginManager, err = plugins.NewPluginManagerWithOCI(pluginServiceAdapter, ociConfig)
-		if err != nil {
-			log.Error().Err(err).Msg("Failed to initialize OCI plugin support, using standard plugin manager")
-			pluginManager = plugins.NewPluginManager(pluginServiceAdapter)
-		} else {
-			log.Debug().
-				Str("cache_dir", ociConfig.CacheDir).
-				Int("public_keys", len(ociConfig.DefaultPublicKeys)).
-				Bool("require_signature", ociConfig.RequireSignature).
-				Msg("OCI plugin support enabled")
-		}
-	} else {
-		// Standard plugin manager
-		pluginManager = plugins.NewPluginManager(pluginServiceAdapter)
-		log.Debug().Msg("OCI plugin support disabled - using standard plugin manager")
-	}
-
-	// Set enterprise security service on plugin manager for OCI signature verification
-	pluginManager.SetSecurityService(pluginSecurityService)
 
 	// Load global data collection plugins if configured
 	if cfg.Plugins.ConfigPath != "" || cfg.Plugins.ConfigServiceURL != "" {
@@ -390,4 +360,49 @@ func (sc *ServiceContainer) startTokenCleanup(ctx context.Context, provider *aut
 			}
 		}
 	}
+}
+// newPluginManager builds the plugin manager every service container uses:
+// OCI support when configured (with the security service that verifies
+// signatures) and this gateway's plugin source policy, both in place before
+// any plugin loads.
+func newPluginManager(cfg *config.Config, pluginService plugins.PluginServiceInterface, securityService plugin_security.Service) *plugins.PluginManager {
+	var pluginManager *plugins.PluginManager
+	if cfg.OCIPlugins.CacheDir != "" {
+		// OCI support enabled
+		ociConfig := cfg.OCIPlugins.ToOCIConfig()
+		var err error
+		pluginManager, err = plugins.NewPluginManagerWithOCI(pluginService, ociConfig, securityService)
+		if err != nil {
+			log.Error().Err(err).Msg("Failed to initialize OCI plugin support, using standard plugin manager")
+			pluginManager = plugins.NewPluginManager(pluginService)
+		} else {
+			log.Debug().
+				Str("cache_dir", ociConfig.CacheDir).
+				Int("public_keys", len(ociConfig.DefaultPublicKeys)).
+				Bool("require_signature", ociConfig.RequireSignature).
+				Msg("OCI plugin support enabled")
+		}
+	} else {
+		// Standard plugin manager
+		pluginManager = plugins.NewPluginManager(pluginService)
+		log.Debug().Msg("OCI plugin support disabled - using standard plugin manager")
+	}
+	pluginManager.SetSourcePolicy(cfg.Plugins.SourcePolicy)
+	pluginManager.SetGRPCHostValidator(securityService)
+	return pluginManager
+}
+
+// newPluginSecurityService builds the plugin security service (ENT: full
+// security enforcement, CE: the community stub) every service container
+// gives its plugin manager.
+func newPluginSecurityService(cfg *config.Config) plugin_security.Service {
+	var ociLibConfig *ociplugins.OCIConfig
+	if cfg.OCIPlugins.CacheDir != "" {
+		ociLibConfig = cfg.OCIPlugins.ToOCIConfig()
+	}
+	return plugin_security.NewService(&plugin_security.Config{
+		OCIConfig:                  ociLibConfig,
+		AllowInternalNetworkAccess: os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") == "true",
+		SourcePolicy:               cfg.Plugins.SourcePolicy,
+	})
 }

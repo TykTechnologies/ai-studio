@@ -42,9 +42,9 @@ Plugin security provides multiple layers of protection against malicious or misc
 └─────────────────────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────────────────────┐
 │ Tier 4: Supply Chain Security (ENT ONLY)                    │
-│ • OCI Manifest Signature Verification (Cosign)              │
-│ • Keyless Signing Support                                    │
-│ • Policy-Based Verification                                  │
+│ • OCI Signature Verification (in-process, sigstore-go)      │
+│ • cosign v2 (.sig tag) and v3 (Sigstore bundle) formats      │
+│ • Transparency-log (Rekor) checks, keyless support           │
 │ • Multiple Public Key Support                                │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -137,53 +137,35 @@ if calculatedChecksum != plugin.Checksum {
 
 ## Enterprise Edition Features
 
-### 3. GRPC Host Whitelisting (Tier 3 - Network Security)
+### 3. Internal plugin hosts and registries (Tier 3 - Network Security)
 
-**⚠️ ENTERPRISE EDITION ONLY**
+**Both editions** (midsommar-clean-c1g.32; before 2.3 only Community AI Studio resolved hostnames).
 
-**Purpose**: Prevents plugins from targeting internal network addresses (SSRF protection)
+**Purpose**: Prevents plugins from targeting internal network addresses (SSRF protection), whether the plugin is a `grpc://` server or an `oci://` artifact on a registry.
 
-**Implementation**: [enterprise/features/plugin_security/grpc_validator.go](../enterprise/features/plugin_security/grpc_validator.go)
+**Rule** (`netguard.CheckPluginHost`; the security services' `ValidateGRPCHost` classify hosts the same way): unless `ALLOW_INTERNAL_NETWORK_ACCESS=true`, a host is refused when it is `localhost`/`*.localhost`, an internal IP literal (legacy IPv4 spellings such as `0x7f000001` included), a hostname that resolves to any internal address, or a hostname that does not resolve. Internal ranges (`netguard.IsInternalIP`): `10/8`, `172.16/12`, `192.168/16`, `100.64/10`, `127/8`, `169.254/16`, `0/8`, `::1`, `::`, `fc00::/7`, `fe80::/10`. Hostname lookups go through `netguard.LookupIP` (tests stub it with `netguardtest.StubLookupIP`).
 
-**Blocked IP Ranges**:
-```
-10.0.0.0/8          Private Class A (10.x.x.x)
-172.16.0.0/12       Private Class B (172.16-31.x.x)
-192.168.0.0/16      Private Class C (192.168.x.x)
-127.0.0.0/8         IPv4 loopback (127.x.x.x)
-169.254.0.0/16      IPv4 link-local
-::1/128             IPv6 loopback
-fc00::/7            IPv6 unique local
-fe80::/10           IPv6 link-local
-```
+**Where it applies** (Studio and Microgateway):
+- API create/update (`plugin_security.ValidateCommand`, gateway `handlers/validation.go`), and the service layer (`plugin_security.CheckCommandHosts`: create, update, upgrade, management gRPC, marketplace install).
+- Load of a stored plugin (`validateCommandForLoad`), and the gateway's `createPluginClient` for `grpc://` (the host and the address it resolved to, c1g.31).
+- Every OCI client entry point: `ociplugins.CheckRegistryHost` in `FetchPlugin`, `GetPlugin` (cache hits included) and `NewRemoteRepository` (pulls, manifests, signature reads); gateway pre-fetch and pre-warm.
+- At dial time for every OCI client connection (registry, signatures, token server) via `netguard.PluginHTTPTransport` / `PluginDialControl`, whatever `LLM_UPSTREAM_BLOCK_INTERNAL` says, against DNS rebinding. Behind a proxy the proxy endpoint is dialled unguarded and each request's target is name-checked (`CheckPluginHost`) in the transport's `Proxy` hook; no connect-time protection for the target then (c1g.33).
+- Cache hits: `GetPlugin` loads a verified cache hit when the registry name only fails to resolve (`netguard.IsUnresolvedPluginHost`), with a warning; a positive internal resolution, a failed cache check or any fallthrough to `FetchPlugin` is refused. Studio's load-time `ValidateCommand` therefore skips the host check for `oci://` commands and leaves it to the OCI client (c1g.33).
 
-**Blocked Hostnames**:
-- `localhost`
-- `::1`
-- Any hostname containing "localhost"
+**Opt-outs**: a host named in `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` (`netguard.PluginHostExempt`) is exempt from the check and dialled unguarded (preferred). `ALLOW_INTERNAL_NETWORK_ACCESS=true` (read at call time) is platform-wide: it allows every internal plugin host and OCI registry, on every path in AI Studio and the Microgateway; it turns off `LLM_UPSTREAM_BLOCK_INTERNAL`, so LLM upstreams, guardrail provider calls (Enterprise) and script HTTP calls (Enterprise) may reach internal addresses again; and it skips the internal-address check on submitted embed URLs. `PLUGIN_BLOCK_INTERNAL_URLS` is deprecated: still accepted, it only adds refusals for literals (including `host:port` arguments).
 
 **Example**:
 ```bash
 # ✅ ALLOWED (public addresses)
 grpc://plugins.company.com:50051
-grpc://35.123.45.67:8080
+oci://ghcr.io/org/plugin@sha256:...
 
 # ❌ BLOCKED (internal addresses)
 grpc://localhost:50051
-grpc://127.0.0.1:8080
-grpc://192.168.1.100:50051
 grpc://10.0.0.5:8080
-grpc://::1:50051
+oci://registry.corp.internal/plugin:1   # resolves to 10.x
+oci://localhost:5000/plugin:1
 ```
-
-**Development Bypass**:
-```bash
-ALLOW_INTERNAL_NETWORK_ACCESS=true  # Allows internal IPs (development only)
-```
-
-**Community Edition Behavior**:
-- ⚠️ All hosts allowed (no blocking)
-- Logs one-time warning: "Plugin Security: GRPC host whitelisting is disabled in Community Edition"
 
 ---
 
@@ -191,53 +173,42 @@ ALLOW_INTERNAL_NETWORK_ACCESS=true  # Allows internal IPs (development only)
 
 **⚠️ ENTERPRISE EDITION ONLY**
 
-**Purpose**: Verifies plugin authenticity using cryptographic signatures (Cosign)
+**Purpose**: Verifies plugin authenticity using cryptographic signatures, in-process: no `cosign` binary is run or needed, so verification works in distroless images.
 
-**Implementation**: [enterprise/features/plugin_security/signature_verifier.go](../enterprise/features/plugin_security/signature_verifier.go)
+**Implementation**: [enterprise/features/plugin_security/signature_verifier.go](../enterprise/features/plugin_security/signature_verifier.go) (cosign v2), [bundle_verifier.go](../enterprise/features/plugin_security/bundle_verifier.go) (cosign v3, keyless), [trusted_root.go](../enterprise/features/plugin_security/trusted_root.go), built on sigstore-go and the core OCI client (`pkg/ociplugins`). The `sigstore-go` dependency is in the enterprise module only; Community binaries do not link it.
 
-**Verification Methods**:
+**Defaults**: `AI_STUDIO_OCI_REQUIRE_SIGNATURE` and `OCI_PLUGINS_REQUIRE_SIGNATURE` default to `true` (AI Studio's default was `false` before 2.3.0), as do the Helm charts.
 
-#### A. Key-Based Verification
-```bash
-# Sign plugin during build
-cosign sign --key cosign.key registry/plugin:v1.0.0
+**Signature formats** (a plugin verifies if either does; a failure reports both attempts):
 
-# Verify during fetch (ENT automatic)
-OCI_PLUGINS_PUBKEY_1="-----BEGIN PUBLIC KEY-----..."
-OCI_PLUGINS_REQUIRE_SIGNATURE=true
-```
+| Format | Where it lives | Binding to the artifact |
+|---|---|---|
+| cosign v2 (what `tools/publish-plugin.sh` writes) | manifest tagged `sha256-<hex>.sig`; each `application/vnd.dev.cosign.simplesigning.v1+json` layer has the signature in `dev.cosignproject.cosign/signature` and an optional Rekor bundle in `dev.sigstore.cosign/bundle` | the signed payload's `critical.image.docker-manifest-digest` must equal the digest asked about (the `.sig` tag's location proves nothing); `critical.type` must be `cosign container image signature` |
+| cosign v3 | a Sigstore bundle (`application/vnd.dev.sigstore.bundle.v0.3+json`) attached as an OCI referrer of the digest (referrers API, or the `sha256-<hex>` tag-schema fallback) | sigstore-go `WithArtifactDigest(sha256, digest)`; a DSSE bundle must be an in-toto statement with predicate `https://sigstore.dev/cosign/sign/v1` (attestations such as SLSA provenance or SBOMs are not signatures) |
 
-#### B. Keyless Verification (OIDC)
-```go
-// Verify using certificate identity
-err := securityService.VerifyBundle(ctx, ref,
-    "https://github.com/login/oauth",  // Issuer
-    "user@company.com")                // Subject
-```
+**Which digest is verified**: the client (`pkg/ociplugins` `FetchPlugin`) resolves the reference once and passes the **top-level** digest it resolved to: the multi-arch index for a multi-arch plugin (what `publish-plugin.sh` signs), else the manifest. If the index has no valid signature, the **platform manifest that was pulled** (taken from the index content, never from a tag or second resolution) is verified with the same key; another platform's manifest is never consulted. A digest that is not `sha256:<64 hex>` fails closed. The cache records `ResolvedDigest`, `ManifestDigest` and `SignedDigest`; with signatures enforced a cache hit requires `ResolvedDigest` to be the requested digest and `SignedDigest` to be it or its platform manifest, so entries from earlier releases are verified once more.
 
-#### C. Policy-Based Verification
-```bash
-# Create policy file
-cat > policy.yaml <<EOF
-apiVersion: policy.sigstore.dev/v1beta1
-kind: ClusterImagePolicy
-metadata:
-  name: plugin-policy
-spec:
-  images:
-  - glob: "registry.company.com/plugins/*"
-  authorities:
-  - keyless:
-      url: https://fulcio.sigstore.dev
-EOF
+**Transparency log** (`AI_STUDIO_OCI_TLOG_POLICY` / `OCI_PLUGINS_TLOG_POLICY`, `ociplugins.OCIConfig.EffectiveTlogPolicy()`):
 
-# Verify with policy
-err := securityService.VerifyWithPolicy(ctx, ref, "policy.yaml")
-```
+| Policy | cosign v2 | cosign v3 |
+|---|---|---|
+| `required` (default) | the Rekor bundle's signed entry timestamp is checked offline against the trusted root's Rekor key for that log ID, within the key's validity window; the hashedrekord entry must record this payload's hash, this signature and **the verification key** | `WithTransparencyLog(1)` + `WithIntegratedTimestamps(1)` |
+| `optional` | as `required` when the bundle annotation is present; accepted without one | as `required` when the bundle has tlog entries; key only otherwise |
+| `disabled` | key only | key only (`WithCurrentTime`) |
 
-**Public Key Resolution**:
+Any other value fails closed. `optional` gives no protection against someone who can write to the registry and strip the entry; use it only in transition, and `disabled` only for air-gapped signing (`--tlog-upload=false`).
 
-The verifier supports multiple key reference formats:
+**Trusted root**: a snapshot of the Sigstore public-good `trusted_root.json` is embedded (`trusted_root.json`, refreshed with `refresh-trusted-root.sh` / `go generate`). `AI_STUDIO_OCI_TRUSTED_ROOT_FILE` / `OCI_PLUGINS_TRUSTED_ROOT_FILE` replace it (read with `ociplugins.ReadTrustedRootFile`: a regular file of at most 4 MiB); an invalid override fails closed and never falls back to the embedded root.
+
+**Keyless** (`VerifyBundle(ctx, ref, issuer, subject)`): a cosign v3 bundle whose Fulcio certificate chains to the trusted root, with exact OIDC issuer and SAN, a tlog entry and an SCT. Nothing calls it today.
+
+**Not supported**: cosign policy files. `VerifyWithPolicy` returns an error and is deprecated in both service interfaces.
+
+**Fail closed**: with signatures required, an OCI client with no security service refuses every plugin (`no signature verifier configured`). Every OCI client in Studio and in both Microgateway service containers is built with the security service (`services.NewServiceWithOCI`, `Service.NewOCIPluginClient`, `plugins.NewPluginManagerWithOCI`, which requires it).
+
+**Limits**: signature manifests, payloads and bundles are read with a 1 MiB cap; at most 32 simplesigning layers per `.sig` manifest and 16 bundle referrers are tried; key files must be regular files of at most 64 KiB.
+
+**Public Key Resolution** (`ociplugins.ResolvePublicKey`, returns PEM bytes, no temp files):
 
 ```bash
 # 1. Numbered keys
@@ -258,12 +229,96 @@ OCI_PLUGINS_PUBKEY_FILE_COSIGN=/etc/ai-studio/cosign.pub
 
 # 5. Environment variable reference
 # Reference: "env:OCI_PLUGINS_PUBKEY_CI"
+
+# 6. The embedded Tyk key: "embedded:default" (always the first default key)
 ```
 
+**Core seams the Enterprise verifier uses** (`pkg/ociplugins`, documented in `doc.go`):
+- `NewRemoteRepository(cfg, ref, authConfigName)`: the repository client plugin pulls use (insecure-registry list, registry auth, netguard SSRF guard).
+- `WithAuthConfig` / `AuthConfigFrom`: the plugin reference's `?auth=` name, carried on the context to `VerifySignature`.
+- `ResolvePublicKey`, `ParsePublicKey`, `PublicKeyPath`, `ReadTrustedRootFile`.
+- `SignatureCapability`: a service that cannot verify (the Community one) reports it, and plugins load recorded as unverified.
+
 **Community Edition Behavior**:
-- ⚠️ Signature verification skipped (no-op)
-- `RequireSignature` setting ignored
-- Logs one-time warning: "Plugin Security: OCI signature verification is disabled in Community Edition"
+- ⚠️ Signatures are not verified; OCI plugins load and are recorded as unverified (`Verified` and `SignatureChecked` false), so an Enterprise build on the same cache verifies them again
+- A warning is logged once per process when `RequireSignature` is set (the default)
+
+---
+
+## Plugin Source Lockdown (CE and ENT)
+
+Hardened installations can limit which plugin deployment types they accept.
+Each process enforces its own setting: a gateway refuses a source it does not
+allow even when the hub pushes it.
+
+| Process | Setting | Default |
+|---------|---------|---------|
+| AI Studio | `AI_STUDIO_PLUGIN_ALLOWED_SOURCES` | empty = all sources |
+| Microgateway | `PLUGINS_ALLOWED_SOURCES` | empty = all sources |
+
+The value is a comma-separated list of `oci`, `file` and `grpc` (case and
+spaces ignored, duplicates dropped), e.g. `PLUGINS_ALLOWED_SOURCES=oci`.
+An unknown source (`ocii`) or a list naming none (`,`) stops startup with an
+error naming the setting, so a typo never opens everything up or locks
+everything out. A restricted policy is logged at INFO on startup.
+
+**Classification** (`plugin_security.SourceOf`) matches how the plugin
+managers dispatch a command, and both managers now dispatch through it:
+
+| Command | Source |
+|---------|--------|
+| `oci://...` (case-sensitive prefix) | `oci` |
+| `grpc://...` (case-sensitive prefix) | `grpc` |
+| anything else: paths, `file://`, `http(s)://` | `file` (run as a local executable) |
+
+Commands are not trimmed, lower-cased or parsed before classification, so
+`OCI://x` or ` oci://x` are `file`, as they would be run.
+
+**Types** ([services/plugin_security/sources.go](../services/plugin_security/sources.go)):
+`ParseSourcePolicy(csv)`, `SourcePolicy.Check(command)` (returns
+`*ErrPluginSourceNotAllowed`: `🔒 SECURITY: plugin source "file" is not
+allowed by this installation (allowed: oci). Set <SETTING> to change this.`),
+`Allowed()` (order oci, file, grpc), `AllowsAll()`. The zero `SourcePolicy`
+allows all. The parsed policy travels on `plugin_security.Config.SourcePolicy`
+(Studio: `AppConf.PluginSourcePolicy`; gateway: `PluginConfig.SourcePolicy`).
+
+**Enforcement points (AI Studio)** — components read the policy from
+configuration at check time (`services/plugin_source_policy.go`;
+`SetSourcePolicy` overrides it), so one built without a setter or a security
+service never fails open:
+
+| Point | Where | Result |
+|---|---|---|
+| Plugin API create/update | `api/validation.go` `validatePluginCommand` | `400` |
+| OCI create / refresh | `api/plugin_handlers.go` → `PluginService.CreateOCIPluginFromReference`, `RefreshOCIPlugin` | `400`, before any registry request |
+| Service layer | `PluginService.validatePluginCommand` (create, marketplace upgrade plan), `UpdatePlugin` (command or OCI reference), `MarketplaceService.InstallFromMarketplace` | error |
+| Manifest fetch | `PluginManifestService.ParsePluginManifest` | error, before any registry request |
+| Load time | `AIStudioPluginManager.validateCommandForLoad` (load and config-only paths) | not spawned; WARN with plugin ID, name and source |
+
+**Enforcement points (Microgateway)** — the policy is set on the plugin
+manager by the shared `newPluginManager` builder both service containers use:
+
+| Point | Where | Result |
+|---|---|---|
+| Management API | `internal/api/handlers/validation.go` (create/update), pre-warm handler | `400` |
+| Every plugin load | `PluginManager.createPluginClient`, first statement (hub-pushed configs, global data-collection plugins, local config) | not loaded; WARN with plugin ID; `failed` in plugin health |
+| OCI pre-fetch / pre-warm | `PreFetchOCIPlugin` (first statement), `PreWarmOCIPlugins` (skipped when `oci` is refused) | no registry request |
+
+Existing plugin records with a refused source are kept (readable, editable,
+deletable) but do not load and cannot be saved with that command.
+
+**UI**: `GET /api/v1/plugin-policy` (plugins read permission) returns
+`plugin_allowed_sources` and `oci_require_signature`; it is not on the public
+`/auth/config`. The plugin wizard and form list only the allowed sources in
+their help text, reject a refused command client-side with the backend's
+wording, and note that OCI artifacts must be signed when they must. The
+marketplace disables install and upgrade, with a tooltip naming
+`AI_STUDIO_PLUGIN_ALLOWED_SOURCES`, when `oci` is refused. The client-side
+`pluginSourceOf` (`ui/admin-frontend/src/admin/services/pluginService.js`)
+uses the same rules as `SourceOf`.
+
+**Helm**: `config.pluginAllowedSources` (AI Studio) and
+`microgateway.config.pluginsAllowedSources` (gateways), empty by default.
 
 ---
 
@@ -452,128 +507,29 @@ if err := pluginService.ValidatePluginChecksum(pluginID, filePath); err != nil {
 
 ## Enterprise Edition Features
 
-### GRPC Host Whitelisting
+### Internal plugin hosts and registries
 
-**File**: [enterprise/features/plugin_security/grpc_validator.go](../enterprise/features/plugin_security/grpc_validator.go)
-
-**CIDR Range Detection**:
-```go
-func (v *GRPCValidator) isInternalIP(host string) bool {
-    privateCIDRs := []string{
-        "10.0.0.0/8",        // Private Class A
-        "172.16.0.0/12",     // Private Class B
-        "192.168.0.0/16",    // Private Class C
-        "127.0.0.0/8",       // IPv4 loopback
-        "169.254.0.0/16",    // IPv4 link-local
-        "::1/128",           // IPv6 loopback
-        "fc00::/7",          // IPv6 unique local
-        "fe80::/10",         // IPv6 link-local
-    }
-
-    // Check if IP falls within any private CIDR range
-    for _, cidrStr := range privateCIDRs {
-        _, cidr, _ := net.ParseCIDR(cidrStr)
-        if cidr.Contains(ip) {
-            return true
-        }
-    }
-    return false
-}
-```
+**Files**: [pkg/netguard/plugin_hosts.go](../pkg/netguard/plugin_hosts.go), [pkg/ociplugins/fetcher.go](../pkg/ociplugins/fetcher.go) (`CheckRegistryHost`), [services/plugin_security/command_validation.go](../services/plugin_security/command_validation.go), [enterprise/features/plugin_security/grpc_validator.go](../enterprise/features/plugin_security/grpc_validator.go)
 
 **Attack Prevention**:
 - **SSRF (Server-Side Request Forgery)**: Prevents malicious plugins from accessing internal services
-- **Cloud Metadata Attacks**: Blocks access to cloud provider metadata endpoints (169.254.169.254)
+- **Cloud Metadata Attacks**: Blocks access to cloud provider metadata endpoints (169.254.169.254, 100.100.100.200)
 - **Internal Service Discovery**: Prevents scanning of internal networks
+- **DNS rebinding**: registry connections are checked on the address being dialled (not behind a proxy, where the proxy controls egress)
 
-**Error Messages**:
+**Error Messages** (both editions; name the host and the setting):
 ```
-CE: No error (allowed)
-ENT: "🔒 SECURITY: plugin command targets internal network address: grpc://127.0.0.1:50051"
+plugin host "registry.corp.internal" is an internal address, resolves to one, or does not resolve; add it to LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS to allow this host, or set ALLOW_INTERNAL_NETWORK_ACCESS=true to allow every internal host
 ```
 
 ---
 
 ### OCI Signature Verification
 
-**File**: [enterprise/features/plugin_security/signature_verifier.go](../enterprise/features/plugin_security/signature_verifier.go)
+See [Tier 4](#4-oci-signature-verification-tier-4---supply-chain-security) for the design. Failures are `*ociplugins.ErrSignatureVerificationFailed` with a reason naming each format tried and why it failed, never key material or tool output:
 
-**Dependencies**:
-- **Cosign CLI**: Sigstore signing tool (must be installed)
-- **Public Keys**: PEM-formatted public keys for verification
-
-**Verification Process**:
-```go
-func (v *SignatureVerifier) Verify(ctx, ref, pubKeyID) error {
-    // 1. Resolve public key reference
-    pubKeyPath, err := v.getPublicKeyPath(pubKeyID)
-
-    // 2. Build cosign verify command
-    cmd := exec.CommandContext(ctx, "cosign", "verify",
-        "--key", pubKeyPath,
-        ref.FullReference())
-
-    // 3. Run verification
-    output, err := cmd.CombinedOutput()
-    if err != nil {
-        return ErrSignatureVerificationFailed
-    }
-
-    return nil
-}
 ```
-
-**Public Key Resolution Examples**:
-```go
-// Numeric reference → OCI_PLUGINS_PUBKEY_1
-pubKeyPath, err := verifier.getPublicKeyPath("1")
-
-// Named reference → OCI_PLUGINS_PUBKEY_CI
-pubKeyPath, err := verifier.getPublicKeyPath("CI")
-
-// Direct file path
-pubKeyPath, err := verifier.getPublicKeyPath("/etc/keys/cosign.pub")
-
-// File reference
-pubKeyPath, err := verifier.getPublicKeyPath("file:/etc/keys/cosign.pub")
-
-// Environment variable
-pubKeyPath, err := verifier.getPublicKeyPath("env:MY_PUBKEY")
-```
-
-**Advanced Features**:
-
-**Keyless Signing** (OIDC-based):
-```go
-// No pre-shared key required
-err := securityService.VerifyBundle(ctx, ref,
-    "https://token.actions.githubusercontent.com",  // Issuer
-    "https://github.com/myorg/repo/.github/workflows/build.yml@refs/heads/main")  // Subject
-```
-
-**Policy-Based Verification**:
-```yaml
-# policy.yaml
-apiVersion: policy.sigstore.dev/v1beta1
-kind: ClusterImagePolicy
-metadata:
-  name: require-keyless-signature
-spec:
-  images:
-  - glob: "registry.company.com/plugins/*"
-  authorities:
-  - keyless:
-      url: https://fulcio.sigstore.dev
-      identities:
-      - issuer: https://token.actions.githubusercontent.com
-        subject: "https://github.com/myorg/*"
-```
-
-**Error Messages**:
-```
-CE: No error (skipped)
-ENT (failure): "signature verification failed: cosign verify failed: no signatures found"
-ENT (success): Signature verification passed (logged at debug level)
+with key "1": cosign v3 bundle: no signatures found; cosign v2 signature (sha256-<hex>.sig): no valid signature: layer 0: signature is for sha256:<other>, not sha256:<hex>
 ```
 
 ---
@@ -594,8 +550,17 @@ MICROGATEWAY_ALLOW_ALL_PLUGIN_PATHS=0  # 0=enabled, 1=disabled (dev only)
 ALLOW_INTERNAL_NETWORK_ACCESS=false  # false=enforced, true=bypassed (dev only)
 
 # OCI signature verification (ENT)
-AI_STUDIO_OCI_REQUIRE_SIGNATURE=false     # AI Studio default (permissive)
+AI_STUDIO_OCI_REQUIRE_SIGNATURE=true      # AI Studio default (since 2.3; was false)
 OCI_PLUGINS_REQUIRE_SIGNATURE=true        # Microgateway default (strict)
+
+# Transparency-log (Rekor) policy (ENT): required | optional | disabled
+AI_STUDIO_OCI_TLOG_POLICY=required        # AI Studio (default required)
+OCI_PLUGINS_TLOG_POLICY=required          # Microgateway (default required)
+
+# Sigstore trusted root override (ENT): a trusted_root.json replacing the
+# embedded Sigstore public-good root (private Sigstore, Rekor key rotation)
+AI_STUDIO_OCI_TRUSTED_ROOT_FILE=/etc/ai-studio/trusted_root.json
+OCI_PLUGINS_TRUSTED_ROOT_FILE=/etc/microgateway/trusted_root.json
 
 # Public keys (ENT)
 OCI_PLUGINS_PUBKEY_1="-----BEGIN PUBLIC KEY-----..."
@@ -603,12 +568,30 @@ OCI_PLUGINS_PUBKEY_CI="-----BEGIN PUBLIC KEY-----..."
 OCI_PLUGINS_PUBKEY_FILE_COSIGN=/etc/keys/cosign.pub
 ```
 
+**Transparency-log policy** (`ociplugins.OCIConfig.TlogPolicy`, read through
+`EffectiveTlogPolicy()`, which treats empty as `required`):
+
+| Policy | Meaning |
+|--------|---------|
+| `required` (default) | The signature must have a transparency-log (Rekor) entry, checked offline against the trusted root's Rekor key. Matches `cosign verify --key`. |
+| `optional` | A transparency-log entry is checked when the signature has one; a signature without one is accepted. |
+| `disabled` | Key-only verification, for air-gapped signing (`cosign sign --tlog-upload=false`). A WARN is logged once at startup. |
+
+**Trusted root** (`TrustedRootFile`): empty uses the Sigstore public-good
+trusted root embedded in the Enterprise verifier. When set, the file must be
+readable.
+
+Both settings are security settings: an unknown policy or an unreadable
+trusted-root file refuses to start (Studio: `AppConf.ConfigErrors`, checked by
+`studio.New`; gateway: `Config.Validate`), with an error naming the variable.
+So does an invalid `AI_STUDIO_OCI_REQUIRE_SIGNATURE` / `OCI_PLUGINS_REQUIRE_SIGNATURE`.
+
 ### Code Configuration
 
 **AI Studio** ([config/oci_config.go](../config/oci_config.go)):
 ```go
 type OCIConfig struct {
-    RequireSignature bool  `env:"AI_STUDIO_OCI_REQUIRE_SIGNATURE" envDefault:"false"`
+    RequireSignature bool  `env:"AI_STUDIO_OCI_REQUIRE_SIGNATURE" envDefault:"true"`
     // ... other fields
 }
 ```
@@ -679,7 +662,8 @@ func (s *enterpriseService) ValidateGRPCHost(host string) error {
     return s.grpcValidator.ValidateHost(host)  // Returns error if internal
 }
 
-// VerifySignature performs Cosign verification in ENT
+// VerifySignature verifies cosign v3 bundles and cosign v2 signatures
+// in-process (sigstore-go) in ENT
 func (s *enterpriseService) VerifySignature(ctx, ref, pubKeyID) error {
     return s.signatureVerifier.Verify(ctx, ref, pubKeyID)
 }
@@ -770,17 +754,24 @@ When upgrading from Community Edition to Enterprise Edition:
 - **Cause**: Using Community Edition
 - **Solution**: Upgrade to Enterprise Edition or accept reduced security
 
-**ENT: "plugin command targets internal network address"**
-- **Cause**: Plugin trying to access internal IP
+**"plugin host ... is an internal address, resolves to one, or does not resolve"**
+- **Cause**: The plugin's gRPC host or OCI registry is, or resolves to, an internal address, or does not resolve (both editions)
 - **Solution**:
-  - Use public IP/hostname instead
-  - Set `ALLOW_INTERNAL_NETWORK_ACCESS=true` (development only)
+  - Use a host or registry with a public address
+  - Name the host in `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS`, or set `ALLOW_INTERNAL_NETWORK_ACCESS=true` (platform-wide)
 
-**ENT: "signature verification failed: no signatures found"**
-- **Cause**: Plugin image not signed
+**ENT: "signature verification failed ... no signatures found"**
+- **Cause**: Plugin image not signed (neither a cosign v3 bundle nor a cosign v2 `.sig` tag)
 - **Solution**:
-  - Sign plugin: `cosign sign --key cosign.key registry/plugin:v1`
-  - Or disable verification: `OCI_PLUGINS_REQUIRE_SIGNATURE=false` (not recommended)
+  - Sign plugin: `cosign sign --key cosign.key registry/plugin@sha256:<digest>` (or `tools/publish-plugin.sh`)
+  - Or disable verification: `AI_STUDIO_OCI_REQUIRE_SIGNATURE=false` / `OCI_PLUGINS_REQUIRE_SIGNATURE=false` (not recommended)
+
+**ENT: "no transparency-log entry, which ..._TLOG_POLICY=required needs"**
+- **Cause**: Signed with `--tlog-upload=false`
+- **Solution**: Set `AI_STUDIO_OCI_TLOG_POLICY` / `OCI_PLUGINS_TLOG_POLICY` to `disabled` (air-gapped signing)
+
+**"no signature verifier configured"**
+- **Cause**: An OCI client was built without the plugin security service while signatures are required (a wiring bug; every client should have it)
 
 **ENT: "public key not found"**
 - **Cause**: Public key reference not configured
@@ -810,14 +801,15 @@ When upgrading from Community Edition to Enterprise Edition:
 
 ### Enterprise Edition Tests
 
-**Location**: `enterprise/features/plugin_security/` (when implemented)
+**Location**: `enterprise/features/plugin_security/` (`-tags enterprise`)
 
 **Coverage**:
 - ✅ GRPC host validation (internal IPs, public IPs, localhost)
-- ✅ Signature verification (valid, invalid, keyless)
-- ✅ Public key resolution (all formats)
-- ✅ Policy-based verification
-- ✅ Development bypass
+- ✅ cosign v2 and v3 signatures with generated keys against an in-process registry (`pkg/ociplugins/ocitest`), wrong key, wrong digest, tampered payload, attestations, size and count caps
+- ✅ Transparency-log policies, Rekor SET and key binding (test trusted roots, sigstore-go's virtual Sigstore)
+- ✅ Real cosign v2.4.1 and v3.1.4 signatures from `testdata/` (offline), a copied signature failing, and a network-gated check against a published plugin (`TYK_PLUGIN_SIGNATURE_NETWORK_TEST=1`)
+- ✅ Keyless `VerifyBundle`; `VerifyWithPolicy` refused
+- ✅ No `os/exec` in the package (guard test)
 
 ---
 

@@ -50,6 +50,9 @@ type Service struct {
 	PluginService         *PluginService
 	PluginManifestService *PluginManifestService
 	AIStudioPluginManager *AIStudioPluginManager
+	// PluginSecurityService verifies OCI plugin signatures; every OCI client
+	// gets it (NewOCIPluginClient). Nil when OCI is not configured.
+	PluginSecurityService plugin_security.Service
 	// PluginResourceRPC creates plugin resource instances from approved
 	// submissions. Defaults to AIStudioPluginManager; tests inject a fake.
 	PluginResourceRPC    ResourceInstanceCreator
@@ -275,6 +278,17 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	var ociClient *ociplugins.OCIPluginClient
 	var aiStudioPluginManager *AIStudioPluginManager
 
+	// Build the plugin security service before any OCI client, so every
+	// client verifies signatures through it (CE: the community stub).
+	var secService plugin_security.Service
+	if ociConfig != nil {
+		secService = plugin_security.NewService(&plugin_security.Config{
+			OCIConfig:                  ociConfig,
+			AllowInternalNetworkAccess: os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") == "true",
+			SourcePolicy:               appConf.PluginSourcePolicy,
+		})
+	}
+
 	if ociConfig != nil {
 		// Create plugin service with OCI support
 		pluginService, err = NewPluginServiceWithOCI(db, ociConfig)
@@ -285,7 +299,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 			aiStudioPluginManager = NewAIStudioPluginManager(db, nil)
 		} else {
 			// Create OCI client and services with OCI support
-			ociClient, _ = ociplugins.NewOCIPluginClient(ociConfig)
+			ociClient = newSecuredOCIClient(ociConfig, secService)
 			pluginManifestService = NewPluginManifestService(db, ociClient)
 			aiStudioPluginManager = NewAIStudioPluginManager(db, ociClient)
 		}
@@ -310,13 +324,8 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 			pluginService == nil, aiStudioPluginManager == nil)
 	}
 
-	// Wire enterprise security service to OCI clients for signature verification
-	if ociConfig != nil {
-		secConfig := &plugin_security.Config{
-			OCIConfig:                  ociConfig,
-			AllowInternalNetworkAccess: os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") == "true",
-		}
-		secService := plugin_security.NewService(secConfig)
+	// Wire the security service to the remaining OCI clients for signature verification
+	if secService != nil {
 		if pluginService != nil {
 			pluginService.SetSecurityService(secService)
 		}
@@ -366,6 +375,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 		PluginService:         pluginService,
 		PluginManifestService: pluginManifestService,
 		AIStudioPluginManager: aiStudioPluginManager,
+		PluginSecurityService: secService,
 		PluginMetadataLoader:  pluginMetadataLoader,
 		MarketplaceService:    marketplaceService,
 		HookRegistry:          hookRegistry,
@@ -596,4 +606,28 @@ func (s *Service) Authz() rbac.Service {
 		s.RBAC = rbac.NewService(s.DB)
 	}
 	return s.RBAC
+}
+
+// NewOCIPluginClient creates an OCI plugin client wired to the shared plugin
+// security service, for OCI clients built outside NewServiceWithOCI (the
+// marketplace). Never call ociplugins.NewOCIPluginClient directly in Studio.
+func (s *Service) NewOCIPluginClient(cfg *ociplugins.OCIConfig) (*ociplugins.OCIPluginClient, error) {
+	client, err := ociplugins.NewOCIPluginClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+	client.SetSecurityService(s.PluginSecurityService)
+	return client, nil
+}
+
+// newSecuredOCIClient creates an OCI client wired to secService, or returns
+// nil if the client cannot be created.
+func newSecuredOCIClient(cfg *ociplugins.OCIConfig, secService plugin_security.Service) *ociplugins.OCIPluginClient {
+	client, err := ociplugins.NewOCIPluginClient(cfg)
+	if err != nil {
+		logger.Warnf("Could not create OCI plugin client: %v", err)
+		return nil
+	}
+	client.SetSecurityService(secService)
+	return client
 }

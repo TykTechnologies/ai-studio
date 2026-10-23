@@ -159,7 +159,11 @@ config:
   # Plugins
   pluginsConfigPath: "/opt/tyk-microgateway/config/analytics-pulse.yaml"
   ociPluginsCacheDir: "/var/lib/microgateway/plugins"
-  ociPluginsRequireSignature: "false"
+  ociPluginsRequireSignature: "true"
+  # Plugin deployment types this gateway accepts: comma-separated oci, file,
+  # grpc. Empty allows all; an unknown value stops startup. Enforced on
+  # plugins the hub pushes too.
+  pluginsAllowedSources: ""
 
   # Upstream network policy. Turn blockInternalUpstreams on to stop LLM configs
   # reaching cluster-internal or link-local addresses, then name the exceptions

@@ -33,6 +33,9 @@ data:
   PLUGINS_CONFIG_PATH: {{ .Values.config.pluginsConfigPath | quote }}
   OCI_PLUGINS_CACHE_DIR: {{ .Values.config.ociPluginsCacheDir | quote }}
   OCI_PLUGINS_REQUIRE_SIGNATURE: {{ .Values.config.ociPluginsRequireSignature | quote }}
+  {{- if .Values.config.pluginsAllowedSources }}
+  PLUGINS_ALLOWED_SOURCES: {{ .Values.config.pluginsAllowedSources | quote }}
+  {{- end }}
   LOG_LEVEL: {{ .Values.config.logLevel | quote }}
   ENABLE_METRICS: {{ .Values.metrics.enabled | quote }}
   METRICS_PATH: {{ .Values.metrics.path | quote }}

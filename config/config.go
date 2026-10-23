@@ -3,6 +3,7 @@ package config
 import (
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -13,6 +14,9 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
+
+	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 )
 
 // cfgLog is initialized early with a console writer for config loading
@@ -30,6 +34,13 @@ func init() {
 }
 
 type AppConf struct {
+	// ConfigErrors lists settings with invalid values that must not fall
+	// back to a default (security settings). studio.New refuses to start
+	// while there are any; see Err.
+	ConfigErrors []error `json:"-"`
+	// PluginSourcePolicy limits the plugin deployment types (oci, file,
+	// grpc) Studio accepts (AI_STUDIO_PLUGIN_ALLOWED_SOURCES; all when unset).
+	PluginSourcePolicy plugin_security.SourcePolicy `json:"-"`
 	SMTPServer           string
 	SMTPPort             int
 	SMTPUser             string
@@ -386,6 +397,11 @@ func NormalizeBasePath(p string) string {
 // BasePath.
 func (c *AppConf) PublicPath(path string) string {
 	return c.BasePath + path
+}
+
+// Err reports the invalid settings in ConfigErrors, or nil.
+func (c *AppConf) Err() error {
+	return errors.Join(c.ConfigErrors...)
 }
 
 // Set installs conf as the configuration Get returns.
@@ -820,8 +836,24 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 	conf.GRPCMaxConnectionAge = parseDurationWithDefault(getenv, "GRPC_MAX_CONNECTION_AGE", 0)
 	conf.GRPCMaxConnectionAgeGrace = parseDurationWithDefault(getenv, "GRPC_MAX_CONNECTION_AGE_GRACE", 0)
 
+	// Plugin source lockdown: the deployment types this installation
+	// accepts. A security setting, so an invalid value refuses to start.
+	sourcePolicy, err := plugin_security.ParseSourcePolicy(getenv("AI_STUDIO_PLUGIN_ALLOWED_SOURCES"))
+	if err != nil {
+		conf.ConfigErrors = append(conf.ConfigErrors, fmt.Errorf("invalid AI_STUDIO_PLUGIN_ALLOWED_SOURCES: %w", err))
+	} else {
+		conf.PluginSourcePolicy = sourcePolicy.WithSetting("AI_STUDIO_PLUGIN_ALLOWED_SOURCES")
+		if !sourcePolicy.AllowsAll() {
+			cfgLog.Info().Msgf("Plugin sources limited by AI_STUDIO_PLUGIN_ALLOWED_SOURCES: %s", sourcePolicy)
+		}
+	}
+
 	// OCI Plugin configuration
-	conf.OCIPlugins = getOCIConfig(getenv)
+	var ociErr error
+	conf.OCIPlugins, ociErr = getOCIConfig(getenv)
+	if ociErr != nil {
+		conf.ConfigErrors = append(conf.ConfigErrors, ociErr)
+	}
 
 	// Audit trail configuration
 	conf.Audit = getAuditConfig(getenv)
@@ -1434,7 +1466,7 @@ func splitCSVList(v string) []string {
 	return out
 }
 
-func getOCIConfig(getenv func(string) string) OCIConfig {
+func getOCIConfig(getenv func(string) string) (OCIConfig, error) {
 	config := OCIConfig{}
 
 	// Cache directory - if not set, OCI support is disabled
@@ -1442,7 +1474,7 @@ func getOCIConfig(getenv func(string) string) OCIConfig {
 
 	// Only parse other settings if OCI is enabled
 	if config.CacheDir == "" {
-		return config
+		return config, nil
 	}
 
 	// Max cache size
@@ -1462,13 +1494,30 @@ func getOCIConfig(getenv func(string) string) OCIConfig {
 		}
 	}
 
-	// Require signature verification
+	// Require signature verification, on by default. A security setting: an
+	// invalid value refuses to start rather than falling back to the default.
+	config.RequireSignature = true
 	if requireSigStr := getenv("AI_STUDIO_OCI_REQUIRE_SIGNATURE"); requireSigStr != "" {
-		if requireSig, err := strconv.ParseBool(requireSigStr); err == nil {
-			config.RequireSignature = requireSig
-		} else {
-			cfgLog.Info().Msgf("Warning: Invalid AI_STUDIO_OCI_REQUIRE_SIGNATURE value: %s. Using default: %t", requireSigStr, config.RequireSignature)
+		requireSig, err := strconv.ParseBool(strings.TrimSpace(requireSigStr))
+		if err != nil {
+			return OCIConfig{}, fmt.Errorf("invalid AI_STUDIO_OCI_REQUIRE_SIGNATURE value %q: must be true or false", requireSigStr)
 		}
+		config.RequireSignature = requireSig
+	}
+
+	// Transparency-log policy and trusted-root override, security settings
+	// too: invalid values refuse to start.
+	tlogPolicy, err := ociplugins.ParseTlogPolicy(getenv("AI_STUDIO_OCI_TLOG_POLICY"))
+	if err != nil {
+		return OCIConfig{}, fmt.Errorf("invalid AI_STUDIO_OCI_TLOG_POLICY: %w", err)
+	}
+	config.TlogPolicy = tlogPolicy
+	config.TrustedRootFile = strings.TrimSpace(getenv("AI_STUDIO_OCI_TRUSTED_ROOT_FILE"))
+	if err := ociplugins.ValidateTrustedRootFile(config.TrustedRootFile); err != nil {
+		return OCIConfig{}, fmt.Errorf("invalid AI_STUDIO_OCI_TRUSTED_ROOT_FILE: %w", err)
+	}
+	if config.TlogPolicy == ociplugins.TlogPolicyDisabled {
+		cfgLog.Warn().Msg("AI_STUDIO_OCI_TLOG_POLICY=disabled: OCI plugin signatures are verified against the key only, with no transparency-log check")
 	}
 
 	// Network timeout
@@ -1519,11 +1568,11 @@ func getOCIConfig(getenv func(string) string) OCIConfig {
 	config.SetDefaults()
 	if err := config.Validate(); err != nil {
 		cfgLog.Info().Msgf("Warning: Invalid OCI configuration: %v. OCI support will be disabled.", err)
-		return OCIConfig{} // Return empty config to disable OCI
+		return OCIConfig{}, nil // Return empty config to disable OCI
 	}
 
 	cfgLog.Info().Msgf("✅ AI Studio OCI configuration loaded successfully - cache dir: %s", config.CacheDir)
-	return config
+	return config, nil
 }
 
 func Get(envFile string) *AppConf {

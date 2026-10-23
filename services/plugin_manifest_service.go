@@ -17,6 +17,7 @@ import (
 
 // PluginManifestService handles plugin manifest parsing and UI registration
 type PluginManifestService struct {
+	sourcePolicyHolder
 	db             *gorm.DB
 	ociClient      *ociplugins.OCIPluginClient
 	permissionSync pluginPermissionSyncer
@@ -45,6 +46,10 @@ func (s *PluginManifestService) ParsePluginManifest(plugin *models.Plugin) (*mod
 
 	if s.ociClient == nil {
 		return nil, fmt.Errorf("OCI client not configured")
+	}
+	// No registry request for a source the policy does not allow.
+	if err := s.checkSource(plugin.OCIReference); err != nil {
+		return nil, err
 	}
 
 	// Parse OCI reference

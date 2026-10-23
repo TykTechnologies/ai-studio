@@ -11,12 +11,14 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	"github.com/rs/zerolog/log"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // PluginService implements plugin management for AI Studio
 type PluginService struct {
+	sourcePolicyHolder
 	db               *gorm.DB
 	ociClient        *ociplugins.OCIPluginClient
 	pluginManager    *AIStudioPluginManager // For loading plugins to get config schemas
@@ -226,6 +228,14 @@ func (s *PluginService) UpdatePlugin(id uint, req *UpdatePluginRequest) (*models
 		plugin.Description = *req.Description
 	}
 	if req.Command != nil {
+		// A plugin whose source the policy no longer allows can still be
+		// edited, but not saved with a disallowed command.
+		if err := s.checkSource(*req.Command); err != nil {
+			return nil, err
+		}
+		if err := plugin_security.CheckCommandHosts(*req.Command); err != nil {
+			return nil, err
+		}
 		plugin.Command = *req.Command
 	}
 	if req.Checksum != nil {
@@ -249,6 +259,14 @@ func (s *PluginService) UpdatePlugin(id uint, req *UpdatePluginRequest) (*models
 	// PluginType field removed - use hook types instead
 	// IsOCI is now determined by command prefix, no need to set explicitly
 	if req.OCIReference != nil {
+		if *req.OCIReference != "" {
+			if err := s.checkSource(*req.OCIReference); err != nil {
+				return nil, err
+			}
+			if err := plugin_security.CheckCommandHosts(*req.OCIReference); err != nil {
+				return nil, err
+			}
+		}
 		plugin.OCIReference = *req.OCIReference
 	}
 
@@ -530,6 +548,16 @@ func isValidHookType(hookType string) bool {
 
 // validatePluginCommand performs security validation on plugin commands
 func (s *PluginService) validatePluginCommand(command string) error {
+	// The installation's plugin source policy (AI_STUDIO_PLUGIN_ALLOWED_SOURCES)
+	if err := s.checkSource(command); err != nil {
+		return err
+	}
+	// Plugin and registry hosts that are, or resolve to, internal addresses
+	// (create, update, upgrade, marketplace install, management gRPC).
+	if err := plugin_security.CheckCommandHosts(command); err != nil {
+		return err
+	}
+
 	// Get configuration from environment variables
 	allowlist := os.Getenv("PLUGIN_COMMAND_ALLOWLIST")
 	blockInternalURLs := os.Getenv("PLUGIN_BLOCK_INTERNAL_URLS") == "true"
@@ -588,6 +616,9 @@ func (s *PluginService) validatePluginCommand(command string) error {
 func (s *PluginService) CreateOCIPluginFromReference(req *CreateOCIPluginRequest) (*models.Plugin, error) {
 	if s.ociClient == nil {
 		return nil, fmt.Errorf("OCI client not configured")
+	}
+	if err := s.checkSource(req.OCIReference); err != nil {
+		return nil, err
 	}
 
 	// Parse OCI reference
@@ -655,6 +686,10 @@ func (s *PluginService) RefreshOCIPlugin(pluginID uint) (*models.Plugin, error) 
 
 	if !plugin.IsOCIPlugin() {
 		return nil, fmt.Errorf("plugin is not an OCI plugin")
+	}
+	// An existing oci plugin is not fetched again once oci is disallowed.
+	if err := s.checkSource(plugin.Command); err != nil {
+		return nil, err
 	}
 
 	// Parse OCI reference

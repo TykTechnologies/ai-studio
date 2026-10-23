@@ -18,6 +18,7 @@ import {
   Tabs,
   Alert,
   CircularProgress,
+  Tooltip,
 } from '@mui/material';
 import {
   OpenInNew as OpenInNewIcon,
@@ -27,6 +28,7 @@ import {
 } from '@mui/icons-material';
 import marketplaceService from '../../services/marketplaceService';
 import { useEdition } from '../../context/EditionContext';
+import { OCI_NOT_ALLOWED } from './PluginCard';
 
 function TabPanel({ children, value, index }) {
   return (
@@ -36,7 +38,7 @@ function TabPanel({ children, value, index }) {
   );
 }
 
-const PluginDetailModal = ({ open, plugin, installed = [], canUpgrade = false, onClose, onInstall, onUpgrade }) => {
+const PluginDetailModal = ({ open, plugin, installed = [], canUpgrade = false, ociAllowed = true, onClose, onInstall, onUpgrade }) => {
   // The installed copy to act on: one with an update pending, else the first.
   const installedEntry = installed.find((entry) => entry.update_available) || installed[0];
   const { isEnterprise, loading: editionLoading } = useEdition();
@@ -45,7 +47,8 @@ const PluginDetailModal = ({ open, plugin, installed = [], canUpgrade = false, o
   const [loadingVersions, setLoadingVersions] = useState(false);
 
   // Disable install for enterprise-only plugins when not running enterprise binary
-  const isInstallDisabled = editionLoading || (plugin?.enterprise_only && !isEnterprise);
+  const isInstallDisabled = editionLoading || (plugin?.enterprise_only && !isEnterprise) || !ociAllowed;
+  const installTooltip = ociAllowed ? '' : OCI_NOT_ALLOWED;
 
   useEffect(() => {
     if (open && plugin) {
@@ -331,28 +334,36 @@ const PluginDetailModal = ({ open, plugin, installed = [], canUpgrade = false, o
       <DialogActions>
         <Button onClick={onClose}>Close</Button>
         {installedEntry?.update_available && canUpgrade && (
-          <Button
-            variant="contained"
-            onClick={() => onUpgrade?.(plugin, installedEntry)}
-            disabled={isInstallDisabled}
-          >
-            Upgrade Installed Plugin
-          </Button>
+          <Tooltip title={installTooltip}>
+            <span>
+              <Button
+                variant="contained"
+                onClick={() => onUpgrade?.(plugin, installedEntry)}
+                disabled={isInstallDisabled}
+              >
+                Upgrade Installed Plugin
+              </Button>
+            </span>
+          </Tooltip>
         )}
         {!plugin.deprecated && (
-          <Button
-            variant={installedEntry ? 'outlined' : 'contained'}
-            startIcon={<DownloadIcon />}
-            onClick={() => {
-              onInstall(plugin);
-              onClose();
-            }}
-            disabled={isInstallDisabled}
-          >
-            {isInstallDisabled && plugin.enterprise_only
-              ? 'Enterprise Required'
-              : installedEntry ? 'Install Another Copy' : 'Install Plugin'}
-          </Button>
+          <Tooltip title={installTooltip}>
+            <span>
+              <Button
+                variant={installedEntry ? 'outlined' : 'contained'}
+                startIcon={<DownloadIcon />}
+                onClick={() => {
+                  onInstall(plugin);
+                  onClose();
+                }}
+                disabled={isInstallDisabled}
+              >
+                {isInstallDisabled && plugin.enterprise_only && !isEnterprise
+                  ? 'Enterprise Required'
+                  : installedEntry ? 'Install Another Copy' : 'Install Plugin'}
+              </Button>
+            </span>
+          </Tooltip>
         )}
       </DialogActions>
     </Dialog>

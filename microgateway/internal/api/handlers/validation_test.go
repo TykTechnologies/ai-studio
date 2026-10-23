@@ -59,7 +59,7 @@ func TestMicrogatewayValidatePluginCommand(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validatePluginCommand(tc.command, securityService)
+			err := validatePluginCommand(tc.command, securityService, plugin_security.AllowAllSources())
 
 			if tc.shouldError {
 				if err == nil {

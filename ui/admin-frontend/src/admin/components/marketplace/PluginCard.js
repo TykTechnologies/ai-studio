@@ -8,6 +8,7 @@ import {
   Chip,
   Box,
   Avatar,
+  Tooltip,
 } from '@mui/material';
 import {
   Verified as VerifiedIcon,
@@ -17,10 +18,16 @@ import {
 } from '@mui/icons-material';
 import { useEdition } from '../../context/EditionContext';
 
+// OCI_NOT_ALLOWED explains why install is disabled when the installation
+// does not accept OCI plugins.
+export const OCI_NOT_ALLOWED =
+  'OCI plugins are not allowed by this installation. Set AI_STUDIO_PLUGIN_ALLOWED_SOURCES to include oci to install from the marketplace.';
+
 const PluginCard = ({
   plugin,
   installed = [],
   canUpgrade = false,
+  ociAllowed = true,
   onViewDetails,
   onInstall,
   onUpgrade,
@@ -34,7 +41,8 @@ const PluginCard = ({
 
   // Disable install for enterprise-only plugins when not running enterprise binary
   // Also disable while loading to prevent flash of enabled state
-  const isInstallDisabled = loading || (plugin.enterprise_only && !isEnterprise);
+  const isInstallDisabled = loading || (plugin.enterprise_only && !isEnterprise) || !ociAllowed;
+  const installTooltip = ociAllowed ? '' : OCI_NOT_ALLOWED;
   const getPublisherColor = (publisher) => {
     switch (publisher) {
       case 'tyk-official':
@@ -209,15 +217,19 @@ const PluginCard = ({
           View Details
         </Button>
         {installedEntry && updateAvailable && canUpgrade && (
-          <Button
-            size="small"
-            onClick={() => onUpgrade?.(plugin, installedEntry)}
-            fullWidth
-            variant="contained"
-            disabled={isInstallDisabled}
-          >
-            Upgrade
-          </Button>
+          <Tooltip title={installTooltip}>
+            <span style={{ width: '100%' }}>
+              <Button
+                size="small"
+                onClick={() => onUpgrade?.(plugin, installedEntry)}
+                fullWidth
+                variant="contained"
+                disabled={isInstallDisabled}
+              >
+                Upgrade
+              </Button>
+            </span>
+          </Tooltip>
         )}
         {installedEntry && !(updateAvailable && canUpgrade) && (
           <Button
@@ -230,15 +242,19 @@ const PluginCard = ({
           </Button>
         )}
         {!installedEntry && !plugin.deprecated && (
-          <Button
-            size="small"
-            onClick={() => onInstall(plugin)}
-            fullWidth
-            variant="contained"
-            disabled={isInstallDisabled}
-          >
-            {isInstallDisabled && plugin.enterprise_only ? 'Enterprise Required' : 'Install'}
-          </Button>
+          <Tooltip title={installTooltip}>
+            <span style={{ width: '100%' }}>
+              <Button
+                size="small"
+                onClick={() => onInstall(plugin)}
+                fullWidth
+                variant="contained"
+                disabled={isInstallDisabled}
+              >
+                {isInstallDisabled && plugin.enterprise_only && !isEnterprise ? 'Enterprise Required' : 'Install'}
+              </Button>
+            </span>
+          </Tooltip>
         )}
       </CardActions>
     </Card>

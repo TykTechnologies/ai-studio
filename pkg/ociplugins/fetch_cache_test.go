@@ -20,12 +20,13 @@ type countingPuller struct {
 	pulls          int
 }
 
-func (p *countingPuller) Pull(context.Context, *OCIReference, *OCIPluginParams) (*ocispec.Descriptor, *PluginConfig, []byte, error) {
+func (p *countingPuller) Pull(context.Context, *OCIReference, *OCIPluginParams) (*PullResult, error) {
 	p.pulls++
 	if p.err != nil {
-		return nil, nil, nil, p.err
+		return nil, p.err
 	}
-	return &ocispec.Descriptor{Digest: digest.Digest(p.manifestDigest)}, &PluginConfig{Version: "1.0.0"}, p.binary, nil
+	manifest := &ocispec.Descriptor{Digest: digest.Digest(p.manifestDigest)}
+	return &PullResult{Resolved: manifest, Manifest: manifest, Config: &PluginConfig{Version: "1.0.0"}, Binary: p.binary}, nil
 }
 
 // stubVerifier stands in for the signature service; err fails verification.
@@ -56,7 +57,7 @@ func fetchFixture(t *testing.T) (*OCIPluginClient, *countingPuller, *stubVerifie
 	require.NoError(t, err)
 	t.Cleanup(func() { client.Close() })
 
-	manifest := digestOf([]byte("manifest"))
+	manifest := "sha256:" + digestOf([]byte("manifest"))
 	puller := &countingPuller{manifestDigest: manifest, binary: []byte("signed plugin binary")}
 	verifier := &stubVerifier{}
 	client.fetcher = puller

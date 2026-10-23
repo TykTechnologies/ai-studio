@@ -42,12 +42,65 @@ type OCIConfig struct {
 	// Security settings
 	RequireSignature bool `yaml:"require_signature" json:"require_signature"`
 
+	// TlogPolicy sets whether a signature needs a transparency-log (Rekor)
+	// entry: TlogPolicyRequired (the default when empty), TlogPolicyOptional
+	// or TlogPolicyDisabled. See EffectiveTlogPolicy.
+	TlogPolicy string `yaml:"tlog_policy" json:"tlog_policy"`
+	// TrustedRootFile overrides the embedded Sigstore trusted root (a
+	// trusted_root.json), for private Sigstore deployments and key rotation.
+	TrustedRootFile string `yaml:"trusted_root_file" json:"trusted_root_file"`
+
 	// Registry connection settings
 	InsecureRegistries []string `yaml:"insecure_registries" json:"insecure_registries"`
 
 	// Garbage collection
 	GCInterval   time.Duration `yaml:"gc_interval" json:"gc_interval"`
 	KeepVersions int          `yaml:"keep_versions" json:"keep_versions"`
+}
+
+// Transparency-log policies for signature verification (OCIConfig.TlogPolicy).
+const (
+	// TlogPolicyRequired requires a transparency-log entry for the signature,
+	// as cosign verify --key does.
+	TlogPolicyRequired = "required"
+	// TlogPolicyOptional checks a transparency-log entry when the signature
+	// has one and accepts a signature without.
+	TlogPolicyOptional = "optional"
+	// TlogPolicyDisabled verifies signatures against the key only, for
+	// air-gapped signing (cosign sign --tlog-upload=false).
+	TlogPolicyDisabled = "disabled"
+)
+
+// EffectiveTlogPolicy returns the transparency-log policy, TlogPolicyRequired
+// when none is set.
+func (c *OCIConfig) EffectiveTlogPolicy() string {
+	if c == nil || c.TlogPolicy == "" {
+		return TlogPolicyRequired
+	}
+	return c.TlogPolicy
+}
+
+// ParseTlogPolicy normalizes a transparency-log policy setting: "" is
+// TlogPolicyRequired, and anything but the three policies is an error.
+func ParseTlogPolicy(value string) (string, error) {
+	switch policy := strings.ToLower(strings.TrimSpace(value)); policy {
+	case "":
+		return TlogPolicyRequired, nil
+	case TlogPolicyRequired, TlogPolicyOptional, TlogPolicyDisabled:
+		return policy, nil
+	default:
+		return "", fmt.Errorf("unknown transparency-log policy %q (want %s, %s or %s)", value, TlogPolicyRequired, TlogPolicyOptional, TlogPolicyDisabled)
+	}
+}
+
+// ValidateTrustedRootFile checks that a trusted-root override, if set, is a
+// readable regular file of bounded size (see ReadTrustedRootFile).
+func ValidateTrustedRootFile(path string) error {
+	if path == "" {
+		return nil
+	}
+	_, err := ReadTrustedRootFile(path)
+	return err
 }
 
 // RegistryAuth holds authentication configuration for a specific registry
@@ -109,6 +162,16 @@ type PluginMetadata struct {
 	// SignatureKey is the public key ID the signature was checked with
 	// ("" for the default key).
 	SignatureKey string `json:"signature_key,omitempty"`
+	// SignedDigest is the digest whose signature verified: ResolvedDigest,
+	// or ManifestDigest when only the platform manifest is signed. Set only
+	// when signatures were enforced.
+	SignedDigest string `json:"signed_digest,omitempty"`
+	// ResolvedDigest is the top-level digest (index or manifest) the
+	// reference resolved to. The cache key (Reference.Digest) is the
+	// platform manifest for a multi-arch tag.
+	ResolvedDigest string `json:"resolved_digest,omitempty"`
+	// ManifestDigest is the platform manifest the binary was read from.
+	ManifestDigest string `json:"manifest_digest,omitempty"`
 }
 
 // PluginConfig represents the configuration metadata stored in the OCI artifact
@@ -152,6 +215,7 @@ func DefaultOCIConfig() *OCIConfig {
 		Timeout:           30 * time.Second,
 		RetryAttempts:     3,
 		RequireSignature:  true,
+		TlogPolicy:        TlogPolicyRequired,
 		GCInterval:        24 * time.Hour,
 		KeepVersions:      3,
 	}

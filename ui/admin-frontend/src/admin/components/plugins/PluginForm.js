@@ -38,7 +38,14 @@ import {
   useUnsavedForm,
   useConfirmNavigation,
 } from '../../../components/unsaved-changes';
-import pluginService, { PluginService } from '../../services/pluginService';
+import pluginService, {
+  PluginService,
+  allowedPluginSources,
+  pluginSourceError,
+  pluginCommandHelp,
+  pluginCommandPlaceholder,
+} from '../../services/pluginService';
+import usePluginPolicy from '../../hooks/usePluginPolicy';
 import EdgeAvailabilitySection from '../common/EdgeAvailabilitySection';
 import PublishSwitch from "../rbac/PublishSwitch";
 import { P } from "../../rbac/permissions";
@@ -46,6 +53,8 @@ import PluginConfigurationSection from './PluginConfigurationSection';
 import ScopeReviewSection from './ScopeReviewSection';
 
 const PluginForm = ({ mode = 'create' }) => {
+  const { policy } = usePluginPolicy();
+  const allowedSources = allowedPluginSources(policy);
   const { id } = useParams();
   const navigate = useNavigate();
   const isEdit = mode === 'edit' && id;
@@ -289,6 +298,9 @@ const PluginForm = ({ mode = 'create' }) => {
       newErrors.command = 'Plugin command is required';
     } else if (formData.command.startsWith('oci://') && formData.ociReference && !formData.ociReference.trim()) {
       newErrors.command = 'OCI reference cannot be empty for OCI plugins';
+    } else {
+      const sourceError = pluginSourceError(formData.command, allowedSources);
+      if (sourceError) newErrors.command = sourceError;
     }
 
     // Hook type is always required
@@ -548,9 +560,9 @@ const PluginForm = ({ mode = 'create' }) => {
                 error={!!errors.command}
                 helperText={
                   errors.command ||
-                  'Plugin command - use oci:// for OCI artifacts, grpc:// for external services, or local path for binaries'
+                  pluginCommandHelp(allowedSources, Boolean(policy?.oci_require_signature))
                 }
-                placeholder="e.g., oci://registry.com/my-plugin:latest or /path/to/plugin-binary"
+                placeholder={pluginCommandPlaceholder(allowedSources)}
                 required
               />
             </Grid>

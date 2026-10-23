@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"runtime"
@@ -17,15 +18,31 @@ import (
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
+	"github.com/rs/zerolog/log"
+
 	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 )
 
 // registryHTTPClient is the shared HTTP client for OCI registry requests,
 // used by every authentication path. Its transport applies the full URL
-// policy (scheme + host allowlist) to each request and enforces the
-// internal-network policy at dial time (post-DNS), so a rebinding DNS answer
-// cannot bypass the SSRF protection.
-var registryHTTPClient = &http.Client{Transport: netguard.ValidatingHTTPTransport()}
+// policy (scheme + host allowlist) to each request and the plugin host rule
+// at dial time (post-DNS), so a rebinding DNS answer cannot bypass it.
+var registryHTTPClient = &http.Client{Transport: netguard.PluginHTTPTransport()}
+
+// CheckRegistryHost applies the plugin host rule (netguard.CheckPluginHost)
+// to ref's registry: unless ALLOW_INTERNAL_NETWORK_ACCESS=true, a registry
+// that is, or resolves to, an internal address, or does not resolve, is
+// refused. Every fetch, signature read and cache lookup goes through it.
+func CheckRegistryHost(ref *OCIReference) error {
+	host := ref.Registry
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	if err := netguard.CheckPluginHost(host); err != nil {
+		return fmt.Errorf("plugin registry %s refused: %w", ref.Registry, err)
+	}
+	return nil
+}
 
 // DefaultMaxPluginSize bounds a single plugin binary when the configuration
 // does not set MaxPluginSize. Plugin binaries are statically linked Go
@@ -44,22 +61,62 @@ func NewORASFetcher(config *OCIConfig) (*ORASFetcher, error) {
 	}, nil
 }
 
-// Pull fetches a plugin from an OCI registry and returns the manifest, config, and binary data
-func (f *ORASFetcher) Pull(ctx context.Context, ref *OCIReference, params *OCIPluginParams) (*ocispec.Descriptor, *PluginConfig, []byte, error) {
-	// Create remote repository
+// NewRemoteRepository returns a repository client for ref's repository that
+// reaches the registry exactly as plugin pulls do: plain HTTP for insecure
+// registries, the registry auth named by authConfigName (or configured for
+// the registry), and the netguard-validating HTTP client for every request,
+// authenticated or anonymous. The Enterprise signature verifier uses it to
+// read signatures, so they are fetched under the same SSRF policy.
+func NewRemoteRepository(cfg *OCIConfig, ref *OCIReference, authConfigName string) (*remote.Repository, error) {
+	if err := CheckRegistryHost(ref); err != nil {
+		return nil, err
+	}
 	repo, err := remote.NewRepository(ref.FullRepo())
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create remote repository: %w", err)
+		return nil, fmt.Errorf("failed to create remote repository: %w", err)
 	}
 
 	// Configure for insecure (HTTP) registries if needed
-	if f.isInsecureRegistry(ref.Registry) {
+	if isInsecureRegistry(cfg, ref.Registry) {
 		repo.PlainHTTP = true
 	}
 
 	// Configure authentication
-	if err := f.configureAuth(repo, ref.Registry, params.AuthConfig); err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to configure authentication: %w", err)
+	if err := configureAuth(cfg, repo, ref.Registry, authConfigName); err != nil {
+		return nil, fmt.Errorf("failed to configure authentication: %w", err)
+	}
+	return repo, nil
+}
+
+// PullResult is what Pull fetched for a plugin reference.
+type PullResult struct {
+	// Resolved is the top-level descriptor the reference resolved to: the
+	// image index for a multi-arch plugin, else the manifest. Its digest is
+	// the one publish-plugin.sh signs, so signatures are checked against it.
+	// The platform manifest is bound to it through the index's
+	// content-addressed descriptor list.
+	Resolved *ocispec.Descriptor
+	// Manifest is the platform manifest the binary was read from (Resolved
+	// itself for a single-platform plugin).
+	Manifest *ocispec.Descriptor
+	Config   *PluginConfig
+	Binary   []byte
+}
+
+// Pull fetches a plugin from an OCI registry and returns the resolved
+// descriptor, platform manifest, config and binary data
+func (f *ORASFetcher) Pull(ctx context.Context, ref *OCIReference, params *OCIPluginParams) (*PullResult, error) {
+	resolved, manifestDesc, pluginConfig, binaryData, err := f.pull(ctx, ref, params)
+	if err != nil {
+		return nil, err
+	}
+	return &PullResult{Resolved: resolved, Manifest: manifestDesc, Config: pluginConfig, Binary: binaryData}, nil
+}
+
+func (f *ORASFetcher) pull(ctx context.Context, ref *OCIReference, params *OCIPluginParams) (*ocispec.Descriptor, *ocispec.Descriptor, *PluginConfig, []byte, error) {
+	repo, err := NewRemoteRepository(f.config, ref, params.AuthConfig)
+	if err != nil {
+		return nil, nil, nil, nil, err
 	}
 
 	// Determine reference (digest or tag)
@@ -76,18 +133,20 @@ func (f *ORASFetcher) Pull(ctx context.Context, ref *OCIReference, params *OCIPl
 	// including the binaries for platforms this host will never run.
 	descriptor, err := repo.Resolve(ctx, reference)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to resolve reference: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("failed to resolve reference: %w", err)
 	}
 
 	// Check if this is a multi-arch image index
 	switch descriptor.MediaType {
 	case ocispec.MediaTypeImageIndex, "application/vnd.docker.distribution.manifest.list.v2+json":
 		// Handle multi-arch index - resolve to platform-specific manifest
-		return f.pullFromIndex(ctx, repo, &descriptor, params)
+		manifestDesc, pluginConfig, binaryData, err := f.pullFromIndex(ctx, repo, &descriptor, params)
+		return &descriptor, manifestDesc, pluginConfig, binaryData, err
 	}
 
 	// Handle single-platform manifest
-	return f.pullFromManifest(ctx, repo, &descriptor, params)
+	manifestDesc, pluginConfig, binaryData, err := f.pullFromManifest(ctx, repo, &descriptor, params)
+	return &descriptor, manifestDesc, pluginConfig, binaryData, err
 }
 
 // pullFromManifest extracts plugin data from a single-platform manifest
@@ -198,32 +257,24 @@ func (f *ORASFetcher) selectPlatformManifest(index *ocispec.Index, targetArch st
 }
 
 // configureAuth sets up authentication for the registry
-func (f *ORASFetcher) configureAuth(repo *remote.Repository, registry, authConfigName string) error {
+func configureAuth(cfg *OCIConfig, repo *remote.Repository, registry, authConfigName string) error {
 	// Get auth config
 	var authConfig RegistryAuth
 	var exists bool
 
-	fmt.Printf("[OCI Auth] configureAuth: registry=%q authConfigName=%q available_auths=%d\n", registry, authConfigName, len(f.config.RegistryAuth))
-	for k := range f.config.RegistryAuth {
-		fmt.Printf("[OCI Auth]   available key: %q\n", k)
-	}
-
 	if authConfigName != "" {
-		authConfig, exists = f.config.RegistryAuth[authConfigName]
+		authConfig, exists = cfg.RegistryAuth[authConfigName]
 	} else {
 		// Look for registry-specific auth
-		authConfig, exists = f.config.RegistryAuth[registry]
+		authConfig, exists = cfg.RegistryAuth[registry]
 	}
 
 	if !exists {
-		fmt.Printf("[OCI Auth] NO auth found for registry %q - using anonymous access\n", registry)
+		log.Debug().Str("registry", registry).Msg("No registry auth configured; using anonymous access")
 		// Anonymous access still goes through the SSRF-guarded client
 		repo.Client = &auth.Client{Client: registryHTTPClient}
 		return nil
 	}
-
-	fmt.Printf("[OCI Auth] auth found: entitlement=%t entitlementEnv=%t token=%t username=%t\n",
-		authConfig.Entitlement != "", authConfig.EntitlementEnv != "", authConfig.Token != "", authConfig.Username != "")
 
 	// Create credential function
 	var creds auth.Credential
@@ -404,20 +455,9 @@ func (f *ORASFetcher) isCompatibleArchitecture(layerArch, targetArch string) boo
 
 // PullManifest fetches just the manifest without downloading layers
 func (f *ORASFetcher) PullManifest(ctx context.Context, ref *OCIReference, params *OCIPluginParams) (*ocispec.Descriptor, *ocispec.Manifest, error) {
-	// Create remote repository
-	repo, err := remote.NewRepository(ref.FullRepo())
+	repo, err := NewRemoteRepository(f.config, ref, params.AuthConfig)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create remote repository: %w", err)
-	}
-
-	// Configure for insecure (HTTP) registries if needed
-	if f.isInsecureRegistry(ref.Registry) {
-		repo.PlainHTTP = true
-	}
-
-	// Configure authentication
-	if err := f.configureAuth(repo, ref.Registry, params.AuthConfig); err != nil {
-		return nil, nil, fmt.Errorf("failed to configure authentication: %w", err)
+		return nil, nil, err
 	}
 
 	// Determine reference (digest or tag)
@@ -504,20 +544,9 @@ func (f *ORASFetcher) pullManifestFromIndex(ctx context.Context, repo *remote.Re
 
 // CheckExists verifies if an artifact exists in the registry without downloading
 func (f *ORASFetcher) CheckExists(ctx context.Context, ref *OCIReference, params *OCIPluginParams) (bool, error) {
-	// Create remote repository
-	repo, err := remote.NewRepository(ref.FullRepo())
+	repo, err := NewRemoteRepository(f.config, ref, params.AuthConfig)
 	if err != nil {
-		return false, fmt.Errorf("failed to create remote repository: %w", err)
-	}
-
-	// Configure for insecure (HTTP) registries if needed
-	if f.isInsecureRegistry(ref.Registry) {
-		repo.PlainHTTP = true
-	}
-
-	// Configure authentication
-	if err := f.configureAuth(repo, ref.Registry, params.AuthConfig); err != nil {
-		return false, fmt.Errorf("failed to configure authentication: %w", err)
+		return false, err
 	}
 
 	// Determine reference (digest or tag)
@@ -541,8 +570,12 @@ func (f *ORASFetcher) CheckExists(ctx context.Context, ref *OCIReference, params
 
 // isInsecureRegistry checks if a registry should use HTTP instead of HTTPS
 func (f *ORASFetcher) isInsecureRegistry(registry string) bool {
+	return isInsecureRegistry(f.config, registry)
+}
+
+func isInsecureRegistry(cfg *OCIConfig, registry string) bool {
 	// Check if registry is in the insecure registries list
-	for _, insecureRegistry := range f.config.InsecureRegistries {
+	for _, insecureRegistry := range cfg.InsecureRegistries {
 		if registry == insecureRegistry {
 			return true
 		}

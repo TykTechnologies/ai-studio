@@ -26,15 +26,19 @@ type communityService struct {
 // AllowInternalNetworkAccess config option or the
 // ALLOW_INTERNAL_NETWORK_ACCESS=true environment variable.
 func (s *communityService) ValidateGRPCHost(host string) error {
-	if s.IsInternalIP(host) && !s.allowInternalAccess() {
+	if s.allowInternalAccess() || netguard.PluginHostExempt(host) {
+		return nil // no DNS lookup for an allowed or exempt host
+	}
+	if s.IsInternalIP(host) {
 		return ErrInternalNetworkBlocked
 	}
 	return nil
 }
 
 // lookupIPFunc resolves hostnames to IPs. A variable so tests can stub DNS
-// and stay hermetic.
-var lookupIPFunc = net.LookupIP
+// and stay hermetic; by default it goes through netguard.LookupIP, the seam
+// every plugin host check shares.
+var lookupIPFunc = func(host string) ([]net.IP, error) { return netguard.LookupIP(host) }
 
 // IsInternalIP reports whether a hostname or IP is internal (see
 // netguard.HostIsInternal): hostnames are resolved and classified by every
@@ -56,6 +60,12 @@ func (s *communityService) allowInternalAccess() bool {
 func (s *communityService) VerifySignature(ctx context.Context, ref *OCIReference, pubKeyID string) error {
 	s.logSecurityWarning("OCI signature verification")
 	return nil
+}
+
+// VerifiesSignatures reports that CE cannot verify signatures, so OCI
+// clients record plugins as unverified (ociplugins.SignatureCapability).
+func (s *communityService) VerifiesSignatures() bool {
+	return false
 }
 
 // VerifyBundle always returns nil in CE (no verification)

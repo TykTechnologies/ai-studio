@@ -1,8 +1,14 @@
-// pkg/ociplugins/verifier_test.go
+// pkg/ociplugins/keys_test.go
 package ociplugins
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/pem"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -93,132 +99,97 @@ func TestLoadPublicKeysFromEnv(t *testing.T) {
 	assert.Equal(t, "embedded:default", keys[0], "embedded Tyk key should be present even with no env vars")
 }
 
-func TestSignatureVerifier_resolveKeyReference(t *testing.T) {
+func TestResolvePublicKey(t *testing.T) {
 	// Save and restore environment
 	originalEnv := saveEnvironment()
 	defer restoreEnvironment(originalEnv)
-
 	clearOCIPluginEnvVars()
 
-	// Set up test environment
+	// No temp files are written while resolving keys.
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+
+	keyDir := t.TempDir()
+	keyFile := filepath.Join(keyDir, "signing.pub")
+	require.NoError(t, os.WriteFile(keyFile, []byte(testPublicKeyPEM2), 0o600))
+	badFile := filepath.Join(keyDir, "bad.pub")
+	require.NoError(t, os.WriteFile(badFile, []byte("not a key"), 0o600))
+	namedFile := filepath.Join(keyDir, "named.pem")
+	require.NoError(t, os.WriteFile(namedFile, []byte(testPublicKeyPEM), 0o600))
+
 	os.Setenv("OCI_PLUGINS_PUBKEY_1", testPublicKeyPEM)
 	os.Setenv("OCI_PLUGINS_PUBKEY_CI", testPublicKeyPEM2)
+	os.Setenv("OCI_PLUGINS_PUBKEY_FILE_DEV", namedFile)
+	os.Setenv("CUSTOM_KEY_VAR", testPublicKeyPEM)
+	os.Setenv("OCI_PLUGINS_PUBKEY_2", "not a key")
 
-	config := &OCIConfig{
-		DefaultPublicKeys: LoadPublicKeysFromEnv(),
-	}
-
-	verifier, err := NewSignatureVerifier(config)
-	require.NoError(t, err)
+	config := &OCIConfig{DefaultPublicKeys: LoadPublicKeysFromEnv()}
 
 	tests := []struct {
-		name        string
-		keyRef      string
-		setupFunc   func() string // Function to set up test-specific resources
-		expectError bool
+		name     string
+		cfg      *OCIConfig
+		keyID    string
+		want     string
+		wantPath string
+		wantErr  bool
 	}{
-		{
-			name:        "numeric reference",
-			keyRef:      "1",
-			expectError: false,
-		},
-		{
-			name:        "named reference",
-			keyRef:      "CI",
-			expectError: false,
-		},
-		{
-			name:        "environment variable reference",
-			keyRef:      "env:OCI_PLUGINS_PUBKEY_1",
-			expectError: false,
-		},
-		{
-			name: "file reference",
-			setupFunc: func() string {
-				return createTempKeyFile(t, testPublicKeyPEM)
-			},
-			expectError: false,
-		},
-		{
-			name: "file prefix reference",
-			setupFunc: func() string {
-				tempFile := createTempKeyFile(t, testPublicKeyPEM)
-				return "file:" + tempFile
-			},
-			expectError: false,
-		},
-		{
-			name:        "nonexistent numeric",
-			keyRef:      "99",
-			expectError: true,
-		},
-		{
-			name:        "nonexistent named",
-			keyRef:      "NONEXISTENT",
-			expectError: true,
-		},
+		{name: "empty ID uses the first default key (embedded)", cfg: config, keyID: "", want: DefaultTykPublicKey},
+		{name: "empty ID with no default keys", cfg: &OCIConfig{}, keyID: "", wantErr: true},
+		{name: "embedded", cfg: config, keyID: "embedded:default", want: DefaultTykPublicKey},
+		{name: "numeric env", cfg: config, keyID: "1", want: testPublicKeyPEM},
+		{name: "numeric env missing", cfg: config, keyID: "99", wantErr: true},
+		{name: "numeric env with invalid PEM", cfg: config, keyID: "2", wantErr: true},
+		{name: "named env", cfg: config, keyID: "CI", want: testPublicKeyPEM2},
+		{name: "named env, lower case", cfg: config, keyID: "ci", want: testPublicKeyPEM2},
+		{name: "named PUBKEY_FILE env", cfg: config, keyID: "DEV", want: testPublicKeyPEM, wantPath: namedFile},
+		{name: "named missing", cfg: config, keyID: "NONEXISTENT", wantErr: true},
+		{name: "env: prefix", cfg: config, keyID: "env:CUSTOM_KEY_VAR", want: testPublicKeyPEM},
+		{name: "env: prefix missing", cfg: config, keyID: "env:NO_SUCH_VAR", wantErr: true},
+		{name: "file: prefix", cfg: config, keyID: "file:" + keyFile, want: testPublicKeyPEM2, wantPath: keyFile},
+		{name: "file: prefix missing", cfg: config, keyID: "file:" + keyDir + "/missing.pub", wantErr: true},
+		{name: "direct path", cfg: config, keyID: keyFile, want: testPublicKeyPEM2, wantPath: keyFile},
+		{name: "direct path with invalid PEM", cfg: config, keyID: badFile, wantErr: true},
+		{name: "configured-key search", cfg: &OCIConfig{DefaultPublicKeys: []string{"env:CUSTOM_KEY_VAR"}}, keyID: "CUSTOM", want: testPublicKeyPEM},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up test-specific resources
-			keyRef := tt.keyRef
-			var tempFile string
-			if tt.setupFunc != nil {
-				keyRef = tt.setupFunc()
-				if strings.HasPrefix(keyRef, "file:") {
-					tempFile = strings.TrimPrefix(keyRef, "file:")
-				} else {
-					tempFile = keyRef
-				}
-			}
-
-			keyPath, err := verifier.resolveKeyReference(keyRef)
-
-			if tt.expectError {
+			got, err := ResolvePublicKey(tt.cfg, tt.keyID)
+			if tt.wantErr {
 				assert.Error(t, err)
-				assert.Empty(t, keyPath)
-			} else {
-				assert.NoError(t, err)
-				assert.NotEmpty(t, keyPath)
-
-				// Verify the resolved file exists and is readable
-				_, err := os.Stat(keyPath)
-				assert.NoError(t, err)
-
-				// Clean up temp file if created
-				if strings.HasPrefix(keyPath, os.TempDir()) {
-					defer os.Remove(keyPath)
-				}
+				assert.Nil(t, got)
+				return
 			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, string(got))
 
-			// Clean up setup temp file
-			if tempFile != "" && tempFile != keyPath {
-				os.Remove(tempFile)
-			}
+			path, err := PublicKeyPath(tt.cfg, tt.keyID)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantPath, path)
 		})
 	}
+
+	entries, err := os.ReadDir(tmp)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "resolving keys must not write temp files")
 }
 
-func TestSignatureVerifier_writeKeyToTempFile(t *testing.T) {
-	config := &OCIConfig{}
-	verifier, err := NewSignatureVerifier(config)
+func TestParsePublicKey(t *testing.T) {
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
-
-	// Test valid PEM content
-	tempPath, err := verifier.writeKeyToTempFile(testPublicKeyPEM, "test")
+	der, err := x509.MarshalPKIXPublicKey(&priv.PublicKey)
 	require.NoError(t, err)
-	defer os.Remove(tempPath)
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der})
 
-	// Verify file was created and contains correct content
-	content, err := os.ReadFile(tempPath)
+	key, err := ParsePublicKey(pemBytes)
 	require.NoError(t, err)
-	assert.Equal(t, testPublicKeyPEM, string(content))
+	assert.True(t, priv.PublicKey.Equal(key))
 
-	// Test invalid PEM content
-	_, err = verifier.writeKeyToTempFile("invalid content", "test")
+	_, err = ParsePublicKey([]byte(DefaultTykPublicKey))
+	assert.NoError(t, err, "the embedded Tyk key must parse")
+
+	_, err = ParsePublicKey([]byte("not a key"))
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid PEM content")
 }
 
 func TestPEMContentDetection(t *testing.T) {
@@ -300,43 +271,45 @@ func TestEmbeddedDefaultKeyAlwaysPresent(t *testing.T) {
 		assert.Contains(t, keys, "env:OCI_PLUGINS_PUBKEY_1")
 	})
 
-	t.Run("resolves to valid PEM file", func(t *testing.T) {
+	t.Run("resolves to the embedded PEM", func(t *testing.T) {
 		clearOCIPluginEnvVars()
 
 		config := &OCIConfig{
 			DefaultPublicKeys: LoadPublicKeysFromEnv(),
 		}
-		verifier, err := NewSignatureVerifier(config)
+		key, err := ResolvePublicKey(config, "embedded:default")
 		require.NoError(t, err)
-
-		keyPath, err := verifier.resolveKeyReference("embedded:default")
-		require.NoError(t, err)
-		defer os.Remove(keyPath)
-
-		// File must exist and contain the expected PEM content
-		content, err := os.ReadFile(keyPath)
-		require.NoError(t, err)
-		assert.Equal(t, DefaultTykPublicKey, string(content))
+		assert.Equal(t, DefaultTykPublicKey, string(key))
 	})
 
-	t.Run("getPublicKeyPath uses embedded key when no specific key requested", func(t *testing.T) {
+	t.Run("an empty key ID uses the embedded key when no specific key requested", func(t *testing.T) {
 		clearOCIPluginEnvVars()
 
 		config := &OCIConfig{
 			DefaultPublicKeys: LoadPublicKeysFromEnv(),
 		}
-		verifier, err := NewSignatureVerifier(config)
-		require.NoError(t, err)
-
 		// Empty pubKeyID should fall back to first key, which is the embedded default
-		keyPath, err := verifier.getPublicKeyPath("")
+		key, err := ResolvePublicKey(config, "")
 		require.NoError(t, err)
-		defer os.Remove(keyPath)
-
-		content, err := os.ReadFile(keyPath)
-		require.NoError(t, err)
-		assert.Equal(t, DefaultTykPublicKey, string(content))
+		assert.Equal(t, DefaultTykPublicKey, string(key))
 	})
+}
+
+func TestLoadPublicKeysFromDirectoryAndValidate(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"cosign.pub", "a.pem", "b.key", "notes.txt"} {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(testPublicKeyPEM), 0o600))
+	}
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "sub.pub"), 0o700))
+
+	paths, err := LoadPublicKeysFromDirectory(dir)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{dir + "/cosign.pub", dir + "/a.pem", dir + "/b.key"}, paths)
+
+	assert.NoError(t, ValidatePublicKey(dir+"/cosign.pub"))
+	assert.Error(t, ValidatePublicKey(dir+"/missing.pub"))
+	_, err = LoadPublicKeysFromDirectory(dir + "/missing")
+	assert.Error(t, err)
 }
 
 // Helper functions

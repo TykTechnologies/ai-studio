@@ -917,6 +917,7 @@ func (a *API) setupRoutes() error {
 	v1.DELETE("/plugins/:id", authz.Delete("plugins"), a.deletePlugin)
 	v1.DELETE("/plugins/:id/data", authz.Delete("plugins"), a.clearPluginData)
 	v1.GET("/plugins", authz.Read("plugins"), a.listPlugins)
+	v1.GET("/plugin-policy", authz.Read("plugins"), a.getPluginPolicy)
 	v1.POST("/plugins/:id/test", authz.Execute("plugins"), a.testPlugin)
 
 	// OCI Plugin routes

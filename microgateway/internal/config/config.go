@@ -4,9 +4,13 @@ package config
 import (
 	"context"
 	"fmt"
+	"os"
+	"reflect"
+	"strings"
 	"time"
 
 	aiconfig "github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/caarlos0/env/v9"
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog/log"
@@ -365,7 +369,7 @@ func Load(envFile string) (*Config, error) {
 
 	cfg := &Config{}
 	if err := env.Parse(cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse environment variables: %w", err)
+		return nil, fmt.Errorf("failed to parse environment variables: %w%s", err, envVarsHint(err))
 	}
 
 	// Post-process OCI plugin configuration
@@ -393,6 +397,12 @@ func Load(envFile string) (*Config, error) {
 	// Validate configuration
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
+	}
+	if !cfg.Plugins.SourcePolicy.AllowsAll() {
+		log.Info().Str("allowed_sources", cfg.Plugins.SourcePolicy.String()).Msg("Plugin sources limited by PLUGINS_ALLOWED_SOURCES")
+	}
+	if cfg.OCIPlugins.TlogPolicy == ociplugins.TlogPolicyDisabled {
+		log.Warn().Msg("OCI_PLUGINS_TLOG_POLICY=disabled: OCI plugin signatures are verified against the key only, with no transparency-log check")
 	}
 
 	return cfg, nil
@@ -458,6 +468,13 @@ func (c *Config) Validate() error {
 
 	if len(c.Security.EncryptionKey) != 32 {
 		return fmt.Errorf("encryption key must be exactly 32 characters")
+	}
+
+	if err := c.OCIPlugins.validateVerification(); err != nil {
+		return err
+	}
+	if err := c.Plugins.parseSourcePolicy(); err != nil {
+		return err
 	}
 
 	// Validate BCrypt cost
@@ -598,4 +615,47 @@ func (c *Config) postProcessOCIConfig() {
 	if c.OCIPlugins.CacheDir == "" {
 		c.OCIPlugins.CacheDir = "/var/lib/microgateway/plugins"
 	}
+}
+// envVarsHint names the environment variables behind the parse errors in
+// err (env's ParseError names only the struct field), so a typo such as
+// OCI_PLUGINS_REQUIRE_SIGNATURE=ture is reported by the variable to fix.
+func envVarsHint(err error) string {
+	agg, ok := err.(env.AggregateError)
+	if !ok {
+		return ""
+	}
+	var vars []string
+	for _, e := range agg.Errors {
+		if pe, ok := e.(env.ParseError); ok {
+			vars = append(vars, envVarsForField(reflect.TypeOf(Config{}), pe.Name, pe.Type)...)
+		}
+	}
+	if len(vars) == 0 {
+		return ""
+	}
+	return " (check " + strings.Join(vars, ", ") + ")"
+}
+
+// envVarsForField returns the set environment variables of the fields named
+// name with type typ anywhere in the struct type t.
+func envVarsForField(t reflect.Type, name string, typ reflect.Type) []string {
+	var vars []string
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		ft := f.Type
+		if ft.Kind() == reflect.Ptr {
+			ft = ft.Elem()
+		}
+		key, _, _ := strings.Cut(f.Tag.Get("env"), ",")
+		if f.Name == name && f.Type == typ && key != "" && key != "-" {
+			if _, set := os.LookupEnv(key); set {
+				vars = append(vars, key)
+			}
+			continue
+		}
+		if ft.Kind() == reflect.Struct && key == "" {
+			vars = append(vars, envVarsForField(ft, name, typ)...)
+		}
+	}
+	return vars
 }

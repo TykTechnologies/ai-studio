@@ -14,6 +14,8 @@ Tyk AI Studio supports three plugin deployment methods: local filesystem (`file:
 
 Deploy plugins from the local filesystem.
 
+> **Can be turned off:** an installation can refuse this deployment type with `AI_STUDIO_PLUGIN_ALLOWED_SOURCES` (AI Studio) and `PLUGINS_ALLOWED_SOURCES` (Microgateway). See [Hardening: restrict plugin sources](./plugins-security.md#hardening-restrict-plugin-sources).
+
 > **Safety settings:** By default, local filesystem plugin loading has safety restrictions that prevent loading from arbitrary paths. For development, you may need to adjust these settings in your configuration to allow local path loading and absolute paths. See the Security Considerations section below for details on `ALLOW_INTERNAL_NETWORK_ACCESS` and `PLUGIN_COMMAND_ALLOWLIST`.
 
 ### Building Your Plugin
@@ -111,6 +113,8 @@ spec:
 ## grpc:// - Remote gRPC
 
 Deploy plugins as remote gRPC services.
+
+> **Can be turned off:** an installation can refuse this deployment type with `AI_STUDIO_PLUGIN_ALLOWED_SOURCES` (AI Studio) and `PLUGINS_ALLOWED_SOURCES` (Microgateway). See [Hardening: restrict plugin sources](./plugins-security.md#hardening-restrict-plugin-sources).
 
 ### Running Plugin as gRPC Server
 
@@ -231,6 +235,8 @@ Register with service DNS:
 
 Deploy plugins as OCI artifacts in container registries.
 
+> **Can be turned off:** an installation can refuse this deployment type with `AI_STUDIO_PLUGIN_ALLOWED_SOURCES` (AI Studio) and `PLUGINS_ALLOWED_SOURCES` (Microgateway). See [Hardening: restrict plugin sources](./plugins-security.md#hardening-restrict-plugin-sources).
+
 ### Prerequisites
 
 - Docker or Podman
@@ -320,36 +326,37 @@ Both runtimes use the same `OCI_PLUGINS_REGISTRY_*` environment variables for au
 | Setting | AI Studio | Microgateway |
 |---------|-----------|-------------|
 | **Enable OCI** | `AI_STUDIO_OCI_CACHE_DIR=/path` | `OCI_PLUGINS_CACHE_DIR=/path` (default: `/var/lib/microgateway/plugins`) |
-| **Require signatures** | `AI_STUDIO_OCI_REQUIRE_SIGNATURE=true` | `OCI_PLUGINS_REQUIRE_SIGNATURE=true` |
+| **Require signatures** | `AI_STUDIO_OCI_REQUIRE_SIGNATURE` (default `true`) | `OCI_PLUGINS_REQUIRE_SIGNATURE` (default `true`) |
+| **Transparency log** | `AI_STUDIO_OCI_TLOG_POLICY` (default `required`) | `OCI_PLUGINS_TLOG_POLICY` (default `required`) |
+| **Trusted root override** | `AI_STUDIO_OCI_TRUSTED_ROOT_FILE` | `OCI_PLUGINS_TRUSTED_ROOT_FILE` |
 | **Registry auth** | `OCI_PLUGINS_REGISTRY_*` (shared) | `OCI_PLUGINS_REGISTRY_*` (shared) |
 
 **Important**: `AI_STUDIO_OCI_CACHE_DIR` must be set for OCI plugin support to be enabled in AI Studio. Without it, OCI plugins cannot be installed or loaded, and registry auth configuration is ignored.
 
 #### Signature Verification
 
-> **Community Edition limitation**: OCI signature verification is an Enterprise Edition feature. In Community Edition, `AI_STUDIO_OCI_REQUIRE_SIGNATURE` / `OCI_PLUGINS_REQUIRE_SIGNATURE` have **no effect** — plugin signatures are never verified, and a prominent warning is logged at startup if the flag is set. Internal-network blocking for plugin hosts, however, is enforced in both editions (bypass with `ALLOW_INTERNAL_NETWORK_ACCESS=true` for local development).
+> **Community Edition limitation**: OCI signature verification is an Enterprise Edition feature. Community Edition does **not** verify signatures: with `AI_STUDIO_OCI_REQUIRE_SIGNATURE` / `OCI_PLUGINS_REQUIRE_SIGNATURE` set (the default), OCI plugins still load, are recorded as unverified, and a warning is logged once at startup. Internal-network blocking for plugin hosts, however, is enforced in both editions (bypass with `ALLOW_INTERNAL_NETWORK_ACCESS=true` for local development).
 
-When signature verification is enabled (Enterprise Edition), the `cosign` tool verifies plugin signatures against the registry. Cosign uses the standard Docker credential store (`~/.docker/config.json`) for registry authentication — it does **not** use the `OCI_PLUGINS_REGISTRY_*` environment variables.
+In Enterprise Edition, AI Studio and the Microgateway verify signatures **in-process**: no `cosign` binary is needed, so verification works in the distroless images too. Signatures are read from the registry with the same registry auth (`OCI_PLUGINS_REGISTRY_*`), insecure-registry list and internal-network rules as the plugin itself; there is no separate Docker credential store to configure.
 
-To configure cosign auth in containerized environments:
+Both cosign signature formats are accepted:
 
-```bash
-# Create Docker config with registry credentials
-mkdir -p ~/.docker
-echo '{"auths":{"docker.tyk.io":{"auth":"'$(echo -n 'token:YOUR_ENTITLEMENT' | base64)'"}}}' > ~/.docker/config.json
-```
+- **cosign v2**: a signature manifest tagged `sha256-<digest>.sig`. `tools/publish-plugin.sh` writes this format.
+- **cosign v3**: a Sigstore bundle attached to the plugin as an OCI referrer (cosign v3's default). Registries without the OCI referrers API work too.
 
-For Kubernetes, mount a Docker config secret:
+The signature must name the digest that was pulled: the multi-arch index a tag points to (which `publish-plugin.sh` signs), or, for plugins signed per platform, the platform manifest that was pulled. An in-toto attestation (SLSA provenance, an SBOM) signed with the same key is not a signature and does not count.
 
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: oci-registry-creds
-type: kubernetes.io/dockerconfigjson
-data:
-  .dockerconfigjson: <base64-encoded-docker-config>
-```
+| Setting (AI Studio / Microgateway) | Default | Values |
+|---|---|---|
+| `AI_STUDIO_OCI_REQUIRE_SIGNATURE` / `OCI_PLUGINS_REQUIRE_SIGNATURE` | `true` | `true`, `false`. AI Studio's default was `false` before 2.3.0 |
+| `AI_STUDIO_OCI_TLOG_POLICY` / `OCI_PLUGINS_TLOG_POLICY` | `required` | `required`: the signature must have a valid Rekor (transparency-log) entry for the signing key, as `cosign verify --key` requires. `optional`: an entry is checked when there is one. `disabled`: key only (a warning is logged at startup) |
+| `AI_STUDIO_OCI_TRUSTED_ROOT_FILE` / `OCI_PLUGINS_TRUSTED_ROOT_FILE` | empty | A Sigstore `trusted_root.json` used instead of the embedded Sigstore public-good root, for a private Sigstore deployment or after a Rekor key rotation |
+
+An invalid value of any of these settings stops AI Studio or the Microgateway at startup.
+
+Use `required` unless your signing pipeline cannot reach Rekor. `optional` gives no transparency-log guarantee against someone who can write to your registry: they can remove the log entry and the signature then verifies against the key alone. For air-gapped signing (`cosign sign --tlog-upload=false`), set the policy to `disabled`.
+
+With signatures required and no Enterprise verifier configured, a plugin is refused, never loaded unverified. Cosign policy files (`VerifyWithPolicy`) are not supported.
 
 Configure public keys for signature verification:
 
@@ -358,6 +365,12 @@ Configure public keys for signature verification:
 OCI_PLUGINS_PUBKEY_1="$(cat /path/to/cosign.pub)"   # key content, selected with ?pubkey=1
 OCI_PLUGINS_PUBKEY_FILE_CI=/path/to/ci-cosign.pub     # key file, selected with ?pubkey=CI
 ```
+
+Key files must be regular files of at most 64 KiB.
+
+To load unsigned plugins (for example, while developing one), set `AI_STUDIO_OCI_REQUIRE_SIGNATURE=false` on AI Studio and `OCI_PLUGINS_REQUIRE_SIGNATURE=false` on the Microgateway.
+
+**Upgrading from 2.2:** AI Studio now requires signatures by default, and the first start re-verifies every cached OCI plugin against its registry. See the breaking changes in the 2.3.0 release notes (`CHANGELOG-v2.3.0.md`).
 
 #### Cloudsmith-Specific Notes
 
@@ -400,7 +413,7 @@ OCI_PLUGINS_CACHE_DIR=/var/cache/microgateway/plugins
 
 The SHA-256 of each fetched binary is recorded in the cache metadata, and a cached plugin is checked against it every time it loads. If the binary on disk has changed, the cached copy is not used and the plugin is fetched from the registry again (signature verification runs again too). If that fetch fails, the plugin does not load.
 
-Some entries have no recorded hash: entries cached by releases before 2.3.0 (including entries an older release rewrote after a rollback), or entries whose metadata is missing. These are fetched from the registry again on their first load, which records the hash, and are checked from then on. After an upgrade, each OCI plugin is therefore fetched once more on its first load, so the registry should be reachable at that point. When signatures are optional and that fetch fails, the cached copy loads unverified with a warning, and the next load tries the registry again. When signatures are required (the default; `OCI_PLUGINS_REQUIRE_SIGNATURE` on the microgateway), these entries, and entries cached while signatures were optional, load only once they have been fetched and verified again.
+Some entries have no recorded hash: entries cached by releases before 2.3.0 (including entries an older release rewrote after a rollback), or entries whose metadata is missing. These are fetched from the registry again on their first load, which records the hash, and are checked from then on. After an upgrade, each OCI plugin is therefore fetched once more on its first load, so the registry should be reachable at that point. When signatures are optional and that fetch fails, the cached copy loads unverified with a warning, and the next load tries the registry again. When signatures are required (the default on AI Studio and the Microgateway), these entries, and entries cached while signatures were optional, load only once they have been fetched and verified again.
 
 The check catches a binary that was corrupted or replaced on disk. It does not protect against an attacker who can rewrite both the binary and its metadata, so keep the cache directory writable only by the service user.
 
@@ -411,13 +424,17 @@ Plugins run as separate processes with the host's privileges, so install only pl
 In short, for production:
 
 ```bash
-# Refuse internal hosts in plugin commands (the default; never set to true in production)
+# Refuse internal plugin hosts and OCI registries, resolved names included
+# (the default; true is platform-wide, see the Plugin Security Model)
 ALLOW_INTERNAL_NETWORK_ACCESS=false
-# Also refuse internal addresses that the advisory check finds in host:port arguments
+# Allow one internal registry (or plugin host) by name instead
+LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS=registry.corp.internal
+# Deprecated: also refuse internal addresses in host:port arguments
 PLUGIN_BLOCK_INTERNAL_URLS=true
-# Only load OCI plugins from these registries, and require signatures (Enterprise Edition)
+# Only load OCI plugins from these registries; signatures are required by default (Enterprise Edition)
 AI_STUDIO_OCI_ALLOWED_REGISTRIES=registry.example.com
 AI_STUDIO_OCI_REQUIRE_SIGNATURE=true
+AI_STUDIO_OCI_TLOG_POLICY=required
 ```
 
 `PLUGIN_COMMAND_ALLOWLIST` is advisory: a command that does not match it is logged with a warning but still accepted. Its entries are comma-separated substrings, not wildcards.

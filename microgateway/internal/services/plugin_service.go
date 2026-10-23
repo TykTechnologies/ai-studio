@@ -14,6 +14,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/v2/pkg/config"
 	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	"github.com/rs/zerolog/log"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -558,6 +559,11 @@ func (s *PluginService) validatePluginCommand(command string) error {
 		log.Warn().
 			Str("command", command).
 			Msg("⚠️  PLUGIN SECURITY WARNING: Plugin command uses absolute path outside standard directories. This may pose a security risk in production environments.")
+	}
+
+	// Plugin and registry hosts that are, or resolve to, internal addresses.
+	if err := plugin_security.CheckCommandHosts(command); err != nil {
+		return err
 	}
 
 	// Check for internal network access (gRPC URLs, host:port arguments)

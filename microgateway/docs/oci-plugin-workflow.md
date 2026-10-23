@@ -23,7 +23,8 @@ curl -LO https://github.com/oras-project/oras/releases/download/v1.1.0/oras_1.1.
 tar -xzf oras_1.1.0_linux_amd64.tar.gz
 sudo mv oras /usr/local/bin/
 
-# 2. Cosign (Container Signing)
+# 2. Cosign (signing at publish time only: the gateway and AI Studio verify
+#    signatures in-process and do not need cosign installed)
 curl -O -L "https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64"
 sudo mv cosign-linux-amd64 /usr/local/bin/cosign
 sudo chmod +x /usr/local/bin/cosign
@@ -212,6 +213,8 @@ cosign sign --key plugin-ci.key nexus.company.com/plugins/my-plugin:1.2.3
 ```
 
 ### Step 7: Verify the Signature (Optional)
+
+This checks the signature before you deploy. The gateway verifies it again, in-process, when it pulls the plugin. Signatures made without a transparency-log entry (`cosign sign --tlog-upload=false`) need `OCI_PLUGINS_TLOG_POLICY=disabled` on the gateway.
 
 ```bash
 # Verify the signature works
@@ -629,6 +632,9 @@ cosign sign --key plugin-ci.key nexus.company.com/plugins/my-plugin:1.0.0-arm64
 ### Common Issues
 
 #### 1. Signature Verification Failures
+
+The gateway's log names each signature format it tried (cosign v3 bundle, cosign v2 `.sig` tag) and why it failed: no signature found, a signature by another key, a signature for another digest, or no transparency-log entry while `OCI_PLUGINS_TLOG_POLICY=required`.
+
 ```bash
 # Check public key configuration
 curl -H "Authorization: Bearer $MGW_TOKEN" \

@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"mime"
 	"os"
@@ -53,6 +54,7 @@ func SetGlobalEventServer(server *PluginEventServer) {
 // AIStudioPluginManager manages AI Studio plugin lifecycle and execution
 // Reuses proven patterns from microgateway's plugin manager
 type AIStudioPluginManager struct {
+	sourcePolicyHolder
 	db              *gorm.DB
 	ociClient       *ociplugins.OCIPluginClient
 	manifestService *PluginManifestService
@@ -431,6 +433,14 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 	// Create plugin client based on command type
 	client, err := m.createPluginClient(plugin.Command)
 	if err != nil {
+		var notAllowed *plugin_security.ErrPluginSourceNotAllowed
+		if errors.As(err, &notAllowed) {
+			log.Warn().
+				Uint("plugin_id", pluginID).
+				Str("plugin_name", plugin.Name).
+				Str("source", string(notAllowed.Source)).
+				Msg("Plugin not loaded: its source is not allowed by AI_STUDIO_PLUGIN_ALLOWED_SOURCES")
+		}
 		return nil, fmt.Errorf("failed to create plugin client: %w", err)
 	}
 
@@ -1465,11 +1475,23 @@ func (m *AIStudioPluginManager) ListResourceInstances(pluginID uint, resourceTyp
 // validation (direct DB writes, migrations, imports, replication), so this is
 // a second layer of defense applied at load time.
 func (m *AIStudioPluginManager) validateCommandForLoad(command string) error {
+	// The plugin source policy comes from configuration (or SetSourcePolicy),
+	// not the security service, so a manager without one still enforces it.
+	if err := m.checkSource(command); err != nil {
+		return err
+	}
 	svc := m.getSecurityService()
 	if svc == nil {
 		svc = plugin_security.NewService(&plugin_security.Config{
 			AllowInternalNetworkAccess: os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") == "true",
 		})
+	}
+	// An OCI plugin's registry is checked by the OCI client when the plugin
+	// is fetched or taken from the cache (ociplugins.CheckRegistryHost),
+	// which lets a verified cache hit load while the registry name does not
+	// resolve; every other check still runs here.
+	if plugin_security.SourceOf(command) == plugin_security.SourceOCI {
+		svc = nil
 	}
 	if err := plugin_security.ValidateCommand(command, svc); err != nil {
 		return fmt.Errorf("plugin command failed load-time validation: %w", err)
@@ -1494,13 +1516,16 @@ func (m *AIStudioPluginManager) createPluginClient(command string) (*goplugin.Cl
 		return nil, err
 	}
 
-	if strings.HasPrefix(command, "oci://") {
+	// Dispatch on plugin_security.SourceOf, so the source policy classifies
+	// a command exactly as it is run.
+	switch plugin_security.SourceOf(command) {
+	case plugin_security.SourceOCI:
 		// OCI plugin - fetch from registry first
 		return m.createOCIPluginClient(command)
-	} else if strings.HasPrefix(command, "grpc://") {
+	case plugin_security.SourceGRPC:
 		// External gRPC service - use ReattachConfig (for testing)
 		return m.createGRPCPluginClient(command)
-	} else {
+	default:
 		// Local executable - use exec.Command
 		return m.createLocalPluginClient(command)
 	}
@@ -1595,10 +1620,14 @@ func (m *AIStudioPluginManager) createConfigOnlyPluginClient(command string) (*g
 		return nil, err
 	}
 
-	if strings.HasPrefix(command, "oci://") {
+	// Dispatch on plugin_security.SourceOf, as createPluginClient does.
+	switch plugin_security.SourceOf(command) {
+	case plugin_security.SourceOCI:
 		// OCI plugin - fetch from registry first, then create config-only client
 		return m.createConfigOnlyOCIPluginClient(command)
-	} else {
+	case plugin_security.SourceGRPC:
+		return nil, fmt.Errorf("grpc plugins have no config-only mode")
+	default:
 		// Local executable - create config-only client
 		return m.createConfigOnlyLocalPluginClient(command)
 	}

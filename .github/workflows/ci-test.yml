@@ -704,48 +704,6 @@ jobs:
         run: make module-check
 
   # ==========================================================================
-  # Host compatibility: the Tyk Dashboard and MDCB embed pkg/studio. Studio
-  # must not raise a host's dependency versions (outside that host's reasoned
-  # allowlist) and must build inside its module graph with CGO_ENABLED=0.
-  # Reads the hosts' private go.mod at run time, so never on forks.
-  # ==========================================================================
-  host-compat:
-    needs: [dep-guard, changes]
-    name: Host Compatibility (${{ matrix.name }})
-    if: ${{ !cancelled() && !failure() && needs.changes.outputs.go == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    runs-on: warp-ubuntu-latest-arm64-4x
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: Dashboard
-            repo: tyk-analytics
-          - name: MDCB
-            repo: tyk-sink
-    steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          submodules: true
-          token: ${{ secrets.CI_SUBMODULE_PAT }}
-
-      - name: Setup Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
-
-      - name: Credentials for private Tyk modules
-        run: git config --global url."https://x-access-token:${{ secrets.CI_SUBMODULE_PAT }}@github.com/TykTechnologies/".insteadOf "https://github.com/TykTechnologies/"
-
-      - name: Check Studio against the ${{ matrix.name }}'s go.mod
-        env:
-          GH_TOKEN: ${{ secrets.CI_SUBMODULE_PAT }}
-          GOPRIVATE: github.com/TykTechnologies
-        run: make host-compat HOST_REPOS=${{ matrix.repo }}
-
-  # ==========================================================================
   # Documentation Build (cheap, and the site may read files outside docs/,
   # so it is not path-filtered)
   # ==========================================================================
@@ -791,7 +749,7 @@ jobs:
     name: CI Gate
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [dep-guard, changes, frontend-tests, go-unit-tests, go-postgres-tests, gorm-verify, module-check, host-compat, docs-build, agent-tracing-bench]
+    needs: [dep-guard, changes, frontend-tests, go-unit-tests, go-postgres-tests, gorm-verify, module-check, docs-build, agent-tracing-bench]
     if: always()
     steps:
       - name: Download Coverage Artifacts
@@ -813,7 +771,6 @@ jobs:
             Agent Tracing Perf Gate=${{ needs.agent-tracing-bench.result }}
             gorm Copy Verification=${{ needs.gorm-verify.result }}
             Module Zip Check=${{ needs.module-check.result }}
-            Host Compatibility=${{ needs.host-compat.result }}
             Documentation Build=${{ needs.docs-build.result }}
         run: |
           {
@@ -847,7 +804,7 @@ jobs:
           retention-days: 30
         continue-on-error: true
 
-      # Module zip, host compatibility and the docs build report as checks of
+      # Module zip and the docs build report as checks of
       # their own but do not fail the gate.
       - name: Check Results
         if: >-

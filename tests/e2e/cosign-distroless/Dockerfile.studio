@@ -1,0 +1,8 @@
+# Runtime stage of ci/Dockerfile.distroless, with a locally built binary.
+FROM gcr.io/distroless/base-debian12:nonroot@sha256:8b9f2e503e55aff85b79d6b22c7a63a65170e8698ae80de680e3f5ea600977bf
+
+COPY tyk-ai-studio /opt/tyk-ai-studio/tyk-ai-studio
+
+WORKDIR /opt/tyk-ai-studio/
+
+ENTRYPOINT ["/opt/tyk-ai-studio/tyk-ai-studio"]

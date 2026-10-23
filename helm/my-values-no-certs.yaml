@@ -30,7 +30,7 @@ config:
   tykAiSecretKey: "your-secret-key"
   tykAiLicense: "your-license"
   ociCacheDir: "./data/cache/plugins"
-  ociRequireSignature: "false"
+  ociRequireSignature: "false"  # evaluation without TLS: allows unsigned plugins
   gatewayMode: "control"
   grpcPort: "50051"
   grpcHost: "0.0.0.0"

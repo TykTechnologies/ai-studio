@@ -36,16 +36,26 @@ forgotten bump fails loudly instead of overwriting a release.
 4. **Pushes each binary** as an OCI artifact to a version-scoped platform tag
    (`1.0.2-linux_amd64`), then assembles the multi-platform index at `1.0.2`.
 5. **Signs the index by digest** with cosign, then verifies the signature it
-   just made. A signature that did not take fails the command.
+   just made. A signature that did not take fails the command. Signing is the
+   only step that needs the cosign CLI: AI Studio and the Microgateway verify
+   signatures in-process (Enterprise Edition), and accept both cosign v2
+   signatures (the legacy `sha256-<digest>.sig` tag) and cosign v3 Sigstore
+   bundles (OCI referrers).
 
-   AI Studio verifies plugins with cosign 2.x, which reads a signature only
-   from the legacy `sha256-<digest>.sig` tag. cosign v3 stores it as an OCI
-   referrer in its new bundle format instead, which cosign 2.x cannot find
-   ("no signatures found" on every install). With cosign v3 or later on
-   `PATH`, the tool therefore signs with `--new-bundle-format=false
-   --use-signing-config=false`. The read-back, and `make plugin-verify`, also
-   require the `.sig` tag, so a release cosign 2.x cannot read fails here
-   rather than at install.
+   Releases before 2.3 verify with the cosign 2.x CLI, which reads a
+   signature only from the `.sig` tag; cosign v3 stores it as an OCI referrer
+   in its new bundle format instead, which cosign 2.x cannot find ("no
+   signatures found" on every install). So that plugins also install on those
+   releases, the tool signs with `--new-bundle-format=false
+   --use-signing-config=false` when cosign v3 or later is on `PATH`. The
+   read-back, and `make plugin-verify`, also require the `.sig` tag, so a
+   release cosign 2.x cannot read fails here rather than at install.
+
+   If you sign with `--tlog-upload=false` (air-gapped), the hosts need
+   `AI_STUDIO_OCI_TLOG_POLICY` / `OCI_PLUGINS_TLOG_POLICY` set to `disabled`;
+   with a private Sigstore deployment, point `AI_STUDIO_OCI_TRUSTED_ROOT_FILE`
+   / `OCI_PLUGINS_TRUSTED_ROOT_FILE` at its trusted root. See
+   [Signature Verification](./plugins-deployment.md#signature-verification).
 6. **Writes the marketplace entry**: pulls the marketplace repo, generates
    `plugins/<name>/<version>/manifest.yaml`, carries the README, icon and
    changelog across, commits and pushes to `main` so the index CI fires.

@@ -12,12 +12,14 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/marketplace"
 	"github.com/TykTechnologies/midsommar/v2/pkg/replicas"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	"github.com/rs/zerolog/log"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // MarketplaceService handles marketplace operations
 type MarketplaceService struct {
+	sourcePolicyHolder
 	db               *gorm.DB
 	fetcher          *marketplace.Fetcher
 	ociClient        *ociplugins.OCIPluginClient
@@ -446,6 +448,13 @@ func (s *MarketplaceService) InstallFromMarketplace(ctx context.Context, req *ma
 
 	// Build OCI reference
 	ociRef := marketplacePlugin.OCIReference()
+	if err := s.checkSource(ociRef); err != nil {
+		return nil, err
+	}
+	// Nor from a registry that is, or resolves to, an internal address.
+	if err := plugin_security.CheckCommandHosts(ociRef); err != nil {
+		return nil, err
+	}
 
 	// Use existing PluginService to create and load the plugin
 	pluginName := req.Name

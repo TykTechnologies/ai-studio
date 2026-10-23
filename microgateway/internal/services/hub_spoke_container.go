@@ -9,7 +9,6 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/providers"
-	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 	"github.com/rs/zerolog/log"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -99,29 +98,13 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 	pluginServiceAdapter.SetCrypto(crypto)
 	pluginServiceAdapter.SetManagementService(management) // Enable LLM-based plugin pre-warming
 
-	// Initialize plugin manager with OCI support if configured
-	var pluginManager *plugins.PluginManager
-	var err error
+	// The plugin security service verifies OCI plugin signatures (ENT; CE
+	// loads them recorded as unverified).
+	pluginSecurityService := newPluginSecurityService(cfg)
 
-	if cfg.OCIPlugins.CacheDir != "" {
-		// OCI support enabled
-		ociConfig := cfg.OCIPlugins.ToOCIConfig()
-		pluginManager, err = plugins.NewPluginManagerWithOCI(pluginServiceAdapter, ociConfig)
-		if err != nil {
-			log.Error().Err(err).Msg("Failed to initialize OCI plugin support, using standard plugin manager")
-			pluginManager = plugins.NewPluginManager(pluginServiceAdapter)
-		} else {
-			log.Debug().
-				Str("cache_dir", ociConfig.CacheDir).
-				Int("public_keys", len(ociConfig.DefaultPublicKeys)).
-				Bool("require_signature", ociConfig.RequireSignature).
-				Msg("OCI plugin support enabled in hub-spoke container")
-		}
-	} else {
-		// Standard plugin manager
-		pluginManager = plugins.NewPluginManager(pluginServiceAdapter)
-		log.Debug().Msg("OCI plugin support disabled in hub-spoke container")
-	}
+	// Initialize plugin manager with OCI support if configured
+	pluginManager := newPluginManager(cfg, pluginServiceAdapter, pluginSecurityService)
+	var err error
 	
 	// Load global data collection plugins if configured
 	if cfg.Plugins.ConfigPath != "" || cfg.Plugins.ConfigServiceURL != "" {
@@ -207,8 +190,9 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 		AuthProvider: authProvider,
 		Crypto:       crypto,
 
-		PluginManager:      pluginManager,
-		ModelRouterService: modelRouterService,
+		PluginManager:         pluginManager,
+		PluginSecurityService: pluginSecurityService,
+		ModelRouterService:    modelRouterService,
 		SemanticRouterService: semanticRouterService,
 
 		// Edge identity from config

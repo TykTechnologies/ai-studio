@@ -2,9 +2,12 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	"github.com/gin-gonic/gin"
 )
 
@@ -100,6 +103,21 @@ func TriggerPluginPreWarm(serviceContainer *services.ServiceContainer) gin.Handl
 
 		// Trigger pre-fetch for the specific plugin
 		if err := serviceContainer.PluginManager.PreFetchOCIPlugin(req.Command); err != nil {
+			var notAllowed *plugin_security.ErrPluginSourceNotAllowed
+			if errors.As(err, &notAllowed) {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error":   "Plugin source not allowed",
+					"message": err.Error(),
+				})
+				return
+			}
+			if errors.Is(err, netguard.ErrInternalPluginHost) {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error":   "Plugin registry is an internal address",
+					"message": err.Error(),
+				})
+				return
+			}
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"error":   "Failed to pre-warm plugin",
 				"message": err.Error(),

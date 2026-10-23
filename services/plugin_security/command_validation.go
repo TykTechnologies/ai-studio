@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 )
 
 // ValidateCommand performs security validation on a plugin command string.
@@ -74,7 +76,7 @@ func ValidateCommand(command string, securityService Service) error {
 				if securityService != nil && parsedURL.Hostname() != "" {
 					host := parsedURL.Hostname()
 					if err := securityService.ValidateGRPCHost(host); err != nil {
-						return fmt.Errorf("🔒 SECURITY: plugin command targets internal network address %s: %w", sanitizeForLogging(command), err)
+						return fmt.Errorf("🔒 SECURITY: plugin host %q in %s is an internal address, resolves to one, or does not resolve; add it to LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS to allow this host, or set ALLOW_INTERNAL_NETWORK_ACCESS=true to allow every internal host: %w", sanitizeForLogging(host), sanitizeForLogging(command), err)
 					}
 				}
 
@@ -94,6 +96,31 @@ func ValidateCommand(command string, securityService Service) error {
 		}
 	}
 
+	return nil
+}
+
+// CheckCommandHosts applies the plugin host rule (netguard.CheckPluginHost)
+// to the host of every URL in command (grpc://, oci://, http(s)://): unless
+// ALLOW_INTERNAL_NETWORK_ACCESS=true, a host that is, or resolves to, an
+// internal address, or does not resolve, is refused (a host named in
+// LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS is exempt). It is the host check of
+// ValidateCommand for paths that have no security service at hand (service
+// layer creates and upgrades).
+func CheckCommandHosts(command string) error {
+	for _, part := range strings.Fields(command) {
+		if !strings.Contains(part, "://") || strings.HasPrefix(part, "file://") {
+			continue
+		}
+		parsedURL, err := url.Parse(part)
+		if err != nil {
+			return fmt.Errorf("🔒 SECURITY: plugin command contains invalid URL: %s", sanitizeForLogging(command))
+		}
+		if host := parsedURL.Hostname(); host != "" {
+			if err := netguard.CheckPluginHost(host); err != nil {
+				return fmt.Errorf("🔒 SECURITY: %w", err)
+			}
+		}
+	}
 	return nil
 }
 

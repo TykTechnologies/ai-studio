@@ -257,6 +257,9 @@ func New(opts Options) (_ *Studio, err error) {
 	if opts.Config == nil || opts.DB == nil {
 		return nil, errors.New("studio: Options.Config and Options.DB are required")
 	}
+	if err := opts.Config.Err(); err != nil {
+		return nil, fmt.Errorf("studio: invalid configuration: %w", err)
+	}
 	if opts.HostTykConnection != nil {
 		if err := opts.HostTykConnection.Validate(); err != nil {
 			return nil, fmt.Errorf("studio: Options.HostTykConnection: %w", err)
@@ -492,7 +495,7 @@ func New(opts Options) (_ *Studio, err error) {
 	if conf.MarketplaceEnabled && ociConfig != nil {
 		var ociClient *ociplugins.OCIPluginClient
 		if service.PluginService != nil {
-			ociClient, _ = ociplugins.NewOCIPluginClient(ociConfig)
+			ociClient, _ = service.NewOCIPluginClient(ociConfig)
 		}
 		service.MarketplaceService = services.NewMarketplaceService(
 			s.db,

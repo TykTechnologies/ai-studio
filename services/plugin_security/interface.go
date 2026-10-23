@@ -29,7 +29,10 @@ type Service interface {
 
 	// VerifyWithPolicy verifies a signature using a policy file
 	// CE: Always returns nil (no verification)
-	// ENT: Verifies using Cosign policy file
+	// ENT: Not supported; returns an error (the in-process verifier has no
+	// cosign policy engine)
+	//
+	// Deprecated: cosign policy files are not supported; use VerifySignature.
 	VerifyWithPolicy(ctx context.Context, ref *OCIReference, policyPath string) error
 
 	// GetPublicKeyPath retrieves the path to a public key for verification

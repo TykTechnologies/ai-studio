@@ -1,0 +1,100 @@
+# c1g.15 e2e: ENT (or CE) distroless Studio in control mode and an edge
+# microgateway. The plugin registry joins this network as "registry" (run.sh).
+# Ports are published on 127.0.0.1 only. Signature and source settings come
+# from the environment of `docker compose up` (run.sh sets them per scenario).
+name: c1g-e2e
+
+x-common: &common
+  ALLOW_INTERNAL_NETWORK_ACCESS: "true" # the registry is on a private docker network
+  OCI_PLUGINS_PUBKEY_FILE_E2E: /keys/e2e-good.pub
+  LOG_LEVEL: debug
+
+services:
+  studio:
+    image: c1g-e2e/studio:${EDITION:-ent}
+    ports: ["127.0.0.1:18080:8080"]
+    tmpfs: ["/data:uid=65532,gid=65532,exec"] # plugin binaries run from /data/oci
+    volumes: ["${KEYS_DIR:?}:/keys:ro"]
+    extra_hosts: ["internal-reg.test:10.0.0.6"]
+    environment:
+      <<: *common
+      TYK_AI_LICENSE: ${TYK_AI_LICENSE:-}
+      DEVMODE: "false"
+      SITE_URL: http://localhost:18080
+      DOCS_DISABLED: "true"
+      TELEMETRY_ENABLED: "false"
+      MARKETPLACE_ENABLED: ${MARKETPLACE_ENABLED:-false}
+      MARKETPLACE_INDEX_URL: ${MARKETPLACE_INDEX_URL:-}
+      ALLOW_REGISTRATIONS: "true"
+      DATABASE_TYPE: sqlite
+      DATABASE_URL: /data/studio.db
+      TYK_AI_SECRET_KEY: c1g-e2e-secret-key-0123456789abcdef
+      MICROGATEWAY_ENCRYPTION_KEY: c1ge2eencryptionkey0123456789abc
+      GATEWAY_MODE: control
+      GRPC_PORT: "50051"
+      GRPC_HOST: 0.0.0.0
+      GRPC_TLS_INSECURE: "true"
+      GRPC_AUTH_TOKEN: c1g-e2e-grpc-token-0123456789abcdef
+      AI_STUDIO_OCI_CACHE_DIR: /data/oci
+      AI_STUDIO_OCI_INSECURE_REGISTRIES: registry:5000
+      AI_STUDIO_OCI_TLOG_POLICY: ${STUDIO_TLOG_POLICY:-required}
+      AI_STUDIO_PLUGIN_ALLOWED_SOURCES: ${STUDIO_ALLOWED_SOURCES:-}
+      # Overrides the common "true" for the internal-host scenarios
+      ALLOW_INTERNAL_NETWORK_ACCESS: ${STUDIO_ALLOW_INTERNAL:-true}
+      LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS: ${STUDIO_ALLOWED_INTERNAL_HOSTS:-}
+      # AI_STUDIO_OCI_REQUIRE_SIGNATURE deliberately unset: the default (true) is under test
+
+  # The edge's /data is a volume (not tmpfs) so a scenario can corrupt the
+  # OCI cache from outside; this makes it writable by the distroless user.
+  gateway-data-init:
+    image: busybox:1.36
+    command: ["chown", "65532:65532", "/data"]
+    volumes: ["gateway-data:/data"]
+
+  gateway:
+    image: c1g-e2e/microgateway:${EDITION:-ent}
+    depends_on:
+      studio: {condition: service_started}
+      gateway-data-init: {condition: service_completed_successfully}
+    # An edge exits when the control plane is not reachable yet; retry.
+    restart: on-failure
+    ports: ["127.0.0.1:18081:8080"]
+    volumes: ["${KEYS_DIR:?}:/keys:ro", "gateway-data:/data"]
+    extra_hosts: ["internal-reg.test:10.0.0.6"]
+    environment:
+      <<: *common
+      TYK_AI_LICENSE: ${TYK_AI_LICENSE:-}
+      PORT: "8080"
+      GATEWAY_MODE: edge
+      CONTROL_ENDPOINT: studio:50051
+      EDGE_ID: c1g-e2e-edge
+      EDGE_AUTH_TOKEN: c1g-e2e-grpc-token-0123456789abcdef
+      EDGE_ALLOW_INSECURE: "true"
+      EDGE_TLS_ENABLED: "false"
+      ENCRYPTION_KEY: c1ge2eencryptionkey0123456789abc
+      DATABASE_TYPE: sqlite
+      DATABASE_DSN: file:/data/edge.db?mode=rwc
+      PLUGINS_CONFIG_PATH: ""
+      OCI_PLUGINS_CACHE_DIR: /data/oci
+      OCI_PLUGINS_INSECURE_REGISTRIES: ${GATEWAY_INSECURE_REGISTRIES:-registry:5000}
+      OCI_PLUGINS_REQUIRE_SIGNATURE: "true"
+      OCI_PLUGINS_TLOG_POLICY: ${GATEWAY_TLOG_POLICY:-required}
+      PLUGINS_ALLOWED_SOURCES: ${GATEWAY_ALLOWED_SOURCES:-}
+      # Overrides the common "true" for the grpc internal-host scenario
+      ALLOW_INTERNAL_NETWORK_ACCESS: ${GATEWAY_ALLOW_INTERNAL:-true}
+      LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS: ${GATEWAY_ALLOWED_INTERNAL_HOSTS:-}
+      HTTPS_PROXY: ${GATEWAY_HTTPS_PROXY:-}
+      HTTP_PROXY: ${GATEWAY_HTTP_PROXY:-}
+      NO_PROXY: ${GATEWAY_NO_PROXY:-}
+
+  # An internal forward proxy for the proxy scenarios (profile "proxy").
+  proxy:
+    image: ubuntu/squid:6.6-24.04_beta
+    profiles: ["proxy"]  # the image's default config allows the local network
+
+volumes:
+  gateway-data:
+
+networks:
+  default:
+    name: c1g-e2e

@@ -3,10 +3,12 @@ package config
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 )
 
 // PluginConfigLoader defines how plugin configurations are loaded
@@ -27,6 +29,12 @@ type PluginConfigLoader interface {
 type PluginConfig struct {
 	// File-based configuration
 	ConfigPath string `env:"PLUGINS_CONFIG_PATH" envDefault:""`
+
+	// AllowedSources limits the plugin deployment types (oci, file, grpc)
+	// this gateway accepts, whoever configures them (the hub included).
+	// Empty allows all. SourcePolicy is the parsed value (see Validate).
+	AllowedSources string                       `env:"PLUGINS_ALLOWED_SOURCES" envDefault:""`
+	SourcePolicy   plugin_security.SourcePolicy `env:"-"`
 
 	// Service-based configuration
 	ConfigServiceURL   string        `env:"PLUGINS_CONFIG_SERVICE_URL" envDefault:""`
@@ -62,12 +70,41 @@ type OCIPluginConfig struct {
 	// Security settings
 	RequireSignature bool `env:"OCI_PLUGINS_REQUIRE_SIGNATURE" envDefault:"true"`
 
+	// Transparency-log policy (required|optional|disabled) and Sigstore
+	// trusted-root override for signature verification
+	TlogPolicy      string `env:"OCI_PLUGINS_TLOG_POLICY" envDefault:"required"`
+	TrustedRootFile string `env:"OCI_PLUGINS_TRUSTED_ROOT_FILE"`
+
 	// Registry connection settings
 	InsecureRegistries []string `env:"OCI_PLUGINS_INSECURE_REGISTRIES" envSeparator:","`
 
 	// Garbage collection
 	GCInterval   time.Duration `env:"OCI_PLUGINS_GC_INTERVAL" envDefault:"24h"`
 	KeepVersions int          `env:"OCI_PLUGINS_KEEP_VERSIONS" envDefault:"3"`
+}
+
+// parseSourcePolicy parses PLUGINS_ALLOWED_SOURCES into SourcePolicy.
+func (c *PluginConfig) parseSourcePolicy() error {
+	policy, err := plugin_security.ParseSourcePolicy(c.AllowedSources)
+	if err != nil {
+		return fmt.Errorf("invalid PLUGINS_ALLOWED_SOURCES: %w", err)
+	}
+	c.SourcePolicy = policy.WithSetting("PLUGINS_ALLOWED_SOURCES")
+	return nil
+}
+
+// validateVerification checks the signature-verification settings and
+// normalizes the transparency-log policy.
+func (c *OCIPluginConfig) validateVerification() error {
+	policy, err := ociplugins.ParseTlogPolicy(c.TlogPolicy)
+	if err != nil {
+		return fmt.Errorf("invalid OCI_PLUGINS_TLOG_POLICY: %w", err)
+	}
+	c.TlogPolicy = policy
+	if err := ociplugins.ValidateTrustedRootFile(c.TrustedRootFile); err != nil {
+		return fmt.Errorf("invalid OCI_PLUGINS_TRUSTED_ROOT_FILE: %w", err)
+	}
+	return nil
 }
 
 // ToOCIConfig converts microgateway OCI config to the library config format
@@ -82,6 +119,8 @@ func (c *OCIPluginConfig) ToOCIConfig() *ociplugins.OCIConfig {
 		Timeout:            c.Timeout,
 		RetryAttempts:      c.RetryAttempts,
 		RequireSignature:   c.RequireSignature,
+		TlogPolicy:         c.TlogPolicy,
+		TrustedRootFile:    c.TrustedRootFile,
 		InsecureRegistries: c.InsecureRegistries,
 		GCInterval:         c.GCInterval,
 		KeepVersions:       c.KeepVersions,

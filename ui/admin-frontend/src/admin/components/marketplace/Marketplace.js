@@ -31,10 +31,15 @@ import { usePermissions } from '../../context/PermissionsContext';
 import { P } from '../../rbac/permissions';
 import { useNavigate } from 'react-router-dom';
 import useAdminData from '../../hooks/useAdminData';
+import { allowedPluginSources } from '../../services/pluginService';
+import usePluginPolicy from '../../hooks/usePluginPolicy';
 
 const Marketplace = () => {
   const navigate = useNavigate();
   const { config } = useAdminData();
+  const { policy } = usePluginPolicy();
+  // Marketplace plugins are OCI artifacts: offered only where oci is allowed.
+  const ociAllowed = allowedPluginSources(policy).includes('oci');
   const { can } = usePermissions();
   const canUpgrade = can(P.PLUGINS_WRITE);
   const [plugins, setPlugins] = useState([]);
@@ -343,6 +348,7 @@ const Marketplace = () => {
                   plugin={plugin}
                   installed={installed[plugin.plugin_id] || []}
                   canUpgrade={canUpgrade}
+                  ociAllowed={ociAllowed}
                   onViewDetails={handleViewDetails}
                   onInstall={handleInstall}
                   onUpgrade={handleUpgrade}
@@ -372,6 +378,7 @@ const Marketplace = () => {
           plugin={selectedPlugin}
           installed={installed[selectedPlugin.plugin_id] || []}
           canUpgrade={canUpgrade}
+          ociAllowed={ociAllowed}
           onClose={() => {
             setDetailModalOpen(false);
             setSelectedPlugin(null);

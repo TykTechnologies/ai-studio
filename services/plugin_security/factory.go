@@ -9,9 +9,12 @@ var (
 )
 
 // RegisterEnterpriseFactory registers the enterprise implementation factory
-// This is called by the enterprise package's init() function
-func RegisterEnterpriseFactory(factory ServiceFactory) {
+// This is called by the enterprise package's init() function. It returns the
+// factory it replaced, so tests can register a fake and restore the original.
+func RegisterEnterpriseFactory(factory ServiceFactory) (previous ServiceFactory) {
+	previous = enterpriseFactory
 	enterpriseFactory = factory
+	return previous
 }
 
 // NewService creates a new plugin security service

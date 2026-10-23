@@ -91,7 +91,7 @@ config:
   tykAiSecretKey: "CHANGE-ME-first-secret"
   tykAiLicense: "your-license-key"                      # Enterprise only, ignored by CE
   ociCacheDir: "./data/cache/plugins"
-  ociRequireSignature: "false"
+  ociRequireSignature: "false"                          # Development only: loads unsigned plugins (default "true")
   gatewayMode: "control"
   grpcPort: "50051"
   grpcHost: "0.0.0.0"
@@ -226,7 +226,7 @@ config:
   tykAiSecretKey: "CHANGE-ME-first-secret"
   tykAiLicense: "your-license-key"
   ociCacheDir: "./data/cache/plugins"
-  ociRequireSignature: "false"
+  ociRequireSignature: "true"
   gatewayMode: "control"
   grpcPort: "50051"
   grpcHost: "0.0.0.0"
@@ -469,6 +469,34 @@ Notes on the defaults:
 - Readiness probes `/ready`, which checks the database and plugin health, rather
   than `/health`, which only reports that the process is alive.
 
+### Plugin Sources and Signatures
+
+Plugin signatures are required by default, and both AI Studio and the
+gateways can refuse whole plugin deployment types. Each gateway enforces its
+own setting, whatever AI Studio pushes:
+
+```yaml
+config:
+  ociRequireSignature: "true"         # AI_STUDIO_OCI_REQUIRE_SIGNATURE (default "true")
+  pluginAllowedSources: "oci"         # AI_STUDIO_PLUGIN_ALLOWED_SOURCES: oci, file, grpc; "" allows all
+
+microgateway:
+  config:
+    ociPluginsRequireSignature: "true"  # OCI_PLUGINS_REQUIRE_SIGNATURE (default "true")
+    pluginsAllowedSources: "oci"        # PLUGINS_ALLOWED_SOURCES: oci, file, grpc; "" allows all
+```
+
+| Value | Environment variable | Default |
+|---|---|---|
+| `config.ociRequireSignature` | `AI_STUDIO_OCI_REQUIRE_SIGNATURE` | `"true"` |
+| `config.pluginAllowedSources` | `AI_STUDIO_PLUGIN_ALLOWED_SOURCES` | `""` (all sources) |
+| `microgateway.config.ociPluginsRequireSignature` | `OCI_PLUGINS_REQUIRE_SIGNATURE` | `"true"` |
+| `microgateway.config.pluginsAllowedSources` | `PLUGINS_ALLOWED_SOURCES` | `""` (all sources) |
+
+An unknown source stops the pod at startup. See
+[Hardening: restrict plugin sources](./plugins-security.md#hardening-restrict-plugin-sources)
+and [Signature Verification](./plugins-deployment.md#signature-verification).
+
 ### Egress Policy
 
 By default the gateway will connect to any upstream an LLM configuration names,
@@ -583,7 +611,7 @@ kubectl describe pod <pod-name>
 - **Ingress not working**: Verify DNS records and TLS configuration
 - **Login fails on HTTP**: Set `devMode: "true"` — session cookies require this when not using HTTPS
 - **Marketplace page is empty**: Set `ociCacheDir: "./data/cache/plugins"` in your config values — the marketplace service will not start without it
-- **Plugin signature verification**: Docker images use distroless bases without cosign. Set `ociRequireSignature: "false"` to disable signature verification
+- **Plugin refused because its signature does not verify**: signatures are verified in-process (Enterprise Edition) and required by default (`ociRequireSignature: "true"` for AI Studio, `microgateway.config.ociPluginsRequireSignature: "true"` for the Microgateway). Configure the plugin's signing key, or set these to `"false"` to load unsigned plugins. See [Signature Verification](./plugins-deployment.md#signature-verification)
 
 ### Microgateway cannot connect to AI Studio
 

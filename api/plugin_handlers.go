@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"fmt"
 	"log"
@@ -9,11 +10,13 @@ import (
 	"strconv"
 	"strings"
 
+	appconfig "github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	"github.com/gin-gonic/gin"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -1233,6 +1236,9 @@ func (a *API) createOCIPlugin(c *gin.Context) {
 
 	plugin, err := a.service.PluginService.CreateOCIPluginFromReference(&req)
 	if err != nil {
+		if respondPluginSourceNotAllowed(c, err) {
+			return
+		}
 		if strings.Contains(err.Error(), "already exists") {
 			c.JSON(http.StatusConflict, ErrorResponse{
 				Errors: []struct {
@@ -1307,6 +1313,9 @@ func (a *API) refreshOCIPlugin(c *gin.Context) {
 
 	plugin, err := a.service.PluginService.RefreshOCIPlugin(uint(id))
 	if err != nil {
+		if respondPluginSourceNotAllowed(c, err) {
+			return
+		}
 		if strings.Contains(err.Error(), "not found") || err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, ErrorResponse{
 				Errors: []struct {
@@ -2530,4 +2539,36 @@ func extractUserGroupNames(c *gin.Context) []string {
 		groups = append(groups, g.Name)
 	}
 	return groups
+}
+// respondPluginSourceNotAllowed answers 400 when err is the installation's
+// plugin source policy refusing the plugin, a configuration matter rather
+// than a server error, and reports whether it did.
+func respondPluginSourceNotAllowed(c *gin.Context, err error) bool {
+	var notAllowed *plugin_security.ErrPluginSourceNotAllowed
+	if !errors.As(err, &notAllowed) {
+		return false
+	}
+	c.JSON(http.StatusBadRequest, ErrorResponse{
+		Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Plugin Source Not Allowed", Detail: notAllowed.Error()}},
+	})
+	return true
+}
+
+// getPluginPolicy returns the plugin deployment types this installation
+// accepts and whether OCI plugins must be signed, for the plugin wizard,
+// form and marketplace.
+func (a *API) getPluginPolicy(c *gin.Context) {
+	conf := appconfig.Get("")
+	resp := PluginPolicyResponse{
+		PluginAllowedSources: []string{},
+		OCIEnabled:           conf.OCIPlugins.IsEnabled(),
+		OCIRequireSignature:  conf.OCIPlugins.IsEnabled() && conf.OCIPlugins.RequireSignature,
+	}
+	for _, source := range conf.PluginSourcePolicy.Allowed() {
+		resp.PluginAllowedSources = append(resp.PluginAllowedSources, string(source))
+	}
+	c.JSON(http.StatusOK, gin.H{"data": resp})
 }

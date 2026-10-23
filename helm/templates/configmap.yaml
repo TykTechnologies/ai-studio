@@ -35,6 +35,9 @@ data:
   {{- if .Values.config.ociRequireSignature }}
   AI_STUDIO_OCI_REQUIRE_SIGNATURE: {{ .Values.config.ociRequireSignature | quote }}
   {{- end }}
+  {{- if .Values.config.pluginAllowedSources }}
+  AI_STUDIO_PLUGIN_ALLOWED_SOURCES: {{ .Values.config.pluginAllowedSources | quote }}
+  {{- end }}
   {{- /* Hub-Spoke: Control Plane Mode */}}
   {{- if .Values.config.gatewayMode }}
   GATEWAY_MODE: {{ .Values.config.gatewayMode | quote }}
