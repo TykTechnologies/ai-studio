@@ -388,6 +388,7 @@ func newPluginManager(cfg *config.Config, pluginService plugins.PluginServiceInt
 		log.Debug().Msg("OCI plugin support disabled - using standard plugin manager")
 	}
 	pluginManager.SetSourcePolicy(cfg.Plugins.SourcePolicy)
+	pluginManager.SetGRPCHostValidator(securityService)
 	return pluginManager
 }
 

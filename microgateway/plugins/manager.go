@@ -22,6 +22,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/sdk"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pluginenv"
@@ -173,6 +174,9 @@ type PluginManager struct {
 	// value allows all. Its own lock: createPluginClient runs under mu.
 	sourcePolicyMu sync.RWMutex
 	sourcePolicy   plugin_security.SourcePolicy
+	// grpcHostValidator applies this gateway's internal-network rule to
+	// grpc:// plugin hosts at load time (guarded by sourcePolicyMu).
+	grpcHostValidator GRPCHostValidator
 
 	// Plugin health tracking
 	pluginHealth         map[uint]*PluginHealthStatus // Plugin ID -> health status
@@ -279,14 +283,83 @@ func (pm *PluginManager) SourcePolicy() plugin_security.SourcePolicy {
 	return pm.sourcePolicy
 }
 
-// SetSecurityService sets the enterprise security service for OCI signature verification
+// SetSecurityService sets the enterprise security service for OCI signature
+// verification, and for gRPC host checks when it provides them.
 func (pm *PluginManager) SetSecurityService(securityService ociplugins.SecurityService) {
+	if validator, ok := securityService.(GRPCHostValidator); ok {
+		pm.SetGRPCHostValidator(validator)
+	}
+
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
 	if pm.ociClient != nil {
 		pm.ociClient.SetSecurityService(securityService)
 	}
+}
+
+// GRPCHostValidator decides whether a grpc:// plugin host may be dialled
+// (plugin_security.Service implements it).
+type GRPCHostValidator interface {
+	ValidateGRPCHost(host string) error
+}
+
+// SetGRPCHostValidator sets the internal-network rule for grpc:// plugin
+// hosts at load time.
+func (pm *PluginManager) SetGRPCHostValidator(validator GRPCHostValidator) {
+	pm.sourcePolicyMu.Lock()
+	defer pm.sourcePolicyMu.Unlock()
+	pm.grpcHostValidator = validator
+}
+
+// grpcHostValidatorOrDefault returns the configured validator, else the
+// Community Edition's internal-network rule, so a manager built without one
+// still refuses internal hosts.
+func (pm *PluginManager) grpcHostValidatorOrDefault() GRPCHostValidator {
+	pm.sourcePolicyMu.RLock()
+	validator := pm.grpcHostValidator
+	pm.sourcePolicyMu.RUnlock()
+	if validator != nil {
+		return validator
+	}
+	return defaultGRPCHostValidator{}
+}
+
+// defaultGRPCHostValidator refuses hosts that are, or resolve to, internal
+// addresses unless ALLOW_INTERNAL_NETWORK_ACCESS=true. It does not go through
+// plugin_security.NewService, which needs the enterprise factory registered
+// in an enterprise build.
+type defaultGRPCHostValidator struct{}
+
+func (defaultGRPCHostValidator) ValidateGRPCHost(host string) error {
+	if os.Getenv("ALLOW_INTERNAL_NETWORK_ACCESS") == "true" {
+		return nil
+	}
+	if netguard.HostIsInternal(host, net.LookupIP) {
+		return plugin_security.ErrInternalNetworkBlocked
+	}
+	return nil
+}
+
+// checkGRPCHost applies the internal-network rule to a grpc:// plugin's host
+// and to the address it resolved to, from this gateway's network position:
+// the hub checked the host from its own, and a name can resolve differently
+// here (split-horizon DNS) or have reached the gateway without the hub's API.
+func (pm *PluginManager) checkGRPCHost(command string, addr net.Addr) error {
+	validator := pm.grpcHostValidatorOrDefault()
+	host, _, err := net.SplitHostPort(strings.TrimPrefix(command, "grpc://"))
+	if err != nil {
+		return fmt.Errorf("invalid gRPC address in %q: %w", command, err)
+	}
+	if err := validator.ValidateGRPCHost(host); err != nil {
+		return fmt.Errorf("gRPC plugin host %q refused: %w", host, err)
+	}
+	if tcpAddr, ok := addr.(*net.TCPAddr); ok && tcpAddr.IP.String() != host {
+		if err := validator.ValidateGRPCHost(tcpAddr.IP.String()); err != nil {
+			return fmt.Errorf("gRPC plugin host %q resolves to a refused address: %w", host, err)
+		}
+	}
+	return nil
 }
 
 // LoadPlugin loads a plugin by ID
@@ -1075,6 +1148,11 @@ func (pm *PluginManager) createPluginClient(command string) (*plugin.Client, err
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse gRPC address: %w", err)
 		}
+		// The same internal-network rule as the management API, for every
+		// load path (hub-pushed, global data-collection, local config).
+		if err := pm.checkGRPCHost(command, reattachConfig.Addr); err != nil {
+			return nil, err
+		}
 
 		log.Debug().
 			Str("command", command).
@@ -1216,7 +1294,7 @@ func (pm *PluginManager) parseGRPCReattachConfig(grpcURL string) (*plugin.Reatta
 
 	// If host is not an IP, resolve it
 	if tcpAddr.IP == nil {
-		tcpAddr, err = net.ResolveTCPAddr("tcp", address)
+		tcpAddr, err = resolveTCPAddr("tcp", address)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve gRPC address '%s': %w", address, err)
 		}
@@ -1228,6 +1306,9 @@ func (pm *PluginManager) parseGRPCReattachConfig(grpcURL string) (*plugin.Reatta
 		Pid:      0, // Not applicable for network connections
 	}, nil
 }
+
+// resolveTCPAddr resolves gRPC plugin addresses; a variable so tests can stub DNS.
+var resolveTCPAddr = net.ResolveTCPAddr
 
 // connectWithRetry connects to a plugin with retry logic for external services
 func (pm *PluginManager) connectWithRetry(client *plugin.Client, command string) (plugin.ClientProtocol, error) {
