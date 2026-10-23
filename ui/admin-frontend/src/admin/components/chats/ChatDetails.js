@@ -284,6 +284,15 @@ const ChatDetails = () => {
               {chat.attributes.tool_support ? "Enabled" : "Disabled"}
             </FieldValue>
           </Grid>
+
+          <Grid item xs={3}>
+            <FieldLabel>Images in Responses:</FieldLabel>
+          </Grid>
+          <Grid item xs={9}>
+            <FieldValue>
+              {chat.attributes.render_images ? "Rendered" : "Shown as links"}
+            </FieldValue>
+          </Grid>
         </Grid>
 
         <Divider sx={{ my: 3 }} />

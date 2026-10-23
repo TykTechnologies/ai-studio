@@ -70,6 +70,11 @@ services:
       TYK_AI_LICENSE: ${TYK_AI_LICENSE:-}
       OCI_PLUGINS_REGISTRY_DOCKER_TYK_IO_ENTITLEMENT: ${OCI_PLUGINS_REGISTRY_DOCKER_TYK_IO_ENTITLEMENT:-}
       OCI_PLUGINS_CACHE_DIR: /app/oci-cache
+      # Outbound calls to internal addresses (a local Ollama, in-cluster
+      # guardrails) are blocked by default since 2.3; the dev stack opts out
+      # here too, for .env.gateway files created before this setting existed.
+      # See dev/.env.gateway.dev for the allow-list alternative.
+      LLM_UPSTREAM_BLOCK_INTERNAL: "false"
     depends_on:
       studio:
         condition: service_healthy

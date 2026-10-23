@@ -87,6 +87,7 @@ func TestChatEndpoints(t *gotest.T) {
 				FilterIDs           []uint `json:"filter_ids"`
 				RagN                int    `json:"rag_n"`
 				ToolSupport         bool   `json:"tool_support"`
+				RenderImages        *bool  `json:"render_images"`
 				SystemPrompt        string `json:"system_prompt"`
 				DefaultDataSourceID int    `json:"default_data_source_id"`
 				DefaultToolIDs      []uint `json:"default_tool_ids"`
@@ -102,6 +103,7 @@ func TestChatEndpoints(t *gotest.T) {
 				FilterIDs           []uint `json:"filter_ids"`
 				RagN                int    `json:"rag_n"`
 				ToolSupport         bool   `json:"tool_support"`
+				RenderImages        *bool  `json:"render_images"`
 				SystemPrompt        string `json:"system_prompt"`
 				DefaultDataSourceID int    `json:"default_data_source_id"`
 				DefaultToolIDs      []uint `json:"default_tool_ids"`
@@ -143,6 +145,7 @@ func TestChatEndpoints(t *gotest.T) {
 				FilterIDs           []uint `json:"filter_ids"`
 				RagN                int    `json:"rag_n"`
 				ToolSupport         bool   `json:"tool_support"`
+				RenderImages        *bool  `json:"render_images"`
 				SystemPrompt        string `json:"system_prompt"`
 				DefaultDataSourceID int    `json:"default_data_source_id"`
 				DefaultToolIDs      []uint `json:"default_tool_ids"`
@@ -158,6 +161,7 @@ func TestChatEndpoints(t *gotest.T) {
 				FilterIDs           []uint `json:"filter_ids"`
 				RagN                int    `json:"rag_n"`
 				ToolSupport         bool   `json:"tool_support"`
+				RenderImages        *bool  `json:"render_images"`
 				SystemPrompt        string `json:"system_prompt"`
 				DefaultDataSourceID int    `json:"default_data_source_id"`
 				DefaultToolIDs      []uint `json:"default_tool_ids"`
@@ -257,6 +261,7 @@ func TestChatEndpointsErrors(t *gotest.T) {
 				FilterIDs           []uint `json:"filter_ids"`
 				RagN                int    `json:"rag_n"`
 				ToolSupport         bool   `json:"tool_support"`
+				RenderImages        *bool  `json:"render_images"`
 				SystemPrompt        string `json:"system_prompt"`
 				DefaultDataSourceID int    `json:"default_data_source_id"`
 				DefaultToolIDs      []uint `json:"default_tool_ids"`
@@ -272,6 +277,7 @@ func TestChatEndpointsErrors(t *gotest.T) {
 				FilterIDs           []uint `json:"filter_ids"`
 				RagN                int    `json:"rag_n"`
 				ToolSupport         bool   `json:"tool_support"`
+				RenderImages        *bool  `json:"render_images"`
 				SystemPrompt        string `json:"system_prompt"`
 				DefaultDataSourceID int    `json:"default_data_source_id"`
 				DefaultToolIDs      []uint `json:"default_tool_ids"`
@@ -304,6 +310,7 @@ func TestChatEndpointsErrors(t *gotest.T) {
 				FilterIDs           []uint `json:"filter_ids"`
 				RagN                int    `json:"rag_n"`
 				ToolSupport         bool   `json:"tool_support"`
+				RenderImages        *bool  `json:"render_images"`
 				SystemPrompt        string `json:"system_prompt"`
 				DefaultDataSourceID int    `json:"default_data_source_id"`
 				DefaultToolIDs      []uint `json:"default_tool_ids"`
@@ -319,6 +326,7 @@ func TestChatEndpointsErrors(t *gotest.T) {
 				FilterIDs           []uint `json:"filter_ids"`
 				RagN                int    `json:"rag_n"`
 				ToolSupport         bool   `json:"tool_support"`
+				RenderImages        *bool  `json:"render_images"`
 				SystemPrompt        string `json:"system_prompt"`
 				DefaultDataSourceID int    `json:"default_data_source_id"`
 				DefaultToolIDs      []uint `json:"default_tool_ids"`
@@ -342,4 +350,57 @@ func TestChatEndpointsErrors(t *gotest.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &emptyResponse)
 	assert.NoError(t, err)
 	assert.Len(t, emptyResponse["data"], 0)
+}
+
+// "Render images in responses" (2u2): off unless set on create, kept by an
+// update that does not mention it, and changed by one that does.
+func TestChatRenderImagesSetting(t *gotest.T) {
+	db := apitest.SetupTestDB(t)
+	service := apitest.SetupTestService(db)
+	config := apitest.SetupTestAuthConfig(db, service)
+	authService := apitest.SetupTestAuthService(db, service)
+	a := api.NewAPI(service, true, authService, config, nil, apitest.EmptyFile, nil)
+
+	group, err := service.CreateGroup("Images Group", []uint{}, []uint{}, []uint{}, []uint{})
+	assert.NoError(t, err)
+	llmSettings, err := service.CreateLLMSettings(&models.LLMSettings{ModelName: "m", MaxTokens: 100})
+	assert.NoError(t, err)
+	llm, err := service.CreateLLM("Images LLM", "api-key", "https://api.anthropic.com", 75,
+		"", "", "", "anthropic", true, nil, "", []string{}, nil, nil, false, nil, nil)
+	assert.NoError(t, err)
+
+	body := func(extra map[string]any) map[string]any {
+		attrs := map[string]any{"name": "Images Chat", "llm_settings_id": llmSettings.ID, "llm_id": llm.ID, "group_ids": []uint{group.ID}}
+		for k, v := range extra {
+			attrs[k] = v
+		}
+		return map[string]any{"data": map[string]any{"type": "chats", "attributes": attrs}}
+	}
+	renderImages := func(method, path string, b any, wantCode int) bool {
+		t.Helper()
+		w := apitest.PerformRequest(a.Router(), method, path, b)
+		assert.Equal(t, wantCode, w.Code, w.Body.String())
+		var response map[string]api.ChatResponse
+		assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+		return response["data"].Attributes.RenderImages
+	}
+
+	w := apitest.PerformRequest(a.Router(), "POST", "/api/v1/chats", body(nil))
+	assert.Equal(t, http.StatusCreated, w.Code)
+	var created map[string]api.ChatResponse
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &created))
+	assert.False(t, created["data"].Attributes.RenderImages, "off by default")
+	path := "/api/v1/chats/" + created["data"].ID
+
+	assert.True(t, renderImages("PATCH", path, body(map[string]any{"render_images": true}), http.StatusOK))
+	assert.True(t, renderImages("GET", path, nil, http.StatusOK), "stored")
+	assert.True(t, renderImages("PATCH", path, body(nil), http.StatusOK), "an update without the field keeps it")
+	assert.False(t, renderImages("PATCH", path, body(map[string]any{"render_images": false}), http.StatusOK))
+
+	id, err := strconv.Atoi(created["data"].ID)
+	assert.NoError(t, err)
+	chat, err := service.GetChatByID(uint(id))
+	assert.NoError(t, err)
+	assert.False(t, chat.RenderImages)
+	assert.True(t, renderImages("POST", "/api/v1/chats", body(map[string]any{"name": "Images On", "render_images": true}), http.StatusCreated))
 }

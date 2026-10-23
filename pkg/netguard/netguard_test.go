@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -94,7 +96,7 @@ func TestHostIsInternal(t *testing.T) {
 }
 
 func TestValidateUpstreamURLSchemes(t *testing.T) {
-	t.Setenv(EnvBlockInternal, "")
+	setBlockInternal(t, "")
 	t.Setenv(EnvAllowedHosts, "")
 
 	if err := ValidateUpstreamURL(mustURL(t, "https://api.openai.com/v1")); err != nil {
@@ -112,7 +114,7 @@ func TestValidateUpstreamURLSchemes(t *testing.T) {
 }
 
 func TestValidateUpstreamURLAllowedHosts(t *testing.T) {
-	t.Setenv(EnvBlockInternal, "")
+	setBlockInternal(t, "")
 	t.Setenv(EnvAllowedHosts, "api.openai.com, .anthropic.com")
 
 	if err := ValidateUpstreamURL(mustURL(t, "https://api.openai.com/v1")); err != nil {
@@ -143,7 +145,7 @@ func TestValidateUpstreamURLAllowedHosts(t *testing.T) {
 
 func TestValidateUpstreamURLBlockInternal(t *testing.T) {
 	t.Setenv(EnvAllowedHosts, "")
-	t.Setenv(EnvBlockInternal, "true")
+	setBlockInternal(t, "true")
 	t.Setenv(EnvAllowInternal, "")
 
 	blocked := []string{
@@ -166,15 +168,60 @@ func TestValidateUpstreamURLBlockInternal(t *testing.T) {
 	}
 }
 
-func TestValidateUpstreamURLBlockInternalDisabledByDefault(t *testing.T) {
+// Since 2.3 internal upstreams are blocked unless the setting says false
+// (sf5); a local Ollama needs LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS.
+func TestValidateUpstreamURLBlockInternalEnabledByDefault(t *testing.T) {
 	t.Setenv(EnvAllowedHosts, "")
-	t.Setenv(EnvBlockInternal, "")
 	t.Setenv(EnvAllowInternal, "")
 
-	// Backwards compatible: internal upstreams (e.g. local Ollama) work unless
-	// blocking is explicitly enabled.
+	setBlockInternal(t, "")
+	if err := ValidateUpstreamURL(mustURL(t, "http://127.0.0.1:11434")); err == nil {
+		t.Error("internal upstreams must be blocked by default")
+	}
+	t.Setenv(EnvAllowedInternalHosts, "127.0.0.1")
 	if err := ValidateUpstreamURL(mustURL(t, "http://127.0.0.1:11434")); err != nil {
-		t.Errorf("internal upstreams must be allowed by default: %v", err)
+		t.Errorf("an allow-listed internal host must pass: %v", err)
+	}
+	t.Setenv(EnvAllowedInternalHosts, "")
+	setBlockInternal(t, "false")
+	if err := ValidateUpstreamURL(mustURL(t, "http://127.0.0.1:11434")); err != nil {
+		t.Errorf("%s=false must allow internal upstreams: %v", EnvBlockInternal, err)
+	}
+}
+
+// setBlockInternal sets LLM_UPSTREAM_BLOCK_INTERNAL and applies it as startup
+// does (Configure), restoring the stored setting after the test.
+func setBlockInternal(t *testing.T, v string) {
+	t.Helper()
+	t.Setenv(EnvBlockInternal, v)
+	prev := blockInternal.Load()
+	t.Cleanup(func() { blockInternal.Store(prev) })
+	if err := Configure(os.Getenv); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// An invalid value is an error, never a silent default.
+func TestParseBlockInternal(t *testing.T) {
+	for v, want := range map[string]bool{"": true, "  ": true, "true": true, "TRUE": true, "1": true, " false ": false, "0": false, "False": false} {
+		got, err := ParseBlockInternal(v)
+		if err != nil || got != want {
+			t.Errorf("ParseBlockInternal(%q) = %v, %v; want %v", v, got, err, want)
+		}
+	}
+	for _, v := range []string{"ture", "yes", "off", "no"} {
+		if _, err := ParseBlockInternal(v); err == nil {
+			t.Errorf("ParseBlockInternal(%q) accepted an invalid value", v)
+		}
+	}
+	prev := blockInternal.Load()
+	t.Cleanup(func() { blockInternal.Store(prev) })
+	blockInternal.Store(true)
+	if err := Configure(func(string) string { return "yes" }); err == nil {
+		t.Error("Configure accepted an invalid value")
+	}
+	if !blockInternal.Load() {
+		t.Error("an invalid value changed the stored setting")
 	}
 }
 
@@ -190,7 +237,7 @@ func TestHTTPTransportBlocksInternalDialsPostDNS(t *testing.T) {
 	client := &http.Client{Transport: HTTPTransport(), Timeout: 5 * time.Second}
 
 	t.Run("blocking disabled allows internal", func(t *testing.T) {
-		t.Setenv(EnvBlockInternal, "")
+		setBlockInternal(t, "false")
 		resp, err := client.Get(srv.URL)
 		if err != nil {
 			t.Fatalf("expected success with blocking disabled: %v", err)
@@ -199,7 +246,7 @@ func TestHTTPTransportBlocksInternalDialsPostDNS(t *testing.T) {
 	})
 
 	t.Run("blocking enabled rejects internal IP literal", func(t *testing.T) {
-		t.Setenv(EnvBlockInternal, "true")
+		setBlockInternal(t, "true")
 		client.CloseIdleConnections() // force a fresh dial
 		if _, err := client.Get(srv.URL); err == nil {
 			t.Fatal("expected dial to an internal IP to be blocked")
@@ -209,7 +256,7 @@ func TestHTTPTransportBlocksInternalDialsPostDNS(t *testing.T) {
 	t.Run("blocking enabled rejects hostname resolving to internal IP", func(t *testing.T) {
 		// The decisive DNS-rebinding case: validating the hostname up front is
 		// not enough — the IP actually dialed (post-resolution) must be checked.
-		t.Setenv(EnvBlockInternal, "true")
+		setBlockInternal(t, "true")
 		u, err := url.Parse(srv.URL)
 		if err != nil {
 			t.Fatal(err)
@@ -220,7 +267,7 @@ func TestHTTPTransportBlocksInternalDialsPostDNS(t *testing.T) {
 	})
 
 	t.Run("dev override allows internal", func(t *testing.T) {
-		t.Setenv(EnvBlockInternal, "true")
+		setBlockInternal(t, "true")
 		t.Setenv(EnvAllowInternal, "true")
 		resp, err := client.Get(srv.URL)
 		if err != nil {
@@ -231,7 +278,7 @@ func TestHTTPTransportBlocksInternalDialsPostDNS(t *testing.T) {
 }
 
 func TestValidatingHTTPTransportAppliesURLPolicyPerRequest(t *testing.T) {
-	t.Setenv(EnvBlockInternal, "")
+	setBlockInternal(t, "false")
 	t.Setenv(EnvAllowInternal, "")
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -266,4 +313,55 @@ func TestValidatingHTTPTransportAppliesURLPolicyPerRequest(t *testing.T) {
 		}
 		resp.Body.Close()
 	})
+}
+
+// The ranges added with blocking on by default (sf5), and IPv4-mapped IPv6,
+// which IPNet.Contains matches against the IPv4 ranges.
+func TestIsInternalIP_AddedRanges(t *testing.T) {
+	for _, s := range []string{
+		"64:ff9b::a00:1", "64:ff9b:1::1", "2002:a00:1::1", // NAT64, 6to4
+		"192.0.0.8", "198.18.0.1", "198.19.255.255", // IETF, benchmarking
+		"224.0.0.1", "239.255.255.250", "ff02::1", // multicast
+		"240.0.0.1", "255.255.255.255", // reserved, broadcast
+		"fec0::1",                             // site-local
+		"::ffff:10.0.0.1", "::ffff:127.0.0.1", // IPv4-mapped
+	} {
+		if !IsInternalIP(net.ParseIP(s)) {
+			t.Errorf("IsInternalIP(%s) = false", s)
+		}
+	}
+	for _, s := range []string{"8.8.8.8", "2606:4700::1111", "::ffff:8.8.8.8", "203.0.113.10"} {
+		if IsInternalIP(net.ParseIP(s)) {
+			t.Errorf("IsInternalIP(%s) = true", s)
+		}
+	}
+}
+
+// A redirect to an internal address is refused on the hop that reaches it,
+// even when the first hop was allowed: every dial is checked.
+func TestValidatingHTTPTransport_RefusesRedirectToInternal(t *testing.T) {
+	t.Setenv(EnvAllowedHosts, "")
+	t.Setenv(EnvAllowInternal, "")
+	setBlockInternal(t, "true")
+
+	internal := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer internal.Close()
+	// The first hop is reached as "localhost", exempted by name; it
+	// redirects to 127.0.0.1, which is not.
+	first := httptest.NewServer(http.RedirectHandler(internal.URL, http.StatusFound))
+	defer first.Close()
+	t.Setenv(EnvAllowedInternalHosts, "localhost")
+
+	client := &http.Client{Transport: ValidatingHTTPTransport(), Timeout: 5 * time.Second}
+	firstURL := mustURL(t, first.URL)
+	resp, err := client.Get("http://localhost:" + firstURL.Port())
+	if err == nil {
+		resp.Body.Close()
+		t.Fatal("the redirect to an internal address was followed")
+	}
+	if !strings.Contains(err.Error(), "internal address") {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }

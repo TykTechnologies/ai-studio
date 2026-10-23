@@ -61,10 +61,9 @@ as it does for a hosted provider. The pool is just an upstream.
 
 ### 2. Egress policy
 
-By default the gateway will reach an in-cluster address without complaint;
-internal-range blocking is opt-in. If you turn it on to constrain egress, the
-InferencePool Service becomes unreachable too, because it lives on a private
-address.
+Since 2.3 internal-range blocking is on by default (`LLM_UPSTREAM_BLOCK_INTERNAL`,
+`blockInternalUpstreams` in the charts), so the InferencePool Service is
+unreachable until you exempt it, because it lives on a private address.
 
 The exemption is `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS`:
 

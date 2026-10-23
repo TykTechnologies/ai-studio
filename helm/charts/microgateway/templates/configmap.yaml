@@ -54,7 +54,6 @@ data:
   {{- with .Values.config.allowedInternalHosts }}
   LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS: {{ . | quote }}
   {{- end }}
-  {{- if .Values.config.blockInternalUpstreams }}
-  LLM_UPSTREAM_BLOCK_INTERNAL: "true"
-  {{- end }}
+  {{- /* On unless explicitly false (boolean or string) */}}
+  LLM_UPSTREAM_BLOCK_INTERNAL: {{ ternary "false" "true" (eq (toString .Values.config.blockInternalUpstreams) "false") | quote }}
 {{- end }}

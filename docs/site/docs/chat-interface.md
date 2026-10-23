@@ -58,6 +58,7 @@ Administrators configure the available "Chat Experiences" (formerly known as Cha
 *   **Applying Filters:** Associating specific [Filters](./filters.md) for governance.
 *   **Assigning Groups:** Determining which [User Groups](./user-management.md) can access this Chat Experience.
 *   **Enabling/Disabling Features:** Toggling features like file uploads or direct tool usage.
+*   **Render images in responses:** Off by default. With it off, an image in a model response (`![alt](https://...)`) is shown as a link with its alt text and host, and the user's browser never loads it. Model output can be shaped by prompt injection (through a tool result or a retrieved document), and loading an image would send whatever is in its URL to that host. Turn it on only for a chat whose models and sources you trust to show images. Agent chats and retrieved context never render images. The setting is `render_images` on the chat in the API.
 
 ### Choosing the chat front end
 

@@ -631,6 +631,9 @@ type ChatInput struct {
 			FilterIDs           []uint `json:"filter_ids"`
 			RagN                int    `json:"rag_n"`
 			ToolSupport         bool   `json:"tool_support"`
+			// RenderImages is "Render images in responses"; absent on an
+			// update keeps the stored value, absent on create is false.
+			RenderImages        *bool  `json:"render_images"`
 			SystemPrompt        string `json:"system_prompt"`
 			DefaultDataSourceID int    `json:"default_data_source_id"`
 			DefaultToolIDs      []uint `json:"default_tool_ids"`
@@ -652,6 +655,7 @@ type ChatResponse struct {
 		Filters             []FilterResponse         `json:"filters"`
 		RagN                int                      `json:"rag_n"`
 		ToolSupport         bool                     `json:"tool_support"`
+		RenderImages        bool                     `json:"render_images"`
 		SystemPrompt        string                   `json:"system_prompt"`
 		DefaultDataSourceID int                      `json:"default_data_source_id"`
 		DefaultDataSource   DatasourceResponse       `json:"default_data_source"`

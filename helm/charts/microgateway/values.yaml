@@ -165,11 +165,12 @@ config:
   # plugins the hub pushes too.
   pluginsAllowedSources: ""
 
-  # Upstream network policy. Turn blockInternalUpstreams on to stop LLM configs
-  # reaching cluster-internal or link-local addresses, then name the exceptions
-  # in allowedInternalHosts — that is how you front an in-cluster model server
-  # (an InferencePool-backed Service, say) without opening up egress generally.
-  blockInternalUpstreams: false
+  # Upstream network policy. blockInternalUpstreams (on by default since 2.3)
+  # stops LLM configs reaching cluster-internal or link-local addresses; name
+  # the exceptions in allowedInternalHosts — that is how you front an
+  # in-cluster model server (an InferencePool-backed Service, say) without
+  # opening up egress generally. false sets LLM_UPSTREAM_BLOCK_INTERNAL=false.
+  blockInternalUpstreams: true
   allowedInternalHosts: ""   # e.g. ".svc.cluster.local"
 
   # Logging

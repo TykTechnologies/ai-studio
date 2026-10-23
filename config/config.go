@@ -15,6 +15,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 )
@@ -41,6 +42,11 @@ type AppConf struct {
 	// PluginSourcePolicy limits the plugin deployment types (oci, file,
 	// grpc) Studio accepts (AI_STUDIO_PLUGIN_ALLOWED_SOURCES; all when unset).
 	PluginSourcePolicy plugin_security.SourcePolicy `json:"-"`
+	// AllowInternalUpstreams is LLM_UPSTREAM_BLOCK_INTERNAL=false: outbound
+	// connections to internal addresses (LLM upstreams, guardrail providers,
+	// filter HTTP calls) are allowed. The zero value blocks them; studio.New
+	// applies it to pkg/netguard.
+	AllowInternalUpstreams bool `json:"-"`
 	SMTPServer           string
 	SMTPPort             int
 	SMTPUser             string
@@ -846,6 +852,15 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 		if !sourcePolicy.AllowsAll() {
 			cfgLog.Info().Msgf("Plugin sources limited by AI_STUDIO_PLUGIN_ALLOWED_SOURCES: %s", sourcePolicy)
 		}
+	}
+
+	// Internal-address blocking for outbound calls (pkg/netguard), on unless
+	// LLM_UPSTREAM_BLOCK_INTERNAL=false. A security setting, so an invalid
+	// value refuses to start.
+	if block, err := netguard.ParseBlockInternal(getenv(netguard.EnvBlockInternal)); err != nil {
+		conf.ConfigErrors = append(conf.ConfigErrors, err)
+	} else {
+		conf.AllowInternalUpstreams = !block
 	}
 
 	// OCI Plugin configuration

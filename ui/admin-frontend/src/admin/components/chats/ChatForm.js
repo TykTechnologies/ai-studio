@@ -26,7 +26,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 
-import { FormControlLabel, Switch } from "@mui/material";
+import { FormControlLabel, FormHelperText, Switch } from "@mui/material";
 
 import { useNavigate, useParams, Link } from "react-router-dom";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -51,6 +51,7 @@ const ChatForm = () => {
     filters: [],
     rag_n: "",
     tool_support: false,
+    render_images: false,
     system_prompt: "",
     default_data_source_id: 0,
     default_tool_ids: [],
@@ -206,6 +207,7 @@ const ChatForm = () => {
         filters: chatData.filters.map((filter) => filter.id.toString()),
         rag_n: chatData.rag_n || "",
         tool_support: chatData.tool_support || false,
+        render_images: chatData.render_images || false,
         system_prompt: chatData.system_prompt || "",
         default_data_source_id:
           chatData.default_data_source_id?.toString() || "",
@@ -310,6 +312,7 @@ const ChatForm = () => {
           filter_ids: chat.filters.map((filterId) => parseInt(filterId, 10)),
           rag_n: chat.rag_n ? parseInt(chat.rag_n, 10) : null,
           tool_support: chat.tool_support,
+          render_images: chat.render_images,
           system_prompt: chat.system_prompt,
           default_data_source_id: chat.default_data_source_id
             ? parseInt(chat.default_data_source_id, 10)
@@ -551,6 +554,27 @@ const ChatForm = () => {
                 }
                 label="Enable Tool Support"
               />
+            </Grid>
+
+            <Grid item xs={12}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={chat.render_images}
+                    onChange={(event) =>
+                      setChat({ ...chat, render_images: event.target.checked })
+                    }
+                    name="render_images"
+                    color="primary"
+                  />
+                }
+                label="Render images in responses"
+              />
+              <FormHelperText sx={{ mt: 0, ml: 0 }}>
+                Off: images in model responses are shown as links and never
+                loaded. On: the user's browser loads them, so a response that
+                a prompt injection shaped can send data to any address.
+              </FormHelperText>
             </Grid>
 
             <Grid item xs={12}>

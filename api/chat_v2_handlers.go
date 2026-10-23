@@ -67,6 +67,7 @@ type V2ChatSummary struct {
 	Name            string                  `json:"name"`
 	Description     string                  `json:"description"`
 	ToolSupport     bool                    `json:"tool_support"`
+	RenderImages    bool                    `json:"render_images"`
 	PromptTemplates []models.PromptTemplate `json:"prompt_templates"`
 }
 
@@ -122,7 +123,7 @@ func chatSummary(chat *models.Chat) V2ChatSummary {
 	}
 	return V2ChatSummary{
 		ID: chat.ID, Name: chat.Name, Description: chat.Description,
-		ToolSupport: chat.SupportsTools, PromptTemplates: templates,
+		ToolSupport: chat.SupportsTools, RenderImages: chat.RenderImages, PromptTemplates: templates,
 	}
 }
 
