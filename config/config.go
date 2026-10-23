@@ -3,6 +3,7 @@ package config
 import (
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -30,6 +31,10 @@ func init() {
 }
 
 type AppConf struct {
+	// ConfigErrors lists settings with invalid values that must not fall
+	// back to a default (security settings). studio.New refuses to start
+	// while there are any; see Err.
+	ConfigErrors []error `json:"-"`
 	SMTPServer           string
 	SMTPPort             int
 	SMTPUser             string
@@ -386,6 +391,11 @@ func NormalizeBasePath(p string) string {
 // BasePath.
 func (c *AppConf) PublicPath(path string) string {
 	return c.BasePath + path
+}
+
+// Err reports the invalid settings in ConfigErrors, or nil.
+func (c *AppConf) Err() error {
+	return errors.Join(c.ConfigErrors...)
 }
 
 // Set installs conf as the configuration Get returns.
@@ -821,7 +831,11 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 	conf.GRPCMaxConnectionAgeGrace = parseDurationWithDefault(getenv, "GRPC_MAX_CONNECTION_AGE_GRACE", 0)
 
 	// OCI Plugin configuration
-	conf.OCIPlugins = getOCIConfig(getenv)
+	var ociErr error
+	conf.OCIPlugins, ociErr = getOCIConfig(getenv)
+	if ociErr != nil {
+		conf.ConfigErrors = append(conf.ConfigErrors, ociErr)
+	}
 
 	// Audit trail configuration
 	conf.Audit = getAuditConfig(getenv)
@@ -1434,7 +1448,7 @@ func splitCSVList(v string) []string {
 	return out
 }
 
-func getOCIConfig(getenv func(string) string) OCIConfig {
+func getOCIConfig(getenv func(string) string) (OCIConfig, error) {
 	config := OCIConfig{}
 
 	// Cache directory - if not set, OCI support is disabled
@@ -1442,7 +1456,7 @@ func getOCIConfig(getenv func(string) string) OCIConfig {
 
 	// Only parse other settings if OCI is enabled
 	if config.CacheDir == "" {
-		return config
+		return config, nil
 	}
 
 	// Max cache size
@@ -1462,13 +1476,14 @@ func getOCIConfig(getenv func(string) string) OCIConfig {
 		}
 	}
 
-	// Require signature verification
+	// Require signature verification. A security setting: an invalid value
+	// refuses to start rather than falling back to the default.
 	if requireSigStr := getenv("AI_STUDIO_OCI_REQUIRE_SIGNATURE"); requireSigStr != "" {
-		if requireSig, err := strconv.ParseBool(requireSigStr); err == nil {
-			config.RequireSignature = requireSig
-		} else {
-			cfgLog.Info().Msgf("Warning: Invalid AI_STUDIO_OCI_REQUIRE_SIGNATURE value: %s. Using default: %t", requireSigStr, config.RequireSignature)
+		requireSig, err := strconv.ParseBool(strings.TrimSpace(requireSigStr))
+		if err != nil {
+			return OCIConfig{}, fmt.Errorf("invalid AI_STUDIO_OCI_REQUIRE_SIGNATURE value %q: must be true or false", requireSigStr)
 		}
+		config.RequireSignature = requireSig
 	}
 
 	// Network timeout
@@ -1519,11 +1534,11 @@ func getOCIConfig(getenv func(string) string) OCIConfig {
 	config.SetDefaults()
 	if err := config.Validate(); err != nil {
 		cfgLog.Info().Msgf("Warning: Invalid OCI configuration: %v. OCI support will be disabled.", err)
-		return OCIConfig{} // Return empty config to disable OCI
+		return OCIConfig{}, nil // Return empty config to disable OCI
 	}
 
 	cfgLog.Info().Msgf("✅ AI Studio OCI configuration loaded successfully - cache dir: %s", config.CacheDir)
-	return config
+	return config, nil
 }
 
 func Get(envFile string) *AppConf {

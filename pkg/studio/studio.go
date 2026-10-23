@@ -257,6 +257,9 @@ func New(opts Options) (_ *Studio, err error) {
 	if opts.Config == nil || opts.DB == nil {
 		return nil, errors.New("studio: Options.Config and Options.DB are required")
 	}
+	if err := opts.Config.Err(); err != nil {
+		return nil, fmt.Errorf("studio: invalid configuration: %w", err)
+	}
 	if opts.HostTykConnection != nil {
 		if err := opts.HostTykConnection.Validate(); err != nil {
 			return nil, fmt.Errorf("studio: Options.HostTykConnection: %w", err)
