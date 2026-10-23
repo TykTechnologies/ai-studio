@@ -344,10 +344,15 @@ AI Studio and the Microgateway log a warning at startup whenever internal addres
 
 - LLM upstreams on every gateway route (`/llm/`, `/ai/`, `/anthropic/`, `/v1`, native and Bedrock routes), in AI Studio's embedded gateway and the Microgateway;
 - guardrail providers (Enterprise);
-- `tyk.makeHTTPRequest` in filter scripts (Enterprise).
+- `tyk.makeHTTPRequest` in filter scripts (Enterprise);
+- tool (OpenAPI) calls, from chat, the gateway's tool REST and MCP endpoints, and edges;
+- data source and vector store connections (Chroma, Pinecone, pgvector, Qdrant, Redis, Weaviate);
+- AI Studio's tool discovery call to a remote MCP server in the registration wizard (Enterprise).
+
+**Per-asset exemption.** An administrator can switch on **Allow internal host** for a tool or a data source (and in the MCP registration wizard, for its discovery call). That lets the asset's own host be internal while blocking stays on for every other host, including other assets on the same host and redirects. It lifts only the internal-address check: `LLM_UPSTREAM_ALLOWED_HOSTS` still applies, and the environment settings above stay global. Only administrators can set or change it; portal submissions cannot carry it, and an approved submission starts with it off. Edges honour the switch for the assets the hub sends them.
 
 OCI plugin registries, their signatures and token servers, and `grpc://` plugin hosts follow the plugin host rule, which refuses internal addresses whatever `LLM_UPSTREAM_BLOCK_INTERNAL` says (see [Plugin Security](./plugins-security.md)). Webhooks and Tyk Gateway connections (Enterprise) have their own always-on URL policies.
 
-**What it does not cover yet:** Studio chat's own calls to an LLM (chat uses the vendor clients directly, not the gateway), embedders and datasource or vector store connections, tool (OpenAPI) calls, MCP servers, SSO and identity providers, SMTP, the hub-to-edge gRPC connection and marketplace index fetches. Restrict those with network policy (a Kubernetes `NetworkPolicy`, firewall rules or an egress proxy).
+**What it does not cover yet:** Studio chat's own calls to an LLM (chat uses the vendor clients directly, not the gateway), embedders, SSO and identity providers, SMTP, the hub-to-edge gRPC connection and marketplace index fetches. Restrict those with network policy (a Kubernetes `NetworkPolicy`, firewall rules or an egress proxy).
 
 For the metrics and traces the Proxy emits — request latency, time to first token, token usage, cost and policy blocks — see [Observability](./observability.md).
