@@ -32,8 +32,12 @@ func (s *ControlServer) llmMetadataForEdge(metadata models.JSONMap) (string, map
 			continue
 		}
 		// Metadata carries credentials (Bedrock keys), which vendor clients
-		// replace with their own when empty.
+		// replace with their own when empty: a credential key's reference
+		// to an empty secret is refused, not sent empty.
 		value := secrets.ForEdgeCredential(secrets.ResolveRef(strVal))
+		if models.IsCredentialMetadataKey(k) {
+			value = secrets.CredentialRefForEdge(strVal)
+		}
 		if value == "" || !models.IsCredentialMetadataKey(k) {
 			resolved[k] = value
 			continue
