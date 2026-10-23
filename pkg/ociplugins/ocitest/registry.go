@@ -43,6 +43,16 @@ type Registry struct {
 	// Requests counts requests by "METHOD kind" (kind is manifests, blobs or
 	// referrers), so tests can assert which endpoints were used.
 	requests map[string]int
+	// username and password, when set, are required as basic auth.
+	username, password string
+}
+
+// RequireBasicAuth makes every request after it need these basic-auth
+// credentials, answering 401 with a Basic challenge otherwise.
+func (r *Registry) RequireBasicAuth(username, password string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.username, r.password = username, password
 }
 
 // NewRegistry starts a registry that is shut down when the test ends.
@@ -137,6 +147,16 @@ func (r *Registry) PushIndex(repo, tag string, manifests ...ocispec.Descriptor) 
 }
 
 func (r *Registry) serve(w http.ResponseWriter, req *http.Request) {
+	r.mu.Lock()
+	username, password := r.username, r.password
+	r.mu.Unlock()
+	if username != "" {
+		if u, p, ok := req.BasicAuth(); !ok || u != username || p != password {
+			w.Header().Set("WWW-Authenticate", `Basic realm="ocitest"`)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+	}
 	if req.URL.Path == "/v2/" || req.URL.Path == "/v2" {
 		w.WriteHeader(http.StatusOK)
 		return
