@@ -27,6 +27,7 @@ import (
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // Global service reference for GRPCServer access
@@ -2203,6 +2204,11 @@ func (m *AIStudioPluginManager) RouteEdgePayload(ctx context.Context, payload *p
 		var err error
 		loadedPlugin, err = m.LoadPlugin(pluginID)
 		if err != nil {
+			// A plugin Studio does not have will not appear; anything else
+			// (inactive, failing to start) may pass.
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("plugin %d is not loaded and could not be loaded: %w", pluginID, err)
+			}
 			return fmt.Errorf("%w: plugin %d is not loaded and could not be loaded: %w", ErrEdgePayloadRetry, pluginID, err)
 		}
 	}
@@ -2260,6 +2266,10 @@ func (m *AIStudioPluginManager) RouteEdgePayload(ctx context.Context, payload *p
 			Uint("plugin_id", pluginID).
 			Str("edge_id", payload.EdgeId).
 			Msg("Failed to call AcceptEdgePayload on plugin")
+		// A plugin that does not implement AcceptEdgePayload never will.
+		if status.Code(err) == codes.Unimplemented {
+			return fmt.Errorf("failed to route edge payload to plugin %d: %w", pluginID, err)
+		}
 		return fmt.Errorf("%w: failed to route edge payload to plugin %d: %w", ErrEdgePayloadRetry, pluginID, err)
 	}
 
