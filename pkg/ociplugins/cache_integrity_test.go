@@ -42,6 +42,10 @@ func cachedPluginFixture(t *testing.T, requireSignature bool, binary []byte, met
 			BinarySHA256:     hex.EncodeToString(sum[:]),
 			SignatureChecked: requireSignature,
 		}
+		if requireSignature {
+			// The current format records what was resolved and verified.
+			m.ResolvedDigest, m.SignedDigest = ref.Digest, ref.Digest
+		}
 		meta(m)
 		require.NoError(t, client.storage.StoreMetadata(ref.Digest, cacheTestArch, m))
 	}

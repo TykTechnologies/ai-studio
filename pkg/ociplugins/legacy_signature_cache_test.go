@@ -16,7 +16,6 @@ import (
 // fetched and verified once more instead of being served from the cache
 // (midsommar-clean-c1g.19).
 func TestFetchPlugin_PreSignedDigestEntryIsVerifiedAgain(t *testing.T) {
-	t.Skip("fails until midsommar-clean-c1g.19 is fixed; remove this skip with the fix")
 	for _, publicKey := range []string{"", "1"} {
 		t.Run("key="+publicKey, func(t *testing.T) {
 			client, puller, verifier, ref, params := fetchFixture(t)

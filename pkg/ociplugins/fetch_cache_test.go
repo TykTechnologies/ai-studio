@@ -57,7 +57,7 @@ func fetchFixture(t *testing.T) (*OCIPluginClient, *countingPuller, *stubVerifie
 	require.NoError(t, err)
 	t.Cleanup(func() { client.Close() })
 
-	manifest := digestOf([]byte("manifest"))
+	manifest := "sha256:" + digestOf([]byte("manifest"))
 	puller := &countingPuller{manifestDigest: manifest, binary: []byte("signed plugin binary")}
 	verifier := &stubVerifier{}
 	client.fetcher = puller

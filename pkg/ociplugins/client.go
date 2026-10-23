@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/opencontainers/go-digest"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/rs/zerolog/log"
 )
 
@@ -195,42 +197,15 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 		cacheRef = &resolved
 	}
 
-	// The signature covers the top-level digest the reference resolved to
-	// (the index for a multi-arch plugin; publish-plugin.sh signs that), not
-	// the platform manifest. Verify that digest as pulled, not the tag: a tag
-	// moved between the pull and the check would otherwise get a signed image
-	// verified and an unsigned one stored.
-	signedRef := cacheRef
-	if pulled.Resolved != nil {
-		resolved := *ref
-		resolved.Digest = pulled.Resolved.Digest.String()
-		signedRef = &resolved
-	}
-
 	// Verify signature if required.
+	var signedDigest string
 	if c.config.RequireSignature {
 		var err error
-
-		// Use enterprise security service if available, otherwise fall back to built-in verifier
-		if c.securityService != nil {
-			log.Debug().Msg("Using enterprise security service for signature verification")
-			err = c.securityService.VerifySignature(WithAuthConfig(ctx, params.AuthConfig), signedRef, params.PublicKey)
-		} else {
-			log.Debug().Msg("Using built-in verifier for signature verification (CE mode)")
-			err = c.verifier.Verify(ctx, signedRef, params.PublicKey)
-		}
-
+		signedDigest, err = c.verifySignature(ctx, ref, pulled, params)
 		if err != nil {
-			return nil, &ErrSignatureVerificationFailed{
-				Reference: ref.FullReference(),
-				Reason:    err.Error(),
-			}
+			return nil, err
 		}
-		if c.signaturesEnforced() {
-			log.Debug().
-				Str("reference", ref.FullReference()).
-				Msg("Signature verification passed")
-		} else {
+		if !c.signaturesEnforced() {
 			log.Warn().
 				Str("reference", ref.FullReference()).
 				Msg("OCI plugin signature NOT verified: signature verification is not available in this edition; the plugin is recorded as unverified")
@@ -284,8 +259,14 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 		SignatureChecked: enforced,
 		SignatureKey:     params.PublicKey,
 	}
+	if pulled.Resolved != nil {
+		metadata.ResolvedDigest = pulled.Resolved.Digest.String()
+	}
+	if pulled.Manifest != nil {
+		metadata.ManifestDigest = pulled.Manifest.Digest.String()
+	}
 	if enforced {
-		metadata.SignedDigest = signedRef.Digest
+		metadata.SignedDigest = signedDigest
 	}
 
 	if err := c.storage.StoreMetadata(cacheRef.Digest, params.Architecture, metadata); err != nil {
@@ -310,6 +291,96 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 		Msg("OCI plugin fetched successfully")
 
 	return localPlugin, nil
+}
+
+// verifySignature checks the signature of the pulled plugin and returns the
+// digest whose signature verified. Every failure is an
+// ErrSignatureVerificationFailed.
+//
+// The signature is checked against the top-level digest the reference
+// resolved to: the index for a multi-arch plugin, which publish-plugin.sh
+// signs. Plugins signed before that, or by hand, may be signed on the
+// platform manifest instead, so when the index's signature does not verify,
+// the platform manifest that was pulled is checked with the same key. That
+// digest comes from the index content (fetched by the index digest), never
+// from the tag or a second resolution, and another platform's manifest is
+// never consulted. Both checks use the digests as pulled, not the tag: a tag
+// moved between the pull and the check would otherwise get a signed image
+// verified and an unsigned one stored.
+func (c *OCIPluginClient) verifySignature(ctx context.Context, ref *OCIReference, pulled *PullResult, params *OCIPluginParams) (string, error) {
+	fail := func(reason string) error {
+		return &ErrSignatureVerificationFailed{Reference: ref.FullReference(), Reason: reason}
+	}
+
+	var resolved string
+	if pulled.Resolved != nil {
+		resolved = pulled.Resolved.Digest.String()
+	}
+	if !isSHA256Digest(resolved) {
+		return "", fail(fmt.Sprintf("the reference resolved to no valid sha256 digest (%q)", resolved))
+	}
+	var platform string
+	if isIndexMediaType(pulled.Resolved.MediaType) && pulled.Manifest != nil && pulled.Manifest.Digest.String() != resolved {
+		platform = pulled.Manifest.Digest.String()
+		if !isSHA256Digest(platform) {
+			return "", fail(fmt.Sprintf("the platform manifest has no valid sha256 digest (%q)", platform))
+		}
+	}
+
+	ctx = WithAuthConfig(ctx, params.AuthConfig)
+	firstErr := c.verifyDigest(ctx, ref, resolved, params.PublicKey)
+	if firstErr == nil {
+		kind := "manifest"
+		if platform != "" {
+			kind = "index"
+		}
+		log.Info().
+			Str("reference", ref.FullReference()).
+			Str("verified_digest", resolved).
+			Str("digest_kind", kind).
+			Msg("OCI plugin signature check passed")
+		return resolved, nil
+	}
+	if platform == "" {
+		return "", fail(firstErr.Error())
+	}
+
+	secondErr := c.verifyDigest(ctx, ref, platform, params.PublicKey)
+	if secondErr != nil {
+		return "", fail(fmt.Sprintf("index %s: %v; platform manifest %s: %v", resolved, firstErr, platform, secondErr))
+	}
+	log.Info().
+		Str("reference", ref.FullReference()).
+		Str("verified_digest", platform).
+		Str("digest_kind", "platform").
+		Str("index_digest", resolved).
+		Msg("OCI plugin signature check passed on the platform manifest (the index has no valid signature)")
+	return platform, nil
+}
+
+// verifyDigest checks the signature of the artifact with the given digest in
+// ref's repository.
+func (c *OCIPluginClient) verifyDigest(ctx context.Context, ref *OCIReference, digest, publicKey string) error {
+	pinned := *ref
+	pinned.Digest = digest
+	// Use enterprise security service if available, otherwise fall back to built-in verifier
+	if c.securityService != nil {
+		log.Debug().Msg("Using enterprise security service for signature verification")
+		return c.securityService.VerifySignature(ctx, &pinned, publicKey)
+	}
+	log.Debug().Msg("Using built-in verifier for signature verification (CE mode)")
+	return c.verifier.Verify(ctx, &pinned, publicKey)
+}
+
+// isSHA256Digest reports whether d is a well-formed "sha256:<64 hex>" digest.
+func isSHA256Digest(d string) bool {
+	parsed := digest.Digest(d)
+	return parsed.Validate() == nil && parsed.Algorithm() == digest.SHA256
+}
+
+// isIndexMediaType reports whether mediaType is a multi-platform index.
+func isIndexMediaType(mediaType string) bool {
+	return mediaType == ocispec.MediaTypeImageIndex || mediaType == "application/vnd.docker.distribution.manifest.list.v2+json"
 }
 
 // HasPlugin checks if a plugin exists in the cache
@@ -359,6 +430,21 @@ func (c *OCIPluginClient) getLocalPlugin(ref *OCIReference, params *OCIPluginPar
 	}
 	if c.signaturesEnforced() && metadata.SignatureKey != params.PublicKey {
 		return nil, &ErrCacheCorrupted{Path: execPath, Reason: "signature was verified with a different public key"}
+	}
+	// Serve the entry only if a fresh fetch of ref.Digest would verify the
+	// same way: it was resolved from this digest, and the digest whose
+	// signature passed is that one or its platform manifest. A tag fetch
+	// caches a multi-arch plugin under the platform digest but resolved the
+	// index, so a later pin to the platform digest is verified afresh. An
+	// entry with no recorded digests (an earlier release, which may not have
+	// verified anything) is verified again once.
+	if c.signaturesEnforced() {
+		if metadata.ResolvedDigest != ref.Digest {
+			return nil, &ErrCacheCorrupted{Path: execPath, Reason: "cached from a different resolution of this reference, or by an earlier release; verifying it again"}
+		}
+		if metadata.SignedDigest == "" || (metadata.SignedDigest != metadata.ResolvedDigest && metadata.SignedDigest != metadata.ManifestDigest) {
+			return nil, &ErrCacheCorrupted{Path: execPath, Reason: "no record of which digest's signature verified; verifying it again"}
+		}
 	}
 
 	if err := c.storage.UpdateLastAccessed(ref.Digest, params.Architecture); err != nil {
