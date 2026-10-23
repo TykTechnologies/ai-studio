@@ -191,7 +191,7 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 		// Use enterprise security service if available, otherwise fall back to built-in verifier
 		if c.securityService != nil {
 			log.Debug().Msg("Using enterprise security service for signature verification")
-			err = c.securityService.VerifySignature(ctx, signedRef, params.PublicKey)
+			err = c.securityService.VerifySignature(WithAuthConfig(ctx, params.AuthConfig), signedRef, params.PublicKey)
 		} else {
 			log.Debug().Msg("Using built-in verifier for signature verification (CE mode)")
 			err = c.verifier.Verify(ctx, signedRef, params.PublicKey)
