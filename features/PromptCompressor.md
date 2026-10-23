@@ -22,10 +22,13 @@ starting with tool outputs. A Community Edition plugin
   The only refusal is `failure_mode: closed` with an engine failure in
   enforce mode (502, `failed_closed`).
 - **post_auth, not pre_upstream (Phase 1).** `post_auth` runs before request
-  filters, so the filters screen the compressed body. The Bedrock bridges run
-  no plugins and are not covered until the core `pre_upstream` hook exists
-  (eac.28); `post_auth` is deliberately not extended to them (it would leak
-  rate-limiter and load-balancer counters and double-run on `/ai/`).
+  filters, so the filters screen the compressed body. The Bedrock bridges
+  are covered from 2.3 without a new hook: they loop back through
+  `/llm/call/` (8xf.12), where `post_auth` runs once on the Converse body,
+  as for every other vendor. (`post_auth` was not added to the bridges
+  themselves, which would have leaked rate-limiter and load-balancer counters
+  and run twice on `/ai/`.) `pre_upstream` (eac.28) remains a separate change
+  for running after the request filters.
 - **Lossy levels are capped on LLMs with request filters** unless
   `lossy_with_request_filters` is set: ANSI and whitespace stripping can join
   text into a match the filter would otherwise not see. An LLM whose filter
@@ -288,10 +291,15 @@ Enterprise-only note is over-broad: bead `midsommar-clean-utx`.
 
 ## 7. Open work
 
-- eac.24 / eac.31: eval reports (levels 1–2, then level 3 and engines). The
-  docs page's Evaluation section waits for them.
-- eac.28 / eac.29: `pre_upstream` hook and the plugin's switch to it
-  (Bedrock bridges).
-- eac.39 / eac.40: tool-schema slimming, measured, then a per-App drop list.
+- eac.24 / eac.31 (deferred): the full quality suites for levels 1–2, then
+  level 3 and engines. The docs page's Evaluation section carries the
+  offline and end-to-end results so far; level 2 stays opt-in until the
+  suites run.
+- eac.28 / eac.29: `pre_upstream` hook and the plugin's switch to it (to
+  run after the request filters; the Bedrock bridges are already covered
+  through the loopback, 8xf.12).
 - eac.22: opt-in live samples. eac.32: reversible compression.
-- eac.41: rebuild request-path plugins on the 2.3 SDK.
+
+Done since the first release: tool-definition cost and the per-App drop
+list (eac.39 / eac.40), and the 2.3 SDK rebuild of the request-path plugins
+(eac.41).
