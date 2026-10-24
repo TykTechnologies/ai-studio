@@ -48,17 +48,42 @@ const ExcerptMask = "[masked]"
 // reports replaced by ExcerptMask and "…" where text was cut. A masked span
 // that crosses the cut is masked whole, so a cut never leaves part of a
 // credential showing. It returns "" and false when no masker is registered.
+// For many excerpts of one text, use NewExcerpter: the masker runs once.
 func Excerpt(text string, span *Span, limit int) (string, bool) {
+	return NewExcerpter(text).Excerpt(span, limit)
+}
+
+// Excerpter is a text prepared for excerpts (Excerpt): its UTF-8 repaired
+// and the masker run once, so each excerpt costs its window, not the text.
+// A provider can report hundreds of thousands of findings on one
+// multi-megabyte piece (4qm).
+type Excerpter struct {
+	text  string
+	masks []Span // merged and sorted
+	ok    bool
+}
+
+// NewExcerpter prepares text for excerpts.
+func NewExcerpter(text string) *Excerpter {
 	maskerMu.RLock()
 	m := masker
 	maskerMu.RUnlock()
 	if m == nil {
+		return &Excerpter{}
+	}
+	text = strings.ToValidUTF8(text, "�")
+	return &Excerpter{text: text, masks: mergeSpans(m(text), len(text)), ok: true}
+}
+
+// Excerpt is Excerpt for the prepared text.
+func (x *Excerpter) Excerpt(span *Span, limit int) (string, bool) {
+	if !x.ok {
 		return "", false
 	}
 	if limit <= 0 {
 		limit = DefaultExcerptChars
 	}
-	text = strings.ToValidUTF8(text, "�")
+	text, masks := x.text, x.masks
 
 	// The window, in bytes: the span (or its first limit characters), with
 	// the rest of the limit shared before and after it.
@@ -66,7 +91,7 @@ func Excerpt(text string, span *Span, limit int) (string, bool) {
 	if span != nil && span.Start >= 0 && span.Start <= span.End && span.End <= len(text) {
 		s, e = snapBack(text, span.Start), snapBack(text, span.End)
 	}
-	if n := utf8.RuneCountInString(text[s:e]); n >= limit {
+	if n := runesUpTo(text[s:e], limit); n >= limit {
 		e = advance(text, s, limit)
 	} else {
 		// Half the room before the span, the rest after; what one side
@@ -81,15 +106,13 @@ func Excerpt(text string, span *Span, limit int) (string, bool) {
 		s = retreat(text, s, room-used)
 	}
 
-	masks := mergeSpans(m(text), len(text))
-	// Widen the window over any mask that crosses its edges.
-	for _, mk := range masks {
-		if mk.Start < s && mk.End > s {
-			s = snapBack(text, mk.Start)
-		}
-		if mk.Start < e && mk.End > e {
-			e = snapForward(text, mk.End)
-		}
+	// Widen the window over any mask that crosses its edges. The masks are
+	// merged, so at most one crosses each edge.
+	if mk, ok := maskAround(masks, s); ok {
+		s = snapBack(text, mk.Start)
+	}
+	if mk, ok := maskAround(masks, e); ok {
+		e = snapForward(text, mk.End)
 	}
 
 	var b strings.Builder
@@ -97,8 +120,13 @@ func Excerpt(text string, span *Span, limit int) (string, bool) {
 		b.WriteString("…")
 	}
 	at := s
-	for _, mk := range masks {
-		if mk.End <= at || mk.Start >= e {
+	// The first mask that ends after the window starts.
+	for i := sort.Search(len(masks), func(i int) bool { return masks[i].End > at }); i < len(masks); i++ {
+		mk := masks[i]
+		if mk.Start >= e {
+			break
+		}
+		if mk.End <= at {
 			continue
 		}
 		start := max(mk.Start, at)
@@ -113,6 +141,25 @@ func Excerpt(text string, span *Span, limit int) (string, bool) {
 		b.WriteString("…")
 	}
 	return b.String(), true
+}
+
+// maskAround is the mask strictly containing offset i (Start < i < End).
+func maskAround(masks []Span, i int) (Span, bool) {
+	k := sort.Search(len(masks), func(k int) bool { return masks[k].End > i })
+	if k < len(masks) && masks[k].Start < i {
+		return masks[k], true
+	}
+	return Span{}, false
+}
+
+// runesUpTo counts the characters of s, stopping at limit.
+func runesUpTo(s string, limit int) int {
+	n := 0
+	for i := 0; i < len(s) && n < limit; n++ {
+		_, size := utf8.DecodeRuneInString(s[i:])
+		i += size
+	}
+	return n
 }
 
 // mergeSpans drops spans outside text and merges the overlapping or
