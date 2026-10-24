@@ -8,13 +8,23 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 )
 
+// connectionEncryptedKey is Config.ConnectionEncrypted's JSON key.
+const connectionEncryptedKey = "connection_encrypted"
+
 // ConfigJSONForEdge renders a stored guardrail config for the edge snapshot.
 // Connection values are passed through resolve so `$SECRET/` and `$ENV/`
 // references become the values an edge, which has no access to the hub's
 // secret store, can use. This mirrors how LLM API keys reach edges. Edges
 // never resolve references themselves, so a value resolve leaves unresolved
 // goes out without its name (EdgeConnectionValue).
-func ConfigJSONForEdge(raw map[string]any, resolve func(string) string) (string, error) {
+//
+// With encrypt, each resolved secret connection value (isSecretConnectionField)
+// travels encrypted in connection_encrypted and the connection field holds
+// secrets.RefusedCredential, as an LLM's metadata credentials do: the
+// snapshot never carries it in clear, and an edge too old to decrypt it
+// sends a key the provider refuses, so the filter's fail mode applies. encrypt
+// returns "" when it cannot encrypt, which leaves the refused key alone.
+func ConfigJSONForEdge(raw map[string]any, resolve func(string) string, encrypt func(string) string) (string, error) {
 	if len(raw) == 0 {
 		return "", nil
 	}
@@ -24,7 +34,40 @@ func ConfigJSONForEdge(raw map[string]any, resolve func(string) string) (string,
 	}
 	if resolve != nil {
 		for k, v := range cfg.Connection {
-			cfg.Connection[k] = EdgeConnectionValue(cfg.Provider, k, resolve(v))
+			resolved := resolve(v)
+			// A secret field whose reference resolves to an empty value
+			// (a secret stored empty, an unset $ENV/ name) is refused, never
+			// sent empty: a provider client fills an empty key from its own
+			// environment (Bedrock's AWS default chain), as
+			// secrets.CredentialRefForEdge does for LLM keys.
+			if resolved == "" && v != "" && isSecretConnectionField(cfg.Provider, k) {
+				resolved = secrets.RefusedCredential
+			}
+			cfg.Connection[k] = EdgeConnectionValue(cfg.Provider, k, resolved)
+		}
+	}
+	if encrypt != nil {
+		refused := false
+		for k, v := range cfg.Connection {
+			if v == "" || v == secrets.RefusedCredential || !isSecretConnectionField(cfg.Provider, k) {
+				continue
+			}
+			refused = true
+			cfg.Connection[k] = secrets.RefusedCredential
+			if c := encrypt(v); c != "" {
+				if cfg.ConnectionEncrypted == nil {
+					cfg.ConnectionEncrypted = make(map[string]string)
+				}
+				cfg.ConnectionEncrypted[k] = c
+			}
+		}
+		// An edge before v2.3 reads only connection, so it sends the refused
+		// key and its guardrail fails; make that fail block, whatever the
+		// admin's fail mode, and carry the real one for current edges.
+		if refused {
+			mode := cfg.FailMode
+			cfg.FailModeExt = &mode
+			cfg.FailMode = FailClosed
 		}
 	}
 	// An edge older than this hub rejects an action it does not know. Send
@@ -70,6 +113,36 @@ func isSecretConnectionField(provider, field string) bool {
 		}
 	}
 	return true
+}
+
+// DecryptEdgeConnection is the edge's side of ConfigJSONForEdge's
+// encryption: each connection_encrypted value is decrypted into connection,
+// and connection_encrypted is removed. cfg is the decoded snapshot form
+// (ConfigFromJSON) and is changed in place. A value that does not decrypt
+// keeps the refused key in connection, so the provider refuses the call and
+// the filter's fail mode applies; its field is returned in failed.
+func DecryptEdgeConnection(cfg map[string]any, decrypt func(string) (string, error)) (failed []string) {
+	enc, ok := cfg[connectionEncryptedKey].(map[string]any)
+	delete(cfg, connectionEncryptedKey)
+	if !ok || len(enc) == 0 {
+		return nil
+	}
+	conn, _ := cfg["connection"].(map[string]any)
+	if conn == nil {
+		conn = make(map[string]any, len(enc))
+		cfg["connection"] = conn
+	}
+	for k, v := range enc {
+		s, _ := v.(string)
+		plain, err := decrypt(s)
+		if err != nil || s == "" {
+			conn[k] = secrets.RefusedCredential
+			failed = append(failed, k)
+			continue
+		}
+		conn[k] = plain
+	}
+	return failed
 }
 
 // ConfigFromJSON decodes the edge snapshot form back into the stored map

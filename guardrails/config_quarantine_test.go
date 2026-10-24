@@ -49,7 +49,7 @@ func TestQuarantineConfigRoundTripsToTheEdge(t *testing.T) {
 		"custom": {"provider": ProviderBuiltin, "detectors": []any{map[string]any{"name": CategoryInjection}}, "on_detect": ActionQuarantine, "quarantine": map[string]any{"placeholder": custom}},
 		"absent": {"provider": ProviderBuiltin, "detectors": []any{map[string]any{"name": CategoryInjection}}, "on_detect": ActionQuarantine},
 	} {
-		js, err := ConfigJSONForEdge(raw, nil)
+		js, err := ConfigJSONForEdge(raw, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

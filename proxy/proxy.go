@@ -2072,6 +2072,10 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		Timeout:   p.config.llmTimeout(),
 		Transport: upstreamTransport,
 	}
+	// From here every exit completes the stream for the response hooks; a
+	// transport error with no response does so with the status the client got.
+	sc := p.newStreamCompletion(r, llm, app, reqBody)
+	defer func() { sc.complete(respStatus, nil, nil, 0) }()
 	resp, err := client.Do(upstreamReq)
 	if err != nil {
 		respStatus = loopbackAwareTransportStatus(r, err)
@@ -2183,6 +2187,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 						p.goAnalyzeFor(r, func() {
 							p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
 						})
+						sc.complete(http.StatusBadRequest, resp.Header, fullResponse.Bytes(), chunkIndex)
 						return
 					}
 					release = append(release, held...)
@@ -2211,6 +2216,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 					p.goAnalyzeFor(r, func() {
 						p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
 					})
+					sc.complete(http.StatusBadRequest, resp.Header, fullResponse.Bytes(), chunkIndex)
 					return
 				}
 				chunk = release
@@ -2283,6 +2289,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 				p.goAnalyzeFor(r, func() {
 					p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
 				})
+				sc.complete(http.StatusBadRequest, resp.Header, fullResponse.Bytes(), chunkIndex)
 				return
 			}
 			tail = append(held, tail...)
@@ -2307,6 +2314,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 			p.goAnalyzeFor(r, func() {
 				p.analyzeStreamingResponse(llm, app, upstreamReq, http.StatusBadRequest, blockedResponseBody, reqBody, responses, time.Now(), "")
 			})
+			sc.complete(http.StatusBadRequest, resp.Header, fullResponse.Bytes(), chunkIndex)
 			return
 		}
 	}
@@ -2322,9 +2330,11 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		})
 
 		// Execute OnStreamComplete hook for plugins (e.g., caching)
-		if p.responseHookManager != nil && p.hasResponseHooks() {
-			go p.executeOnStreamComplete(r, resp, llm, app, fullResponse.Bytes(), reqBody, chunkIndex)
-		}
+		sc.complete(resp.StatusCode, resp.Header, fullResponse.Bytes(), chunkIndex)
+	} else {
+		// The upstream broke off mid-stream: the client has a truncated
+		// stream, which no cache may store.
+		sc.complete(http.StatusBadGateway, resp.Header, fullResponse.Bytes(), chunkIndex)
 	}
 }
 

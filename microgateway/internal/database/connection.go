@@ -147,6 +147,7 @@ func Migrate(db *gorm.DB) error {
 		&ControlPayload{},
 		&SyncState{},
 		&BudgetBlock{},
+		&LLMBudgetBlock{},
 		// Model Router models (Enterprise)
 		&ModelRouter{},
 		&ModelPool{},

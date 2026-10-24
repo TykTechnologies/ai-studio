@@ -54,7 +54,7 @@ type ServiceTierUsage struct {
 // included: the pulse carries the tier.
 func GetServiceTierUsage(db *gorm.DB, startDate, endDate time.Time, llmID, appID *uint, tier *string) (*ServiceTierUsage, error) {
 	q := db.Model(&models.LLMChatRecord{}).
-		Where("time_stamp BETWEEN ? AND ?", startDate, endDate)
+		Where("time_stamp >= ? AND time_stamp < ?", startDate, endDate)
 	if llmID != nil {
 		q = q.Where("llm_id = ?", *llmID)
 	}

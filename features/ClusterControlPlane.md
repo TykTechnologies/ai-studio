@@ -436,7 +436,11 @@ control plane does not run:
   `NOTIFY` (`cluster.Log.PublishBatch`), and answers the edge "queued for the
   plugin host". A failed write fails every payload of the batch in the
   response, not with a gRPC error, as the edge would otherwise keep and
-  resend the whole batch. Every full replica with a plugin manager subscribes
+  resend the whole batch; each failure is flagged `retry` (with its
+  `payload_index`), so the edge keeps those payloads queued and sends them
+  again a minute later, within its retention (rlk). A payload the leader's
+  plugin then fails to take is not reported back to the edge: it is logged
+  and lost. Every full replica with a plugin manager subscribes
   (`edgePayloadHost`, `pkg/studio/edge_payloads.go`); only the one leading at
   delivery routes the payload to `RouteEdgePayload`, one row once (ids are
   remembered for the log's retention, and forgotten by a minutely sweep).

@@ -545,6 +545,7 @@ TABLE chats
   column system_prompt text(text) nullable=YES
   column default_data_source_id bigint(int8) nullable=YES precision=64 scale=0
   column prompt_templates_json text(text) nullable=YES
+  column render_images boolean(bool) nullable=NO default=false
 TABLE cluster_events
   constraint cluster_events_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX cluster_events_pkey ON cluster_events USING btree (id)

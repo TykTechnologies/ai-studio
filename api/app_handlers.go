@@ -287,9 +287,10 @@ func (a *API) updateApp(c *gin.Context) {
 		})
 		return
 	}
-	_, hasBudget := present["monthly_budget"]
-	_, hasStart := present["budget_start_date"]
-	if !hasBudget || !hasStart {
+	// The same goes for every other attribute: PATCH changes only the keys
+	// the body holds, so a metadata-only PATCH must not blank the App's
+	// name, owner or LLM access (dg5).
+	if !hasAllAppAttributes(present) {
 		existing, err := a.service.GetAppByID(uint(id))
 		if err != nil {
 			c.JSON(http.StatusNotFound, ErrorResponse{
@@ -300,12 +301,7 @@ func (a *API) updateApp(c *gin.Context) {
 			})
 			return
 		}
-		if !hasBudget {
-			input.Data.Attributes.MonthlyBudget = existing.MonthlyBudget
-		}
-		if !hasStart {
-			input.Data.Attributes.BudgetStartDate = existing.BudgetStartDate
-		}
+		keepOmittedAppAttributes(&input, present, existing)
 	}
 
 	datasourceIDs := input.Data.Attributes.DatasourceIDs
@@ -1096,6 +1092,63 @@ func (a *API) getAppTools(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": response})
+}
+
+// appPatchAttributes are the App attributes a PATCH that leaves them out
+// keeps; the others are already optional in AppInput.
+var appPatchAttributes = []string{"name", "description", "user_id", "datasource_ids", "llm_ids",
+	"tool_ids", "metadata", "monthly_budget", "budget_start_date"}
+
+func hasAllAppAttributes(present map[string]json.RawMessage) bool {
+	for _, k := range appPatchAttributes {
+		if _, ok := present[k]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// keepOmittedAppAttributes sets every attribute the request body left out
+// to the App's stored value.
+func keepOmittedAppAttributes(input *AppInput, present map[string]json.RawMessage, existing *models.App) {
+	attrs := &input.Data.Attributes
+	has := func(k string) bool { _, ok := present[k]; return ok }
+	if !has("name") {
+		attrs.Name = existing.Name
+	}
+	if !has("description") {
+		attrs.Description = existing.Description
+	}
+	if !has("user_id") {
+		attrs.UserID = existing.UserID
+	}
+	if !has("datasource_ids") {
+		attrs.DatasourceIDs = make([]uint, 0, len(existing.Datasources))
+		for _, d := range existing.Datasources {
+			attrs.DatasourceIDs = append(attrs.DatasourceIDs, d.ID)
+		}
+	}
+	if !has("llm_ids") {
+		attrs.LLMIDs = make([]uint, 0, len(existing.LLMs))
+		for _, l := range existing.LLMs {
+			attrs.LLMIDs = append(attrs.LLMIDs, l.ID)
+		}
+	}
+	if !has("tool_ids") {
+		attrs.ToolIDs = make([]uint, 0, len(existing.Tools))
+		for _, t := range existing.Tools {
+			attrs.ToolIDs = append(attrs.ToolIDs, t.ID)
+		}
+	}
+	if !has("metadata") {
+		attrs.Metadata = existing.Metadata
+	}
+	if !has("monthly_budget") {
+		attrs.MonthlyBudget = existing.MonthlyBudget
+	}
+	if !has("budget_start_date") {
+		attrs.BudgetStartDate = existing.BudgetStartDate
+	}
 }
 
 // boundAttributeKeys returns the data.attributes keys of a body bound with

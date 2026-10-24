@@ -16,6 +16,12 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// payloadRetryDelay is how long a payload control could not deliver for a
+// reason that may pass waits before it is sent again. Meanwhile batches
+// carry the payloads behind it, so a plugin awaiting approval does not hold
+// up the others.
+const payloadRetryDelay = time.Minute
+
 // ControlPayloadQueue manages queuing and batching of plugin payloads for transmission to control
 type ControlPayloadQueue struct {
 	db            *gorm.DB
@@ -28,10 +34,15 @@ type ControlPayloadQueue struct {
 	// Synchronization
 	mu             sync.Mutex
 	sequenceNumber uint64
+	// sendMu serialises sends: two at once fetch the same unsent rows and
+	// deliver them twice.
+	sendMu sync.Mutex
 
 	// State
 	started bool
 	stopCh  chan struct{}
+	// retryAt holds payloads waiting to be sent again (payloadRetryDelay)
+	retryAt map[uint]time.Time
 
 	// Stats
 	totalQueued uint64
@@ -53,6 +64,7 @@ func NewControlPayloadQueue(
 		edgeNamespace:  edgeNamespace,
 		sequenceNumber: 1,
 		stopCh:         make(chan struct{}),
+		retryAt:        make(map[uint]time.Time),
 	}
 }
 
@@ -157,6 +169,8 @@ func (q *ControlPayloadQueue) QueuePayload(pluginID uint, payload []byte, correl
 	q.mu.Lock()
 	q.totalQueued++
 	pendingCount := q.getPendingCountLocked()
+	// Payloads waiting to be retried are not ready to send.
+	ready := pendingCount - int64(q.waitingLocked(time.Now()))
 	q.mu.Unlock()
 
 	log.Debug().
@@ -166,10 +180,15 @@ func (q *ControlPayloadQueue) QueuePayload(pluginID uint, payload []byte, correl
 		Int64("pending_count", pendingCount).
 		Msg("Control payload queued")
 
-	// Check if we should trigger immediate send
-	if int(pendingCount) >= q.config.BatchThreshold {
+	// Check if we should trigger immediate send. One already running (or
+	// the next heartbeat) takes these too, so a busy queue skips it.
+	if int(ready) >= q.config.BatchThreshold {
 		go func() {
-			if err := q.SendPendingBatch(context.Background()); err != nil {
+			if !q.sendMu.TryLock() {
+				return
+			}
+			defer q.sendMu.Unlock()
+			if err := q.sendPendingBatch(context.Background()); err != nil {
 				log.Error().Err(err).Msg("Failed to send batch after threshold reached")
 			}
 		}()
@@ -181,6 +200,24 @@ func (q *ControlPayloadQueue) QueuePayload(pluginID uint, payload []byte, correl
 // SendPendingBatch sends all pending payloads to control
 // This should be called from the heartbeat worker
 func (q *ControlPayloadQueue) SendPendingBatch(ctx context.Context) error {
+	q.sendMu.Lock()
+	defer q.sendMu.Unlock()
+	return q.sendPendingBatch(ctx)
+}
+
+// waitingLocked counts the payloads waiting for their retry; q.mu is held.
+func (q *ControlPayloadQueue) waitingLocked(now time.Time) int {
+	n := 0
+	for _, at := range q.retryAt {
+		if now.Before(at) {
+			n++
+		}
+	}
+	return n
+}
+
+// sendPendingBatch is SendPendingBatch with q.sendMu held.
+func (q *ControlPayloadQueue) sendPendingBatch(ctx context.Context) error {
 	q.mu.Lock()
 	if q.grpcClient == nil {
 		q.mu.Unlock()
@@ -188,11 +225,24 @@ func (q *ControlPayloadQueue) SendPendingBatch(ctx context.Context) error {
 	}
 	client := q.grpcClient
 	authCtxFunc := q.authCtxFunc
+	now := time.Now()
+	var waiting []uint
+	for id, at := range q.retryAt {
+		if now.Before(at) {
+			waiting = append(waiting, id)
+		} else {
+			delete(q.retryAt, id)
+		}
+	}
 	q.mu.Unlock()
 
 	// Get pending payloads
 	var payloads []database.ControlPayload
-	if err := q.db.Where("sent = ?", false).Order("created_at ASC").Limit(q.config.BatchThreshold).Find(&payloads).Error; err != nil {
+	pending := q.db.Where("sent = ?", false)
+	if len(waiting) > 0 {
+		pending = pending.Where("id NOT IN ?", waiting)
+	}
+	if err := pending.Order("created_at ASC").Limit(q.config.BatchThreshold).Find(&payloads).Error; err != nil {
 		return fmt.Errorf("failed to fetch pending payloads: %w", err)
 	}
 
@@ -287,19 +337,41 @@ func (q *ControlPayloadQueue) SendPendingBatch(ctx context.Context) error {
 		return fmt.Errorf("failed to send batch: %w", err)
 	}
 
-	// Mark payloads as sent
-	now := time.Now()
-	if err := q.db.Model(&database.ControlPayload{}).
-		Where("id IN ?", payloadIDs).
-		Updates(map[string]interface{}{
-			"sent":    true,
-			"sent_at": now,
-		}).Error; err != nil {
-		log.Error().Err(err).Msg("Failed to mark payloads as sent")
+	// Mark payloads as sent, except those control could not deliver for a
+	// reason that may pass (the plugin unavailable, its scopes awaiting
+	// approval): they stay queued for the next batch, within the retention.
+	retry := make(map[uint]bool)
+	for _, e := range resp.Errors {
+		if e.Retry && int(e.PayloadIndex) < len(payloadIDs) {
+			retry[payloadIDs[e.PayloadIndex]] = true
+		}
+	}
+	sentIDs := make([]uint, 0, len(payloadIDs))
+	for _, id := range payloadIDs {
+		if !retry[id] {
+			sentIDs = append(sentIDs, id)
+		}
+	}
+	if len(retry) > 0 {
+		q.mu.Lock()
+		for id := range retry {
+			q.retryAt[id] = now.Add(payloadRetryDelay)
+		}
+		q.mu.Unlock()
+	}
+	if len(sentIDs) > 0 {
+		if err := q.db.Model(&database.ControlPayload{}).
+			Where("id IN ?", sentIDs).
+			Updates(map[string]interface{}{
+				"sent":    true,
+				"sent_at": now,
+			}).Error; err != nil {
+			log.Error().Err(err).Msg("Failed to mark payloads as sent")
+		}
 	}
 
 	q.mu.Lock()
-	q.totalSent += uint64(len(payloads))
+	q.totalSent += uint64(len(sentIDs))
 	q.mu.Unlock()
 
 	log.Debug().
@@ -315,19 +387,32 @@ func (q *ControlPayloadQueue) SendPendingBatch(ctx context.Context) error {
 			Uint32("plugin_id", errMsg.PluginId).
 			Str("correlation_id", errMsg.CorrelationId).
 			Str("error", errMsg.ErrorMessage).
+			Bool("will_retry", errMsg.Retry).
 			Msg("Control server reported error for payload")
 	}
 
 	return nil
 }
 
-// CleanupOldPayloads removes sent payloads older than retention period
+// CleanupOldPayloads removes sent payloads older than retention period, and
+// unsent ones queued longer than it: a payload control keeps refusing for a
+// reason that may pass is retried only that long.
 func (q *ControlPayloadQueue) CleanupOldPayloads() error {
 	cutoff := time.Now().Add(-time.Duration(q.config.RetentionHours) * time.Hour)
 
 	result := q.db.Where("sent = ? AND sent_at < ?", true, cutoff).Delete(&database.ControlPayload{})
 	if result.Error != nil {
 		return fmt.Errorf("failed to cleanup old payloads: %w", result.Error)
+	}
+	expired := q.db.Where("sent = ? AND created_at < ?", false, cutoff).Delete(&database.ControlPayload{})
+	if expired.Error != nil {
+		return fmt.Errorf("failed to cleanup expired payloads: %w", expired.Error)
+	}
+	if expired.RowsAffected > 0 {
+		log.Warn().
+			Int64("dropped", expired.RowsAffected).
+			Int("retention_hours", q.config.RetentionHours).
+			Msg("Dropped control payloads that could not be delivered within the retention")
 	}
 
 	if result.RowsAffected > 0 {

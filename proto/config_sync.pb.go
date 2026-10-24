@@ -4300,6 +4300,12 @@ type PluginPayloadError struct {
 	PluginId      uint32                 `protobuf:"varint,1,opt,name=plugin_id,json=pluginId,proto3" json:"plugin_id,omitempty"`               // Plugin ID that failed
 	CorrelationId string                 `protobuf:"bytes,2,opt,name=correlation_id,json=correlationId,proto3" json:"correlation_id,omitempty"` // Correlation ID from the payload
 	ErrorMessage  string                 `protobuf:"bytes,3,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`    // Error description
+	// The payload was not delivered for a reason that may pass (the plugin not
+	// loaded or unreachable, a service scope awaiting approval): the edge keeps
+	// it queued and sends it again within its retention. Otherwise the plugin
+	// refused the payload itself, which is final.
+	Retry         bool   `protobuf:"varint,4,opt,name=retry,proto3" json:"retry,omitempty"`
+	PayloadIndex  uint32 `protobuf:"varint,5,opt,name=payload_index,json=payloadIndex,proto3" json:"payload_index,omitempty"` // The payload's position in the batch
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4353,6 +4359,20 @@ func (x *PluginPayloadError) GetErrorMessage() string {
 		return x.ErrorMessage
 	}
 	return ""
+}
+
+func (x *PluginPayloadError) GetRetry() bool {
+	if x != nil {
+		return x.Retry
+	}
+	return false
+}
+
+func (x *PluginPayloadError) GetPayloadIndex() uint32 {
+	if x != nil {
+		return x.PayloadIndex
+	}
+	return 0
 }
 
 var File_proto_config_sync_proto protoreflect.FileDescriptor
@@ -4803,11 +4823,13 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x0fprocessed_count\x18\x03 \x01(\x04R\x0eprocessedCount\x12'\n" +
 	"\x0fsequence_number\x18\x04 \x01(\x04R\x0esequenceNumber\x12=\n" +
 	"\fprocessed_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\vprocessedAt\x128\n" +
-	"\x06errors\x18\x06 \x03(\v2 .microgateway.PluginPayloadErrorR\x06errors\"}\n" +
+	"\x06errors\x18\x06 \x03(\v2 .microgateway.PluginPayloadErrorR\x06errors\"\xb8\x01\n" +
 	"\x12PluginPayloadError\x12\x1b\n" +
 	"\tplugin_id\x18\x01 \x01(\rR\bpluginId\x12%\n" +
 	"\x0ecorrelation_id\x18\x02 \x01(\tR\rcorrelationId\x12#\n" +
-	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage*[\n" +
+	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\x12\x14\n" +
+	"\x05retry\x18\x04 \x01(\bR\x05retry\x12#\n" +
+	"\rpayload_index\x18\x05 \x01(\rR\fpayloadIndex*[\n" +
 	"\vReloadPhase\x12\b\n" +
 	"\x04PONG\x10\x00\x12\x10\n" +
 	"\fPULL_STARTED\x10\x01\x12\f\n" +

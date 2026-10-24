@@ -22,6 +22,11 @@ type AppBudgetData struct {
 
 	// PeriodEnd is the end of this app's budget period
 	PeriodEnd time.Time `json:"period_end"`
+
+	// Limit is an LLM's monthly budget in dollars, set on llm_budgets entries
+	// only, so a budget changed in Studio reaches edges with the next sync
+	// rather than the next config push (ap6). App entries leave it out.
+	Limit *float64 `json:"limit,omitempty"`
 }
 
 // BudgetSyncPayload matches the control server's payload structure
@@ -55,6 +60,16 @@ type BudgetSyncPayload struct {
 	// and ours is left alone.
 	Blocks         map[uint32]string `json:"blocks,omitempty"`
 	BlocksIncluded bool              `json:"blocks_included,omitempty"`
+
+	// LLMBudgets maps llm_id to the spend of an LLM with a monthly budget
+	// in its period, across Studio and every edge; LLMBlocks maps llm_id to
+	// the reason the LLM must be refused (its budget is 0 or spent). Both
+	// come with LLMIncluded, which makes LLMBlocks the complete set (ap6).
+	// A control plane without LLM budgets (before 2.3, or Community) sends
+	// none of them, and the gateway's LLM blocks and spend are left alone.
+	LLMBudgets  map[uint32]AppBudgetData `json:"llm_budgets,omitempty"`
+	LLMBlocks   map[uint32]string        `json:"llm_blocks,omitempty"`
+	LLMIncluded bool                     `json:"llm_included,omitempty"`
 }
 
 // BudgetSyncTopic is re-exported from eventbridge for convenience
@@ -72,6 +87,11 @@ type BudgetSyncHandler struct {
 	// blocksUnsaved is set when persisting the blocks failed, so the next
 	// sync writes them even if the set is unchanged.
 	blocksUnsaved bool
+	// llmBlocks and llmSpend receive the LLM budgets; nil means the shared
+	// edge sets.
+	llmBlocks        *BudgetBlocks
+	llmSpend         *LLMBudgetSpend
+	llmBlocksUnsaved bool
 	// ledger is raised with the control plane's figures; nil means the
 	// gateway's shared ledger.
 	ledger *BudgetLedger
@@ -84,6 +104,20 @@ func (h *BudgetSyncHandler) budgetBlocks() *BudgetBlocks {
 	return edgeBudgetBlocks
 }
 
+func (h *BudgetSyncHandler) llmBudgetBlocks() *BudgetBlocks {
+	if h.llmBlocks != nil {
+		return h.llmBlocks
+	}
+	return edgeLLMBudgetBlocks
+}
+
+func (h *BudgetSyncHandler) llmBudgetSpend() *LLMBudgetSpend {
+	if h.llmSpend != nil {
+		return h.llmSpend
+	}
+	return edgeLLMBudgetSpend
+}
+
 // NewBudgetSyncHandler creates a new budget sync handler.
 // It loads the last sequence number from the database to survive restarts.
 func NewBudgetSyncHandler(db *gorm.DB) *BudgetSyncHandler {
@@ -94,6 +128,7 @@ func NewBudgetSyncHandler(db *gorm.DB) *BudgetSyncHandler {
 	handler.loadSequenceNumber()
 	// A restarted edge keeps refusing what it was last told to refuse.
 	loadBudgetBlocks(db, handler.budgetBlocks())
+	loadLLMBudgetBlocks(db, handler.llmBudgetBlocks())
 	return handler
 }
 
@@ -173,6 +208,22 @@ func (h *BudgetSyncHandler) HandleBudgetSync(event eventbridge.Event) {
 				h.blocksUnsaved = false
 			}
 		}
+	}
+
+	if payload.LLMIncluded {
+		llmBlocks := make(map[uint]string, len(payload.LLMBlocks))
+		for llmID, reason := range payload.LLMBlocks {
+			llmBlocks[uint(llmID)] = reason
+		}
+		if h.llmBudgetBlocks().Replace(llmBlocks) || h.llmBlocksUnsaved {
+			if err := persistLLMBudgetBlocks(h.db, llmBlocks); err != nil {
+				h.llmBlocksUnsaved = true
+				log.Error().Err(err).Msg("Failed to persist LLM budget blocks")
+			} else {
+				h.llmBlocksUnsaved = false
+			}
+		}
+		h.llmBudgetSpend().Sync(payload.LLMBudgets)
 	}
 
 	// Use new AppBudgets if available (supports per-app budget periods)

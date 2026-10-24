@@ -79,7 +79,9 @@ const (
 	//     credential metadata are stored as $ENC/ when TYK_AI_SECRET_KEY is
 	//     set; older code would use the ciphertext as the key, so the minimum
 	//     reader is 23 and an older headless replica refuses the database.
-	SchemaVersion          = 23
+	// 24: chats.render_images (defaulted false, additive): per-chat switch
+	//     for rendering images in chat responses (2u2).
+	SchemaVersion          = 24
 	MinReaderSchemaVersion = 23
 )
 

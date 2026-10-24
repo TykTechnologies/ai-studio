@@ -93,6 +93,17 @@ func (a *API) createChat(c *gin.Context) {
 		})
 		return
 	}
+	if v := input.Data.Attributes.RenderImages; v != nil {
+		if err := a.service.SetChatRenderImages(chat, *v); err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Internal Server Error", Detail: err.Error()}},
+			})
+			return
+		}
+	}
 
 	c.JSON(http.StatusCreated, gin.H{"data": serializeChat(chat, a.config.DB)})
 }
@@ -183,6 +194,17 @@ func (a *API) updateChat(c *gin.Context) {
 			}{{Title: "Not Found", Detail: err.Error()}},
 		})
 		return
+	}
+	if v := input.Data.Attributes.RenderImages; v != nil {
+		if err := a.service.SetChatRenderImages(chat, *v); err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Internal Server Error", Detail: err.Error()}},
+			})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": serializeChat(chat, a.config.DB)})
@@ -450,6 +472,7 @@ func serializeChat(chat *models.Chat, db *gorm.DB) ChatResponse {
 			Filters             []FilterResponse         `json:"filters"`
 			RagN                int                      `json:"rag_n"`
 			ToolSupport         bool                     `json:"tool_support"`
+			RenderImages        bool                     `json:"render_images"`
 			SystemPrompt        string                   `json:"system_prompt"`
 			DefaultDataSourceID int                      `json:"default_data_source_id"`
 			DefaultDataSource   DatasourceResponse       `json:"default_data_source"`
@@ -465,6 +488,7 @@ func serializeChat(chat *models.Chat, db *gorm.DB) ChatResponse {
 			Filters:             serializeFilters(chat.Filters),
 			RagN:                chat.RagResultsPerSource,
 			ToolSupport:         chat.SupportsTools,
+			RenderImages:        chat.RenderImages,
 			SystemPrompt:        chat.SystemPrompt,
 			DefaultDataSourceID: defaultDSID,
 			DefaultDataSource:   serializeDatasource(chat.DefaultDataSource),

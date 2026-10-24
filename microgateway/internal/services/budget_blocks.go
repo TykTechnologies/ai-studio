@@ -28,6 +28,11 @@ type BudgetBlocks struct {
 // Enterprise budget check (reader).
 var edgeBudgetBlocks = &BudgetBlocks{blocks: map[uint]string{}}
 
+// edgeLLMBudgetBlocks holds the LLMs the control plane says to refuse: their
+// Studio budget is 0 or spent (ap6). The edge's LLM config, like its App
+// config, reads a budget of 0 as "no limit".
+var edgeLLMBudgetBlocks = &BudgetBlocks{blocks: map[uint]string{}}
+
 // Replace swaps in a complete set of blocks.
 // It reports whether the set differs from the one it replaced.
 func (b *BudgetBlocks) Replace(blocks map[uint]string) bool {
@@ -86,6 +91,38 @@ func persistBudgetBlocks(db *gorm.DB, blocks map[uint]string) error {
 	}
 	return db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("1 = 1").Delete(&database.BudgetBlock{}).Error; err != nil {
+			return err
+		}
+		if len(rows) == 0 {
+			return nil
+		}
+		return tx.CreateInBatches(rows, budgetBlockBatch).Error
+	})
+}
+
+// loadLLMBudgetBlocks fills the LLM set from the persisted table.
+func loadLLMBudgetBlocks(db *gorm.DB, into *BudgetBlocks) {
+	var rows []database.LLMBudgetBlock
+	if err := db.Find(&rows).Error; err != nil {
+		log.Warn().Err(err).Msg("Failed to load persisted LLM budget blocks")
+		return
+	}
+	blocks := make(map[uint]string, len(rows))
+	for _, r := range rows {
+		blocks[r.LLMID] = r.Reason
+	}
+	into.Replace(blocks)
+}
+
+// persistLLMBudgetBlocks is persistBudgetBlocks for the LLM set.
+func persistLLMBudgetBlocks(db *gorm.DB, blocks map[uint]string) error {
+	now := time.Now()
+	rows := make([]database.LLMBudgetBlock, 0, len(blocks))
+	for id, reason := range blocks {
+		rows = append(rows, database.LLMBudgetBlock{LLMID: id, Reason: reason, UpdatedAt: now})
+	}
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("1 = 1").Delete(&database.LLMBudgetBlock{}).Error; err != nil {
 			return err
 		}
 		if len(rows) == 0 {

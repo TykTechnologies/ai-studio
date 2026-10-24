@@ -114,13 +114,9 @@ func (m *HookManager) ExecuteHooks(
 				logger.Error(fmt.Sprintf("Failed to unmarshal modified object: plugin=%s error=%v", hookReg.PluginName, err))
 				result.Errors = append(result.Errors, fmt.Errorf("failed to unmarshal modified object: %w", err))
 			} else {
-				// The hook saw the LLM's credentials redacted: what it
+				// The hook saw the object's credentials redacted: what it
 				// left redacted is unchanged, so the originals go back.
-				if modified, ok := modifiedObj.(*models.LLM); ok {
-					if current, ok := currentObject.(*models.LLM); ok {
-						models.RestoreLLMCredentials(current, modified)
-					}
-				}
+				models.RestoreObjectCredentials(currentObject, modifiedObj)
 				currentObject = modifiedObj
 				result.ModifiedObject = modifiedObj
 			}
@@ -225,50 +221,12 @@ func (m *HookManager) unmarshalObject(objectType ObjectType, jsonStr string) (in
 	}
 }
 
-// Helper function to sanitize sensitive fields before passing to hooks.
-// An LLM's credentials are redacted for every hook (models.
-// RedactLLMCredentials, references kept); a before-hook's result gets them
-// back where it left them redacted (ExecuteHooks).
+// sanitizeObject is the object a hook sees: the credentials of an LLM,
+// tool, datasource or user are redacted for every hook (models.
+// RedactObjectCredentials, references kept); a before-hook's result gets
+// them back where it left them redacted (ExecuteHooks).
 func (m *HookManager) sanitizeObject(objectType ObjectType, object interface{}, hookType HookType) interface{} {
-	if objectType == ObjectTypeLLM {
-		if llm, ok := object.(*models.LLM); ok {
-			return models.RedactLLMCredentials(llm)
-		}
-	}
-	// For "after_*" hooks, remove sensitive fields
-	if hookType == HookAfterCreate || hookType == HookAfterUpdate || hookType == HookAfterDelete {
-		switch objectType {
-
-		case ObjectTypeDatasource:
-			if ds, ok := object.(*models.Datasource); ok {
-				sanitized := *ds
-				sanitized.DBConnAPIKey = "[REDACTED]"
-				sanitized.RedactEmbedKey()
-				sanitized.DBConnString = "[REDACTED]"
-				return &sanitized
-			}
-
-		case ObjectTypeTool:
-			if tool, ok := object.(*models.Tool); ok {
-				sanitized := *tool
-				sanitized.AuthKey = "[REDACTED]"
-				return &sanitized
-			}
-
-		case ObjectTypeUser:
-			if user, ok := object.(*models.User); ok {
-				sanitized := *user
-				sanitized.Password = "[REDACTED]"
-				sanitized.APIKey = "[REDACTED]"
-				sanitized.SessionToken = "[REDACTED]"
-				sanitized.ResetToken = "[REDACTED]"
-				sanitized.VerificationToken = "[REDACTED]"
-				return &sanitized
-			}
-		}
-	}
-
-	return object
+	return models.RedactObjectCredentials(object)
 }
 
 // MergeMetadata merges plugin metadata into the object's metadata field

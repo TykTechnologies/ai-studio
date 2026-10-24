@@ -25,6 +25,11 @@ type AppBudgetData struct {
 
 	// PeriodEnd is the end of this app's budget period
 	PeriodEnd time.Time `json:"period_end"`
+
+	// Limit is an LLM's monthly budget in dollars, set on llm_budgets entries
+	// only, so a budget changed in Studio reaches edges with the next sync
+	// rather than the next config push (ap6). App entries leave it out.
+	Limit *float64 `json:"limit,omitempty"`
 }
 
 // BudgetSyncPayload is the JSON payload for budget.sync events
@@ -61,6 +66,17 @@ type BudgetSyncPayload struct {
 	// served again.
 	Blocks         map[uint32]string `json:"blocks,omitempty"`
 	BlocksIncluded bool              `json:"blocks_included,omitempty"`
+
+	// LLMBudgets maps llm_id to the spend of an LLM with a monthly budget in
+	// its budget period, across Studio and every edge (Enterprise, ap6).
+	// LLMBlocks maps llm_id to the reason edges must refuse it: its budget
+	// is 0 or spent. Both come with BlocksIncluded, and LLMBlocks is then
+	// the complete set.
+	// LLMIncluded says the sync carries LLM budgets at all, so an edge can
+	// tell "no LLM is blocked" from a control plane that sends none.
+	LLMBudgets  map[uint32]AppBudgetData `json:"llm_budgets,omitempty"`
+	LLMBlocks   map[uint32]string        `json:"llm_blocks,omitempty"`
+	LLMIncluded bool                     `json:"llm_included,omitempty"`
 }
 
 // EdgeBudgetSource is the Enterprise budget service as the budget sync sees
@@ -87,6 +103,8 @@ type BudgetSyncService struct {
 	// published is the latest cycle's figures, for other readers.
 	usage     *budgetUsageTracker
 	published atomic.Pointer[map[uint]appPeriodUsage]
+	// llmUsage keeps each budgeted LLM's spend for its budget period.
+	llmUsage *budgetUsageTracker
 	// lastUsage is each App's usage at the previous sync; Apps whose usage
 	// moved are analysed for alerts. Only the sync goroutine touches it.
 	lastUsage map[uint32]float64
@@ -128,6 +146,7 @@ func NewBudgetSyncService(db *gorm.DB, eventBus eventbridge.Bus) *BudgetSyncServ
 		syncInterval: interval,
 		done:         make(chan struct{}),
 		usage:        newBudgetUsageTracker(),
+		llmUsage:     newLLMBudgetUsageTracker(),
 	}
 }
 
@@ -317,10 +336,20 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 	// Blocks are sent every time (even empty) so edges release Apps that
 	// are allowed again.
 	var blocks map[uint32]string
-	blocksIncluded := false
+	var llmBudgets map[uint32]AppBudgetData
+	var llmBlocks map[uint32]string
+	blocksIncluded, llmIncluded := false, false
 	src, _ := s.budgetSource.Load().(EdgeBudgetSource)
 	if src != nil {
 		found, err := src.EdgeBlocks()
+		// LLM budgets are sent only when computed; a failure leaves the
+		// edges' LLM state alone and does not hold back the App blocks.
+		var llmErr error
+		if llmBudgets, llmBlocks, llmErr = s.llmBudgets(now); llmErr != nil {
+			logger.Log.Error().Err(llmErr).Msg("Failed to compute LLM budget usage; keeping edges' last LLM set")
+		} else {
+			llmIncluded = true
+		}
 		if err != nil {
 			logger.Log.Error().Err(err).Msg("Failed to compute budget blocks; keeping edges' last set")
 		} else {
@@ -360,7 +389,7 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 	}
 
 	// Skip publishing if there is nothing to sync
-	if len(appBudgets) == 0 && !blocksIncluded {
+	if len(appBudgets) == 0 && !blocksIncluded && !llmIncluded {
 		logger.Log.Debug().Msg("No budget usage data to sync")
 		return
 	}
@@ -368,6 +397,9 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 	payload := BudgetSyncPayload{
 		Blocks:           blocks,
 		BlocksIncluded:   blocksIncluded,
+		LLMBudgets:       llmBudgets,
+		LLMBlocks:        llmBlocks,
+		LLMIncluded:      llmIncluded,
 		AppUsages:        appUsages,           // Legacy field
 		AppBudgets:       appBudgets,          // New per-app periods
 		PeriodStart:      calendarPeriodStart, // Legacy field
@@ -386,6 +418,38 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 		Int("app_count", len(appBudgets)).
 		Uint64("sequence", payload.SequenceNumber).
 		Msg("Published budget sync to edges")
+}
+
+// llmBudgets returns the spend of every LLM with a monthly budget in its
+// budget period, and the LLMs edges must refuse, as Studio's own budget
+// check does: a budget of 0 allows nothing, and a spent one refuses (ap6).
+func (s *BudgetSyncService) llmBudgets(now time.Time) (map[uint32]AppBudgetData, map[uint32]string, error) {
+	var llms []models.LLM
+	if err := s.db.Select("id", "monthly_budget", "budget_start_date").
+		Where("monthly_budget IS NOT NULL").Find(&llms).Error; err != nil {
+		return nil, nil, err
+	}
+	spend, err := s.llmUsage.llmUsage(s.db, llms, now)
+	if err != nil {
+		return nil, nil, err
+	}
+	usages := make(map[uint32]AppBudgetData, len(llms))
+	blocks := map[uint32]string{}
+	for _, llm := range llms {
+		u := spend[llm.ID]
+		dollars := u.cost / 10000.0
+		// Every budgeted LLM, unspent ones too: its period tells edges
+		// when it starts again (a new month, a budget reset).
+		limit := *llm.MonthlyBudget
+		usages[uint32(llm.ID)] = AppBudgetData{Usage: dollars, PeriodStart: u.start, PeriodEnd: u.end, Limit: &limit}
+		switch budget := *llm.MonthlyBudget; {
+		case budget <= 0:
+			blocks[uint32(llm.ID)] = "LLM monthly budget exceeded (budget is 0)"
+		case dollars >= budget:
+			blocks[uint32(llm.ID)] = "LLM monthly budget exceeded"
+		}
+	}
+	return usages, blocks, nil
 }
 
 // nextSequence returns a sequence number above both the previous one and

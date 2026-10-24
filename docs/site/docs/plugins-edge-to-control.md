@@ -181,7 +181,8 @@ func SendToControlJSON(
 - **Batching**: Payloads are batched during heartbeat (default: every 30s)
 - **Batch size**: Up to 100 payloads per batch
 - **Retention**: Successfully sent payloads are deleted; failed payloads are retried
-- **Cleanup**: Payloads older than 24 hours are automatically cleaned up
+- **Rejected payloads**: when AI Studio cannot hand a payload to its plugin for a reason that may pass (the plugin is not loaded, unhealthy or unreachable, or a service API call it made was refused because its scopes await approval, as after an upgrade that adds a scope), the payload stays queued on the edge and is sent again a minute later, while newer payloads keep flowing. A payload the plugin itself refuses (`AcceptEdgePayload` returns an error that is not a service API `PermissionDenied` or `Unavailable`) is final and not resent, as is a payload for a plugin AI Studio does not have or one that does not implement `AcceptEdgePayload`. Sends are serialised, so a payload is delivered once, and payloads waiting for a retry do not count towards the batch threshold
+- **Cleanup**: Payloads older than 24 hours (`CONTROL_PAYLOAD_RETENTION_HOURS`) are automatically cleaned up, delivered or not
 
 ### Example: Complete Edge Plugin
 

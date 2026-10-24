@@ -25,8 +25,9 @@ func TestGetDateRange(t *testing.T) {
 		if start.Format("2006-01-02") != "2026-08-01" {
 			t.Errorf("unexpected start: %v", start)
 		}
-		// The end date is widened to the end of the day.
-		if end.Format("2006-01-02 15:04:05") != "2026-08-28 23:59:59" {
+		// The end is exclusive: the midnight after end_date, so the whole
+		// last day counts, its final sub-second included.
+		if end.Format("2006-01-02 15:04:05.000000000") != "2026-08-29 00:00:00.000000000" {
 			t.Errorf("unexpected end: %v", end)
 		}
 	})
@@ -84,5 +85,16 @@ func assertOmits(t *testing.T, got string, unwanted ...string) {
 		if strings.Contains(got, bad) {
 			t.Errorf("error %q should not leak the Go layout string %q", got, bad)
 		}
+	}
+}
+
+// Compliance ranges end (exclusively) at the midnight after end_date too.
+func TestGetComplianceDateRange_ExclusiveEnd(t *testing.T) {
+	_, end, err := getComplianceDateRange(dateRangeContext("start_date=2026-08-01&end_date=2026-08-28"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := end.Format("2006-01-02 15:04:05.000000000"); got != "2026-08-29 00:00:00.000000000" {
+		t.Errorf("unexpected end: %s", got)
 	}
 }

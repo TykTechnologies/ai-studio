@@ -511,6 +511,7 @@ TABLE chats
   column `system_prompt` text
   column `default_data_source_id` integer
   column `prompt_templates_json` text
+  column `render_images` numeric NOT NULL DEFAULT false
   constraint CONSTRAINT `fk_chats_default_data_source` FOREIGN KEY (`default_data_source_id`) REFERENCES `datasources`(`id`) ON DELETE SET NULL
   constraint CONSTRAINT `fk_chats_llm_settings` FOREIGN KEY (`llm_settings_id`) REFERENCES `llm_settings`(`id`)
   constraint CONSTRAINT `fk_chats_llm` FOREIGN KEY (`llm_id`) REFERENCES `llms`(`id`)

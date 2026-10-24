@@ -138,6 +138,15 @@ config:
   # grpc. Empty allows all; an unknown value stops startup.
   pluginAllowedSources: ""
 
+  # Outbound network policy (LLM_UPSTREAM_BLOCK_INTERNAL): LLM upstreams,
+  # guardrail providers and filter HTTP calls may not reach internal or
+  # link-local addresses. On by default since 2.3. Name the in-cluster or
+  # private hosts AI Studio must reach (a local Ollama, a model server) in
+  # allowedInternalHosts (".svc.cluster.local" for every Service) rather than
+  # turning blocking off.
+  blockInternalUpstreams: "true"
+  allowedInternalHosts: ""
+
   # Hub-Spoke: Control Plane Mode
   gatewayMode: "control"
   grpcPort: "50051"

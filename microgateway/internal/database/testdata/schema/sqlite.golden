@@ -262,6 +262,11 @@ TABLE filters
   column `namespace` text DEFAULT ""
   index CREATE INDEX `idx_filter_namespace` ON `filters`(`namespace`)
   index CREATE INDEX `idx_filters_deleted_at` ON `filters`(`deleted_at`)
+TABLE llm_budget_blocks
+  column `llm_id` integer
+  column `reason` text
+  column `updated_at` datetime
+  constraint PRIMARY KEY (`llm_id`)
 TABLE llm_filters
   column `llm_id` integer
   column `filter_id` integer

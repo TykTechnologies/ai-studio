@@ -138,25 +138,21 @@ func (e *SystemEventEmitter) EmitObjectEvent(topic string, objectType string, ac
 
 // EmitLLMCreated emits an event when an LLM is created
 func (e *SystemEventEmitter) EmitLLMCreated(llm interface{}, objectID uint, userID uint) {
-	e.EmitObjectEvent(TopicLLMCreated, "llm", "created", objectID, userID, redactLLMForEvent(llm))
+	e.EmitObjectEvent(TopicLLMCreated, "llm", "created", objectID, userID, redactForEvent(llm))
 }
 
 // EmitLLMUpdated emits an event when an LLM is updated
 func (e *SystemEventEmitter) EmitLLMUpdated(llm interface{}, objectID uint, userID uint) {
-	e.EmitObjectEvent(TopicLLMUpdated, "llm", "updated", objectID, userID, redactLLMForEvent(llm))
+	e.EmitObjectEvent(TopicLLMUpdated, "llm", "updated", objectID, userID, redactForEvent(llm))
 }
 
-// redactLLMForEvent is the LLM an event carries: its credentials redacted
-// (models.RedactLLMCredentials), since the payload reaches every subscribed
-// plugin and the cluster_events table. Done here so no caller can forget.
-func redactLLMForEvent(llm interface{}) interface{} {
-	switch l := llm.(type) {
-	case *models.LLM:
-		return models.RedactLLMCredentials(l)
-	case models.LLM:
-		return models.RedactLLMCredentials(&l)
-	}
-	return llm
+// redactForEvent is the LLM, tool, datasource, user, filter, App or group an
+// event carries: its
+// credentials redacted (models.RedactObjectCredentials), since the payload
+// reaches every subscribed plugin and the cluster_events table. Done here so
+// no caller can forget.
+func redactForEvent(object interface{}) interface{} {
+	return models.RedactObjectCredentials(object)
 }
 
 // EmitLLMDeleted emits an event when an LLM is deleted
@@ -166,12 +162,12 @@ func (e *SystemEventEmitter) EmitLLMDeleted(objectID uint, userID uint) {
 
 // EmitAppCreated emits an event when an App is created
 func (e *SystemEventEmitter) EmitAppCreated(app interface{}, objectID uint, userID uint) {
-	e.EmitObjectEvent(TopicAppCreated, "app", "created", objectID, userID, app)
+	e.EmitObjectEvent(TopicAppCreated, "app", "created", objectID, userID, redactForEvent(app))
 }
 
 // EmitAppUpdated emits an event when an App is updated
 func (e *SystemEventEmitter) EmitAppUpdated(app interface{}, objectID uint, userID uint) {
-	e.EmitObjectEvent(TopicAppUpdated, "app", "updated", objectID, userID, app)
+	e.EmitObjectEvent(TopicAppUpdated, "app", "updated", objectID, userID, redactForEvent(app))
 }
 
 // EmitAppDeleted emits an event when an App is deleted
@@ -181,7 +177,7 @@ func (e *SystemEventEmitter) EmitAppDeleted(objectID uint, userID uint) {
 
 // EmitAppApproved emits an event when an App is approved (credential activated)
 func (e *SystemEventEmitter) EmitAppApproved(app interface{}, objectID uint, userID uint) {
-	e.EmitObjectEvent(TopicAppApproved, "app", "approved", objectID, userID, app)
+	e.EmitObjectEvent(TopicAppApproved, "app", "approved", objectID, userID, redactForEvent(app))
 }
 
 // EmitAppPluginResourcesChanged emits an event when plugin resources on an App change.
@@ -192,12 +188,12 @@ func (e *SystemEventEmitter) EmitAppPluginResourcesChanged(appID uint, userID ui
 
 // EmitDatasourceCreated emits an event when a Datasource is created
 func (e *SystemEventEmitter) EmitDatasourceCreated(datasource interface{}, objectID uint, userID uint) {
-	e.EmitObjectEvent(TopicDatasourceCreated, "datasource", "created", objectID, userID, datasource)
+	e.EmitObjectEvent(TopicDatasourceCreated, "datasource", "created", objectID, userID, redactForEvent(datasource))
 }
 
 // EmitDatasourceUpdated emits an event when a Datasource is updated
 func (e *SystemEventEmitter) EmitDatasourceUpdated(datasource interface{}, objectID uint, userID uint) {
-	e.EmitObjectEvent(TopicDatasourceUpdated, "datasource", "updated", objectID, userID, datasource)
+	e.EmitObjectEvent(TopicDatasourceUpdated, "datasource", "updated", objectID, userID, redactForEvent(datasource))
 }
 
 // EmitDatasourceDeleted emits an event when a Datasource is deleted
@@ -207,12 +203,12 @@ func (e *SystemEventEmitter) EmitDatasourceDeleted(objectID uint, userID uint) {
 
 // EmitUserCreated emits an event when a User is created
 func (e *SystemEventEmitter) EmitUserCreated(user interface{}, objectID uint, userID uint) {
-	e.EmitObjectEvent(TopicUserCreated, "user", "created", objectID, userID, user)
+	e.EmitObjectEvent(TopicUserCreated, "user", "created", objectID, userID, redactForEvent(user))
 }
 
 // EmitUserUpdated emits an event when a User is updated
 func (e *SystemEventEmitter) EmitUserUpdated(user interface{}, objectID uint, userID uint) {
-	e.EmitObjectEvent(TopicUserUpdated, "user", "updated", objectID, userID, user)
+	e.EmitObjectEvent(TopicUserUpdated, "user", "updated", objectID, userID, redactForEvent(user))
 }
 
 // EmitUserDeleted emits an event when a User is deleted
@@ -222,12 +218,12 @@ func (e *SystemEventEmitter) EmitUserDeleted(objectID uint, userID uint) {
 
 // EmitGroupCreated emits an event when a Group is created
 func (e *SystemEventEmitter) EmitGroupCreated(group interface{}, objectID uint, userID uint) {
-	e.EmitObjectEvent(TopicGroupCreated, "group", "created", objectID, userID, group)
+	e.EmitObjectEvent(TopicGroupCreated, "group", "created", objectID, userID, redactForEvent(group))
 }
 
 // EmitGroupUpdated emits an event when a Group is updated
 func (e *SystemEventEmitter) EmitGroupUpdated(group interface{}, objectID uint, userID uint) {
-	e.EmitObjectEvent(TopicGroupUpdated, "group", "updated", objectID, userID, group)
+	e.EmitObjectEvent(TopicGroupUpdated, "group", "updated", objectID, userID, redactForEvent(group))
 }
 
 // EmitGroupDeleted emits an event when a Group is deleted
@@ -237,12 +233,12 @@ func (e *SystemEventEmitter) EmitGroupDeleted(objectID uint, userID uint) {
 
 // EmitToolCreated emits an event when a Tool is created
 func (e *SystemEventEmitter) EmitToolCreated(tool interface{}, objectID uint, userID uint) {
-	e.EmitObjectEvent(TopicToolCreated, "tool", "created", objectID, userID, tool)
+	e.EmitObjectEvent(TopicToolCreated, "tool", "created", objectID, userID, redactForEvent(tool))
 }
 
 // EmitToolUpdated emits an event when a Tool is updated
 func (e *SystemEventEmitter) EmitToolUpdated(tool interface{}, objectID uint, userID uint) {
-	e.EmitObjectEvent(TopicToolUpdated, "tool", "updated", objectID, userID, tool)
+	e.EmitObjectEvent(TopicToolUpdated, "tool", "updated", objectID, userID, redactForEvent(tool))
 }
 
 // EmitToolDeleted emits an event when a Tool is deleted
@@ -252,12 +248,12 @@ func (e *SystemEventEmitter) EmitToolDeleted(objectID uint, userID uint) {
 
 // EmitFilterCreated emits an event when a Filter is created
 func (e *SystemEventEmitter) EmitFilterCreated(filter interface{}, objectID uint, userID uint) {
-	e.EmitObjectEvent(TopicFilterCreated, "filter", "created", objectID, userID, filter)
+	e.EmitObjectEvent(TopicFilterCreated, "filter", "created", objectID, userID, redactForEvent(filter))
 }
 
 // EmitFilterUpdated emits an event when a Filter is updated
 func (e *SystemEventEmitter) EmitFilterUpdated(filter interface{}, objectID uint, userID uint) {
-	e.EmitObjectEvent(TopicFilterUpdated, "filter", "updated", objectID, userID, filter)
+	e.EmitObjectEvent(TopicFilterUpdated, "filter", "updated", objectID, userID, redactForEvent(filter))
 }
 
 // EmitFilterDeleted emits an event when a Filter is deleted

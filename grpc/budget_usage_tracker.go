@@ -27,6 +27,9 @@ const appSpendIDChunk = 500
 // and afterwards reads only the rows added since the last cycle, found by id.
 // llm_chat_records rows are only ever inserted, never updated or deleted.
 type budgetUsageTracker struct {
+	// column is the llm_chat_records column spend is kept by: app_id, or
+	// llm_id for LLM budgets (ap6).
+	column      string
 	initialized bool
 	// Rows with id <= settledID are included in the settled totals.
 	settledID uint
@@ -49,11 +52,39 @@ type appPeriodUsage struct {
 }
 
 func newBudgetUsageTracker() *budgetUsageTracker {
-	return &budgetUsageTracker{totals: map[uint]*periodSpend{}}
+	return &budgetUsageTracker{column: "app_id", totals: map[uint]*periodSpend{}}
+}
+
+// newLLMBudgetUsageTracker keeps each LLM's spend for its budget period.
+func newLLMBudgetUsageTracker() *budgetUsageTracker {
+	return &budgetUsageTracker{column: "llm_id", totals: map[uint]*periodSpend{}}
+}
+
+// budgetOwner is what the tracker needs of an App or LLM.
+type budgetOwner struct {
+	ID              uint
+	BudgetStartDate *time.Time
 }
 
 // usage returns each App's spend for its current budget period at now.
 func (t *budgetUsageTracker) usage(db *gorm.DB, apps []models.App, now time.Time) (map[uint]appPeriodUsage, error) {
+	owners := make([]budgetOwner, len(apps))
+	for i, app := range apps {
+		owners[i] = budgetOwner{ID: app.ID, BudgetStartDate: app.BudgetStartDate}
+	}
+	return t.usageOf(db, owners, now)
+}
+
+// llmUsage is usage for LLMs.
+func (t *budgetUsageTracker) llmUsage(db *gorm.DB, llms []models.LLM, now time.Time) (map[uint]appPeriodUsage, error) {
+	owners := make([]budgetOwner, len(llms))
+	for i, llm := range llms {
+		owners[i] = budgetOwner{ID: llm.ID, BudgetStartDate: llm.BudgetStartDate}
+	}
+	return t.usageOf(db, owners, now)
+}
+
+func (t *budgetUsageTracker) usageOf(db *gorm.DB, apps []budgetOwner, now time.Time) (map[uint]appPeriodUsage, error) {
 	var maxID uint
 	if err := db.Model(&models.LLMChatRecord{}).Select("COALESCE(MAX(id), 0)").Scan(&maxID).Error; err != nil {
 		return nil, err
@@ -98,7 +129,7 @@ func (t *budgetUsageTracker) usage(db *gorm.DB, apps []models.App, now time.Time
 		}
 		for i := 0; i < len(fresh); i += appSpendIDChunk {
 			chunk := fresh[i:min(i+appSpendIDChunk, len(fresh))]
-			sums, err := sumSpend(db, chunk, g.start, g.end, 0, t.settledID, true)
+			sums, err := sumSpend(db, t.column, chunk, g.start, g.end, 0, t.settledID, true)
 			if err != nil {
 				return nil, err
 			}
@@ -116,7 +147,7 @@ func (t *budgetUsageTracker) usage(db *gorm.DB, apps []models.App, now time.Time
 		t.recentMax = t.recentMax[1:]
 		if target > t.settledID {
 			for _, g := range groups {
-				sums, err := sumSpend(db, nil, g.start, g.end, t.settledID, target, true)
+				sums, err := sumSpend(db, t.column, nil, g.start, g.end, t.settledID, target, true)
 				if err != nil {
 					return nil, err
 				}
@@ -131,7 +162,7 @@ func (t *budgetUsageTracker) usage(db *gorm.DB, apps []models.App, now time.Time
 	// Add the rows since settledID, summed afresh.
 	usage := make(map[uint]appPeriodUsage, len(apps))
 	for _, g := range groups {
-		recent, err := sumSpend(db, nil, g.start, g.end, t.settledID, 0, false)
+		recent, err := sumSpend(db, t.column, nil, g.start, g.end, t.settledID, 0, false)
 		if err != nil {
 			return nil, err
 		}
@@ -142,15 +173,16 @@ func (t *budgetUsageTracker) usage(db *gorm.DB, apps []models.App, now time.Time
 	return usage, nil
 }
 
-// sumSpend sums llm_chat_records cost per App within [start, end], for rows
-// with id > afterID and, when bounded, id <= uptoID; optionally only for
-// appIDs. Ids start at 1, so afterID 0 is no lower bound.
-func sumSpend(db *gorm.DB, appIDs []uint, start, end time.Time, afterID, uptoID uint, bounded bool) (map[uint]float64, error) {
+// sumSpend sums llm_chat_records cost per App (per column: app_id or
+// llm_id) within [start, end], for rows with id > afterID and, when bounded,
+// id <= uptoID; optionally only for appIDs. Ids start at 1, so afterID 0 is
+// no lower bound.
+func sumSpend(db *gorm.DB, column string, appIDs []uint, start, end time.Time, afterID, uptoID uint, bounded bool) (map[uint]float64, error) {
 	q := db.Model(&models.LLMChatRecord{}).
-		Select("app_id, COALESCE(SUM(cost), 0) AS total").
+		Select(column+" AS app_id, COALESCE(SUM(cost), 0) AS total").
 		Where("time_stamp >= ? AND time_stamp <= ?", start, end)
 	if appIDs != nil {
-		q = q.Where("app_id IN ?", appIDs)
+		q = q.Where(column+" IN ?", appIDs)
 	}
 	if afterID > 0 {
 		q = q.Where("id > ?", afterID)
@@ -162,7 +194,7 @@ func sumSpend(db *gorm.DB, appIDs []uint, start, end time.Time, afterID, uptoID 
 		AppID uint
 		Total float64
 	}
-	if err := q.Group("app_id").Scan(&rows).Error; err != nil {
+	if err := q.Group(column).Scan(&rows).Error; err != nil {
 		return nil, err
 	}
 	sums := make(map[uint]float64, len(rows))

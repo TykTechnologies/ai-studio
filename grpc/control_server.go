@@ -1376,11 +1376,13 @@ func (s *ControlServer) SendPluginControlBatch(ctx context.Context, req *pb.Plug
 		if err := s.edgePayloads.ForwardEdgePayloads(ctx, req.Payloads); err != nil {
 			logger.Log.Warn().Err(err).Str("edge_id", req.EdgeId).Int("payloads", len(req.Payloads)).
 				Msg("Failed to queue edge payloads for the plugin host")
-			for _, payload := range req.Payloads {
+			for i, payload := range req.Payloads {
 				errors = append(errors, &pb.PluginPayloadError{
 					PluginId:      payload.PluginId,
 					CorrelationId: payload.CorrelationId,
 					ErrorMessage:  fmt.Sprintf("could not queue the payload for the plugin host: %v", err),
+					Retry:         true,
+					PayloadIndex:  uint32(i),
 				})
 			}
 		} else {
@@ -1389,7 +1391,7 @@ func (s *ControlServer) SendPluginControlBatch(ctx context.Context, req *pb.Plug
 		}
 	} else {
 		// Process each payload - route to corresponding plugin
-		for _, payload := range req.Payloads {
+		for i, payload := range req.Payloads {
 			err := s.routeEdgePayloadToPlugin(ctx, payload)
 			if err != nil {
 				logger.Log.Warn().
@@ -1398,10 +1400,14 @@ func (s *ControlServer) SendPluginControlBatch(ctx context.Context, req *pb.Plug
 					Str("correlation_id", payload.CorrelationId).
 					Msg("Failed to route edge payload to plugin")
 
+				// A failure that may pass (rlk) keeps the payload queued on
+				// the edge; the plugin's own refusal is final.
 				errors = append(errors, &pb.PluginPayloadError{
 					PluginId:      payload.PluginId,
 					CorrelationId: payload.CorrelationId,
 					ErrorMessage:  err.Error(),
+					Retry:         edgePayloadRetryable(err),
+					PayloadIndex:  uint32(i),
 				})
 			} else {
 				processedCount++
@@ -1431,6 +1437,12 @@ func (s *ControlServer) SendPluginControlBatch(ctx context.Context, req *pb.Plug
 		ProcessedAt:    timestamppb.Now(),
 		Errors:         errors,
 	}, nil
+}
+
+// edgePayloadRetryable reports whether a payload's failure may pass, so its
+// edge sends it again (services.ErrEdgePayloadRetry).
+func edgePayloadRetryable(err error) bool {
+	return errors.Is(err, services.ErrEdgePayloadRetry)
 }
 
 // routeEdgePayloadToPlugin routes an edge payload to the corresponding AI
@@ -1644,7 +1656,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		// Edges never resolve references themselves (and released ones
 		// would resolve $ENV/ against their own environment): what the
 		// policy refuses goes out as a bare "$ENV/" (secrets.ForEdge).
-		resolvedAPIKey := secrets.ForEdgeCredential(secrets.ResolveRef(llm.APIKey))
+		resolvedAPIKey := secrets.CredentialRefForEdge(llm.APIKey)
 		resolvedEndpoint := secrets.ForEdge(secrets.ResolveRef(llm.APIEndpoint))
 
 		// Encrypt API key using microgateway's encryption format
@@ -1982,8 +1994,20 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		}
 		if filter.IsGuardrail() {
 			// Edges have no secret store: resolve connection references here,
-			// as the LLM API keys above are.
-			configJSON, err := guardrails.ConfigJSONForEdge(filter.Config, resolveRef)
+			// as the LLM API keys above are, and send the secret ones
+			// encrypted the same way (deterministic, so the checksum is
+			// stable). One that cannot be encrypted goes out as the refused
+			// key, never in clear.
+			filterID := filter.ID
+			encrypt := func(v string) string {
+				c, err := s.encryptForMicrogateway(v)
+				if err != nil {
+					logger.Log.Error().Err(err).Uint("filter_id", filterID).Msg("Failed to encrypt guardrail connection secret - edges get a refused key")
+					return ""
+				}
+				return c
+			}
+			configJSON, err := guardrails.ConfigJSONForEdge(filter.Config, resolveRef, encrypt)
 			if err != nil {
 				logger.Log.Warn().Err(err).Uint("filter_id", filter.ID).Msg("Skipping guardrail filter with invalid config in snapshot")
 				continue
@@ -2336,7 +2360,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	governedTools := s.loadGovernedMetadata(models.GovernedObjectTypeTool)
 	for _, tool := range tools {
 		// Resolve and encrypt auth key for edge transit (fail-closed: skip tool if encryption fails)
-		resolvedAuthKey := secrets.ForEdgeCredential(secrets.ResolveRef(tool.AuthKey))
+		resolvedAuthKey := secrets.CredentialRefForEdge(tool.AuthKey)
 		encryptedAuthKey := ""
 		if resolvedAuthKey != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedAuthKey)
@@ -2437,7 +2461,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			encryptedConnString = encrypted
 		}
 
-		resolvedConnAPIKey := secrets.ForEdgeCredential(secrets.ResolveRef(ds.DBConnAPIKey))
+		resolvedConnAPIKey := secrets.CredentialRefForEdge(ds.DBConnAPIKey)
 		encryptedConnAPIKey := ""
 		if resolvedConnAPIKey != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedConnAPIKey)
@@ -2452,14 +2476,18 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		// carry that LLM's credentials here (the API refuses such links;
 		// this covers rows saved before it did).
 		embed := ds.EmbedFields(true)
+		// The key as stored (a reference unresolved), so a reference to an
+		// empty secret is told apart from no key.
+		embedKeyRef := ds.FlattenedEmbed().APIKey
 		if ds.Embedder != nil {
 			if err := ds.Embedder.UsableInNamespace(ds.Namespace); err != nil {
 				logger.Log.Error().Err(err).Uint("ds_id", ds.ID).Msg("Datasource embedder not available in its namespace - syncing it without embedding settings")
 				embed = models.LegacyEmbed{}
+				embedKeyRef = ""
 			}
 		}
 		embed.URL = secrets.ForEdge(embed.URL)
-		resolvedEmbedAPIKey := secrets.ForEdgeCredential(embed.APIKey)
+		resolvedEmbedAPIKey := secrets.CredentialRefForEdge(embedKeyRef)
 		encryptedEmbedAPIKey := ""
 		if resolvedEmbedAPIKey != "" {
 			encrypted, err := s.encryptForMicrogateway(resolvedEmbedAPIKey)

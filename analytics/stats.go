@@ -136,7 +136,7 @@ func GetChatRecordsPerDay(db *gorm.DB, startDate, endDate *time.Time) (*ChartDat
 
 	err := db.Model(&models.LLMChatRecord{}).
 		Select("DATE(time_stamp) as date, COUNT(*) as count").
-		Where("time_stamp BETWEEN ? AND ?", startDate, endDate).
+		Where("time_stamp >= ? AND time_stamp < ?", startDate, endDate).
 		Group("DATE(time_stamp)").
 		Order("date").
 		Find(&results).Error
@@ -166,7 +166,7 @@ func GetToolCallsPerDay(db *gorm.DB, startDate, endDate time.Time) (*ChartData, 
 
 	err := db.Model(&models.ToolCallRecord{}).
 		Select("DATE(time_stamp) as date, COUNT(*) as count").
-		Where("time_stamp BETWEEN ? AND ?", startDate, endDate).
+		Where("time_stamp >= ? AND time_stamp < ?", startDate, endDate).
 		Group("DATE(time_stamp)").
 		Order("date").
 		Find(&results).Error
@@ -197,7 +197,7 @@ func GetChatRecordsPerUser(db *gorm.DB, startDate, endDate time.Time) (*ChartDat
 
 	err := db.Model(&models.LLMChatRecord{}).
 		Select("user_id, COUNT(*) as count").
-		Where("time_stamp BETWEEN ? AND ?", startDate, endDate).
+		Where("time_stamp >= ? AND time_stamp < ?", startDate, endDate).
 		Group("user_id").
 		Order("count DESC").
 		Find(&results).Error
@@ -235,7 +235,7 @@ func GetCostAnalysis(db *gorm.DB, startDate, endDate time.Time, interactionType 
 
 	query := db.Model(&models.LLMChatRecord{}).
 		Select("DATE(time_stamp) as date, currency, SUM(cost) as cost").
-		Where("time_stamp BETWEEN ? AND ?", startDate, endDate)
+		Where("time_stamp >= ? AND time_stamp < ?", startDate, endDate)
 
 	if interactionType != nil {
 		query = query.Where("interaction_type = ?", *interactionType)
@@ -274,7 +274,7 @@ func GetMostUsedLLMModels(db *gorm.DB, startDate, endDate time.Time, interaction
 
 	query := db.Model(&models.LLMChatRecord{}).
 		Select("COALESCE(NULLIF(name, ''), 'Unknown') as name, COUNT(*) as count").
-		Where("time_stamp BETWEEN ? AND ?", startDate, endDate)
+		Where("time_stamp >= ? AND time_stamp < ?", startDate, endDate)
 
 	if interactionType != nil {
 		query = query.Where("interaction_type = ?", *interactionType)
@@ -311,7 +311,7 @@ func GetToolUsageStatistics(db *gorm.DB, startDate, endDate time.Time) (*ChartDa
 
 	err := db.Model(&models.ToolCallRecord{}).
 		Select("name, COUNT(*) as count").
-		Where("time_stamp BETWEEN ? AND ?", startDate, endDate).
+		Where("time_stamp >= ? AND time_stamp < ?", startDate, endDate).
 		Group("name").
 		Order("count DESC").
 		Limit(10).
@@ -345,7 +345,7 @@ func GetToolOperationsUsageOverTime(db *gorm.DB, toolID uint, startDate, endDate
 
 	err := db.Model(&models.ToolCallRecord{}).
 		Select("DATE(time_stamp) as date, name, COUNT(*) as count").
-		Where("tool_id = ? AND time_stamp BETWEEN ? AND ?", toolID, startDate, endDate).
+		Where("tool_id = ? AND time_stamp >= ? AND time_stamp < ?", toolID, startDate, endDate).
 		Group("DATE(time_stamp), name").
 		Order("date ASC, name ASC").
 		Find(&results).Error
@@ -421,7 +421,7 @@ func GetUniqueUsersPerDay(db *gorm.DB, startDate, endDate time.Time) (*ChartData
 
 	err := db.Model(&models.LLMChatRecord{}).
 		Select("DATE(time_stamp) as date, COUNT(DISTINCT user_id) as count").
-		Where("time_stamp BETWEEN ? AND ?", startDate, endDate).
+		Where("time_stamp >= ? AND time_stamp < ?", startDate, endDate).
 		Group("DATE(time_stamp)").
 		Order("date").
 		Find(&results).Error
@@ -452,7 +452,7 @@ func GetTokenUsagePerUser(db *gorm.DB, startDate, endDate time.Time, interaction
 
 	query := db.Model(&models.LLMChatRecord{}).
 		Select("user_id, SUM(total_tokens) as tokens").
-		Where("time_stamp BETWEEN ? AND ?", startDate, endDate)
+		Where("time_stamp >= ? AND time_stamp < ?", startDate, endDate)
 
 	if interactionType != nil {
 		query = query.Where("interaction_type = ?", *interactionType)
@@ -489,7 +489,7 @@ func GetTokenUsagePerApp(db *gorm.DB, startDate, endDate time.Time, interactionT
 
 	query := db.Model(&models.LLMChatRecord{}).
 		Select("app_id, SUM(total_tokens) as tokens").
-		Where("time_stamp BETWEEN ? AND ?", startDate, endDate)
+		Where("time_stamp >= ? AND time_stamp < ?", startDate, endDate)
 
 	if interactionType != nil {
 		query = query.Where("interaction_type = ?", *interactionType)
@@ -532,7 +532,7 @@ func GetTokenUsageForApp(db *gorm.DB, startDate, endDate time.Time, appID uint) 
 
 	err := db.Model(&models.LLMChatRecord{}).
 		Select("DATE(time_stamp) as date, SUM(total_tokens) as tokens, SUM(cost) as cost").
-		Where("time_stamp BETWEEN ? AND ? AND app_id = ?", startDate, endDate, appID).
+		Where("time_stamp >= ? AND time_stamp < ? AND app_id = ?", startDate, endDate, appID).
 		Group("DATE(time_stamp)").
 		Order("date").
 		Find(&results).Error
@@ -574,7 +574,7 @@ func GetChatInteractionsForChat(db *gorm.DB, startDate, endDate time.Time, chatI
 
 	err := db.Model(&models.LLMChatRecord{}).
 		Select("DATE(time_stamp) as date, COUNT(*) as interactions").
-		Where("time_stamp BETWEEN ? AND ? AND chat_id = ?", startDate, endDate, chatID).
+		Where("time_stamp >= ? AND time_stamp < ? AND chat_id = ?", startDate, endDate, chatID).
 		Group("DATE(time_stamp)").
 		Order("date").
 		Find(&results).Error
@@ -605,7 +605,7 @@ func GetAppInteractionsOverTime(db *gorm.DB, startDate, endDate time.Time, appID
 
 	err := db.Model(&models.LLMChatRecord{}).
 		Select("DATE(time_stamp) as date, COUNT(*) as interactions").
-		Where("time_stamp BETWEEN ? AND ? AND app_id = ?", startDate, endDate, appID).
+		Where("time_stamp >= ? AND time_stamp < ? AND app_id = ?", startDate, endDate, appID).
 		Group("DATE(time_stamp)").
 		Order("date").
 		Find(&results).Error
@@ -638,7 +638,7 @@ func GetModelUsage(db *gorm.DB, startDate, endDate time.Time, modelName string) 
 
 	err := db.Model(&models.LLMChatRecord{}).
 		Select("DATE(time_stamp) as date, SUM(total_tokens) as tokens, SUM(cost) as cost, COUNT(*) as calls").
-		Where("time_stamp BETWEEN ? AND ? AND name = ?", startDate, endDate, modelName).
+		Where("time_stamp >= ? AND time_stamp < ? AND name = ?", startDate, endDate, modelName).
 		Group("DATE(time_stamp)").
 		Order("date").
 		Find(&results).Error
@@ -681,7 +681,7 @@ func GetVendorUsage(db *gorm.DB, startDate, endDate time.Time, vendor string, ll
 
 	query := db.Model(&models.LLMChatRecord{}).
 		Select("DATE(time_stamp) as date, SUM(total_tokens) as tokens, SUM(cost) as cost, COUNT(*) as calls").
-		Where("time_stamp BETWEEN ? AND ? AND vendor = ?", startDate, endDate, vendor)
+		Where("time_stamp >= ? AND time_stamp < ? AND vendor = ?", startDate, endDate, vendor)
 
 	if llmID != nil {
 		query = query.Where("llm_id = ?", *llmID)
@@ -742,7 +742,7 @@ func GetUsage(db *gorm.DB, startDate, endDate time.Time, vendor string, llmID, a
 			COALESCE(SUM(COALESCE(cache_write_prompt_tokens, 0)), 0) as cache_write_tokens,
 			COALESCE(SUM(COALESCE(cache_read_prompt_tokens, 0)), 0) as cache_read_tokens
 		`).
-		Where("time_stamp BETWEEN ? AND ?", startDate, endDate)
+		Where("time_stamp >= ? AND time_stamp < ?", startDate, endDate)
 
 	if vendor != "" {
 		query = query.Where("vendor = ?", vendor)
@@ -827,7 +827,7 @@ func GetTokenUsageAndCostForApp(db *gorm.DB, startDate, endDate time.Time, appID
 
 	err := db.Model(&models.LLMChatRecord{}).
 		Select("DATE(time_stamp) as date, SUM(total_tokens) as tokens, SUM(cost) as cost").
-		Where("time_stamp BETWEEN ? AND ? AND app_id = ?", startDate, endDate, appID).
+		Where("time_stamp >= ? AND time_stamp < ? AND app_id = ?", startDate, endDate, appID).
 		Group("DATE(time_stamp)").
 		Order("date").
 		Find(&results).Error
@@ -940,7 +940,7 @@ func GetTotalCostPerVendorAndModel(db *gorm.DB, startDate, endDate time.Time, in
 			SUM(COALESCE(llm_chat_records.cache_write_prompt_tokens, 0)) as cache_write_tokens,
 			SUM(COALESCE(llm_chat_records.cache_read_prompt_tokens, 0)) as cache_read_tokens
 		`).
-		Where("llm_chat_records.time_stamp BETWEEN ? AND ? AND llm_chat_records.name IS NOT NULL", startDate, endDate)
+		Where("llm_chat_records.time_stamp >= ? AND llm_chat_records.time_stamp < ? AND llm_chat_records.name IS NOT NULL", startDate, endDate)
 
 	if interactionType != nil {
 		query = query.Where("interaction_type = ?", *interactionType)
@@ -1021,7 +1021,7 @@ func GetAppsForModel(db *gorm.DB, startDate, endDate time.Time, llmID uint, mode
 			MIN(llm_chat_records.time_stamp) as first_used,
 			MAX(llm_chat_records.time_stamp) as last_used
 		`).
-		Where("llm_chat_records.time_stamp BETWEEN ? AND ?", startDate, endDate).
+		Where("llm_chat_records.time_stamp >= ? AND llm_chat_records.time_stamp < ?", startDate, endDate).
 		Where("llm_chat_records.llm_id = ?", llmID).
 		Where("COALESCE(NULLIF(llm_chat_records.name, ''), 'Unknown') = ?", modelName)
 
@@ -1114,9 +1114,8 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
 	// Set start of month to beginning of day (00:00:00) UTC
 	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 
-	// Set end of month to end of the last day (23:59:59) UTC
-	lastDay := startOfMonth.AddDate(0, 1, -1)
-	endOfMonth := time.Date(lastDay.Year(), lastDay.Month(), lastDay.Day(), 23, 59, 59, 0, time.UTC)
+	// The month ends (exclusively) at the start of the next one
+	endOfMonth := startOfMonth.AddDate(0, 1, 0)
 
 	// Use provided date range for total cost calculation, or default to current month
 	costStartDate := startOfMonth
@@ -1126,8 +1125,8 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
 		costStartDate = time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, time.UTC)
 	}
 	if endDate != nil {
-		// Set end date to end of day (23:59:59) UTC
-		costEndDate = time.Date(endDate.Year(), endDate.Month(), endDate.Day(), 23, 59, 59, 0, time.UTC)
+		// The end day is inclusive: the range ends (exclusively) at the next midnight UTC
+		costEndDate = time.Date(endDate.Year(), endDate.Month(), endDate.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, 1)
 	}
 
 	// Get LLM usage statistics
@@ -1141,14 +1140,14 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
 		Select(`
 			llm_chat_records.llm_id,
 			COALESCE(llms.name, NULLIF(llm_chat_records.vendor, ''), 'Unknown') AS name,
-			SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(cost, 0) ELSE 0 END) AS monthly_usage,
-			SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(cost, 0) ELSE 0 END) AS total_cost,
-			SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(total_tokens, 0) ELSE 0 END) AS total_tokens,
+			SUM(CASE WHEN time_stamp >= ? AND time_stamp < ? THEN COALESCE(cost, 0) ELSE 0 END) AS monthly_usage,
+			SUM(CASE WHEN time_stamp >= ? AND time_stamp < ? THEN COALESCE(cost, 0) ELSE 0 END) AS total_cost,
+			SUM(CASE WHEN time_stamp >= ? AND time_stamp < ? THEN COALESCE(total_tokens, 0) ELSE 0 END) AS total_tokens,
 			llms.monthly_budget,
 			llms.budget_start_date
 	`, startOfMonth, endOfMonth, costStartDate, costEndDate, costStartDate, costEndDate).
 		Joins("LEFT JOIN llms ON llm_chat_records.llm_id = llms.id AND llms.deleted_at IS NULL").
-		Where("time_stamp BETWEEN ? AND ?", minDate, maxDate).
+		Where("time_stamp >= ? AND time_stamp < ?", minDate, maxDate).
 		Group("llm_chat_records.llm_id, COALESCE(llms.name, NULLIF(llm_chat_records.vendor, ''), 'Unknown'), llms.monthly_budget, llms.budget_start_date")
 
 	if llmID != nil {
@@ -1173,16 +1172,16 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
 		Select(`
         COALESCE(llm_chat_records.app_id, 0) AS llm_id,
         COALESCE(apps.name, 'Tyk AI Studio Chat') AS name,
-        SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(cost, 0) ELSE 0 END) AS monthly_usage,
-        SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(cost, 0) ELSE 0 END) AS total_cost,
-        SUM(CASE WHEN time_stamp BETWEEN ? AND ? THEN COALESCE(total_tokens, 0) ELSE 0 END) AS total_tokens,
+        SUM(CASE WHEN time_stamp >= ? AND time_stamp < ? THEN COALESCE(cost, 0) ELSE 0 END) AS monthly_usage,
+        SUM(CASE WHEN time_stamp >= ? AND time_stamp < ? THEN COALESCE(cost, 0) ELSE 0 END) AS total_cost,
+        SUM(CASE WHEN time_stamp >= ? AND time_stamp < ? THEN COALESCE(total_tokens, 0) ELSE 0 END) AS total_tokens,
         apps.monthly_budget,
         apps.budget_start_date,
         COALESCE(apps.user_id, 0) AS user_id,
         COALESCE(users.email, CASE WHEN apps.id IS NOT NULL THEN 'Unknown User' ELSE NULL END) AS user_email
     `, startOfMonth, endOfMonth, costStartDate, costEndDate, costStartDate, costEndDate).
 		Joins("LEFT JOIN apps ON llm_chat_records.app_id = apps.id AND apps.deleted_at IS NULL").
-		Where("time_stamp BETWEEN ? AND ?", minDate, maxDate).
+		Where("time_stamp >= ? AND time_stamp < ?", minDate, maxDate).
 		Joins("LEFT JOIN users ON apps.user_id = users.id AND users.deleted_at IS NULL").
 		Group("COALESCE(llm_chat_records.app_id, 0), COALESCE(apps.name, 'Tyk AI Studio Chat'), apps.monthly_budget, apps.budget_start_date, COALESCE(apps.user_id, 0), user_email").
 		Find(&appStats).Error; err != nil {
@@ -1214,7 +1213,7 @@ func GetProxyLogsForAppID(db *gorm.DB, startDate, endDate time.Time, appID uint,
 
 	// Build base query
 	query := db.Model(&models.ProxyLog{}).
-		Where("app_id = ? AND time_stamp BETWEEN ? AND ?", appID, startDate, endDate)
+		Where("app_id = ? AND time_stamp >= ? AND time_stamp < ?", appID, startDate, endDate)
 
 	// Add search filter if provided
 	if search != "" {
@@ -1251,7 +1250,7 @@ func GetProxyLogsForLLM(db *gorm.DB, startDate, endDate time.Time, llmID uint, p
 	// type — two LLM entries can share a vendor (e.g. two Anthropic entries
 	// with different API keys) and must remain isolated in the detail view.
 	query := db.Model(&models.ProxyLog{}).
-		Where("llm_id = ? AND time_stamp BETWEEN ? AND ?", llmID, startDate, endDate)
+		Where("llm_id = ? AND time_stamp >= ? AND time_stamp < ?", llmID, startDate, endDate)
 
 	// Add search filter if provided
 	if search != "" {

@@ -134,6 +134,7 @@ func NewControlPlane(opts ControlPlaneOptions) (_ *ControlPlane, err error) {
 	if err := opts.Config.Err(); err != nil {
 		return nil, fmt.Errorf("studio: invalid configuration: %w", err)
 	}
+	applyNetguard(opts.Config)
 	if opts.DB.Dialector.Name() != "postgres" {
 		return nil, ErrControlPlaneNeedsPostgres
 	}

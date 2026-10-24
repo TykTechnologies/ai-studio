@@ -26,6 +26,8 @@ import (
 	goplugin "github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // Global service reference for GRPCServer access
@@ -1154,23 +1156,17 @@ func (m *AIStudioPluginManager) closePluginSession(pluginID uint, client *AIStud
 
 // GetPluginAsset retrieves an asset from a loaded plugin via gRPC
 func (m *AIStudioPluginManager) GetPluginAsset(pluginID uint, assetPath string) ([]byte, string, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	loadedPlugin, exists := m.loadedPlugins[pluginID]
-	if !exists {
-		return nil, "", fmt.Errorf("plugin %d is not loaded", pluginID)
-	}
-
-	if !loadedPlugin.IsHealthy {
-		return nil, "", fmt.Errorf("plugin %d is not healthy", pluginID)
+	// Read under the lock; the call runs without it (mj3).
+	client, _, err := m.pluginClient(pluginID)
+	if err != nil {
+		return nil, "", err
 	}
 
 	// Call plugin's GetAsset gRPC method
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	resp, err := loadedPlugin.GRPCClient.GetAsset(ctx, &pb.GetAssetRequest{
+	resp, err := client.GetAsset(ctx, &pb.GetAssetRequest{
 		AssetPath: assetPath,
 	})
 	if err != nil {
@@ -1186,23 +1182,17 @@ func (m *AIStudioPluginManager) GetPluginAsset(pluginID uint, assetPath string) 
 
 // GetPluginManifest retrieves the manifest from a loaded plugin via gRPC
 func (m *AIStudioPluginManager) GetPluginManifest(pluginID uint) (string, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	loadedPlugin, exists := m.loadedPlugins[pluginID]
-	if !exists {
-		return "", fmt.Errorf("plugin %d is not loaded", pluginID)
-	}
-
-	if !loadedPlugin.IsHealthy {
-		return "", fmt.Errorf("plugin %d is not healthy", pluginID)
+	// Read under the lock; the call runs without it (mj3).
+	client, _, err := m.pluginClient(pluginID)
+	if err != nil {
+		return "", err
 	}
 
 	// Call plugin's GetManifest gRPC method
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	resp, err := loadedPlugin.GRPCClient.GetManifest(ctx, &pb.GetManifestRequest{})
+	resp, err := client.GetManifest(ctx, &pb.GetManifestRequest{})
 	if err != nil {
 		return "", fmt.Errorf("failed to get manifest from plugin: %w", err)
 	}
@@ -1216,23 +1206,17 @@ func (m *AIStudioPluginManager) GetPluginManifest(pluginID uint) (string, error)
 
 // ListPluginAssets lists all assets available from a plugin
 func (m *AIStudioPluginManager) ListPluginAssets(pluginID uint, pathPrefix string) ([]AssetInfo, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	loadedPlugin, exists := m.loadedPlugins[pluginID]
-	if !exists {
-		return nil, fmt.Errorf("plugin %d is not loaded", pluginID)
-	}
-
-	if !loadedPlugin.IsHealthy {
-		return nil, fmt.Errorf("plugin %d is not healthy", pluginID)
+	// Read under the lock; the call runs without it (mj3).
+	client, _, err := m.pluginClient(pluginID)
+	if err != nil {
+		return nil, err
 	}
 
 	// Call plugin's ListAssets gRPC method
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	resp, err := loadedPlugin.GRPCClient.ListAssets(ctx, &pb.ListAssetsRequest{
+	resp, err := client.ListAssets(ctx, &pb.ListAssetsRequest{
 		PathPrefix: pathPrefix,
 	})
 	if err != nil {
@@ -1265,18 +1249,6 @@ func (m *AIStudioPluginManager) CallPluginRPC(pluginID uint, method string, payl
 // issuing the call. Plugins implementing plugin_sdk.UserAwareRPCHandler receive
 // it; others ignore it. userCtx may be nil.
 func (m *AIStudioPluginManager) CallPluginRPCAs(pluginID uint, method string, payload map[string]interface{}, userCtx *pb.PortalUserContext) (interface{}, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	loadedPlugin, exists := m.loadedPlugins[pluginID]
-	if !exists {
-		return nil, fmt.Errorf("plugin %d is not loaded", pluginID)
-	}
-
-	if !loadedPlugin.IsHealthy {
-		return nil, fmt.Errorf("plugin %d is not healthy", pluginID)
-	}
-
 	// Convert payload to JSON string
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -1285,7 +1257,10 @@ func (m *AIStudioPluginManager) CallPluginRPCAs(pluginID uint, method string, pa
 
 	// The long-lived session broker serves RPC calls, once the plugin has
 	// connected to a broker (rpcBrokerID)
-	serviceBrokerID := loadedPlugin.rpcBrokerID("ui rpc")
+	client, serviceBrokerID, err := m.rpcTarget(pluginID, "ui rpc")
+	if err != nil {
+		return nil, err
+	}
 
 	log.Debug().
 		Uint("plugin_id", pluginID).
@@ -1303,7 +1278,7 @@ func (m *AIStudioPluginManager) CallPluginRPCAs(pluginID uint, method string, pa
 		Uint32("service_broker_id", serviceBrokerID).
 		Msg("Calling plugin RPC")
 
-	resp, err := loadedPlugin.GRPCClient.Call(ctx, &pb.CallRequest{
+	resp, err := client.Call(ctx, &pb.CallRequest{
 		Method:          method,
 		Payload:         string(payloadBytes),
 		ServiceBrokerId: serviceBrokerID,
@@ -1335,27 +1310,61 @@ func (m *AIStudioPluginManager) CallPluginRPCAs(pluginID uint, method string, pa
 	return responseData, nil
 }
 
-// CallPluginPortalRPC calls a plugin's portal RPC method via gRPC with user context.
-// This is the portal-scoped equivalent of CallPluginRPC, using PortalCall instead of Call.
-func (m *AIStudioPluginManager) CallPluginPortalRPC(pluginID uint, method string, payload map[string]interface{}, userCtx *pb.PortalUserContext) (interface{}, error) {
+// rpcTarget reads, under the manager's read lock, the client and broker ID
+// a UI or portal RPC to pluginID needs. The call itself runs without the
+// lock: it can take up to its 30 s timeout, and holding the lock for it
+// stalled session renewals and plugin loads behind a slow plugin (bqo).
+func (m *AIStudioPluginManager) rpcTarget(pluginID uint, purpose string) (pb.PluginServiceClient, uint32, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
+	loadedPlugin, err := m.healthyPluginLocked(pluginID)
+	if err != nil {
+		return nil, 0, err
+	}
+	return loadedPlugin.GRPCClient, loadedPlugin.rpcBrokerID(purpose), nil
+}
+
+// pluginClient is rpcTarget for the other plugin calls (assets, the
+// manifest, resource instances, scheduled tasks): the client and the
+// plugin's session broker ID are read under the lock, and the call runs
+// without it (mj3).
+func (m *AIStudioPluginManager) pluginClient(pluginID uint) (pb.PluginServiceClient, uint32, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	loadedPlugin, err := m.healthyPluginLocked(pluginID)
+	if err != nil {
+		return nil, 0, err
+	}
+	return loadedPlugin.GRPCClient, loadedPlugin.SessionBrokerID, nil
+}
+
+// healthyPluginLocked returns pluginID if it is loaded and healthy; m.mu is
+// held.
+func (m *AIStudioPluginManager) healthyPluginLocked(pluginID uint) (*LoadedAIStudioPlugin, error) {
 	loadedPlugin, exists := m.loadedPlugins[pluginID]
 	if !exists {
 		return nil, fmt.Errorf("plugin %d is not loaded", pluginID)
 	}
-
 	if !loadedPlugin.IsHealthy {
 		return nil, fmt.Errorf("plugin %d is not healthy", pluginID)
 	}
+	return loadedPlugin, nil
+}
 
+// CallPluginPortalRPC calls a plugin's portal RPC method via gRPC with user context.
+// This is the portal-scoped equivalent of CallPluginRPC, using PortalCall instead of Call.
+func (m *AIStudioPluginManager) CallPluginPortalRPC(pluginID uint, method string, payload map[string]interface{}, userCtx *pb.PortalUserContext) (interface{}, error) {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal portal RPC payload: %w", err)
 	}
 
-	serviceBrokerID := loadedPlugin.rpcBrokerID("portal rpc")
+	client, serviceBrokerID, err := m.rpcTarget(pluginID, "portal rpc")
+	if err != nil {
+		return nil, err
+	}
 
 	log.Debug().
 		Uint("plugin_id", pluginID).
@@ -1367,7 +1376,7 @@ func (m *AIStudioPluginManager) CallPluginPortalRPC(pluginID uint, method string
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	resp, err := loadedPlugin.GRPCClient.PortalCall(ctx, &pb.PortalCallRequest{
+	resp, err := client.PortalCall(ctx, &pb.PortalCallRequest{
 		Method:          method,
 		Payload:         string(payloadBytes),
 		ServiceBrokerId: serviceBrokerID,
@@ -1401,29 +1410,23 @@ func (m *AIStudioPluginManager) CallPluginPortalRPC(pluginID uint, method string
 // an administrator approves a community submission for a plugin resource type.
 // payload is the JSON-encoded plugin_sdk.SubmissionEnvelope.
 func (m *AIStudioPluginManager) CreateResourceInstance(pluginID uint, resourceTypeSlug string, payload []byte, reviewerID uint) (*pb.ResourceInstanceProto, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	loadedPlugin, exists := m.loadedPlugins[pluginID]
-	if !exists {
-		return nil, fmt.Errorf("plugin %d is not loaded", pluginID)
-	}
-
-	if !loadedPlugin.IsHealthy {
-		return nil, fmt.Errorf("plugin %d is not healthy", pluginID)
+	// Read under the lock; the call runs without it (mj3).
+	client, sessionBrokerID, err := m.pluginClient(pluginID)
+	if err != nil {
+		return nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	resp, err := loadedPlugin.GRPCClient.CreateResourceInstance(ctx, &pb.CreateResourceInstanceRequest{
+	resp, err := client.CreateResourceInstance(ctx, &pb.CreateResourceInstanceRequest{
 		ResourceTypeSlug: resourceTypeSlug,
 		Payload:          payload,
 		Context: &pb.PluginContext{
 			UserId:   uint32(reviewerID),
 			Metadata: map[string]string{"source": "submission"},
 		},
-		ServiceBrokerId: loadedPlugin.SessionBrokerID,
+		ServiceBrokerId: sessionBrokerID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("CreateResourceInstance RPC failed: %w", err)
@@ -1441,24 +1444,18 @@ func (m *AIStudioPluginManager) CreateResourceInstance(pluginID uint, resourceTy
 // ListResourceInstances calls a plugin's ListResourceInstances RPC to get all instances
 // of a given resource type. Used by the service layer to cache instance details.
 func (m *AIStudioPluginManager) ListResourceInstances(pluginID uint, resourceTypeSlug string) ([]*pb.ResourceInstanceProto, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	loadedPlugin, exists := m.loadedPlugins[pluginID]
-	if !exists {
-		return nil, fmt.Errorf("plugin %d is not loaded", pluginID)
-	}
-
-	if !loadedPlugin.IsHealthy {
-		return nil, fmt.Errorf("plugin %d is not healthy", pluginID)
+	// Read under the lock; the call runs without it (mj3).
+	client, sessionBrokerID, err := m.pluginClient(pluginID)
+	if err != nil {
+		return nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	resp, err := loadedPlugin.GRPCClient.ListResourceInstances(ctx, &pb.ListResourceInstancesRequest{
+	resp, err := client.ListResourceInstances(ctx, &pb.ListResourceInstancesRequest{
 		ResourceTypeSlug: resourceTypeSlug,
-		ServiceBrokerId:  loadedPlugin.SessionBrokerID,
+		ServiceBrokerId:  sessionBrokerID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("ListResourceInstances RPC failed: %w", err)
@@ -1748,10 +1745,11 @@ func (m *AIStudioPluginManager) IsPluginLoaded(pluginID uint) bool {
 
 // PingPlugin performs a health check on a loaded plugin
 func (m *AIStudioPluginManager) PingPlugin(pluginID uint) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
+	// The ping runs without the lock (up to 5 s); only reading the plugin
+	// and recording the answer take it (mj3).
+	m.mu.RLock()
 	loadedPlugin, exists := m.loadedPlugins[pluginID]
+	m.mu.RUnlock()
 	if !exists {
 		return fmt.Errorf("plugin %d is not loaded", pluginID)
 	}
@@ -1763,6 +1761,12 @@ func (m *AIStudioPluginManager) PingPlugin(pluginID uint) error {
 		Timestamp: time.Now().Unix(),
 	})
 
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// A plugin reloaded meanwhile has a record of its own.
+	if m.loadedPlugins[pluginID] != loadedPlugin {
+		return fmt.Errorf("plugin %d was reloaded during the ping", pluginID)
+	}
 	if err != nil {
 		loadedPlugin.IsHealthy = false
 		return fmt.Errorf("plugin ping failed: %w", err)
@@ -2104,21 +2108,15 @@ func (m *AIStudioPluginManager) ExecuteScheduledTask(ctx context.Context, plugin
 		}
 	}
 
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	loadedPlugin, exists := m.loadedPlugins[pluginID]
-	if !exists {
-		return nil, fmt.Errorf("plugin %d is not loaded", pluginID)
-	}
-
-	if !loadedPlugin.IsHealthy {
-		return nil, fmt.Errorf("plugin %d is not healthy", pluginID)
+	// Read under the lock; the call runs without it (mj3).
+	client, _, err := m.pluginClient(pluginID)
+	if err != nil {
+		return nil, err
 	}
 
 	// Set up per-request broker for service API access
 	var serviceBrokerID uint32
-	if clientWrapper, ok := loadedPlugin.GRPCClient.(*AIStudioPluginClient); ok {
+	if clientWrapper, ok := client.(*AIStudioPluginClient); ok {
 		if clientWrapper.broker != nil && clientWrapper.service != nil {
 			brokerID := clientWrapper.startCallBroker(pluginID, "scheduled task")
 			log.Debug().
@@ -2138,7 +2136,7 @@ func (m *AIStudioPluginManager) ExecuteScheduledTask(ctx context.Context, plugin
 		Uint32("service_broker_id", serviceBrokerID).
 		Msg("Executing scheduled task on plugin")
 
-	resp, err := loadedPlugin.GRPCClient.ExecuteScheduledTask(ctx, &pb.ExecuteScheduledTaskRequest{
+	resp, err := client.ExecuteScheduledTask(ctx, &pb.ExecuteScheduledTaskRequest{
 		Context:         contextProto,
 		Schedule:        scheduleProto,
 		ServiceBrokerId: serviceBrokerID,
@@ -2180,6 +2178,21 @@ func DetectMimeType(filename string) string {
 	return mimeType
 }
 
+// ErrEdgePayloadRetry marks an edge payload that was not delivered for a
+// reason that may pass: the plugin is not loaded, healthy or reachable, or a
+// service API call it made was refused (PermissionDenied while its scopes
+// await approval) or unavailable. The edge keeps such a payload queued and
+// sends it again; only the plugin's own refusal of the payload is final (rlk).
+var ErrEdgePayloadRetry = errors.New("edge payload can be retried")
+
+// edgePayloadRejectionRetryable reports whether a plugin's rejection message
+// carries a service API refusal that may pass, as the SDK passes the
+// plugin's error on as text.
+func edgePayloadRejectionRetryable(msg string) bool {
+	return strings.Contains(msg, "code = "+codes.PermissionDenied.String()) ||
+		strings.Contains(msg, "code = "+codes.Unavailable.String())
+}
+
 // RouteEdgePayload routes a payload from an edge instance to the corresponding AI Studio plugin
 // This implements the EdgePayloadRouter interface required by the control server
 func (m *AIStudioPluginManager) RouteEdgePayload(ctx context.Context, payload *pb.PluginControlPayload) error {
@@ -2198,12 +2211,17 @@ func (m *AIStudioPluginManager) RouteEdgePayload(ctx context.Context, payload *p
 		var err error
 		loadedPlugin, err = m.LoadPlugin(pluginID)
 		if err != nil {
-			return fmt.Errorf("plugin %d is not loaded and could not be loaded: %w", pluginID, err)
+			// A plugin Studio does not have will not appear; anything else
+			// (inactive, failing to start) may pass.
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("plugin %d is not loaded and could not be loaded: %w", pluginID, err)
+			}
+			return fmt.Errorf("%w: plugin %d is not loaded and could not be loaded: %w", ErrEdgePayloadRetry, pluginID, err)
 		}
 	}
 
 	if !loadedPlugin.IsHealthy {
-		return fmt.Errorf("plugin %d is not healthy", pluginID)
+		return fmt.Errorf("%w: plugin %d is not healthy", ErrEdgePayloadRetry, pluginID)
 	}
 
 	// Set up per-request broker for service API access
@@ -2255,7 +2273,11 @@ func (m *AIStudioPluginManager) RouteEdgePayload(ctx context.Context, payload *p
 			Uint("plugin_id", pluginID).
 			Str("edge_id", payload.EdgeId).
 			Msg("Failed to call AcceptEdgePayload on plugin")
-		return fmt.Errorf("failed to route edge payload to plugin %d: %w", pluginID, err)
+		// A plugin that does not implement AcceptEdgePayload never will.
+		if status.Code(err) == codes.Unimplemented {
+			return fmt.Errorf("failed to route edge payload to plugin %d: %w", pluginID, err)
+		}
+		return fmt.Errorf("%w: failed to route edge payload to plugin %d: %w", ErrEdgePayloadRetry, pluginID, err)
 	}
 
 	if !resp.Success {
@@ -2265,6 +2287,9 @@ func (m *AIStudioPluginManager) RouteEdgePayload(ctx context.Context, payload *p
 			Str("error", resp.ErrorMessage).
 			Bool("handled", resp.Handled).
 			Msg("Plugin rejected edge payload")
+		if edgePayloadRejectionRetryable(resp.ErrorMessage) {
+			return fmt.Errorf("%w: plugin %d could not handle edge payload: %s", ErrEdgePayloadRetry, pluginID, resp.ErrorMessage)
+		}
 		return fmt.Errorf("plugin %d rejected edge payload: %s", pluginID, resp.ErrorMessage)
 	}
 

@@ -120,6 +120,10 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 		respondWithError(w, http.StatusInternalServerError, "failed to sign Bedrock request", err, false)
 		return
 	}
+	// From here every exit completes the stream for the response hooks
+	// (streamCompletion); the last resort is a broken stream's 502.
+	sc := p.newStreamCompletion(r, llm, app, reqBody)
+	defer sc.complete(http.StatusBadGateway, nil, nil, 0)
 	resp, err := (&http.Client{Timeout: p.config.llmTimeout(), Transport: upstreamTransport}).Do(upReq)
 	if err != nil {
 		// A vendor that cannot be reached answers 502 (a timeout 504) and
@@ -129,6 +133,7 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 			recordBedrockFailedAttempt(llm, app, modelID, reqBody, status, upstreamFailureBody(status, err), r, startTime)
 		})
 		respondWithError(w, status, "Bedrock stream request failed", err, false)
+		sc.complete(status, nil, nil, 0)
 		return
 	}
 	defer resp.Body.Close()
@@ -151,9 +156,7 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 		// As on every other stream, an upstream error completes the stream
 		// too: plugins that hold per-request state (a load balancer's or rate
 		// limiter's in-flight count, a cache's pending entry) release it here.
-		if hooks {
-			go p.executeOnStreamComplete(r, resp, llm, app, errBody, reqBody, 0)
-		}
+		sc.complete(resp.StatusCode, resp.Header, errBody, 0)
 		return
 	}
 
@@ -203,18 +206,21 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 			cacheWriteTokens, cacheReadTokens = m.Usage.CacheWriteInputTokens, m.Usage.CacheReadInputTokens
 		}
 	}
+	buf := make([]byte, 32<<10)
+	// The events as the vendor sent them, as data: lines, for OnStreamComplete
+	var full bytes.Buffer
+	chunkIndex := 0
+	// completeBlocked completes a stream a filter ended, with the 400 its
+	// analytics records.
+	completeBlocked := func() { sc.complete(http.StatusBadRequest, resp.Header, full.Bytes(), chunkIndex) }
 	block := func(msg string) {
 		recordPolicyBlock(r.Context(), "response_filter", "filter")
 		log.Warn().Str("reason", msg).Msg("Bedrock stream blocked by filter")
 		markStreamBlocked(w, r, msg)
 		_, _ = w.Write(dialect.blockEvent(framer, msg))
 		flush()
+		completeBlocked()
 	}
-
-	buf := make([]byte, 32<<10)
-	// The events as the vendor sent them, as data: lines, for OnStreamComplete
-	var full bytes.Buffer
-	chunkIndex := 0
 	isErr, clientGone := false, false
 	for {
 		n, readErr := resp.Body.Read(buf)
@@ -314,6 +320,7 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 					if !clientGone {
 						block(msg)
 					}
+					completeBlocked()
 					return
 				}
 				tail = append(held, tail...)
@@ -327,6 +334,7 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 				if !clientGone {
 					block(msg)
 				}
+				completeBlocked()
 				return
 			}
 		}
@@ -346,9 +354,13 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 			recordBedrockStreamAnalytics(p, llm, app, modelID, reqBody, responseText, inputTokens, outputTokens, cacheWriteTokens, cacheReadTokens, r, startTime, bt)
 		}()
 	}
-	if !isErr && hooks {
-		go p.executeOnStreamComplete(r, resp, llm, app, full.Bytes(), reqBody, chunkIndex)
+	if isErr {
+		// The upstream broke off mid-stream: the client has a truncated
+		// stream, which no cache may store.
+		sc.complete(http.StatusBadGateway, resp.Header, full.Bytes(), chunkIndex)
+		return
 	}
+	sc.complete(resp.StatusCode, resp.Header, full.Bytes(), chunkIndex)
 }
 
 // converseEventLine is a Converse stream event as OnStreamComplete gets it:

@@ -146,7 +146,7 @@ type ObjectHookRequest struct {
 
 **LLM credentials are redacted.** From 2.3.0, an LLM's `ObjectJson` carries `[redacted]` for its API key and for each metadata value whose name contains `key`, `secret` or `token` (a Bedrock LLM's AWS keys), in every hook. `$SECRET/` and `$ENV/` references are shown as written. A `before_*` hook that returns a modified object and leaves those values as `[redacted]` keeps the stored credentials; a hook that writes a new value replaces the credential.
 
-**Other objects' credentials in `after_*` hooks.** From 2.3.0, `after_create`, `after_update` and `after_delete` hooks see `[REDACTED]` in place of a datasource's connection API key, connection string and embedder key, a tool's auth key, and a user's password, API key and session, reset and verification tokens. `before_*` hooks for those objects, and their `system.*` events, are unchanged in 2.3.0.
+**Tool, datasource and user credentials are redacted.** From 2.3.0, every hook, before and after, sees `[redacted]` in place of a tool's auth key (and its dependencies' auth keys), a datasource's connection string and connection API key, and a user's password hash, API key and session, reset and verification tokens; a datasource's embedder key (`embed_api_key`) reads `[REDACTED]`. `$SECRET/` and `$ENV/` references are shown as written, and empty values stay empty. As for LLMs, a `before_*` hook that returns a modified object and leaves those values redacted keeps the stored credentials; a hook that writes a new value replaces the credential. A tool's and an LLM's filters reach hooks with their guardrail connection secrets `[redacted]`, restored the same way. Their `system.*` events carry the same redacted copy.
 
 ## Hook Response Structure
 

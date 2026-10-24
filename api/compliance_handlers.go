@@ -43,8 +43,9 @@ func getComplianceDateRange(c *gin.Context) (time.Time, time.Time, error) {
 		if err != nil {
 			return time.Time{}, time.Time{}, fmt.Errorf("invalid end_date format, expected YYYY-MM-DD")
 		}
-		// Set end date to end of day
-		endDate = time.Date(parsedDate.Year(), parsedDate.Month(), parsedDate.Day(), 23, 59, 59, 0, parsedDate.Location())
+		// end_date is inclusive: the range ends (exclusively) at the next
+		// midnight, as getDateRange's, so the last sub-second counts.
+		endDate = nextMidnight(parsedDate)
 	}
 
 	return startDate, endDate, nil
@@ -502,7 +503,7 @@ func (a *API) exportComplianceData(c *gin.Context) {
 	filename := fmt.Sprintf("compliance_%s_%s_%s.csv",
 		view,
 		startDate.Format("2006-01-02"),
-		endDate.Format("2006-01-02"))
+		endDate.Add(-time.Nanosecond).Format("2006-01-02")) // the last day: endDate is exclusive
 
 	c.Header("Content-Description", "File Transfer")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))

@@ -464,7 +464,7 @@ prepare_marketplace() {
 # --- publish ----------------------------------------------------------------
 
 do_publish() {
-  require_tool go "Install Go 1.26.6+."
+  require_tool go "Install Go 1.26.10+."
   require_tool git ""
   require_tool python3 ""
   [ "$DRY_RUN" = "1" ] || require_tool oras "See microgateway/docs/oci-plugin-workflow.md."

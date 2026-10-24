@@ -24,8 +24,8 @@ func TestAdversarial_RotatedSecretSameLengthReachesTheRunner(t *testing.T) {
 			Config: `{"provider":"lakera","detectors":[{"name":"prompt_attack"}],"on_detect":"block","connection":{"api_key":"` + key + `"}}`,
 		}
 	}
-	before := convertDatabaseFilterToModel(row("lk-OLDOLDOLDOLDOLD"))
-	after := convertDatabaseFilterToModel(row("lk-NEWNEWNEWNEWNEW"))
+	before := convertDatabaseFilterToModel(nil, row("lk-OLDOLDOLDOLDOLD"))
+	after := convertDatabaseFilterToModel(nil, row("lk-NEWNEWNEWNEWNEW"))
 
 	conn := func(f *models.Filter) string {
 		c, _ := f.Config["connection"].(map[string]any)

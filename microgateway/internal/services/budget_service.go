@@ -8,6 +8,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
@@ -34,6 +37,12 @@ type DatabaseBudgetService struct {
 	// ledger keeps usage in memory and writes it through the analytics
 	// writer; see SetLedger. Nil reads and writes budget_usage directly.
 	ledger *BudgetLedger
+	// llmBudgets caches each LLM's monthly budget (0: none).
+	llmBudgets *database.GenCache[uint, float64]
+	// llmBlocks and llmSpend are the LLM budget verdicts and spend; nil
+	// means the shared edge sets the budget sync fills (ap6).
+	llmBlocks *BudgetBlocks
+	llmSpend  *LLMBudgetSpend
 }
 
 // SetLedger moves usage recording and the spend read of the budget check to
@@ -58,7 +67,84 @@ func NewDatabaseBudgetService(db *gorm.DB, repo *database.Repository, pluginMana
 		repo:          repo,
 		pluginManager: pluginManager,
 		apps:          database.NewGenCache[uint, budgetApp](),
+		llmBudgets:    database.NewGenCache[uint, float64](),
 	}
+}
+
+func (s *DatabaseBudgetService) llmBudgetBlocks() *BudgetBlocks {
+	if s.llmBlocks != nil {
+		return s.llmBlocks
+	}
+	return edgeLLMBudgetBlocks
+}
+
+func (s *DatabaseBudgetService) llmBudgetSpend() *LLMBudgetSpend {
+	if s.llmSpend != nil {
+		return s.llmSpend
+	}
+	return edgeLLMBudgetSpend
+}
+
+// llmMonthlyBudget returns an LLM's monthly budget in dollars, 0 for none or
+// an LLM this gateway does not have.
+func (s *DatabaseBudgetService) llmMonthlyBudget(llmID uint) (float64, error) {
+	return s.llmBudgets.Load(llmID, func() (float64, error) {
+		var llm database.LLM
+		err := s.db.Select("id", "monthly_budget").Where("id = ?", llmID).First(&llm).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, nil
+		}
+		return llm.MonthlyBudget, err
+	})
+}
+
+// checkLLMBudget refuses a request to an LLM whose own monthly budget is
+// spent, as Studio does (ap6): the control plane's verdict (a budget of 0,
+// or spend at the budget across Studio and every edge) first, then the
+// LLM's spend as this gateway knows it. It returns the spend and the limit.
+func (s *DatabaseBudgetService) checkLLMBudget(llmID *uint, estimatedCost float64) (float64, float64, error) {
+	if llmID == nil {
+		return 0, 0, nil
+	}
+	if reason, blocked := s.llmBudgetBlocks().Reason(*llmID); blocked {
+		return 0, 0, fmt.Errorf("budget exceeded: %s", reason)
+	}
+	// The budget the last sync carried, which follows a change in Studio at
+	// once; the LLM config only after the next config push.
+	limit, synced := s.llmBudgetSpend().Limit(*llmID)
+	if !synced {
+		var err error
+		if limit, err = s.llmMonthlyBudget(*llmID); err != nil {
+			return 0, 0, fmt.Errorf("%w: reading LLM %d: %v", services.ErrBudgetCheckUnavailable, *llmID, err)
+		}
+	}
+	// 0 is no limit here; a budget of 0 is refused through llm_blocks.
+	if limit <= 0 {
+		return 0, 0, nil
+	}
+	spent := s.llmBudgetSpend().Spent(*llmID)
+	// Spent once the spend reaches the budget, as Studio's check has it.
+	if spent+estimatedCost >= limit {
+		return spent, limit, fmt.Errorf("budget exceeded: LLM monthly budget exceeded: current=%s, estimated=%s, limit=%s",
+			formatBudgetAmount(spent), formatBudgetAmount(estimatedCost), formatBudgetAmount(limit))
+	}
+	return spent, limit, nil
+}
+
+// formatBudgetAmount prints a dollar amount: cents from a dollar up, and
+// below a dollar six significant digits in plain decimals (at least two), so
+// a sub-cent budget does not read as 0.00 (0.0005, 0.00005, 0.99999).
+func formatBudgetAmount(v float64) string {
+	a := math.Abs(v)
+	if a == 0 || a >= 1 {
+		return fmt.Sprintf("%.2f", v)
+	}
+	decimals := 6 - int(math.Floor(math.Log10(a))) - 1
+	out := strconv.FormatFloat(v, 'f', decimals, 64)
+	for strings.HasSuffix(out, "0") && len(out)-strings.IndexByte(out, '.') > 3 {
+		out = out[:len(out)-1]
+	}
+	return out
 }
 
 // SetWriteDB moves the usage writes to w, the gateway's writer handle.
@@ -177,6 +263,10 @@ func (s *DatabaseBudgetService) CheckBudgetStatus(appID uint, llmID *uint, estim
 
 	monthlyBudget := app.monthlyBudget
 	if monthlyBudget <= 0 {
+		// No App budget; the LLM's own budget still applies.
+		if spent, limit, err := s.checkLLMBudget(llmID, estimatedCost); err != nil {
+			return spent, limit, err
+		}
 		return 0, 0, nil // No budget limit set
 	}
 
@@ -207,8 +297,12 @@ func (s *DatabaseBudgetService) CheckBudgetStatus(appID uint, llmID *uint, estim
 
 	// Check if request would exceed budget
 	if currentCost+estimatedCost > monthlyBudget {
-		return currentCost, monthlyBudget, fmt.Errorf("budget exceeded: current=%.2f, estimated=%.2f, limit=%.2f",
-			currentCost, estimatedCost, monthlyBudget)
+		return currentCost, monthlyBudget, fmt.Errorf("budget exceeded: current=%s, estimated=%s, limit=%s",
+			formatBudgetAmount(currentCost), formatBudgetAmount(estimatedCost), formatBudgetAmount(monthlyBudget))
+	}
+	// Within the App's budget; the LLM's own budget still applies.
+	if spent, limit, err := s.checkLLMBudget(llmID, estimatedCost); err != nil {
+		return spent, limit, err
 	}
 
 	return currentCost, monthlyBudget, nil
@@ -217,6 +311,11 @@ func (s *DatabaseBudgetService) CheckBudgetStatus(appID uint, llmID *uint, estim
 // RecordUsage records usage for budget tracking
 func (s *DatabaseBudgetService) RecordUsage(appID uint, llmID *uint, tokens int64, cost float64, promptTokens, completionTokens int64) error {
 	now := time.Now()
+
+	// The LLM's own budget counts it too (cost is dollars * 10000).
+	if llmID != nil {
+		s.llmBudgetSpend().Record(*llmID, cost/10000.0)
+	}
 
 	// Get app to determine custom budget period
 	app, err := s.budgetApp(appID)

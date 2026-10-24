@@ -48,7 +48,7 @@ func TestAdversarial_V222EdgeLoadsEveryNewKeyAtOnce(t *testing.T) {
 					if err != nil {
 						t.Skipf("the hub refuses this config: %v", err)
 					}
-					js, err := ConfigJSONForEdge(raw, nil)
+					js, err := ConfigJSONForEdge(raw, nil, nil)
 					if err != nil {
 						t.Fatal(err)
 					}

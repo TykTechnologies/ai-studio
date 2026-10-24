@@ -94,12 +94,17 @@ func ForEdgeCredential(resolved string) string {
 	return resolved
 }
 
-// CredentialRefForEdge resolves a credential reference for a snapshot sent
-// to edges: a reference the policy refuses, that cannot be resolved, or that
+// CredentialRefForEdge resolves a credential field for a snapshot sent to
+// edges: a reference the policy refuses, that cannot be resolved, or that
 // resolves to an empty value goes out as RefusedCredential. An empty
 // credential is what a client fills from its own environment, and a secret
-// stored empty is never what the writer of the reference meant.
+// stored empty is never what the writer of the reference meant. A field
+// with no value at all (an Ollama LLM without a key) stays empty, and a
+// literal value goes out as it is.
 func CredentialRefForEdge(ref string) string {
+	if ref == "" {
+		return ""
+	}
 	resolved := ResolveRef(ref)
 	if resolved == "" {
 		return RefusedCredential

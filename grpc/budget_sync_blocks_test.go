@@ -69,12 +69,15 @@ func TestBudgetSyncService_BudgetBlocks(t *testing.T) {
 	assert.Empty(t, got[1].Blocks)
 	mu.Unlock()
 
-	// A failure leaves the edges' last set in place (and, with no usage,
-	// nothing is published at all).
+	// A failure leaves the edges' last set in place: the sync, which still
+	// carries the LLM budgets, says nothing about App blocks.
 	src.err = errors.New("db down")
 	svc.aggregateAndPublish()
-	time.Sleep(100 * time.Millisecond)
-	assert.Equal(t, 2, count())
+	require.Eventually(t, func() bool { return count() == 3 }, time.Second, 10*time.Millisecond)
+	mu.Lock()
+	assert.False(t, got[2].BlocksIncluded)
+	assert.True(t, got[2].LLMIncluded)
+	mu.Unlock()
 }
 
 func TestBudgetSyncService_AnalyzesAppsWhoseEdgeSpendMoved(t *testing.T) {
@@ -135,4 +138,99 @@ func TestBudgetSyncService_HandsSpendToSpendAnalyzer(t *testing.T) {
 	assert.InDelta(t, 2.5, got.Spent, 1e-9)
 	wantStart, _ := calculateBudgetPeriod(nil, now)
 	assert.True(t, got.PeriodStart.Equal(wantStart))
+}
+
+// ap6: the sync carries the spend of every LLM with a monthly budget in its
+// own period, across every App, and the LLMs edges must refuse: a budget of
+// 0, or one spent, as Studio's check refuses them.
+func TestBudgetSyncService_LLMBudgets(t *testing.T) {
+	db := setupBudgetSyncTestDB(t)
+	bus := eventbridge.NewBus()
+	got := make(chan BudgetSyncPayload, 4)
+	bus.Subscribe(BudgetSyncTopic, func(event eventbridge.Event) {
+		var p BudgetSyncPayload
+		require.NoError(t, json.Unmarshal(event.Payload, &p))
+		got <- p
+	})
+	svc := NewBudgetSyncService(db, bus)
+	svc.SetEdgeBudgetSource(&fakeEdgeBudget{blocks: map[uint]string{}})
+
+	budget := func(v float64) *float64 { return &v }
+	now := time.Now()
+	resetAt := now.Add(-time.Hour).Truncate(time.Second)
+	llms := []models.LLM{
+		{ID: 1, Name: "over", MonthlyBudget: budget(0.0005)},
+		{ID: 2, Name: "under", MonthlyBudget: budget(5)},
+		{ID: 3, Name: "zero", MonthlyBudget: budget(0)},
+		{ID: 4, Name: "unbudgeted"},
+		// Reset an hour ago: earlier spend is not in its period.
+		{ID: 5, Name: "reset", MonthlyBudget: budget(1), BudgetStartDate: &resetAt},
+	}
+	for i := range llms {
+		require.NoError(t, db.Create(&llms[i]).Error)
+	}
+	for _, r := range []models.LLMChatRecord{
+		{AppID: 1, LLMID: 1, Cost: 50, TimeStamp: now}, // $0.005, across two Apps
+		{AppID: 2, LLMID: 1, Cost: 60, TimeStamp: now},
+		{AppID: 1, LLMID: 2, Cost: 10000, TimeStamp: now},
+		{AppID: 1, LLMID: 4, Cost: 10000, TimeStamp: now},
+		{AppID: 1, LLMID: 5, Cost: 90000, TimeStamp: now.Add(-2 * time.Hour)},
+		{AppID: 1, LLMID: 5, Cost: 1000, TimeStamp: now},
+	} {
+		require.NoError(t, db.Create(&r).Error)
+	}
+
+	svc.aggregateAndPublish()
+	var p BudgetSyncPayload
+	select {
+	case p = <-got:
+	case <-time.After(time.Second):
+		t.Fatal("no budget sync published")
+	}
+	require.True(t, p.BlocksIncluded)
+	require.True(t, p.LLMIncluded)
+	assert.InDelta(t, 0.011, p.LLMBudgets[1].Usage, 1e-9)
+	assert.InDelta(t, 1.0, p.LLMBudgets[2].Usage, 1e-9)
+	// Each entry carries the LLM's budget, so a change in Studio reaches
+	// edges with the next sync.
+	require.NotNil(t, p.LLMBudgets[2].Limit)
+	assert.Equal(t, 5.0, *p.LLMBudgets[2].Limit)
+	require.NotNil(t, p.LLMBudgets[3].Limit)
+	assert.Zero(t, *p.LLMBudgets[3].Limit)
+	assert.NotContains(t, p.LLMBudgets, uint32(4), "an LLM without a budget is not tracked")
+	require.Contains(t, p.LLMBudgets, uint32(3), "an unspent LLM is sent too, with its period")
+	assert.Zero(t, p.LLMBudgets[3].Usage)
+	assert.False(t, p.LLMBudgets[3].PeriodStart.IsZero())
+	assert.InDelta(t, 0.1, p.LLMBudgets[5].Usage, 1e-9)
+	assert.True(t, p.LLMBudgets[5].PeriodStart.Equal(resetAt), "the LLM's own period")
+	assert.Equal(t, map[uint32]string{
+		1: "LLM monthly budget exceeded",
+		3: "LLM monthly budget exceeded (budget is 0)",
+	}, p.LLMBlocks)
+}
+
+// A failure to compute LLM budgets leaves the edges' LLM state alone
+// (llm_included unset) but still sends the App blocks.
+func TestBudgetSyncService_LLMBudgetFailureKeepsAppBlocks(t *testing.T) {
+	db := setupBudgetSyncTestDB(t)
+	bus := eventbridge.NewBus()
+	got := make(chan BudgetSyncPayload, 1)
+	bus.Subscribe(BudgetSyncTopic, func(event eventbridge.Event) {
+		var p BudgetSyncPayload
+		require.NoError(t, json.Unmarshal(event.Payload, &p))
+		got <- p
+	})
+	svc := NewBudgetSyncService(db, bus)
+	svc.SetEdgeBudgetSource(&fakeEdgeBudget{blocks: map[uint]string{3: "app monthly budget is 0"}})
+	require.NoError(t, db.Migrator().DropTable(&models.LLM{}))
+
+	svc.aggregateAndPublish()
+	select {
+	case p := <-got:
+		assert.True(t, p.BlocksIncluded)
+		assert.Equal(t, "app monthly budget is 0", p.Blocks[3])
+		assert.False(t, p.LLMIncluded)
+	case <-time.After(time.Second):
+		t.Fatal("no budget sync published")
+	}
 }

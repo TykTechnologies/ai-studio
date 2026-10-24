@@ -8,8 +8,8 @@
 //
 // The mock upstream binds 127.0.0.1, which is an internal range, so it stands in
 // for a cluster Service as far as the SSRF policy is concerned. That makes this
-// an honest test of the exact interaction operators hit: turn on
-// LLM_UPSTREAM_BLOCK_INTERNAL and the in-cluster upstream is refused until it is
+// an honest test of the exact interaction operators hit: with
+// LLM_UPSTREAM_BLOCK_INTERNAL on (the default since 2.3) the in-cluster upstream is refused until it is
 // named in LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS.
 package integration
 
@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard/netguardtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +29,7 @@ func TestInferenceGatewayCoexistence(t *testing.T) {
 	chatBody := `{"model":"gpt-4","messages":[{"role":"user","content":"hello"}]}`
 
 	t.Run("in-cluster upstream is refused when internal egress is blocked", func(t *testing.T) {
-		t.Setenv(netguard.EnvBlockInternal, "true")
+		netguardtest.BlockInternal(t)
 		baseURL, backend := setupTrafficTest(t)
 		before := backend.GetRequestCount()
 
@@ -41,7 +42,7 @@ func TestInferenceGatewayCoexistence(t *testing.T) {
 	})
 
 	t.Run("naming the host in the internal allowlist permits it", func(t *testing.T) {
-		t.Setenv(netguard.EnvBlockInternal, "true")
+		netguardtest.BlockInternal(t)
 		t.Setenv(netguard.EnvAllowedInternalHosts, "127.0.0.1")
 		baseURL, backend := setupTrafficTest(t)
 		before := backend.GetRequestCount()
@@ -60,7 +61,7 @@ func TestInferenceGatewayCoexistence(t *testing.T) {
 	t.Run("governance still applies to the in-cluster upstream", func(t *testing.T) {
 		// The whole point of fronting an InferencePool with Tyk: authentication
 		// is enforced on the way in, not delegated to the model server.
-		t.Setenv(netguard.EnvBlockInternal, "true")
+		netguardtest.BlockInternal(t)
 		t.Setenv(netguard.EnvAllowedInternalHosts, "127.0.0.1")
 		baseURL, backend := setupTrafficTest(t)
 		before := backend.GetRequestCount()
@@ -75,7 +76,7 @@ func TestInferenceGatewayCoexistence(t *testing.T) {
 	t.Run("the internal allowlist does not become a global allowlist", func(t *testing.T) {
 		// Naming a cluster host must not restrict external providers the way
 		// LLM_UPSTREAM_ALLOWED_HOSTS would.
-		t.Setenv(netguard.EnvBlockInternal, "true")
+		netguardtest.BlockInternal(t)
 		t.Setenv(netguard.EnvAllowedInternalHosts, ".svc.cluster.local")
 
 		u, err := url.Parse("https://api.anthropic.com/v1/messages")
