@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
@@ -392,4 +393,30 @@ func TestUpdateMySubmission_PartialPatchKeepsTheRest(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, got.SecondaryContact, "an explicit empty string applies")
 	assert.Equal(t, "owner@example.com", got.PrimaryContact)
+}
+
+// encoding/json binds a differently-cased key ("Description") to the
+// attribute, so the PATCH merge must count it as present, not keep the
+// stored value over it.
+func TestPatch_KeysMatchCaseInsensitively(t *testing.T) {
+	api, db := setupTestAPI(t)
+	tool := &models.Tool{Name: "Case Tool", Description: "old", PrivacyScore: 2}
+	require.NoError(t, db.Create(tool).Error)
+
+	w := performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/tools/%d", tool.ID),
+		patchAttrs(map[string]interface{}{"Description": "new", "PRIVACY_SCORE": 3}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	got := models.NewTool()
+	require.NoError(t, got.Get(db, tool.ID))
+	assert.Equal(t, "new", got.Description)
+	assert.Equal(t, 3, got.PrivacyScore)
+	assert.Equal(t, "Case Tool", got.Name)
+
+	type attrs struct {
+		Name string `json:"name"`
+		Note string `json:"note"`
+	}
+	var dst attrs
+	require.NoError(t, patchOnto(&dst, attrs{Name: "stored", Note: "kept"}, map[string]json.RawMessage{"Name": json.RawMessage(`"sent"`)}))
+	assert.Equal(t, attrs{Name: "sent", Note: "kept"}, dst)
 }

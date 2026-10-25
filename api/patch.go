@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -29,6 +30,13 @@ func patchOnto(dst any, base any, present map[string]json.RawMessage) error {
 		return err
 	}
 	for k, v := range present {
+		// encoding/json matches keys case-insensitively: a body's "Name"
+		// replaces the base's "name".
+		for bk := range merged {
+			if strings.EqualFold(bk, k) {
+				delete(merged, bk)
+			}
+		}
 		merged[k] = v
 	}
 	out, err := json.Marshal(merged)
@@ -56,7 +64,20 @@ func boundBodyKeys(c *gin.Context) (map[string]json.RawMessage, error) {
 	if err := json.Unmarshal(body, &present); err != nil || present == nil {
 		return nil, errors.New("request body is not a JSON object")
 	}
-	return present, nil
+	return lowerKeys(present), nil
+}
+
+// lowerKeys lower-cases a body's keys, as encoding/json matches them
+// case-insensitively (input names are all lower case). nil stays nil.
+func lowerKeys(m map[string]json.RawMessage) map[string]json.RawMessage {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]json.RawMessage, len(m))
+	for k, v := range m {
+		out[strings.ToLower(k)] = v
+	}
+	return out
 }
 
 // patchAttributes lays the data.attributes of a body bound with

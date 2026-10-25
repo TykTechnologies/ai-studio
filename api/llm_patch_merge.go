@@ -115,6 +115,8 @@ func mergeLLMPatch(input *LLMInput, existing *models.LLM, present map[string]jso
 
 // llmPatchAttributeKeys reports which attribute keys a request body actually
 // carried, so absent keys can be distinguished from explicitly zeroed ones.
+// Keys are lower-cased: encoding/json binds "Name" to the "name" attribute,
+// so it must count as present (attribute names are all lower case).
 func llmPatchAttributeKeys(body []byte) map[string]json.RawMessage {
 	var probe struct {
 		Data struct {
@@ -124,7 +126,7 @@ func llmPatchAttributeKeys(body []byte) map[string]json.RawMessage {
 	if err := json.Unmarshal(body, &probe); err != nil {
 		return nil
 	}
-	return probe.Data.Attributes
+	return lowerKeys(probe.Data.Attributes)
 }
 
 // redactedAPIKeyRetained reports whether the incoming api_key is the redaction
