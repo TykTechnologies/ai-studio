@@ -222,6 +222,8 @@ func (a *API) updateDatasource(c *gin.Context) {
 		}{{Title: "Not Found", Detail: "Datasource not found"}}})
 		return
 	}
+	present := llmPatchAttributeKeys(rawBody)
+	mergeDatasourcePatch(&input, existingDS, present)
 
 	existingEmbed := existingDS.EmbedFields(false)
 	if !requireSecretReadForCredentials(c,
@@ -232,7 +234,7 @@ func (a *API) updateDatasource(c *gin.Context) {
 	}
 
 	// Flipping the active switch is the publish action on datasources.
-	if _, present := llmPatchAttributeKeys(rawBody)["active"]; !present {
+	if _, ok := present["active"]; !ok {
 		input.Data.Attributes.Active = existingDS.Active
 	}
 	if !a.requirePublishIfChanged(c, "datasources", existingDS.Active, input.Data.Attributes.Active) {

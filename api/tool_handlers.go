@@ -12,6 +12,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -248,7 +249,7 @@ func (a *API) updateTool(c *gin.Context) {
 	}
 
 	var input ToolInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -269,6 +270,17 @@ func (a *API) updateTool(c *gin.Context) {
 		})
 		return
 	}
+	present, err := boundAttributeKeys(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+	mergeToolPatch(&input, tool, present)
 
 	// Only a changed spec (or type) is checked, so a tool stored with a bad
 	// spec before validation existed can still be renamed or deactivated.
