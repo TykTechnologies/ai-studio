@@ -63,8 +63,10 @@ type Store struct {
 	preDeleteCollection bool
 	vectorDimensions    int
 	hnswIndex           *HNSWIndex
-	// Tyk: dialFunc dials the connection New makes from connURL (WithDialFunc).
-	dialFunc pgconn.DialFunc
+	// Tyk: dialFunc dials the connection New makes from connURL (WithDialFunc),
+	// lookupFunc resolves its hosts (WithLookupFunc).
+	dialFunc   pgconn.DialFunc
+	lookupFunc pgconn.LookupFunc
 }
 
 type HNSWIndex struct {
@@ -89,6 +91,9 @@ func New(ctx context.Context, opts ...Option) (Store, error) {
 		}
 		if store.dialFunc != nil {
 			cfg.DialFunc = store.dialFunc
+		}
+		if store.lookupFunc != nil {
+			cfg.LookupFunc = store.lookupFunc
 		}
 		store.conn, err = pgx.ConnectConfig(ctx, cfg)
 		if err != nil {
