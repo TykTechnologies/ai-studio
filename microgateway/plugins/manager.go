@@ -108,9 +108,13 @@ type LoadedPlugin struct {
 	Config        map[string]interface{}
 	RawConfig     []byte
 	Checksum      string
-	IsHealthy     bool
-	IsGlobal      bool                            // True for global plugins (vs per-LLM plugins)
-	BuiltinPlugin interfaces.DataCollectionPlugin // For built-in plugins
+	// AllowInternalHost is the switch the plugin was loaded with; a change
+	// reloads it (ReconcilePlugins), so turning it off refuses an internal
+	// host instead of keeping the connection.
+	AllowInternalHost bool
+	IsHealthy         bool
+	IsGlobal          bool                            // True for global plugins (vs per-LLM plugins)
+	BuiltinPlugin     interfaces.DataCollectionPlugin // For built-in plugins
 }
 
 // GlobalPlugin represents a global data collection plugin instance
@@ -567,6 +571,8 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 		RawConfig:  pluginData.Config,
 		Checksum:   pluginData.Checksum,
 		IsHealthy:  true,
+
+		AllowInternalHost: pluginData.AllowInternalHost,
 	}
 
 	// Store references
@@ -3011,8 +3017,9 @@ func (pm *PluginManager) ReconcilePlugins(ctx context.Context) error {
 
 	// Phase 1: Snapshot currently loaded (non-global, non-builtin) plugins
 	type pluginState struct {
-		Checksum  string
-		RawConfig []byte
+		Checksum          string
+		RawConfig         []byte
+		AllowInternalHost bool
 	}
 	pm.mu.RLock()
 	loadedStates := make(map[uint]pluginState, len(pm.loadedPlugins))
@@ -3021,8 +3028,9 @@ func (pm *PluginManager) ReconcilePlugins(ctx context.Context) error {
 			continue
 		}
 		loadedStates[id] = pluginState{
-			Checksum:  lp.Checksum,
-			RawConfig: lp.RawConfig,
+			Checksum:          lp.Checksum,
+			RawConfig:         lp.RawConfig,
+			AllowInternalHost: lp.AllowInternalHost,
 		}
 	}
 	pm.mu.RUnlock()
@@ -3041,7 +3049,8 @@ func (pm *PluginManager) ReconcilePlugins(ctx context.Context) error {
 		desired, exists := desiredPlugins[id]
 		if !exists {
 			toUnload = append(toUnload, id)
-		} else if loadedState.Checksum != desired.Checksum || !bytes.Equal(loadedState.RawConfig, desired.Config) {
+		} else if loadedState.Checksum != desired.Checksum || !bytes.Equal(loadedState.RawConfig, desired.Config) ||
+			loadedState.AllowInternalHost != desired.AllowInternalHost {
 			toReload = append(toReload, id)
 		}
 	}

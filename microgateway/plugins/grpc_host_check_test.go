@@ -44,6 +44,29 @@ func TestReconcile_HubPushedGRPCPluginToInternalIPRefused(t *testing.T) {
 	assert.Contains(t, health.ErrorMessage, "refused")
 }
 
+// Turning a loaded grpc:// plugin's "Allow internal host" switch off at the
+// hub reloads it at the next reconcile, and the reload refuses the internal
+// host: the edge does not keep the plugin it loaded under the switch (w4e.5).
+func TestReconcile_InternalHostSwitchTurnedOffUnloadsPlugin(t *testing.T) {
+	t.Setenv("ALLOW_INTERNAL_NETWORK_ACCESS", "")
+	t.Setenv("LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS", "")
+	pushed := PluginData{ID: 7, Name: "internal-grpc", HookType: "post_auth", Command: "grpc://10.0.0.5:50051", IsActive: true, Checksum: "c"}
+	svc := &mockPluginService{
+		allActiveGwPlugins: []PluginData{pushed},
+		getPluginByID:      map[uint]PluginData{7: pushed},
+	}
+	pm := newTestManager(svc, map[uint]*LoadedPlugin{
+		7: {ID: 7, Name: "internal-grpc", Checksum: "c", AllowInternalHost: true},
+	})
+
+	require.NoError(t, pm.ReconcilePlugins(context.Background()))
+	assert.False(t, pm.IsPluginLoaded(7), "the plugin loaded under the switch is gone")
+	health := pm.GetPluginHealth()[7]
+	require.NotNil(t, health)
+	assert.Equal(t, PluginStatusFailed, health.Status)
+	assert.Contains(t, health.ErrorMessage, "refused")
+}
+
 // A manager without a validator still applies the rule.
 func TestCreatePluginClient_GRPCInternalIPRefusedByDefault(t *testing.T) {
 	t.Setenv("ALLOW_INTERNAL_NETWORK_ACCESS", "")
