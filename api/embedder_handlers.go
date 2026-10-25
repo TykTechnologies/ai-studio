@@ -162,7 +162,10 @@ func (a *API) updateEmbedder(c *gin.Context) {
 		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
 		return
 	}
-	mergeEmbedderPatch(&input, current, present)
+	if err := mergeEmbedderPatch(&input, current, present); err != nil {
+		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
+		return
+	}
 	changes := attributesToEmbedder(&input.Data.Attributes)
 	if changes.IsLinked() {
 		if (!current.IsLinked() || *current.LLMID != *changes.LLMID) && !a.requireLLMReadToLink(c) {

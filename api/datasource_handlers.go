@@ -223,7 +223,15 @@ func (a *API) updateDatasource(c *gin.Context) {
 		return
 	}
 	present := llmPatchAttributeKeys(rawBody)
-	mergeDatasourcePatch(&input, existingDS, present)
+	if err := mergeDatasourcePatch(&input, existingDS, present); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
 
 	existingEmbed := existingDS.EmbedFields(false)
 	if !requireSecretReadForCredentials(c,

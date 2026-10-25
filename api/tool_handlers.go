@@ -280,7 +280,15 @@ func (a *API) updateTool(c *gin.Context) {
 		})
 		return
 	}
-	mergeToolPatch(&input, tool, present)
+	if err := mergeToolPatch(&input, tool, present); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
 
 	// Only a changed spec (or type) is checked, so a tool stored with a bad
 	// spec before validation existed can still be renamed or deactivated.
