@@ -43,25 +43,24 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// waitForRecord retries fetching a record until it exists or timeout is reached
+// waitForRecord retries fetching a record until it exists or timeout is reached.
+// It checks first, so a record already written costs no wait.
 func waitForRecord[T any](db *gorm.DB, condition string, args ...interface{}) (*T, error) {
 	var record T
-	timeout := time.After(2 * time.Second)
-	tick := time.Tick(100 * time.Millisecond)
+	deadline := time.Now().Add(2 * time.Second)
 
 	for {
-		select {
-		case <-timeout:
-			return nil, fmt.Errorf("timeout waiting for record")
-		case <-tick:
-			result := db.Where(condition, args...).First(&record)
-			if result.Error == nil {
-				return &record, nil
-			}
-			if !errors.Is(result.Error, gorm.ErrRecordNotFound) {
-				return nil, result.Error
-			}
+		result := db.Where(condition, args...).First(&record)
+		if result.Error == nil {
+			return &record, nil
 		}
+		if !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return nil, result.Error
+		}
+		if !time.Now().Before(deadline) {
+			return nil, fmt.Errorf("timeout waiting for record")
+		}
+		time.Sleep(waitPollInterval)
 	}
 }
 
