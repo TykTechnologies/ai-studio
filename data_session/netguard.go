@@ -12,6 +12,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/vectorstores/pgvector"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/stdlib"
@@ -77,7 +78,33 @@ func openPostgres(d *models.Datasource) (*gorm.DB, error) {
 		return nil, err
 	}
 	cfg.DialFunc = exemption(d).DialContext
+	cfg.LookupFunc = pgLookup(d)
 	return gorm.Open(postgres.New(postgres.Config{Conn: stdlib.OpenDB(*cfg)}), &gorm.Config{})
+}
+
+// pgLookup is pgx's host resolver for the datasource. pgx resolves a host
+// itself and dials the addresses, so an exempt host is returned unresolved:
+// the dial then sees the host named in the connection string, which the
+// exemption matches, and resolves it. Every other host resolves as pgx's
+// default does, and its addresses get the dial-time check.
+func pgLookup(d *models.Datasource) pgconn.LookupFunc {
+	ex := exemption(d)
+	return func(ctx context.Context, host string) ([]string, error) {
+		if ex.Has(host) {
+			return []string{host}, nil
+		}
+		return net.DefaultResolver.LookupHost(ctx, host)
+	}
+}
+
+// pgvectorDial is the pgvector store's connection option: the datasource's
+// dialer and host resolver, as openPostgres uses.
+func pgvectorDial(d *models.Datasource) pgvector.Option {
+	dial, lookup := pgvector.WithDialFunc(exemption(d).DialContext), pgvector.WithLookupFunc(pgLookup(d))
+	return func(s *pgvector.Store) {
+		dial(s)
+		lookup(s)
+	}
 }
 
 // redisDialer sets opt's dialer to the datasource's, applying opt's TLS

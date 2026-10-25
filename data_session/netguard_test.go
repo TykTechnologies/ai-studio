@@ -10,6 +10,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/netguard/netguardtest"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/vectorstores/pgvector"
 	redis "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -91,6 +92,78 @@ func TestDatasourceClientsRefuseInternalUnlessAllowed(t *testing.T) {
 		check("Redis vector store", err)
 	}
 }
+
+// The switch is keyed by the host named in the connection string, and pgx
+// resolves a host itself and dials the addresses: a hostname that resolves
+// to an internal address (pgvector at "pgvec" in a compose network) must be
+// allowed with the switch on and refused with it off, through openPostgres
+// and the pgvector store alike. Redis dials the hostname; checked too.
+func TestHostnameExemption(t *testing.T) {
+	netguardtest.BlockInternal(t)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			_ = c.Close()
+		}
+	}()
+	_, port, err := net.SplitHostPort(ln.Addr().String())
+	require.NoError(t, err)
+	conn := "postgres://u:p@localhost:" + port + "/vec?sslmode=disable&connect_timeout=2"
+
+	for _, allow := range []bool{false, true} {
+		d := &models.Datasource{DBConnString: conn, AllowInternalHost: allow}
+		_, pgErr := openPostgresPing(d)
+		_, storeErr := pgvector.New(context.Background(),
+			pgvector.WithConnectionURL(conn),
+			pgvector.WithEmbedder(stubEmbedder{}),
+			pgvectorDial(d),
+		)
+		for what, err := range map[string]error{"openPostgres": pgErr, "pgvector store": storeErr} {
+			// The stub listener closes every connection, so both fail either way.
+			require.Error(t, err, what)
+			if allow {
+				assert.NotContains(t, err.Error(), "internal address", "%s with the switch on", what)
+			} else {
+				assert.Contains(t, err.Error(), "internal address", "%s with the switch off", what)
+			}
+		}
+
+		rd := &models.Datasource{DBConnString: "redis://localhost:" + port, AllowInternalHost: allow}
+		opt, err := redis.ParseURL(rd.DBConnString)
+		require.NoError(t, err)
+		redisDialer(rd, opt)
+		c, redisErr := opt.Dialer(context.Background(), "tcp", opt.Addr)
+		if redisErr == nil {
+			c.Close()
+		}
+		c, rueidisErr := rueidisDial(rd)("localhost:"+port, &net.Dialer{Timeout: 2 * time.Second}, nil)
+		if rueidisErr == nil {
+			c.Close()
+		}
+		for what, err := range map[string]error{"Redis": redisErr, "Redis vector store": rueidisErr} {
+			if allow {
+				// localhost may resolve to ::1 first, where nothing listens.
+				if err != nil {
+					assert.NotContains(t, err.Error(), "internal address", "%s with the switch on", what)
+				}
+			} else {
+				require.Error(t, err, what)
+				assert.Contains(t, err.Error(), "internal address", "%s with the switch off", what)
+			}
+		}
+	}
+}
+
+type stubEmbedder struct{}
+
+func (stubEmbedder) EmbedDocuments(context.Context, []string) ([][]float32, error) { return nil, nil }
+func (stubEmbedder) EmbedQuery(context.Context, string) ([]float32, error)         { return nil, nil }
 
 // openPostgresPing opens the database and pings it, as the stores do.
 func openPostgresPing(d *models.Datasource) (any, error) {

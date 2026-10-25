@@ -72,6 +72,16 @@ func WithDialFunc(dial pgconn.DialFunc) Option {
 	}
 }
 
+// WithLookupFunc sets the host resolver of the connection New makes from the
+// connection URL (Tyk: with WithDialFunc, so the dialer can see the
+// configured host instead of the address it resolves to). Ignored with
+// WithConn.
+func WithLookupFunc(lookup pgconn.LookupFunc) Option {
+	return func(p *Store) {
+		p.lookupFunc = lookup
+	}
+}
+
 // WithConn is an option for specifying the Postgres connection.
 // From pgx doc: it is not safe for concurrent usage.Use a connection pool to manage access
 // to multiple database connections from multiple goroutines.

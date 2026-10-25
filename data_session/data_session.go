@@ -352,7 +352,7 @@ func (ds *DataSession) getStore(d *models.Datasource, embedder *embeddings.Embed
 			pgvector.WithConnectionURL(d.DBConnString),
 			pgvector.WithEmbedder(embedder),
 			pgvector.WithCollectionName(d.DBName),
-			pgvector.WithDialFunc(exemption(d).DialContext),
+			pgvectorDial(d),
 		)
 
 	case VECTOR_CHROMA:
