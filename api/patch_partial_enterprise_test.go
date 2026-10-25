@@ -77,3 +77,61 @@ func TestUpdateGroup_PartialPatchKeepsAccess(t *testing.T) {
 	assert.Len(t, got.Catalogues, 1)
 	assert.Equal(t, "Renamed team", got.Name)
 }
+
+// Catalogues, data and tool catalogues: an omitted attribute keeps its value.
+func TestUpdateCatalogues_PartialPatchKeepsTheRest(t *testing.T) {
+	api, db := setupTestAPI(t)
+	dc := &models.DataCatalogue{Name: "Data", ShortDescription: "short", LongDescription: "long", Icon: "i.png"}
+	require.NoError(t, db.Create(dc).Error)
+	tc := &models.ToolCatalogue{Name: "Tools", ShortDescription: "short", LongDescription: "long", Icon: "t.png"}
+	require.NoError(t, db.Create(tc).Error)
+	cat := &models.Catalogue{Name: "LLMs"}
+	require.NoError(t, db.Create(cat).Error)
+
+	w := performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/data-catalogues/%d", dc.ID), patchAttrs(map[string]interface{}{"icon": ""}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var gotDC models.DataCatalogue
+	require.NoError(t, db.First(&gotDC, dc.ID).Error)
+	assert.Equal(t, "Data", gotDC.Name)
+	assert.Equal(t, "short", gotDC.ShortDescription)
+	assert.Equal(t, "long", gotDC.LongDescription)
+	assert.Empty(t, gotDC.Icon, "an explicit empty string applies")
+
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/tool-catalogues/%d", tc.ID), patchAttrs(map[string]interface{}{"name": "Renamed"}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var gotTC models.ToolCatalogue
+	require.NoError(t, db.First(&gotTC, tc.ID).Error)
+	assert.Equal(t, "Renamed", gotTC.Name)
+	assert.Equal(t, "short", gotTC.ShortDescription)
+	assert.Equal(t, "t.png", gotTC.Icon)
+
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/catalogues/%d", cat.ID), patchAttrs(map[string]interface{}{}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var gotCat models.Catalogue
+	require.NoError(t, db.First(&gotCat, cat.ID).Error)
+	assert.Equal(t, "LLMs", gotCat.Name)
+}
+
+// A filter rename keeps its script and guardrail config.
+func TestUpdateFilter_PartialPatchKeepsScriptAndConfig(t *testing.T) {
+	api, db := setupTestAPI(t)
+	f := &models.Filter{Name: "Keep filter", Description: "d", Kind: "script", Script: []byte("output = true"), ResponseFilter: true}
+	require.NoError(t, db.Create(f).Error)
+
+	w := performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/filters/%d", f.ID), patchAttrs(map[string]interface{}{"name": "Renamed filter"}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var got models.Filter
+	require.NoError(t, db.First(&got, f.ID).Error)
+	assert.Equal(t, "Renamed filter", got.Name)
+	assert.Equal(t, "d", got.Description)
+	assert.Equal(t, "output = true", string(got.Script))
+	assert.True(t, got.ResponseFilter)
+	assert.Equal(t, "script", got.Kind)
+
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/filters/%d", f.ID), patchAttrs(map[string]interface{}{"response_filter": false}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	got = models.Filter{}
+	require.NoError(t, db.First(&got, f.ID).Error)
+	assert.False(t, got.ResponseFilter, "an explicit false applies")
+	assert.Equal(t, "output = true", string(got.Script))
+}

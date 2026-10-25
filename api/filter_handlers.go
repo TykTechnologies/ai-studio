@@ -19,6 +19,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
 // @Summary Create a new filter
@@ -249,7 +250,26 @@ func (a *API) updateFilter(c *gin.Context) {
 	}
 
 	var input FilterInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Bad Request", err.Error()}}})
+		return
+	}
+
+	existing, err := a.service.GetFilterByID(uint(id))
+	if err != nil {
+		c.JSON(filterErrorStatus(err), ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Invalid filter", filterErrorDetail(err)}}})
+		return
+	}
+	// An omitted attribute keeps the stored one (96e): a rename must not
+	// blank the script or the guardrail config. The stored filter's JSON
+	// names are the input's.
+	if err := patchAttributes(c, &input.Data.Attributes, existing); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
 			Detail string `json:"detail"`
@@ -265,11 +285,7 @@ func (a *API) updateFilter(c *gin.Context) {
 		return
 	}
 
-	if existing, err := a.service.GetFilterByID(uint(id)); err == nil {
-		if !requireSecretReadForGuardrailReferences(c, existing.Config, input.Data.Attributes.Config) {
-			return
-		}
-	} else if !requireSecretReadForGuardrailReferences(c, nil, input.Data.Attributes.Config) {
+	if !requireSecretReadForGuardrailReferences(c, existing.Config, input.Data.Attributes.Config) {
 		return
 	}
 

@@ -16,6 +16,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/universalclient"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
@@ -215,11 +216,22 @@ func (a *API) updateToolCatalogue(c *gin.Context) {
 	}
 
 	var input ToolCatalogueInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
 			Detail string `json:"detail"`
 		}{{"Bad Request", err.Error()}}})
+		return
+	}
+	// An omitted attribute keeps the stored one (96e); the stored record's
+	// JSON names are the input's.
+	stored, err := a.service.GetToolCatalogueByID(uint(id))
+	if err != nil {
+		simpleError(c, http.StatusNotFound, "Not Found", "Tool catalogue not found")
+		return
+	}
+	if err := patchAttributes(c, &input.Data.Attributes, stored); err != nil {
+		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
 		return
 	}
 

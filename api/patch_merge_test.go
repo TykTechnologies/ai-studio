@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -216,4 +217,148 @@ func TestToggleModelRouter_RequiresActive(t *testing.T) {
 
 	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/model-routers/%d/toggle", r.ID), map[string]interface{}{"active": false})
 	assert.NotEqual(t, http.StatusBadRequest, w.Code, "an explicit active is accepted: %s", w.Body.String())
+}
+
+func TestUpdateLLMSettings_PartialPatchKeepsTheRest(t *testing.T) {
+	api, db := setupTestAPI(t)
+	s := &models.LLMSettings{ModelName: "gpt-x", MaxTokens: 512, Temperature: 0.7, TopP: 0.9, SystemPrompt: "keep", StopWords: []string{"END"}}
+	require.NoError(t, db.Create(s).Error)
+
+	w := performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/llm-settings/%d", s.ID), patchAttrs(map[string]interface{}{"max_tokens": 1024}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var got models.LLMSettings
+	require.NoError(t, db.First(&got, s.ID).Error)
+	assert.Equal(t, 1024, got.MaxTokens)
+	assert.Equal(t, "gpt-x", got.ModelName)
+	assert.Equal(t, 0.7, got.Temperature)
+	assert.Equal(t, 0.9, got.TopP)
+	assert.Equal(t, "keep", got.SystemPrompt)
+	assert.Equal(t, []string{"END"}, got.StopWords)
+
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/llm-settings/%d", s.ID), patchAttrs(map[string]interface{}{"temperature": 0, "stop_words": []string{}}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	got = models.LLMSettings{}
+	require.NoError(t, db.First(&got, s.ID).Error)
+	assert.Zero(t, got.Temperature, "an explicit 0 applies")
+	assert.Empty(t, got.StopWords)
+	assert.Equal(t, "gpt-x", got.ModelName)
+}
+
+func TestUpdateModelPrice_PartialPatchKeepsThePrices(t *testing.T) {
+	api, db := setupTestAPI(t)
+	p := &models.ModelPrice{ModelName: "m-price", Vendor: "openai", CPT: 0.00002, CPIT: 0.00001, CacheReadPT: 0.000001, Currency: "USD"}
+	require.NoError(t, db.Create(p).Error)
+	reload := func() models.ModelPrice {
+		var got models.ModelPrice
+		require.NoError(t, db.First(&got, p.ID).Error)
+		return got
+	}
+
+	for _, path := range []string{"/api/v1/model-prices/%d", "/api/v1/model-prices/%d/recalculate"} {
+		w := performRequest(api.router, "PATCH", fmt.Sprintf(path, p.ID), patchAttrs(map[string]interface{}{"cpit": 0.000015}))
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		got := reload()
+		assert.Equal(t, 0.000015, got.CPIT, path)
+		assert.Equal(t, 0.00002, got.CPT, "%s: an omitted price is kept, not zeroed", path)
+		assert.Equal(t, 0.000001, got.CacheReadPT, path)
+		assert.Equal(t, "m-price", got.ModelName, path)
+		assert.Equal(t, "openai", got.Vendor, path)
+		assert.Equal(t, "USD", got.Currency, path)
+	}
+
+	w := performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/model-prices/%d", p.ID), patchAttrs(map[string]interface{}{"cache_read_pt": 0}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	assert.Zero(t, reload().CacheReadPT, "an explicit 0 applies")
+}
+
+func TestUpdateFileStore_PartialPatchKeepsContent(t *testing.T) {
+	api, db := setupTestAPI(t)
+	f := &models.FileStore{FileName: "keep.txt", Description: "old", Content: "the content", Length: 11}
+	require.NoError(t, db.Create(f).Error)
+
+	w := performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/filestore/%d", f.ID), patchAttrs(map[string]interface{}{"description": "new"}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var got models.FileStore
+	require.NoError(t, db.First(&got, f.ID).Error)
+	assert.Equal(t, "new", got.Description)
+	assert.Equal(t, "keep.txt", got.FileName)
+	assert.Equal(t, "the content", got.Content)
+	assert.Equal(t, 11, got.Length)
+
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/filestore/%d", f.ID), patchAttrs(map[string]interface{}{"description": ""}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	got = models.FileStore{}
+	require.NoError(t, db.First(&got, f.ID).Error)
+	assert.Empty(t, got.Description, "an explicit empty string applies")
+	assert.Equal(t, "the content", got.Content)
+}
+
+func TestUpdateAttestationTemplate_PartialPatchKeepsTheRest(t *testing.T) {
+	api, db := setupTestAPI(t)
+	tpl := &models.AttestationTemplate{Name: "Keep", Text: "I attest", Required: true, AppliesToType: "tool", Active: true, SortOrder: 3}
+	require.NoError(t, db.Create(tpl).Error)
+
+	w := performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/attestation-templates/%d", tpl.ID), patchAttrs(map[string]interface{}{"name": "Renamed"}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var got models.AttestationTemplate
+	require.NoError(t, db.First(&got, tpl.ID).Error)
+	assert.Equal(t, "Renamed", got.Name)
+	assert.Equal(t, "I attest", got.Text)
+	assert.True(t, got.Required)
+	assert.True(t, got.Active)
+	assert.Equal(t, "tool", got.AppliesToType)
+	assert.Equal(t, 3, got.SortOrder)
+
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/attestation-templates/%d", tpl.ID), patchAttrs(map[string]interface{}{"required": false}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	got = models.AttestationTemplate{}
+	require.NoError(t, db.First(&got, tpl.ID).Error)
+	assert.False(t, got.Required, "an explicit false applies")
+	assert.True(t, got.Active)
+}
+
+func TestUpdateTag_OmittedNameIsKept(t *testing.T) {
+	api, db := setupTestAPI(t)
+	tag := &models.Tag{Name: "keep-tag"}
+	require.NoError(t, db.Create(tag).Error)
+
+	w := performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/tags/%d", tag.ID), patchAttrs(map[string]interface{}{}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var got models.Tag
+	require.NoError(t, db.First(&got, tag.ID).Error)
+	assert.Equal(t, "keep-tag", got.Name)
+}
+
+func TestUpdateMySubmission_PartialPatchKeepsTheRest(t *testing.T) {
+	api, db := setupTestAPI(t)
+	user := &models.User{Email: "submitter@example.com", Name: "Submitter", EmailVerified: true}
+	require.NoError(t, user.Create(db))
+	sub, err := api.service.CreateSubmission(user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusDraft,
+		models.JSONMap{"name": "My DS", "db_source_type": "pgvector"}, nil, 3, "Product data only",
+		"owner@example.com", "backup@example.com", "", nil, "https://docs.example.com", "keep notes")
+	require.NoError(t, err)
+
+	router := gin.New()
+	group := router.Group("/common")
+	group.Use(func(c *gin.Context) { c.Set("user", user); c.Next() })
+	group.PATCH("/submissions/:id", api.updateMySubmission)
+
+	w := performRequest(router, "PATCH", fmt.Sprintf("/common/submissions/%d", sub.ID), patchAttrs(map[string]interface{}{"notes": "new notes"}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	got, err := api.service.GetSubmissionByID(sub.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "new notes", got.Notes)
+	assert.Equal(t, "My DS", got.ResourcePayload["name"], "an omitted payload is kept")
+	assert.Equal(t, 3, got.SuggestedPrivacy)
+	assert.Equal(t, "Product data only", got.PrivacyJustification)
+	assert.Equal(t, "owner@example.com", got.PrimaryContact)
+	assert.Equal(t, "backup@example.com", got.SecondaryContact)
+	assert.Equal(t, "https://docs.example.com", got.DocumentationURL)
+
+	w = performRequest(router, "PATCH", fmt.Sprintf("/common/submissions/%d", sub.ID), patchAttrs(map[string]interface{}{"secondary_contact": ""}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	got, err = api.service.GetSubmissionByID(sub.ID)
+	require.NoError(t, err)
+	assert.Empty(t, got.SecondaryContact, "an explicit empty string applies")
+	assert.Equal(t, "owner@example.com", got.PrimaryContact)
 }

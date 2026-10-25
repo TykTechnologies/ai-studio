@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -74,10 +76,6 @@ func mergeEmbedderPatch(input *EmbedderInput, existing *models.Embedder, present
 
 // mergeChatPatch lays the PATCH body over the chat's stored attributes.
 func mergeChatPatch(c *gin.Context, input *ChatInput, existing *models.Chat) error {
-	present, err := boundAttributeKeys(c)
-	if err != nil {
-		return err
-	}
 	base := input.Data.Attributes
 	base.Name = existing.Name
 	base.Description = existing.Description
@@ -102,5 +100,43 @@ func mergeChatPatch(c *gin.Context, input *ChatInput, existing *models.Chat) err
 	for _, t := range existing.DefaultTools {
 		base.DefaultToolIDs = append(base.DefaultToolIDs, t.ID)
 	}
-	return patchOnto(&input.Data.Attributes, base, present)
+	return patchAttributes(c, &input.Data.Attributes, base)
+}
+
+// mergeModelPricePatch lays the PATCH body over the stored price (its JSON
+// names are the input's); false once it has responded. An omitted price
+// must not become 0, which /recalculate would also write into history.
+func (a *API) mergeModelPricePatch(c *gin.Context, id uint, input *ModelPriceInput) bool {
+	stored, err := a.service.GetModelPriceByID(id)
+	if err != nil {
+		simpleError(c, http.StatusNotFound, "Not Found", "Model price not found")
+		return false
+	}
+	if err := patchAttributes(c, &input.Data.Attributes, stored); err != nil {
+		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
+		return false
+	}
+	return true
+}
+
+// mergeSubmissionPatch lays the PATCH body over the submission's stored
+// attributes (a draft edit). resource_type, plugin_resource_type_id and
+// status are not updatable here.
+func mergeSubmissionPatch(c *gin.Context, input *SubmissionInput, existing *models.Submission) error {
+	base := input.Data.Attributes
+	base.ResourcePayload = existing.ResourcePayload
+	base.Attestations = existing.Attestations
+	base.SuggestedPrivacy = existing.SuggestedPrivacy
+	base.PrivacyJustification = existing.PrivacyJustification
+	base.PrimaryContact = existing.PrimaryContact
+	base.SecondaryContact = existing.SecondaryContact
+	base.SLAExpectation = existing.SLAExpectation
+	base.DataCutoffDate = nil
+	if existing.DataCutoffDate != nil {
+		s := existing.DataCutoffDate.Format(time.RFC3339)
+		base.DataCutoffDate = &s
+	}
+	base.DocumentationURL = existing.DocumentationURL
+	base.Notes = existing.Notes
+	return patchAttributes(c, &input.Data.Attributes, base)
 }

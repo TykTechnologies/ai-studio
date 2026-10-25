@@ -12,6 +12,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/semantic_router"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
 // Semantic Routers (Enterprise): routers that pick one of their named routes
@@ -226,13 +227,21 @@ func (a *API) updateSemanticRouter(c *gin.Context) {
 		return
 	}
 	var input SemanticRouterInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
 		return
 	}
 	existing, err := a.semanticRouters().GetRouter(id)
 	if err != nil {
 		respondSemanticRouterError(c, err)
+		return
+	}
+	// An omitted attribute keeps the stored one (96e): a rename must not
+	// drop the routes, the settings or the embedder. A present settings or
+	// routes replaces the whole value. The stored router's JSON names are
+	// the input's.
+	if err := patchAttributes(c, &input.Data.Attributes, existing); err != nil {
+		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
 		return
 	}
 	router := attributesToSemanticRouter(&input.Data.Attributes, existing.Active)

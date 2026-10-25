@@ -58,3 +58,15 @@ func boundBodyKeys(c *gin.Context) (map[string]json.RawMessage, error) {
 	}
 	return present, nil
 }
+
+// patchAttributes lays the data.attributes of a body bound with
+// ShouldBindBodyWith over base: attrs is a pointer to the input's
+// attributes, base the stored record's input, or the stored record itself
+// when its JSON names are the input's.
+func patchAttributes(c *gin.Context, attrs any, base any) error {
+	present, err := boundAttributeKeys(c)
+	if err != nil {
+		return err
+	}
+	return patchOnto(attrs, base, present)
+}

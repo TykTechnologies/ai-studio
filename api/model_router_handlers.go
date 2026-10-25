@@ -8,6 +8,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services/model_router"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
 // ModelRouterInput represents the JSON:API input for creating/updating a model router
@@ -172,7 +173,7 @@ func (a *API) updateModelRouter(c *gin.Context) {
 	}
 
 	var input ModelRouterInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -189,6 +190,18 @@ func (a *API) updateModelRouter(c *gin.Context) {
 	existing, err := a.service.ModelRouterService.GetRouter(uint(id))
 	if err != nil || existing == nil {
 		a.respondModelRouterLookupError(c, uint(id), err)
+		return
+	}
+
+	// So is every other omitted attribute (96e): a rename must not drop the
+	// pools. The stored router's JSON names are the input's.
+	if err := patchAttributes(c, &input.Data.Attributes, existing); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
 		return
 	}
 
