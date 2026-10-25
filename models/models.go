@@ -31,7 +31,7 @@ func InitModels(db *gorm.DB) error {
 
 	// The llm_filters join carries the chain order; registering the join
 	// model makes AutoMigrate add order_index to existing installs.
-	if err := setupLLMFilterJoin(db); err != nil {
+	if err := RegisterJoinModels(db); err != nil {
 		return err
 	}
 

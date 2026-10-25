@@ -25,6 +25,14 @@ func setupLLMFilterJoin(db *gorm.DB) error {
 	return db.SetupJoinTable(&LLM{}, "Filters", &LLMFilter{})
 }
 
+// RegisterJoinModels registers on db the custom join models InitModels sets
+// up. The registration lives on the *gorm.DB (its schema cache), not in the
+// database, so a handle to a database whose schema was copied rather than
+// migrated (the proxy tests' template database) needs this call.
+func RegisterJoinModels(db *gorm.DB) error {
+	return setupLLMFilterJoin(db)
+}
+
 // writeLLMFilterOrder stores each filter's slice position as order_index.
 // Called after Association("Filters").Replace, which has already written the
 // join rows; one UPDATE per row is fine for chains this short.

@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"database/sql"
 	"fmt"
 	"math"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -14,6 +16,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/andybalholm/brotli"
+	"github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
@@ -26,7 +29,114 @@ import (
 // database with an earlier one whose background writers are still draining.
 var setupDBSeq atomic.Int64
 
-// setupDB opens a private in-memory SQLite database for one test.
+// openSetupDB opens one named in-memory SQLite database on a single
+// connection.
+//
+// No PrepareStmt: with gorm's prepared-statement cache, a transaction
+// holding the one connection waited for another goroutine to finish
+// preparing the same statement, and that goroutine waited for the
+// connection (TestSetupDBTransactionDoesNotWaitOnAnotherGoroutinesPrepare).
+// Studio does not enable PrepareStmt either.
+func openSetupDB(name string) (*gorm.DB, *sql.DB, error) {
+	db, err := gorm.Open(sqlite.Open("file:"+name+"?mode=memory&cache=shared&_busy_timeout=5000"), &gorm.Config{
+		SkipDefaultTransaction: true,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, nil, err
+	}
+	// One connection: statements from the test, the proxy and the analytics
+	// writer queue for it rather than contend for table locks. It must never
+	// be closed while idle, or the in-memory database goes with it.
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
+	sqlDB.SetConnMaxLifetime(0)
+	return db, sqlDB, nil
+}
+
+var (
+	setupDBTemplateOnce sync.Once
+	setupDBTemplate     *sql.DB
+	setupDBTemplateErr  error
+)
+
+// migratedTemplate returns the package's template database, migrated once
+// (models.InitModels and the analytics tables) and kept open for the life of
+// the test binary. setupDB copies it instead of migrating every test's
+// database, which cost ~300 ms a test under -race. Migration itself is still
+// exercised for real, here and by the schema goldens in models.
+func migratedTemplate() (*sql.DB, error) {
+	setupDBTemplateOnce.Do(func() {
+		db, sqlDB, err := openSetupDB("proxytest_template")
+		if err != nil {
+			setupDBTemplateErr = err
+			return
+		}
+		if err := models.InitModels(db); err != nil {
+			setupDBTemplateErr = fmt.Errorf("migrate the template: %w", err)
+			return
+		}
+		if err := db.AutoMigrate(
+			&models.LLMChatRecord{},
+			&models.LLMChatLogEntry{},
+			&models.ToolCallRecord{},
+			&models.ProxyLog{},
+			&models.Notification{},
+		); err != nil {
+			setupDBTemplateErr = fmt.Errorf("migrate the template's analytics tables: %w", err)
+			return
+		}
+		// What setupTest used to run on each test's database.
+		if err := analytics.Migrate(db); err != nil {
+			setupDBTemplateErr = fmt.Errorf("migrate the template for analytics: %w", err)
+			return
+		}
+		setupDBTemplate = sqlDB
+	})
+	return setupDBTemplate, setupDBTemplateErr
+}
+
+// copySQLiteDB copies src's main database into dst's with SQLite's online
+// backup API.
+func copySQLiteDB(ctx context.Context, dst, src *sql.DB) error {
+	dstConn, err := dst.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer dstConn.Close()
+	srcConn, err := src.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer srcConn.Close()
+	return dstConn.Raw(func(d any) error {
+		return srcConn.Raw(func(s any) error {
+			dc, ok := d.(*sqlite3.SQLiteConn)
+			if !ok {
+				return fmt.Errorf("destination connection is a %T, not a *sqlite3.SQLiteConn", d)
+			}
+			sc, ok := s.(*sqlite3.SQLiteConn)
+			if !ok {
+				return fmt.Errorf("source connection is a %T, not a *sqlite3.SQLiteConn", s)
+			}
+			b, err := dc.Backup("main", sc, "main")
+			if err != nil {
+				return err
+			}
+			if _, err := b.Step(-1); err != nil {
+				_ = b.Finish()
+				return err
+			}
+			return b.Finish()
+		})
+	})
+}
+
+// setupDB opens a private in-memory SQLite database for one test, holding a
+// copy of the migrated template.
 //
 // It used to open "file::memory:?cache=shared" with 10 pooled connections:
 // one database for the whole package, and table-level locks between those
@@ -36,55 +146,22 @@ var setupDBSeq atomic.Int64
 // database per test, on a single connection, serialises every statement
 // instead: no table lock can be contended.
 func setupDB(t *testing.T) *gorm.DB {
-	name := fmt.Sprintf("proxytest_%d", setupDBSeq.Add(1))
-	// No PrepareStmt: with gorm's prepared-statement cache, a transaction
-	// holding the one connection waited for another goroutine to finish
-	// preparing the same statement, and that goroutine waited for the
-	// connection (TestSetupDBTransactionDoesNotWaitOnAnotherGoroutinesPrepare).
-	// Studio does not enable PrepareStmt either.
-	db, err := gorm.Open(sqlite.Open("file:"+name+"?mode=memory&cache=shared&_busy_timeout=5000"), &gorm.Config{
-		SkipDefaultTransaction: true,
-	})
+	template, err := migratedTemplate()
 	require.NoError(t, err)
 
-	sqlDB, err := db.DB()
+	db, sqlDB, err := openSetupDB(fmt.Sprintf("proxytest_%d", setupDBSeq.Add(1)))
 	require.NoError(t, err)
-	// One connection: statements from the test, the proxy and the analytics
-	// writer queue for it rather than contend for table locks. It must never
-	// be closed while idle, or the in-memory database goes with it.
-	sqlDB.SetMaxOpenConns(1)
-	sqlDB.SetMaxIdleConns(1)
-	sqlDB.SetConnMaxLifetime(0)
-
-	// Migrate main models with retry logic
-	err = models.InitModels(db)
-	require.NoError(t, err)
-
-	// Migrate analytics tables explicitly with retry logic
-	for attempt := 0; attempt < 3; attempt++ {
-		err = db.AutoMigrate(
-			&models.LLMChatRecord{},
-			&models.LLMChatLogEntry{},
-			&models.ToolCallRecord{},
-			&models.ProxyLog{},
-			&models.Notification{},
-		)
-		if err == nil {
-			break
-		}
-		if strings.Contains(err.Error(), "database table is locked") {
-			t.Logf("Database locked during migration, retrying... (attempt %d/3)", attempt+1)
-			time.Sleep(time.Duration(100*(attempt+1)) * time.Millisecond)
-			continue
-		}
-		require.NoError(t, err)
-	}
-	require.NoError(t, err)
+	require.NoError(t, copySQLiteDB(context.Background(), sqlDB, template))
+	// The join models InitModels registers live on the gorm handle, not in
+	// the database, so this handle registers them itself.
+	require.NoError(t, models.RegisterJoinModels(db))
 
 	return db
 }
 
 // setupTest initializes DB, does migrations, and starts analytics in one place.
+// The returned cancel stops the analytics recorder and waits for its writer to
+// return, so nothing is written to the database after it.
 func setupTest(t *testing.T) (*gorm.DB, context.CancelFunc) {
 	// Clear signup domain filter for tests (allows any email domain)
 	config.Get("").FilterSignupDomains = nil
@@ -92,21 +169,25 @@ func setupTest(t *testing.T) (*gorm.DB, context.CancelFunc) {
 	// Reset global analytics handler state before test
 	analytics.ResetHandler()
 
+	// The template is migrated for analytics already (analytics.Migrate).
 	db := setupDB(t)
 
-	// Now start analytics AFTER migrations, ensuring the table is ready.
-	require.NoError(t, analytics.Migrate(db))
 	ctx, cancel := context.WithCancel(context.Background())
 	analytics.StartRecording(ctx, db)
+	recorder := analytics.GetHandler()
 
-	return db, cancel
+	return db, func() {
+		cancel()
+		if s, ok := recorder.(interface{ Stop() }); ok {
+			s.Stop()
+		}
+	}
 }
 
-// tearDownTest ensures the analytics background goroutine does not outlive the DB.
+// tearDownTest stops the analytics recorder, waiting for its writer so it
+// does not outlive the DB, then closes the DB.
 func tearDownTest(db *gorm.DB, cancel context.CancelFunc) {
-	time.Sleep(25 * time.Millisecond)
 	cancel()
-	time.Sleep(25 * time.Millisecond)
 	sqlDB, err := db.DB()
 	if err == nil {
 		_ = sqlDB.Close()
