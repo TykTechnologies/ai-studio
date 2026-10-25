@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/testinfra/studiodb"
 	pb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
@@ -33,7 +34,7 @@ func newBrokerFixture(t *testing.T, serviceAccess bool, scopes ...string) *broke
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, models.InitModels(db))
+	require.NoError(t, studiodb.Migrate(db))
 	service := services.NewService(db)
 
 	caller := &models.Plugin{Name: "caller", Command: "/usr/bin/caller", HookType: models.HookTypePostAuth,

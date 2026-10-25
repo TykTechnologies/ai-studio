@@ -11,7 +11,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
-	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/testinfra/studiodb"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
 	"github.com/TykTechnologies/midsommar/v2/services/pushes"
@@ -39,7 +39,9 @@ func SetupTestDB(t *testing.T) *gorm.DB {
 	sqlDB.SetMaxIdleConns(1)
 	sqlDB.SetConnMaxLifetime(0)
 
-	err = models.InitModels(db)
+	// Studio's schema, copied from a template migrated once per test binary
+	// (models.InitModels on every test's database cost ~300 ms under -race).
+	err = studiodb.Migrate(db)
 	assert.NoError(t, err, "Failed to init models")
 
 	return db

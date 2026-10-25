@@ -5,6 +5,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/testinfra/studiodb"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/stretchr/testify/assert"
@@ -16,7 +17,7 @@ func setupProfileTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, err)
 
 	// Initialize models - this will create all necessary tables and relationships
-	err = models.InitModels(db)
+	err = studiodb.Migrate(db)
 	require.NoError(t, err)
 
 	// Migrate the Profile model explicitly

@@ -7,6 +7,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/testinfra/studiodb"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
@@ -19,7 +20,7 @@ func setupSSOTestDB(t *testing.T) *gorm.DB {
 	assert.NoError(t, err)
 
 	// Initialize models - this will create all necessary tables and relationships
-	err = models.InitModels(db)
+	err = studiodb.Migrate(db)
 	assert.NoError(t, err)
 
 	// Create a default group

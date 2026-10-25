@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"testing"
 
-	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/testinfra/studiodb"
 	pb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
@@ -24,7 +24,7 @@ const slugTestSpec = `{"openapi":"3.0.0","info":{"title":"T","version":"1"},"ser
 func TestPluginAPIRefusesDuplicateSlugs(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, models.InitModels(db))
+	require.NoError(t, studiodb.Migrate(db))
 	service := services.NewService(db)
 	ctx := context.Background()
 	spec := base64.StdEncoding.EncodeToString([]byte(slugTestSpec))
