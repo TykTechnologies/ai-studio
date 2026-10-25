@@ -213,6 +213,11 @@ jobs:
   # test results, and packages whose code and test inputs are unchanged are
   # reported as "(cached)" instead of re-running. setup-go's own cache is off:
   # it stored the same directories a second time.
+  #
+  # Timings: each go test step writes go test -json to test-*.json and
+  # prints the usual -v log from it (scripts/gotest-json.py). The job
+  # summary lists the slowest packages and tests, and the JSON is kept as
+  # an artifact for 7 days.
   # ==========================================================================
   go-unit-tests:
     needs: [dep-guard, changes]
@@ -325,20 +330,24 @@ jobs:
 
       # -timeout: the proxy package alone takes ~10 min under -race, past go
       # test's per-package default of 10m.
+      # -json feeds the timing summary; gotest-json.py prints the -v log
+      # from it, one block per package (see the job comment above).
       - name: Run AI Studio Unit Tests
         run: |
-          go test ${{ steps.flags.outputs.BUILD_TAGS }} -v -race -short -timeout 25m \
+          set -o pipefail
+          go test ${{ steps.flags.outputs.BUILD_TAGS }} -json -v -race -short -timeout 25m \
             ${{ steps.flags.outputs.FULL }} \
             ${{ env.MODE == 'full' && format('-coverprofile=coverage-studio-{0}.out', matrix.edition) || '' }} \
-            ./...
+            ./... | scripts/gotest-json.py tee test-studio.json
 
       - name: Run Microgateway Unit Tests
         run: |
+          set -o pipefail
           cd microgateway
-          go test ${{ steps.flags.outputs.BUILD_TAGS }} -v -race -short \
+          go test ${{ steps.flags.outputs.BUILD_TAGS }} -json -v -race -short \
             ${{ steps.flags.outputs.FULL }} \
             ${{ env.MODE == 'full' && format('-coverprofile=../coverage-microgateway-{0}.out', matrix.edition) || '' }} \
-            ./...
+            ./... | ../scripts/gotest-json.py tee ../test-microgateway.json
 
       # The enterprise module's own packages (features/, scripting/, ...).
       # Its Postgres-gated tests skip here and run in go-postgres-tests.
@@ -346,10 +355,35 @@ jobs:
         if: matrix.edition == 'ent'
         working-directory: enterprise
         run: |
-          go test -tags enterprise -v -race -short \
+          set -o pipefail
+          go test -tags enterprise -json -v -race -short \
             ${{ steps.flags.outputs.FULL }} \
             ${{ env.MODE == 'full' && '-coverprofile=../coverage-enterprise-ent.out' || '' }} \
-            ./...
+            ./... | ../scripts/gotest-json.py tee ../test-enterprise.json
+
+      # Written even when a test failed; a step that did not run is left out.
+      - name: Test timings summary
+        if: ${{ !cancelled() }}
+        run: |
+          args=()
+          for step in studio microgateway enterprise; do
+            if [ -f "test-$step.json" ]; then args+=("$step=test-$step.json"); fi
+          done
+          [ ${#args[@]} -gt 0 ] || exit 0
+          {
+            echo "## Go test timings (${{ matrix.edition }})"
+            echo ""
+            scripts/gotest-json.py summary "${args[@]}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test timings
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: test-json-${{ matrix.edition }}
+          path: test-*.json
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Upload Coverage
         if: env.MODE == 'full'
