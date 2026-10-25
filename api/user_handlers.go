@@ -179,13 +179,34 @@ func (a *API) updateUser(c *gin.Context) {
 		return
 	}
 
-	if err := a.validateUserInput(input, uint(id)); err != nil {
+	// Groups are loaded so an omitted list is kept and an explicit [] can
+	// clear it (unloaded, both compared equal to "no groups").
+	user, err := a.service.GetUserByID(uint(id), "Groups")
+	if err != nil {
 		helpers.SendErrorResponse(c, err)
 		return
 	}
-
-	user, err := a.service.GetUserByID(uint(id))
+	// An omitted attribute keeps the stored value (96e).
+	present, err := boundAttributeKeys(c)
 	if err != nil {
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError(err.Error()))
+		return
+	}
+	base := input.Data.Attributes
+	base.Email = user.Email
+	base.Name = user.Name
+	base.ShowChat = user.ShowChat
+	base.ShowPortal = user.ShowPortal
+	base.EmailVerified = user.EmailVerified
+	base.NotificationsEnabled = user.NotificationsEnabled
+	base.AccessToSSOConfig = user.AccessToSSOConfig
+	base.Groups = user.ExtractGroupIDs()
+	if err := patchOnto(&input.Data.Attributes, base, present); err != nil {
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError(err.Error()))
+		return
+	}
+
+	if err := a.validateUserInput(input, uint(id)); err != nil {
 		helpers.SendErrorResponse(c, err)
 		return
 	}

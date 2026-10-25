@@ -65,7 +65,7 @@ const ModelRouterDetails = () => {
 
   const handleToggleActive = async () => {
     try {
-      await apiClient.patch(`/model-routers/${id}/toggle`);
+      await apiClient.patch(`/model-routers/${id}/toggle`, { active: !router.attributes.active });
       setSnackbar({
         open: true,
         message: `Model Router ${!router.attributes.active ? "activated" : "deactivated"} successfully`,

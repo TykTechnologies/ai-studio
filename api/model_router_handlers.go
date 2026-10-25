@@ -335,8 +335,9 @@ func (a *API) toggleModelRouterActive(c *gin.Context) {
 		return
 	}
 
+	// active is required: an empty body used to deactivate the router (96e).
 	var input struct {
-		Active bool `json:"active"`
+		Active *bool `json:"active" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -348,7 +349,7 @@ func (a *API) toggleModelRouterActive(c *gin.Context) {
 		return
 	}
 
-	if err := a.service.ModelRouterService.ToggleRouterActive(uint(id), input.Active); err != nil {
+	if err := a.service.ModelRouterService.ToggleRouterActive(uint(id), *input.Active); err != nil {
 		a.respondModelRouterLookupError(c, uint(id), err)
 		return
 	}
@@ -356,7 +357,7 @@ func (a *API) toggleModelRouterActive(c *gin.Context) {
 	// Fetch the updated router
 	router, err := a.service.ModelRouterService.GetRouter(uint(id))
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": id, "active": input.Active}})
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": id, "active": *input.Active}})
 		return
 	}
 

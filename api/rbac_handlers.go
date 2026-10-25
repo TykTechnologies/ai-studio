@@ -12,6 +12,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services/rbac"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
 // RBAC handlers are edition-neutral: they delegate to services/rbac and map
@@ -361,7 +362,24 @@ func (a *API) updateRole(c *gin.Context) {
 		return
 	}
 	var in RoleInput
-	if err := c.ShouldBindJSON(&in); err != nil {
+	if err := c.ShouldBindBodyWith(&in, binding.JSON); err != nil {
+		rbacBadRequest(c, err.Error())
+		return
+	}
+	// An omitted name, description or permissions keeps the stored one:
+	// a rename must not leave the role with no permissions.
+	present, err := boundBodyKeys(c)
+	if err != nil {
+		rbacBadRequest(c, err.Error())
+		return
+	}
+	stored, err := a.service.Authz().GetRole(c.Request.Context(), id)
+	if err != nil {
+		rbacErrorResponse(c, err)
+		return
+	}
+	base := RoleInput{Name: stored.Name, Description: stored.Description, Permissions: []string(stored.Permissions)}
+	if err := patchOnto(&in, base, present); err != nil {
 		rbacBadRequest(c, err.Error())
 		return
 	}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/services/tykmcp"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
 func isDryRun(c *gin.Context) bool {
@@ -251,9 +252,18 @@ func (a *API) updateTykPolicy(c *gin.Context) {
 		return
 	}
 	var in tykmcp.PolicyInput
-	if err := c.ShouldBindJSON(&in); err != nil {
+	if err := c.ShouldBindBodyWith(&in, binding.JSON); err != nil {
 		webhookBadRequest(c, "invalid request body")
 		return
+	}
+	present, err := boundBodyKeys(c)
+	if err != nil {
+		webhookBadRequest(c, "invalid request body")
+		return
+	}
+	in.Present = map[string]bool{}
+	for k := range present {
+		in.Present[k] = true
 	}
 	pol, err := a.tykMCPService().UpdatePolicy(c.Request.Context(), actor, id, c.Param("pid"), in)
 	if err != nil {

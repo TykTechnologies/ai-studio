@@ -114,3 +114,106 @@ func TestUpdateEmbedder_PartialPatchKeepsTheRest(t *testing.T) {
 	assert.Equal(t, "Renamed", got.Name)
 	assert.Equal(t, "emb-key", got.APIKey)
 }
+
+func TestUpdateUser_PartialPatchKeepsTheRest(t *testing.T) {
+	api, _, _ := setupTestAPIWithAdminUser(t)
+	db := api.service.DB
+	u := &models.User{Email: "keep@example.com", Name: "Keep Me", EmailVerified: true, ShowChat: true, ShowPortal: true, AccessToSSOConfig: false}
+	require.NoError(t, u.Create(db))
+	g := &models.Group{Name: "Keep group"}
+	require.NoError(t, db.Create(g).Error)
+	require.NoError(t, db.Model(u).Association("Groups").Append(g))
+	reload := func() *models.User {
+		got := models.NewUser()
+		require.NoError(t, got.Get(db, u.ID, "Groups"))
+		return got
+	}
+
+	w := performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/users/%d", u.ID), patchAttrs(map[string]interface{}{"name": "Renamed"}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	got := reload()
+	assert.Equal(t, "Renamed", got.Name)
+	assert.Equal(t, "keep@example.com", got.Email)
+	assert.True(t, got.EmailVerified)
+	assert.True(t, got.ShowChat)
+	assert.True(t, got.ShowPortal)
+	require.Len(t, got.Groups, 1, "a rename keeps the groups")
+
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/users/%d", u.ID), patchAttrs(map[string]interface{}{"groups": []uint{}, "show_chat": false}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	got = reload()
+	assert.Empty(t, got.Groups, "an explicit empty list clears")
+	assert.False(t, got.ShowChat, "an explicit false applies")
+	assert.True(t, got.EmailVerified)
+}
+
+func TestUpdateChat_PartialPatchKeepsAccessAndFilters(t *testing.T) {
+	api, db := setupTestAPI(t)
+	llm := &models.LLM{Name: "Chat LLM", Vendor: "openai", DefaultModel: "m", PrivacyScore: 5, Active: true}
+	require.NoError(t, db.Create(llm).Error)
+	g := &models.Group{Name: "Chat group"}
+	require.NoError(t, db.Create(g).Error)
+	f := &models.Filter{Name: "Guard"}
+	require.NoError(t, db.Create(f).Error)
+	chat := &models.Chat{Name: "Keep chat", Description: "d", LLMID: llm.ID, SystemPrompt: "be nice", SupportsTools: true,
+		RagResultsPerSource: 3, Groups: []models.Group{*g}, Filters: []*models.Filter{f}}
+	require.NoError(t, db.Create(chat).Error)
+	reload := func() *models.Chat {
+		got := &models.Chat{}
+		require.NoError(t, got.Get(db, chat.ID))
+		return got
+	}
+
+	w := performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/chats/%d", chat.ID), patchAttrs(map[string]interface{}{"name": "Renamed chat"}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	got := reload()
+	assert.Equal(t, "Renamed chat", got.Name)
+	assert.Equal(t, "d", got.Description)
+	assert.Equal(t, llm.ID, got.LLMID)
+	assert.Equal(t, "be nice", got.SystemPrompt)
+	assert.True(t, got.SupportsTools)
+	assert.Equal(t, 3, got.RagResultsPerSource)
+	assert.Len(t, got.Groups, 1, "a rename keeps the chat's groups")
+	assert.Len(t, got.Filters, 1, "a rename keeps the chat's filters")
+
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/chats/%d", chat.ID), patchAttrs(map[string]interface{}{"filter_ids": []uint{}, "tool_support": false}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	got = reload()
+	assert.Empty(t, got.Filters, "an explicit empty list clears")
+	assert.False(t, got.SupportsTools)
+	assert.Len(t, got.Groups, 1)
+}
+
+func TestUpdateCredential_OmittedActiveIsKept(t *testing.T) {
+	api, db := setupTestAPI(t)
+	cred := &models.Credential{KeyID: "kid", Secret: "sec", Active: true}
+	require.NoError(t, db.Create(cred).Error)
+
+	w := performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/credentials/%d", cred.ID), patchAttrs(map[string]interface{}{}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var got models.Credential
+	require.NoError(t, db.First(&got, cred.ID).Error)
+	assert.True(t, got.Active, "an omitted active keeps the credential live")
+
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/credentials/%d", cred.ID), patchAttrs(map[string]interface{}{"active": false}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.NoError(t, db.First(&got, cred.ID).Error)
+	assert.False(t, got.Active)
+}
+
+// The model-router toggle needs active: an empty body used to deactivate
+// the router (midsommar-clean-96e).
+func TestToggleModelRouter_RequiresActive(t *testing.T) {
+	api, db := setupTestAPI(t)
+	r := &models.ModelRouter{Name: "Toggle me", Slug: "toggle-me", Active: true}
+	require.NoError(t, db.Create(r).Error)
+
+	w := performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/model-routers/%d/toggle", r.ID), map[string]interface{}{})
+	assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	var got models.ModelRouter
+	require.NoError(t, db.First(&got, r.ID).Error)
+	assert.True(t, got.Active, "an empty body leaves the router live")
+
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/model-routers/%d/toggle", r.ID), map[string]interface{}{"active": false})
+	assert.NotEqual(t, http.StatusBadRequest, w.Code, "an explicit active is accepted: %s", w.Body.String())
+}

@@ -12,6 +12,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/templates"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
 // @Summary Create a new credential
@@ -128,7 +129,7 @@ func (a *API) updateCredential(c *gin.Context) {
 	}
 
 	var input CredentialInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -150,7 +151,20 @@ func (a *API) updateCredential(c *gin.Context) {
 	}
 
 	prev := credential.Active
-	credential.Active = input.Data.Attributes.Active
+	// An omitted active keeps the stored switch (96e).
+	present, err := boundAttributeKeys(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+	if _, ok := present["active"]; ok {
+		credential.Active = input.Data.Attributes.Active
+	}
 
 	err = a.service.UpdateCredential(credential)
 	if err != nil {

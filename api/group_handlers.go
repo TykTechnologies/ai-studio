@@ -11,6 +11,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
 // @Summary Create a new group
@@ -103,8 +104,27 @@ func (a *API) updateGroup(c *gin.Context) {
 	}
 
 	var input GroupInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		helpers.SendErrorResponse(c, helpers.NewBadRequestError("malformed request body: "+err.Error()))
+		return
+	}
+	// An omitted member or catalogue list keeps the stored one: a rename
+	// must not revoke the group's access.
+	present, err := boundAttributeKeys(c)
+	if err != nil {
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError(err.Error()))
+		return
+	}
+	stored, err := a.service.GetGroupByID(uint(id), "Users", "Catalogues", "DataCatalogues", "ToolCatalogues")
+	if err != nil {
+		helpers.SendErrorResponse(c, err)
+		return
+	}
+	base := input.Data.Attributes
+	base.Name = stored.Name
+	base.Members, base.Catalogues, base.DataCatalogues, base.ToolCatalogues = stored.ExtractAssociationsIDs()
+	if err := patchOnto(&input.Data.Attributes, base, present); err != nil {
+		helpers.SendErrorResponse(c, helpers.NewBadRequestError(err.Error()))
 		return
 	}
 

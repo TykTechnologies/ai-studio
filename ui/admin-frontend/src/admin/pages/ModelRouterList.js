@@ -81,7 +81,7 @@ const ModelRouterList = () => {
 
   const handleToggleActive = useCallback(async (router) => {
     try {
-      await apiClient.patch(`/model-routers/${router.id}/toggle`);
+      await apiClient.patch(`/model-routers/${router.id}/toggle`, { active: !router.attributes.active });
       notify(`Model Router ${!router.attributes.active ? "activated" : "deactivated"} successfully`);
       fetchRouters();
     } catch (error) {

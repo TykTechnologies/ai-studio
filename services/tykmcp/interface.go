@@ -451,6 +451,9 @@ type PolicyInput struct {
 	KeyExpiresIn     int64  `json:"key_expires_in"`
 	// Pin adds the new policy to ServerID's bundle straight away.
 	Pin bool `json:"pin"`
+	// Present is, on update, the JSON keys the body held: an omitted name
+	// or limit keeps the policy's current one. nil means all were sent.
+	Present map[string]bool `json:"-"`
 }
 
 const (

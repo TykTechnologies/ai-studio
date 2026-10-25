@@ -71,7 +71,7 @@ describe("ModelRouterList permission gating (model-routers:publish vs model-rout
     expect(within(menu).queryByRole("menuitem", { name: /Edit Router/ })).not.toBeInTheDocument();
     expect(within(menu).queryByRole("menuitem", { name: /Delete Router/ })).not.toBeInTheDocument();
     fireEvent.click(within(menu).getByRole("menuitem", { name: "Deactivate Router" }));
-    await waitFor(() => expect(apiClient.patch).toHaveBeenCalledWith("/model-routers/1/toggle"));
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalledWith("/model-routers/1/toggle", { active: false }));
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Primary router" }));
     const toolbar = await screen.findByRole("toolbar", { name: "Bulk actions" });

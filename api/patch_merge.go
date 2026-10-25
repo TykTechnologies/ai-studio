@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 
+	"github.com/gin-gonic/gin"
+
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 )
@@ -67,5 +69,38 @@ func mergeEmbedderPatch(input *EmbedderInput, existing *models.Embedder, present
 	base.APIKey = services.RedactedEmbedderKey // keeps the stored key
 	base.Model = existing.ModelName
 	base.PrivacyScore = existing.PrivacyScore
+	return patchOnto(&input.Data.Attributes, base, present)
+}
+
+// mergeChatPatch lays the PATCH body over the chat's stored attributes.
+func mergeChatPatch(c *gin.Context, input *ChatInput, existing *models.Chat) error {
+	present, err := boundAttributeKeys(c)
+	if err != nil {
+		return err
+	}
+	base := input.Data.Attributes
+	base.Name = existing.Name
+	base.Description = existing.Description
+	base.LLMSettingsID = existing.LLMSettingsID
+	base.LLMID = existing.LLMID
+	base.GroupIDs = make([]uint, 0, len(existing.Groups))
+	for _, g := range existing.Groups {
+		base.GroupIDs = append(base.GroupIDs, g.ID)
+	}
+	base.FilterIDs = make([]uint, 0, len(existing.Filters))
+	for _, f := range existing.Filters {
+		base.FilterIDs = append(base.FilterIDs, f.ID)
+	}
+	base.RagN = existing.RagResultsPerSource
+	base.ToolSupport = existing.SupportsTools
+	base.SystemPrompt = existing.SystemPrompt
+	base.DefaultDataSourceID = 0
+	if existing.DefaultDataSourceID != nil {
+		base.DefaultDataSourceID = int(*existing.DefaultDataSourceID)
+	}
+	base.DefaultToolIDs = make([]uint, 0, len(existing.DefaultTools))
+	for _, t := range existing.DefaultTools {
+		base.DefaultToolIDs = append(base.DefaultToolIDs, t.ID)
+	}
 	return patchOnto(&input.Data.Attributes, base, present)
 }
