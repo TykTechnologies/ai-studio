@@ -220,6 +220,16 @@ func (s *PluginService) ListAllPlugins(page, limit int, hookType string, namespa
 	return []models.Plugin(plugins), totalCount, nil
 }
 
+// UpdateHostCheckExemption is the exemption a plugin update checks command's
+// hosts with. A command left as stored was accepted when it was saved, so
+// its hosts are not checked again: turning the "Allow internal host" switch
+// off must save, and the plugin is then refused when it is loaded or dialled
+// (fail closed), not at the edit (w4e.5). A new command is checked with the
+// switch as it will be stored.
+func UpdateHostCheckExemption(allowInternalHost bool, stored, command string) netguard.Exemption {
+	return netguard.CommandExemption(allowInternalHost || command == stored, command)
+}
+
 // UpdatePlugin updates an existing plugin (adapted from microgateway)
 func (s *PluginService) UpdatePlugin(id uint, req *UpdatePluginRequest) (*models.Plugin, error) {
 	plugin, err := s.GetPlugin(id)
@@ -243,7 +253,7 @@ func (s *PluginService) UpdatePlugin(id uint, req *UpdatePluginRequest) (*models
 		if err := s.checkSource(*req.Command); err != nil {
 			return nil, err
 		}
-		if err := plugin_security.CheckCommandHostsWith(*req.Command, netguard.CommandExemption(plugin.AllowInternalHost, *req.Command)); err != nil {
+		if err := plugin_security.CheckCommandHostsWith(*req.Command, UpdateHostCheckExemption(plugin.AllowInternalHost, plugin.Command, *req.Command)); err != nil {
 			return nil, err
 		}
 		plugin.Command = *req.Command
@@ -273,7 +283,7 @@ func (s *PluginService) UpdatePlugin(id uint, req *UpdatePluginRequest) (*models
 			if err := s.checkSource(*req.OCIReference); err != nil {
 				return nil, err
 			}
-			if err := plugin_security.CheckCommandHostsWith(*req.OCIReference, netguard.CommandExemption(plugin.AllowInternalHost, *req.OCIReference)); err != nil {
+			if err := plugin_security.CheckCommandHostsWith(*req.OCIReference, UpdateHostCheckExemption(plugin.AllowInternalHost, plugin.OCIReference, *req.OCIReference)); err != nil {
 				return nil, err
 			}
 		}

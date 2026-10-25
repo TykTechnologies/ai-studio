@@ -40,7 +40,7 @@ type InternalPluginHostError struct {
 }
 
 func (e *InternalPluginHostError) Error() string {
-	return fmt.Sprintf("plugin host %q is an internal address, resolves to one, or does not resolve; add it to %s to allow this host, or set %s=true to allow every internal host", e.Host, EnvAllowedInternalHosts, EnvAllowInternal)
+	return fmt.Sprintf("plugin host %q is an internal address, resolves to one, or does not resolve; an administrator can switch on Allow internal host for this plugin, add the host to %s, or set %s=true to allow every internal host", e.Host, EnvAllowedInternalHosts, EnvAllowInternal)
 }
 
 // Is makes errors.Is(err, ErrInternalPluginHost) true.

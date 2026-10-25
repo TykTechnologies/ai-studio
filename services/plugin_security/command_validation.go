@@ -83,7 +83,7 @@ func ValidateCommandWith(command string, securityService Service, exempt netguar
 				if securityService != nil && parsedURL.Hostname() != "" && !exempt.Has(parsedURL.Hostname()) {
 					host := parsedURL.Hostname()
 					if err := securityService.ValidateGRPCHost(host); err != nil {
-						return fmt.Errorf("🔒 SECURITY: plugin host %q in %s is an internal address, resolves to one, or does not resolve; add it to LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS to allow this host, or set ALLOW_INTERNAL_NETWORK_ACCESS=true to allow every internal host: %w", sanitizeForLogging(host), sanitizeForLogging(command), err)
+						return fmt.Errorf("🔒 SECURITY: plugin host %q in %s is an internal address, resolves to one, or does not resolve; an administrator can switch on Allow internal host for this plugin, add the host to LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS, or set ALLOW_INTERNAL_NETWORK_ACCESS=true to allow every internal host: %w", sanitizeForLogging(host), sanitizeForLogging(command), err)
 					}
 				}
 

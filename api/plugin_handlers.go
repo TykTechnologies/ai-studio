@@ -550,9 +550,11 @@ func (a *API) updatePlugin(c *gin.Context) {
 	}
 
 	// Perform API-level security validation on the command field if it's
-	// being updated, with the plugin's own "Allow internal host" exemption.
+	// being updated, with the plugin's own "Allow internal host" exemption
+	// (an unchanged command's hosts are not checked again, so the switch can
+	// be turned off; see services.UpdateHostCheckExemption).
 	if req.Command != nil {
-		if err := validatePluginCommand(*req.Command, a.pluginSecurityService, netguard.CommandExemption(allowInternalHost, *req.Command)); err != nil {
+		if err := validatePluginCommand(*req.Command, a.pluginSecurityService, services.UpdateHostCheckExemption(allowInternalHost, originalPlugin.Command, *req.Command)); err != nil {
 			c.JSON(http.StatusBadRequest, ErrorResponse{
 				Errors: []struct {
 					Title  string `json:"title"`
@@ -592,6 +594,9 @@ func (a *API) updatePlugin(c *gin.Context) {
 
 	// Handle plugin activation state changes for AI Studio plugins
 	a.applyPluginActivation(plugin, originalPlugin.IsActive, req.LoadImmediately != nil && *req.LoadImmediately)
+	if plugin.AllowInternalHost != originalPlugin.AllowInternalHost {
+		a.reloadForInternalHostChange(plugin)
+	}
 
 	// Auto-load AI Studio plugins if requested on update
 	if req.LoadImmediately != nil && *req.LoadImmediately && plugin.SupportsHookType(models.HookTypeStudioUI) && a.service.AIStudioPluginManager != nil {
@@ -652,6 +657,27 @@ var pluginSelfServiceFields = map[string]bool{"config": true, "name": true, "des
 // applyPluginActivation unloads a Studio plugin that was just disabled and,
 // when loadOnActivate is set, loads one that was just enabled. Shared by the
 // PATCH update and the dedicated enable/disable routes.
+// reloadForInternalHostChange reloads a plugin Studio has loaded after its
+// "Allow internal host" switch changed, so the running plugin does not keep
+// a connection the switch no longer allows: the load validates the command
+// with the new exemption and refuses an internal host (w4e.5).
+func (a *API) reloadForInternalHostChange(plugin *models.Plugin) {
+	mgr := a.service.AIStudioPluginManager
+	if mgr == nil || !mgr.IsPluginLoaded(plugin.ID) {
+		return
+	}
+	if err := mgr.UnloadPlugin(plugin.ID); err != nil {
+		log.Printf("Warning: Failed to unload plugin %s after its Allow internal host switch changed: %v", plugin.Name, err)
+		return
+	}
+	if !plugin.IsActive {
+		return
+	}
+	if _, err := mgr.LoadPlugin(plugin.ID); err != nil {
+		log.Printf("Plugin %s not reloaded after its Allow internal host switch changed: %v", plugin.Name, err)
+	}
+}
+
 func (a *API) applyPluginActivation(plugin *models.Plugin, wasActive, loadOnActivate bool) {
 	if !plugin.SupportsHookType(models.HookTypeStudioUI) || a.service.AIStudioPluginManager == nil {
 		return

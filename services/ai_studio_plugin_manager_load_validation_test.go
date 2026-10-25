@@ -116,3 +116,21 @@ func TestValidateCommandForLoad_NoDataRace(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// A grpc:// plugin on an internal host is refused at load once its "Allow
+// internal host" switch is off, which is how turning the switch off takes
+// effect (w4e.5); with the switch on its own host is allowed.
+func TestValidateCommandForLoad_InternalHostSwitch(t *testing.T) {
+	t.Setenv("ALLOW_INTERNAL_NETWORK_ACCESS", "")
+	t.Setenv("LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS", "")
+	m := NewAIStudioPluginManager(nil, nil)
+	const command = "grpc://10.0.0.5:9001"
+
+	err := m.validateCommandForLoad(command, netguard.CommandExemption(false, command))
+	if err == nil || !strings.Contains(err.Error(), "Allow internal host") {
+		t.Fatalf("switch off: want a refusal naming the switch, got %v", err)
+	}
+	if err := m.validateCommandForLoad(command, netguard.CommandExemption(true, command)); err != nil {
+		t.Fatalf("switch on: want the plugin's own host allowed, got %v", err)
+	}
+}
