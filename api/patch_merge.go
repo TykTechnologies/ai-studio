@@ -16,9 +16,10 @@ import (
 // unchanged) keep the request's value and are left to their handlers.
 
 // mergeDatasourcePatch keeps the datasource's stored value for every
-// attribute the body left out. The embed_* fields already keep the current
-// embedder's values when empty (pickDatasourceEmbedder), and active is
-// handled by updateDatasource.
+// attribute the body left out. An empty embed_vendor, embed_url or
+// embed_model keeps the current embedder's value (pickDatasourceEmbedder),
+// but an empty embed_api_key clears the key, so an omitted one is sent as
+// "[redacted]", which keeps it. active is handled by updateDatasource.
 func mergeDatasourcePatch(input *DatasourceInput, existing *models.Datasource, present map[string]json.RawMessage) error {
 	base := input.Data.Attributes
 	base.Name = existing.Name
@@ -39,6 +40,7 @@ func mergeDatasourcePatch(input *DatasourceInput, existing *models.Datasource, p
 	base.DBConnAPIKey = existing.DBConnAPIKey
 	base.DBName = existing.DBName
 	base.Namespace = existing.Namespace
+	base.EmbedAPIKey = services.RedactedEmbedderKey
 	return patchOnto(&input.Data.Attributes, base, present)
 }
 

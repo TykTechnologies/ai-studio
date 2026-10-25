@@ -57,6 +57,37 @@ func TestUpdateDatasource_PartialPatchKeepsTheRest(t *testing.T) {
 	assert.Equal(t, "ds-key", got.DBConnAPIKey)
 }
 
+// A partial PATCH keeps the datasource's embedder: an omitted
+// embed_api_key used to bind as "" (which clears a key), so the datasource
+// was moved to a new keyless copy of its embedder.
+func TestUpdateDatasource_PartialPatchKeepsKeyedEmbedder(t *testing.T) {
+	t.Setenv("TYK_AI_SECRET_KEY", "test-key")
+	api, db := setupTestAPI(t)
+	emb, err := api.service.CreateEmbedder(&models.Embedder{Name: "Keyed", Vendor: models.OPENAI,
+		Endpoint: "https://api.openai.com/v1", APIKey: "sk-keep", ModelName: "text-embedding-3-small", PrivacyScore: 5}, 1)
+	require.NoError(t, err)
+	ds := &models.Datasource{Name: "Embedded DS", PrivacyScore: 3, DBSourceType: "pgvector",
+		DBConnString: "postgres://u:p@pg.example:5432/vec", EmbedderID: &emb.ID}
+	require.NoError(t, db.Create(ds).Error)
+	var before int64
+	require.NoError(t, db.Model(&models.Embedder{}).Count(&before).Error)
+
+	w := performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/datasources/%d", ds.ID),
+		patchAttrs(map[string]interface{}{"short_description": "partial"}))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	got := models.NewDatasource()
+	require.NoError(t, got.Get(db, ds.ID))
+	require.NotNil(t, got.EmbedderID)
+	assert.Equal(t, emb.ID, *got.EmbedderID, "the datasource keeps its embedder")
+	var after int64
+	require.NoError(t, db.Model(&models.Embedder{}).Count(&after).Error)
+	assert.Equal(t, before, after, "no new embedder is created")
+	var stored models.Embedder
+	require.NoError(t, stored.Get(db, emb.ID))
+	assert.Equal(t, "sk-keep", stored.APIKey)
+}
+
 func TestUpdateTool_PartialPatchKeepsTheRest(t *testing.T) {
 	api, db := setupTestAPI(t)
 	tool := &models.Tool{Name: "Keep Tool", Description: "old", PrivacyScore: 4,
