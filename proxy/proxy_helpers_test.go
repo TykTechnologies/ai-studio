@@ -4,11 +4,9 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"database/sql"
 	"fmt"
 	"math"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,12 +14,12 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/andybalholm/brotli"
-	"github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/testinfra/sqlitetemplate"
 	"github.com/TykTechnologies/midsommar/v2/services"
 )
 
@@ -29,111 +27,26 @@ import (
 // database with an earlier one whose background writers are still draining.
 var setupDBSeq atomic.Int64
 
-// openSetupDB opens one named in-memory SQLite database on a single
-// connection.
-//
-// No PrepareStmt: with gorm's prepared-statement cache, a transaction
-// holding the one connection waited for another goroutine to finish
-// preparing the same statement, and that goroutine waited for the
-// connection (TestSetupDBTransactionDoesNotWaitOnAnotherGoroutinesPrepare).
-// Studio does not enable PrepareStmt either.
-func openSetupDB(name string) (*gorm.DB, *sql.DB, error) {
-	db, err := gorm.Open(sqlite.Open("file:"+name+"?mode=memory&cache=shared&_busy_timeout=5000"), &gorm.Config{
-		SkipDefaultTransaction: true,
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-	sqlDB, err := db.DB()
-	if err != nil {
-		return nil, nil, err
-	}
-	// One connection: statements from the test, the proxy and the analytics
-	// writer queue for it rather than contend for table locks. It must never
-	// be closed while idle, or the in-memory database goes with it.
-	sqlDB.SetMaxOpenConns(1)
-	sqlDB.SetMaxIdleConns(1)
-	sqlDB.SetConnMaxLifetime(0)
-	return db, sqlDB, nil
-}
-
-var (
-	setupDBTemplateOnce sync.Once
-	setupDBTemplate     *sql.DB
-	setupDBTemplateErr  error
-)
-
-// migratedTemplate returns the package's template database, migrated once
-// (models.InitModels and the analytics tables) and kept open for the life of
-// the test binary. setupDB copies it instead of migrating every test's
-// database, which cost ~300 ms a test under -race. Migration itself is still
-// exercised for real, here and by the schema goldens in models.
-func migratedTemplate() (*sql.DB, error) {
-	setupDBTemplateOnce.Do(func() {
-		db, sqlDB, err := openSetupDB("proxytest_template")
-		if err != nil {
-			setupDBTemplateErr = err
-			return
-		}
-		if err := models.InitModels(db); err != nil {
-			setupDBTemplateErr = fmt.Errorf("migrate the template: %w", err)
-			return
-		}
-		if err := db.AutoMigrate(
-			&models.LLMChatRecord{},
-			&models.LLMChatLogEntry{},
-			&models.ToolCallRecord{},
-			&models.ProxyLog{},
-			&models.Notification{},
-		); err != nil {
-			setupDBTemplateErr = fmt.Errorf("migrate the template's analytics tables: %w", err)
-			return
-		}
-		// What setupTest used to run on each test's database.
-		if err := analytics.Migrate(db); err != nil {
-			setupDBTemplateErr = fmt.Errorf("migrate the template for analytics: %w", err)
-			return
-		}
-		setupDBTemplate = sqlDB
-	})
-	return setupDBTemplate, setupDBTemplateErr
-}
-
-// copySQLiteDB copies src's main database into dst's with SQLite's online
-// backup API.
-func copySQLiteDB(ctx context.Context, dst, src *sql.DB) error {
-	dstConn, err := dst.Conn(ctx)
-	if err != nil {
+// setupDBTemplate is migrated once per test binary (models.InitModels and the
+// analytics tables) and copied into every test's database: migrating each one
+// cost ~300 ms a test under -race. Migration itself still runs for real, here
+// and in the schema goldens in models.
+var setupDBTemplate = sqlitetemplate.New(func(db *gorm.DB) error {
+	if err := models.InitModels(db); err != nil {
 		return err
 	}
-	defer dstConn.Close()
-	srcConn, err := src.Conn(ctx)
-	if err != nil {
+	if err := db.AutoMigrate(
+		&models.LLMChatRecord{},
+		&models.LLMChatLogEntry{},
+		&models.ToolCallRecord{},
+		&models.ProxyLog{},
+		&models.Notification{},
+	); err != nil {
 		return err
 	}
-	defer srcConn.Close()
-	return dstConn.Raw(func(d any) error {
-		return srcConn.Raw(func(s any) error {
-			dc, ok := d.(*sqlite3.SQLiteConn)
-			if !ok {
-				return fmt.Errorf("destination connection is a %T, not a *sqlite3.SQLiteConn", d)
-			}
-			sc, ok := s.(*sqlite3.SQLiteConn)
-			if !ok {
-				return fmt.Errorf("source connection is a %T, not a *sqlite3.SQLiteConn", s)
-			}
-			b, err := dc.Backup("main", sc, "main")
-			if err != nil {
-				return err
-			}
-			if _, err := b.Step(-1); err != nil {
-				_ = b.Finish()
-				return err
-			}
-			return b.Finish()
-		})
-	})
-}
+	// What setupTest used to run on each test's database.
+	return analytics.Migrate(db)
+})
 
 // setupDB opens a private in-memory SQLite database for one test, holding a
 // copy of the migrated template.
@@ -146,12 +59,27 @@ func copySQLiteDB(ctx context.Context, dst, src *sql.DB) error {
 // database per test, on a single connection, serialises every statement
 // instead: no table lock can be contended.
 func setupDB(t *testing.T) *gorm.DB {
-	template, err := migratedTemplate()
+	name := fmt.Sprintf("proxytest_%d", setupDBSeq.Add(1))
+	// No PrepareStmt: with gorm's prepared-statement cache, a transaction
+	// holding the one connection waited for another goroutine to finish
+	// preparing the same statement, and that goroutine waited for the
+	// connection (TestSetupDBTransactionDoesNotWaitOnAnotherGoroutinesPrepare).
+	// Studio does not enable PrepareStmt either.
+	db, err := gorm.Open(sqlite.Open("file:"+name+"?mode=memory&cache=shared&_busy_timeout=5000"), &gorm.Config{
+		SkipDefaultTransaction: true,
+	})
 	require.NoError(t, err)
 
-	db, sqlDB, err := openSetupDB(fmt.Sprintf("proxytest_%d", setupDBSeq.Add(1)))
+	sqlDB, err := db.DB()
 	require.NoError(t, err)
-	require.NoError(t, copySQLiteDB(context.Background(), sqlDB, template))
+	// One connection: statements from the test, the proxy and the analytics
+	// writer queue for it rather than contend for table locks. It must never
+	// be closed while idle, or the in-memory database goes with it.
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
+	sqlDB.SetConnMaxLifetime(0)
+
+	require.NoError(t, setupDBTemplate.CopyInto(db))
 	// The join models InitModels registers live on the gorm handle, not in
 	// the database, so this handle registers them itself.
 	require.NoError(t, models.RegisterJoinModels(db))
