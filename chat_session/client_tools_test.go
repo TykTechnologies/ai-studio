@@ -326,3 +326,35 @@ func TestDefaultToolWithUndecodableSpecIsLeftOut(t *testing.T) {
 	assert.Contains(t, attached, present.Name)
 	assert.NotContains(t, attached, broken.Name)
 }
+
+// An open session rebuilds its vendor client once the chat's LLM row changes
+// (for example its allow_internal_host switch is turned off), and keeps it
+// while the row is unchanged.
+func TestCurrentCaller_RebuildsAfterLLMChange(t *testing.T) {
+	db := setupSharedDB(t, "caller-refresh")
+	chat := &models.Chat{
+		Name:        "Refresh",
+		LLM:         &models.LLM{Name: "Mock", Vendor: models.MOCK_VENDOR, PrivacyScore: 5, AllowInternalHost: true},
+		LLMSettings: &models.LLMSettings{ModelName: "dummy", MaxLength: 10000},
+	}
+	require.NoError(t, chat.Create(db))
+	require.NotZero(t, chat.LLM.ID)
+	original := &scriptedModel{}
+	cs := &ChatSession{db: db, chatRef: chat, caller: original}
+
+	got, err := cs.currentCaller()
+	require.NoError(t, err)
+	assert.Same(t, original, got, "an unchanged LLM keeps the session's client")
+
+	time.Sleep(5 * time.Millisecond)
+	require.NoError(t, db.Model(&models.LLM{}).Where("id = ?", chat.LLM.ID).Update("allow_internal_host", false).Error)
+
+	got, err = cs.currentCaller()
+	require.NoError(t, err)
+	assert.NotSame(t, original, got, "a changed LLM rebuilds the client")
+	rebuilt := got
+
+	got, err = cs.currentCaller()
+	require.NoError(t, err)
+	assert.Same(t, rebuilt, got, "the rebuilt client is kept until the next change")
+}

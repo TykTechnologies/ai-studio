@@ -258,7 +258,12 @@ func (cs *ChatSession) callModelAfterTools() bool {
 	cs.streamFilterBlocked = false
 	cs.resetStreamed()
 
-	resp, err := cs.caller.GenerateContent(cs.runCtx(), history, currentOpts...)
+	caller, err := cs.currentCaller()
+	if err != nil {
+		cs.sendError(err)
+		return false
+	}
+	resp, err := caller.GenerateContent(cs.runCtx(), history, currentOpts...)
 	if err != nil {
 		cs.sendError(fmt.Errorf("error getting LLM response after tool call: %v", err))
 		return false
