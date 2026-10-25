@@ -61,7 +61,7 @@ GET    /api/v1/rbac/permissions            the catalogue (also tells you whether
 GET    /api/v1/rbac/me                     your effective permissions and roles
 GET    /api/v1/rbac/roles                  list roles
 POST   /api/v1/rbac/roles                  {"name": "...", "description": "...", "permissions": ["llms:read", ...]}
-PATCH  /api/v1/rbac/roles/:id
+PATCH  /api/v1/rbac/roles/:id              omitted keys keep their values; "permissions": [] clears
 DELETE /api/v1/rbac/roles/:id
 POST   /api/v1/rbac/roles/:id/clone        {"name": "..."}
 GET    /api/v1/rbac/bindings?subject_type=user&subject_id=42

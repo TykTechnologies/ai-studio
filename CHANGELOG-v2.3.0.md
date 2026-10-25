@@ -283,6 +283,9 @@ Two images, released with 2.3 from [TykTechnologies/ai-studio-guardrail-wolf](ht
 - **Multi-select fields release outside clicks**, and a failed submit scrolls to the first error ([#762](https://github.com/TykTechnologies/ai-studio/pull/762)).
 - **Credential status says an unresolved `$ENV/` provider key is an unset environment variable** ([#763](https://github.com/TykTechnologies/ai-studio/pull/763)). The credential help texts point at the secret store ([#796](https://github.com/TykTechnologies/ai-studio/pull/796)).
 
+### Management API
+- **A partial `PATCH` wiped the attributes it left out** (midsommar-clean-96e). Most update endpoints bound the body onto plain values and wrote every attribute, so an omitted one was stored empty: renaming a group removed its members and catalogues, a role lost its permissions, a chat its groups and filters, a datasource or tool its owner, privacy score and credentials, a consumption policy its limits, a secret its name (breaking every `$SECRET/` reference). Every `PATCH` now changes only the attributes its body holds, as `PATCH /apps/{id}` and `PATCH /llms/{id}` already did; an attribute that is present, an empty list, `0`, `false` or `""` included, still replaces the stored value. `/model-prices/{id}/recalculate` no longer writes zeroed prices into history. `PATCH /model-routers/{id}/toggle` needs `{"active": ...}` (an empty body deactivated the router), and `PATCH /secrets/{id}` refuses an empty `var_name`.
+
 ### Datasources
 - **PDF extraction** ([#753](https://github.com/TykTechnologies/ai-studio/pull/753), [#765](https://github.com/TykTechnologies/ai-studio/pull/765)). `pdftotext` is looked up once, only on the `PATH`, and runs with a minimal environment. The log names the extractor in use once.
 - **The vector store list** ([#777](https://github.com/TykTechnologies/ai-studio/pull/777)) offers the stores datasources implement (it listed Milvus and left out PGVector and Redis).
