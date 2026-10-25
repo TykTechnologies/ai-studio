@@ -188,21 +188,26 @@ func (c *convo) body(format string) []byte {
 // jyx.57: the trimmed parse equals the whole-body parse over thousands of
 // random conversations in every dialect, and the trim is actually taken.
 func TestTrimHistory_Differential(t *testing.T) {
+	// The formats share nothing (each has its own generator), so they run
+	// side by side: this is the slowest test in the package under -race.
 	for _, format := range []string{FormatOpenAI, FormatOllama, FormatAnthropic, FormatBedrock, FormatGoogleAI, FormatVertex} {
-		rnd := rand.New(rand.NewSource(57))
-		taken, parsed := 0, 0
-		for i := 0; i < 3000; i++ {
-			c := &convo{rnd: rnd}
-			body := c.body(format)
-			if _, err := referenceRequest(format, body); err == nil {
-				parsed++
+		t.Run(format, func(t *testing.T) {
+			t.Parallel()
+			rnd := rand.New(rand.NewSource(57))
+			taken, parsed := 0, 0
+			for i := 0; i < 3000; i++ {
+				c := &convo{rnd: rnd}
+				body := c.body(format)
+				if _, err := referenceRequest(format, body); err == nil {
+					parsed++
+				}
+				if assertSameAsReference(t, fmt.Sprintf("%s #%d", format, i), format, body) {
+					taken++
+				}
 			}
-			if assertSameAsReference(t, fmt.Sprintf("%s #%d", format, i), format, body) {
-				taken++
-			}
-		}
-		assert.Greater(t, parsed, 2500, "%s: the generator must make bodies the segmenter accepts", format)
-		assert.Greater(t, taken, 500, "%s: the trim must be exercised", format)
+			assert.Greater(t, parsed, 2500, "%s: the generator must make bodies the segmenter accepts", format)
+			assert.Greater(t, taken, 500, "%s: the trim must be exercised", format)
+		})
 	}
 }
 
