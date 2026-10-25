@@ -826,8 +826,9 @@ func (cs *ChatSession) handleDefaults() error {
 // currentCaller is the vendor client for the next model call. The session
 // builds it once, so before each call it checks whether the chat's LLM row
 // has changed (an administrator revoking its "Allow internal host" switch,
-// a rotated key or endpoint) and, if so, rebuilds it from the stored LLM.
-// A session without a database or a stored LLM row keeps the client it has.
+// a rotated key or endpoint) and, if so, rebuilds it from the stored LLM. An
+// LLM that was deleted or deactivated fails the turn. A session without a
+// database or a stored LLM keeps the client it has.
 func (cs *ChatSession) currentCaller() (llms.Model, error) {
 	cs.callerMu.Lock()
 	defer cs.callerMu.Unlock()
@@ -837,13 +838,16 @@ func (cs *ChatSession) currentCaller() (llms.Model, error) {
 	if cs.db == nil || cs.chatRef == nil || cs.chatRef.LLM == nil || cs.chatRef.LLM.ID == 0 {
 		return cs.caller, nil
 	}
-	var row struct{ UpdatedAt time.Time }
-	res := cs.db.Model(&models.LLM{}).Select("updated_at").Where("id = ?", cs.chatRef.LLM.ID).Limit(1).Scan(&row)
+	var row struct {
+		UpdatedAt time.Time
+		Active    bool
+	}
+	res := cs.db.Model(&models.LLM{}).Select("updated_at", "active").Where("id = ?", cs.chatRef.LLM.ID).Limit(1).Scan(&row)
 	if res.Error != nil {
 		return nil, fmt.Errorf("checking the chat's LLM: %w", res.Error)
 	}
-	if res.RowsAffected == 0 {
-		return cs.caller, nil
+	if res.RowsAffected == 0 || !row.Active {
+		return nil, fmt.Errorf("the chat's LLM is no longer available")
 	}
 	if cs.callerLLMUpdatedAt.IsZero() {
 		cs.callerLLMUpdatedAt = row.UpdatedAt

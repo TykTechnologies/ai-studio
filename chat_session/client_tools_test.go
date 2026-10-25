@@ -4,11 +4,15 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard/netguardtest"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -81,7 +85,7 @@ func TestClientTools_ParkAndResume(t *testing.T) {
 	svc := services.NewService(db)
 	chat := &models.Chat{
 		Name:          "HITL",
-		LLM:           &models.LLM{Name: "Mock", Vendor: models.MOCK_VENDOR, PrivacyScore: 5},
+		LLM:           &models.LLM{Name: "Mock", Vendor: models.MOCK_VENDOR, PrivacyScore: 5, Active: true},
 		LLMSettings:   &models.LLMSettings{ModelName: "dummy", MaxLength: 10000},
 		SupportsTools: true,
 	}
@@ -178,7 +182,7 @@ func TestClientTools_AbandonedOnNextMessage(t *testing.T) {
 	svc := services.NewService(db)
 	chat := &models.Chat{
 		Name:        "HITL2",
-		LLM:         &models.LLM{Name: "Mock", Vendor: models.MOCK_VENDOR, PrivacyScore: 5},
+		LLM:         &models.LLM{Name: "Mock", Vendor: models.MOCK_VENDOR, PrivacyScore: 5, Active: true},
 		LLMSettings: &models.LLMSettings{ModelName: "dummy", MaxLength: 10000},
 	}
 	require.NoError(t, chat.Create(db))
@@ -327,34 +331,56 @@ func TestDefaultToolWithUndecodableSpecIsLeftOut(t *testing.T) {
 	assert.NotContains(t, attached, broken.Name)
 }
 
-// An open session rebuilds its vendor client once the chat's LLM row changes
-// (for example its allow_internal_host switch is turned off), and keeps it
-// while the row is unchanged.
-func TestCurrentCaller_RebuildsAfterLLMChange(t *testing.T) {
+// Turning an LLM's "Allow internal host" off reaches a session that is already
+// open: the next turn is refused, with no restart. An unchanged LLM keeps the
+// session's client, and a deactivated one fails the turn.
+func TestCurrentCaller_InternalHostRevokedInOpenSession(t *testing.T) {
+	netguardtest.BlockInternal(t)
+	var hits atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"c1","object":"chat.completion","model":"gpt-4o","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}]}`))
+	}))
+	defer upstream.Close()
+
 	db := setupSharedDB(t, "caller-refresh")
 	chat := &models.Chat{
-		Name:        "Refresh",
-		LLM:         &models.LLM{Name: "Mock", Vendor: models.MOCK_VENDOR, PrivacyScore: 5, AllowInternalHost: true},
-		LLMSettings: &models.LLMSettings{ModelName: "dummy", MaxLength: 10000},
+		Name: "Refresh",
+		LLM: &models.LLM{Name: "Internal", Vendor: models.OPENAI, APIKey: "k", APIEndpoint: upstream.URL,
+			PrivacyScore: 5, Active: true, AllowInternalHost: true},
+		LLMSettings: &models.LLMSettings{ModelName: "gpt-4o", MaxLength: 10000},
 	}
 	require.NoError(t, chat.Create(db))
 	require.NotZero(t, chat.LLM.ID)
-	original := &scriptedModel{}
-	cs := &ChatSession{db: db, chatRef: chat, caller: original}
-
-	got, err := cs.currentCaller()
+	cs := &ChatSession{db: db, chatRef: chat}
+	var err error
+	cs.caller, err = cs.fetchDriver(nil)
 	require.NoError(t, err)
-	assert.Same(t, original, got, "an unchanged LLM keeps the session's client")
+	original := cs.caller
+	turn := func() (llms.Model, error) {
+		caller, err := cs.currentCaller()
+		if err != nil {
+			return nil, err
+		}
+		_, err = caller.GenerateContent(context.Background(), []llms.MessageContent{llms.TextParts(llms.ChatMessageTypeHuman, "hello")})
+		return caller, err
+	}
+
+	caller, err := turn()
+	require.NoError(t, err, "the switch on allows the internal endpoint")
+	assert.Same(t, original, caller, "an unchanged LLM keeps the session's client")
+	require.EqualValues(t, 1, hits.Load())
 
 	time.Sleep(5 * time.Millisecond)
 	require.NoError(t, db.Model(&models.LLM{}).Where("id = ?", chat.LLM.ID).Update("allow_internal_host", false).Error)
+	_, err = turn()
+	require.Error(t, err, "the next turn after the switch is turned off is refused")
+	assert.EqualValues(t, 1, hits.Load(), "the refused turn never reaches the internal endpoint")
 
-	got, err = cs.currentCaller()
-	require.NoError(t, err)
-	assert.NotSame(t, original, got, "a changed LLM rebuilds the client")
-	rebuilt := got
-
-	got, err = cs.currentCaller()
-	require.NoError(t, err)
-	assert.Same(t, rebuilt, got, "the rebuilt client is kept until the next change")
+	time.Sleep(5 * time.Millisecond)
+	require.NoError(t, db.Model(&models.LLM{}).Where("id = ?", chat.LLM.ID).Update("active", false).Error)
+	_, err = cs.currentCaller()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no longer available")
 }
