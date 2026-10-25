@@ -76,6 +76,7 @@ func TestChatSSE(t *gotest.T) {
 		LLM: &models.LLM{
 			Name:   "Dummy LLM",
 			Vendor: models.MOCK_VENDOR,
+			Active: true,
 		},
 		LLMSettings: &models.LLMSettings{
 			ModelName: "dummy",
