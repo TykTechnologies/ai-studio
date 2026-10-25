@@ -362,6 +362,8 @@ Each LLM, embedder, tool, datasource, guardrail, plugin and MCP server has an **
 
 OCI plugin registries, their signatures and token servers, and `grpc://` plugin hosts follow the plugin host rule, which refuses internal addresses whatever `LLM_UPSTREAM_BLOCK_INTERNAL` says (see [Plugin Security](./plugins-security.md)); a plugin's Allow internal host switch exempts its own. Webhooks and Tyk Gateway connections (Enterprise) have their own always-on URL policies.
 
+A refused upstream answers `502`, and the error message says why, naming the setting (for example `upstream endpoint not permitted: upstream host "10.0.0.5" is an internal address — blocked by LLM_UPSTREAM_BLOCK_INTERNAL`). This is the same on every route: `/llm/`, the `/ai/` and unified `/v1` bridges, and native routes.
+
 **What it does not cover:** SSO and identity providers, SMTP, the hub-to-edge gRPC connection and marketplace index fetches, which are operator configuration. Restrict those with network policy (a Kubernetes `NetworkPolicy`, firewall rules or an egress proxy).
 
 For the metrics and traces the Proxy emits — request latency, time to first token, token usage, cost and policy blocks — see [Observability](./observability.md).

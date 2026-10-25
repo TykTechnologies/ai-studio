@@ -104,7 +104,7 @@ func (p *Proxy) handleBedrockStreamingProxy(w http.ResponseWriter, r *http.Reque
 	exempt := llmExemption(llm)
 	if err := exempt.ValidateURL(upstream); err != nil {
 		log.Error().Err(err).Msg("Bedrock streaming upstream URL blocked by SSRF policy")
-		respondWithError(w, http.StatusBadGateway, "upstream endpoint not permitted", err, false)
+		respondWithError(w, http.StatusBadGateway, upstreamErrorMessage("upstream endpoint not permitted", err), err, false)
 		return
 	}
 	upReq, err := http.NewRequestWithContext(exempt.WithContext(r.Context()), http.MethodPost, upstream.String(), bytes.NewReader(body))

@@ -15,6 +15,7 @@ package netguard
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -255,14 +256,14 @@ func validateUpstreamURL(u *url.URL, checkInternal bool, exempt Exemption) error
 
 	if allowed := os.Getenv(EnvAllowedHosts); allowed != "" {
 		if !hostMatchesAllowlist(host, allowed) {
-			return fmt.Errorf("upstream host %q is not in %s", host, EnvAllowedHosts)
+			return refusedf("upstream host %q is not in %s", host, EnvAllowedHosts)
 		}
 		return nil
 	}
 
 	if checkInternal && blockInternalEnabled() && !exempt.Has(host) {
 		if ip := net.ParseIP(strings.Trim(host, "[]")); ip != nil && IsInternalIP(ip) {
-			return fmt.Errorf("upstream host %q is an internal address — blocked by %s", host, EnvBlockInternal)
+			return refusedf("upstream host %q is an internal address — blocked by %s", host, EnvBlockInternal)
 		}
 	}
 
@@ -316,7 +317,7 @@ func DialControl(network, address string, _ syscall.RawConn) error {
 		return fmt.Errorf("refusing to dial unparseable address %q", address)
 	}
 	if IsInternalIP(ip) {
-		return fmt.Errorf("connection to internal address %s blocked by %s", ip, EnvBlockInternal)
+		return refusedf("connection to internal address %s blocked by %s", ip, EnvBlockInternal)
 	}
 	return nil
 }
@@ -418,4 +419,28 @@ func (t validatingTransport) CloseIdleConnections() {
 // validation cannot be guaranteed at the call sites.
 func ValidatingHTTPTransport() http.RoundTripper {
 	return validatingTransport{inner: HTTPTransport()}
+}
+
+// RefusalError is a refusal by the upstream policy: a host outside
+// LLM_UPSTREAM_ALLOWED_HOSTS or an internal address with blocking on. Its
+// message names the setting, which is what tells an operator how to fix it,
+// so a caller that hides other upstream errors behind a generic message
+// still passes this one on (see Refusal).
+type RefusalError struct{ msg string }
+
+func (e *RefusalError) Error() string { return e.msg }
+
+func refusedf(format string, args ...any) error {
+	return &RefusalError{msg: fmt.Sprintf(format, args...)}
+}
+
+// Refusal returns the policy's reason when err is, or wraps, a RefusalError:
+// from ValidateUpstreamURL and the Exemption checks, or from a dial that
+// DialControl refused.
+func Refusal(err error) (string, bool) {
+	var r *RefusalError
+	if errors.As(err, &r) {
+		return r.msg, true
+	}
+	return "", false
 }

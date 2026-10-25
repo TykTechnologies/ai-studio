@@ -306,6 +306,18 @@ func upstreamTransportStatus(err error) int {
 	return http.StatusBadGateway
 }
 
+// upstreamErrorMessage is message, followed by the outbound network policy's
+// reason when err is its refusal (netguard.Refusal). The reason names the
+// setting to change, and the /ai/ bridges relay only the message of the
+// inner hop's 5xx, never its error detail (parseLoopbackError), so without
+// this a blocked upstream reached the caller as a bare 502 (w4e.4).
+func upstreamErrorMessage(message string, err error) string {
+	if reason, ok := netguard.Refusal(err); ok {
+		return message + ": " + reason
+	}
+	return message
+}
+
 // loopbackAwareTransportStatus is upstreamTransportStatus for a request that
 // may be the /ai/ loopback hop. The outer hop runs its attempts on contexts
 // detached from its client, so the only thing that cancels a loopback request
@@ -1166,7 +1178,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	if err := exempt.ValidateURL(upstreamURL); err != nil {
 		logger.Errorf("Upstream URL blocked by SSRF policy: %v", err)
 		respStatus = http.StatusBadGateway
-		respondWithError(w, http.StatusBadGateway, "upstream endpoint not permitted", err, false)
+		respondWithError(w, http.StatusBadGateway, upstreamErrorMessage("upstream endpoint not permitted", err), err, false)
 		return
 	}
 	r = r.WithContext(exempt.WithContext(r.Context()))
@@ -1232,7 +1244,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		// recorded a success.
 		ErrorHandler: func(w http.ResponseWriter, req *http.Request, err error) {
 			respStatus = loopbackAwareTransportStatus(req, err)
-			respondWithError(w, respStatus, "failed to make upstream request", err, false)
+			respondWithError(w, respStatus, upstreamErrorMessage("failed to make upstream request", err), err, false)
 		},
 	}
 
@@ -2049,7 +2061,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	if err := exempt.ValidateURL(upstreamURL); err != nil {
 		logger.Errorf("Streaming upstream URL blocked by SSRF policy: %v", err)
 		respStatus = http.StatusBadGateway
-		respondWithError(w, http.StatusBadGateway, "upstream endpoint not permitted", err, false)
+		respondWithError(w, http.StatusBadGateway, upstreamErrorMessage("upstream endpoint not permitted", err), err, false)
 		return
 	}
 	r = r.WithContext(exempt.WithContext(r.Context()))
@@ -2105,7 +2117,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		p.goAnalyzeFor(r, func() {
 			p.analyzeStreamingResponse(llm, app, r, status, upstreamFailureBody(status, err), reqBody, nil, time.Now(), "")
 		})
-		respondWithError(w, respStatus, "failed to make upstream request for streaming", err, false)
+		respondWithError(w, respStatus, upstreamErrorMessage("failed to make upstream request for streaming", err), err, false)
 		return
 	}
 	defer resp.Body.Close()

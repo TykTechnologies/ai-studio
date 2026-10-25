@@ -114,7 +114,7 @@ func (c *nativeCall) serveResults(w http.ResponseWriter, path string) {
 	req, err := c.upstreamRequest(ctx, http.MethodGet, path, c.r.URL.Query(), nil)
 	if err != nil {
 		slog.Error("native upstream request", "llm", llm.Name, "op", c.op.Name, "error", err)
-		c.fail(w, http.StatusBadGateway, nativeErrAPI, "upstream endpoint not permitted")
+		c.fail(w, http.StatusBadGateway, nativeErrAPI, upstreamErrorMessage("upstream endpoint not permitted", err))
 		return
 	}
 	// The response header must arrive within the request timeout; the body
@@ -123,7 +123,7 @@ func (c *nativeCall) serveResults(w http.ResponseWriter, path string) {
 	resp, err := upstreamTransport.RoundTrip(req)
 	headerTimer.Stop()
 	if err != nil {
-		c.fail(w, upstreamTransportStatus(err), nativeErrAPI, "failed to make upstream request")
+		c.fail(w, upstreamTransportStatus(err), nativeErrAPI, upstreamErrorMessage("failed to make upstream request", err))
 		return
 	}
 	defer resp.Body.Close()
