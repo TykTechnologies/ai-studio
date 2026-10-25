@@ -65,6 +65,7 @@ func TestReconcile_InternalHostSwitchTurnedOffUnloadsPlugin(t *testing.T) {
 	require.NotNil(t, health)
 	assert.Equal(t, PluginStatusFailed, health.Status)
 	assert.Contains(t, health.ErrorMessage, "refused")
+	assert.Contains(t, health.ErrorMessage, "Allow internal host", "the refusal names the switch")
 }
 
 // A manager without a validator still applies the rule.

@@ -364,7 +364,7 @@ func (pm *PluginManager) checkGRPCHost(command string, addr net.Addr, exempt net
 		return nil
 	}
 	if err := validator.ValidateGRPCHost(host); err != nil {
-		return fmt.Errorf("gRPC plugin host %q refused (add it to %s, or set %s=true to allow every internal host): %w", host, netguard.EnvAllowedInternalHosts, netguard.EnvAllowInternal, err)
+		return fmt.Errorf("gRPC plugin host %q refused (an administrator can switch on Allow internal host for this plugin in AI Studio, add the host to %s, or set %s=true to allow every internal host): %w", host, netguard.EnvAllowedInternalHosts, netguard.EnvAllowInternal, err)
 	}
 	if tcpAddr, ok := addr.(*net.TCPAddr); ok && tcpAddr.IP.String() != host {
 		if err := validator.ValidateGRPCHost(tcpAddr.IP.String()); err != nil {
