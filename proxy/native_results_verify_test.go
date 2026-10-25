@@ -105,6 +105,7 @@ func TestNativeResultsVerify_ConcurrentDownloadsAccountOnce(t *testing.T) {
 // The vendor connection dropping mid-file is not a complete download: nothing
 // is recorded and the row stays claimable.
 func TestNativeResultsVerify_UpstreamTruncationRecordsNothing(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.addPrice("claude-luna", 0.00001, 0.000002)
 	h.vendor.addBatch("msgbatch_TR", "ended")
@@ -136,6 +137,7 @@ func TestNativeResultsVerify_UpstreamTruncationRecordsNothing(t *testing.T) {
 // A results line over the 16 MiB line cap ends the download incomplete:
 // nothing recorded, the row stays claimable (for the reconciler).
 func TestNativeResultsVerify_OversizedLineRecordsNothing(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.addPrice("claude-luna", 0.00001, 0.000002)
 	h.vendor.addBatch("msgbatch_OL", "ended")

@@ -46,6 +46,7 @@ func decodeOAIError(t *testing.T, body []byte) *APIError {
 // it; Google's kept no message at all ("googleapi: Error 403:"), so the
 // caller could not tell a spent budget from anything else.
 func TestLoopbackRefusal_BudgetReasonReachesTheClient(t *testing.T) {
+	t.Parallel()
 	for _, vendor := range []models.Vendor{models.OPENAI, models.GOOGLEAI, models.ANTHROPIC} {
 		for name, body := range map[string]string{"non-streaming": failoverChatBody, "streaming": failoverStreamBody} {
 			t.Run(fmt.Sprintf("%s/%s", vendor, name), func(t *testing.T) {
@@ -70,6 +71,7 @@ func TestLoopbackRefusal_BudgetReasonReachesTheClient(t *testing.T) {
 // A budget check that could not run is a 503 that says so, without the
 // database error behind it.
 func TestLoopbackRefusal_BudgetCheckUnavailable(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIText("never"), serveOpenAIText("never"), asVendor(models.GOOGLEAI))
 	h.proxy.budgetService = denyBudget{err: fmt.Errorf("%w: reading app 3: disk I/O error", services.ErrBudgetCheckUnavailable)}
 
@@ -84,6 +86,7 @@ func TestLoopbackRefusal_BudgetCheckUnavailable(t *testing.T) {
 // A direct caller of the pass-through keeps the pass-through's error body,
 // and a streaming request says what a buffered one does.
 func TestBudgetRefusal_PassThroughBodyUnchanged(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIText("never"), serveOpenAIText("never"), nil)
 	h.proxy.budgetService = denyBudget{err: fmt.Errorf("budget exceeded: app monthly budget is 0")}
 
@@ -151,6 +154,7 @@ func proxyLogCount(t *testing.T, h *failoverHarness, status int) int {
 // streaming pass-through, which /ai/ and the unified /v1 route through,
 // answered 502 and recorded nothing, so a vendor outage was invisible.
 func TestUpstreamTransportFailure_IsRecorded(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ path, body string }{
 		{"/ai/primary/v1/chat/completions", failoverChatBody},
 		{"/ai/primary/v1/chat/completions", failoverStreamBody},
@@ -172,6 +176,7 @@ func TestUpstreamTransportFailure_IsRecorded(t *testing.T) {
 // A vendor that never answers: the /ai/ caller gets 504 from the outer hop's
 // deadline, and the row the inner hop leaves says 504 too, not 502.
 func TestUpstreamTimeout_OnTheLoopbackIsRecordedAs504(t *testing.T) {
+	t.Parallel()
 	hang := func(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-r.Context().Done():
@@ -200,6 +205,7 @@ func proxyLogCount502(t *testing.T, h *failoverHarness) int {
 // Every proxied chat record carries its latency (total_time_ms). It was 0 on
 // every row the gateway wrote.
 func TestChatRecord_CarriesLatency(t *testing.T) {
+	t.Parallel()
 	slow := func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(40 * time.Millisecond)
 		serveOpenAIText("hello")(w, r)

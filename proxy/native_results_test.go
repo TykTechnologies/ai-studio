@@ -65,6 +65,7 @@ func (s *spendCounter) totals() (float64, int) {
 // per model at half the list price, billed lines only, identity from the
 // ledger row. A second download records nothing more.
 func TestNativeResults_AccountedOnceAtBatchPrice(t *testing.T) {
+	t.Parallel()
 	spend := &spendCounter{}
 	h := newNativeHarness(t, nativeHarnessOpts{wrapBudget: func(s budget.Service) budget.Service { spend.Service = s; return spend }})
 	h.addPrice("claude-luna", 0.00001, 0.000002)
@@ -123,6 +124,7 @@ func TestNativeResults_AccountedOnceAtBatchPrice(t *testing.T) {
 // The same usage through the synchronous chain costs twice as much: the
 // batch discount is the multiplier, not a different price.
 func TestNativeResults_CostIsHalfOfSyncForSameUsage(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.addPrice("claude-luna", 0.00001, 0.000002)
 	resp, body := h.do(h.keyB, http.MethodPost, "/llm/rest/claude/v1/messages",
@@ -146,6 +148,7 @@ func TestNativeResults_CostIsHalfOfSyncForSameUsage(t *testing.T) {
 
 // First result bytes reach the client while the vendor is still sending.
 func TestNativeResults_StreamsBeforeUpstreamFinishes(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.vendor.addBatch("msgbatch_S1", "ended")
 	h.vendor.setResults("msgbatch_S1", succeededLine("a", "claude-luna", 1, 1), succeededLine("b", "claude-luna", 1, 1))
@@ -194,6 +197,7 @@ func TestNativeResults_StreamsBeforeUpstreamFinishes(t *testing.T) {
 // gateway, and the download would stall. This is measured on the bytes in
 // flight, not on the process heap, which other tests' garbage moves.
 func TestNativeResults_LargeFileMemoryBounded(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("large stream")
 	}
@@ -267,6 +271,7 @@ func TestNativeResults_LargeFileMemoryBounded(t *testing.T) {
 
 // A gzip-encoded upstream (the transport asks for it) is decoded and parsed.
 func TestNativeResults_GzipUpstream(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.addPrice("claude-luna", 0.00001, 0.000002)
 	h.vendor.addBatch("msgbatch_GZ", "ended")
@@ -287,6 +292,7 @@ func TestNativeResults_GzipUpstream(t *testing.T) {
 // A client that goes away before the end records nothing and leaves the row
 // claimable for the next download or the reconciler.
 func TestNativeResults_InterruptedDownloadRecordsNothing(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.addPrice("claude-luna", 0.00001, 0.000002)
 	h.vendor.addBatch("msgbatch_INT", "ended")
@@ -328,6 +334,7 @@ func TestNativeResults_InterruptedDownloadRecordsNothing(t *testing.T) {
 // A node without the ledger row (another edge, another replica's ledger)
 // passes the results through and records only an audit proxy log.
 func TestNativeResults_NonCreatorNodePassesThrough(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.addPrice("claude-luna", 0.00001, 0.000002)
 	h.vendor.addBatch("msgbatch_NC", "ended")
@@ -343,6 +350,7 @@ func TestNativeResults_NonCreatorNodePassesThrough(t *testing.T) {
 
 // Results of a batch still in progress are the vendor's error, passed on.
 func TestNativeResults_NotEndedIsVendorError(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.vendor.addBatch("msgbatch_RUN", "in_progress")
 	resp, body := h.do(h.keyA, http.MethodGet, resultsPath(h.wrap(h.llm, h.appA, "msgbatch_RUN")), "")
@@ -353,6 +361,7 @@ func TestNativeResults_NotEndedIsVendorError(t *testing.T) {
 
 // Results of another App's batch are not found, like any foreign ID.
 func TestNativeResults_ForeignIDNotFound(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.vendor.addBatch("msgbatch_R1", "ended")
 	h.vendor.setResults("msgbatch_R1", succeededLine("a", "claude-luna", 1, 1))
@@ -385,6 +394,7 @@ func (h scopedBodyHook) HasHooksForLLM(uint) bool { return h.applies }
 // An LLM with response plugins refuses results downloads, which those
 // plugins could not see; a plugin scoped to other LLMs does not.
 func TestNativeResults_ResponsePluginsRefuseDownload(t *testing.T) {
+	t.Parallel()
 	for name, tc := range map[string]struct {
 		hook ResponseHook
 		want int

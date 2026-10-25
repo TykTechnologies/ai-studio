@@ -341,6 +341,7 @@ func oaiErr(t *testing.T, b []byte) (typ, msg string) {
 // --- end to end ----------------------------------------------------------------
 
 func TestResponsesChain_CreateWrapsIDAndRecordsUsage(t *testing.T) {
+	t.Parallel()
 	h := newResponsesHarness(t)
 	for _, mode := range []string{"rest", "call"} {
 		t.Run(mode, func(t *testing.T) {
@@ -372,6 +373,7 @@ func TestResponsesChain_CreateWrapsIDAndRecordsUsage(t *testing.T) {
 }
 
 func TestResponsesChain_PreviousResponseOwnership(t *testing.T) {
+	t.Parallel()
 	h := newResponsesHarness(t)
 	_, body := h.do(h.keyC, http.MethodPost, "/llm/rest/primary/v1/responses", `{"model":"gpt-4o","input":"hi"}`)
 	mine := decodeObj(t, body)["id"].(string)
@@ -421,6 +423,7 @@ func TestResponsesChain_PreviousResponseOwnership(t *testing.T) {
 }
 
 func TestResponsesNative_RetrieveCancelInputItemsDelete(t *testing.T) {
+	t.Parallel()
 	h := newResponsesHarness(t)
 	_, body := h.do(h.keyC, http.MethodPost, "/llm/rest/primary/v1/responses", `{"model":"gpt-4o","input":"hi"}`)
 	first := decodeObj(t, body)["id"].(string)
@@ -475,6 +478,7 @@ func TestResponsesNative_RetrieveCancelInputItemsDelete(t *testing.T) {
 }
 
 func TestResponsesChain_StreamWrapsEventIDs(t *testing.T) {
+	t.Parallel()
 	h := newResponsesHarness(t)
 	resp, body := h.do(h.keyC, http.MethodPost, "/llm/call/primary/v1/responses", `{"model":"gpt-4o","input":"hi","stream":true}`)
 	require.Equal(t, http.StatusOK, resp.StatusCode, "%s", body)
@@ -492,6 +496,7 @@ func TestResponsesChain_StreamWrapsEventIDs(t *testing.T) {
 }
 
 func TestResponsesChain_BackgroundAccountedOnceByReconciler(t *testing.T) {
+	t.Parallel()
 	h := newResponsesHarness(t)
 	store := h.service.NativeResourceStore()
 	ctx := context.Background()
@@ -539,6 +544,7 @@ func TestResponsesChain_BackgroundAccountedOnceByReconciler(t *testing.T) {
 }
 
 func TestResponsesChain_BackgroundDeleteAccountsFirst(t *testing.T) {
+	t.Parallel()
 	h := newResponsesHarness(t)
 	_, body := h.do(h.keyC, http.MethodPost, "/llm/rest/primary/v1/responses", `{"model":"gpt-4o","input":"hi","background":true}`)
 	id := decodeObj(t, body)["id"].(string)
@@ -555,6 +561,7 @@ func TestResponsesChain_BackgroundDeleteAccountsFirst(t *testing.T) {
 }
 
 func TestResponsesChain_BackgroundWithoutLedgerRowIsNotDeletable(t *testing.T) {
+	t.Parallel()
 	h := newResponsesHarness(t)
 	_, body := h.do(h.keyC, http.MethodPost, "/llm/rest/primary/v1/responses", `{"model":"gpt-4o","input":"hi","background":true}`)
 	id := decodeObj(t, body)["id"].(string)
@@ -572,6 +579,7 @@ func TestResponsesChain_BackgroundWithoutLedgerRowIsNotDeletable(t *testing.T) {
 }
 
 func TestResponsesChain_BackgroundStreamRecordedOnce(t *testing.T) {
+	t.Parallel()
 	h := newResponsesHarness(t)
 	resp, body := h.do(h.keyC, http.MethodPost, "/llm/call/primary/v1/responses",
 		`{"model":"gpt-4o","input":"hi","stream":true,"background":true}`)
@@ -591,6 +599,7 @@ func TestResponsesChain_BackgroundStreamRecordedOnce(t *testing.T) {
 }
 
 func TestResponsesChain_RefusesBackgroundWhenLedgerUnavailable(t *testing.T) {
+	t.Parallel()
 	h := newResponsesHarness(t)
 	// Make every ledger write fail.
 	require.NoError(t, h.db.Exec("DROP TABLE native_resources").Error)
@@ -616,6 +625,7 @@ func TestResponsesChain_RefusesBackgroundWhenLedgerUnavailable(t *testing.T) {
 }
 
 func TestResponsesNative_ChainHookPathsStayOnTheChain(t *testing.T) {
+	t.Parallel()
 	h := newResponsesHarness(t)
 	// /v1/responses/compact matches the shape of /v1/responses/{id}, but
 	// the chain hook keeps it on the synchronous chain rather than a 405.
@@ -628,6 +638,7 @@ func TestResponsesNative_ChainHookPathsStayOnTheChain(t *testing.T) {
 }
 
 func TestAnthropicMessagesChain_RefusesDuplicateKeys(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	refused := map[string]string{
 		"top-level duplicate model": `{"model":"claude-luna","model":"claude-other","max_tokens":5,"messages":[{"role":"user","content":"hi"}]}`,
@@ -679,6 +690,7 @@ func TestAnthropicMessagesChain_RefusesDuplicateKeys(t *testing.T) {
 }
 
 func TestNativeBatchCreate_NestedDuplicateKeyRefusedOnce(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	resp, out := h.do(h.keyA, http.MethodPost, "/llm/call/claude/v1/messages/batches",
 		`{"requests":[{"custom_id":"a","params":{"model":"claude-luna","max_tokens":5,"messages":[{"role":"user","content":"ok","Content":"evil"}]}}]}`)
@@ -692,6 +704,7 @@ func TestNativeBatchCreate_NestedDuplicateKeyRefusedOnce(t *testing.T) {
 // forwarded around the native handling to an upstream that might route it
 // case-insensitively.
 func TestNativePathVariantsRefused(t *testing.T) {
+	t.Parallel()
 	h := newResponsesHarness(t)
 	_, body := h.do(h.keyC, http.MethodPost, "/llm/rest/primary/v1/responses", `{"model":"gpt-4o","input":"hi"}`)
 	vendorID := vendorPart(decodeObj(t, body)["id"].(string))
@@ -735,6 +748,7 @@ func TestNativePathVariantsRefused(t *testing.T) {
 // segment does not overlap it and would be forwarded as /v1/V1/responses: the
 // caller's own path is fold-checked too.
 func TestNativePathVariantsRefused_VersionedEndpoint(t *testing.T) {
+	t.Parallel()
 	h := newResponsesHarness(t)
 	h.primary.APIEndpoint = h.api.server.URL + "/v1"
 	require.NoError(t, h.db.Save(h.primary).Error)

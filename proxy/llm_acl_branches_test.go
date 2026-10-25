@@ -92,6 +92,7 @@ func assertLLMACL(t *testing.T, h *failoverHarness, authorization string, unknow
 // TestLLMACL_BearerAppSecretBranch is the reported bug: an app granted only
 // "primary" got 200 from "fallback" by naming it.
 func TestLLMACL_BearerAppSecretBranch(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
 	assertLLMACL(t, h, "Bearer "+h.apiKey, http.StatusForbidden)
 
@@ -122,6 +123,7 @@ func TestLLMACL_BearerAppSecretBranch(t *testing.T) {
 // names the fallback, which the app does not hold. The waterfall must still
 // reach it, while the same app naming the fallback directly is refused.
 func TestLLMACL_FailoverStillReachesUngrantedFallback(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveStatus(503), serveOpenAIText("from fallback"), nil)
 
 	resp, body := h.post("/ai/primary/v1/chat/completions", failoverChatBody)
@@ -138,6 +140,7 @@ func TestLLMACL_FailoverStillReachesUngrantedFallback(t *testing.T) {
 // is; it does not decide which LLMs that app may use. The /ai/ loopback
 // forwards the same bearer credential, so the plugin authenticates both hops.
 func TestLLMACL_BearerCustomAuthBranch(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
 	h.proxy.credValidator.SetAuthHooks(&AuthHooks{
 		CustomAuth: acceptCredential("plugin-credential", h.app.ID),
@@ -151,6 +154,7 @@ func TestLLMACL_BearerCustomAuthBranch(t *testing.T) {
 // granted request cannot re-authenticate a non-bearer key for an OpenAI LLM,
 // so only the refusal is asserted.
 func TestLLMACL_APIKeyCustomAuthBranch(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
 	h.proxy.credValidator.SetAuthHooks(&AuthHooks{
 		CustomAuth: acceptCredential("plugin-api-key", h.app.ID),
@@ -168,6 +172,7 @@ func TestLLMACL_APIKeyCustomAuthBranch(t *testing.T) {
 // check, refuses an ungranted route. It answers 403 like every other branch;
 // until 2026-09-27 it answered 401, telling the caller to fix a working key.
 func TestLLMACL_APIKeyBranch(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
 
 	resp, body := h.post("/ai/fallback/v1/chat/completions", failoverChatBody, "Authorization", h.apiKey)
@@ -187,6 +192,7 @@ func TestLLMACL_APIKeyBranch(t *testing.T) {
 // granted datasource gets as far as the handler (which rejects the non-JSON
 // body with 400); an ungranted or unknown one is refused before it.
 func TestLLMACL_Datasources(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
 
 	granted := &models.Datasource{Name: "Granted DS", Active: true}
@@ -226,6 +232,7 @@ func TestLLMACL_Datasources(t *testing.T) {
 // TestLLMACL_BedrockOuterHop: Bedrock is served from the /ai/ hop itself, with
 // no /llm/call/ loopback behind it, so the outer hop is its only check.
 func TestLLMACL_BedrockOuterHop(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
 
 	bedrock := &models.LLM{Name: "Bedrock Spare", Vendor: models.BEDROCK, Active: true, DefaultModel: "anthropic.claude-x"}

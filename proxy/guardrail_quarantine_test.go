@@ -32,6 +32,7 @@ func serveGemini(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestGuardrailQuarantine_ReachesTheVendor(t *testing.T) {
+	t.Parallel()
 	const placeholder = "[removed: {{source}}]"
 	cases := []struct {
 		name   string

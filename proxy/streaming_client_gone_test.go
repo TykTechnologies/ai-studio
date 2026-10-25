@@ -20,6 +20,7 @@ import (
 // soon as it has the finish event, so the inner hop's final write fails
 // after a complete response, and the request vanished from the log.
 func TestStreaming_ClientGoneStillLogsTheExchange(t *testing.T) {
+	t.Parallel()
 	// Ten frames, spaced out, so the proxy is still writing after the caller
 	// has hung up and sees the failed write.
 	slowStream := func(w http.ResponseWriter, r *http.Request) {

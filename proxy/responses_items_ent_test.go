@@ -16,6 +16,7 @@ import (
 // streamed and batch paths; an unknown item type is refused when filters are
 // attached.
 func TestResponsesFilters_BuiltInItemsBlocked(t *testing.T) {
+	t.Parallel()
 	items := map[string]string{
 		"mcp output":       `{"type":"mcp_call","id":"mcp_1","server_label":"s","name":"t","arguments":"{}","output":"forbidden result"}`,
 		"code logs":        `{"type":"code_interpreter_call","id":"ci_1","code":"x","outputs":[{"type":"logs","logs":"forbidden logs"}]}`,
@@ -53,6 +54,7 @@ func TestResponsesFilters_BuiltInItemsBlocked(t *testing.T) {
 
 // Batch lines carry the same items.
 func TestResponsesFilters_BuiltInItemsInBatchLines(t *testing.T) {
+	t.Parallel()
 	h := newBatchesHarness(t)
 	withPrimaryFilters(t, h, responsesBlockScript)
 	for name, item := range map[string]string{
@@ -70,6 +72,7 @@ func TestResponsesFilters_BuiltInItemsInBatchLines(t *testing.T) {
 
 // A redacting filter rewrites built-in item text in place.
 func TestResponsesFilters_BuiltInItemsRedacted(t *testing.T) {
+	t.Parallel()
 	h := newResponsesHarness(t)
 	withPrimaryFilters(t, h, nativeRedactScript)
 	resp, out := h.do(h.keyC, http.MethodPost, "/llm/rest/primary/v1/responses",

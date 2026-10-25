@@ -23,6 +23,7 @@ func TestUpstreamTransportStatus(t *testing.T) {
 // A vendor that drops the connection without answering is the upstream's
 // failure: both paths return 502, never 500.
 func TestUpstreamConnectionDropIsBadGateway(t *testing.T) {
+	t.Parallel()
 	h := newTimingHarness(t, func(w http.ResponseWriter, r *http.Request) {
 		conn, _, err := w.(http.Hijacker).Hijack()
 		require.NoError(t, err)

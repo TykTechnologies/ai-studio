@@ -82,6 +82,7 @@ func serveStreamWithHeaders(text string) http.HandlerFunc {
 // are sent, headers it drops are not, repeated headers it left alone keep
 // every value, and the SSE framing headers do not change.
 func TestStreamingResponse_RunsHeaderHooks(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveStreamWithHeaders("streamed answer"), serveOpenAIText("never"), nil)
 	hook := &headerHook{
 		set:  map[string]string{"X-Tyk-Compression": "applied", "X-Tyk-Compression-Saved-Tokens": "120", "Content-Type": "text/plain"},
@@ -124,6 +125,7 @@ func TestStreamingResponse_SlowHeaderHookIsCutOff(t *testing.T) {
 // The header a plugin sets on the inner /llm/call/ hop reaches /ai/ and
 // unified /v1 clients, buffered and streaming; other X-Tyk- headers do not.
 func TestLoopbackRelay_CompressionHeadersReachOpenAICompatibleClients(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ name, path, body string }{
 		{"ai endpoint", "/ai/primary/v1/chat/completions", failoverChatBody},
 		{"ai endpoint streaming", "/ai/primary/v1/chat/completions", failoverStreamBody},

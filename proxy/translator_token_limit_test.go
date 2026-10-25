@@ -59,6 +59,7 @@ func (b *bodyRecorder) body() map[string]any {
 // The Main Ingress and the /ai/ bridge must honour either, whatever the
 // upstream vendor, and max_completion_tokens wins when a client sends both.
 func TestBridge_HonoursMaxTokensAndMaxCompletionTokens(t *testing.T) {
+	t.Parallel()
 	// Distinct values, and neither is a driver default (Anthropic's is 2048),
 	// so the upstream body shows which field the cap came from.
 	const (

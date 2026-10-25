@@ -112,6 +112,14 @@ func claimNativeWithRetry(ctx context.Context, store services.NativeResourceStor
 	return false, err
 }
 
+// asyncUsageContext is the context recordAsyncUsage records on (usageCtx).
+func (p *Proxy) asyncUsageContext() context.Context {
+	if p.usageCtx != nil {
+		return p.usageCtx
+	}
+	return context.Background()
+}
+
 // recordAsyncUsage records the usage of a settled resource: per model and
 // price, one proxy log row and one chat record (priced through
 // buildChatRecordFor, so the multiplier applies) through
@@ -148,7 +156,7 @@ func (p *Proxy) recordAsyncUsage(row *models.NativeResource, llm *models.LLM, ap
 		slog.Debug("native usage recorded", "type", row.ResourceType, "row", row.ID, "model", t.usage.Model,
 			"tier", t.usage.Tier, "requests", t.requests, "cost", rec.Cost)
 		p.goAnalyze(func() {
-			analytics.RecordExchange(context.Background(), l, rec)
+			analytics.RecordExchange(p.asyncUsageContext(), l, rec)
 			analyzeBudget(budgetServiceOf(p.gatewayService), llm, app, rec)
 		})
 	}

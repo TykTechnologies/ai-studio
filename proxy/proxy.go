@@ -176,6 +176,13 @@ type Proxy struct {
 	// that tears the proxy or the analytics handler down waits on it.
 	analyzers sync.WaitGroup
 
+	// usageCtx is the context usage no request carries is recorded on: a
+	// native resource settled by the reconciler or by a later download
+	// (recordAsyncUsage). nil means context.Background(), which records into
+	// the global analytics handler; tests scope it to their own recorder
+	// (analytics.WithHandler).
+	usageCtx context.Context
+
 	// nativeCreates bounds the native creates in flight (native_create.go).
 	nativeCreatesOnce sync.Once
 	nativeCreates     chan struct{}

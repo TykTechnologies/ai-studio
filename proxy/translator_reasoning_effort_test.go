@@ -14,6 +14,7 @@ import (
 // per model, so the gateway never supplies one. Anthropic has no such field
 // and never receives it.
 func TestBridge_ReasoningEffortPassThrough(t *testing.T) {
+	t.Parallel()
 	post := func(h *endpointShapeHarness, model, extra string, stream bool) {
 		t.Helper()
 		streamField := ""

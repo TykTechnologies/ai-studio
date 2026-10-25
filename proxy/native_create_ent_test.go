@@ -43,6 +43,7 @@ func withNativeFilters(scripts ...string) func(*models.LLM) {
 // A filter that blocks one request refuses the batch, naming the request;
 // nothing reaches the vendor.
 func TestNativeCreate_FilterBlocksOneItem(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{mutateLLM: withNativeFilters(nativeBlockScript)})
 	body := `{"requests":[` +
 		`{"custom_id":"fine","params":{"model":"claude-luna","max_tokens":5,"messages":[{"role":"user","content":"hello"}]}},` +
@@ -59,6 +60,7 @@ func TestNativeCreate_FilterBlocksOneItem(t *testing.T) {
 // A redacting filter rewrites only the request it changed; the rest of the
 // forwarded body is byte for byte what the client sent.
 func TestNativeCreate_RedactionRewritesOnlyChangedItems(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{mutateLLM: withNativeFilters(nativeRedactScript, nativeBlockScript)})
 	untouched := `{"model": "claude-luna",  "max_tokens": 5, "messages": [ {"role":"user", "content":"plain"} ]}`
 	body := `{"requests":[` +
@@ -85,6 +87,7 @@ func TestNativeCreate_RedactionRewritesOnlyChangedItems(t *testing.T) {
 // With request filters configured, a batch over the item cap is refused
 // with a message that says why.
 func TestNativeCreate_FilteredItemCap(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{
 		config:    &Config{NativeMaxFilteredItems: 2},
 		mutateLLM: withNativeFilters(nativeBlockScript),
@@ -101,6 +104,7 @@ func TestNativeCreate_FilteredItemCap(t *testing.T) {
 
 // Many items run through the filter pool; every one is screened.
 func TestNativeCreate_ManyItemsAllScreened(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{mutateLLM: withNativeFilters(nativeBlockScript)})
 	var reqs []string
 	for i := 0; i < 60; i++ {

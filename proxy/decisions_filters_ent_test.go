@@ -42,6 +42,7 @@ func withFilter(name, script string, vendor models.Vendor) func(primary, fallbac
 }
 
 func TestDecisionFilters_RedactionReachesTheUpstreamInItsOwnFormat(t *testing.T) {
+	t.Parallel()
 	for name, tc := range map[string]struct {
 		vendor models.Vendor
 		model  string
@@ -95,6 +96,7 @@ output := {
 }
 
 func TestDecisionFilters_BlockOnRequestKind(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveSystemOneDecision(), serveStatus(500), withFilter("block", decisionBlockScript, models.SYSTEMONE))
 	body := `{"model":"primary/jev-latest","input":"this is forbidden content",` +
 		`"questions":[{"type":"predicate","name":"q","instructions":"?"}]}`

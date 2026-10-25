@@ -15,6 +15,7 @@ const countTokensPath = "/llm/call/claude/v1/messages/count_tokens"
 // count_tokens is admitted like a synchronous call (model allow-list) and
 // logged without a chat record.
 func TestNativeCountTokens_AllowListAndLogOnly(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{mutateLLM: func(l *models.LLM) { l.AllowedModels = []string{"^claude-luna$"} }})
 
 	body := `{"model":"claude-luna","messages":[{"role":"user","content":"hi"}]}`
@@ -60,6 +61,7 @@ func TestNativeCountTokens_AllowListAndLogOnly(t *testing.T) {
 // count_tokens touches no vendor resource: it needs no vendor credential for
 // an ID codec.
 func TestNativeCountTokens_NoResourcePrerequisites(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{vendorKey: "-"})
 	resp, out := h.do(h.keyA, http.MethodPost, countTokensPath, `{"model":"claude-luna","messages":[]}`)
 	require.Equal(t, http.StatusOK, resp.StatusCode, "%s", out)
@@ -72,6 +74,7 @@ func TestNativeCountTokens_NoResourcePrerequisites(t *testing.T) {
 // Only the exact method and path are native; a trailing slash stays on the
 // legacy chain, and GET is the vendor-shaped 405.
 func TestNativeCountTokens_ExactMatch(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	resp, out := h.do(h.keyA, http.MethodGet, countTokensPath, "")
 	require.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode, "%s", out)

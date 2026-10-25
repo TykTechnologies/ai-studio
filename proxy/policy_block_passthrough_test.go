@@ -32,6 +32,7 @@ func attachBlockingFilter(primary, _ *models.LLM) {
 // as the detail, so the caller got the reason twice, nested in two prefixes,
 // and the JSON envelope quoted inside a string.
 func TestPolicyBlock_OuterHopRelaysInnerEnvelope(t *testing.T) {
+	t.Parallel()
 	const wantMessage = "[ERROR] msg: policy_violation err: Policy error: no-secrets - no secrets"
 
 	assertRelayed := func(t *testing.T, resp *http.Response, body []byte) {

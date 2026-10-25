@@ -5,15 +5,19 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync/atomic"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
-var dbRef *gorm.DB
+// dbRef is the database $SECRET references resolve against. Every
+// services.NewService sets it, so it is atomic: test packages build services
+// in parallel tests.
+var dbRef atomic.Pointer[gorm.DB]
 
 func SetDBRef(db *gorm.DB) {
-	dbRef = db
+	dbRef.Store(db)
 }
 
 // IsSecretReference checks if a string is in the format $SECRET/NAME
@@ -65,8 +69,8 @@ func GetValue(reference string, preserveRef bool) string {
 			return reference
 		}
 
-		if dbRef != nil {
-			val, err := GetSecretByVarName(dbRef, name, preserveRef)
+		if db := dbRef.Load(); db != nil {
+			val, err := GetSecretByVarName(db, name, preserveRef)
 			if err != nil {
 				logger.Log.Warn().Err(err).Str("secret", name).Msg("Could not resolve secret reference")
 				return reference

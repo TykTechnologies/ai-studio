@@ -19,6 +19,7 @@ import (
 // native operation and never reaches the vendor's batch API (the router may
 // redirect to the cleaned path; that request is checked on its own merits).
 func TestNativeVerify_TraversalNeverReachesVendor(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{endpointPath: "/corp/anthropic/v1"})
 	h.vendor.addBatch("msgbatch_T1", "ended")
 	id := h.wrap(h.llm, h.appA, "msgbatch_T1")
@@ -51,6 +52,7 @@ func TestNativeVerify_TraversalNeverReachesVendor(t *testing.T) {
 // Every ID that does not verify for the caller gets the same answer, so the
 // check is no oracle for which batches exist or whose they are.
 func TestNativeVerify_NotFoundIsUniform(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.vendor.addBatch("msgbatch_U1", "in_progress")
 	good := h.wrap(h.llm, h.appA, "msgbatch_U1")
@@ -80,6 +82,7 @@ func TestNativeVerify_NotFoundIsUniform(t *testing.T) {
 // A vendor answer whose id is not a valid batch id is never handed to the
 // client raw: the call fails instead.
 func TestNativeVerify_UnwrappableVendorIDIs502(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.vendor.addBatch("msgbatch_V1", "ended")
 	h.vendor.mu.Lock()
@@ -95,6 +98,7 @@ func TestNativeVerify_UnwrappableVendorIDIs502(t *testing.T) {
 // An oversized vendor object is refused, not buffered without bound or passed
 // through.
 func TestNativeVerify_OversizedVendorObjectIs502(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.vendor.addBatch("msgbatch_W1", "ended")
 	h.vendor.mu.Lock()
@@ -109,6 +113,7 @@ func TestNativeVerify_OversizedVendorObjectIs502(t *testing.T) {
 // A public URL that is not http(s) or has no host is ignored: results_url
 // stays root-relative and never takes a hostile scheme.
 func TestNativeVerify_PublicURLMustBeHTTP(t *testing.T) {
+	t.Parallel()
 	for _, pub := range []string{"javascript:alert(1)", "ftp://gw.example.com", "//gw.example.com", "gw.example.com"} {
 		t.Run(pub, func(t *testing.T) {
 			h := newNativeHarness(t, nativeHarnessOpts{config: &Config{NativePublicURL: pub}})
@@ -124,6 +129,7 @@ func TestNativeVerify_PublicURLMustBeHTTP(t *testing.T) {
 // Concurrent retrieves and cancels of one batch by its owner are race-free
 // (run with -race) and each one answers with the wrapped id.
 func TestNativeVerify_ConcurrentRetrieveAndCancel(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.vendor.addBatch("msgbatch_C1", "in_progress")
 	id := h.wrap(h.llm, h.appA, "msgbatch_C1")

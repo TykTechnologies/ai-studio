@@ -32,11 +32,13 @@ import (
 )
 
 // Global service reference for GRPCServer access
-// This is set when the service is created to avoid circular dependencies
-var globalServiceReference *Service
+// This is set when the service is created to avoid circular dependencies.
+// Atomic, as is the event server's: test packages build services in
+// parallel tests.
+var globalServiceReference atomic.Pointer[Service]
 
 // Global event server reference for plugin pub/sub
-var globalEventServerReference *PluginEventServer
+var globalEventServerReference atomic.Pointer[PluginEventServer]
 
 // NewAIStudioManagementServerFunc is a factory function for creating AIStudioManagementServer
 // This is set by the grpc package to avoid circular imports
@@ -44,13 +46,13 @@ var NewAIStudioManagementServerFunc func(*Service) interface{}
 
 // SetGlobalServiceReference sets the global service reference for GRPCServer access
 func SetGlobalServiceReference(service *Service) {
-	globalServiceReference = service
+	globalServiceReference.Store(service)
 	logger.Debug("Global service reference set for plugin GRPCServer access")
 }
 
 // SetGlobalEventServer sets the global event server for plugin pub/sub access
 func SetGlobalEventServer(server *PluginEventServer) {
-	globalEventServerReference = server
+	globalEventServerReference.Store(server)
 	logger.Debug("Global event server set for plugin pub/sub access")
 }
 
@@ -212,8 +214,8 @@ func (p *AIStudioPluginGRPC) GRPCClient(ctx context.Context, broker *goplugin.GR
 	return &AIStudioPluginClient{
 		broker:      broker,
 		pluginStub:  pb.NewPluginServiceClient(c),
-		service:     globalServiceReference,
-		eventServer: globalEventServerReference,
+		service:     globalServiceReference.Load(),
+		eventServer: globalEventServerReference.Load(),
 	}, nil
 }
 

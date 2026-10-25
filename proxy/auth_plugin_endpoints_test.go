@@ -24,6 +24,7 @@ import (
 // are in TestAuthPlugins_Tool.
 
 func TestAuthPlugins_LLMListIsAuthoritative(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
 	plugins := newFakeAuthPlugins().attach(AuthTargetLLM, "primary")
 	plugins.accept["jwt-for-app"] = h.app.ID
@@ -65,6 +66,7 @@ func TestAuthPlugins_LLMListIsAuthoritative(t *testing.T) {
 // The /ai/ loopback hands the outer hop's identity to the inner hop, so the
 // plugin is asked once per request, not once per hop.
 func TestAuthPlugins_AIRouteAsksThePluginOnce(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
 	plugins := newFakeAuthPlugins().attach(AuthTargetLLM, "primary")
 	plugins.accept["jwt-for-app"] = h.app.ID
@@ -86,6 +88,7 @@ func TestAuthPlugins_AIRouteAsksThePluginOnce(t *testing.T) {
 // accepts an app key even when the LLM it calls has some: the inner hop takes
 // the outer hop's identity rather than asking that LLM's plugins.
 func TestAuthPlugins_InnerHopFollowsTheRoute(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
 	plugins := newFakeAuthPlugins().attach(AuthTargetLLM, "primary")
 	h.proxy.credValidator.SetAuthHooks(&AuthHooks{CustomAuth: plugins.hook})
@@ -117,6 +120,7 @@ func TestAuthPlugins_InnerHopFollowsTheRoute(t *testing.T) {
 
 // A hand-off is trusted only with this process's token over the loopback.
 func TestAuthPlugins_ForgedHandoffIsIgnored(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
 	h.proxy.credValidator.SetAuthHooks(&AuthHooks{CustomAuth: newFakeAuthPlugins().hook})
 
@@ -153,6 +157,7 @@ func TestAuthPlugins_ForgedHandoffIsIgnored(t *testing.T) {
 // An endpoint without auth plugins keeps app keys, and its plugins (of other
 // endpoints) are never asked about its traffic.
 func TestAuthPlugins_EndpointWithoutListKeepsAppKeys(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
 	plugins := newFakeAuthPlugins().attach(AuthTargetLLM, "fallback")
 	h.proxy.credValidator.SetAuthHooks(&AuthHooks{CustomAuth: plugins.hook})
@@ -163,6 +168,7 @@ func TestAuthPlugins_EndpointWithoutListKeepsAppKeys(t *testing.T) {
 }
 
 func TestAuthPlugins_Datasource(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
 	ds := &models.Datasource{Name: "Docs", Active: true}
 	require.NoError(t, h.db.Create(ds).Error)
@@ -187,6 +193,7 @@ func TestAuthPlugins_Datasource(t *testing.T) {
 // A plugin authenticates; the app it names must still hold the endpoint, be
 // active and exist.
 func TestAuthPlugins_AppIsStillAuthorised(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
 	plugins := newFakeAuthPlugins().attach(AuthTargetLLM, "fallback").attach(AuthTargetLLM, "primary")
 	plugins.accept["jwt-for-app"] = h.app.ID
@@ -208,6 +215,7 @@ func TestAuthPlugins_AppIsStillAuthorised(t *testing.T) {
 // Plugins that cannot be asked refuse the request (503) rather than letting
 // app keys in.
 func TestAuthPlugins_UnavailableFailsClosed(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
 	h.proxy.credValidator.SetAuthHooks(&AuthHooks{
 		CustomAuth: func(*http.Request, AuthTarget, string, string) (AuthResult, error) {
@@ -223,6 +231,7 @@ func TestAuthPlugins_UnavailableFailsClosed(t *testing.T) {
 // That is a 413, not "retry shortly", and still closed. The client is not
 // told which plugin.
 func TestAuthPlugins_TooLargeIs413(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
 	h.proxy.credValidator.SetAuthHooks(&AuthHooks{
 		CustomAuth: func(*http.Request, AuthTarget, string, string) (AuthResult, error) {
@@ -240,6 +249,7 @@ func TestAuthPlugins_TooLargeIs413(t *testing.T) {
 // The identity the request authenticated as is on the context for the
 // handlers, analytics and the post-auth hook, whichever branch it came by.
 func TestAuthPlugins_IdentityOnContext(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
 	plugins := newFakeAuthPlugins().attach(AuthTargetLLM, "primary")
 	plugins.accept["jwt-for-app"] = h.app.ID
@@ -325,6 +335,7 @@ func TestAuthPlugins_Tool(t *testing.T) {
 // The subject and acting agent a plugin returned are recorded on the
 // request's proxy log, through both hops of the /ai/ loopback.
 func TestAuthPlugins_IdentityIsRecorded(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
 	plugins := newFakeAuthPlugins().attach(AuthTargetLLM, "primary")
 	plugins.accept["jwt-for-app"] = h.app.ID
@@ -346,6 +357,7 @@ func TestAuthPlugins_IdentityIsRecorded(t *testing.T) {
 
 // authTarget resolves /ai/{slug} to a router when the slug names one.
 func TestAuthPlugins_RouterTarget(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIText("primary"), serveOpenAIText("never"), nil)
 	h.proxy.SetRouteResolver(&fakeRouteLookup{refs: map[string]RouterRef{
 		"smart":    {Kind: RouterKindModel, ID: 7, Slug: "smart"},

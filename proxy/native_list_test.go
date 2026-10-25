@@ -88,6 +88,7 @@ func listURL(params ...string) string {
 // newest first, paged through wrapped cursors in both directions; the vendor
 // is never asked (it would list every App's batches).
 func TestNativeList_OwnBatchesNewestFirstWithWrappedCursors(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	base := time.Now().Add(-time.Hour)
 	for i := 0; i < 5; i++ {
@@ -156,6 +157,7 @@ func TestNativeList_OwnBatchesNewestFirstWithWrappedCursors(t *testing.T) {
 
 // An App with no batches gets an empty page.
 func TestNativeList_Empty(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	resp, body := h.do(h.keyA, http.MethodGet, listURL(), "")
 	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
@@ -168,6 +170,7 @@ func TestNativeList_Empty(t *testing.T) {
 // when this node's ledger holds the App's row for the vendor ID: the
 // key-rotation fallback of unwrapID.)
 func TestNativeList_BadCursorsAndLimits(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.seedListedBatch(h.llm, h.appA, "msgbatch_C0", time.Now().Add(-time.Minute))
 	h.seedListedBatch(h.llm, h.appB, "msgbatch_C1", time.Now())
@@ -200,6 +203,7 @@ func TestNativeList_BadCursorsAndLimits(t *testing.T) {
 // A delete on a node whose ledger does not hold the batch (it was created
 // elsewhere) is refused before the vendor is called.
 func TestNativeDelete_NotOnCreatorNodeIs409(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.vendor.addBatch("msgbatch_D0", "ended")
 	resp, body := h.do(h.keyA, http.MethodDelete, batchesPath+"/"+h.wrap(h.llm, h.appA, "msgbatch_D0"), "")
@@ -213,6 +217,7 @@ func TestNativeDelete_NotOnCreatorNodeIs409(t *testing.T) {
 // A settled batch is deleted at the vendor (raw ID, vendor key), the answer
 // carries the wrapped ID, and the batch leaves the ledger and its listing.
 func TestNativeDelete_SettledForwardsAndLeavesLedger(t *testing.T) {
+	t.Parallel()
 	for _, state := range []string{models.NativeAccountingAccounted, models.NativeAccountingUnaccountable, models.NativeAccountingLost} {
 		t.Run(state, func(t *testing.T) {
 			h := newNativeHarness(t, nativeHarnessOpts{})
@@ -240,6 +245,7 @@ func TestNativeDelete_SettledForwardsAndLeavesLedger(t *testing.T) {
 
 // A vendor refusal of the delete is passed on and the row stays.
 func TestNativeDelete_VendorRefusalKeepsRow(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.vendor.addBatch("msgbatch_D2", "in_progress")
 	row := h.seedListedBatch(h.llm, h.appA, "msgbatch_D2", time.Now())
@@ -254,6 +260,7 @@ func TestNativeDelete_VendorRefusalKeepsRow(t *testing.T) {
 // Another App's batch, or a tampered ID, is not found, whatever the ledger
 // holds.
 func TestNativeDelete_ForeignIDNotFound(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.vendor.addBatch("msgbatch_D3", "ended")
 	row := h.seedListedBatch(h.llm, h.appA, "msgbatch_D3", time.Now())
@@ -269,6 +276,7 @@ func TestNativeDelete_ForeignIDNotFound(t *testing.T) {
 // An unaccounted batch still in progress cannot be deleted: its usage is
 // not known yet. The vendor's delete is never called.
 func TestNativeDelete_InProgressUnaccountedIs409(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.vendor.addBatch("msgbatch_D4", "in_progress")
 	h.seedListedBatch(h.llm, h.appA, "msgbatch_D4", time.Now())
@@ -288,6 +296,7 @@ func TestNativeDelete_InProgressUnaccountedIs409(t *testing.T) {
 // identity - and only then deletes it at the vendor. A second delete finds
 // nothing left to delete on this node.
 func TestNativeDelete_AccountsUnsettledEndedBatchOnceThenDeletes(t *testing.T) {
+	t.Parallel()
 	spend := &spendCounter{}
 	h := newNativeHarness(t, nativeHarnessOpts{wrapBudget: func(s budget.Service) budget.Service { spend.Service = s; return spend }})
 	h.addPrice("claude-luna", 0.00001, 0.000002)
@@ -336,6 +345,7 @@ func TestNativeDelete_AccountsUnsettledEndedBatchOnceThenDeletes(t *testing.T) {
 // reconciler, so the assertions are "at most once" and "never deleted
 // unaccounted".)
 func TestNativeDelete_ConcurrentDeletesAccountOnce(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.addPrice("claude-luna", 0.00001, 0.000002)
 	h.vendor.addBatch("msgbatch_D6", "ended")

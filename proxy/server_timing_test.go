@@ -29,8 +29,7 @@ type timingHarness struct {
 
 func newTimingHarness(t *testing.T, serve http.HandlerFunc, serverTiming bool) *timingHarness {
 	t.Helper()
-	db, cancel := setupTest(t)
-	t.Cleanup(func() { tearDownTest(db, cancel) })
+	db, recorder := setupParallelTest(t)
 
 	vendor := newFakeVendor(t, serve)
 	service := services.NewService(db)
@@ -55,7 +54,7 @@ func newTimingHarness(t *testing.T, serve http.HandlerFunc, serverTiming bool) *
 
 	p := NewProxy(service, &Config{Port: h.port, ServerTiming: serverTiming}, budgetSvc)
 	require.NoError(t, p.loadResources())
-	srv := &http.Server{Handler: p.createHandler()}
+	srv := &http.Server{Handler: serveWithRecorder(p.createHandler(), recorder)}
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -139,6 +138,7 @@ func readAll(r *http.Request) string {
 }
 
 func TestServerTiming_RESTHeaderSplitsGatewayFromUpstream(t *testing.T) {
+	t.Parallel()
 	h := newTimingHarness(t, delayedOpenAI(60*time.Millisecond, 0, 0), true)
 
 	resp, _ := h.do("/llm/rest/primary/v1/chat/completions", failoverChatBody)
@@ -153,6 +153,7 @@ func TestServerTiming_RESTHeaderSplitsGatewayFromUpstream(t *testing.T) {
 }
 
 func TestServerTiming_StreamTrailerHasFullBreakdown(t *testing.T) {
+	t.Parallel()
 	h := newTimingHarness(t, delayedOpenAI(40*time.Millisecond, 3, 30*time.Millisecond), true)
 
 	resp, body := h.do("/llm/stream/primary/v1/chat/completions", failoverStreamBody)
@@ -172,6 +173,7 @@ func TestServerTiming_StreamTrailerHasFullBreakdown(t *testing.T) {
 }
 
 func TestServerTiming_SecondRequestReusesUpstreamConnection(t *testing.T) {
+	t.Parallel()
 	h := newTimingHarness(t, delayedOpenAI(0, 0, 0), true)
 
 	h.do("/llm/rest/primary/v1/chat/completions", failoverChatBody)
@@ -183,6 +185,7 @@ func TestServerTiming_SecondRequestReusesUpstreamConnection(t *testing.T) {
 // outer response must report the vendor's timing, not the loopback's, and must
 // not leak the internal header either as a header or a trailer.
 func TestServerTiming_LoopbackReportsVendorTiming(t *testing.T) {
+	t.Parallel()
 	h := newTimingHarness(t, delayedOpenAI(60*time.Millisecond, 3, 20*time.Millisecond), true)
 
 	for _, body := range []string{failoverChatBody, failoverStreamBody} {
@@ -206,6 +209,7 @@ func TestServerTiming_LoopbackReportsVendorTiming(t *testing.T) {
 }
 
 func TestServerTiming_OffByDefault(t *testing.T) {
+	t.Parallel()
 	h := newTimingHarness(t, delayedOpenAI(0, 2, 0), false)
 
 	resp, _ := h.do("/llm/rest/primary/v1/chat/completions", failoverChatBody)

@@ -89,6 +89,7 @@ func assertBlocked(t *testing.T, status int, got string) {
 // A mid-stream block on the inner hop reaches the /ai/ client as an OpenAI
 // error chunk and [DONE], never a clean finish.
 func TestShimStream_InnerBlockReachesTheClient(t *testing.T) {
+	t.Parallel()
 	for _, tc := range shimCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			status, got := shimPost(t, shimHarness(t, tc, tc.text, forbiddenResponseGuardrail()))
@@ -100,6 +101,7 @@ func TestShimStream_InnerBlockReachesTheClient(t *testing.T) {
 
 // A block in the inner hop's final pass is visible on the outer stream.
 func TestShimStream_FinalPassBlockReachesTheClient(t *testing.T) {
+	t.Parallel()
 	for _, tc := range shimCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			f := forbiddenResponseGuardrail()
@@ -114,6 +116,7 @@ func TestShimStream_FinalPassBlockReachesTheClient(t *testing.T) {
 // the client too, and so does one on a non-streaming /ai/ request (the
 // bridge streams its inner hop either way).
 func TestShimStream_UnifiedRouteAndNonStreaming(t *testing.T) {
+	t.Parallel()
 	tc := shimCases()[0]
 	h := shimHarness(t, tc, strings.ReplaceAll(tc.toolCall, "{ARG}", "EXFIL"), streamCallGuardrail(true))
 	resp, body := h.post("/v1/chat/completions", strings.Replace(shimRequest, `"model":"gpt-4o"`, `"model":"primary/gpt-4o"`, 1))
@@ -129,6 +132,7 @@ func TestShimStream_UnifiedRouteAndNonStreaming(t *testing.T) {
 
 // A flagged tool call is never emitted on /ai/; a clean one is.
 func TestShimStream_ToolCalls(t *testing.T) {
+	t.Parallel()
 	for _, tc := range shimCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			status, got := shimPost(t, shimHarness(t, tc, strings.ReplaceAll(tc.toolCall, "{ARG}", "EXFIL"), streamCallGuardrail(true)))

@@ -35,6 +35,7 @@ func panickingGuardrail() *models.Filter {
 // batch item (whose filters run on worker goroutines no HTTP server
 // recovers), and the gateway goes on serving.
 func TestGuardrailPanic_RefusesAndSurvives(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAI, serveStatus(500), func(primary, _ *models.LLM) {
 		primary.Failover = models.LLMFailover{}
 		primary.Filters = []*models.Filter{panickingGuardrail()}

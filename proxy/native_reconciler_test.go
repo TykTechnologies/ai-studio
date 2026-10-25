@@ -59,6 +59,7 @@ func batchLines() []string {
 // (or a later download) records nothing more. Its calls carry the vendor key
 // and API version and nothing of a client.
 func TestNativeReconciler_AccountsUndownloadedBatchOnce(t *testing.T) {
+	t.Parallel()
 	spend := &spendCounter{}
 	h := newNativeHarness(t, nativeHarnessOpts{wrapBudget: func(s budget.Service) budget.Service { spend.Service = s; return spend }})
 	h.addPrice("claude-luna", 0.00001, 0.000002)
@@ -140,6 +141,7 @@ func TestNativeReconciler_NotEndedSchedulesNextPoll(t *testing.T) {
 // without calling the vendor; a batch the vendor no longer knows settles
 // lost. Neither is due again.
 func TestNativeReconciler_ExpiredAndLostAreTerminal(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	store := h.service.NativeResourceStore()
 	ctx := context.Background()
@@ -175,6 +177,7 @@ func TestNativeReconciler_ExpiredAndLostAreTerminal(t *testing.T) {
 // Results the vendor no longer serves for an ended batch settle it
 // unaccountable.
 func TestNativeReconciler_ResultsGoneIsUnaccountable(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.vendor.addBatch("msgbatch_G1", "ended")
 	h.vendor.resultsStatus = http.StatusNotFound
@@ -216,6 +219,7 @@ func TestNativeReconciler_TransientErrorBacksOff(t *testing.T) {
 // A row whose LLM is gone stays pending (with backoff) until its results
 // expire, then settles unaccountable.
 func TestNativeReconciler_UnresolvableLLM(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	row := h.seedBatchRow(h.llm, h.appA, "msgbatch_U1")
 	row.LLMID = 999999
@@ -492,6 +496,7 @@ func (s *settleFlakyStore) Settle(ctx context.Context, id uint, token, state str
 // ours; one that persists is a failure (never an "accounted" outcome) and
 // records nothing.
 func TestNativeReconciler_SettleStoreErrors(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name     string
 		failures int
@@ -533,6 +538,7 @@ func TestNativeReconciler_SettleStoreErrors(t *testing.T) {
 // back until its results expire: the reconciler skips it and accounts the
 // other lines on its first pass.
 func TestNativeReconciler_OversizedLineSkipped(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.addPrice("claude-luna", 0.00001, 0.000002)
 	h.vendor.addBatch("msgbatch_BIG", "ended")
@@ -592,6 +598,7 @@ func TestNativeReconcilerConfig(t *testing.T) {
 // The running reconciler uses the configured timings: the pass interval,
 // rows per pass, and the next poll of an unfinished batch.
 func TestNativeWorkers_UseConfiguredTimings(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{config: &Config{
 		NativeReconcileInterval: 10 * time.Millisecond,
 		NativeReconcileBatch:    1,

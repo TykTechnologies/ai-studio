@@ -54,6 +54,7 @@ func headerLine(lines []string, key string) (string, bool) {
 // that reads headers case-sensitively (or a proxy that forwards a fixed
 // list) found nothing.
 func TestServedHeaders_ExactCaseOnTheWire(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveStatus(503), serveOpenAIText("from the fallback"), nil)
 
 	for name, body := range map[string]string{"non-streaming": failoverChatBody, "streaming": failoverStreamBody} {

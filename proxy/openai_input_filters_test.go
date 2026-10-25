@@ -80,6 +80,7 @@ func TestOpenAIInputExtractor(t *testing.T) {
 // Without filters, traffic on these endpoints is unchanged, token arrays
 // included.
 func TestOpenAIInputCalls_NoFiltersUnchanged(t *testing.T) {
+	t.Parallel()
 	h := newResponsesHarness(t)
 	for path, body := range map[string]string{
 		"/llm/rest/primary/v1/embeddings":  `{"model":"text-embedding-3-small","input":[1,2,3]}`,

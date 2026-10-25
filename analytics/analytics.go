@@ -89,11 +89,11 @@ func RecordProxyLog(ctx context.Context, log *models.ProxyLog) {
 	stampTraceSpan(ctx, log)
 	stampRequestIDs(ctx, log)
 
-	handlerMu.RLock()
-	defer handlerMu.RUnlock()
+	h, release := handlerFor(ctx)
+	defer release()
 
-	if globalHandler != nil {
-		globalHandler.RecordProxyLog(ctx, log)
+	if h != nil {
+		h.RecordProxyLog(ctx, log)
 	}
 
 	recordProxyLogMetrics(ctx, log)
@@ -124,15 +124,15 @@ func RecordExchange(ctx context.Context, log *models.ProxyLog, rec *models.LLMCh
 		recordChatRecordMetrics(ctx, rec)
 	}
 
-	handlerMu.RLock()
-	defer handlerMu.RUnlock()
+	h, release := handlerFor(ctx)
+	defer release()
 
-	if er, ok := globalHandler.(ExchangeRecorder); ok {
+	if er, ok := h.(ExchangeRecorder); ok {
 		er.RecordExchange(ctx, log, rec)
-	} else if globalHandler != nil {
-		globalHandler.RecordProxyLog(ctx, log)
+	} else if h != nil {
+		h.RecordProxyLog(ctx, log)
 		if rec != nil {
-			globalHandler.RecordChatRecord(ctx, rec)
+			h.RecordChatRecord(ctx, rec)
 		}
 	}
 }
@@ -147,11 +147,11 @@ func recordProxyLogMetrics(ctx context.Context, log *models.ProxyLog) {
 }
 
 func RecordToolCall(ctx context.Context, name string, t time.Time, execTime int, toolID uint) {
-	handlerMu.RLock()
-	defer handlerMu.RUnlock()
+	h, release := handlerFor(ctx)
+	defer release()
 
-	if globalHandler != nil {
-		globalHandler.RecordToolCall(ctx, name, t, execTime, toolID)
+	if h != nil {
+		h.RecordToolCall(ctx, name, t, execTime, toolID)
 	}
 
 	// The metric's app_id is the calling App (it used to be given the tool
@@ -174,14 +174,14 @@ func RecordMCPCalls(ctx context.Context, records []models.MCPCallRecord) error {
 		return nil
 	}
 
-	handlerMu.RLock()
-	defer handlerMu.RUnlock()
+	h, release := handlerFor(ctx)
+	defer release()
 
-	if r, ok := globalHandler.(MCPCallRecorder); ok {
+	if r, ok := h.(MCPCallRecorder); ok {
 		return r.RecordMCPCalls(ctx, records)
 	}
 	noMCPRecorderOnce.Do(func() {
-		logger.Warnf("The analytics handler does not record MCP calls (%T); Tyk MCP analytics are dropped", globalHandler)
+		logger.Warnf("The analytics handler does not record MCP calls (%T); Tyk MCP analytics are dropped", h)
 	})
 	return nil
 }
@@ -342,11 +342,11 @@ func RecordChatRecord(ctx context.Context, record *models.LLMChatRecord) {
 	// Before the hand-off; see RecordExchange.
 	recordChatRecordMetrics(ctx, record)
 
-	handlerMu.RLock()
-	defer handlerMu.RUnlock()
+	h, release := handlerFor(ctx)
+	defer release()
 
-	if globalHandler != nil {
-		globalHandler.RecordChatRecord(ctx, record)
+	if h != nil {
+		h.RecordChatRecord(ctx, record)
 	}
 }
 
@@ -366,11 +366,11 @@ func recordChatRecordMetrics(ctx context.Context, record *models.LLMChatRecord) 
 }
 
 func RecordChatLogEntry(ctx context.Context, log *models.LLMChatLogEntry) {
-	handlerMu.RLock()
-	defer handlerMu.RUnlock()
+	h, release := handlerFor(ctx)
+	defer release()
 
-	if globalHandler != nil {
-		globalHandler.RecordChatLogEntry(ctx, log)
+	if h != nil {
+		h.RecordChatLogEntry(ctx, log)
 	}
 }
 
@@ -390,11 +390,11 @@ func RecordComplianceEvents(ctx context.Context, events []*models.ComplianceEven
 		}
 	}
 
-	handlerMu.RLock()
-	defer handlerMu.RUnlock()
+	h, release := handlerFor(ctx)
+	defer release()
 
-	if globalHandler != nil {
-		globalHandler.RecordComplianceEvents(ctx, events)
+	if h != nil {
+		h.RecordComplianceEvents(ctx, events)
 	}
 
 	for _, event := range events {
@@ -404,21 +404,21 @@ func RecordComplianceEvents(ctx context.Context, events []*models.ComplianceEven
 
 // RecordChatRecordsBatch records multiple chat records in a batch for improved performance
 func RecordChatRecordsBatch(ctx context.Context, records []*models.LLMChatRecord) {
-	handlerMu.RLock()
-	defer handlerMu.RUnlock()
+	h, release := handlerFor(ctx)
+	defer release()
 
-	if globalHandler != nil {
-		globalHandler.RecordChatRecordsBatch(ctx, records)
+	if h != nil {
+		h.RecordChatRecordsBatch(ctx, records)
 	}
 }
 
 // RecordProxyLogsBatch records multiple proxy logs in a batch for improved performance
 func RecordProxyLogsBatch(ctx context.Context, logs []*models.ProxyLog) {
-	handlerMu.RLock()
-	defer handlerMu.RUnlock()
+	h, release := handlerFor(ctx)
+	defer release()
 
-	if globalHandler != nil {
-		globalHandler.RecordProxyLogsBatch(ctx, logs)
+	if h != nil {
+		h.RecordProxyLogsBatch(ctx, logs)
 	}
 }
 

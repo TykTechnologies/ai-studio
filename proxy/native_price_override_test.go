@@ -16,6 +16,7 @@ import (
 // multiplier (0.5) in the recorded cost and the budget charge; a tier the
 // override does not name keeps the vendor's.
 func TestNative_PriceMultiplierOverride(t *testing.T) {
+	t.Parallel()
 	for name, tc := range map[string]struct {
 		overrides models.LLMPriceMultipliers
 		want      float64

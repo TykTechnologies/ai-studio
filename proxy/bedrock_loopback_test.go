@@ -479,6 +479,7 @@ func TestBedrockBridges_Failover(t *testing.T) {
 // A router that picks a Bedrock LLM loops back too: the plugins run once,
 // on the inner hop of the LLM it picked.
 func TestBedrockBridges_Router(t *testing.T) {
+	t.Parallel()
 	for _, stream := range []bool{false, true} {
 		t.Run(fmt.Sprintf("stream=%v", stream), func(t *testing.T) {
 			v := &converseVendor{t: t, stream: bedrockStream(t, "Sure. ", `{"to":"x"}`)}

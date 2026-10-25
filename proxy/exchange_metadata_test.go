@@ -57,6 +57,7 @@ func (h *metadataHook) phases() (headers, write []map[string]string) {
 // it streams, for every vendor (8xf.11): buffered (header phase and
 // OnBeforeWrite) and streamed (header phase and OnStreamComplete).
 func TestResponseHooks_ExchangeMetadata(t *testing.T) {
+	t.Parallel()
 	const converse = `{"messages":[{"role":"user","content":[{"text":"hi"}]}]}`
 	var signed http.Header
 	cases := []struct {

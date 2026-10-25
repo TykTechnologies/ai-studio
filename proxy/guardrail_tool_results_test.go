@@ -15,6 +15,7 @@ import (
 // flagged tool result and the request goes on; tool_results.on_detect block
 // keeps the policy error.
 func TestGuardrailToolResults_DefaultQuarantineAndExplicitBlock(t *testing.T) {
+	t.Parallel()
 	body := `{"model":"claude-sonnet-5","max_tokens":64,"messages":[{"role":"user","content":"read it"},` +
 		`{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"read_file","input":{}}]},` +
 		`{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"API_KEY=SECRET"}]}]}`

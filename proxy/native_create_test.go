@@ -32,6 +32,7 @@ const batchesPath = "/llm/rest/claude/v1/messages/batches"
 // A batch whose every request is admitted reaches the vendor once, as sent,
 // and the App gets a wrapped ID backed by a ledger row it owns.
 func TestNativeCreate_AdmittedBatchIsRecordedAndWrapped(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{mutateLLM: func(l *models.LLM) { l.AllowedModels = []string{"^claude-luna$"} }})
 	body := batchCreateBody("claude-luna", "claude-luna")
 	resp, out := h.do(h.keyA, http.MethodPost, batchesPath, body, "anthropic-version", "2023-06-01")
@@ -69,6 +70,7 @@ func TestNativeCreate_AdmittedBatchIsRecordedAndWrapped(t *testing.T) {
 // naming it, before anything reaches the vendor. A top-level model on the
 // body changes nothing: the native route never reads one.
 func TestNativeCreate_DisallowedItemModel(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{mutateLLM: func(l *models.LLM) { l.AllowedModels = []string{"^claude-luna$"} }})
 	for name, body := range map[string]string{
 		"plain":                    batchCreateBody("claude-luna", "claude-opus-max"),
@@ -92,6 +94,7 @@ func TestNativeCreate_DisallowedItemModel(t *testing.T) {
 
 // Malformed bodies are the vendor's 400, not forwarded.
 func TestNativeCreate_MalformedBody(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	for _, body := range []string{`{}`, `{"requests":[]}`, `not json`, `{"requests":[{"custom_id":"a"}]}`} {
 		resp, out := h.do(h.keyA, http.MethodPost, batchesPath, body)
@@ -104,6 +107,7 @@ func TestNativeCreate_MalformedBody(t *testing.T) {
 
 // A body over the configured limit is a 413.
 func TestNativeCreate_BodyLimit(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{config: &Config{NativeMaxBodyBytes: 512}})
 	resp, out := h.do(h.keyA, http.MethodPost, batchesPath, batchCreateBody("claude-luna", "claude-luna", "claude-luna", "claude-luna", "claude-luna"))
 	require.Equal(t, http.StatusRequestEntityTooLarge, resp.StatusCode, string(out))
@@ -127,6 +131,7 @@ func TestConfigNativeLimits(t *testing.T) {
 // An App out of budget gets exactly the denial a synchronous call gets, and
 // so does a budget check that cannot run.
 func TestNativeCreate_BudgetDenial(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	for name, err := range map[string]error{
 		"exhausted":   fmt.Errorf("budget exceeded: app monthly budget is 0"),
@@ -148,6 +153,7 @@ func TestNativeCreate_BudgetDenial(t *testing.T) {
 
 // The in-progress cap counts the App's unfinished batches in the ledger.
 func TestNativeCreate_InProgressCap(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{config: &Config{NativeMaxInProgressPerApp: 2}})
 	for i := 0; i < 2; i++ {
 		resp, out := h.do(h.keyA, http.MethodPost, batchesPath, batchCreateBody("claude-luna"))
@@ -198,6 +204,7 @@ func (s *flakyNativeStore) List(ctx context.Context, q services.NativeResourceLi
 // A batch the ledger cannot record is cancelled at the vendor and the client
 // gets a 503: an unrecorded batch would never be accounted.
 func TestNativeCreate_LedgerInsertFailureCancelsUpstream(t *testing.T) {
+	t.Parallel()
 	store := &flakyNativeStore{failCreate: true}
 	h := newNativeHarness(t, nativeHarnessOpts{wrapService: func(s services.ServiceInterface) services.ServiceInterface {
 		store.NativeResourceStore = s.(*services.Service).NativeResourceStore()
@@ -219,6 +226,7 @@ func TestNativeCreate_LedgerInsertFailureCancelsUpstream(t *testing.T) {
 // A ledger that cannot even be read refuses the create before the vendor is
 // called.
 func TestNativeCreate_UnhealthyLedgerRefusesBeforeVendor(t *testing.T) {
+	t.Parallel()
 	store := &flakyNativeStore{failList: true}
 	h := newNativeHarness(t, nativeHarnessOpts{wrapService: func(s services.ServiceInterface) services.ServiceInterface {
 		store.NativeResourceStore = s.(*services.Service).NativeResourceStore()
@@ -231,6 +239,7 @@ func TestNativeCreate_UnhealthyLedgerRefusesBeforeVendor(t *testing.T) {
 
 // Creates past the concurrency bound wait for a slot rather than failing.
 func TestNativeCreate_ConcurrentCreatesWait(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{config: &Config{NativeMaxConcurrentCreates: 1}})
 	const n = 5
 	codes := make(chan int, n)

@@ -81,6 +81,7 @@ func withGuard(allowed ...string) func(*models.LLM) {
 // vendor with that tool result quarantined; the other item, the custom_ids
 // and the tool_use_id are untouched.
 func TestNativeAnthropicBatch_ToolResultQuarantined(t *testing.T) {
+	t.Parallel()
 	fx := toolfixtures.Get("anthropic_batch_tool_result")
 	h := newNativeHarness(t, nativeHarnessOpts{mutateLLM: withGuard("^claude-sonnet-4-5$")})
 	resp, out := h.do(h.keyA, http.MethodPost, batchesPath, string(fx.Body), "anthropic-version", "2023-06-01")
@@ -99,6 +100,7 @@ func TestNativeAnthropicBatch_ToolResultQuarantined(t *testing.T) {
 // spending it refuses the create with a 400 that names the limit, before
 // anything reaches the vendor.
 func TestNativeCreate_GuardrailCallBudget(t *testing.T) {
+	t.Parallel()
 	body := batchCreateBody("claude-luna", "claude-luna", "claude-luna")
 	for name, tc := range map[string]struct {
 		limit  int
@@ -129,6 +131,7 @@ func TestNativeCreate_GuardrailCallBudget(t *testing.T) {
 // function_call_output is uploaded with only that line's tool output
 // quarantined; the other line is byte for byte what was sent.
 func TestOpenAIBatchUpload_QuarantinesOnlyTheToolOutput(t *testing.T) {
+	t.Parallel()
 	h := newResponsesHarness(t)
 	h.primary.AllowedModels = []string{"^gpt-4o"}
 	h.primary.Filters = []*models.Filter{remoteGuardFilter()}

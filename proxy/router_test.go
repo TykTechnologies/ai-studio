@@ -116,8 +116,7 @@ type routerHarnessOpts struct {
 
 func newRouterHarness(t *testing.T, o routerHarnessOpts) *routerHarness {
 	t.Helper()
-	db, cancel := setupTest(t)
-	t.Cleanup(func() { tearDownTest(db, cancel) })
+	db, recorder := setupParallelTest(t)
 
 	h := &routerHarness{t: t, db: db}
 	h.fastV = newFakeVendor(t, serveOpenAIText("fast answer"))
@@ -190,7 +189,7 @@ func newRouterHarness(t *testing.T, o routerHarnessOpts) *routerHarness {
 		h.proxy.SetAuthHooks(o.authHooks)
 	}
 	require.NoError(t, h.proxy.loadResources())
-	srv := &http.Server{Handler: h.proxy.createHandler()}
+	srv := &http.Server{Handler: serveWithRecorder(h.proxy.createHandler(), recorder)}
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -238,6 +237,7 @@ func (h *routerHarness) proxyLogs() []models.ProxyLog {
 }
 
 func TestRouter_GrantedAppIsServedThroughTheUnifiedIngress(t *testing.T) {
+	t.Parallel()
 	h := newRouterHarness(t, routerHarnessOpts{grantRouter: true})
 
 	resp, body := h.do(http.MethodPost, "/v1/chat/completions", chatBody("smart/big", false))
@@ -277,6 +277,7 @@ func TestRouter_GrantedAppIsServedThroughTheUnifiedIngress(t *testing.T) {
 }
 
 func TestRouter_Streaming(t *testing.T) {
+	t.Parallel()
 	h := newRouterHarness(t, routerHarnessOpts{grantRouter: true})
 
 	resp, body := h.do(http.MethodPost, "/v1/chat/completions", chatBody("smart/fast", true))
@@ -292,6 +293,7 @@ func TestRouter_Streaming(t *testing.T) {
 // A router grant reaches the router's LLMs only through the router: naming
 // one of them directly is refused, on every entry point.
 func TestRouter_GrantDoesNotGrantItsLLMsDirectly(t *testing.T) {
+	t.Parallel()
 	h := newRouterHarness(t, routerHarnessOpts{grantRouter: true})
 
 	resp, body := h.do(http.MethodPost, "/v1/chat/completions", chatBody("big/gpt-4o", false))
@@ -308,6 +310,7 @@ func TestRouter_GrantDoesNotGrantItsLLMsDirectly(t *testing.T) {
 }
 
 func TestRouter_DirectAIPath(t *testing.T) {
+	t.Parallel()
 	h := newRouterHarness(t, routerHarnessOpts{grantRouter: true})
 	resp, body := h.do(http.MethodPost, "/ai/smart/v1/chat/completions", chatBody("fast", false))
 	require.Equal(t, http.StatusOK, resp.StatusCode, "body: %s", body)
@@ -315,6 +318,7 @@ func TestRouter_DirectAIPath(t *testing.T) {
 }
 
 func TestRouter_UnknownModelIsABadRequest(t *testing.T) {
+	t.Parallel()
 	h := newRouterHarness(t, routerHarnessOpts{grantRouter: true})
 	resp, body := h.do(http.MethodPost, "/v1/chat/completions", chatBody("smart/nope", false))
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "body: %s", body)
@@ -323,6 +327,7 @@ func TestRouter_UnknownModelIsABadRequest(t *testing.T) {
 }
 
 func TestRouter_AnonymousCallerCostsNothing(t *testing.T) {
+	t.Parallel()
 	h := newRouterHarness(t, routerHarnessOpts{grantRouter: true})
 	resp, _ := h.do(http.MethodPost, "/v1/chat/completions", chatBody("smart/big", false), "Authorization", "")
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
@@ -332,6 +337,7 @@ func TestRouter_AnonymousCallerCostsNothing(t *testing.T) {
 }
 
 func TestRouter_UngrantedAppUsesOnlyItsOwnLLMs(t *testing.T) {
+	t.Parallel()
 	// Deprecated compatibility: an App that holds no grant for a Model Router
 	// but holds LLMs behind it is served from those LLMs only.
 	h := newRouterHarness(t, routerHarnessOpts{
@@ -347,6 +353,7 @@ func TestRouter_UngrantedAppUsesOnlyItsOwnLLMs(t *testing.T) {
 }
 
 func TestRouter_UngrantedAppWithNoLLMsIsRefused(t *testing.T) {
+	t.Parallel()
 	h := newRouterHarness(t, routerHarnessOpts{})
 	resp, _ := h.do(http.MethodPost, "/v1/chat/completions", chatBody("smart/fast", false))
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
@@ -354,6 +361,7 @@ func TestRouter_UngrantedAppWithNoLLMsIsRefused(t *testing.T) {
 }
 
 func TestRouter_WithoutAResolverARouterIsAnUnknownVendor(t *testing.T) {
+	t.Parallel()
 	h := newRouterHarness(t, routerHarnessOpts{grantRouter: true, noResolver: true})
 	resp, _ := h.do(http.MethodPost, "/v1/chat/completions", chatBody("smart/big", false))
 	// Unknown and ungranted routes get the same 403, so a caller cannot list
@@ -363,6 +371,7 @@ func TestRouter_WithoutAResolverARouterIsAnUnknownVendor(t *testing.T) {
 }
 
 func TestRouter_ModelsListsGrantedRouters(t *testing.T) {
+	t.Parallel()
 	h := newRouterHarness(t, routerHarnessOpts{grantRouter: true})
 	resp, body := h.do(http.MethodGet, "/v1/models", "")
 	require.Equal(t, http.StatusOK, resp.StatusCode, "body: %s", body)
@@ -377,12 +386,14 @@ func TestRouter_ModelsListsGrantedRouters(t *testing.T) {
 }
 
 func TestRouter_ModelsOmitsUngrantedRouters(t *testing.T) {
+	t.Parallel()
 	h := newRouterHarness(t, routerHarnessOpts{directLLMs: func(h *routerHarness) []uint { return []uint{h.fast.ID} }})
 	_, body := h.do(http.MethodGet, "/v1/models", "")
 	assert.NotContains(t, string(body), "smart/")
 }
 
 func TestRouter_ChosenLLMFailsOverToALLMOutsideTheRouter(t *testing.T) {
+	t.Parallel()
 	// Big fails over to Spare, which the router cannot reach and the app does
 	// not hold: access to Spare is inherited from Big, whose own access is
 	// inherited from the router.
@@ -400,6 +411,7 @@ func TestRouter_ChosenLLMFailsOverToALLMOutsideTheRouter(t *testing.T) {
 }
 
 func TestRouter_SemanticRouterIsServedAndRecorded(t *testing.T) {
+	t.Parallel()
 	h := newRouterHarness(t, routerHarnessOpts{grantRouter: true, semantic: true})
 
 	resp, body := h.do(http.MethodPost, "/v1/chat/completions", chatBody("smart/auto", false))
@@ -426,6 +438,7 @@ func TestRouter_SemanticRouterIsServedAndRecorded(t *testing.T) {
 }
 
 func TestRouter_SemanticRouterNeedsAGrant(t *testing.T) {
+	t.Parallel()
 	// Unlike a Model Router, a Semantic Router has no grant-less fallback:
 	// holding the LLM it would pick is not enough.
 	h := newRouterHarness(t, routerHarnessOpts{semantic: true,
@@ -437,6 +450,7 @@ func TestRouter_SemanticRouterNeedsAGrant(t *testing.T) {
 }
 
 func TestRouter_ModelsListsGrantedSemanticRouters(t *testing.T) {
+	t.Parallel()
 	h := newRouterHarness(t, routerHarnessOpts{grantRouter: true, semantic: true})
 	_, body := h.do(http.MethodGet, "/v1/models", "")
 	assert.Contains(t, string(body), `"smart/auto"`)

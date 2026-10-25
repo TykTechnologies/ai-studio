@@ -72,6 +72,7 @@ func (f *fakeResponsesAPI) serveConversations(w http.ResponseWriter, r *http.Req
 }
 
 func TestConversations_Ownership(t *testing.T) {
+	t.Parallel()
 	h := newResponsesHarness(t)
 
 	resp, out := h.do(h.keyC, http.MethodPost, "/llm/call/primary/v1/conversations",

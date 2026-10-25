@@ -138,6 +138,7 @@ const openAIToolConversation = `{"model":"gpt-4o","messages":[
 	],"tools":[{"type":"function","function":{"name":"read_file","parameters":{"type":"object"}}}],"parallel_tool_calls":true}`
 
 func TestGuardrailRedact_KeepsToolBlocksUpstream(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name   string
 		vendor models.Vendor
@@ -196,6 +197,7 @@ func TestGuardrailRedact_KeepsToolBlocksUpstream(t *testing.T) {
 // time in the item's own format: a redaction inside a Message Batch keeps
 // the item's tool blocks.
 func TestGuardrailRedact_KeepsToolBlocksInBatchItems(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{mutateLLM: func(l *models.LLM) {
 		l.Filters = []*models.Filter{redactGuardrail(guardrails.ScopeAllMessages)}
 	}})

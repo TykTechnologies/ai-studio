@@ -17,6 +17,7 @@ import (
 // and the reconciler's own polls and downloads. A client's workspace and
 // user-profile headers never do.
 func TestNative_WorkspacePinnedOnEveryUpstreamCall(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{mutateLLM: func(l *models.LLM) {
 		l.VendorWorkspaceID = "wrkspc_pinned"
 	}})
@@ -57,6 +58,7 @@ func TestNative_WorkspacePinnedOnEveryUpstreamCall(t *testing.T) {
 // Without a pin no workspace header reaches Anthropic, whatever the client
 // sends: calls run in the API key's workspace.
 func TestNative_ClientWorkspaceDroppedWithoutPin(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.vendor.addBatch("msgbatch_A1", "ended")
 	clientHeaders := []string{"anthropic-workspace-id", "wrkspc_client", "anthropic-user-profile-id", "prof_client"}

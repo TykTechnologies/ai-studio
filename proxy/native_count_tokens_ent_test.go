@@ -22,6 +22,7 @@ output := {block: text.contains(last.content, "forbidden"), message: "blocked; c
 // The request filters run on a count_tokens body as on a synchronous call:
 // a redaction is forwarded, a block refuses the call before the vendor.
 func TestNativeCountTokens_Filters(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{mutateLLM: withNativeFilters(nativeRedactScript, countTokensBlockScript)})
 
 	resp, out := h.do(h.keyA, http.MethodPost, countTokensPath,

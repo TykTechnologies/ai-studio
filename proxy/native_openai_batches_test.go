@@ -194,6 +194,7 @@ func newBatchesHarness(t *testing.T, opts ...nativeHarnessOpts) *responsesHarnes
 // --- end to end ----------------------------------------------------------------
 
 func TestOpenAIBatches_FullFlowAccountedOnceAtBatchPrice(t *testing.T) {
+	t.Parallel()
 	h := newBatchesHarness(t)
 	ctx := context.Background()
 	store := h.service.NativeResourceStore()
@@ -290,6 +291,7 @@ func TestOpenAIBatches_FullFlowAccountedOnceAtBatchPrice(t *testing.T) {
 }
 
 func TestOpenAIBatches_UploadAdmission(t *testing.T) {
+	t.Parallel()
 	h := newBatchesHarness(t)
 
 	resp, out := h.uploadFile(h.keyC, chatLine("ok", "gpt-4o", "hi"), chatLine("bad-one", "o1-pro", "hi"))
@@ -331,6 +333,7 @@ func TestOpenAIBatches_UploadAdmission(t *testing.T) {
 }
 
 func TestOpenAIBatches_OutputFileDeleteWaitsForAccounting(t *testing.T) {
+	t.Parallel()
 	h := newBatchesHarness(t)
 	ctx := context.Background()
 	_, out := h.uploadFile(h.keyC, chatLine("r1", "gpt-4o", "hi"))
@@ -365,6 +368,7 @@ func TestOpenAIBatches_OutputFileDeleteWaitsForAccounting(t *testing.T) {
 }
 
 func TestOpenAIBatches_InputFileOwnedOnItsNode(t *testing.T) {
+	t.Parallel()
 	h := newBatchesHarness(t)
 	_, out := h.uploadFile(h.keyC, chatLine("r1", "gpt-4o", "hi"))
 	file := decodeObj(t, out)["id"].(string)
@@ -383,6 +387,7 @@ func TestOpenAIBatches_InputFileOwnedOnItsNode(t *testing.T) {
 }
 
 func TestOpenAIBatches_InProgressCap(t *testing.T) {
+	t.Parallel()
 	h := newBatchesHarness(t, nativeHarnessOpts{config: &Config{NativeMaxInProgressPerApp: 1}})
 	_, out := h.uploadFile(h.keyC, chatLine("r1", "gpt-4o", "hi"))
 	file := decodeObj(t, out)["id"].(string)
@@ -396,6 +401,7 @@ func TestOpenAIBatches_InProgressCap(t *testing.T) {
 // A part the gateway and a vendor could name differently is refused: the
 // unchecked part never reaches the vendor as its batch file.
 func TestOpenAIBatches_AmbiguousPartsRefused(t *testing.T) {
+	t.Parallel()
 	h := newBatchesHarness(t)
 	const b = "gwboundary42"
 	part := func(disp, content string) string {
