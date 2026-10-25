@@ -17,6 +17,7 @@ export const emptyDraft = () => ({
   api_key: "",
   model: "",
   privacy_score: 0,
+  allow_internal_host: false,
 });
 
 export const draftFromAttributes = (a = {}) => ({
@@ -30,6 +31,8 @@ export const draftFromAttributes = (a = {}) => ({
   api_key: a.linked ? "" : a.api_key || "",
   model: a.model || "",
   privacy_score: a.privacy_score ?? 0,
+  // Admin-only; a linked embedder uses its LLM's switch.
+  allow_internal_host: Boolean(a.allow_internal_host),
 });
 
 /** The JSON:API attributes for a create or update. */
@@ -49,6 +52,7 @@ export const attributesFromDraft = (d) => {
     endpoint: d.endpoint.trim(),
     api_key: d.api_key,
     privacy_score: Number(d.privacy_score) || 0,
+    allow_internal_host: Boolean(d.allow_internal_host),
   };
 };
 

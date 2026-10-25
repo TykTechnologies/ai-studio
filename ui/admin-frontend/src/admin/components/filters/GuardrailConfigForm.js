@@ -20,6 +20,7 @@ import {
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import apiClient from "../../utils/apiClient";
+import AllowInternalHostSwitch from "../common/AllowInternalHostSwitch";
 
 // The stored shape of a guardrail filter's config. Everything the server
 // defaults is left empty here so the saved config shows what the server chose.
@@ -414,6 +415,13 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
                   />
                 </Grid>
               ))}
+              <Grid item xs={12}>
+                <AllowInternalHostSwitch
+                  checked={!!config.allow_internal_host}
+                  onChange={(v) => update({ allow_internal_host: v })}
+                  target="the guardrail's endpoints"
+                />
+              </Grid>
             </Grid>
           </Grid>
         )}

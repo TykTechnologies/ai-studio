@@ -309,3 +309,25 @@ func TestTykMCPEnterprise_DiscoverTools(t *testing.T) {
 	w = apitest.PerformAuthRequest(r, "POST", "/api/v1/mcp-servers/discover-tools", map[string]interface{}{}, key)
 	assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 }
+
+// w4e: without the host in TYK_MCP_ALLOWED_HOSTS an internal upstream is
+// refused, unless the administrator switches on Allow internal host for the
+// discovery call.
+func TestTykMCPEnterprise_DiscoverToolsAllowInternalHost(t *testing.T) {
+	h := setupTykMCPEnterpriseAPI(t)
+	s := server.NewMCPServer("orders", "1.0.0", server.WithToolCapabilities(false))
+	s.AddTool(mcp.NewTool("get_order"), func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return mcp.NewToolResultText("ok"), nil
+	})
+	up := httptest.NewServer(server.NewStreamableHTTPServer(s))
+	t.Cleanup(up.Close)
+
+	body := map[string]interface{}{"upstream_url": up.URL}
+	w := apitest.PerformAuthRequest(h.api.router, "POST", "/api/v1/mcp-servers/discover-tools", body, h.admin.APIKey)
+	assert.Equal(t, http.StatusUnprocessableEntity, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "Allow internal host")
+
+	body["allow_internal_host"] = true
+	w = apitest.PerformAuthRequest(h.api.router, "POST", "/api/v1/mcp-servers/discover-tools", body, h.admin.APIKey)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+}

@@ -11,6 +11,7 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/registry/remote"
@@ -29,6 +30,25 @@ import (
 // at dial time (post-DNS), so a rebinding DNS answer cannot bypass it.
 var registryHTTPClient = &http.Client{Transport: netguard.PluginHTTPTransport()}
 
+// exemptRegistryClients holds one registry client per plugin exemption
+// (OCIReference.Exemption), so connections are never shared across plugins
+// with different "Allow internal host" switches.
+var exemptRegistryClients sync.Map // host-set key -> *http.Client
+
+// registryClientFor is the registry client for a plugin's exemption.
+func registryClientFor(exempt netguard.Exemption) *http.Client {
+	hosts := exempt.Hosts()
+	if len(hosts) == 0 {
+		return registryHTTPClient
+	}
+	key := strings.Join(hosts, ",")
+	if c, ok := exemptRegistryClients.Load(key); ok {
+		return c.(*http.Client)
+	}
+	c, _ := exemptRegistryClients.LoadOrStore(key, &http.Client{Transport: netguard.PluginHTTPTransportFor(exempt)})
+	return c.(*http.Client)
+}
+
 // CheckRegistryHost applies the plugin host rule (netguard.CheckPluginHost)
 // to ref's registry: unless ALLOW_INTERNAL_NETWORK_ACCESS=true, a registry
 // that is, or resolves to, an internal address, or does not resolve, is
@@ -38,7 +58,7 @@ func CheckRegistryHost(ref *OCIReference) error {
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		host = h
 	}
-	if err := netguard.CheckPluginHost(host); err != nil {
+	if err := netguard.CheckPluginHostWith(ref.Exemption, host); err != nil {
 		return fmt.Errorf("plugin registry %s refused: %w", ref.Registry, err)
 	}
 	return nil
@@ -82,7 +102,7 @@ func NewRemoteRepository(cfg *OCIConfig, ref *OCIReference, authConfigName strin
 	}
 
 	// Configure authentication
-	if err := configureAuth(cfg, repo, ref.Registry, authConfigName); err != nil {
+	if err := configureAuth(cfg, repo, ref.Registry, authConfigName, registryClientFor(ref.Exemption)); err != nil {
 		return nil, fmt.Errorf("failed to configure authentication: %w", err)
 	}
 	return repo, nil
@@ -257,7 +277,7 @@ func (f *ORASFetcher) selectPlatformManifest(index *ocispec.Index, targetArch st
 }
 
 // configureAuth sets up authentication for the registry
-func configureAuth(cfg *OCIConfig, repo *remote.Repository, registry, authConfigName string) error {
+func configureAuth(cfg *OCIConfig, repo *remote.Repository, registry, authConfigName string, client *http.Client) error {
 	// Get auth config
 	var authConfig RegistryAuth
 	var exists bool
@@ -272,7 +292,7 @@ func configureAuth(cfg *OCIConfig, repo *remote.Repository, registry, authConfig
 	if !exists {
 		log.Debug().Str("registry", registry).Msg("No registry auth configured; using anonymous access")
 		// Anonymous access still goes through the SSRF-guarded client
-		repo.Client = &auth.Client{Client: registryHTTPClient}
+		repo.Client = &auth.Client{Client: client}
 		return nil
 	}
 
@@ -336,12 +356,12 @@ func configureAuth(cfg *OCIConfig, repo *remote.Repository, registry, authConfig
 		repo.Client = &basicAuthHTTPClient{
 			username: creds.Username,
 			password: creds.Password,
-			inner:    registryHTTPClient,
+			inner:    client,
 		}
 	} else {
 		// Standard Docker token exchange for username/password and token auth
 		repo.Client = &auth.Client{
-			Client: registryHTTPClient,
+			Client: client,
 			Credential: func(ctx context.Context, hostport string) (auth.Credential, error) {
 				return creds, nil
 			},

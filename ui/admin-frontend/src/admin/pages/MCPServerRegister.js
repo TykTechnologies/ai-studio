@@ -33,6 +33,7 @@ import { TitleBox, ContentBox, PrimaryButton, SecondaryLinkButton, SecondaryOutl
 import { apiErrorDetail, preStyle } from "./webhookShared";
 import { TykUpsell, TykDisabledNotice } from "./tykShared";
 import { TOOL_VS_MCP_SERVER } from "../components/tools/toolsVsMcpServers";
+import AllowInternalHostSwitch from "../components/common/AllowInternalHostSwitch";
 
 const STEPS = ["Connection and kind", "Proxy details", "Access and governance", "Review and create"];
 
@@ -79,6 +80,8 @@ export const buildPayload = (f) => {
       body.upstream_auth_token = f.upstream_auth_token;
     }
     body.allowed_tools = selectedTools(f);
+    // Stored on the server; sent only when on (administrators only, w4e).
+    if (f.allow_internal_host) body.allow_internal_host = true;
   } else {
     body.source_api_id = f.source_api_id;
     body.primitives = f.primitives
@@ -101,6 +104,9 @@ const initialForm = {
   upstream_url: "",
   upstream_auth_header_name: "Authorization",
   upstream_auth_token: "",
+  // Lets tool discovery reach the upstream on an internal address
+  // (administrators only, w4e).
+  allow_internal_host: false,
   tool_access: "all",
   allowed_tools: [],
   manual_tools: "",
@@ -360,6 +366,8 @@ const MCPServerRegister = () => {
         upstream_url: form.upstream_url,
         upstream_auth_header_name: form.upstream_auth_header_name,
         upstream_auth_token: form.upstream_auth_token,
+        // Sent only when on: the API refuses it from anyone but an administrator.
+        ...(form.allow_internal_host && { allow_internal_host: true }),
       });
       const tools = res.data?.tools || [];
       setDiscovery({ status: "done", tools, serverName: res.data?.server_name, endpoint: res.data?.endpoint, truncated: res.data?.truncated });
@@ -526,6 +534,13 @@ const MCPServerRegister = () => {
                   </Grid>
                   <Grid item xs={12} md={8}>
                     <TextField fullWidth type="password" label="Upstream auth value (optional)" value={form.upstream_auth_token} onChange={setUpstream("upstream_auth_token")} inputProps={{ "data-testid": "upstream-token" }} helperText={connection?.kind === "gateway" ? "Written into the proxy on every gateway node and kept encrypted in AI Studio to keep the nodes in step. Prefer a gateway secret reference such as $secret_env.WEATHER_TOKEN (read from TYK_SECRET_WEATHER_TOKEN on the gateways) so no literal token lands on their disks; tool discovery needs the literal value." : "Used to discover tools and sent to the Dashboard; never stored in AI Studio."} autoComplete="new-password" />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <AllowInternalHostSwitch
+                      checked={form.allow_internal_host}
+                      onChange={(v) => setForm((f) => ({ ...f, allow_internal_host: v }))}
+                      target="AI Studio's tool discovery call to this upstream's host"
+                    />
                   </Grid>
                   <Grid item xs={12}>
                     <ToolAccess

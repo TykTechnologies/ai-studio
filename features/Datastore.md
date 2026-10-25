@@ -143,6 +143,8 @@ graph TD
 
 (Model definitions, DataSession logic, API endpoints, File Processing API, File Content Storage, Vendor Utilities, State Management - *Remain the same as previous spec, referencing `.js` files where appropriate.*)
 
+**Internal hosts (w4e).** Every connection `data_session` makes to a vector store refuses internal network addresses unless an administrator switched the datasource's **Allow internal host** on (`models.Datasource.AllowInternalHost`, admin-only through the API; submissions never carry it, as for tools: `features/Tools.md` 5b), which exempts the host of its own connection string (`data_session/netguard.go` `exemption`: a URL, a Redis URL or a Postgres DSN in URL or key=value form, fallback hosts included). HTTP stores (Chroma, Pinecone's REST API, Qdrant, Weaviate) get `Exemption.HTTPClient`; Pinecone's gRPC index connection a context dialer; pgvector (store and metadata operations) a pgx `DialFunc`; Redis (go-redis for direct writes, rueidis in the vector store) a dialer that applies the client's TLS itself. The langchaingo fork takes them through `Tyk:` options (`pgvector.WithDialFunc`, `pinecone.WithHTTPClient`/`WithGRPCDialOptions`, `qdrant.WithHTTPClient`, `chroma.WithHTTPClient`, `redisvector.WithDialFn`; Weaviate already had `WithHTTPClient`). Edges read the switch from `DatasourceConfig.allow_internal_host`. The datasource's embedder has its own switch (`embed_allow_internal_host`, the linked LLM's for a linked embedder). The datasource form shows the switch under **Vector Database Access Details**.
+
 **4. Use Cases & Behavior**
 
 (Use cases remain the same, but the UI steps follow the revised "Admin UI Flows (UX Perspective)" above).

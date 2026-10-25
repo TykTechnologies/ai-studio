@@ -3,6 +3,7 @@ package qdrant
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/embeddings"
@@ -53,6 +54,14 @@ func WithAPIKey(apiKey string) Option {
 func WithContentKey(contentKey string) Option {
 	return func(p *Store) {
 		p.contentKey = contentKey
+	}
+}
+
+// WithHTTPClient sets the client of the REST calls (Tyk: an outbound
+// network policy).
+func WithHTTPClient(c *http.Client) Option {
+	return func(p *Store) {
+		p.httpClient = c
 	}
 }
 

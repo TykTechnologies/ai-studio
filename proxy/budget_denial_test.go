@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/services"
 )
 
@@ -43,7 +44,7 @@ func TestBudgetDenial(t *testing.T) {
 // The default transport keeps 2 idle connections per host; with more requests
 // in flight to one vendor that forces a new TCP+TLS handshake for most of them.
 func TestUpstreamAndLoopbackPoolsKeepConnections(t *testing.T) {
-	up := upstreamGuardedTransport
+	up := newUpstreamTransport(netguard.Exemption{})
 	if up.MaxIdleConnsPerHost < 64 || up.MaxIdleConns < up.MaxIdleConnsPerHost {
 		t.Fatalf("upstream pool too small: per-host %d, total %d", up.MaxIdleConnsPerHost, up.MaxIdleConns)
 	}

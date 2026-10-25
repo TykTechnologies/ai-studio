@@ -340,14 +340,31 @@ Since 2.3, AI Studio and the Microgateway refuse outbound connections to interna
 
 AI Studio and the Microgateway log a warning at startup whenever internal addresses are allowed. Each process applies its own setting: an edge refuses an internal upstream that the hub configured when blocking is on at the edge, whatever the hub's setting.
 
+#### Allow internal host, per asset
+
+Each LLM, embedder, tool, datasource, guardrail, plugin and MCP server has an **Allow internal host** switch (`allow_internal_host` in the API), off by default. On, that asset's own host may be an internal address, while blocking stays on for everything else, including another asset on the same host. Use it for a local Ollama, an in-cluster model server, classifier or vector database, or an internal plugin registry, instead of opening the whole process with the environment settings.
+
+- **Admin-only.** Only an administrator can set or change it; anyone else gets `403` for a request that changes it, and an update that leaves the field out keeps the stored value. Community submissions never carry it: an approved submission starts with it off.
+- **Its own hosts only.** An LLM's switch covers its endpoint, on every route to it (gateway routes, routers, Studio chat, semantic routing) and its linked embedders. A standalone embedder's covers its endpoint; a tool's its API host; a data source's its vector store; a guardrail's the URLs in its connection; a plugin's its OCI registry (fetches, signatures and token servers) or `grpc://` host. An MCP server's (Enterprise), set in the registration wizard and stored on the server, covers AI Studio's tool discovery call to its upstream.
+- **It lifts only the internal-address check.** `LLM_UPSTREAM_ALLOWED_HOSTS`, when set, still applies. The environment settings stay global overrides: `LLM_UPSTREAM_BLOCK_INTERNAL=false` and `ALLOW_INTERNAL_NETWORK_ACCESS=true` allow everything, `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` adds hosts.
+- **Turning it off always saves.** A plugin edit that keeps its internal command saves with the switch off; the plugin is then refused when it loads or connects, in AI Studio and on edges once the change is pushed. A new internal command with the switch off is refused at the edit.
+- **Turning it off takes effect without a restart.** AI Studio's gateway reloads on an LLM, embedder, data source, guardrail or plugin change, tools are read per request, a plugin AI Studio has loaded is reloaded (and refused if its host is internal), and an open chat rebuilds its LLM client on its next model call after the LLM changes (a chat whose LLM was deleted or deactivated gets an error).
+- **Edges honour it** for the assets the hub pushes. Edges released before it ignore the switch and keep blocking.
+
 **What the policy covers:**
 
 - LLM upstreams on every gateway route (`/llm/`, `/ai/`, `/anthropic/`, `/v1`, native and Bedrock routes), in AI Studio's embedded gateway and the Microgateway;
+- Studio chat's own LLM calls and semantic routing (OpenAI, Anthropic and Ollama clients, whose endpoint is configurable), and embedders;
 - guardrail providers (Enterprise);
-- `tyk.makeHTTPRequest` in filter scripts (Enterprise).
+- `tyk.makeHTTPRequest` in filter scripts (Enterprise). A script has no host of its own, so only the environment settings exempt one;
+- tool (OpenAPI) calls, from chat, the gateway's tool REST and MCP endpoints, and edges;
+- data source and vector store connections (Chroma, Pinecone, pgvector, Qdrant, Redis, Weaviate);
+- AI Studio's tool discovery call to a remote MCP server in the registration wizard (Enterprise).
 
-OCI plugin registries, their signatures and token servers, and `grpc://` plugin hosts follow the plugin host rule, which refuses internal addresses whatever `LLM_UPSTREAM_BLOCK_INTERNAL` says (see [Plugin Security](./plugins-security.md)). Webhooks and Tyk Gateway connections (Enterprise) have their own always-on URL policies.
+OCI plugin registries, their signatures and token servers, and `grpc://` plugin hosts follow the plugin host rule, which refuses internal addresses whatever `LLM_UPSTREAM_BLOCK_INTERNAL` says (see [Plugin Security](./plugins-security.md)); a plugin's Allow internal host switch exempts its own. Webhooks and Tyk Gateway connections (Enterprise) have their own always-on URL policies.
 
-**What it does not cover yet:** Studio chat's own calls to an LLM (chat uses the vendor clients directly, not the gateway), embedders and datasource or vector store connections, tool (OpenAPI) calls, MCP servers, SSO and identity providers, SMTP, the hub-to-edge gRPC connection and marketplace index fetches. Restrict those with network policy (a Kubernetes `NetworkPolicy`, firewall rules or an egress proxy).
+A refused upstream answers `502`, and the error message says why, naming the setting (for example `upstream endpoint not permitted: upstream host "10.0.0.5" is an internal address — blocked by LLM_UPSTREAM_BLOCK_INTERNAL`). This is the same on every route: `/llm/`, the `/ai/` and unified `/v1` bridges, and native routes.
+
+**What it does not cover:** SSO and identity providers, SMTP, the hub-to-edge gRPC connection and marketplace index fetches, which are operator configuration. Restrict those with network policy (a Kubernetes `NetworkPolicy`, firewall rules or an egress proxy).
 
 For the metrics and traces the Proxy emits — request latency, time to first token, token usage, cost and policy blocks — see [Observability](./observability.md).

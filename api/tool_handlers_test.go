@@ -45,6 +45,7 @@ func TestToolEndpoints(t *testing.T) {
 				MCPAccessEnabled *bool `json:"mcp_access_enabled,omitempty"`
 				TracingContentModeMax *string `json:"tracing_content_mode_max,omitempty"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
+				AllowInternalHost *bool `json:"allow_internal_host,omitempty"`
 			} `json:"attributes"`
 		}{
 			Type: "tools",
@@ -63,6 +64,7 @@ func TestToolEndpoints(t *testing.T) {
 				MCPAccessEnabled *bool `json:"mcp_access_enabled,omitempty"`
 				TracingContentModeMax *string `json:"tracing_content_mode_max,omitempty"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
+				AllowInternalHost *bool `json:"allow_internal_host,omitempty"`
 			}{
 				Name:         "Test Tool",
 				Description:  "A test tool",
@@ -107,6 +109,7 @@ func TestToolEndpoints(t *testing.T) {
 				MCPAccessEnabled *bool `json:"mcp_access_enabled,omitempty"`
 				TracingContentModeMax *string `json:"tracing_content_mode_max,omitempty"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
+				AllowInternalHost *bool `json:"allow_internal_host,omitempty"`
 			} `json:"attributes"`
 		}{
 			Type: "tools",
@@ -125,6 +128,7 @@ func TestToolEndpoints(t *testing.T) {
 				MCPAccessEnabled *bool `json:"mcp_access_enabled,omitempty"`
 				TracingContentModeMax *string `json:"tracing_content_mode_max,omitempty"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
+				AllowInternalHost *bool `json:"allow_internal_host,omitempty"`
 			}{
 				Name:         "Updated Tool",
 				Description:  "An updated test tool",
@@ -200,6 +204,7 @@ func TestToolAuthKeyRedaction(t *testing.T) {
 					MCPAccessEnabled *bool `json:"mcp_access_enabled,omitempty"`
 					TracingContentModeMax *string `json:"tracing_content_mode_max,omitempty"`
 					GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
+					AllowInternalHost *bool `json:"allow_internal_host,omitempty"`
 				} `json:"attributes"`
 			}{
 				Type: "tools",
@@ -218,6 +223,7 @@ func TestToolAuthKeyRedaction(t *testing.T) {
 					MCPAccessEnabled *bool `json:"mcp_access_enabled,omitempty"`
 					TracingContentModeMax *string `json:"tracing_content_mode_max,omitempty"`
 					GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
+					AllowInternalHost *bool `json:"allow_internal_host,omitempty"`
 				}{
 					Name:     name,
 					AuthKey:  authKey,
@@ -302,6 +308,7 @@ func TestToolEndpointsErrors(t *testing.T) {
 				MCPAccessEnabled *bool `json:"mcp_access_enabled,omitempty"`
 				TracingContentModeMax *string `json:"tracing_content_mode_max,omitempty"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
+				AllowInternalHost *bool `json:"allow_internal_host,omitempty"`
 			} `json:"attributes"`
 		}{
 			Type: "tools",
@@ -320,6 +327,7 @@ func TestToolEndpointsErrors(t *testing.T) {
 				MCPAccessEnabled *bool `json:"mcp_access_enabled,omitempty"`
 				TracingContentModeMax *string `json:"tracing_content_mode_max,omitempty"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
+				AllowInternalHost *bool `json:"allow_internal_host,omitempty"`
 			}{
 				Name:         "Updated Tool",
 				Description:  "An updated test tool",
@@ -356,6 +364,7 @@ func TestToolEndpointsErrors(t *testing.T) {
 				MCPAccessEnabled *bool `json:"mcp_access_enabled,omitempty"`
 				TracingContentModeMax *string `json:"tracing_content_mode_max,omitempty"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
+				AllowInternalHost *bool `json:"allow_internal_host,omitempty"`
 			} `json:"attributes"`
 		}{
 			Type: "tools",
@@ -374,6 +383,7 @@ func TestToolEndpointsErrors(t *testing.T) {
 				MCPAccessEnabled *bool `json:"mcp_access_enabled,omitempty"`
 				TracingContentModeMax *string `json:"tracing_content_mode_max,omitempty"`
 				GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
+				AllowInternalHost *bool `json:"allow_internal_host,omitempty"`
 			}{
 				Name:         "",
 				Description:  "",

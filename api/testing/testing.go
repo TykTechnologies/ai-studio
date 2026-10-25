@@ -28,6 +28,17 @@ func SetupTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	assert.NoError(t, err, "Failed to open database")
 
+	// One connection. Every pooled connection to ":memory:" is a separate,
+	// empty database: a background goroutine writing while a request holds
+	// the connection (the ENT audit writer, the chat v2 title and turn
+	// writes while a stream is still open) made the pool open a second one,
+	// and that query and later requests failed with "no such table".
+	sqlDB, err := db.DB()
+	assert.NoError(t, err, "Failed to get database handle")
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
+	sqlDB.SetConnMaxLifetime(0)
+
 	err = models.InitModels(db)
 	assert.NoError(t, err, "Failed to init models")
 

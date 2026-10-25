@@ -51,6 +51,7 @@ import PublishSwitch from "../rbac/PublishSwitch";
 import { P } from "../../rbac/permissions";
 import PluginConfigurationSection from './PluginConfigurationSection';
 import ScopeReviewSection from './ScopeReviewSection';
+import AllowInternalHostSwitch from '../common/AllowInternalHostSwitch';
 
 const PluginForm = ({ mode = 'create' }) => {
   const { policy } = usePluginPolicy();
@@ -72,6 +73,7 @@ const PluginForm = ({ mode = 'create' }) => {
     namespace: '',
     ociReference: '',
     loadImmediately: false,
+    allowInternalHost: false,
   });
   
   const [errors, setErrors] = useState({});
@@ -129,6 +131,7 @@ const PluginForm = ({ mode = 'create' }) => {
           namespace: plugin.namespace === 'global' ? '' : plugin.namespace,
           ociReference: plugin.ociReference || '',
           loadImmediately: false,
+          allowInternalHost: Boolean(plugin.allowInternalHost),
         });
         setConfigJson(JSON.stringify(plugin.config || {}, null, 2));
 
@@ -333,6 +336,7 @@ const PluginForm = ({ mode = 'create' }) => {
         isActive: formData.isActive,
         namespace: formData.namespace,
         ociReference: formData.ociReference,
+        allowInternalHost: formData.allowInternalHost,
       };
 
       if (isEdit) {
@@ -564,6 +568,13 @@ const PluginForm = ({ mode = 'create' }) => {
                 }
                 placeholder={pluginCommandPlaceholder(allowedSources)}
                 required
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <AllowInternalHostSwitch
+                checked={formData.allowInternalHost}
+                onChange={(v) => setFormData((prev) => ({ ...prev, allowInternalHost: v }))}
+                target="the plugin's registry or gRPC host"
               />
             </Grid>
             <Grid item xs={12}>

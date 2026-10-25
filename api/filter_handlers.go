@@ -62,6 +62,10 @@ func (a *API) createFilter(c *gin.Context) {
 	if !requireSecretReadForGuardrailReferences(c, nil, input.Data.Attributes.Config) {
 		return
 	}
+	allow := guardrailAllowInternalHost(input.Data.Attributes.Config)
+	if _, ok := allowInternalHostUpdate(c, false, &allow); !ok {
+		return
+	}
 
 	filter, err := a.service.CreateFilterFromSpec(filterSpecFromInput(input))
 	if err != nil {
@@ -285,7 +289,11 @@ func (a *API) updateFilter(c *gin.Context) {
 		return
 	}
 
+	allow := guardrailAllowInternalHost(input.Data.Attributes.Config)
 	if !requireSecretReadForGuardrailReferences(c, existing.Config, input.Data.Attributes.Config) {
+		return
+	}
+	if _, ok := allowInternalHostUpdate(c, guardrailAllowInternalHost(existing.Config), &allow); !ok {
 		return
 	}
 
@@ -443,6 +451,12 @@ func (a *API) testFilter(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, FilterTestOutput{Success: false, Error: reason})
 			return
 		}
+		// Only an administrator may test with the "Allow internal host"
+		// switch on, as only one may save it.
+		allow := guardrailAllowInternalHost(input.Config)
+		if _, ok := allowInternalHostUpdate(c, false, &allow); !ok {
+			return
+		}
 		// A socket endpoint is tested only when the operator allows it,
 		// as when it is saved.
 		if cfg, err := guardrails.ParseConfig(input.Config); err == nil {
@@ -549,4 +563,11 @@ func mapToScriptInput(inputMap map[string]interface{}) (*scripting.ScriptInput, 
 	}
 
 	return &scriptInput, nil
+}
+
+// guardrailAllowInternalHost is a guardrail config's "Allow internal host"
+// switch (guardrails.Config.AllowInternalHost, admin-only).
+func guardrailAllowInternalHost(cfg map[string]interface{}) bool {
+	v, _ := cfg["allow_internal_host"].(bool)
+	return v
 }

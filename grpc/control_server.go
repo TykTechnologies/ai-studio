@@ -1747,6 +1747,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			TracingContentModeMax:              llm.TracingContentModeMax,
 			TracingPropagationOptOut:           llm.TracingPropagationOptOut,
 			MetadataSecretsEncrypted:           metadataSecrets,
+			AllowInternalHost:                  llm.AllowInternalHost,
 			FilterIds:        filterIDs,
 			PluginIds:        llmPluginOrder[llm.ID],
 			CreatedAt:        timestamppb.New(llm.CreatedAt),
@@ -2169,6 +2170,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			// snapshot checksum changes when a referenced secret does and
 			// edges show as pending until the change is pushed.
 			ConfigSecretsEncrypted: s.pluginConfigSecretsForEdge(&plugin, cfg),
+			AllowInternalHost:      plugin.AllowInternalHost,
 		})
 	}
 
@@ -2400,6 +2402,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			AppIds:              toolAppMap[tool.ID],
 			AuthPluginIds:       endpointAuthPlugins[endpointKey{models.EndpointTypeTool, tool.ID}],
 			TracingContentModeMax: tool.TracingContentModeMax,
+			AllowInternalHost:     tool.AllowInternalHost,
 			CreatedAt:           timestamppb.New(tool.CreatedAt),
 			UpdatedAt:           timestamppb.New(tool.UpdatedAt),
 		}
@@ -2479,11 +2482,13 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		// The key as stored (a reference unresolved), so a reference to an
 		// empty secret is told apart from no key.
 		embedKeyRef := ds.FlattenedEmbed().APIKey
+		embedAllowInternalHost := ds.Embedder != nil && ds.Embedder.AllowsInternalHost()
 		if ds.Embedder != nil {
 			if err := ds.Embedder.UsableInNamespace(ds.Namespace); err != nil {
 				logger.Log.Error().Err(err).Uint("ds_id", ds.ID).Msg("Datasource embedder not available in its namespace - syncing it without embedding settings")
 				embed = models.LegacyEmbed{}
 				embedKeyRef = ""
+				embedAllowInternalHost = false
 			}
 		}
 		embed.URL = secrets.ForEdge(embed.URL)
@@ -2529,6 +2534,8 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			AppIds:                dsAppMap[ds.ID],
 			AuthPluginIds:         endpointAuthPlugins[endpointKey{models.EndpointTypeDatasource, ds.ID}],
 			TracingContentModeMax: ds.TracingContentModeMax,
+			AllowInternalHost:      ds.AllowInternalHost,
+			EmbedAllowInternalHost: embedAllowInternalHost,
 			CreatedAt:             timestamppb.New(ds.CreatedAt),
 			UpdatedAt:             timestamppb.New(ds.UpdatedAt),
 		}

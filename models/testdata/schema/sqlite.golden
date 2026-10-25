@@ -643,6 +643,7 @@ TABLE datasources
   column `community_submitted` numeric
   column `submission_id` integer
   column `metadata` json
+  column `allow_internal_host` numeric NOT NULL DEFAULT false
   constraint CONSTRAINT `fk_datasources_embedder` FOREIGN KEY (`embedder_id`) REFERENCES `embedders`(`id`)
   index CREATE INDEX `idx_datasource_namespace` ON `datasources`(`namespace`)
   index CREATE INDEX `idx_datasources_db_conn_string` ON `datasources`(`db_conn_string`)
@@ -720,6 +721,7 @@ TABLE embedders
   column `model` text NOT NULL
   column `privacy_score` integer
   column `user_id` integer
+  column `allow_internal_host` numeric NOT NULL DEFAULT false
   constraint CONSTRAINT `fk_embedders_llm` FOREIGN KEY (`llm_id`) REFERENCES `llms`(`id`)
   index CREATE INDEX `idx_embedders_deleted_at` ON `embedders`(`deleted_at`)
   index CREATE INDEX `idx_embedders_llm_id` ON `embedders`(`llm_id`)
@@ -948,6 +950,7 @@ TABLE llms
   column `resource_signing_secret_prev` text
   column `resource_signing_prev_expires_at` datetime
   column `resource_signing_rotated_at` datetime
+  column `allow_internal_host` numeric NOT NULL DEFAULT false
   index CREATE INDEX `idx_llm_namespace` ON `llms`(`namespace`)
   index CREATE INDEX `idx_llms_deleted_at` ON `llms`(`deleted_at`)
 TABLE marketplace_config
@@ -1158,6 +1161,7 @@ TABLE mcp_servers
   column `endpoint_url` text
   column `endpoint_urls` text
   column `upstream_url` text
+  column `allow_internal_host` numeric NOT NULL DEFAULT false
   column `source_api_id` text
   column `auth_mode` text NOT NULL DEFAULT "custom"
   column `auth_details` text
@@ -1529,6 +1533,7 @@ TABLE plugins
   column `manifest` text
   column `service_access_authorized` numeric DEFAULT false
   column `service_scopes` text
+  column `allow_internal_host` numeric NOT NULL DEFAULT false
   index CREATE INDEX `idx_plugin_namespace` ON `plugins`(`namespace`)
   index CREATE INDEX `idx_plugins_deleted_at` ON `plugins`(`deleted_at`,`deleted_at`)
   index CREATE INDEX `idx_plugins_hook_type` ON `plugins`(`hook_type`)
@@ -1970,6 +1975,7 @@ TABLE tools
   column `community_submitted` numeric
   column `submission_id` integer
   column `metadata` json
+  column `allow_internal_host` numeric NOT NULL DEFAULT false
   index CREATE INDEX `idx_tool_namespace` ON `tools`(`namespace`)
   index CREATE INDEX `idx_tool_user_community` ON `tools`(`user_id`,`community_submitted`)
   index CREATE INDEX `idx_tools_deleted_at` ON `tools`(`deleted_at`)

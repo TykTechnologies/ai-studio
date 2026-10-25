@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 )
 
 // TestCreatePluginClient_RejectsDangerousCommands verifies that plugin
@@ -29,7 +31,7 @@ func TestCreatePluginClient_RejectsDangerousCommands(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			client, err := m.createPluginClient(tc.command)
+			client, err := m.createPluginClient(tc.command, netguard.Exemption{})
 			if err == nil {
 				if client != nil {
 					client.Kill()
@@ -57,7 +59,7 @@ func TestCreatePluginClient_AllowsSafeLocalCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	client, err := m.createPluginClient(exe)
+	client, err := m.createPluginClient(exe, netguard.Exemption{})
 	if err != nil {
 		t.Fatalf("expected safe command to be accepted, got: %v", err)
 	}
@@ -72,7 +74,7 @@ func TestCreatePluginClient_AllowsSafeLocalCommand(t *testing.T) {
 func TestCreateConfigOnlyPluginClient_RejectsDangerousCommands(t *testing.T) {
 	m := NewAIStudioPluginManager(nil, nil)
 
-	client, err := m.createConfigOnlyPluginClient("./plugins/x; rm -rf /")
+	client, err := m.createConfigOnlyPluginClient("./plugins/x; rm -rf /", netguard.Exemption{})
 	if err == nil {
 		if client != nil {
 			client.Kill()
@@ -108,9 +110,27 @@ func TestValidateCommandForLoad_NoDataRace(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < 50; j++ {
-				_ = m.validateCommandForLoad(exe)
+				_ = m.validateCommandForLoad(exe, netguard.Exemption{})
 			}
 		}()
 	}
 	wg.Wait()
+}
+
+// A grpc:// plugin on an internal host is refused at load once its "Allow
+// internal host" switch is off, which is how turning the switch off takes
+// effect (w4e.5); with the switch on its own host is allowed.
+func TestValidateCommandForLoad_InternalHostSwitch(t *testing.T) {
+	t.Setenv("ALLOW_INTERNAL_NETWORK_ACCESS", "")
+	t.Setenv("LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS", "")
+	m := NewAIStudioPluginManager(nil, nil)
+	const command = "grpc://10.0.0.5:9001"
+
+	err := m.validateCommandForLoad(command, netguard.CommandExemption(false, command))
+	if err == nil || !strings.Contains(err.Error(), "Allow internal host") {
+		t.Fatalf("switch off: want a refusal naming the switch, got %v", err)
+	}
+	if err := m.validateCommandForLoad(command, netguard.CommandExemption(true, command)); err != nil {
+		t.Fatalf("switch on: want the plugin's own host allowed, got %v", err)
+	}
 }

@@ -148,3 +148,21 @@ func TestSignalSender(t *testing.T) {
 	ss.close()
 	assert.Equal(t, []string{signalTopic + ":budgets"}, flaky.got(), "retried until written, and flushed on close")
 }
+
+// An embedder change reloads the embedded gateway like a datasource change:
+// datasources carry their embedder in memory, so an embedder's revoked
+// "Allow internal host" switch or rotated key would otherwise not reach
+// them until the datasource itself changed (w4e).
+func TestReloadsGateway(t *testing.T) {
+	for _, topic := range []string{"system.llm.updated", "system.datasource.created", "system.embedder.updated",
+		"system.embedder.deleted", "system.filter.updated", "system.plugin.deleted"} {
+		if !reloadsGateway(topic) {
+			t.Errorf("%s does not reload the gateway", topic)
+		}
+	}
+	for _, topic := range []string{"system.app.updated", "system.user.created", "system.tool.updated", "system.embedderx"} {
+		if reloadsGateway(topic) {
+			t.Errorf("%s reloads the gateway", topic)
+		}
+	}
+}

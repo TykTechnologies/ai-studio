@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/embeddings"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 const (
@@ -60,6 +61,24 @@ func WithCollectionTableName(name string) Option {
 func WithConnectionURL(connectionURL string) Option {
 	return func(p *Store) {
 		p.connURL = connectionURL
+	}
+}
+
+// WithDialFunc sets the dialer of the connection New makes from the
+// connection URL (Tyk: an outbound network policy). Ignored with WithConn.
+func WithDialFunc(dial pgconn.DialFunc) Option {
+	return func(p *Store) {
+		p.dialFunc = dial
+	}
+}
+
+// WithLookupFunc sets the host resolver of the connection New makes from the
+// connection URL (Tyk: with WithDialFunc, so the dialer can see the
+// configured host instead of the address it resolves to). Ignored with
+// WithConn.
+func WithLookupFunc(lookup pgconn.LookupFunc) Option {
+	return func(p *Store) {
+		p.lookupFunc = lookup
 	}
 }
 

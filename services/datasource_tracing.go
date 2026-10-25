@@ -17,3 +17,9 @@ func (s *Service) SetDatasourceTracingContentModeMax(id uint, mode string) error
 	}
 	return s.DB.Model(&models.Datasource{}).Where("id = ?", id).Update("tracing_content_mode_max", mode).Error
 }
+
+// SetDatasourceAllowInternalHost sets the datasource's admin-only "Allow
+// internal host" switch (w4e); the caller checks who may.
+func (s *Service) SetDatasourceAllowInternalHost(id uint, allow bool) error {
+	return s.DB.Model(&models.Datasource{}).Where("id = ?", id).Update("allow_internal_host", allow).Error
+}

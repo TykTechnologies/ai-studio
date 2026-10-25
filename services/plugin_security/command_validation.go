@@ -20,6 +20,13 @@ import (
 // commands (enforced in ENT, and configurable in CE). A nil service skips
 // the host check but all other checks still apply.
 func ValidateCommand(command string, securityService Service) error {
+	return ValidateCommandWith(command, securityService, netguard.Exemption{})
+}
+
+// ValidateCommandWith is ValidateCommand with the plugin's own "Allow
+// internal host" exemption (netguard.CommandExemption): its hosts skip the
+// internal-host check.
+func ValidateCommandWith(command string, securityService Service, exempt netguard.Exemption) error {
 	if command == "" {
 		return fmt.Errorf("🔒 SECURITY: plugin command cannot be empty")
 	}
@@ -73,10 +80,10 @@ func ValidateCommand(command string, securityService Service) error {
 
 				// Check for internal/private network addresses using the plugin security service
 				// ENT: Blocks internal IPs unless development bypass is enabled
-				if securityService != nil && parsedURL.Hostname() != "" {
+				if securityService != nil && parsedURL.Hostname() != "" && !exempt.Has(parsedURL.Hostname()) {
 					host := parsedURL.Hostname()
 					if err := securityService.ValidateGRPCHost(host); err != nil {
-						return fmt.Errorf("🔒 SECURITY: plugin host %q in %s is an internal address, resolves to one, or does not resolve; add it to LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS to allow this host, or set ALLOW_INTERNAL_NETWORK_ACCESS=true to allow every internal host: %w", sanitizeForLogging(host), sanitizeForLogging(command), err)
+						return fmt.Errorf("🔒 SECURITY: plugin host %q in %s is an internal address, resolves to one, or does not resolve; an administrator can switch on Allow internal host for this plugin, add the host to LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS, or set ALLOW_INTERNAL_NETWORK_ACCESS=true to allow every internal host: %w", sanitizeForLogging(host), sanitizeForLogging(command), err)
 					}
 				}
 
@@ -107,6 +114,12 @@ func ValidateCommand(command string, securityService Service) error {
 // ValidateCommand for paths that have no security service at hand (service
 // layer creates and upgrades).
 func CheckCommandHosts(command string) error {
+	return CheckCommandHostsWith(command, netguard.Exemption{})
+}
+
+// CheckCommandHostsWith is CheckCommandHosts with the plugin's own "Allow
+// internal host" exemption (netguard.CommandExemption).
+func CheckCommandHostsWith(command string, exempt netguard.Exemption) error {
 	for _, part := range strings.Fields(command) {
 		if !strings.Contains(part, "://") || strings.HasPrefix(part, "file://") {
 			continue
@@ -116,7 +129,7 @@ func CheckCommandHosts(command string) error {
 			return fmt.Errorf("🔒 SECURITY: plugin command contains invalid URL: %s", sanitizeForLogging(command))
 		}
 		if host := parsedURL.Hostname(); host != "" {
-			if err := netguard.CheckPluginHost(host); err != nil {
+			if err := netguard.CheckPluginHostWith(exempt, host); err != nil {
 				return fmt.Errorf("🔒 SECURITY: %w", err)
 			}
 		}

@@ -69,6 +69,12 @@ type LLM struct {
 	ResourceSigningSecretPrev    string     `json:"-" gorm:"type:text"`
 	ResourceSigningPrevExpiresAt *time.Time `json:"-"`
 	ResourceSigningRotatedAt     *time.Time `json:"-"`
+
+	// AllowInternalHost is the admin-only "Allow internal host" switch: the
+	// LLM's own host(s) may be internal addresses while blocking stays on for
+	// everything else (netguard.ExemptionFor). Off by default; never set
+	// from a community submission.
+	AllowInternalHost bool `json:"allow_internal_host" gorm:"not null;default:false"`
 }
 
 const (

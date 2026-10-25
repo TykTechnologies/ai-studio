@@ -29,6 +29,7 @@ describe("embedderModel", () => {
       endpoint: "https://api.openai.com/v1",
       api_key: "[redacted]",
       privacy_score: 40,
+      allow_internal_host: false,
     });
 
     const linked = { ...emptyDraft(), mode: MODE_LINKED, name: "Via LLM", llm_id: "7", model: "m", vendor: "openai" };

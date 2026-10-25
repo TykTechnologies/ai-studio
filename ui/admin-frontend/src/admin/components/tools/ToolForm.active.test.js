@@ -129,6 +129,28 @@ describe("ToolForm Active switch and privacy level", () => {
     expect(lastPostAttributes().mcp_access_enabled).toBe(false);
   });
 
+  // w4e: an administrator's Allow internal host switch is sent; for anyone
+  // else it is read-only.
+  it("sends the Allow internal host switch an administrator turned on", async () => {
+    usePermissions.mockReturnValue({ can: () => true, isFullAdmin: true });
+    renderForm();
+    await screen.findByRole("button", { name: "Add tool" });
+    const toggle = screen.getByRole("checkbox", { name: "Allow internal host" });
+    expect(toggle).not.toBeChecked();
+    fireEvent.click(toggle);
+    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: "Time" } });
+    fireEvent.change(screen.getByLabelText(/^Description/), { target: { value: "Clock" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add tool" }));
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith("/tools", expect.anything()));
+    expect(lastPostAttributes().allow_internal_host).toBe(true);
+  });
+
+  it("shows the Allow internal host switch read-only to a non-administrator", async () => {
+    renderForm();
+    await screen.findByRole("button", { name: "Add tool" });
+    expect(screen.getByRole("checkbox", { name: "Allow internal host" })).toBeDisabled();
+  });
+
   it("sends an access method that was switched on, and drops the chat-only note", async () => {
     renderForm();
     await screen.findByRole("button", { name: "Add tool" });

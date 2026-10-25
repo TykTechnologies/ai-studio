@@ -2,9 +2,11 @@ package redisvector
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"reflect"
 	"strconv"
 
@@ -33,10 +35,16 @@ var _ RedisClient = RueidisClient{}
 
 // NewRueidisClient create rueidis redist client.
 func NewRueidisClient(url string) (*RueidisClient, error) {
+	return newRueidisClient(url, nil)
+}
+
+// newRueidisClient is NewRueidisClient dialing with dialFn when set (Tyk).
+func newRueidisClient(url string, dialFn func(string, *net.Dialer, *tls.Config) (net.Conn, error)) (*RueidisClient, error) {
 	clientOption, err := rueidis.ParseURL(url)
 	if err != nil {
 		return nil, err
 	}
+	clientOption.DialFn = dialFn
 	client, err := rueidis.NewClient(clientOption)
 	if err != nil {
 		return nil, err

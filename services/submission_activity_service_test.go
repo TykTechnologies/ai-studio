@@ -69,3 +69,41 @@ func TestRecordSubmissionActivity_StoresActorName(t *testing.T) {
 	}
 	assert.True(t, found, "expected a 'submitted' activity")
 }
+
+// The approval transaction holds its connection, so a name lookup on the
+// plain DB inside it ran on a second connection: an empty in-memory database
+// in tests (the activity was stored with ActorName ""), and a deadlock on a
+// single-connection pool. The name is resolved before the transaction.
+func TestApproveSubmission_ActivityStoresReviewerName(t *testing.T) {
+	db := setupTestDBForSubmissions(t)
+	service := NewService(db)
+	user := createSubmissionTestUser(t, service, "submitter@test.com")
+	admin := createSubmissionTestAdmin(t, service, "admin@test.com")
+
+	submission, err := service.CreateSubmission(
+		user.ID, models.SubmissionResourceTypeDatasource, models.SubmissionStatusSubmitted,
+		models.JSONMap{
+			"name":           "Community Vector DB",
+			"db_source_type": "pgvector",
+			"embed_vendor":   "openai",
+			"embed_model":    "text-embedding-3-small",
+		},
+		nil, 5, "Low sensitivity",
+		"contact@test.com", "", "", nil, "", "",
+	)
+	assert.NoError(t, err)
+
+	_, err = service.ApproveSubmission(submission.ID, admin.ID, 5, models.JSONMap{"catalogue_ids": []int{1}}, "Looks good")
+	assert.NoError(t, err)
+
+	activities, err := service.GetSubmissionActivities(submission.ID)
+	assert.NoError(t, err)
+	found := false
+	for _, a := range activities {
+		if a.ActivityType == models.ActivityTypeApproved {
+			assert.Equal(t, "Admin User", a.ActorName, "the approval must name the reviewer")
+			found = true
+		}
+	}
+	assert.True(t, found, "expected an 'approved' activity")
+}

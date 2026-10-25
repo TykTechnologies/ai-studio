@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	appconfig "github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 )
 
@@ -103,9 +104,12 @@ func sanitizeStringForLogging(input string) string {
 // securityService is used for enterprise features like GRPC host whitelisting.
 // The command's deployment type must also be one the installation allows
 // (AI_STUDIO_PLUGIN_ALLOWED_SOURCES).
-func validatePluginCommand(command string, securityService plugin_security.Service) error {
+//
+// exempt is the plugin's own "Allow internal host" exemption
+// (netguard.CommandExemption).
+func validatePluginCommand(command string, securityService plugin_security.Service, exempt netguard.Exemption) error {
 	if err := appconfig.Get("").PluginSourcePolicy.Check(command); err != nil {
 		return err
 	}
-	return plugin_security.ValidateCommand(command, securityService)
+	return plugin_security.ValidateCommandWith(command, securityService, exempt)
 }

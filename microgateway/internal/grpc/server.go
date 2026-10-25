@@ -1009,6 +1009,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			PriceMultipliers:                   string(llm.PriceMultipliers),
 			TracingContentModeMax:              llm.TracingContentModeMax,
 			TracingPropagationOptOut:           llm.TracingPropagationOptOut,
+			AllowInternalHost:                  llm.AllowInternalHost,
 			
 			// Embedded relationship data
 			AppIds:    appIDs,    // Which apps can access this LLM
@@ -1277,6 +1278,8 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			CreatedAt:   timestamppb.New(plugin.CreatedAt),
 			UpdatedAt:   timestamppb.New(plugin.UpdatedAt),
 			LlmIds:      llmIDs, // Which LLMs use this plugin
+
+			AllowInternalHost: plugin.AllowInternalHost,
 		}
 		// Passed on still encrypted, like LLM API keys.
 		if len(plugin.ConfigSecretsEncrypted) > 0 {

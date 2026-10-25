@@ -3,6 +3,7 @@ package services
 import (
 	"encoding/base64"
 	"fmt"
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard/netguardtest"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -21,6 +22,8 @@ import (
 // auth key names, and a new client once the secret changes; the tool as
 // loaded keeps showing the reference.
 func TestCallToolOperationResolvesSecretAuthKey(t *testing.T) {
+	// The tool's API is an httptest server on 127.0.0.1.
+	netguardtest.AllowInternal(t)
 	t.Setenv("TYK_AI_SECRET_KEY", "test-encryption-key-for-secrets")
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)

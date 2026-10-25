@@ -62,6 +62,7 @@ import { parseOpenAPIOperations } from "../../utils/openapiOperations";
 import ClientToolEditor from "./client/ClientToolEditor";
 import ToolAccessMethods from "./ToolAccessMethods";
 import { ResourceTracingSection } from "../common/TracingSettingsSection";
+import AllowInternalHostSwitch from "../common/AllowInternalHostSwitch";
 import { listAll } from "../../utils/listAll";
 
 const SectionTitle = ({ children, tooltip }) => (
@@ -296,6 +297,7 @@ const ToolForm = () => {
     rest_access_enabled: false,
     mcp_access_enabled: false,
     tracing_content_mode_max: "", // Agent tracing content cap (Enterprise); "" = no cap
+    allow_internal_host: false, // administrators only (w4e)
   });
   const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
@@ -929,6 +931,14 @@ const ToolForm = () => {
                 restUrl={id ? tool.rest_endpoint_url : ""}
                 mcpUrl={id ? tool.mcp_endpoint_url : ""}
                 existing={Boolean(id)}
+              />
+              <SectionTitle tooltip="Calls to internal network addresses are blocked. An administrator can allow this tool's own API host to be internal; every other internal address stays blocked.">
+                Network
+              </SectionTitle>
+              <AllowInternalHostSwitch
+                checked={tool.allow_internal_host}
+                onChange={(v) => setTool((prev) => ({ ...prev, allow_internal_host: v }))}
+                target="this tool's API host (from its OpenAPI servers entry)"
               />
             </>
           )}

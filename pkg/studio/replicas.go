@@ -277,9 +277,8 @@ func (s *Studio) watchRelayedChanges(bus eventbridge.Bus) {
 		}
 		switch {
 		// Local or relayed: not every write path here reloads the gateway
-		// itself (deleting an LLM, any datasource or filter change).
-		case strings.HasPrefix(ev.Topic, "system.llm."), strings.HasPrefix(ev.Topic, "system.datasource."),
-			strings.HasPrefix(ev.Topic, "system.filter."), strings.HasPrefix(ev.Topic, "system.plugin."):
+		// itself (deleting an LLM, any datasource, embedder or filter change).
+		case reloadsGateway(ev.Topic):
 			rc.reloadGateway.trigger()
 		case ev.RelayedFrom != "" && strings.HasPrefix(ev.Topic, "system.app."):
 			rc.clearBudgets.trigger()
@@ -291,6 +290,20 @@ func (s *Studio) watchRelayedChanges(bus eventbridge.Bus) {
 		removeSignal()
 	}
 	s.relayed = rc
+}
+
+// reloadsGateway reports whether a change on topic must reload the
+// embedded gateway, which holds LLMs (with their filters and plugins) and
+// datasources (with their embedders) in memory. An embedder edit (its key,
+// endpoint or "Allow internal host" switch) changes the datasources that
+// use it.
+func reloadsGateway(topic string) bool {
+	for _, prefix := range []string{"system.llm.", "system.datasource.", "system.embedder.", "system.filter.", "system.plugin."} {
+		if strings.HasPrefix(topic, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func (rc *relayedChanges) stop() {

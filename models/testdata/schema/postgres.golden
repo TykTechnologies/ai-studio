@@ -690,6 +690,7 @@ TABLE datasources
   column community_submitted boolean(bool) nullable=YES
   column submission_id bigint(int8) nullable=YES precision=64 scale=0
   column metadata json(json) nullable=YES
+  column allow_internal_host boolean(bool) nullable=NO default=false
 TABLE edge_instances
   constraint edge_instances_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX edge_instances_pkey ON edge_instances USING btree (id)
@@ -770,6 +771,7 @@ TABLE embedders
   column model text(text) nullable=NO
   column privacy_score bigint(int8) nullable=YES precision=64 scale=0
   column user_id bigint(int8) nullable=YES precision=64 scale=0
+  column allow_internal_host boolean(bool) nullable=NO default=false
 TABLE endpoint_auth_plugins
   constraint endpoint_auth_plugins_pkey PRIMARY KEY (object_type, object_id, plugin_id)
   index CREATE UNIQUE INDEX endpoint_auth_plugins_pkey ON endpoint_auth_plugins USING btree (object_type, object_id, plugin_id)
@@ -1014,6 +1016,7 @@ TABLE llms
   column resource_signing_secret_prev text(text) nullable=YES
   column resource_signing_prev_expires_at timestamp with time zone(timestamptz) nullable=YES
   column resource_signing_rotated_at timestamp with time zone(timestamptz) nullable=YES
+  column allow_internal_host boolean(bool) nullable=NO default=false
 TABLE marketplace_config
   constraint marketplace_config_pkey PRIMARY KEY (id)
   index CREATE INDEX idx_marketplace_config_deleted_at ON marketplace_config USING btree (deleted_at)
@@ -1244,6 +1247,7 @@ TABLE mcp_servers
   column endpoint_url character varying(varchar) nullable=YES len=2048
   column endpoint_urls text(text) nullable=YES
   column upstream_url character varying(varchar) nullable=YES len=2048
+  column allow_internal_host boolean(bool) nullable=NO default=false
   column source_api_id character varying(varchar) nullable=YES len=64
   column auth_mode character varying(varchar) nullable=NO len=32 default='custom'::character varying
   column auth_details text(text) nullable=YES
@@ -1652,6 +1656,7 @@ TABLE plugins
   column manifest text(text) nullable=YES
   column service_access_authorized boolean(bool) nullable=YES default=false
   column service_scopes text(text) nullable=YES
+  column allow_internal_host boolean(bool) nullable=NO default=false
 TABLE pool_vendors
   constraint fk_model_pools_vendors FOREIGN KEY (pool_id) REFERENCES model_pools(id) ON DELETE CASCADE
   constraint fk_pool_vendors_llm FOREIGN KEY (llm_id) REFERENCES llms(id)
@@ -2140,6 +2145,7 @@ TABLE tools
   column community_submitted boolean(bool) nullable=YES
   column submission_id bigint(int8) nullable=YES precision=64 scale=0
   column metadata json(json) nullable=YES
+  column allow_internal_host boolean(bool) nullable=NO default=false
 TABLE tyk_connection_ingests
   constraint tyk_connection_ingests_pkey PRIMARY KEY (connection_id)
   index CREATE UNIQUE INDEX idx_tyk_ingest_token_hash ON tyk_connection_ingests USING btree (token_hash)

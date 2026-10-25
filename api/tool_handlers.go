@@ -100,6 +100,11 @@ func (a *API) createTool(c *gin.Context) {
 		return
 	}
 
+	allowInternal, ok := allowInternalHostUpdate(c, false, input.Data.Attributes.AllowInternalHost)
+	if !ok {
+		return
+	}
+
 	// Refuse an impossible access-method request before anything is written.
 	if err := applyToolAccessInput(&models.Tool{ToolType: input.Data.Attributes.ToolType},
 		input.Data.Attributes.RESTAccessEnabled, input.Data.Attributes.MCPAccessEnabled); err != nil {
@@ -168,6 +173,7 @@ func (a *API) createTool(c *gin.Context) {
 			RESTAccessEnabled: input.Data.Attributes.RESTAccessEnabled,
 			MCPAccessEnabled:  input.Data.Attributes.MCPAccessEnabled,
 			TracingContentModeMax: input.Data.Attributes.TracingContentModeMax,
+			AllowInternalHost:     allowInternal,
 		},
 	)
 	if respondToolSlugConflict(c, err) {
@@ -359,6 +365,11 @@ func (a *API) updateTool(c *gin.Context) {
 	}
 	if input.Data.Attributes.TracingContentModeMax != nil {
 		tool.TracingContentModeMax = *input.Data.Attributes.TracingContentModeMax
+	}
+
+	var ok bool
+	if tool.AllowInternalHost, ok = allowInternalHostUpdate(c, tool.AllowInternalHost, input.Data.Attributes.AllowInternalHost); !ok {
+		return
 	}
 
 	// Access methods; an omitted switch keeps its value.
@@ -1222,6 +1233,7 @@ func serializeTool(tool *models.Tool, db *gorm.DB) ToolResponse {
 			AuthSchemaName: tool.AuthSchemaName,
 			Active:         tool.Active,
 			Namespace:      tool.Namespace,
+			AllowInternalHost: tool.AllowInternalHost,
 			FileStores:     serializeFileStores(fileStores),
 			Filters:        serializeFiltersForTool(filters),
 			Dependencies:   serializeToolsPointers(dependencies, db),
@@ -1273,6 +1285,7 @@ func serializeToolSlim(tool *models.Tool, db *gorm.DB) ToolResponse {
 			AuthSchemaName: tool.AuthSchemaName,
 			Active:         tool.Active,
 			Namespace:      tool.Namespace,
+			AllowInternalHost: tool.AllowInternalHost,
 			FileStores:     serializeFileStores(fileStores),
 			Filters:        serializeFiltersForTool(filters),
 			Dependencies:   serializeToolsPointersSlim(dependencies, db),

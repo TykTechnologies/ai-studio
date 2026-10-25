@@ -20,7 +20,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/nativeapi"
-	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/pkg/requestformat"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/switches"
@@ -595,9 +594,11 @@ func (p *Proxy) nativeUpstreamRequest(ctx context.Context, llm *models.LLM, meth
 	if err != nil {
 		return nil, fmt.Errorf("invalid upstream URL: %w", err)
 	}
-	if err := netguard.ValidateUpstreamURL(endpoint); err != nil {
+	exempt := llmExemption(llm)
+	if err := exempt.ValidateURL(endpoint); err != nil {
 		return nil, fmt.Errorf("upstream endpoint not permitted: %w", err)
 	}
+	ctx = exempt.WithContext(ctx)
 	u := &url.URL{Scheme: endpoint.Scheme, Host: endpoint.Host}
 	u.RawPath = joinUpstreamPath(endpoint.EscapedPath(), path)
 	if p, err := url.PathUnescape(u.RawPath); err == nil {
@@ -638,12 +639,12 @@ func (c *nativeCall) forward(w http.ResponseWriter, path string, body []byte) {
 	req, err := c.upstreamRequest(ctx, c.r.Method, path, c.r.URL.Query(), body)
 	if err != nil {
 		slog.Error("native upstream request", "llm", c.nr.llm.Name, "op", c.op.Name, "error", err)
-		c.fail(w, http.StatusBadGateway, nativeErrAPI, "upstream endpoint not permitted")
+		c.fail(w, http.StatusBadGateway, nativeErrAPI, upstreamErrorMessage("upstream endpoint not permitted", err))
 		return
 	}
 	resp, err := upstreamTransport.RoundTrip(req)
 	if err != nil {
-		c.fail(w, upstreamTransportStatus(err), nativeErrAPI, "failed to make upstream request")
+		c.fail(w, upstreamTransportStatus(err), nativeErrAPI, upstreamErrorMessage("failed to make upstream request", err))
 		return
 	}
 	defer resp.Body.Close()

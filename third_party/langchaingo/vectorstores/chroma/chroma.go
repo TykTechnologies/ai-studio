@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/http"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/embeddings"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/schema"
@@ -39,6 +40,8 @@ type Store struct {
 	nameSpaceKey string
 	embedder     embeddings.Embedder
 	includes     []chromav2.Include
+	// Tyk: httpClient makes the API calls (WithHTTPClient).
+	httpClient *http.Client
 }
 
 var _ vectorstores.VectorStore = Store{}
@@ -52,7 +55,11 @@ func New(opts ...Option) (Store, error) {
 	}
 
 	// create the client connection and confirm that we can access the server with it
-	chromaClient, err := chromav2.NewHTTPClient(chromav2.WithBaseURL(s.chromaURL))
+	clientOpts := []chromav2.ClientOption{chromav2.WithBaseURL(s.chromaURL)}
+	if s.httpClient != nil {
+		clientOpts = append(clientOpts, chromav2.WithHTTPClient(s.httpClient))
+	}
+	chromaClient, err := chromav2.NewHTTPClient(clientOpts...)
 	if err != nil {
 		return s, err
 	}

@@ -40,6 +40,9 @@ func (a *API) registerMCPServer(c *gin.Context) {
 		webhookBadRequest(c, "connection_id and the proxy fields are required")
 		return
 	}
+	if _, ok := allowInternalHostUpdate(c, false, in.AllowInternalHost); !ok {
+		return
+	}
 	dryRun := isDryRun(c)
 	preview, srv, err := a.tykMCPService().RegisterServer(c.Request.Context(), actor, in, dryRun)
 	if err != nil {
@@ -73,6 +76,9 @@ func (a *API) discoverMCPServerTools(c *gin.Context) {
 	var in tykmcp.DiscoverToolsInput
 	if err := c.ShouldBindJSON(&in); err != nil || strings.TrimSpace(in.UpstreamURL) == "" {
 		webhookBadRequest(c, "upstream_url is required")
+		return
+	}
+	if _, ok := allowInternalHostUpdate(c, false, &in.AllowInternalHost); !ok {
 		return
 	}
 	res, err := a.tykMCPService().DiscoverUpstreamTools(c.Request.Context(), in)
