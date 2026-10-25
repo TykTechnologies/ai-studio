@@ -10,6 +10,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
 // Embedders: reusable embedding configurations that datasources (and
@@ -154,19 +155,28 @@ func (a *API) updateEmbedder(c *gin.Context) {
 		return
 	}
 	var input EmbedderInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
 		return
 	}
 	if !validatePrivacyScore(c, input.Data.Attributes.PrivacyScore) {
 		return
 	}
-	changes := attributesToEmbedder(&input.Data.Attributes)
 	current, err := a.service.GetEmbedder(id)
 	if err != nil {
 		respondEmbedderError(c, err)
 		return
 	}
+	present, err := boundAttributeKeys(c)
+	if err != nil {
+		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
+		return
+	}
+	if err := mergeEmbedderPatch(&input, current, present); err != nil {
+		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
+		return
+	}
+	changes := attributesToEmbedder(&input.Data.Attributes)
 	if changes.IsLinked() {
 		if (!current.IsLinked() || *current.LLMID != *changes.LLMID) && !a.requireLLMReadToLink(c) {
 			return

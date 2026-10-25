@@ -7,6 +7,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
 // updateChatPromptTemplates updates the prompt templates for a chat
@@ -162,7 +163,28 @@ func (a *API) updateChat(c *gin.Context) {
 	}
 
 	var input ChatInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+	// An omitted attribute keeps the stored value (96e): a rename must not
+	// drop the chat's groups (access) or filters (guardrails).
+	stored, err := a.service.GetChatByID(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: err.Error()}},
+		})
+		return
+	}
+	if err := mergeChatPatch(c, &input, stored); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`

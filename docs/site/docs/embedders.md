@@ -24,7 +24,7 @@ API keys can be [Secrets](./secrets.md) references (`$SECRET/NAME`), as on LLM p
 
 ## API
 
-`/api/v1/embedders` supports list, create, get, update (`PATCH`), delete and `GET /embedders/{id}/dependents`. `GET /api/v1/embedders/vendors` lists the API compatibilities. Keys are never returned; send `"[redacted]"` on update to keep the stored key.
+`/api/v1/embedders` supports list, create, get, update (`PATCH`), delete and `GET /embedders/{id}/dependents`. `GET /api/v1/embedders/vendors` lists the API compatibilities. Keys are never returned; omit `api_key` (or send `"[redacted]"`) on update to keep the stored key. An update changes only the attributes it holds.
 
 The data source API is unchanged: `embed_vendor`, `embed_url`, `embed_api_key` and `embed_model` still work, and responses add `embedder_id`. Data source writes may send `embedder_id` instead of the `embed_*` fields. When the `embed_*` fields are used, AI Studio links the data source to an embedder with exactly that configuration, creating one if needed. It never edits an embedder that other data sources share.
 

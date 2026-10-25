@@ -7,6 +7,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
 // validatePricePlausibility rejects prices that are almost certainly per-million
@@ -197,13 +198,16 @@ func (a *API) updateModelPrice(c *gin.Context) {
 	}
 
 	var input ModelPriceInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
 			}{{Title: "Bad Request", Detail: err.Error()}},
 		})
+		return
+	}
+	if !a.mergeModelPricePatch(c, uint(id), &input) {
 		return
 	}
 
@@ -423,13 +427,16 @@ func (a *API) updateModelPriceAndRecalculate(c *gin.Context) {
 	}
 
 	var input ModelPriceInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
 			}{{Title: "Bad Request", Detail: err.Error()}},
 		})
+		return
+	}
+	if !a.mergeModelPricePatch(c, uint(id), &input) {
 		return
 	}
 

@@ -6,6 +6,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
 // @Summary Create new LLM settings
@@ -122,7 +123,28 @@ func (a *API) updateLLMSettings(c *gin.Context) {
 	}
 
 	var input LLMSettingsInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+	// An omitted setting keeps the stored one (96e); the stored settings'
+	// JSON names are the input's.
+	stored, err := a.service.GetLLMSettingsByID(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "LLM Settings not found"}},
+		})
+		return
+	}
+	if err := patchAttributes(c, &input.Data.Attributes, stored); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`

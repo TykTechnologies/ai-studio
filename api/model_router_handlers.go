@@ -8,6 +8,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services/model_router"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
 // ModelRouterInput represents the JSON:API input for creating/updating a model router
@@ -172,7 +173,7 @@ func (a *API) updateModelRouter(c *gin.Context) {
 	}
 
 	var input ModelRouterInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -189,6 +190,18 @@ func (a *API) updateModelRouter(c *gin.Context) {
 	existing, err := a.service.ModelRouterService.GetRouter(uint(id))
 	if err != nil || existing == nil {
 		a.respondModelRouterLookupError(c, uint(id), err)
+		return
+	}
+
+	// So is every other omitted attribute (96e): a rename must not drop the
+	// pools. The stored router's JSON names are the input's.
+	if err := patchAttributes(c, &input.Data.Attributes, existing); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
 		return
 	}
 
@@ -335,8 +348,9 @@ func (a *API) toggleModelRouterActive(c *gin.Context) {
 		return
 	}
 
+	// active is required: an empty body used to deactivate the router (96e).
 	var input struct {
-		Active bool `json:"active"`
+		Active *bool `json:"active" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
@@ -348,7 +362,7 @@ func (a *API) toggleModelRouterActive(c *gin.Context) {
 		return
 	}
 
-	if err := a.service.ModelRouterService.ToggleRouterActive(uint(id), input.Active); err != nil {
+	if err := a.service.ModelRouterService.ToggleRouterActive(uint(id), *input.Active); err != nil {
 		a.respondModelRouterLookupError(c, uint(id), err)
 		return
 	}
@@ -356,7 +370,7 @@ func (a *API) toggleModelRouterActive(c *gin.Context) {
 	// Fetch the updated router
 	router, err := a.service.ModelRouterService.GetRouter(uint(id))
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": id, "active": input.Active}})
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"id": id, "active": *input.Active}})
 		return
 	}
 

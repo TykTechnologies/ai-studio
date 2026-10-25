@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -132,4 +133,29 @@ func TestUpdateSecret_EmptyValueDoesNotOverwrite(t *testing.T) {
 	updatedSecret, err := secrets.GetSecretByID(db, secretID, false)
 	require.NoError(t, err)
 	assert.Equal(t, "real-secret", updatedSecret.Value, "Secret value should be preserved when empty value is sent")
+}
+
+// An omitted var_name keeps the secret's name, so its $SECRET/ references
+// keep resolving; an empty one is refused (midsommar-clean-96e).
+func TestUpdateSecret_VarNameOmittedKeptEmptyRefused(t *testing.T) {
+	t.Setenv("TYK_AI_SECRET_KEY", "test-secret-key-for-unit-test")
+	api, db := setupTestAPI(t)
+	db.AutoMigrate(&secrets.Secret{})
+	secret := &secrets.Secret{VarName: "KEEP_NAME", Value: "real-secret"}
+	require.NoError(t, secrets.CreateSecret(db, secret))
+
+	w := performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/secrets/%d", secret.ID),
+		map[string]interface{}{"data": map[string]interface{}{"attributes": map[string]interface{}{"value": "new-value"}}})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	got, err := secrets.GetSecretByID(db, secret.ID, false)
+	require.NoError(t, err)
+	assert.Equal(t, "KEEP_NAME", got.VarName)
+	assert.Equal(t, "new-value", got.Value)
+
+	w = performRequest(api.router, "PATCH", fmt.Sprintf("/api/v1/secrets/%d", secret.ID),
+		map[string]interface{}{"data": map[string]interface{}{"attributes": map[string]interface{}{"var_name": " "}}})
+	assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	got, err = secrets.GetSecretByID(db, secret.ID, false)
+	require.NoError(t, err)
+	assert.Equal(t, "KEEP_NAME", got.VarName)
 }

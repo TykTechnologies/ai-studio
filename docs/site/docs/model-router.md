@@ -261,9 +261,9 @@ Use weighted routing to gradually shift traffic between model versions or vendor
 | `GET` | `/api/v1/model-routers` | List all model routers |
 | `POST` | `/api/v1/model-routers` | Create a new model router |
 | `GET` | `/api/v1/model-routers/{id}` | Get a model router by ID |
-| `PATCH` | `/api/v1/model-routers/{id}` | Update a model router |
+| `PATCH` | `/api/v1/model-routers/{id}` | Update a model router (omitted attributes keep their values; `pools` present replaces them all) |
 | `DELETE` | `/api/v1/model-routers/{id}` | Delete a model router |
-| `PATCH` | `/api/v1/model-routers/{id}/toggle` | Toggle router active status |
+| `PATCH` | `/api/v1/model-routers/{id}/toggle` | Set the router's active status (`{"active": true\|false}`, required) |
 | `PUT` | `/api/v1/model-routers/{id}/catalogues` | Set the LLM catalogues the router is published in (`{"catalogue_ids": [...]}`) |
 | `GET` | `/api/v1/model-routers/{id}/dependents` | Apps granted the router and catalogues it is published in |
 

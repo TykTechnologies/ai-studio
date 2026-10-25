@@ -10,6 +10,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
 // @Summary Create a new data catalogue
@@ -116,13 +117,24 @@ func (a *API) updateDataCatalogue(c *gin.Context) {
 	}
 
 	var input DataCatalogueInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
 			}{{Title: "Bad Request", Detail: err.Error()}},
 		})
+		return
+	}
+	// An omitted attribute keeps the stored one (96e); the stored record's
+	// JSON names are the input's.
+	stored, err := a.service.GetDataCatalogueByID(uint(id))
+	if err != nil {
+		simpleError(c, http.StatusNotFound, "Not Found", "Data catalogue not found")
+		return
+	}
+	if err := patchAttributes(c, &input.Data.Attributes, stored); err != nil {
+		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
 		return
 	}
 

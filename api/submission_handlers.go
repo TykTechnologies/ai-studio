@@ -9,6 +9,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
 // --- Input types ---
@@ -312,13 +313,25 @@ func (a *API) updateMySubmission(c *gin.Context) {
 	}
 
 	var input SubmissionInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
 			}{{Title: "Bad Request", Detail: err.Error()}},
 		})
+		return
+	}
+
+	// An omitted attribute keeps the stored one (96e). Another user's
+	// submission is merged too; UpdateSubmission refuses it.
+	stored, err := a.service.GetSubmissionByID(uint(id))
+	if err != nil {
+		simpleError(c, http.StatusNotFound, "Not Found", "Submission not found")
+		return
+	}
+	if err := mergeSubmissionPatch(c, &input, stored); err != nil {
+		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
 		return
 	}
 

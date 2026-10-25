@@ -3,12 +3,14 @@ package api
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
 func checkSecretKey(c *gin.Context) bool {
@@ -144,7 +146,7 @@ func (a *API) updateSecret(c *gin.Context) {
 	}
 
 	var input SecretInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -165,7 +167,30 @@ func (a *API) updateSecret(c *gin.Context) {
 		return
 	}
 
-	secret.VarName = input.Data.Attributes.VarName
+	// An omitted var_name keeps the stored name (96e); an empty one would
+	// break every $SECRET/ reference to the secret, so it is refused.
+	present, err := boundAttributeKeys(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
+	}
+	if _, ok := present["var_name"]; ok {
+		if strings.TrimSpace(input.Data.Attributes.VarName) == "" {
+			c.JSON(http.StatusBadRequest, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Bad Request", Detail: "var_name must not be empty"}},
+			})
+			return
+		}
+		secret.VarName = input.Data.Attributes.VarName
+	}
 
 	// Only update the value if the user actually provided a new secret value.
 	// When editing, the frontend loads the placeholder reference (e.g. $SECRET/NAME)
