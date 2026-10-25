@@ -479,6 +479,7 @@ func (s *Service) ApproveSubmissionWithOptions(submissionID, reviewerID uint, fi
 	if isPluginResource {
 		reviewer = s.submissionUserRefByID(reviewerID)
 	}
+	actorName := s.ResolveActorName(reviewerID, "")
 
 	// Begin transaction — all writes must succeed or all roll back
 	tx := s.DB.Begin()
@@ -544,7 +545,7 @@ func (s *Service) ApproveSubmissionWithOptions(submissionID, reviewerID uint, fi
 	activity := &models.SubmissionActivity{
 		SubmissionID: submissionID,
 		ActorID:      reviewerID,
-		ActorName:    s.ResolveActorName(reviewerID, ""),
+		ActorName:    actorName,
 		ActivityType: models.ActivityTypeApproved,
 		InternalNote: reviewNotes,
 	}
