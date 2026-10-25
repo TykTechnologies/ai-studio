@@ -344,7 +344,7 @@ func (ds *DataSession) getStore(d *models.Datasource, embedder *embeddings.Embed
 			pinecone.WithAPIKey(d.DBConnAPIKey),
 			pinecone.WithNameSpace(d.DBName),
 			pinecone.WithHTTPClient(httpClient(d)),
-			pinecone.WithGRPCDialOptions(grpcDialer(d)))
+			pinecone.WithGRPCDialOptions(grpcDialOptions(d)...))
 
 	case VECTOR_PGVECTOR:
 		store, err = pgvector.New(
@@ -490,7 +490,7 @@ func (ds *DataSession) storeToPinecone(ctx context.Context, store vectorstores.V
 	indexName := hostParts[0]
 
 	// Get index connection
-	idx, err := pc.Index(pineconeSDK.NewIndexConnParams{Host: d.DBConnString}, grpcDialer(d))
+	idx, err := pc.Index(pineconeSDK.NewIndexConnParams{Host: d.DBConnString}, grpcDialOptions(d)...)
 	if err != nil {
 		return fmt.Errorf("failed to connect to pinecone index: %w", err)
 	}
@@ -721,7 +721,7 @@ func (ds *DataSession) searchPineconeByVector(ctx context.Context, d *models.Dat
 	}
 
 	// Get index connection
-	idx, err := pc.Index(pineconeSDK.NewIndexConnParams{Host: d.DBConnString}, grpcDialer(d))
+	idx, err := pc.Index(pineconeSDK.NewIndexConnParams{Host: d.DBConnString}, grpcDialOptions(d)...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to pinecone index: %w", err)
 	}

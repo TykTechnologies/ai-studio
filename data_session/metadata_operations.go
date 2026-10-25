@@ -174,7 +174,7 @@ func (ds *DataSession) deletePineconeByMetadata(ctx context.Context, d *models.D
 	idx, err := pc.Index(pineconeSDK.NewIndexConnParams{
 		Host:      d.DBConnString,
 		Namespace: d.DBName,
-	}, grpcDialer(d))
+	}, grpcDialOptions(d)...)
 	if err != nil {
 		return 0, fmt.Errorf("failed to connect to pinecone index: %w", err)
 	}
@@ -240,7 +240,7 @@ func (ds *DataSession) queryPineconeByMetadata(ctx context.Context, d *models.Da
 	idx, err := pc.Index(pineconeSDK.NewIndexConnParams{
 		Host:      d.DBConnString,
 		Namespace: d.DBName,
-	}, grpcDialer(d))
+	}, grpcDialOptions(d)...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to connect to pinecone index: %w", err)
 	}
@@ -349,7 +349,7 @@ func (ds *DataSession) listPineconeNamespaces(ctx context.Context, d *models.Dat
 	}
 
 	// Get index connection (without specific namespace to get all stats)
-	idx, err := pc.Index(pineconeSDK.NewIndexConnParams{Host: d.DBConnString}, grpcDialer(d))
+	idx, err := pc.Index(pineconeSDK.NewIndexConnParams{Host: d.DBConnString}, grpcDialOptions(d)...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to pinecone index: %w", err)
 	}
@@ -386,7 +386,7 @@ func (ds *DataSession) deletePineconeNamespace(ctx context.Context, d *models.Da
 	idx, err := pc.Index(pineconeSDK.NewIndexConnParams{
 		Host:      d.DBConnString,
 		Namespace: namespace,
-	}, grpcDialer(d))
+	}, grpcDialOptions(d)...)
 	if err != nil {
 		return fmt.Errorf("failed to connect to pinecone index: %w", err)
 	}

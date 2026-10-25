@@ -5,12 +5,14 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/netguard/netguardtest"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/vectorstores/pgvector"
+	pineconeSDK "github.com/pinecone-io/go-pinecone/pinecone"
 	redis "github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -94,70 +96,107 @@ func TestDatasourceClientsRefuseInternalUnlessAllowed(t *testing.T) {
 }
 
 // The switch is keyed by the host named in the connection string, and pgx
-// resolves a host itself and dials the addresses: a hostname that resolves
-// to an internal address (pgvector at "pgvec" in a compose network) must be
-// allowed with the switch on and refused with it off, through openPostgres
-// and the pgvector store alike. Redis dials the hostname; checked too.
+// and gRPC resolve a host themselves before dialling: a hostname that
+// resolves to an internal address (pgvector at "pgvec" in a compose
+// network) must connect with the switch on and be refused with it off,
+// through openPostgres, the pgvector store and Pinecone's index connection.
+// An internal host the switch does not name stays refused. Redis dials the
+// hostname; checked too.
 func TestHostnameExemption(t *testing.T) {
 	netguardtest.BlockInternal(t)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = ln.Close() })
+	var accepted atomic.Int64
 	go func() {
 		for {
 			c, err := ln.Accept()
 			if err != nil {
 				return
 			}
+			accepted.Add(1)
 			_ = c.Close()
 		}
 	}()
 	_, port, err := net.SplitHostPort(ln.Addr().String())
 	require.NoError(t, err)
-	conn := "postgres://u:p@localhost:" + port + "/vec?sslmode=disable&connect_timeout=2"
 
-	for _, allow := range []bool{false, true} {
-		d := &models.Datasource{DBConnString: conn, AllowInternalHost: allow}
-		_, pgErr := openPostgresPing(d)
-		_, storeErr := pgvector.New(context.Background(),
-			pgvector.WithConnectionURL(conn),
-			pgvector.WithEmbedder(stubEmbedder{}),
-			pgvectorDial(d),
-		)
-		for what, err := range map[string]error{"openPostgres": pgErr, "pgvector store": storeErr} {
-			// The stub listener closes every connection, so both fail either way.
-			require.Error(t, err, what)
-			if allow {
+	// Each client fails either way (the listener closes every connection):
+	// with the switch on it must have reached the listener, with it off it
+	// must have been refused before dialling.
+	check := func(t *testing.T, what string, allow bool, dial func() error) {
+		before := accepted.Load()
+		err := dial()
+		if allow {
+			if err != nil {
 				assert.NotContains(t, err.Error(), "internal address", "%s with the switch on", what)
-			} else {
-				assert.Contains(t, err.Error(), "internal address", "%s with the switch off", what)
 			}
+			assert.Eventually(t, func() bool { return accepted.Load() > before }, 2*time.Second, 10*time.Millisecond, "%s with the switch on must connect", what)
+		} else {
+			require.Error(t, err, what)
+			assert.Contains(t, err.Error(), "internal address", "%s with the switch off", what)
+			assert.Equal(t, before, accepted.Load(), "%s with the switch off must not connect", what)
 		}
+	}
+
+	pgConn := "postgres://u:p@localhost:" + port + "/vec?sslmode=disable&connect_timeout=2"
+	for _, allow := range []bool{false, true} {
+		pg := &models.Datasource{DBConnString: pgConn, AllowInternalHost: allow}
+		check(t, "openPostgres", allow, func() error {
+			_, err := openPostgresPing(pg)
+			return err
+		})
+		check(t, "pgvector store", allow, func() error {
+			_, err := pgvector.New(context.Background(),
+				pgvector.WithConnectionURL(pgConn),
+				pgvector.WithEmbedder(stubEmbedder{}),
+				pgvectorDial(pg),
+			)
+			return err
+		})
+
+		pc := &models.Datasource{DBConnString: "http://localhost:" + port, DBConnAPIKey: "k", AllowInternalHost: allow}
+		check(t, "Pinecone index", allow, func() error {
+			client, err := pineconeClient(pc)
+			require.NoError(t, err)
+			idx, err := client.Index(pineconeSDK.NewIndexConnParams{Host: pc.DBConnString}, grpcDialOptions(pc)...)
+			require.NoError(t, err)
+			defer idx.Close()
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			_, err = idx.DescribeIndexStats(ctx)
+			return err
+		})
 
 		rd := &models.Datasource{DBConnString: "redis://localhost:" + port, AllowInternalHost: allow}
 		opt, err := redis.ParseURL(rd.DBConnString)
 		require.NoError(t, err)
 		redisDialer(rd, opt)
-		c, redisErr := opt.Dialer(context.Background(), "tcp", opt.Addr)
-		if redisErr == nil {
-			c.Close()
-		}
-		c, rueidisErr := rueidisDial(rd)("localhost:"+port, &net.Dialer{Timeout: 2 * time.Second}, nil)
-		if rueidisErr == nil {
-			c.Close()
-		}
-		for what, err := range map[string]error{"Redis": redisErr, "Redis vector store": rueidisErr} {
-			if allow {
-				// localhost may resolve to ::1 first, where nothing listens.
-				if err != nil {
-					assert.NotContains(t, err.Error(), "internal address", "%s with the switch on", what)
-				}
-			} else {
-				require.Error(t, err, what)
-				assert.Contains(t, err.Error(), "internal address", "%s with the switch off", what)
+		check(t, "Redis", allow, func() error {
+			c, err := opt.Dialer(context.Background(), "tcp", opt.Addr)
+			if err == nil {
+				c.Close()
 			}
-		}
+			return err
+		})
+		check(t, "Redis vector store", allow, func() error {
+			c, err := rueidisDial(rd)("localhost:"+port, &net.Dialer{Timeout: 2 * time.Second}, nil)
+			if err == nil {
+				c.Close()
+			}
+			return err
+		})
 	}
+
+	// The switch on for another host leaves this one refused: pgx and gRPC
+	// resolve it and their dials get the check.
+	other := &models.Datasource{DBConnString: "postgres://u:p@pg.example:5432/vec", AllowInternalHost: true}
+	ips, err := pgLookup(other)(context.Background(), "localhost")
+	require.NoError(t, err)
+	assert.NotContains(t, ips, "localhost", "a host the switch does not name is resolved")
+	_, err = exemption(other).DialContext(context.Background(), "tcp", net.JoinHostPort(ips[0], port))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "internal address")
 }
 
 type stubEmbedder struct{}

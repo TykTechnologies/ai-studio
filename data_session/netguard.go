@@ -3,6 +3,7 @@ package data_session
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -20,6 +21,7 @@ import (
 	redis "github.com/redis/go-redis/v9"
 	weaviateSDK "github.com/weaviate/weaviate-go-client/v5/weaviate"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/resolver"
 )
 
 // Every connection to a datasource's vector store goes through netguard
@@ -56,16 +58,46 @@ func httpClient(d *models.Datasource) *http.Client {
 	return exemption(d).HTTPClient(0)
 }
 
-// grpcDialer is the dialer of Pinecone's index (gRPC) connection.
-func grpcDialer(d *models.Datasource) grpc.DialOption {
+// grpcDialOptions are the options of Pinecone's index (gRPC) connection:
+// the datasource's dialer, and a resolver for the "dns" scheme the
+// connection's target gets. gRPC resolves a host before dialling, so an
+// exempt host goes through passthrough instead: the dial sees the host
+// named in the datasource, which the exemption matches, and resolves it.
+// Every other host resolves as before and its addresses get the dial-time
+// check.
+func grpcDialOptions(d *models.Datasource) []grpc.DialOption {
 	ex := exemption(d)
-	return grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
-		return ex.DialContext(ctx, "tcp", addr)
-	})
+	return []grpc.DialOption{
+		grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
+			return ex.DialContext(ctx, "tcp", addr)
+		}),
+		grpc.WithResolvers(exemptResolver{ex}),
+	}
+}
+
+// exemptResolver builds the "dns" resolver of one datasource's connection.
+type exemptResolver struct{ ex netguard.Exemption }
+
+func (exemptResolver) Scheme() string { return "dns" }
+
+func (r exemptResolver) Build(target resolver.Target, cc resolver.ClientConn, opts resolver.BuildOptions) (resolver.Resolver, error) {
+	host, _, err := net.SplitHostPort(target.Endpoint())
+	if err != nil {
+		host = target.Endpoint()
+	}
+	scheme := "dns"
+	if r.ex.Has(host) {
+		scheme = "passthrough"
+	}
+	b := resolver.Get(scheme)
+	if b == nil {
+		return nil, fmt.Errorf("grpc resolver %q not registered", scheme)
+	}
+	return b.Build(target, cc, opts)
 }
 
 // pineconeClient is a Pinecone client for the datasource; index connections
-// take grpcDialer(d).
+// take grpcDialOptions(d).
 func pineconeClient(d *models.Datasource) (*pineconeSDK.Client, error) {
 	return pineconeSDK.NewClient(pineconeSDK.NewClientParams{ApiKey: d.DBConnAPIKey, RestClient: httpClient(d)})
 }
