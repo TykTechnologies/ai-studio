@@ -73,14 +73,16 @@ def tee(path):
 
 
 def load(label, path):
-    """Returns (packages, tests) for one stream."""
+    """Returns (packages, tests) for one stream. A top-level test's time is
+    its own or its slowest subtest's, whichever is longer: go test reports
+    0s for a test whose subtests all call t.Parallel."""
     pkgs = {}
-    tests = []
+    tests = {}
     try:
         f = open(path, "rb")
     except OSError as e:
         print(f"<!-- {label}: {e} -->", file=sys.stderr)
-        return pkgs, tests
+        return pkgs, []
     with f:
         for raw in f:
             try:
@@ -97,9 +99,13 @@ def load(label, path):
             p = pkgs.setdefault(pkg, {"label": label, "pkg": pkg, "result": None,
                                       "elapsed": 0.0, "cached": False, "notests": False})
             if test:
-                if action in ("pass", "fail", "skip") and "/" not in test:
-                    tests.append({"label": label, "pkg": pkg, "test": test,
-                                  "result": action, "elapsed": ev.get("Elapsed", 0.0)})
+                if action in ("pass", "fail", "skip"):
+                    top = test.split("/", 1)[0]
+                    tc = tests.setdefault((pkg, top), {"label": label, "pkg": pkg, "test": top,
+                                                       "result": None, "elapsed": 0.0})
+                    tc["elapsed"] = max(tc["elapsed"], ev.get("Elapsed", 0.0) or 0.0)
+                    if test == top:
+                        tc["result"] = action
                 continue
             if action == "output":
                 text = ev.get("Output", "")
@@ -112,7 +118,9 @@ def load(label, path):
             elif action in ("pass", "fail", "skip"):
                 p["result"] = action
                 p["elapsed"] = ev.get("Elapsed", 0.0) or 0.0
-    return pkgs, tests
+    # A cached package replays its old results; its tests did not run.
+    ran = [t for t in tests.values() if t["result"] and not pkgs[t["pkg"]]["cached"]]
+    return pkgs, ran
 
 
 def short(pkg):
@@ -159,7 +167,7 @@ def summary(args):
     lines.append("")
     lines.append("</details>")
     lines.append("")
-    lines.append(f"<details open><summary>Slowest {args.tests} top-level tests</summary>")
+    lines.append(f"<details open><summary>Slowest {args.tests} top-level tests (parallel subtests: the slowest one)</summary>")
     lines.append("")
     lines.append("| Step | Package | Test | Time | Result |")
     lines.append("|---|---|---|---:|---|")
