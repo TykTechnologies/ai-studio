@@ -207,12 +207,17 @@ jobs:
   # ==========================================================================
   # Go Unit Tests (Studio + Microgateway + Enterprise) - Matrix for CE/ENT
   #
-  # Caching: one cache of the build and module caches per edition. Pull
-  # requests only restore it; pushes to main save a fresh one, so pull
-  # requests start from the latest main. In pr mode it also holds main's
-  # test results, and packages whose code and test inputs are unchanged are
-  # reported as "(cached)" instead of re-running. setup-go's own cache is off:
-  # it stored the same directories a second time.
+  # Caching: a build cache and a module cache per edition. Pull requests
+  # only restore them; pushes to main save them, so pull requests start
+  # from the latest main. In pr mode the build cache also holds main's test
+  # results, and packages whose code and test inputs are unchanged are
+  # reported as "(cached)" instead of re-running. setup-go's own cache is
+  # off: it stored the same directories a second time.
+  #
+  # The build cache is trimmed to what this run used before it is saved
+  # (see "Trim the Go build cache"); saved whole, it grew without bound.
+  # The module cache only changes with go.sum, so it is keyed on go.sum
+  # and saved only when that key is new.
   #
   # Timings: each go test step writes go test -json to test-*.json and
   # prints the usual -v log from it (scripts/gotest-json.py). The job
@@ -231,6 +236,10 @@ jobs:
         # Fork pull requests run CE only (see FORK_PR above).
         edition: ${{ fromJSON((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && '["ce"]' || '["ce", "ent"]') }}
     steps:
+      # For the cache trim before "Save Go build cache".
+      - name: Record the job start time
+        run: echo "JOB_START=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -248,22 +257,31 @@ jobs:
           go 1.26.5
           EOF
 
+      # Restored before Setup Go: setup-go runs `go`, which downloads the
+      # go.mod toolchain into ~/go/pkg/mod, and tar then fails on its
+      # read-only files ("Cannot open: File exists"), reporting a miss.
+      - name: Restore Go module cache
+        id: gomod
+        uses: WarpBuilds/cache/restore@f643a1ba29942d56621d07fc2d4284c7219868ad # v1
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-gomod-${{ matrix.edition }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-gomod-${{ matrix.edition }}-
+
+      - name: Restore Go build cache
+        uses: WarpBuilds/cache/restore@f643a1ba29942d56621d07fc2d4284c7219868ad # v1
+        with:
+          path: ~/.cache/go-build
+          key: ${{ runner.os }}-gotest2-${{ matrix.edition }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-gotest2-${{ matrix.edition }}-
+
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
           cache: false
-
-      - name: Restore Go cache
-        uses: WarpBuilds/cache/restore@f643a1ba29942d56621d07fc2d4284c7219868ad # v1
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-gotest-${{ matrix.edition }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
-          restore-keys: |
-            ${{ runner.os }}-gotest-${{ matrix.edition }}-${{ hashFiles('**/go.sum') }}-
-            ${{ runner.os }}-gotest-${{ matrix.edition }}-
 
       - name: Go cache size
         run: du -sh ~/.cache/go-build ~/go/pkg/mod 2>/dev/null || true
@@ -393,16 +411,37 @@ jobs:
           path: coverage-*.out
           retention-days: 7
 
+      # Keep only the entries this run used, so the saved cache is this
+      # run's working set instead of everything since the key was new.
+      # Go sets an entry's mtime to now when it uses it, but only if the
+      # mtime is over an hour old (mtimeInterval in cmd/go/internal/cache).
+      # So every entry this run used, read or written, has an mtime after
+      # JOB_START - 60 min; anything older was not used and goes. The
+      # top-level README and trim.txt are kept.
+      - name: Trim the Go build cache
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && env.MODE == 'pr' }}
+        run: |
+          cache=$(go env GOCACHE)
+          cutoff=$((JOB_START - 61 * 60))
+          echo "Before: $(du -sh "$cache" | cut -f1), $(find "$cache" -mindepth 2 -type f | wc -l) files"
+          find "$cache" -mindepth 2 -type f ! -newermt "@$cutoff" -delete
+          echo "After:  $(du -sh "$cache" | cut -f1), $(find "$cache" -mindepth 2 -type f | wc -l) files"
+
       # Saved even when a test failed: the build cache is still good, and Go
       # never caches a failing result.
-      - name: Save Go cache
+      - name: Save Go build cache
         if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && env.MODE == 'pr' }}
         uses: WarpBuilds/cache/save@f643a1ba29942d56621d07fc2d4284c7219868ad # v1
         with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-gotest-${{ matrix.edition }}-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ~/.cache/go-build
+          key: ${{ runner.os }}-gotest2-${{ matrix.edition }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Save Go module cache
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && env.MODE == 'pr' && steps.gomod.outputs.cache-hit != 'true' }}
+        uses: WarpBuilds/cache/save@f643a1ba29942d56621d07fc2d4284c7219868ad # v1
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ steps.gomod.outputs.cache-primary-key }}
 
   # ==========================================================================
   # Go Postgres Tests: the tests that need a real PostgreSQL (SQLite hides
@@ -411,8 +450,8 @@ jobs:
   # DATABASE_URL, so the unit jobs above never run them.
   #
   # They talk to a live database, so they always re-run (-count=1); the job
-  # restores the CE unit-test cache for its compiled packages and saves none
-  # of its own.
+  # restores the CE unit-test build cache for its compiled packages and the
+  # module cache of the edition it checks out, and saves none of its own.
   # ==========================================================================
   go-postgres-tests:
     needs: [dep-guard, changes]
@@ -456,22 +495,33 @@ jobs:
           go 1.26.5
           EOF
 
+      # Before Setup Go, as in go-unit-tests. The checkout includes the
+      # enterprise submodule (except on forks), so its go.sum hash is the
+      # ent job's.
+      - name: Restore Go module cache
+        uses: WarpBuilds/cache/restore@f643a1ba29942d56621d07fc2d4284c7219868ad # v1
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-gomod-${{ env.FORK_PR == 'true' && 'ce' || 'ent' }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-gomod-${{ env.FORK_PR == 'true' && 'ce' || 'ent' }}-
+
+      - name: Restore Go build cache
+        uses: WarpBuilds/cache/restore@f643a1ba29942d56621d07fc2d4284c7219868ad # v1
+        with:
+          path: ~/.cache/go-build
+          key: ${{ runner.os }}-gotest2-ce-${{ github.run_id }}
+          restore-keys: |
+            ${{ runner.os }}-gotest2-ce-
+
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version-file: go.mod
           cache: false
 
-      - name: Restore Go cache
-        uses: WarpBuilds/cache/restore@f643a1ba29942d56621d07fc2d4284c7219868ad # v1
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-gotest-ce-${{ hashFiles('**/go.sum') }}-${{ github.run_id }}
-          restore-keys: |
-            ${{ runner.os }}-gotest-ce-${{ hashFiles('**/go.sum') }}-
-            ${{ runner.os }}-gotest-ce-
+      - name: Go cache size
+        run: du -sh ~/.cache/go-build ~/go/pkg/mod 2>/dev/null || true
 
       - name: Create placeholders for embeds
         run: |
