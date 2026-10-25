@@ -543,7 +543,7 @@ func (a *AuthService) UpdatePassword(user *models.User, oldPassword, newPassword
 		return err
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), models.PasswordHashCost())
 	if err != nil {
 		return err
 	}
@@ -614,7 +614,7 @@ func (a *AuthService) Register(email, name, password string, showPortal, showCha
 		return err
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), models.PasswordHashCost())
 	if err != nil {
 		return err
 	}

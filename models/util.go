@@ -4,6 +4,8 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"sync/atomic"
+	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"golang.org/x/crypto/bcrypt"
@@ -12,9 +14,32 @@ import (
 var HashPassword func(password string) (string, error) = hashPassword
 var IsPasswordValid func(password, original string) bool = isPasswordValid
 
+// passwordHashCost is the bcrypt cost of every password and client-secret
+// hash Studio creates (models, auth and the OAuth client service all read it
+// through PasswordHashCost). It is bcrypt.DefaultCost in every binary; only a
+// test binary can lower it, through UseMinPasswordCostForTests.
+var passwordHashCost atomic.Int32
+
+func init() { passwordHashCost.Store(int32(bcrypt.DefaultCost)) }
+
+// PasswordHashCost returns the bcrypt cost to hash passwords and secrets with.
+func PasswordHashCost() int { return int(passwordHashCost.Load()) }
+
+// UseMinPasswordCostForTests lowers the bcrypt cost to bcrypt.MinCost. One
+// DefaultCost hash takes ~0.8 s under -race, and most test harnesses create a
+// user. Verification reads the cost from the hash itself, so tests that check
+// a hash still pass. It panics outside a test binary, so production can never
+// lower the cost.
+func UseMinPasswordCostForTests() {
+	if !testing.Testing() {
+		panic("models.UseMinPasswordCostForTests called outside a test binary")
+	}
+	passwordHashCost.Store(int32(bcrypt.MinCost))
+}
+
 func hashPassword(password string) (string, error) {
 	// Generate a bcrypt hash
-	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), PasswordHashCost())
 	if err != nil {
 		return "", err
 	}

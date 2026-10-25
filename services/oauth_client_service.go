@@ -51,7 +51,7 @@ func (s *OAuthClientService) CreateClientWithAuthMethod(name string, redirectURI
 		plainClientSecret = hex.EncodeToString(rawClientSecret)
 
 		// Hash the ClientSecret
-		hashedSecretBytes, err := bcrypt.GenerateFromPassword([]byte(plainClientSecret), bcrypt.DefaultCost)
+		hashedSecretBytes, err := bcrypt.GenerateFromPassword([]byte(plainClientSecret), models.PasswordHashCost())
 		if err != nil {
 			return nil, "", err
 		}
