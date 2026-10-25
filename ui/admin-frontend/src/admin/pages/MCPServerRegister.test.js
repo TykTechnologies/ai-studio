@@ -4,8 +4,18 @@ import "@testing-library/jest-dom";
 import { renderWithRoutesAndTheme } from "../../test-utils/render-with-theme";
 import MCPServerRegister, { buildPayload } from "./MCPServerRegister";
 import apiClient from "../utils/apiClient";
+import { usePermissions } from "../context/PermissionsContext";
 
 jest.mock("../utils/apiClient");
+// The real hook, which tests of the administrator-only switch override.
+jest.mock("../context/PermissionsContext", () => {
+  const actual = jest.requireActual("../context/PermissionsContext");
+  return { ...actual, usePermissions: jest.fn(actual.usePermissions) };
+});
+// Jest's resetMocks clears the implementation before each test.
+beforeEach(() => {
+  usePermissions.mockImplementation(jest.requireActual("../context/PermissionsContext").usePermissions);
+});
 
 const connections = [
   { id: 1, name: "Prod", status: "active", effective_mode: "full", capabilities: { rest_to_mcp_supported: { state: "ok" } } },
@@ -155,6 +165,21 @@ describe("MCPServerRegister", () => {
       return apiClient.post.mock.calls.find((c) => c[0] === "/mcp-servers/register?dry_run=1")[1];
     };
 
+    it("sends the administrator's Allow internal host switch with discovery (w4e)", async () => {
+      const actual = jest.requireActual("../context/PermissionsContext");
+      usePermissions.mockImplementation(() => ({ ...actual.usePermissions(), isFullAdmin: true }));
+      apiClient.post.mockImplementation((path) =>
+        path === "/mcp-servers/discover-tools"
+          ? Promise.resolve({ data: { endpoint: "http://orders.internal/mcp", server_name: "orders", tools: [{ name: "get_order" }] } })
+          : Promise.resolve({ data: { definition: {}, warnings: [], endpoint_url: "" } })
+      );
+      await toProxyDetails();
+      fireEvent.click(screen.getByRole("checkbox", { name: "Allow internal host" }));
+      fireEvent.click(screen.getByTestId("tools-selected"));
+      await screen.findByTestId("discovered-tools");
+      expect(apiClient.post).toHaveBeenCalledWith("/mcp-servers/discover-tools", expect.objectContaining({ allow_internal_host: true }));
+    });
+
     it("offers the upstream's tools as a checklist", async () => {
       apiClient.post.mockImplementation((path) => {
         if (path === "/mcp-servers/discover-tools") {
@@ -230,6 +255,10 @@ describe("MCPServerRegister", () => {
     expect(body.upstream_auth_header_name).toBeUndefined();
     expect(body.allowed_tools).toEqual(["t1", "t2"]);
     expect(buildPayload({ kind: "remote", tool_access: "all", allowed_tools: ["t1"], manual_tools: "t2", primitives: [], gateway_tags: [] }).allowed_tools).toEqual([]);
+    // The Allow internal host switch is stored with the server, sent only when on (w4e).
+    const remote = { kind: "remote", tool_access: "all", allowed_tools: [], manual_tools: "", primitives: [], gateway_tags: [] };
+    expect(buildPayload({ ...remote, allow_internal_host: true }).allow_internal_host).toBe(true);
+    expect(buildPayload(remote)).not.toHaveProperty("allow_internal_host");
     expect(body.tags).toEqual(["a", "b"]);
     expect(body.privacy_score).toBeUndefined();
     expect(body.gateway_tags).toEqual(["edge-eu"]);

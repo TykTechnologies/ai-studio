@@ -85,7 +85,7 @@ func TestChatV2(t *gotest.T) {
 	require.NoError(t, service.AddUserToGroup(user.ID, group.ID))
 
 	chat := &models.Chat{
-		LLM:           &models.LLM{Name: "Dummy LLM", Vendor: models.MOCK_VENDOR},
+		LLM:           &models.LLM{Name: "Dummy LLM", Vendor: models.MOCK_VENDOR, Active: true},
 		LLMSettings:   &models.LLMSettings{ModelName: "dummy"},
 		Name:          "V2 Chat",
 		Description:   "A chat for the v2 API",

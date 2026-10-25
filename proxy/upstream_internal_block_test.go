@@ -74,4 +74,33 @@ func TestUpstreamInternalAddressBlockedByDefault(t *testing.T) {
 	t.Setenv(netguard.EnvAllowedInternalHosts, "localhost")
 	assert.Equal(t, http.StatusOK, call("Allow-listed name", "http://localhost:"+u.Port()))
 	assert.Equal(t, int32(1), hits.Load())
+	t.Setenv(netguard.EnvAllowedInternalHosts, "")
+	// The env exemption is static in a running gateway; drop the connection
+	// it let the shared pool keep.
+	upstreamGuardedTransport.(interface{ CloseIdleConnections() }).CloseIdleConnections()
+
+	// The LLM's own "Allow internal host" switch (w4e) exempts its host for
+	// that LLM only, IP literal or name; another LLM on the same host stays
+	// blocked.
+	callLLM := func(llm *models.LLM) int {
+		t.Helper()
+		require.NoError(t, db.Create(llm).Error)
+		require.NoError(t, app.AddLLM(db, llm))
+		p := NewProxy(service, &Config{Port: 8080}, budgetService)
+		require.NoError(t, p.loadResources())
+		req := httptest.NewRequest("POST", "/llm/rest/"+slug.Make(llm.Name)+"/v1/chat/completions",
+			bytes.NewReader([]byte(`{"model":"m","messages":[{"role":"user","content":"hi"}]}`)))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", cred.Secret)
+		req = req.WithContext(context.WithValue(req.Context(), "app", app))
+		w := httptest.NewRecorder()
+		p.createHandler().ServeHTTP(w, req)
+		return w.Code
+	}
+	assert.Equal(t, http.StatusOK, callLLM(&models.LLM{Name: "Switch literal", APIKey: "sk-fake", APIEndpoint: upstream.URL,
+		Vendor: models.MOCK_VENDOR, Active: true, DefaultModel: "m", AllowInternalHost: true}))
+	assert.Equal(t, http.StatusOK, callLLM(&models.LLM{Name: "Switch name", APIKey: "sk-fake", APIEndpoint: "http://localhost:" + u.Port(),
+		Vendor: models.MOCK_VENDOR, Active: true, DefaultModel: "m", AllowInternalHost: true}))
+	assert.NotEqual(t, http.StatusOK, call("No switch, same host", "http://localhost:"+u.Port()))
+	assert.Equal(t, int32(3), hits.Load())
 }

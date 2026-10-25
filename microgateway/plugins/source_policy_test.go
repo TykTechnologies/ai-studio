@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins/ocitest"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pluginenv"
@@ -81,7 +82,7 @@ func TestCreatePluginClient_RefusesDisallowedSource(t *testing.T) {
 	pm.SetSourcePolicy(mustSourcePolicy(t, "oci"))
 
 	for _, command := range []string{"/bin/true", "file:///bin/true", "grpc://127.0.0.1:1"} {
-		client, err := pm.createPluginClient(command)
+		client, err := pm.createPluginClient(command, netguard.Exemption{})
 		requireSourceNotAllowed(t, err)
 		assert.Nil(t, client, command)
 	}

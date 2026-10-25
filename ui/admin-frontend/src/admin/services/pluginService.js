@@ -115,6 +115,7 @@ class PluginService {
           namespace: plugin.attributes.namespace || 'global',
           pluginType: plugin.attributes.plugin_type || 'gateway',
           ociReference: plugin.attributes.oci_reference || '',
+          allowInternalHost: Boolean(plugin.attributes.allow_internal_host),
           manifest: plugin.attributes.manifest || {},
           version: plugin.version || '',
           marketplace: mapMarketplaceInfo(plugin.marketplace),
@@ -151,6 +152,7 @@ class PluginService {
         plugin_type: pluginData.pluginType || 'gateway',
         oci_reference: pluginData.ociReference || '',
         load_immediately: pluginData.loadImmediately || false,
+        allow_internal_host: Boolean(pluginData.allowInternalHost),
       };
 
       const response = await apiClient.post('/plugins', payload);
@@ -200,6 +202,7 @@ class PluginService {
         pluginType: 'plugin_type',
         ociReference: 'oci_reference',
         loadImmediately: 'load_immediately',
+        allowInternalHost: 'allow_internal_host',
       };
       const payload = {};
       for (const [from, to] of Object.entries(fieldMap)) {

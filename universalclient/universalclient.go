@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"io"
 	"log/slog"
 	"net/http"
@@ -125,12 +126,13 @@ func NewClient(specBytes []byte, baseURL string, options ...ClientOption) (*Clie
 		return nil, fmt.Errorf("invalid OpenAPI specification: %w", err)
 	}
 
-	// Create the client with default settings
+	// Create the client with default settings. Its HTTP client refuses
+	// internal addresses (netguard), as every client whose destination
+	// comes from stored configuration does: a tool's spec can be a community
+	// submission. WithAllowInternalHost exempts the tool's own host.
 	client := &Client{
-		spec: doc,
-		httpClient: &http.Client{
-			Timeout: time.Second * 30,
-		},
+		spec:           doc,
+		httpClient:     netguard.Exemption{}.HTTPClient(time.Second * 30),
 		responseFormat: ResponseFormatDefault,
 	}
 
@@ -246,6 +248,19 @@ func WithResponseFormat(format ResponseFormat) ClientOption {
 func WithHTTPClient(httpClient *http.Client) ClientOption {
 	return func(c *Client) {
 		c.httpClient = httpClient
+	}
+}
+
+// WithAllowInternalHost applies the tool's "Allow internal host" switch: on,
+// the tool's own API host (the base URL) may be an internal address; the
+// internal-address block stays on for any other host, redirects included.
+// It replaces the client's HTTP client, keeping its timeout, so apply it
+// before WithHTTPClient if both are used.
+func WithAllowInternalHost(allow bool) ClientOption {
+	return func(c *Client) {
+		if allow {
+			c.httpClient = netguard.ExemptionFor(true, c.baseURL).HTTPClient(c.httpClient.Timeout)
+		}
 	}
 }
 

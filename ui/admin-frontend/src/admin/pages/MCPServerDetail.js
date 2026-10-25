@@ -51,6 +51,7 @@ import {
 } from "../styles/sharedStyles";
 import { apiErrorDetail, formatTime, preStyle } from "./webhookShared";
 import { AUTH_MODE_LABELS, DashboardStateChip, KindChip } from "./MCPServers";
+import AllowInternalHostSwitch from "../components/common/AllowInternalHostSwitch";
 
 // Tool catalogues come back as JSON:API rows; the picker wants {id, name}.
 const catalogueOptions = (data) =>
@@ -331,7 +332,7 @@ const MCPServerDetail = () => {
   const [policies, setPolicies] = useState([]);
   const [catalogues, setCatalogues] = useState([]);
   const [error, setError] = useState(null);
-  const [form, setForm] = useState({ name: "", description: "", long_description: "", logo_url: "", tags: "", privacy_score: "" });
+  const [form, setForm] = useState({ name: "", description: "", long_description: "", logo_url: "", tags: "", privacy_score: "", allow_internal_host: false });
   const [selectedCatalogues, setSelectedCatalogues] = useState([]);
   const [savingCatalogues, setSavingCatalogues] = useState(false);
   const [connection, setConnection] = useState(null);
@@ -358,6 +359,7 @@ const MCPServerDetail = () => {
         logo_url: s.logo_url || "",
         tags: (s.tags || []).join(", "),
         privacy_score: s.privacy_score === null || s.privacy_score === undefined ? "" : s.privacy_score,
+        allow_internal_host: Boolean(s.allow_internal_host),
       });
       setSelectedCatalogues((s.tool_catalogues || []).map((c) => ({ id: Number(c.id), name: c.name })));
       const [pols, cats] = await Promise.all([
@@ -404,6 +406,8 @@ const MCPServerDetail = () => {
       };
       if (form.privacy_score === "") body.clear_privacy_score = true;
       else body.privacy_score = Number(form.privacy_score);
+      // Sent only when changed: only an administrator may change it (w4e).
+      if (form.allow_internal_host !== Boolean(server.allow_internal_host)) body.allow_internal_host = form.allow_internal_host;
       const res = await apiClient.patch(`/mcp-servers/${server.id}`, body);
       setServer(res.data);
       notify("Saved");
@@ -714,6 +718,15 @@ const MCPServerDetail = () => {
             <Grid item xs={12}>
               <TextField fullWidth label="Tags (comma separated)" value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} />
             </Grid>
+            {server.kind === "remote" && (
+              <Grid item xs={12}>
+                <AllowInternalHostSwitch
+                  checked={form.allow_internal_host}
+                  onChange={(v) => setForm({ ...form, allow_internal_host: v })}
+                  target="this upstream's host (for AI Studio's tool discovery call)"
+                />
+              </Grid>
+            )}
           </Grid>
           <Can permission={P.MCP_SERVERS_WRITE}>
             <Box sx={{ mt: 3 }}>

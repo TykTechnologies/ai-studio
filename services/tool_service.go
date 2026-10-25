@@ -42,6 +42,9 @@ type ToolCreateOptions struct {
 	// TracingContentModeMax caps the agent tracing content mode for the
 	// tool; nil or "" is no cap. Validated by the caller.
 	TracingContentModeMax *string
+	// AllowInternalHost is the admin-only "Allow internal host" switch;
+	// the caller checks who sets it. Submissions never do.
+	AllowInternalHost bool
 }
 
 // CreateToolWithOptions creates a tool fully configured in one step, so the
@@ -75,6 +78,7 @@ func (s *Service) CreateToolWithOptions(db *gorm.DB, name, description, toolType
 		Active:             opts.Active == nil || *opts.Active,
 		RESTAccessDisabled: !restEnabled,
 		MCPAccessDisabled:  !mcpEnabled,
+		AllowInternalHost:  opts.AllowInternalHost,
 	}
 	if opts.TracingContentModeMax != nil {
 		tool.TracingContentModeMax = *opts.TracingContentModeMax
@@ -821,6 +825,7 @@ func (s *Service) getCachedUniversalClient(tool *models.Tool, authSchemaName, au
 	// Create options slice for the client
 	options := []universalclient.ClientOption{
 		universalclient.WithResponseFormat(universalclient.ResponseFormatJSON),
+		universalclient.WithAllowInternalHost(tool.AllowInternalHost),
 	}
 
 	// Add auth option if provided

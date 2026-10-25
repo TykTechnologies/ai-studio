@@ -61,6 +61,8 @@ type ChatSession struct {
 	ctxCancel           context.CancelFunc // Cancels ctx
 	preProcessors       []func(*models.UserMessage) error
 	caller              llms.Model
+	callerMu            sync.Mutex // guards caller and callerLLMUpdatedAt (currentCaller)
+	callerLLMUpdatedAt  time.Time  // updated_at of the LLM row caller was built from; zero until the first check
 	mode                ChatMode
 	datasources         map[uint]*models.Datasource
 	tools               map[string]models.Tool
@@ -580,7 +582,12 @@ func (cs *ChatSession) regenerateTurn() bool {
 
 	ctx, done := context.WithTimeout(cs.runCtx(), 300*time.Second)
 	defer done()
-	resp, err := cs.caller.GenerateContent(ctx, messages, opts...)
+	caller, err := cs.currentCaller()
+	if err != nil {
+		cs.sendError(fmt.Errorf("[regenerate] %v", err))
+		return false
+	}
+	resp, err := caller.GenerateContent(ctx, messages, opts...)
 	if err != nil {
 		cs.sendError(fmt.Errorf("[regenerate] error generating content: %v", err))
 		return false
@@ -647,7 +654,7 @@ func (cs *ChatSession) prepareTools() ([]llms.Tool, error) {
 
 		switch t.ToolType {
 		case models.ToolTypeREST:
-			opts := []universalclient.ClientOption{}
+			opts := []universalclient.ClientOption{universalclient.WithAllowInternalHost(t.AllowInternalHost)}
 			if t.AuthKey != "" {
 				// API Key only at the moment
 				schemaName := t.AuthSchemaName
@@ -814,6 +821,57 @@ func (cs *ChatSession) handleDefaults() error {
 	}
 
 	return nil
+}
+
+// currentCaller is the vendor client for the next model call. The session
+// builds it once, so before each call it checks whether the chat's LLM row
+// has changed (an administrator revoking its "Allow internal host" switch,
+// a rotated key or endpoint) and, if so, rebuilds it from the stored LLM. An
+// LLM that was deleted or deactivated fails the turn. A session without a
+// database or a stored LLM keeps the client it has.
+func (cs *ChatSession) currentCaller() (llms.Model, error) {
+	cs.callerMu.Lock()
+	defer cs.callerMu.Unlock()
+	if cs.caller == nil {
+		return nil, fmt.Errorf("LLM driver is not initialized")
+	}
+	if cs.db == nil || cs.chatRef == nil || cs.chatRef.LLM == nil || cs.chatRef.LLM.ID == 0 {
+		return cs.caller, nil
+	}
+	var row struct {
+		UpdatedAt time.Time
+		Active    bool
+	}
+	res := cs.db.Model(&models.LLM{}).Select("updated_at", "active").Where("id = ?", cs.chatRef.LLM.ID).Limit(1).Scan(&row)
+	if res.Error != nil {
+		return nil, fmt.Errorf("checking the chat's LLM: %w", res.Error)
+	}
+	if res.RowsAffected == 0 || !row.Active {
+		return nil, fmt.Errorf("the chat's LLM is no longer available")
+	}
+	if cs.callerLLMUpdatedAt.IsZero() {
+		cs.callerLLMUpdatedAt = row.UpdatedAt
+		if row.UpdatedAt.UnixMilli() == cs.chatRef.LLM.UpdatedAt.UnixMilli() {
+			return cs.caller, nil
+		}
+	} else if row.UpdatedAt.Equal(cs.callerLLMUpdatedAt) {
+		return cs.caller, nil
+	}
+	var fresh models.LLM
+	if err := cs.db.First(&fresh, cs.chatRef.LLM.ID).Error; err != nil {
+		return nil, fmt.Errorf("reloading the chat's LLM: %w", err)
+	}
+	// Resolve secret references as services.GetChatByID does.
+	fresh.APIKey = secrets.GetValue(fresh.APIKey, false)
+	fresh.APIEndpoint = secrets.GetValue(fresh.APIEndpoint, false)
+	driver, err := switches.FetchDriver(&fresh, cs.chatRef.LLMSettings, nil, cs.streamingFunc)
+	if err != nil {
+		return nil, err
+	}
+	slog.Info("Chat LLM changed; rebuilt its client", "session_id", cs.id, "llm_id", fresh.ID)
+	cs.caller = driver
+	cs.callerLLMUpdatedAt = row.UpdatedAt
+	return driver, nil
 }
 
 func (cs *ChatSession) fetchDriver(mem schema.Memory) (llms.Model, error) {
@@ -1261,7 +1319,11 @@ func (cs *ChatSession) HandleUserMessage(msg *models.UserMessage, docs []schema.
 	cs.streamFilterBlocked = false
 	cs.resetStreamed()
 
-	resp, err := cs.caller.GenerateContent(ctx, messages, opts...)
+	caller, err := cs.currentCaller()
+	if err != nil {
+		return nil, fmt.Errorf("[userMessage handler] %v", err)
+	}
+	resp, err := caller.GenerateContent(ctx, messages, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("[userMessage handler] error generating content: %v", err)
 	}
@@ -1328,7 +1390,11 @@ User message: %s`, userMessage)
 		llms.WithTemperature(0.7),
 	}
 
-	resp, err := cs.caller.GenerateContent(mutedContext(ctx), messages, opts...)
+	caller, err := cs.currentCaller()
+	if err != nil {
+		return "", fmt.Errorf("error generating chat title: %v", err)
+	}
+	resp, err := caller.GenerateContent(mutedContext(ctx), messages, opts...)
 	if err != nil {
 		return "", fmt.Errorf("error generating chat title: %v", err)
 	}
@@ -1725,7 +1791,7 @@ func (cs *ChatSession) executeRESTToolCall(ctx context.Context, t llms.ToolCall,
 	)
 	defer span.End()
 
-	opts := make([]universalclient.ClientOption, 0)
+	opts := []universalclient.ClientOption{universalclient.WithAllowInternalHost(toolDef.AllowInternalHost)}
 	// The tool is loaded with its secret references kept (they are what API
 	// responses show); the call resolves them, here and only here.
 	if authKey := secrets.GetValue(toolDef.AuthKey, false); authKey != "" {

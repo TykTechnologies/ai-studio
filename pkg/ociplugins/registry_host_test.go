@@ -70,3 +70,22 @@ func TestGetPlugin_CorruptedCacheEntryRefusedWhileRegistryDoesNotResolve(t *test
 	require.ErrorIs(t, err, netguard.ErrInternalPluginHost)
 	assert.Equal(t, 1, puller.pulls, "no registry request")
 }
+
+// A plugin's own "Allow internal host" switch (w4e), carried on the
+// reference, lets its internal registry through, and only that registry.
+func TestCheckRegistryHost_PluginExemption(t *testing.T) {
+	t.Setenv(netguard.EnvAllowInternal, "")
+	t.Setenv(netguard.EnvAllowedInternalHosts, "")
+	netguardtest.StubLookupIP(t, map[string]string{"registry.corp.internal": "10.0.0.9", "other.corp.internal": "10.0.0.10"})
+	command := "oci://registry.corp.internal/plugins/p@sha256:" + "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	ref, _, err := ParseOCICommand(command)
+	require.NoError(t, err)
+	require.ErrorIs(t, CheckRegistryHost(ref), netguard.ErrInternalPluginHost)
+
+	ref.Exemption = netguard.CommandExemption(true, command)
+	require.NoError(t, CheckRegistryHost(ref))
+
+	other := *ref
+	other.Registry = "other.corp.internal"
+	require.ErrorIs(t, CheckRegistryHost(&other), netguard.ErrInternalPluginHost, "the exemption is for the plugin's own registry")
+}

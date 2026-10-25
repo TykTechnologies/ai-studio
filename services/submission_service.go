@@ -83,6 +83,9 @@ func validateSubmissionInput(
 	if err := refuseSubmissionReferences(resourcePayload); err != nil {
 		return err
 	}
+	if err := refuseSubmissionAllowInternalHost(resourcePayload); err != nil {
+		return err
+	}
 
 	// Resource payload size (configurable via MAX_RESOURCE_PAYLOAD_SIZE env var)
 	if resourcePayload != nil {
@@ -136,6 +139,22 @@ func refuseSubmissionReferences(payload map[string]interface{}) error {
 	for k, v := range payload {
 		if walk(v) {
 			return fmt.Errorf("%w (field %s)", ErrSubmissionReference, k)
+		}
+	}
+	return nil
+}
+
+// ErrSubmissionAllowInternalHost refuses a submission whose payload sets the
+// "Allow internal host" switch: it is an administrator's, set on the asset
+// after approval, which always creates the asset with it off (w4e).
+var ErrSubmissionAllowInternalHost = errors.New("submissions may not set allow_internal_host; an administrator sets it on the approved resource")
+
+// refuseSubmissionAllowInternalHost refuses a payload that names the switch
+// at all, whatever its value.
+func refuseSubmissionAllowInternalHost(payload map[string]interface{}) error {
+	for _, k := range []string{"allow_internal_host", "embed_allow_internal_host"} {
+		if _, ok := payload[k]; ok {
+			return ErrSubmissionAllowInternalHost
 		}
 	}
 	return nil
@@ -464,6 +483,9 @@ func (s *Service) ApproveSubmissionWithOptions(submissionID, reviewerID uint, fi
 
 	// Submissions saved before references were refused are checked again.
 	if err := refuseSubmissionReferences(submission.ResourcePayload); err != nil {
+		return nil, err
+	}
+	if err := refuseSubmissionAllowInternalHost(submission.ResourcePayload); err != nil {
 		return nil, err
 	}
 

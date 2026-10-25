@@ -16,6 +16,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_services"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pluginenv"
@@ -433,7 +434,7 @@ func (m *AIStudioPluginManager) LoadPlugin(pluginID uint) (*LoadedAIStudioPlugin
 	}
 
 	// Create plugin client based on command type
-	client, err := m.createPluginClient(plugin.Command)
+	client, err := m.createPluginClient(plugin.Command, plugin.Exemption())
 	if err != nil {
 		var notAllowed *plugin_security.ErrPluginSourceNotAllowed
 		if errors.As(err, &notAllowed) {
@@ -1471,7 +1472,9 @@ func (m *AIStudioPluginManager) ListResourceInstances(pluginID uint, resourceTyp
 // a process. Plugin records can enter the database without passing API-layer
 // validation (direct DB writes, migrations, imports, replication), so this is
 // a second layer of defense applied at load time.
-func (m *AIStudioPluginManager) validateCommandForLoad(command string) error {
+//
+// exempt is the plugin's "Allow internal host" exemption (models.Plugin.Exemption).
+func (m *AIStudioPluginManager) validateCommandForLoad(command string, exempt netguard.Exemption) error {
 	// The plugin source policy comes from configuration (or SetSourcePolicy),
 	// not the security service, so a manager without one still enforces it.
 	if err := m.checkSource(command); err != nil {
@@ -1490,7 +1493,7 @@ func (m *AIStudioPluginManager) validateCommandForLoad(command string) error {
 	if plugin_security.SourceOf(command) == plugin_security.SourceOCI {
 		svc = nil
 	}
-	if err := plugin_security.ValidateCommand(command, svc); err != nil {
+	if err := plugin_security.ValidateCommandWith(command, svc, exempt); err != nil {
 		return fmt.Errorf("plugin command failed load-time validation: %w", err)
 	}
 	return nil
@@ -1508,8 +1511,8 @@ func asAIStudioPluginClient(raw interface{}) (*AIStudioPluginClient, error) {
 }
 
 // createPluginClient creates a plugin client based on command scheme (adapted from microgateway)
-func (m *AIStudioPluginManager) createPluginClient(command string) (*goplugin.Client, error) {
-	if err := m.validateCommandForLoad(command); err != nil {
+func (m *AIStudioPluginManager) createPluginClient(command string, exempt netguard.Exemption) (*goplugin.Client, error) {
+	if err := m.validateCommandForLoad(command, exempt); err != nil {
 		return nil, err
 	}
 
@@ -1518,7 +1521,7 @@ func (m *AIStudioPluginManager) createPluginClient(command string) (*goplugin.Cl
 	switch plugin_security.SourceOf(command) {
 	case plugin_security.SourceOCI:
 		// OCI plugin - fetch from registry first
-		return m.createOCIPluginClient(command)
+		return m.createOCIPluginClient(command, exempt)
 	case plugin_security.SourceGRPC:
 		// External gRPC service - use ReattachConfig (for testing)
 		return m.createGRPCPluginClient(command)
@@ -1529,7 +1532,7 @@ func (m *AIStudioPluginManager) createPluginClient(command string) (*goplugin.Cl
 }
 
 // createOCIPluginClient fetches an OCI plugin and creates a client
-func (m *AIStudioPluginManager) createOCIPluginClient(command string) (*goplugin.Client, error) {
+func (m *AIStudioPluginManager) createOCIPluginClient(command string, exempt netguard.Exemption) (*goplugin.Client, error) {
 	if m.ociClient == nil {
 		return nil, fmt.Errorf("OCI client not configured")
 	}
@@ -1539,6 +1542,7 @@ func (m *AIStudioPluginManager) createOCIPluginClient(command string) (*goplugin
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse OCI command: %w", err)
 	}
+	ref.Exemption = exempt
 
 	// Get or fetch plugin
 	localPlugin, err := m.ociClient.GetPlugin(ref, params)
@@ -1612,8 +1616,8 @@ func (m *AIStudioPluginManager) createGRPCPluginClient(command string) (*goplugi
 
 // createConfigOnlyPluginClient creates a plugin client specifically for config extraction
 // Uses universal handshake and config-only service
-func (m *AIStudioPluginManager) createConfigOnlyPluginClient(command string) (*goplugin.Client, error) {
-	if err := m.validateCommandForLoad(command); err != nil {
+func (m *AIStudioPluginManager) createConfigOnlyPluginClient(command string, exempt netguard.Exemption) (*goplugin.Client, error) {
+	if err := m.validateCommandForLoad(command, exempt); err != nil {
 		return nil, err
 	}
 
@@ -1621,7 +1625,7 @@ func (m *AIStudioPluginManager) createConfigOnlyPluginClient(command string) (*g
 	switch plugin_security.SourceOf(command) {
 	case plugin_security.SourceOCI:
 		// OCI plugin - fetch from registry first, then create config-only client
-		return m.createConfigOnlyOCIPluginClient(command)
+		return m.createConfigOnlyOCIPluginClient(command, exempt)
 	case plugin_security.SourceGRPC:
 		return nil, fmt.Errorf("grpc plugins have no config-only mode")
 	default:
@@ -1631,7 +1635,7 @@ func (m *AIStudioPluginManager) createConfigOnlyPluginClient(command string) (*g
 }
 
 // createConfigOnlyOCIPluginClient creates a config-only client for OCI plugins
-func (m *AIStudioPluginManager) createConfigOnlyOCIPluginClient(command string) (*goplugin.Client, error) {
+func (m *AIStudioPluginManager) createConfigOnlyOCIPluginClient(command string, exempt netguard.Exemption) (*goplugin.Client, error) {
 	if m.ociClient == nil {
 		return nil, fmt.Errorf("OCI client not configured")
 	}
@@ -1641,6 +1645,7 @@ func (m *AIStudioPluginManager) createConfigOnlyOCIPluginClient(command string) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse OCI command: %w", err)
 	}
+	ref.Exemption = exempt
 
 	// Get or fetch plugin
 	localPlugin, err := m.ociClient.GetPlugin(ref, params)
@@ -1960,7 +1965,9 @@ func (m *AIStudioPluginManager) LoadPluginForConfigOnly(ctx context.Context, com
 // loadPluginWithConfigHandshake loads plugin using universal AI_STUDIO_PLUGIN handshake + config service
 func (m *AIStudioPluginManager) loadPluginWithConfigHandshake(ctx context.Context, command string) (ConfigProvider, error) {
 	// Create plugin client with universal config-only handshake and service
-	client, err := m.createConfigOnlyPluginClient(command)
+	// A caller that knows the plugin puts its "Allow internal host"
+	// exemption in ctx (models.Plugin.Exemption).
+	client, err := m.createConfigOnlyPluginClient(command, netguard.ExemptionFromContext(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create config-only plugin client: %w", err)
 	}
@@ -2075,7 +2082,7 @@ func (m *AIStudioPluginManager) GetPluginConfigSchema(pluginID uint) (string, er
 	}
 
 	// Load plugin for config-only access
-	ctx := context.Background()
+	ctx := plugin.Exemption().WithContext(context.Background())
 	configProvider, err := m.LoadPluginForConfigOnly(ctx, plugin.Command)
 	if err != nil {
 		return "", fmt.Errorf("failed to load plugin for config access: %w", err)

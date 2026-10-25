@@ -88,6 +88,10 @@ type CreatePluginRequest struct {
 	Namespace       string                 `json:"namespace,omitempty"`
 	OCIReference    string                 `json:"oci_reference,omitempty"` // OCI artifact reference
 	LoadImmediately bool                   `json:"load_immediately,omitempty"` // Auto-load AI Studio plugins
+	// AllowInternalHost is the admin-only "Allow internal host" switch: the
+	// plugin's own hosts (OCI registry, grpc:// host) may be internal. The
+	// API refuses it from a non-admin.
+	AllowInternalHost bool `json:"allow_internal_host"`
 }
 
 type UpdatePluginRequest struct {
@@ -103,6 +107,8 @@ type UpdatePluginRequest struct {
 	Namespace           *string                `json:"namespace"`
 	OCIReference        *string                `json:"oci_reference"`
 	LoadImmediately     *bool                  `json:"load_immediately,omitempty"` // Auto-load AI Studio plugins
+	// AllowInternalHost: absent keeps the stored switch (admin-only).
+	AllowInternalHost *bool `json:"allow_internal_host"`
 }
 
 // PluginServiceInterface defines the interface for plugin operations (adapted from microgateway)
@@ -135,7 +141,7 @@ func (s *PluginService) CreatePlugin(req *CreatePluginRequest) (*models.Plugin, 
 	}
 
 	// Security validation for plugin command
-	if err := s.validatePluginCommand(req.Command); err != nil {
+	if err := s.validatePluginCommandWith(req.Command, netguard.CommandExemption(req.AllowInternalHost, req.Command)); err != nil {
 		return nil, err
 	}
 
@@ -168,6 +174,7 @@ func (s *PluginService) CreatePlugin(req *CreatePluginRequest) (*models.Plugin, 
 		Namespace:           req.Namespace,
 		OCIReference:        req.OCIReference,
 		Manifest:            make(map[string]interface{}),
+		AllowInternalHost:   req.AllowInternalHost,
 	}
 
 	if err := plugin.Create(s.db); err != nil {
@@ -213,6 +220,16 @@ func (s *PluginService) ListAllPlugins(page, limit int, hookType string, namespa
 	return []models.Plugin(plugins), totalCount, nil
 }
 
+// UpdateHostCheckExemption is the exemption a plugin update checks command's
+// hosts with. A command left as stored was accepted when it was saved, so
+// its hosts are not checked again: turning the "Allow internal host" switch
+// off must save, and the plugin is then refused when it is loaded or dialled
+// (fail closed), not at the edit (w4e.5). A new command is checked with the
+// switch as it will be stored.
+func UpdateHostCheckExemption(allowInternalHost bool, stored, command string) netguard.Exemption {
+	return netguard.CommandExemption(allowInternalHost || command == stored, command)
+}
+
 // UpdatePlugin updates an existing plugin (adapted from microgateway)
 func (s *PluginService) UpdatePlugin(id uint, req *UpdatePluginRequest) (*models.Plugin, error) {
 	plugin, err := s.GetPlugin(id)
@@ -227,13 +244,16 @@ func (s *PluginService) UpdatePlugin(id uint, req *UpdatePluginRequest) (*models
 	if req.Description != nil {
 		plugin.Description = *req.Description
 	}
+	if req.AllowInternalHost != nil {
+		plugin.AllowInternalHost = *req.AllowInternalHost
+	}
 	if req.Command != nil {
 		// A plugin whose source the policy no longer allows can still be
 		// edited, but not saved with a disallowed command.
 		if err := s.checkSource(*req.Command); err != nil {
 			return nil, err
 		}
-		if err := plugin_security.CheckCommandHosts(*req.Command); err != nil {
+		if err := plugin_security.CheckCommandHostsWith(*req.Command, UpdateHostCheckExemption(plugin.AllowInternalHost, plugin.Command, *req.Command)); err != nil {
 			return nil, err
 		}
 		plugin.Command = *req.Command
@@ -263,7 +283,7 @@ func (s *PluginService) UpdatePlugin(id uint, req *UpdatePluginRequest) (*models
 			if err := s.checkSource(*req.OCIReference); err != nil {
 				return nil, err
 			}
-			if err := plugin_security.CheckCommandHosts(*req.OCIReference); err != nil {
+			if err := plugin_security.CheckCommandHostsWith(*req.OCIReference, UpdateHostCheckExemption(plugin.AllowInternalHost, plugin.OCIReference, *req.OCIReference)); err != nil {
 				return nil, err
 			}
 		}
@@ -548,13 +568,19 @@ func isValidHookType(hookType string) bool {
 
 // validatePluginCommand performs security validation on plugin commands
 func (s *PluginService) validatePluginCommand(command string) error {
+	return s.validatePluginCommandWith(command, netguard.Exemption{})
+}
+
+// validatePluginCommandWith is validatePluginCommand with the plugin's own
+// "Allow internal host" exemption (models.Plugin.Exemption).
+func (s *PluginService) validatePluginCommandWith(command string, exempt netguard.Exemption) error {
 	// The installation's plugin source policy (AI_STUDIO_PLUGIN_ALLOWED_SOURCES)
 	if err := s.checkSource(command); err != nil {
 		return err
 	}
 	// Plugin and registry hosts that are, or resolve to, internal addresses
 	// (create, update, upgrade, marketplace install, management gRPC).
-	if err := plugin_security.CheckCommandHosts(command); err != nil {
+	if err := plugin_security.CheckCommandHostsWith(command, exempt); err != nil {
 		return err
 	}
 
@@ -626,6 +652,7 @@ func (s *PluginService) CreateOCIPluginFromReference(req *CreateOCIPluginRequest
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse OCI reference: %w", err)
 	}
+	ref.Exemption = netguard.CommandExemption(req.AllowInternalHost, req.OCIReference)
 
 	// Fetch plugin from registry to verify it exists
 	ctx := context.Background()
@@ -656,6 +683,8 @@ func (s *PluginService) CreateOCIPluginFromReference(req *CreateOCIPluginRequest
 		Namespace:    req.Namespace,
 		Config:       req.Config,
 		Manifest:     manifest,
+
+		AllowInternalHost: req.AllowInternalHost,
 	}
 
 	if err := plugin.Create(s.db); err != nil {
@@ -697,6 +726,7 @@ func (s *PluginService) RefreshOCIPlugin(pluginID uint) (*models.Plugin, error) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse OCI reference: %w", err)
 	}
+	ref.Exemption = netguard.CommandExemption(plugin.AllowInternalHost, plugin.OCIReference)
 
 	// Fetch latest version to verify it exists and update cache
 	ctx := context.Background()
@@ -757,6 +787,8 @@ type CreateOCIPluginRequest struct {
 	HookType     string                 `json:"hook_type" binding:"required"`
 	IsActive     bool                   `json:"is_active"`
 	Namespace    string                 `json:"namespace,omitempty"`
+	// AllowInternalHost: the admin-only "Allow internal host" switch.
+	AllowInternalHost bool `json:"allow_internal_host"`
 }
 
 // Plugin Config Schema Methods
@@ -769,7 +801,7 @@ func (s *PluginService) GetPluginConfigSchema(ctx context.Context, pluginID uint
 		return "", fmt.Errorf("failed to get plugin: %w", err)
 	}
 
-	return s.GetPluginConfigSchemaByCommand(ctx, plugin.Command)
+	return s.GetPluginConfigSchemaByCommand(plugin.Exemption().WithContext(ctx), plugin.Command)
 }
 
 // GetPluginConfigSchemaByCommand retrieves schema by command, using cache when possible
@@ -823,7 +855,7 @@ func (s *PluginService) RefreshPluginConfigSchema(ctx context.Context, pluginID 
 		Msg("Refreshing plugin config schema - fetching fresh from plugin")
 
 	// Fetch fresh schema from plugin
-	schemaJSON, err := s.fetchSchemaFromPlugin(ctx, plugin.Command)
+	schemaJSON, err := s.fetchSchemaFromPlugin(plugin.Exemption().WithContext(ctx), plugin.Command)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch fresh schema from plugin: %w", err)
 	}

@@ -50,6 +50,16 @@ func WithLLMTracing(contentModeMax string, propagationOptOut bool) LLMOption {
 	}
 }
 
+// WithAllowInternalHost sets the LLM's "Allow internal host" switch: its
+// own endpoint may be an internal address (netguard.ExemptionFor). The API
+// lets only an administrator change it.
+func WithAllowInternalHost(allow bool) LLMOption {
+	return func(l *models.LLM) error {
+		l.AllowInternalHost = allow
+		return nil
+	}
+}
+
 // LLMValidationError is an LLM attribute the caller got wrong (a 400).
 type LLMValidationError struct{ Err error }
 

@@ -2,7 +2,9 @@ package redisvector
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
+	"net"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/embeddings"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/schema"
@@ -33,6 +35,8 @@ type Store struct {
 	createIndexIfNotExists bool
 	indexSchema            *IndexSchema
 	schemaGenerator        *schemaGenerator
+	// Tyk: dialFn dials the client's connections (WithDialFn).
+	dialFn func(string, *net.Dialer, *tls.Config) (net.Conn, error)
 }
 
 var _ vectorstores.VectorStore = &Store{}
@@ -47,7 +51,7 @@ func New(ctx context.Context, opts ...Option) (*Store, error) {
 		return nil, err
 	}
 
-	client, err := NewRueidisClient(s.redisURL)
+	client, err := newRueidisClient(s.redisURL, s.dialFn)
 	if err != nil {
 		return nil, err
 	}

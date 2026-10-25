@@ -270,6 +270,8 @@ func payloadToUpdatesMap(payload models.JSONMap) map[string]interface{} {
 		"user_id": true, "community_submitted": true, "submission_id": true,
 		"slug": true,   // auto-generated from name
 		"active": true, // admin-controlled, not settable via UGC
+		// The "Allow internal host" switch is an administrator's (w4e)
+		"allow_internal_host": true, "embed_allow_internal_host": true,
 	}
 	for k, v := range payload {
 		if skipFields[k] {

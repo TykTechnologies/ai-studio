@@ -195,6 +195,10 @@ type LLMInput struct {
 			// TracingPropagationOptOut stops traceparent reaching this LLM's
 			// upstream (default false: it is sent).
 			TracingPropagationOptOut bool `json:"tracing_propagation_opt_out"`
+			// AllowInternalHost is the admin-only "Allow internal host"
+			// switch (its endpoint may be an internal address). Absent keeps
+			// the stored value; a change by a non-admin is refused (403).
+			AllowInternalHost *bool `json:"allow_internal_host"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -258,6 +262,7 @@ type LLMResponse struct {
 		PriceMultipliers  models.LLMPriceMultipliers `json:"price_multipliers"`
 		TracingContentModeMax    string `json:"tracing_content_mode_max"`
 		TracingPropagationOptOut bool   `json:"tracing_propagation_opt_out"`
+		AllowInternalHost        bool   `json:"allow_internal_host"`
 	} `json:"attributes"`
 }
 
@@ -366,6 +371,10 @@ type DatasourceInput struct {
 			TracingContentModeMax *string `json:"tracing_content_mode_max,omitempty"`
 			// Governed metadata (Enterprise). nil = untouched; {} = clear.
 			GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
+			// AllowInternalHost lets the datasource's own hosts be internal addresses
+			// (the internal-address block stays on for everything else).
+			// Administrators only; omitted keeps the stored value (w4e).
+			AllowInternalHost *bool `json:"allow_internal_host,omitempty"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -404,6 +413,9 @@ type DatasourceResponse struct {
 		Files            []FileStoreResponse `json:"files"`
 		// Agent tracing content mode cap (Enterprise); "" is no cap.
 		TracingContentModeMax string `json:"tracing_content_mode_max"`
+		// AllowInternalHost: the datasource's own host may be an internal
+		// address (an administrator's switch).
+		AllowInternalHost bool `json:"allow_internal_host"`
 	} `json:"attributes"`
 }
 
@@ -698,6 +710,10 @@ type ToolInput struct {
 			TracingContentModeMax *string `json:"tracing_content_mode_max,omitempty"`
 			// Governed metadata (Enterprise). nil = untouched; {} = clear.
 			GovernedMetadata *map[string]interface{} `json:"governed_metadata,omitempty"`
+			// AllowInternalHost lets the tool's own API hosts be internal addresses
+			// (the internal-address block stays on for everything else).
+			// Administrators only; omitted keeps the stored value (w4e).
+			AllowInternalHost *bool `json:"allow_internal_host,omitempty"`
 		} `json:"attributes"`
 	} `json:"data"`
 }
@@ -720,6 +736,9 @@ type ToolResponseAttributes struct {
 	Dependencies   []ToolResponse      `json:"dependencies"`
 	// Agent tracing content mode cap (Enterprise); "" is no cap.
 	TracingContentModeMax string `json:"tracing_content_mode_max"`
+	// AllowInternalHost: the tool's own API hosts may be internal addresses
+	// (an administrator's switch).
+	AllowInternalHost bool `json:"allow_internal_host"`
 
 	// Flattened into the attributes; see toolGatewayAccess.
 	ToolGatewayAccess

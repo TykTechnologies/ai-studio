@@ -306,6 +306,18 @@ func upstreamTransportStatus(err error) int {
 	return http.StatusBadGateway
 }
 
+// upstreamErrorMessage is message, followed by the outbound network policy's
+// reason when err is its refusal (netguard.Refusal). The reason names the
+// setting to change, and the /ai/ bridges relay only the message of the
+// inner hop's 5xx, never its error detail (parseLoopbackError), so without
+// this a blocked upstream reached the caller as a bare 502 (w4e.4).
+func upstreamErrorMessage(message string, err error) string {
+	if reason, ok := netguard.Refusal(err); ok {
+		return message + ": " + reason
+	}
+	return message
+}
+
 // loopbackAwareTransportStatus is upstreamTransportStatus for a request that
 // may be the /ai/ loopback hop. The outer hop runs its attempts on contexts
 // detached from its client, so the only thing that cancels a loopback request
@@ -785,7 +797,9 @@ func respondBudgetDenial(w http.ResponseWriter, r *http.Request, status int, msg
 // being connected (post-DNS), so a DNS answer that changes between validation
 // and connection cannot bypass the SSRF protection. Shared so connection
 // pooling behaves like the default transport it replaces.
-var upstreamGuardedTransport = newUpstreamTransport()
+var upstreamGuardedTransport = netguard.PooledByExemption(func(e netguard.Exemption) http.RoundTripper {
+	return newUpstreamTransport(e)
+})
 
 // upstreamTransport is what upstream requests are sent through: the guarded
 // pool wrapped in timedTransport, a passthrough unless Server-Timing is on for
@@ -803,8 +817,21 @@ const (
 	upstreamMaxIdleConnsPerHost = 512
 )
 
-func newUpstreamTransport() *http.Transport {
-	t := netguard.HTTPTransport()
+// llmExemption is the LLM's "Allow internal host" exemption for its own
+// upstream (netguard.ExemptionFor). The shared upstream transport reads it
+// from the request context (netguard.Exemption.WithContext), so it covers
+// every route to the LLM: /llm/, /ai/, /anthropic/, routers and native APIs.
+func llmExemption(llm *models.LLM) netguard.Exemption {
+	if llm == nil {
+		return netguard.Exemption{}
+	}
+	return netguard.ExemptionFor(llm.AllowInternalHost, switches.UpstreamEndpoint(llm))
+}
+
+// newUpstreamTransport is the upstream pool for one exemption (an LLM's
+// "Allow internal host" switch; the zero Exemption for every other LLM).
+func newUpstreamTransport(e netguard.Exemption) *http.Transport {
+	t := e.Transport()
 	t.MaxIdleConns = upstreamMaxIdleConns
 	t.MaxIdleConnsPerHost = upstreamMaxIdleConnsPerHost
 	return t
@@ -1147,12 +1174,14 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := netguard.ValidateUpstreamURL(upstreamURL); err != nil {
+	exempt := llmExemption(llm)
+	if err := exempt.ValidateURL(upstreamURL); err != nil {
 		logger.Errorf("Upstream URL blocked by SSRF policy: %v", err)
 		respStatus = http.StatusBadGateway
-		respondWithError(w, http.StatusBadGateway, "upstream endpoint not permitted", err, false)
+		respondWithError(w, http.StatusBadGateway, upstreamErrorMessage("upstream endpoint not permitted", err), err, false)
 		return
 	}
+	r = r.WithContext(exempt.WithContext(r.Context()))
 	logger.Debugf("LLM proxy upstream host: %s (llm=%s)", upstreamURL.Host, llm.Name)
 
 	proxyDirector := func(req *http.Request) {
@@ -1215,7 +1244,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		// recorded a success.
 		ErrorHandler: func(w http.ResponseWriter, req *http.Request, err error) {
 			respStatus = loopbackAwareTransportStatus(req, err)
-			respondWithError(w, respStatus, "failed to make upstream request", err, false)
+			respondWithError(w, respStatus, upstreamErrorMessage("failed to make upstream request", err), err, false)
 		},
 	}
 
@@ -2028,12 +2057,14 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := netguard.ValidateUpstreamURL(upstreamURL); err != nil {
+	exempt := llmExemption(llm)
+	if err := exempt.ValidateURL(upstreamURL); err != nil {
 		logger.Errorf("Streaming upstream URL blocked by SSRF policy: %v", err)
 		respStatus = http.StatusBadGateway
-		respondWithError(w, http.StatusBadGateway, "upstream endpoint not permitted", err, false)
+		respondWithError(w, http.StatusBadGateway, upstreamErrorMessage("upstream endpoint not permitted", err), err, false)
 		return
 	}
+	r = r.WithContext(exempt.WithContext(r.Context()))
 	logger.Debugf("LLM streaming proxy upstream host: %s (llm=%s)", upstreamURL.Host, llm.Name)
 
 	// Strip the gateway prefix to get the remaining path, then compose it with
@@ -2086,7 +2117,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		p.goAnalyzeFor(r, func() {
 			p.analyzeStreamingResponse(llm, app, r, status, upstreamFailureBody(status, err), reqBody, nil, time.Now(), "")
 		})
-		respondWithError(w, respStatus, "failed to make upstream request for streaming", err, false)
+		respondWithError(w, respStatus, upstreamErrorMessage("failed to make upstream request for streaming", err), err, false)
 		return
 	}
 	defer resp.Body.Close()
@@ -2740,7 +2771,7 @@ func (p *Proxy) getParsedOpenAPISpec(toolModel *models.Tool) (*universalclient.C
 			return nil, nil, fmt.Errorf("failed to decode Base64 OpenAPI spec: %w", err)
 		}
 
-		client, err := universalclient.NewClient(decodedSpec, "")
+		client, err := universalclient.NewClient(decodedSpec, "", universalclient.WithAllowInternalHost(toolModel.AllowInternalHost))
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create universalclient: %w", err)
 		}
@@ -2754,7 +2785,7 @@ func (p *Proxy) getParsedOpenAPISpec(toolModel *models.Tool) (*universalclient.C
 		return nil, nil, fmt.Errorf("failed to decode Base64 OpenAPI spec: %w", err)
 	}
 
-	client, err := universalclient.NewClient(decodedSpec, "")
+	client, err := universalclient.NewClient(decodedSpec, "", universalclient.WithAllowInternalHost(toolModel.AllowInternalHost))
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create universalclient: %w", err)
 	}

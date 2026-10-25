@@ -12,10 +12,10 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/responses"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/embeddings"
-	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/httputil"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms/anthropic"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/schema"
+	"github.com/TykTechnologies/midsommar/v2/vendors/vendorclient"
 	"github.com/sirupsen/logrus"
 )
 
@@ -286,10 +286,10 @@ func PinWorkspace(client HTTPDoer, llm *models.LLM) HTTPDoer {
 }
 
 func setupAnthropicDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (llms.Model, error) {
-	var opts = make([]anthropic.Option, 0)
-	if connDef.VendorWorkspaceID != "" {
-		opts = append(opts, anthropic.WithHTTPClient(PinWorkspace(httputil.DefaultClient, connDef)))
-	}
+	// Guarded by the outbound policy, with the LLM's "Allow internal host"
+	// exemption for its own endpoint.
+	client := vendorclient.For(connDef.AllowInternalHost, connDef.APIEndpoint)
+	opts := []anthropic.Option{anthropic.WithHTTPClient(PinWorkspace(client, connDef))}
 	if baseURL := DriverBaseURL(connDef.APIEndpoint); baseURL != "" {
 		opts = append(opts, anthropic.WithBaseURL(baseURL))
 	}

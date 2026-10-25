@@ -13,6 +13,7 @@ import {
   pluginCommandHelp,
   pluginCommandPlaceholder,
 } from '../../../services/pluginService';
+import AllowInternalHostSwitch from '../../common/AllowInternalHostSwitch';
 
 const Step1BasicInfo = ({ data, onComplete, onBack, loading, disabled }) => {
   const { policy } = usePluginPolicy();
@@ -21,6 +22,7 @@ const Step1BasicInfo = ({ data, onComplete, onBack, loading, disabled }) => {
     name: data.name || '',
     description: data.description || '',
     command: data.command || '',
+    allowInternalHost: Boolean(data.allowInternalHost),
   });
 
   const [errors, setErrors] = useState({});
@@ -61,6 +63,7 @@ const Step1BasicInfo = ({ data, onComplete, onBack, loading, disabled }) => {
         name: formData.name,
         description: formData.description,
         command: formData.command,
+        allowInternalHost: formData.allowInternalHost,
       };
       console.log('Step1 passing data:', dataToPass);
       onComplete(dataToPass);
@@ -118,6 +121,14 @@ const Step1BasicInfo = ({ data, onComplete, onBack, loading, disabled }) => {
             placeholder={pluginCommandPlaceholder(allowedSources)}
             disabled={disabled}
             required
+          />
+        </Grid>
+
+        <Grid item xs={12}>
+          <AllowInternalHostSwitch
+            checked={formData.allowInternalHost}
+            onChange={(v) => setFormData((prev) => ({ ...prev, allowInternalHost: v }))}
+            target="the plugin's registry or gRPC host"
           />
         </Grid>
       </Grid>

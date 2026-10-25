@@ -163,6 +163,9 @@ func NewProvider(cfg Config) (Provider, error) {
 // stamps the verdict's latency. Errors from the provider, including a
 // timeout, are returned to the caller, which applies the filter's fail mode.
 func Classify(ctx context.Context, cfg Config, p Provider, in Input) (Verdict, error) {
+	// The provider's HTTP client reads the guardrail's exemption from the
+	// context (netguard.PooledByExemption).
+	ctx = cfg.Exemption().WithContext(ctx)
 	timeout := time.Duration(cfg.TimeoutMs) * time.Millisecond
 	if timeout > 0 {
 		var cancel context.CancelFunc

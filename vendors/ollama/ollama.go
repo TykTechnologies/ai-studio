@@ -12,6 +12,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms/ollama"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/schema"
 	openaiVendor "github.com/TykTechnologies/midsommar/v2/vendors/openai"
+	"github.com/TykTechnologies/midsommar/v2/vendors/vendorclient"
 )
 
 type Ollama struct{}
@@ -48,7 +49,9 @@ func (v *Ollama) GetEmbedder(spec *models.EmbedderSpec) (*embeddings.EmbedderImp
 	var llm embeddings.EmbedderClient
 	var err error
 
-	opts := []ollama.Option{}
+	// Guarded by the outbound policy, with the embedder's "Allow internal
+	// host" exemption for its own endpoint.
+	opts := []ollama.Option{ollama.WithHTTPClient(vendorclient.For(spec.AllowInternalHost, spec.Endpoint))}
 	if spec.Endpoint != "" {
 		opts = append(opts, ollama.WithServerURL(spec.Endpoint))
 	}
@@ -104,7 +107,9 @@ func (v *Ollama) DecisionEndpoint() string {
 }
 
 func setupOllamaDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (llms.Model, error) {
-	var opts = make([]ollama.Option, 0)
+	// Guarded by the outbound policy, with the LLM's "Allow internal host"
+	// exemption for its own endpoint.
+	opts := []ollama.Option{ollama.WithHTTPClient(vendorclient.For(connDef.AllowInternalHost, connDef.APIEndpoint))}
 
 	if connDef.APIEndpoint != "" {
 		opts = append(opts, ollama.WithServerURL(connDef.APIEndpoint))

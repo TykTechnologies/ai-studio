@@ -3,6 +3,7 @@ package services
 import (
 	"encoding/base64"
 	"fmt"
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard/netguardtest"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -22,6 +23,8 @@ import (
 // to the writer's server, not in the LLM settings the gateway sends with,
 // and not in what the API returns. A listed name resolves.
 func TestUnlistedEnvReferencesNeverResolve(t *testing.T) {
+	// The tool's API is an httptest server on 127.0.0.1.
+	netguardtest.AllowInternal(t)
 	const canary = "canary-master-key-value"
 	t.Setenv("TYK_AI_SECRET_KEY", canary)
 	t.Setenv("UPSTREAM_REGION", "eu-west-1")

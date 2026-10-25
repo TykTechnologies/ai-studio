@@ -19,6 +19,7 @@ import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import PrivacyLevelInput from "../common/privacy/PrivacyLevelInput";
 import { getEmbedderDefaultModel, getEmbedderDefaultUrl, getEmbedderName } from "../../utils/vendorUtils";
 import { MODE_LINKED, MODE_STANDALONE, endpointField } from "./embedderModel";
+import AllowInternalHostSwitch from "../common/AllowInternalHostSwitch";
 
 /**
  * The fields of an embedder, controlled by the caller. Used by the embedder
@@ -157,6 +158,13 @@ const EmbedderFormFields = ({ draft, onChange, errors = {}, llms = [], vendors =
               value={draft.endpoint}
               onChange={set("endpoint")}
               helperText={endpoint.helper}
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <AllowInternalHostSwitch
+              checked={draft.allow_internal_host}
+              onChange={(v) => onChange({ ...draft, allow_internal_host: v })}
+              target="the embedder's endpoint"
             />
           </Grid>
           <Grid item xs={12}>

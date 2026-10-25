@@ -7,6 +7,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 )
 
@@ -240,7 +241,7 @@ func TestValidatePluginCommand(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validatePluginCommand(tc.command, securityService)
+			err := validatePluginCommand(tc.command, securityService, netguard.Exemption{})
 
 			if tc.shouldError {
 				if err == nil {
@@ -381,7 +382,7 @@ func TestValidatePluginCommand_InternalNetworkBypass(t *testing.T) {
 			})
 
 			// Test validation
-			err := validatePluginCommand(tc.command, securityService)
+			err := validatePluginCommand(tc.command, securityService, netguard.Exemption{})
 
 			if tc.shouldError && err == nil {
 				t.Errorf("expected error for command %s, but got none", tc.command)

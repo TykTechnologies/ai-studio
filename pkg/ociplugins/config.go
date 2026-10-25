@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 )
 
 // DefaultTykPublicKey is the official Tyk plugin signing public key (ECDSA P-256).
@@ -121,6 +123,11 @@ type OCIReference struct {
 	Digest     string            `json:"digest"`     // sha256:...
 	Tag        string            `json:"tag"`        // optional, mainly for development
 	Params     map[string]string `json:"params"`     // Query parameters
+
+	// Exemption is the plugin's "Allow internal host" exemption
+	// (netguard.CommandExemption): its registry may be an internal address.
+	// Set by the caller that knows the plugin; never parsed from a command.
+	Exemption netguard.Exemption `json:"-"`
 }
 
 // OCIPluginParams represents parsed parameters from OCI command

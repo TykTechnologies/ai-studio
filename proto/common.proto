@@ -60,6 +60,10 @@ message LLMConfig {
   // refused-credential placeholder, so an edge that does not read this field
   // fails closed; edges lay these values over it.
   map<string, string> metadata_secrets_encrypted = 34;
+  // The admin-only "Allow internal host" switch (w4e): the edge exempts
+  // only this LLM's own host(s) from internal-address blocking. Edges
+  // released before it ignore the field and keep blocking.
+  bool allow_internal_host = 35;
 }
 
 // AppConfig represents an application configuration with embedded relationships
@@ -177,6 +181,10 @@ message PluginConfig {
   // hub and encrypted with the edge encryption key, by config key. The
   // reference itself stays in config; edges lay these values over it.
   map<string, string> config_secrets_encrypted = 16;
+  // The admin-only "Allow internal host" switch (w4e): the edge exempts
+  // only this plugin's own host(s) from internal-address blocking. Edges
+  // released before it ignore the field and keep blocking.
+  bool allow_internal_host = 17;
 }
 
 // ModelRouterConfig represents a model router configuration (Enterprise)
@@ -273,6 +281,10 @@ message ToolConfig {
   // Agent tracing content mode cap for calls to this tool (Enterprise);
   // empty is no cap.
   string tracing_content_mode_max = 22;
+  // The admin-only "Allow internal host" switch (w4e): the edge exempts
+  // only this tool's own host(s) from internal-address blocking. Edges
+  // released before it ignore the field and keep blocking.
+  bool allow_internal_host = 23;
 }
 
 // DatasourceConfig represents a datasource configuration
@@ -309,6 +321,13 @@ message DatasourceConfig {
   // Agent tracing content mode cap for calls to this datasource
   // (Enterprise); empty is no cap.
   string tracing_content_mode_max = 24;
+  // The admin-only "Allow internal host" switch (w4e): the edge exempts
+  // only this datasource (vector store)'s own host(s) from internal-address blocking. Edges
+  // released before it ignore the field and keep blocking.
+  bool allow_internal_host = 25;
+  // The switch of the datasource's embedder: its own, or its LLM's for a
+  // linked one.
+  bool embed_allow_internal_host = 26;
 }
 
 // OAuthClientConfig represents an OAuth 2.0 client (synced to edges for MCP auth)

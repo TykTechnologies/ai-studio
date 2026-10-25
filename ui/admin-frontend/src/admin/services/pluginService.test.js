@@ -319,6 +319,7 @@ describe('PluginService', () => {
         plugin_type: 'gateway',
         oci_reference: '',
         load_immediately: true,
+        allow_internal_host: false,
       });
       expect(result.id).toBe('2');
       expect(result.name).toBe('New Plugin');
@@ -345,6 +346,7 @@ describe('PluginService', () => {
         plugin_type: 'gateway',
         oci_reference: '',
         load_immediately: false,
+        allow_internal_host: false,
       });
     });
 
@@ -413,6 +415,19 @@ describe('PluginService', () => {
       }));
       expect(result.hookTypes).toEqual(['on_response', 'data_collection']);
       expect(result.hookTypesCustomized).toBe(true);
+    });
+
+    // w4e: an omitted allow_internal_host keeps the stored value, so turning
+    // the switch off must send an explicit false.
+    test('turning Allow internal host off sends an explicit false', async () => {
+      apiClient.patch.mockResolvedValueOnce(mockResponse);
+
+      await pluginService.updatePlugin('1', { ...mockPluginData, allowInternalHost: false });
+      expect(apiClient.patch.mock.calls[0][1].allow_internal_host).toBe(false);
+
+      apiClient.patch.mockResolvedValueOnce(mockResponse);
+      await pluginService.updatePlugin('1', { config: {} });
+      expect(apiClient.patch.mock.calls[1][1]).not.toHaveProperty('allow_internal_host');
     });
 
     test('a partial update sends only the keys it was given (the API leaves the rest untouched)', async () => {

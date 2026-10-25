@@ -365,3 +365,31 @@ func TestValidatingHTTPTransport_RefusesRedirectToInternal(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+// A policy refusal is recognisable through the wrapping of a dial error, so
+// callers can pass its reason on (w4e.4); other errors are not refusals.
+func TestRefusal(t *testing.T) {
+	setBlockInternal(t, "")
+	t.Setenv(EnvAllowedHosts, "")
+	t.Setenv(EnvAllowedInternalHosts, "")
+
+	reason, ok := Refusal(ValidateUpstreamURL(mustURL(t, "http://127.0.0.1:1")))
+	if !ok || !strings.Contains(reason, EnvBlockInternal) {
+		t.Fatalf("ValidateUpstreamURL refusal = %q, %v", reason, ok)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer srv.Close()
+	_, err := (&http.Client{Transport: HTTPTransport()}).Get(srv.URL)
+	if err == nil {
+		t.Fatal("a dial to a loopback address succeeded with blocking on")
+	}
+	reason, ok = Refusal(err)
+	if !ok || !strings.Contains(reason, EnvBlockInternal) || strings.Contains(reason, "dial tcp") {
+		t.Fatalf("dial refusal = %q, %v (from %v)", reason, ok, err)
+	}
+
+	if _, ok := Refusal(fmt.Errorf("connection refused")); ok {
+		t.Fatal("a plain error is not a refusal")
+	}
+}

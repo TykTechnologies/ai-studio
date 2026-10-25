@@ -1,8 +1,10 @@
 package redisvector
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
+	"net"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/embeddings"
 )
@@ -77,6 +79,15 @@ func WithIndexSchema(format SchemaFormat, schemaFilePath string, schemaBytes []b
 			filePath: schemaFilePath,
 			buf:      schemaBytes,
 		}
+	}
+}
+
+// WithDialFn sets how the Redis client dials (Tyk: an outbound network
+// policy). It gets the address, the client's dialer and its TLS config,
+// which it must apply itself.
+func WithDialFn(dial func(string, *net.Dialer, *tls.Config) (net.Conn, error)) Option {
+	return func(p *Store) {
+		p.dialFn = dial
 	}
 }
 

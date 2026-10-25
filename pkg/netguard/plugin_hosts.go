@@ -40,7 +40,7 @@ type InternalPluginHostError struct {
 }
 
 func (e *InternalPluginHostError) Error() string {
-	return fmt.Sprintf("plugin host %q is an internal address, resolves to one, or does not resolve; add it to %s to allow this host, or set %s=true to allow every internal host", e.Host, EnvAllowedInternalHosts, EnvAllowInternal)
+	return fmt.Sprintf("plugin host %q is an internal address, resolves to one, or does not resolve; an administrator can switch on Allow internal host for this plugin, add the host to %s, or set %s=true to allow every internal host", e.Host, EnvAllowedInternalHosts, EnvAllowInternal)
 }
 
 // Is makes errors.Is(err, ErrInternalPluginHost) true.
@@ -65,7 +65,13 @@ func PluginHostExempt(host string) bool {
 // hostname, without a port). No DNS lookup is made when internal hosts are
 // allowed or the host is exempt.
 func CheckPluginHost(host string) error {
-	if PluginInternalHostsAllowed() || PluginHostExempt(host) {
+	return CheckPluginHostWith(Exemption{}, host)
+}
+
+// CheckPluginHostWith is CheckPluginHost with a plugin's own "Allow internal
+// host" exemption (CommandExemption): its hosts pass too.
+func CheckPluginHostWith(exempt Exemption, host string) error {
+	if PluginInternalHostsAllowed() || PluginHostExempt(host) || exempt.Has(host) {
 		return nil
 	}
 	lower := strings.TrimSuffix(strings.ToLower(strings.Trim(host, "[]")), ".")
@@ -146,6 +152,14 @@ var proxyFromEnvironment = http.ProxyFromEnvironment
 // protection does not apply to the target then; the proxy is responsible for
 // egress. A target that bypasses the proxy (NO_PROXY) is dial-guarded.
 func PluginHTTPTransport() http.RoundTripper {
+	return PluginHTTPTransportFor(Exemption{})
+}
+
+// PluginHTTPTransportFor is PluginHTTPTransport with a plugin's own "Allow
+// internal host" exemption (CommandExemption): its registry and signature
+// hosts are dialled unguarded too. Use one per exemption, so connections
+// are never shared across plugins with different switches.
+func PluginHTTPTransportFor(exempt Exemption) http.RoundTripper {
 	guarded := NewDialer()
 	guarded.Control = PluginDialControl
 	unguarded := newUnguardedDialer()
@@ -156,7 +170,7 @@ func PluginHTTPTransport() http.RoundTripper {
 		if err != nil || proxyURL == nil {
 			return proxyURL, err
 		}
-		if err := CheckPluginHost(req.URL.Hostname()); err != nil {
+		if err := CheckPluginHostWith(exempt, req.URL.Hostname()); err != nil {
 			return nil, err
 		}
 		proxies.Store(proxyAddress(proxyURL), true)
@@ -167,7 +181,7 @@ func PluginHTTPTransport() http.RoundTripper {
 		if err != nil {
 			host = address
 		}
-		if _, isProxy := proxies.Load(address); isProxy || PluginHostExempt(host) {
+		if _, isProxy := proxies.Load(address); isProxy || PluginHostExempt(host) || exempt.Has(host) {
 			return unguarded.DialContext(ctx, network, address)
 		}
 		return guarded.DialContext(ctx, network, address)

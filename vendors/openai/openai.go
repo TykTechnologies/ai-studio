@@ -15,6 +15,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms/openai"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/schema"
+	"github.com/TykTechnologies/midsommar/v2/vendors/vendorclient"
 )
 
 const (
@@ -61,7 +62,9 @@ func (v *OpenAI) GetEmbedder(spec *models.EmbedderSpec) (*embeddings.EmbedderImp
 	var llm embeddings.EmbedderClient
 	var err error
 
-	opts := []openai.Option{}
+	// The endpoint is the embedder's own, so the client is guarded by the
+	// outbound policy with its "Allow internal host" exemption.
+	opts := []openai.Option{openai.WithHTTPClient(vendorclient.For(spec.AllowInternalHost, spec.Endpoint))}
 	// Always passed, even when empty: the client must refuse an empty key,
 	// never fill it from the host environment.
 	opts = append(opts, openai.WithToken(spec.APIKey))
@@ -228,7 +231,9 @@ func (v *OpenAI) DecisionEndpoint() string {
 }
 
 func setupOpenAIDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (llms.Model, error) {
-	var opts = make([]openai.Option, 0)
+	// Guarded by the outbound policy, with the LLM's "Allow internal host"
+	// exemption for its own endpoint (chat sessions, semantic routing).
+	opts := []openai.Option{openai.WithHTTPClient(vendorclient.For(connDef.AllowInternalHost, connDef.APIEndpoint))}
 	if connDef.APIEndpoint != "" {
 		opts = append(opts, openai.WithBaseURL(connDef.APIEndpoint))
 	}

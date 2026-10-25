@@ -81,7 +81,10 @@ const (
 	//     reader is 23 and an older headless replica refuses the database.
 	// 24: chats.render_images (defaulted false, additive): per-chat switch
 	//     for rendering images in chat responses (2u2).
-	SchemaVersion          = 24
+	// 25: allow_internal_host on llms, embedders, tools, datasources,
+	//     plugins and mcp_servers (defaulted false, additive): the per-asset
+	//     "Allow internal host" switch (w4e).
+	SchemaVersion          = 25
 	MinReaderSchemaVersion = 23
 )
 

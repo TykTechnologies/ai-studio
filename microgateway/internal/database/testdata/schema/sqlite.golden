@@ -219,6 +219,8 @@ TABLE datasources
   column `namespace` text DEFAULT ""
   column `governed_metadata` JSON
   column `tracing_content_mode_max` text
+  column `allow_internal_host` numeric NOT NULL DEFAULT false
+  column `embed_allow_internal_host` numeric NOT NULL DEFAULT false
   index CREATE INDEX `idx_datasources_deleted_at` ON `datasources`(`deleted_at`)
   index CREATE INDEX `idx_ds_namespace` ON `datasources`(`namespace`)
 TABLE edge_instances
@@ -319,6 +321,7 @@ TABLE llms
   column `price_multipliers` JSON
   column `tracing_content_mode_max` text
   column `tracing_propagation_opt_out` numeric NOT NULL DEFAULT false
+  column `allow_internal_host` numeric NOT NULL DEFAULT false
   index CREATE INDEX `idx_llm_active` ON `llms`(`is_active`)
   index CREATE INDEX `idx_llm_namespace` ON `llms`(`namespace`)
   index CREATE INDEX `idx_llms_deleted_at` ON `llms`(`deleted_at`)
@@ -450,6 +453,7 @@ TABLE plugins
   column `updated_at` datetime
   column `deleted_at` datetime
   column `namespace` text DEFAULT ""
+  column `allow_internal_host` numeric NOT NULL DEFAULT false
   index CREATE INDEX `idx_plugin_namespace` ON `plugins`(`namespace`)
   index CREATE INDEX `idx_plugins_deleted_at` ON `plugins`(`deleted_at`)
   index CREATE INDEX `idx_plugins_hook_type` ON `plugins`(`hook_type`)
@@ -513,6 +517,7 @@ TABLE tools
   column `mcp_access_disabled` numeric NOT NULL DEFAULT false
   column `governed_metadata` JSON
   column `tracing_content_mode_max` text
+  column `allow_internal_host` numeric NOT NULL DEFAULT false
   index CREATE INDEX `idx_tool_namespace` ON `tools`(`namespace`)
   index CREATE INDEX `idx_tools_deleted_at` ON `tools`(`deleted_at`)
   index CREATE UNIQUE INDEX `idx_tools_slug` ON `tools`(`slug`)

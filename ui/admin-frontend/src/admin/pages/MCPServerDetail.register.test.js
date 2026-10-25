@@ -195,3 +195,30 @@ describe("MCPServerDetail registration controls", () => {
     expect(await screen.findByTestId("list-page")).toBeInTheDocument();
   });
 });
+
+// w4e: an administrator sees the stored Allow internal host switch and can
+// change it; the change is sent only when it differs.
+describe("MCPServerDetail Allow internal host", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("shows the stored switch and sends an administrator's change", async () => {
+    mockGets({ ...server, allow_internal_host: true });
+    apiClient.patch
+      .mockResolvedValueOnce({ data: { ...server, allow_internal_host: true } })
+      .mockResolvedValueOnce({ data: { ...server, allow_internal_host: false } });
+    renderDetail();
+    const toggle = await screen.findByRole("checkbox", { name: "Allow internal host" });
+    expect(toggle).toBeChecked();
+
+    fireEvent.click(screen.getByTestId("save-presentation"));
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalledTimes(1));
+    expect(apiClient.patch.mock.calls[0][1]).not.toHaveProperty("allow_internal_host");
+
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByTestId("save-presentation"));
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalledTimes(2));
+    expect(apiClient.patch.mock.calls[1][1].allow_internal_host).toBe(false);
+  });
+});

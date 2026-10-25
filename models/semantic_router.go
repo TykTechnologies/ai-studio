@@ -113,6 +113,8 @@ func (r *SemanticRouter) CompiledConfig(db *gorm.DB, encrypt func(string) (strin
 		EmbedderID: spec.EmbedderID,
 		Vendor:     string(spec.Vendor),
 		Endpoint:   spec.Endpoint,
+
+		AllowInternalHost: spec.AllowInternalHost,
 	}
 	if encrypt == nil {
 		ref.APIKey = spec.APIKey

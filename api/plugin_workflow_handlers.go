@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
@@ -113,8 +114,9 @@ func (a *API) validateAndLoadPlugin(c *gin.Context) {
 		a.service.PluginMetadataLoader = services.NewPluginMetadataLoader(a.service.DB, a.service.AIStudioPluginManager)
 	}
 
-	// Load plugin metadata (config schema + manifest)
-	ctx := c.Request.Context()
+	// Load plugin metadata (config schema + manifest), with the plugin's
+	// own "Allow internal host" exemption for the command loaded.
+	ctx := netguard.CommandExemption(plugin.AllowInternalHost, command).WithContext(c.Request.Context())
 	metadata, err := a.service.PluginMetadataLoader.LoadPluginMetadata(ctx, command)
 	if err != nil {
 		log.Error().
