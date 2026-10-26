@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -142,6 +143,14 @@ func deriveKeyScrypt(input string, salt []byte) ([]byte, error) {
 // fipsEnabled is crypto/fips140.Enabled; tests replace it to cover the FIPS
 // writer in standard runs.
 var fipsEnabled = fips140.Enabled
+
+// fipsEnforced is crypto/fips140.Enforced (GODEBUG=fips140=only); tests
+// replace it.
+var fipsEnforced = fips140.Enforced
+
+// errLegacyUnderEnforcement is returned for a legacy AES-CFB value read
+// outside the re-encryption sweep in a fips140=only process.
+var errLegacyUnderEnforcement = errors.New("legacy AES-CFB value is not readable under fips140=only; run the re-encryption sweep (it runs at start-up) before enabling fips140=only")
 
 // v3Iterations is the PBKDF2 count new v3 values get.
 func v3Iterations() int {
@@ -330,6 +339,17 @@ func encrypt(keyString string, stringToEncrypt string) (encryptedString string, 
 // reported as an error rather than a panic, since stored values can be
 // tampered with or truncated outside our control.
 func decrypt(keyString string, stringToDecrypt string) (string, error) {
+	return decryptValue(keyString, stringToDecrypt, false)
+}
+
+// decryptForMigration is decrypt for the re-encryption sweep: the one place
+// that reads legacy AES-CFB values outside FIPS 140-only enforcement, so it
+// can move them to an approved format.
+func decryptForMigration(keyString string, stringToDecrypt string) (string, error) {
+	return decryptValue(keyString, stringToDecrypt, true)
+}
+
+func decryptValue(keyString string, stringToDecrypt string, migration bool) (string, error) {
 	if strings.HasPrefix(stringToDecrypt, encV3Prefix) {
 		iter, encoded, ok := splitV3(stringToDecrypt)
 		if !ok {
@@ -344,7 +364,7 @@ func decrypt(keyString string, stringToDecrypt string) (string, error) {
 			return deriveKeyScrypt(keyString, salt)
 		})
 	}
-	return decryptCFBLegacy(keyString, stringToDecrypt)
+	return decryptCFBLegacy(keyString, stringToDecrypt, migration)
 }
 
 // splitV3 splits "v3:<iterations>:<payload>" into the iteration count and
@@ -405,7 +425,13 @@ func decryptGCM(keyString string, encoded string, derive func(salt []byte) ([]by
 
 // decryptCFBLegacy decrypts values written before the GCM scheme
 // (SHA256-derived key + AES-CFB). Retained for migration of stored values.
-func decryptCFBLegacy(keyString string, stringToDecrypt string) (string, error) {
+// AES-CFB is not approved and panics under GODEBUG=fips140=only, so in that
+// mode only the sweep (migration) reads it, outside enforcement; any other
+// read returns errLegacyUnderEnforcement.
+func decryptCFBLegacy(keyString string, stringToDecrypt string, migration bool) (string, error) {
+	if !migration && fipsEnforced() {
+		return "", errLegacyUnderEnforcement
+	}
 	key := deriveKey(keyString)
 	ciphertext, err := base64.URLEncoding.DecodeString(stringToDecrypt)
 	if err != nil {
@@ -425,16 +451,18 @@ func decryptCFBLegacy(keyString string, stringToDecrypt string) (string, error) 
 	iv := ciphertext[:aes.BlockSize]
 	ciphertext = ciphertext[aes.BlockSize:]
 
-	// AES-CFB is not approved, and under GODEBUG=fips140=only it panics.
-	// This legacy reader is what the re-encryption sweep migrates from, so
-	// it runs outside enforcement: the read is the migration path, and new
-	// values are never written this way.
-	fips140.WithoutEnforcement(func() {
+	read := func() {
 		stream := cipher.NewCFBDecrypter(block, iv) //nolint:staticcheck // legacy format support only; new values use AES-GCM
 
 		// XORKeyStream can work in-place if the two arguments are the same.
 		stream.XORKeyStream(ciphertext, ciphertext)
-	})
+	}
+	if migration {
+		// The sweep's read, which moves the value to an approved format.
+		fips140.WithoutEnforcement(read)
+	} else {
+		read()
+	}
 
 	return string(ciphertext), nil
 }
@@ -468,24 +496,13 @@ func ReencryptLegacySecrets(db *gorm.DB) (int, error) {
 		FindInBatches(&batch, reencryptBatchSize, func(_ *gorm.DB, _ int) error {
 			return db.Transaction(func(tx *gorm.DB) error {
 				for i := range batch {
-					s := &batch[i]
-
-					plaintext, err := decrypt(key, s.Value)
+					ok, err := reencryptRow(tx, key, &batch[i])
 					if err != nil {
-						log.Warnf("skipping secret %q during re-encryption: %v", s.VarName, err)
-						continue
+						return err
 					}
-
-					reencrypted, err := encrypt(key, plaintext)
-					if err != nil {
-						log.Warnf("failed to re-encrypt secret %q: %v", s.VarName, err)
-						continue
+					if ok {
+						migrated++
 					}
-
-					if err := tx.Model(&Secret{}).Where("id = ?", s.ID).Update("value", reencrypted).Error; err != nil {
-						return fmt.Errorf("failed to save re-encrypted secret %q: %w", s.VarName, err)
-					}
-					migrated++
 				}
 				return nil
 			})
@@ -498,6 +515,30 @@ func ReencryptLegacySecrets(db *gorm.DB) (int, error) {
 		log.Infof("re-encrypted %d secret(s) to the current encryption format", migrated)
 	}
 	return migrated, nil
+}
+
+// reencryptRow re-encrypts one row read by the sweep. It writes only over
+// the value that was read, so a secret updated meanwhile (through the API, or
+// by another replica during a rolling start) keeps its new value; ok is false
+// then, and for a row that cannot be decrypted.
+func reencryptRow(tx *gorm.DB, key string, s *Secret) (ok bool, err error) {
+	plaintext, err := decryptForMigration(key, s.Value)
+	if err != nil {
+		log.Warnf("skipping secret %q during re-encryption: %v", s.VarName, err)
+		return false, nil
+	}
+
+	reencrypted, err := encrypt(key, plaintext)
+	if err != nil {
+		log.Warnf("failed to re-encrypt secret %q: %v", s.VarName, err)
+		return false, nil
+	}
+
+	res := tx.Model(&Secret{}).Where("id = ? AND value = ?", s.ID, s.Value).Update("value", reencrypted)
+	if res.Error != nil {
+		return false, fmt.Errorf("failed to save re-encrypted secret %q: %w", s.VarName, res.Error)
+	}
+	return res.RowsAffected == 1, nil
 }
 
 // plaintextFallbackWarnOnce ensures the loud missing-key warning is emitted

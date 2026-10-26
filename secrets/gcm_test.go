@@ -108,6 +108,9 @@ func legacyCFBEncrypt(t *testing.T, keyString, plaintext string) string {
 }
 
 func TestLegacyCFBValuesStillDecrypt(t *testing.T) {
+	if fipsEnforced() {
+		t.Skip("under fips140=only legacy values are read only by the re-encryption sweep")
+	}
 	legacy := legacyCFBEncrypt(t, "legacy-key", "old-secret-value")
 	dec, err := decrypt("legacy-key", legacy)
 	require.NoError(t, err)
@@ -119,7 +122,11 @@ func TestDecryptValueHandlesBothFormats(t *testing.T) {
 
 	// Legacy "$ENC/" value written by the old code
 	legacy := "$ENC/" + legacyCFBEncrypt(t, "env-key", "legacy-payload")
-	assert.Equal(t, "legacy-payload", DecryptValue(legacy))
+	if fipsEnforced() {
+		assert.Equal(t, legacy, DecryptValue(legacy), "under fips140=only a legacy value is not read outside the sweep")
+	} else {
+		assert.Equal(t, "legacy-payload", DecryptValue(legacy))
+	}
 
 	// New value written by the current code
 	fresh := EncryptValue("fresh-payload")

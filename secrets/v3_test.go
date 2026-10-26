@@ -58,8 +58,12 @@ func TestEveryFormatDecryptsInEveryMode(t *testing.T) {
 			assert.Equal(t, plaintext, got)
 		}
 		got, err := decrypt("fixture-key", legacyFixture)
-		require.NoError(t, err)
-		assert.Equal(t, "fips-fixture-plaintext", got)
+		if fipsEnforced() {
+			assert.ErrorIs(t, err, errLegacyUnderEnforcement)
+		} else {
+			require.NoError(t, err)
+			assert.Equal(t, "fips-fixture-plaintext", got)
+		}
 	}
 	t.Run("standard", func(t *testing.T) { forceStandard(t); check(t) })
 	t.Run("fips", func(t *testing.T) { forceFIPS(t); check(t) })
@@ -212,4 +216,55 @@ func TestEncryptValue_FIPSModeWritesV3(t *testing.T) {
 		forceStandard(t)
 		assert.Equal(t, "payload", DecryptValue(enc), "a standard build reads v3")
 	}
+}
+
+// forceEnforced makes this package behave as under GODEBUG=fips140=only for
+// legacy reads until the test ends.
+func forceEnforced(t *testing.T) {
+	t.Helper()
+	prev := fipsEnforced
+	fipsEnforced = func() bool { return true }
+	t.Cleanup(func() { fipsEnforced = prev })
+}
+
+// Under fips140=only a legacy AES-CFB value is read only by the sweep: a
+// runtime read is an error (not a panic), and the sweep still migrates it.
+func TestLegacyRead_OnlyTheSweepReadsUnderEnforcement(t *testing.T) {
+	t.Setenv(midsommarSecret, "fixture-key")
+	db := openSweepDB(t)
+	forceFIPS(t)
+	forceEnforced(t)
+
+	_, err := decrypt("fixture-key", legacyFixture)
+	assert.ErrorIs(t, err, errLegacyUnderEnforcement)
+	assert.Equal(t, "$ENC/"+legacyFixture, DecryptValue("$ENC/"+legacyFixture), "returned untouched, with an error logged")
+
+	require.NoError(t, db.Create(&Secret{VarName: "LEGACY", Value: legacyFixture}).Error)
+	migrated, err := ReencryptLegacySecrets(db)
+	require.NoError(t, err)
+	assert.Equal(t, 1, migrated)
+	got, err := GetSecretByVarName(db, "LEGACY", false)
+	require.NoError(t, err)
+	assert.Equal(t, "fips-fixture-plaintext", got.Value)
+}
+
+// The sweep writes only over the value it read: a secret changed between the
+// sweep's read and its write keeps the change.
+func TestReencryptRow_DoesNotRevertAConcurrentUpdate(t *testing.T) {
+	t.Setenv(midsommarSecret, "fixture-key")
+	db := openSweepDB(t)
+	forceFIPS(t)
+
+	require.NoError(t, db.Create(&Secret{VarName: "RACE", Value: v2Fixtures["fips-fixture-plaintext"]}).Error)
+	var read Secret
+	require.NoError(t, db.Where("var_name = ?", "RACE").First(&read).Error)
+
+	updated, err := encrypt("fixture-key", "changed through the API")
+	require.NoError(t, err)
+	require.NoError(t, db.Model(&Secret{}).Where("id = ?", read.ID).Update("value", updated).Error)
+
+	ok, err := reencryptRow(db, "fixture-key", &read)
+	require.NoError(t, err)
+	assert.False(t, ok)
+	assert.Equal(t, updated, storedValue(t, db, "RACE"), "the newer value survives")
 }
