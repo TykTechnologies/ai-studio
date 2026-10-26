@@ -449,6 +449,9 @@ jobs:
   # transaction deadlocks, dialect-specific SQL). They skip without
   # DATABASE_URL, so the unit jobs above never run them.
   #
+  # scripts/ci-postgres-tests.sh runs each package on a database of its
+  # own, several at a time (see the script for the suites).
+  #
   # They talk to a live database, so they always re-run (-count=1); the job
   # restores the CE unit-test build cache for its compiled packages and the
   # module cache of the edition it checks out, and saves none of its own.
@@ -472,12 +475,10 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-    env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/midsommar_test?sslmode=disable
     steps:
-      # The enterprise submodule is checked out for the audit suite below;
+      # The enterprise submodule is checked out for the enterprise suites;
       # the other packages are built without the enterprise tag. Fork pull
-      # requests get a stub instead and skip the audit suite.
+      # requests get a stub instead and skip the enterprise suites.
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -530,94 +531,42 @@ jobs:
           echo "placeholder" > ui/admin-frontend/build/index.html
           cp dev/.env.dev .env
 
-      # One package at a time (-p 1): the packages share the database, and
-      # tests that are not schema-isolated would otherwise migrate it at once.
+      - name: Install the Postgres client
+        run: command -v psql >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client)
+
+      # Every test package in a go test of its own, on a database of its
+      # own, four at a time; the suites and why each has the databases it
+      # has are listed in the script. Each package's log is printed whole
+      # when it finishes, failures uncollapsed.
       - name: Run Postgres tests
-        run: |
-          go test -v -race -p 1 -count=1 \
-            -run 'PostgreSQL|_Postgres|InTransaction|EnsureInDefaultCatalogue' \
-            ./models/ ./services/ ./pkg/studio/ ./analytics/
+        run: scripts/ci-postgres-tests.sh
 
-      # Packages whose Postgres-gated tests used to run nowhere: the chat
-      # queue (LISTEN/NOTIFY), config and startup.
-      - name: Run chat queue, config and startup Postgres tests
+      - name: Postgres test timings summary
+        if: ${{ !cancelled() }}
         run: |
-          go test -v -race -p 1 -count=1 ./chat_session/ ./config/ ./startup/
+          shopt -s nullglob
+          files=("$RUNNER_TEMP"/pg-tests/run*.json)
+          [ ${#files[@]} -gt 0 ] || exit 0
+          args=()
+          for f in "${files[@]}"; do args+=("$(basename "$f" .json)=$f"); done
+          {
+            echo "## Go Postgres test timings"
+            echo ""
+            echo "<details><summary>Per run</summary>"
+            echo ""
+            scripts/gotest-json.py summary --packages 10 --tests 15 "${args[@]}"
+            echo ""
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      # The cluster code runs on every Postgres deployment: the event log and
-      # node registry, the shared LISTEN connection, durable pushes and the
-      # leader lease. Each test works in a schema of its own; the push and
-      # lease tests run their SQLite and Postgres cases side by side.
-      - name: Run cluster Postgres tests
-        run: |
-          go test -v -race -p 1 -count=1 \
-            ./pkg/cluster/ ./pkg/pglisten/ ./services/pushes/ ./services/scheduler/
-
-      # The edge, the enterprise audit suite and the budget tracker test get
-      # databases of their own: the edge schema has its own apps/llms tables,
-      # and the budget test drops and recreates the tables it uses.
-      - name: Create edge, audit and budget databases
-        run: |
-          command -v psql >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client)
-          PGPASSWORD=postgres psql -h localhost -U postgres -c 'CREATE DATABASE mgw_test'
-          PGPASSWORD=postgres psql -h localhost -U postgres -c 'CREATE DATABASE audit_test'
-          PGPASSWORD=postgres psql -h localhost -U postgres -c 'CREATE DATABASE budget_test'
-
-      # Pushes and the event-bus relay across several control-server replicas
-      # on one database, and the budget usage tracker's queries.
-      - name: Run gRPC push, relay and budget Postgres tests
-        env:
-          BUDGET_TEST_POSTGRES_DSN: postgres://postgres:postgres@localhost:5432/budget_test?sslmode=disable
-        run: |
-          go test -v -race -count=1 -run 'TestPushCluster_|TestRelay_|_Postgres' ./grpc/
-
-      # Analytics writer, budget ledger and budget sync against Postgres
-      # (ON CONFLICT, GREATEST, enforced foreign keys), and the edge schema
-      # snapshot.
-      - name: Run microgateway Postgres tests
-        working-directory: microgateway
-        env:
-          MGW_TEST_POSTGRES_DSN: postgres://postgres:postgres@localhost:5432/mgw_test?sslmode=disable
-        run: |
-          go test -v -race -count=1 -run 'Postgres' ./internal/services/ ./internal/database/
-
-      # Real edges against several Studio replicas sharing DATABASE_URL (a
-      # schema per test): pushes land whatever happens to the connections.
-      - name: Run microgateway cluster Postgres tests
-        working-directory: microgateway
-        run: |
-          go test -v -race -count=1 ./tests/cluster/
-
-      # Agent Call Tracing on Postgres, in a database of its own: the store
-      # and capture staging in core, and the enterprise assembler,
-      # correlation goldens, JSON v1 and content API (purge). Their gates
-      # read DATABASE_URL or AGENT_TRACE_TEST_POSTGRES_DSN, so both are set.
-      # A Postgres-only bug (jyx.126) must not pass by skipping.
-      - name: Run agent tracing Postgres tests
-        env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/agenttrace_test?sslmode=disable
-          AGENT_TRACE_TEST_POSTGRES_DSN: postgres://postgres:postgres@localhost:5432/agenttrace_test?sslmode=disable
-        run: |
-          PGPASSWORD=postgres psql -h localhost -U postgres -c 'CREATE DATABASE agenttrace_test'
-          go test -v -race -p 1 -count=1 -run 'AgentTrace|Capture' ./models/ ./analytics/
-
-      - name: Run enterprise agent tracing Postgres tests
-        if: env.FORK_PR != 'true'
-        working-directory: enterprise
-        env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/agenttrace_test?sslmode=disable
-          AGENT_TRACE_TEST_POSTGRES_DSN: postgres://postgres:postgres@localhost:5432/agenttrace_test?sslmode=disable
-        run: |
-          go test -tags enterprise -v -race -p 1 -count=1 ./features/agenttracing/...
-
-      - name: Run enterprise audit and webhooks Postgres tests
-        if: env.FORK_PR != 'true'
-        working-directory: enterprise
-        env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/audit_test?sslmode=disable
-        run: |
-          go test -tags enterprise -v -race -count=1 ./features/audit/...
-          go test -tags enterprise -v -race -count=1 -run '_Postgres' ./features/webhooks/
+      - name: Upload Postgres test timings
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: test-json-postgres
+          path: ${{ runner.temp }}/pg-tests/
+          retention-days: 7
+          if-no-files-found: ignore
 
   # ==========================================================================
   # Agent tracing performance gate (spec §10, bead jyx.34). Deterministic
