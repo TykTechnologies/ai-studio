@@ -122,49 +122,37 @@ func tearDownTest(db *gorm.DB, cancel context.CancelFunc) {
 	}
 }
 
+// waitPollInterval is how often the wait helpers re-check their condition.
+// Each helper checks before it first sleeps, so a condition that already
+// holds costs nothing, and none sleeps after its condition holds: the
+// deadlines are the only allowance for a slow machine.
+const waitPollInterval = 10 * time.Millisecond
+
 // waitForAnalytics ensures we have at least `expectedCount` LLMChatRecords.
 func waitForAnalytics(t *testing.T, db *gorm.DB, expectedCount int64) {
 	deadline := time.Now().Add(12000 * time.Millisecond) // Increased to 12s for CI reliability
-	for time.Now().Before(deadline) {
-		var count int64
-		var err error
-
-		// Retry with exponential backoff for database lock errors
-		for i := 0; i < 5; i++ {
-			err = db.Model(&models.LLMChatRecord{}).Count(&count).Error
-			if err == nil {
-				break
-			}
-
-			// Handle database lock errors specifically
-			if strings.Contains(err.Error(), "database table is locked") ||
-				strings.Contains(err.Error(), "database is locked") {
-				backoff := time.Duration(100*(1<<i)) * time.Millisecond
-				t.Logf("Database locked during analytics wait, backing off %v (attempt %d/5)", backoff, i+1)
-				time.Sleep(backoff)
-				continue
-			}
-
-			// For other errors, use shorter backoff
-			time.Sleep(50 * time.Millisecond)
-		}
-		if err != nil {
-			t.Logf("Error checking analytics count: %v, retrying...", err)
-			time.Sleep(200 * time.Millisecond)
-			continue
-		}
-
-		if count >= expectedCount {
-			time.Sleep(100 * time.Millisecond) // Increased stabilization sleep
+	var count int64
+	var lastErr error
+	for {
+		err := db.Model(&models.LLMChatRecord{}).Count(&count).Error
+		if err == nil && count >= expectedCount {
 			return
 		}
-		time.Sleep(150 * time.Millisecond) // Increased polling interval for CI
+		if err != nil {
+			lastErr = err
+		}
+		if !time.Now().Before(deadline) {
+			break
+		}
+		time.Sleep(waitPollInterval)
 	}
-	t.Fatalf("Timeout waiting for analytics records. Expected at least: %d", expectedCount)
+	t.Fatalf("Timeout waiting for analytics records. Expected at least: %d, have %d (last error: %v)", expectedCount, count, lastErr)
 }
 
 // waitUntilIdle waits until the analytics goroutine has not produced any *new*
-// LLMChatRecords for ~100ms, meaning it's idle.
+// LLMChatRecords for ~100ms, meaning it's idle. Unlike the other helpers it
+// has to let real time pass: it checks that nothing more arrives, which no
+// single read can show.
 func waitUntilIdle(t *testing.T, db *gorm.DB) {
 	var lastCount int64
 	var stableRounds int
@@ -202,7 +190,6 @@ func waitUntilIdle(t *testing.T, db *gorm.DB) {
 			if curCount == lastCount {
 				stableRounds++
 				if stableRounds >= 2 {
-					time.Sleep(25 * time.Millisecond)
 					return
 				}
 			} else {
@@ -216,72 +203,49 @@ func waitUntilIdle(t *testing.T, db *gorm.DB) {
 // waitForRecordWithCost waits for a record to be written with a non-zero cost and returns the record
 func waitForRecordWithCost(t *testing.T, db *gorm.DB) *models.LLMChatRecord {
 	deadline := time.Now().Add(8000 * time.Millisecond) // Increased to 8s for very reliable testing
-	for time.Now().Before(deadline) {
-		var record models.LLMChatRecord
-		var err error
-		for i := 0; i < 3; i++ {
-			err = db.First(&record).Error
-			if err == nil {
-				break
-			}
-			time.Sleep(50 * time.Millisecond) // Increased sleep interval for more stability
-		}
-		if err != nil {
-			continue
-		}
-
-		// Scale cost for analytics tests, keep raw value for budget tests
-		scaledCost := record.Cost / 10000.0
-		t.Logf("Found record: cost=%f (raw=%f) prompt_tokens=%d response_tokens=%d timestamp=%v",
-			scaledCost, record.Cost, record.PromptTokens, record.ResponseTokens, record.TimeStamp)
-
-		if record.Cost > 0 {
-			time.Sleep(25 * time.Millisecond)
+	var record models.LLMChatRecord
+	var err error
+	for {
+		record = models.LLMChatRecord{}
+		err = db.First(&record).Error
+		if err == nil && record.Cost > 0 {
+			// Scale cost for analytics tests, keep raw value for budget tests
+			scaledCost := record.Cost / 10000.0
+			t.Logf("Found record: cost=%f (raw=%f) prompt_tokens=%d response_tokens=%d timestamp=%v",
+				scaledCost, record.Cost, record.PromptTokens, record.ResponseTokens, record.TimeStamp)
 			// Return scaled cost for analytics tests, raw cost for budget tests
 			if strings.Contains(t.Name(), "TestAnalyze") {
 				record.Cost = scaledCost
 			}
 			return &record
 		}
-		time.Sleep(25 * time.Millisecond)
+		if !time.Now().Before(deadline) {
+			break
+		}
+		time.Sleep(waitPollInterval)
 	}
-	t.Fatal("Timeout waiting for record with cost")
+	t.Fatalf("Timeout waiting for record with cost (last read: cost=%f, error: %v)", record.Cost, err)
 	return nil
 }
 
-// waitForCacheFlush waits for cache operations to complete
+// waitForCacheFlush clears the budget service's spend cache. ClearCache is
+// synchronous, so there is nothing to wait for once it returns.
 func waitForCacheFlush(t *testing.T, budgetService services.BudgetService) {
-	// Clear cache and wait for it to propagate
 	budgetService.ClearCache()
-	time.Sleep(100 * time.Millisecond)
-
-	// Verify cache is actually cleared by doing a quick operation
-	deadline := time.Now().Add(1000 * time.Millisecond)
-	for time.Now().Before(deadline) {
-		// Try a simple cache operation to ensure it's responsive
-		time.Sleep(50 * time.Millisecond)
-		return
-	}
 }
 
-// waitForDatabaseSync waits for database operations to be fully committed
+// waitForDatabaseSync reads the database once it answers. Every test database
+// is on one connection, so a write that has returned is already visible; this
+// only waits out a read that fails.
 func waitForDatabaseSync(t *testing.T, db *gorm.DB) {
-	// Force a sync by doing a simple query with retry on lock errors
 	var count int64
 	deadline := time.Now().Add(3000 * time.Millisecond) // Increased timeout
-	for time.Now().Before(deadline) {
+	for {
 		err := db.Model(&models.LLMChatRecord{}).Count(&count).Error
-		if err == nil {
-			// Additional wait to ensure database is fully synced
-			time.Sleep(100 * time.Millisecond)
+		if err == nil || !time.Now().Before(deadline) {
 			return
 		}
-		// Check if it's a database lock error and wait longer
-		if strings.Contains(err.Error(), "database table is locked") {
-			time.Sleep(100 * time.Millisecond)
-		} else {
-			time.Sleep(25 * time.Millisecond)
-		}
+		time.Sleep(waitPollInterval)
 	}
 }
 
@@ -289,128 +253,76 @@ func waitForDatabaseSync(t *testing.T, db *gorm.DB) {
 func waitForSpendingValue(t *testing.T, budgetService services.BudgetService, appID uint, start, end time.Time, expectedSpent float64) {
 	deadline := time.Now().Add(10000 * time.Millisecond) // Increased to 10s for very reliable testing
 	var lastSpent float64
+	var lastErr error
 
-	for time.Now().Before(deadline) {
+	for {
 		budgetService.ClearCache()
-		time.Sleep(50 * time.Millisecond) // Brief wait after cache clear
-
-		var spent float64
-		var err error
-
-		// Retry spending query with exponential backoff
-		for attempt := 0; attempt < 3; attempt++ {
-			spent, err = budgetService.GetMonthlySpending(appID, start, end)
-			if err == nil {
-				break
+		spent, err := budgetService.GetMonthlySpending(appID, start, end)
+		if err == nil {
+			if math.Abs(spent-expectedSpent) < 0.1 {
+				t.Logf("Current spending: %.2f (expected: %.2f) [start=%v, end=%v]", spent, expectedSpent, start, end)
+				return
 			}
-			backoff := time.Duration(50*(1<<attempt)) * time.Millisecond
-			time.Sleep(backoff)
+			lastSpent = spent
+		} else {
+			lastErr = err
 		}
-
-		if err != nil {
-			t.Logf("Error getting spending: %v, retrying...", err)
-			time.Sleep(100 * time.Millisecond)
-			continue
+		if !time.Now().Before(deadline) {
+			break
 		}
-
-		t.Logf("Current spending: %.2f (expected: %.2f) [start=%v, end=%v]", spent, expectedSpent, start, end)
-
-		if math.Abs(spent-expectedSpent) < 0.1 {
-			time.Sleep(50 * time.Millisecond) // Final stabilization
-			return
-		}
-
-		lastSpent = spent
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(waitPollInterval)
 	}
 
-	t.Fatalf("Timeout waiting for spending to reach %.2f, last value was %.2f", expectedSpent, lastSpent)
+	t.Fatalf("Timeout waiting for spending to reach %.2f, last value was %.2f [start=%v, end=%v] (last error: %v)", expectedSpent, lastSpent, start, end, lastErr)
 }
 
 // waitForProxyLog waits for a ProxyLog with specific app_id and response_code to exist
 func waitForProxyLog(t *testing.T, db *gorm.DB, appID uint, statusCode int) {
 	deadline := time.Now().Add(5000 * time.Millisecond)
-	for time.Now().Before(deadline) {
+	var lastErr error
+	for {
 		var count int64
-		var err error
-
-		// Retry with exponential backoff for database lock errors
-		for i := 0; i < 5; i++ {
-			err = db.Model(&models.ProxyLog{}).Where("app_id = ? AND response_code = ?", appID, statusCode).Count(&count).Error
-			if err == nil {
-				break
-			}
-
-			// Handle database lock errors specifically
-			if strings.Contains(err.Error(), "database table is locked") ||
-				strings.Contains(err.Error(), "database is locked") {
-				backoff := time.Duration(50*(1<<i)) * time.Millisecond
-				t.Logf("Database locked during proxy log wait, backing off %v (attempt %d/5)", backoff, i+1)
-				time.Sleep(backoff)
-				continue
-			}
-
-			// For other errors, use shorter backoff
-			time.Sleep(50 * time.Millisecond)
-		}
-		if err != nil {
-			t.Logf("Error checking proxy log count: %v, retrying...", err)
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
-
-		if count >= 1 {
+		err := db.Model(&models.ProxyLog{}).Where("app_id = ? AND response_code = ?", appID, statusCode).Count(&count).Error
+		if err == nil && count >= 1 {
 			return
 		}
-		time.Sleep(50 * time.Millisecond)
+		if err != nil {
+			lastErr = err
+		}
+		if !time.Now().Before(deadline) {
+			break
+		}
+		time.Sleep(waitPollInterval)
 	}
-	t.Fatalf("Timeout waiting for ProxyLog with app_id=%d and response_code=%d", appID, statusCode)
+	t.Fatalf("Timeout waiting for ProxyLog with app_id=%d and response_code=%d (last error: %v)", appID, statusCode, lastErr)
 }
 
 // waitForSpendingUpdate waits for spending to be updated to an expected value
 func waitForSpendingUpdate(t *testing.T, budgetService services.BudgetService, appID uint, llmID uint, start, end time.Time, expectedSpent float64) {
 	deadline := time.Now().Add(3000 * time.Millisecond) // Increased from 1.5s to 3s for more reliable testing
-	for time.Now().Before(deadline) {
+	var appSpent, llmSpent float64
+	var lastErr error
+	for {
 		budgetService.ClearCache()
 
-		var appSpent, llmSpent float64
 		var err error
-
-		// Retry app spending query if locked
-		for i := 0; i < 3; i++ {
-			appSpent, err = budgetService.GetMonthlySpending(appID, start, end)
-			if err == nil {
-				break
-			}
-			time.Sleep(50 * time.Millisecond) // Increased sleep interval for more stability
-		}
-		if err != nil {
-			continue
-		}
-
-		// Retry llm spending query if locked
-		for i := 0; i < 3; i++ {
+		appSpent, err = budgetService.GetMonthlySpending(appID, start, end)
+		if err == nil {
 			llmSpent, err = budgetService.GetLLMMonthlySpending(llmID, start, end)
-			if err == nil {
-				break
-			}
-			time.Sleep(25 * time.Millisecond)
 		}
-		if err != nil {
-			continue
-		}
-
-		t.Logf("Current spending - app: %.2f, llm: %.2f (expected: %.2f) [start=%v, end=%v]",
-			appSpent, llmSpent, expectedSpent, start, end)
-
-		if appSpent == expectedSpent && llmSpent == expectedSpent {
-			time.Sleep(25 * time.Millisecond)
+		if err == nil && appSpent == expectedSpent && llmSpent == expectedSpent {
 			return
 		}
-
-		time.Sleep(25 * time.Millisecond)
+		if err != nil {
+			lastErr = err
+		}
+		if !time.Now().Before(deadline) {
+			break
+		}
+		time.Sleep(waitPollInterval)
 	}
-	t.Fatalf("Timeout waiting for spending to update to %.2f", expectedSpent)
+	t.Fatalf("Timeout waiting for spending to update to %.2f: app %.2f, llm %.2f [start=%v, end=%v] (last error: %v)",
+		expectedSpent, appSpent, llmSpent, start, end, lastErr)
 }
 
 func compressWithGzip(t *testing.T, data []byte) []byte {

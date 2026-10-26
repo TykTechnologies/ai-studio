@@ -272,7 +272,7 @@ func TestAnalyzeResponse_SetsModelNameOnProxyLog(t *testing.T) {
 			assert.Equal(t, app.ID, log.AppID)
 			return
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(waitPollInterval)
 	}
 	t.Fatal("Timeout waiting for ProxyLog to be written")
 }
@@ -321,7 +321,7 @@ func TestAnalyzeStreamingResponse_SetsModelNameOnProxyLog(t *testing.T) {
 			assert.Equal(t, "StreamModelNameLLM", log.ModelName, "ProxyLog.ModelName should be set for streaming responses")
 			return
 		}
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(waitPollInterval)
 	}
 	t.Fatal("Timeout waiting for streaming ProxyLog to be written")
 }

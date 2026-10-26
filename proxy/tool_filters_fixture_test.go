@@ -149,7 +149,7 @@ func (f *toolFilterFixture) complianceEvents(t *testing.T, expected int) []model
 		if err := f.db.Order("id asc").Find(&events).Error; err == nil && len(events) >= expected {
 			return events
 		}
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(waitPollInterval)
 	}
 	return events
 }
