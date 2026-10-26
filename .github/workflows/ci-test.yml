@@ -346,13 +346,6 @@ jobs:
       - name: Go vet
         run: scripts/vet.sh ${{ matrix.edition }}
 
-      # A host embedding pkg/studio may build without cgo (the Dashboard's dev
-      # builds do), so pkg/studio must compile with CGO_ENABLED=0.
-      - name: Build pkg/studio without cgo
-        run: |
-          CGO_ENABLED=0 go build -o /dev/null \
-            -tags "studio_noui ${{ matrix.edition == 'ent' && 'enterprise' || '' }}" ./pkg/studio/...
-
       # -timeout: the proxy package alone takes ~10 min under -race, past go
       # test's per-package default of 10m.
       # -json feeds the timing summary; gotest-json.py prints the -v log

@@ -149,8 +149,7 @@ test-secrets/*
 !test-secrets/README.md
 test-results/vendor-conformance/
 # Build outputs that were once committed by accident. A committed file whose
-# path holds ':' (the plugin cache names) makes the Go module zip invalid, so
-# nobody could `go get` Studio; `make module-check` guards that.
+# path holds ':' (the plugin cache names) makes the Go module zip invalid.
 coverage.txt
 agent_session/bin/
 utils/proxy-tests/ollama/ollama
