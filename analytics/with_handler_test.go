@@ -33,3 +33,31 @@ func TestWithHandlerRoutesRecordsToTheContextsHandler(t *testing.T) {
 		t.Fatalf("a context without a handler records into the global one: calls = %v", global.calls)
 	}
 }
+
+// BindHandler fixes the handler current at bind time on the context: records
+// made on it after the global handler is replaced still go to the old one.
+// A context that already carries a handler keeps it.
+func TestBindHandlerKeepsTheHandlerCurrentAtBindTime(t *testing.T) {
+	first := &exchangeHandler{}
+	withHandler(t, first)
+	ctx := BindHandler(context.Background())
+
+	second := &exchangeHandler{}
+	SetHandler(second)
+	RecordProxyLog(ctx, &models.ProxyLog{AppID: 1})
+	if len(first.calls) != 1 || len(second.calls) != 0 {
+		t.Fatalf("first got %v, second got %v; want the record in the first only", first.calls, second.calls)
+	}
+
+	scoped := &exchangeHandler{}
+	ctx = BindHandler(WithHandler(context.Background(), scoped))
+	RecordProxyLog(ctx, &models.ProxyLog{AppID: 1})
+	if len(scoped.calls) != 1 || len(second.calls) != 0 {
+		t.Fatalf("a scoped handler must win over binding: scoped %v, global %v", scoped.calls, second.calls)
+	}
+
+	SetHandler(nil)
+	if got := BindHandler(context.Background()); got != context.Background() {
+		t.Fatal("with no handler at all, BindHandler leaves the context unchanged")
+	}
+}

@@ -79,6 +79,24 @@ func WithHandler(ctx context.Context, h AnalyticsHandler) context.Context {
 	return context.WithValue(ctx, handlerKey{}, h)
 }
 
+// BindHandler returns ctx with the handler its records go to now fixed on it:
+// the one WithHandler put there, else the current global handler. Records
+// made on ctx (or a context derived from it) later go to that handler even if
+// the global one has been replaced in between. The proxy binds every request
+// it serves, so analysis that finishes after the response never lands in a
+// handler installed after the request arrived (a test's, when tests swap the
+// global handler). With neither, ctx is returned unchanged and records
+// resolve the global handler when they are made, as before.
+func BindHandler(ctx context.Context) context.Context {
+	if h, ok := ctx.Value(handlerKey{}).(AnalyticsHandler); ok && h != nil {
+		return ctx
+	}
+	if h := GetHandler(); h != nil {
+		return WithHandler(ctx, h)
+	}
+	return ctx
+}
+
 // handlerFor returns the handler for ctx's records (WithHandler's, else the
 // global one) and the function to call once the record has been handed over:
 // the global handler is read under handlerMu, held until then.
