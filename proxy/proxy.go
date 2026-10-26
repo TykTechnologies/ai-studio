@@ -685,7 +685,8 @@ func (p *Proxy) createHandler() http.Handler {
 }
 
 // requestStartMiddleware notes when the request arrived, so the analytics
-// recorded for it carry its latency (total_time_ms). On the /ai/ loopback the
+// recorded for it carry its latency (total_time_ms), and binds the analytics
+// handler current at that moment to the request (analytics.BindHandler). On the /ai/ loopback the
 // inner hop notes its own start: its row times the vendor call and the inner
 // hop's filters, which is what its row describes.
 //
@@ -705,7 +706,11 @@ func requestStartMiddleware(next http.Handler) http.Handler {
 			}
 			rec.Finish()
 		}()
-		next.ServeHTTP(w, r.WithContext(analytics.WithRequestStart(r.Context(), time.Now())))
+		// Bind the analytics handler now: the analysis of this request runs
+		// after the response (goAnalyze), and must record into the handler
+		// that was current when the request arrived.
+		ctx := analytics.BindHandler(analytics.WithRequestStart(r.Context(), time.Now()))
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
