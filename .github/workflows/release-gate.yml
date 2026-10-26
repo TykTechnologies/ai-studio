@@ -17,7 +17,7 @@ on:
   workflow_dispatch:
     inputs:
       include_package_smoke:
-        description: "Also build the ENT .deb/.rpm packages and smoke-test them (about 45 minutes)"
+        description: "Also build the ENT .deb/.rpm packages and smoke-test them, with the FIPS 140-3 images and packages (about 50 minutes)"
         type: boolean
         default: false
   schedule:
