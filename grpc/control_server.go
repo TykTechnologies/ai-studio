@@ -21,6 +21,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/fipsinfo"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/pkg/config"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
@@ -474,6 +475,7 @@ func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrati
 			BuildHash: req.BuildHash,
 			Status:    models.EdgeStatusRegistered,
 			SessionID: sessionID,
+			FIPS:      edgeFIPSStatus(req.GetHealth()),
 		}
 
 		// Convert metadata
@@ -495,6 +497,9 @@ func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrati
 		edgeInstance.BuildHash = req.BuildHash
 		edgeInstance.Status = models.EdgeStatusRegistered
 		edgeInstance.SessionID = sessionID
+		// What this registration reports, so an edge downgraded to a release
+		// that does not report it shows as unknown again.
+		edgeInstance.FIPS = edgeFIPSStatus(req.GetHealth())
 
 		if req.Metadata != nil {
 			metadata := make(map[string]interface{})
@@ -760,6 +765,7 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 
 					// Get loaded config info from heartbeat
 					loadedChecksum := m.Heartbeat.LoadedConfigChecksum
+					fipsStatus := edgeFIPSStatus(m.Heartbeat.GetHealth())
 					loadedVersion := m.Heartbeat.LoadedConfigVersion
 
 					// Update database with heartbeat and sync tracking
@@ -769,6 +775,13 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 					var requestFullSync bool
 
 					if err := edgeInstance.GetByEdgeID(s.db, edgeID); err == nil {
+						// Edges that report no FIPS status keep the one
+						// their registration recorded (unknown for old edges).
+						if fipsStatus != nil && (edgeInstance.FIPS == nil || *edgeInstance.FIPS != *fipsStatus) {
+							if err := edgeInstance.UpdateFIPS(s.db, fipsStatus); err != nil {
+								logger.Log.Warn().Err(err).Str("edge_id", edgeID).Msg("Failed to record edge FIPS status")
+							}
+						}
 						if reclaimed, err := models.TouchEdgeStream(s.db, edgeID, s.nodeID, edgeConnection.SessionID); err != nil {
 							logger.Log.Warn().Err(err).Str("edge_id", edgeID).Msg("Failed to record edge heartbeat")
 						} else if reclaimed {
@@ -2777,6 +2790,15 @@ func (s *ControlServer) updateNamespaceSyncStatus(namespace, checksum, version s
 		Str("version", version).
 		Msg("Updated namespace sync status")
 
+	return nil
+}
+
+// edgeFIPSStatus is the FIPS 140-3 status an edge reports in its health
+// metrics (pkg/fipsinfo), or nil when it reports none.
+func edgeFIPSStatus(h *pb.HealthStatus) *fipsinfo.Status {
+	if st, ok := fipsinfo.FromMetrics(h.GetMetrics()); ok {
+		return &st
+	}
 	return nil
 }
 

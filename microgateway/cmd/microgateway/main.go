@@ -21,6 +21,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/server"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/TykTechnologies/midsommar/v2/pkg/filterscript"
+	"github.com/TykTechnologies/midsommar/v2/pkg/fipsinfo"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pathcheck"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
@@ -85,6 +86,9 @@ func main() {
 		Str("build_time", BuildTime).
 		Str("gateway_mode", cfg.HubSpoke.Mode).
 		Msg("Starting Microgateway")
+	fips := fipsinfo.Current()
+	log.Info().Bool("enabled", fips.Enabled).Str("version", fips.Version).Bool("enforced", fips.Enforced).
+		Msg("FIPS 140-3")
 
 	// Garbage-collector defaults (GOGC, a soft GOMEMLIMIT under the memory
 	// limit) unless the operator set them. Overload shedding judges against

@@ -52,6 +52,7 @@ describe('EdgeGatewayService', () => {
         status: 'active',
         version: '1.0.0',
         buildHash: 'abc123',
+        fips: null,
         metadata: { region: 'us-east' },
         lastHeartbeat: '2024-01-01T12:00:00Z',
         sessionId: 'session-001',
@@ -620,6 +621,24 @@ describe('EdgeGatewayService', () => {
       const result = edgeGatewayService.formatLastHeartbeat(daysAgo.toISOString());
 
       expect(result).toBe(daysAgo.toLocaleDateString());
+    });
+  });
+
+  describe('formatFipsStatus', () => {
+    it('shows Unknown for an edge that has not reported', () => {
+      expect(edgeGatewayService.formatFipsStatus(null)).toBe('Unknown');
+      expect(edgeGatewayService.formatFipsStatus(undefined)).toBe('Unknown');
+    });
+
+    it('shows Off for a standard build', () => {
+      expect(edgeGatewayService.formatFipsStatus({ enabled: false, version: 'latest', enforced: false })).toBe('Off');
+    });
+
+    it('shows the module version, and strict mode', () => {
+      expect(edgeGatewayService.formatFipsStatus({ enabled: true, version: 'v1.0.0-c2097c7c', enforced: false }))
+        .toBe('On (v1.0.0-c2097c7c)');
+      expect(edgeGatewayService.formatFipsStatus({ enabled: true, version: 'v1.0.0-c2097c7c', enforced: true }))
+        .toBe('On (v1.0.0-c2097c7c), enforced');
     });
   });
 });
