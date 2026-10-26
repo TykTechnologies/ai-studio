@@ -512,92 +512,21 @@ names), so a plugin importing the old paths could not be fetched through the
 proxy unless it also pinned `midsommar/v2` itself. Raise the requirement to
 the release tag when the next one is cut.
 
-## Releases a host can import
+## Releases a host can import (retired)
 
-Every `v*` tag is a version of `github.com/TykTechnologies/midsommar/v2` a
-host can `go get` (the module proxy builds its zip from the tagged tree;
-`make module-check` keeps that tree valid). `release.yml` then:
+Importing Studio as a Go module (a host running `go get` on a `v*` tag) is
+no longer pursued, and its checks are gone (2026-10-26): the CI "Module Zip
+Check" (`tools/modcheck`, `make module-check`), the host version-floor
+check (`tools/hostcompat`, `scripts/host-compat.sh`, `make host-compat` and
+the per-host allowlists), and the release job that imported each tag
+through the module proxy (`scripts/release/consume-module.sh`).
+`release.yml` still builds the enterprise edition from the commit the
+`enterprise` submodule pins, and still tags
+`github.com/TykTechnologies/ai-studio-enterprise` with the same version
+(`scripts/release/tag-enterprise.sh`).
 
-- builds the enterprise edition from the commit the `enterprise` submodule
-  pins, not from the enterprise repository's current main;
-- tags `github.com/TykTechnologies/ai-studio-enterprise` with the same
-  version on that commit (`scripts/release/tag-enterprise.sh`), refusing a
-  pin that is not on enterprise main, so an enterprise host requires both
-  modules at one version;
-- runs `scripts/release/consume-module.sh` for both editions: a throwaway
-  host with a clean module cache imports the tag through the proxy, runs
-  `go mod tidy` and builds with `CGO_ENABLED=0`. The Community Edition run
-  has no credentials at all, and runs even when `enterprise-tag` fails (the
-  enterprise run then fails at once, naming it). The proxy can take a while
-  to see a new tag, so `go get` retries with a doubling backoff (15 s up to
-  5 min) for up to 30 minutes (`CONSUME_MODULE_DEADLINE`, in seconds).
-
-The same script checks any commit by hand, e.g.
-`scripts/release/consume-module.sh ce <commit>`.
-
-## Host version floor
-
-When a host imports Studio, Go's version selection picks, for every module,
-the highest version any `go.mod` in the build requires. So each Studio
-requirement above the host's own upgrades the host silently, and a host
-dependency newer than Studio's is what Studio actually runs with there.
-Studio's `go.mod` (and the enterprise module's) therefore follows the Tyk
-Dashboard's, and is checked against Tyk MDCB's (`tyk-sink`) as well, which
-embeds Studio as a headless control plane:
-
-- Where both require a module, Studio uses the Dashboard's version, up or
-  down (2026-09-30: TIB 1.8, libopenapi 0.36, gorilla/sessions 1.4,
-  go-redis 9.18, nats 1.49, the AWS and Google SDKs and more up;
-  gosimple/slug and mergo down). The `go` directive matches the Dashboard's
-  (`go 1.26.5`, `toolchain go1.26.10` for Studio's own builds).
-- Where a Studio dependency needs a newer version, the module is in the
-  host's allowlist, `scripts/host-compat-allow.<repo>.txt`
-  (`tyk-analytics`, `tyk-sink`), with the dependency that needs it (the
-  OpenTelemetry 1.46 exporters, the Prometheus client behind the otel
-  Prometheus exporter, go-openapi v0.25+, weaviate). Each was checked by
-  lowering it alone: every one drags others down with it. One raise is a
-  choice rather than a need: pgx stays at 5.10 (v2.2.0's version, for its
-  hardening against hostile servers) above the Dashboard's 5.9.2.
-- MDCB (checked 2026-10-01) lags on a subset of the same modules (the otel
-  exporters, the Prometheus client 1.21.1, pgx 5.9.2, go-openapi,
-  jsonparser), so its allowlist holds that subset with the same reasons.
-  Where MDCB is lower than the Dashboard and nothing in Studio's graph
-  needs more, Studio follows MDCB (`golang.org/x/exp`).
-- `mattn/go-sqlite3` is deliberately not aligned: the Dashboard carries the
-  retracted `v2.0.3+incompatible`, and `pkg/studio` does not link SQLite.
-- The in-repo plugin modules (`examples/`, `enterprise/plugins/`, and the
-  `community/` and `tyk-internal/` submodules) replace Studio's module with
-  the checkout, so any version change here needs `go mod tidy` in each of
-  them too, or their `go build` stops at "updates to go.mod needed".
-  `make plugins-mod-check` checks them (CI covers `examples` and
-  `enterprise/plugins`; the submodules are separate repositories).
-
-`make host-compat` (`scripts/host-compat.sh --build`, a CI job per host on
-this repository's branches: "Host Compatibility (Dashboard)" and "(MDCB)")
-fetches the `go.mod` of each repository in `HOST_REPOS` (default
-`tyk-analytics tyk-sink`) at run time (they are private; never commit a
-copy), checks each in turn, fails if any fails, and for each host:
-
-1. fails if Studio or the enterprise module requires anything above the
-   host's version that the host's allowlist does not name
-   (`tools/hostcompat`, no network);
-2. builds `pkg/studio` for both editions inside the host's module
-   graph, its requirements and replaces included, with `CGO_ENABLED=0`, and
-   lists every module that ends up above the host's `go.mod`. That list
-   also shows raises from the `go.mod` files of Studio's dependencies, which
-   the first check cannot see; most come from
-   `github.com/weaviate/weaviate`, the server module, of which Studio only
-   uses `entities/models`.
-
-`make host-compat HOST_REPOS=tyk-sink` checks one host;
-`scripts/host-compat.sh [--build] path/to/go.mod` checks a local copy
-against `HOST_ALLOW` (default the Dashboard's allowlist).
-
-A host that never builds the enterprise edition can build, tidy and verify
-Studio without access to the private enterprise module, but `go list -m
-all` fails there: it resolves every module in the graph, including the
-enterprise module Studio's `go.mod` names at a placeholder version. The
-Dashboard always builds the enterprise edition, requiring a real version.
+Studio's `go.mod` was aligned with the Tyk Dashboard's and MDCB's for that
+route; nothing checks the alignment any more.
 
 ## Sharing the host's Postgres
 
@@ -873,7 +802,8 @@ Dashboard's replace cannot reach it. `third_party/README.md` has the details.
 
 A host may build with `CGO_ENABLED=0` (the Tyk Dashboard's dev builds do), so
 `pkg/studio` links nothing that needs cgo. `TestHostBuildHasNoCgoOnlyDependencies`
-(`pkg/studio/deps_test.go`) and a CI build step keep it that way.
+(`pkg/studio/deps_test.go`) keeps it that way (a CI build step with
+`CGO_ENABLED=0` did too, until the Go-module route was retired).
 
 - **SQLite** (go-sqlite3 needs cgo) lives in `pkg/studio/sqlitedb`, which
   registers itself with `studio.RegisterDatabaseDriver`. The standalone

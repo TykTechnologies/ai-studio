@@ -369,13 +369,6 @@ jobs:
       - name: Go vet
         run: scripts/vet.sh ${{ matrix.edition }}
 
-      # A host embedding pkg/studio may build without cgo (the Dashboard's dev
-      # builds do), so pkg/studio must compile with CGO_ENABLED=0.
-      - name: Build pkg/studio without cgo
-        run: |
-          CGO_ENABLED=0 go build -o /dev/null \
-            -tags "studio_noui ${{ matrix.edition == 'ent' && 'enterprise' || '' }}" ./pkg/studio/...
-
       # -timeout: the proxy package alone takes ~10 min under -race, past go
       # test's per-package default of 10m.
       # -json feeds the timing summary; gotest-json.py prints the -v log
@@ -748,29 +741,6 @@ jobs:
         run: make plugins-mod-check
 
   # ==========================================================================
-  # Module zip check: the committed tree must make a module zip the Go proxy
-  # accepts, or nobody can `go get` Studio (see tools/modcheck)
-  # ==========================================================================
-  module-check:
-    needs: [dep-guard, changes]
-    if: ${{ !cancelled() && !failure() && needs.changes.outputs.go == 'true' }}
-    name: Module Zip Check
-    runs-on: warp-ubuntu-latest-arm64-2x
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: Setup Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
-        with:
-          go-version-file: tools/modcheck/go.mod
-          cache-dependency-path: tools/modcheck/go.sum
-
-      - name: Check the module zip
-        run: make module-check
-
-  # ==========================================================================
   # Documentation Build (cheap, and the site may read files outside docs/,
   # so it is not path-filtered)
   # ==========================================================================
@@ -816,7 +786,7 @@ jobs:
     name: CI Gate
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [dep-guard, changes, frontend-tests, frontend-build, go-unit-tests, go-postgres-tests, gorm-verify, module-check, docs-build, agent-tracing-bench]
+    needs: [dep-guard, changes, frontend-tests, frontend-build, go-unit-tests, go-postgres-tests, gorm-verify, docs-build, agent-tracing-bench]
     if: always()
     steps:
       - name: Download Coverage Artifacts
@@ -838,7 +808,6 @@ jobs:
             Go Postgres Tests=${{ needs.go-postgres-tests.result }}
             Agent Tracing Perf Gate=${{ needs.agent-tracing-bench.result }}
             gorm Copy Verification=${{ needs.gorm-verify.result }}
-            Module Zip Check=${{ needs.module-check.result }}
             Documentation Build=${{ needs.docs-build.result }}
         run: |
           {
@@ -872,8 +841,8 @@ jobs:
           retention-days: 30
         continue-on-error: true
 
-      # Module zip and the docs build report as checks of
-      # their own but do not fail the gate.
+      # The docs build reports as a check of its own but does not fail
+      # the gate.
       - name: Check Results
         if: >-
           !contains(fromJSON('["success","skipped"]'), needs.dep-guard.result) ||

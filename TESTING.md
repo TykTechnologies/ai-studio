@@ -151,9 +151,8 @@ get the full suite, cold.
   until a reviewer checks the change and adds the `deps-reviewed` label.
 - **Go Unit Tests** (CE and ENT, `-race`): the root, microgateway and, in
   ENT, the enterprise module. **Go Postgres Tests** run the tests that need
-  a real PostgreSQL. **Frontend Tests**, **gorm Copy Verification**,
-  **Module Zip Check**, **Host Compatibility** and **Documentation Build**
-  run alongside.
+  a real PostgreSQL. **Frontend Tests**, **gorm Copy Verification** and
+  **Documentation Build** run alongside.
 - **CI Gate** is the single check that sums them up.
 
 What makes it fast:

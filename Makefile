@@ -523,15 +523,6 @@ gorm-verify: ## Check third_party/gorm.io matches its pins and nothing imports g
 vet: ## go vet the root, microgateway and enterprise modules in both editions, excluding third_party/ (VET_EDITION=ce|ent|all)
 	@scripts/vet.sh $(or $(VET_EDITION),all)
 
-.PHONY: host-compat
-HOST_REPOS ?= tyk-analytics tyk-sink
-host-compat: ## Check Studio against the Tyk Dashboard's and MDCB's go.mod (HOST_REPOS): version floor, then build inside each module graph (needs GH_TOKEN + access)
-	@HOST_REPOS="$(HOST_REPOS)" scripts/host-compat.sh --build
-
-.PHONY: module-check
-module-check: ## Check the Go proxy would accept HEAD as a module zip (commit first)
-	@cd tools/modcheck && go run . -rev HEAD
-
 .PHONY: ent-link
 ent-link: ## Link enterprise tests of core packages in from enterprise/_coretests (no-op without the submodule)
 	@scripts/enterprise-link-tests.sh
