@@ -8,11 +8,14 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
-	"io"
 
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/crypto/pbkdf2"
 )
+
+// gcmNonceSize is the AES-GCM nonce size that cipher.NewGCMWithRandomNonce
+// prepends to each ciphertext.
+const gcmNonceSize = 12
 
 // CryptoService provides cryptographic operations
 type CryptoService struct {
@@ -34,8 +37,10 @@ func NewCryptoService(encryptionKey string) CryptoServiceInterface {
 		panic(fmt.Sprintf("failed to create AES cipher: %v", err))
 	}
 
-	// Create GCM mode
-	gcm, err := cipher.NewGCM(block)
+	// Create GCM mode. NewGCMWithRandomNonce draws a random 12-byte nonce on
+	// each Seal and prepends it to the ciphertext: the same nonce || ciphertext
+	// layout as before, and approved in FIPS mode.
+	gcm, err := cipher.NewGCMWithRandomNonce(block)
 	if err != nil {
 		panic(fmt.Sprintf("failed to create GCM: %v", err))
 	}
@@ -52,14 +57,8 @@ func (c *CryptoService) Encrypt(plaintext string) (string, error) {
 		return "", nil
 	}
 
-	// Create a random nonce
-	nonce := make([]byte, c.gcm.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return "", fmt.Errorf("failed to generate nonce: %w", err)
-	}
-
-	// Encrypt the plaintext
-	ciphertext := c.gcm.Seal(nonce, nonce, []byte(plaintext), nil)
+	// Encrypt the plaintext; the output is nonce || ciphertext
+	ciphertext := c.gcm.Seal(nil, nil, []byte(plaintext), nil)
 
 	// Encode to base64 for storage
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
@@ -77,17 +76,13 @@ func (c *CryptoService) Decrypt(ciphertext string) (string, error) {
 		return "", fmt.Errorf("failed to decode base64: %w", err)
 	}
 
-	// Check minimum length
-	nonceSize := c.gcm.NonceSize()
-	if len(data) < nonceSize {
+	// Check minimum length (the prepended nonce)
+	if len(data) < gcmNonceSize {
 		return "", fmt.Errorf("ciphertext too short")
 	}
 
-	// Split nonce and ciphertext
-	nonce, encryptedData := data[:nonceSize], data[nonceSize:]
-
-	// Decrypt
-	plaintext, err := c.gcm.Open(nil, nonce, encryptedData, nil)
+	// Decrypt; data is nonce || ciphertext
+	plaintext, err := c.gcm.Open(nil, nil, data, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to decrypt: %w", err)
 	}

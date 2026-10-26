@@ -581,6 +581,11 @@ agent-tracing-docs-verify: ## Check those tables match the mapping profile (no-o
 enterprise-import-guard: ## Check no public package imports the private enterprise module
 	@scripts/enterprise-import-guard.sh
 
+.PHONY: fips-guard
+fips-guard: ## Check first-party Go code adds no non-FIPS-approved crypto (allowlist: scripts/fips-guard.allowlist)
+	@scripts/fips-guard.sh --self-test
+	@scripts/fips-guard.sh
+
 .PHONY: logging-guard
 logging-guard: ## Check the control-plane packages log only through the logger package (an embedding host's logger)
 	@scripts/logging-guard.sh

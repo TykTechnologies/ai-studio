@@ -175,7 +175,8 @@ func (s *Secret) HasValue() bool {
 }
 
 // gcmNonceSize and gcmTagSize are the standard AES-GCM nonce and tag sizes
-// (cipher.NewGCM's NonceSize and Overhead) that encrypt uses.
+// that encrypt uses: cipher.NewGCMWithRandomNonce prepends a 12-byte nonce
+// and appends a 16-byte tag.
 const (
 	gcmNonceSize = 12
 	gcmTagSize   = 16
@@ -223,21 +224,18 @@ func encrypt(keyString string, stringToEncrypt string) (encryptedString string, 
 		return "", fmt.Errorf("failed to create cipher: %w", err)
 	}
 
-	gcm, err := cipher.NewGCM(block)
+	// NewGCMWithRandomNonce draws a random 12-byte nonce on each Seal and
+	// prepends it to the ciphertext, which is exactly the nonce || ciphertext
+	// layout this format has always used, and is approved in FIPS mode.
+	gcm, err := cipher.NewGCMWithRandomNonce(block)
 	if err != nil {
 		return "", fmt.Errorf("failed to create GCM: %w", err)
 	}
 
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return "", fmt.Errorf("failed to generate nonce: %w", err)
-	}
+	sealed := gcm.Seal(nil, nil, []byte(stringToEncrypt), nil)
 
-	sealed := gcm.Seal(nil, nonce, []byte(stringToEncrypt), nil)
-
-	payload := make([]byte, 0, len(salt)+len(nonce)+len(sealed))
+	payload := make([]byte, 0, len(salt)+len(sealed))
 	payload = append(payload, salt...)
-	payload = append(payload, nonce...)
 	payload = append(payload, sealed...)
 
 	return encVersionPrefix + base64.URLEncoding.EncodeToString(payload), nil
@@ -276,19 +274,18 @@ func decryptGCM(keyString string, encoded string) (string, error) {
 		return "", fmt.Errorf("failed to create cipher: %w", err)
 	}
 
-	gcm, err := cipher.NewGCM(block)
+	// rest is nonce || ciphertext, the layout NewGCMWithRandomNonce reads.
+	gcm, err := cipher.NewGCMWithRandomNonce(block)
 	if err != nil {
 		return "", fmt.Errorf("failed to create GCM: %w", err)
 	}
 
 	rest := payload[saltLength:]
-	if len(rest) < gcm.NonceSize() {
+	if len(rest) < gcmNonceSize {
 		return "", fmt.Errorf("ciphertext too short: %d bytes", len(payload))
 	}
-	nonce := rest[:gcm.NonceSize()]
-	sealed := rest[gcm.NonceSize():]
 
-	plaintext, err := gcm.Open(nil, nonce, sealed, nil)
+	plaintext, err := gcm.Open(nil, nil, rest, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to decrypt value (wrong key or tampered ciphertext): %w", err)
 	}

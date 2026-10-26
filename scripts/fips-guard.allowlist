@@ -1,0 +1,49 @@
+# Allowlist for scripts/fips-guard.sh: the known uses of cryptography that is
+# not FIPS 140-3 approved, or that fails under GODEBUG=fips140=only.
+#
+# One entry per line: <path> <rule> <reason>
+#   path    the file, relative to the repository root (enterprise/... for the
+#           enterprise submodule)
+#   rule    an import path (crypto/md5, golang.org/x/crypto/bcrypt, ...) or a
+#           call (cipher.NewGCM, cipher.NewCFBDecrypter, ...), as the guard
+#           reports it
+#   reason  one line: why this use exists, and which bead removes it or why
+#           it stays
+#
+# This list only shrinks. The remediation beads of the FIPS epic
+# (midsommar-clean-8dy7) delete their entries as they land; the guard fails
+# on an entry that no longer matches anything, so a fixed site cannot stay
+# listed. Entries that stay are the dual-format readers (old formats every
+# build must still read) and tests that build legacy fixtures. Do not add an
+# entry for new code: use the approved primitive (crypto/pbkdf2, crypto/sha256,
+# cipher.NewGCMWithRandomNonce, ...) instead.
+
+# --- Password and secret hashing: bcrypt (PBKDF2 in FIPS mode, midsommar-clean-8dy7.14)
+models/util.go                                   golang.org/x/crypto/bcrypt  HashPassword/IsPasswordValid; bcrypt verify stays as the legacy reader, writer moves to PBKDF2 in .14
+auth/auth.go                                     golang.org/x/crypto/bcrypt  password set/reset hash bcrypt directly instead of models.HashPassword; .14
+services/oauth_client_service.go                 golang.org/x/crypto/bcrypt  OAuth client secret hash; .14
+microgateway/internal/services/crypto_service.go golang.org/x/crypto/bcrypt  microgateway HashSecret/VerifySecret; .14
+microgateway/internal/services/crypto_service.go golang.org/x/crypto/pbkdf2  x/crypto PBKDF2 (outside the validated module) with a fixed salt; stdlib crypto/pbkdf2 in .14
+api/auth_handlers_test.go                        golang.org/x/crypto/bcrypt  test checks the stored hash is bcrypt; .14 makes it format-agnostic or keeps it as a legacy fixture
+auth/auth_test.go                                golang.org/x/crypto/bcrypt  test builds and checks bcrypt hashes; .14
+auth/auth_lifecycle_test.go                      golang.org/x/crypto/bcrypt  test seeds a bcrypt-hashed user; .14
+services/oauth_client_service_test.go            golang.org/x/crypto/bcrypt  test checks the stored OAuth secret is bcrypt; .14
+models/password_cost_test.go                     golang.org/x/crypto/bcrypt  test checks new hashes use bcrypt.MinCost in test binaries and a DefaultCost-style hash still verifies; .14
+
+# --- Secrets at rest (midsommar-clean-8dy7.10, .13)
+secrets/models.go                                golang.org/x/crypto/scrypt  v2 secrets KDF; the v2 reader stays, FIPS-mode writes move to v3 PBKDF2 in .13
+secrets/models.go                                cipher.NewCFBDecrypter      legacy (pre-v2) secrets reader; stays so the re-encrypt sweep can read old values
+secrets/gcm_test.go                              cipher.NewCFBEncrypter      test builds a legacy CFB secret fixture for the reader above
+secrets/gcm_compat_test.go                       cipher.NewGCM               test reproduces the pre-.10 v2 reader (caller nonce) to prove new ciphertexts stay readable by older builds; skipped under fips140.Enforced()
+
+# --- Microgateway and hub->edge snapshot (midsommar-clean-8dy7.10, .15)
+microgateway/internal/services/crypto_service_compat_test.go cipher.NewGCM test reproduces the pre-.10 reader (caller nonce) to prove new ciphertexts stay readable by older builds; skipped under fips140.Enforced()
+grpc/control_server.go                           cipher.NewGCM               deterministic HMAC-derived snapshot nonce for the sync checksum; capability-gated change in .15
+grpc/snapshot_encryption_test.go                 cipher.NewGCM               test decrypts a snapshot the way the microgateway does; follows grpc/control_server.go in .10/.15
+
+# --- Tests outside the remediation beads
+pkg/agenttrace/staging_test.go                   cipher.NewGCM               test Sealer with a random nonce prefix; NewGCMWithRandomNonce would make it strict-mode clean (make test-fips, .12)
+
+# --- Vendored and enterprise code
+third_party/gorm.io/gorm/schema/naming.go        crypto/sha1                 upstream gorm (never edited by hand) hashes over-long index names with SHA-1; fails under fips140=only only for names over 64 chars
+enterprise/features/agenttracing/keys/keys.go    cipher.NewGCM               agent tracing payload sealing (enterprise); covered by the enterprise crypto audit, .17

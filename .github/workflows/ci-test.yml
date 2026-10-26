@@ -723,6 +723,14 @@ jobs:
       - name: Check the control plane logs only through the logger package
         run: make logging-guard
 
+      # Non-approved crypto (MD5, SHA-1, DES, RC4, bcrypt, scrypt, argon2,
+      # ChaCha20-Poly1305, caller-nonce GCM, CFB) only where
+      # scripts/fips-guard.allowlist lists it, with a reason.
+      - name: Check no new non-FIPS-approved cryptography
+        env:
+          CE_ONLY: ${{ env.FORK_PR == 'true' && '1' || '' }}
+        run: make fips-guard
+
       # The Agent Call Tracing operator guide's OTel attribute tables are
       # generated from the enterprise mapping profile.
       - name: Check the agent tracing OTel attribute tables are current
