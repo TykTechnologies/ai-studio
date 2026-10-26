@@ -2,33 +2,38 @@ import React from "react";
 import { Box, Typography } from "@mui/material";
 import { eventGuide } from "./guardrailTriage";
 
-// "What happened" and "How to fix" for a guardrail compliance event.
+const List = ({ items, testId }) => (
+  <Box component="ul" sx={{ m: 0, mt: 0.25, pl: 2.5 }} data-testid={testId}>
+    {items.map((f) => (
+      <Typography key={f} component="li" variant="body2">
+        {f}
+      </Typography>
+    ))}
+  </Box>
+);
+
+// The headline, the reasons and the fixes for a guardrail compliance event.
 const EventGuide = ({ event }) => {
   const g = eventGuide(event?.event_type, event?.metadata, event?.filter_name);
   if (!g) return null;
   return (
     <Box sx={{ mb: 2 }} data-testid="event-guide">
-      <Typography variant="caption" color="text.secondary">
-        What happened
-      </Typography>
-      <Typography variant="body2" sx={{ mt: 0.5 }} data-testid="event-guide-what">
-        {g.what}
+      <Typography variant="subtitle2" data-testid="event-guide-headline">
+        {g.headline}
       </Typography>
       {g.code && (
         <Typography variant="caption" color="text.secondary" component="div">
-          The caller got reason code <Box component="span" sx={{ fontFamily: "monospace" }}>{g.code}</Box>.
+          Caller got <Box component="span" sx={{ fontFamily: "monospace" }}>{g.code}</Box>
         </Typography>
       )}
       <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 1 }}>
-        How to fix
+        Why
       </Typography>
-      <Box component="ul" sx={{ m: 0, mt: 0.5, pl: 2.5 }} data-testid="event-guide-fix">
-        {g.fix.map((f) => (
-          <Typography key={f} component="li" variant="body2">
-            {f}
-          </Typography>
-        ))}
-      </Box>
+      <List items={g.why} testId="event-guide-why" />
+      <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 1 }}>
+        Fix
+      </Typography>
+      <List items={g.fix} testId="event-guide-fix" />
     </Box>
   );
 };

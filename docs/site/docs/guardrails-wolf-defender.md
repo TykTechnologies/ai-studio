@@ -411,7 +411,10 @@ goes to its row). Turn on **Show flagged text in
 compliance events** on the filters to record a 200-character excerpt as well,
 with credentials and personal data masked; Wolf Defender gives no position
 inside the text, so the excerpt is the start of the flagged message or tool
-result. The same `sha256` is the key of the guardrail's decision log
+result. A `guardrail.unscanned` event (Wolf Defender failed or was not
+asked) has no excerpt whatever the setting: the text was never scored, and
+the event's headline names the cause, such as the HTTP status Wolf Defender
+returned. The same `sha256` is the key of the guardrail's decision log
 (`decisions.jsonl`), its previews (`previews.jsonl`) and `GET /v1/admin/flags`,
 and the request id is in the decision log's `request_id`. The blocked request
 itself is in the app's request logs (status 400), with the first part of its

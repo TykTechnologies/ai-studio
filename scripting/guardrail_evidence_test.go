@@ -100,7 +100,7 @@ func TestGuardrailEvidence_PointersAlwaysTextOnlyWhenAsked(t *testing.T) {
 	if segs[0]["sha256"] != guardrails.TextSHA256(flagged) || segs[0]["role"] != "user" || segs[0]["index"] == nil {
 		t.Fatalf("segment = %v", segs[0])
 	}
-	if _, has := segs[0]["excerpt"]; has {
+	if _, has := segs[0]["excerpt"]; has || segs[0]["excerpt_status"] != excerptOff {
 		t.Fatalf("excerpt without evidence.excerpt: %v", segs[0])
 	}
 	if e.Metadata["request_id"] != "req_123" {
@@ -108,7 +108,11 @@ func TestGuardrailEvidence_PointersAlwaysTextOnlyWhenAsked(t *testing.T) {
 	}
 
 	out = runRequest(t, spanFilter(t, &spanFake{}, map[string]any{"evidence": map[string]any{"excerpt": true, "excerpt_chars": 40}}), body, ctx)
-	ex, _ := eventSegments(t, injectionEvent(t, out))[0]["excerpt"].(string)
+	seg := eventSegments(t, injectionEvent(t, out))[0]
+	if seg["excerpt_status"] != excerptShown {
+		t.Fatalf("excerpt_status = %v, want shown", seg["excerpt_status"])
+	}
+	ex, _ := seg["excerpt"].(string)
 	if !strings.Contains(ex, "INJECT") || strings.Contains(ex, "PRIVATE") || !strings.Contains(ex, guardrails.ExcerptMask) {
 		t.Fatalf("excerpt = %q, want the flagged word with the key masked", ex)
 	}
@@ -121,14 +125,14 @@ func TestGuardrailEvidence_NoExcerptWhenBodiesAreNotLoggedOrNoMasker(t *testing.
 	maskWord(t, "sk-live-PRIVATE")
 	out := runRequest(t, spanFilter(t, &spanFake{}, cfg), body, map[string]interface{}{"dont_log_bodies": true})
 	seg := eventSegments(t, injectionEvent(t, out))[0]
-	if _, has := seg["excerpt"]; has || seg["sha256"] == "" {
+	if _, has := seg["excerpt"]; has || seg["sha256"] == "" || seg["excerpt_status"] != excerptBodiesNotLogged {
 		t.Fatalf("dont_log_bodies: segment = %v, want a hash and no excerpt", seg)
 	}
 
 	guardrails.RegisterEvidenceMasker(nil)
 	out = runRequest(t, spanFilter(t, &spanFake{}, cfg), body, nil)
-	if _, has := eventSegments(t, injectionEvent(t, out))[0]["excerpt"]; has {
-		t.Fatal("an excerpt was made with no masker registered")
+	if seg := eventSegments(t, injectionEvent(t, out))[0]; seg["excerpt"] != nil || seg["excerpt_status"] != excerptUnavailable {
+		t.Fatalf("no masker registered: segment = %v, want no excerpt, status unavailable", seg)
 	}
 }
 

@@ -174,6 +174,18 @@ func eventTypes(out *ScriptOutput) []string {
 	return types
 }
 
+// unscannedMeta is the metadata of the first guardrail.unscanned event.
+func unscannedMeta(t *testing.T, out *ScriptOutput) map[string]interface{} {
+	t.Helper()
+	for _, e := range out.ComplianceEvents {
+		if e.EventType == "guardrail.unscanned" {
+			return e.Metadata
+		}
+	}
+	t.Fatalf("no guardrail.unscanned event in %v", eventTypes(out))
+	return nil
+}
+
 func unscannedReason(out *ScriptOutput) string {
 	for _, e := range out.ComplianceEvents {
 		if e.EventType == "guardrail.unscanned" {
@@ -473,6 +485,26 @@ func TestGuardrailScan_LargeRunFailureIsUnscanned(t *testing.T) {
 		}
 		if r := unscannedReason(out); r != unscannedProviderError {
 			t.Errorf("unscanned reason = %q, want provider_error", r)
+		}
+		// The event says why the fail mode did not let it through.
+		m := unscannedMeta(t, out)
+		if m["error_class"] != "timeout" || m["fail_mode"] != guardrails.FailOpen || m["fail_mode_skipped"] != notSmallChars ||
+			m["run_chars"].(int) <= m["single_call_chars"].(int) {
+			t.Errorf("metadata = %v, want error_class timeout, fail_mode open, skipped for run_chars", m)
+		}
+		if seg := m["segments"].([]map[string]any)[0]; seg["excerpt_status"] != excerptNotScanned {
+			t.Errorf("segment = %v, want excerpt_status not_scanned", seg)
+		}
+	})
+
+	// An HTTP failure names its status.
+	t.Run("http status", func(t *testing.T) {
+		freshVerdictCache(t, time.Minute)
+		p := &scanFake{caps: guardrails.Capabilities{MaxCallChars: 1 << 20}, fail: func(guardrails.Input) error { return &guardrails.StatusError{Status: 502} }}
+		f := scanFilter(t, p, map[string]any{"fail_mode": guardrails.FailOpen})
+		out := runRequest(t, f, chatBody(t, chatMsg{Role: "user", Content: padded}), app(1))
+		if m := unscannedMeta(t, out); !out.Block || m["error_class"] != "http_502" {
+			t.Errorf("block=%v metadata=%v, want blocked with error_class http_502", out.Block, m)
 		}
 	})
 

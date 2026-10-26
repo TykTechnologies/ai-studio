@@ -436,8 +436,8 @@ func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail) (*S
 		}
 	}
 
-	out.ComplianceEvents = append(out.ComplianceEvents, complianceEvents(g.filter.Name, cfg, res.findings, sel.segments, o, verdict, evidenceContext{requestID: requestIDOf(input), clientRequestID: clientRequestIDOf(input), excerptChars: job.excerptChars})...)
-	out.ComplianceEvents = append(out.ComplianceEvents, unscannedEvents(g.filter.Name, cfg, sel.segments, res.unscanned, o.overall)...)
+	out.ComplianceEvents = append(out.ComplianceEvents, complianceEvents(g.filter.Name, cfg, res.findings, sel.segments, o, verdict, evidenceContext{requestID: requestIDOf(input), clientRequestID: clientRequestIDOf(input), excerptChars: job.excerptChars, excerptStatus: excerptStatus(cfg, input)})...)
+	out.ComplianceEvents = append(out.ComplianceEvents, unscannedEvents(g.filter.Name, cfg, sel.segments, res, o.overall)...)
 	if len(o.unredactable) > 0 {
 		out.ComplianceEvents = append(out.ComplianceEvents, unredactableEvent(g.filter.Name, cfg, sel.segments, o.unredactable, o.overall))
 	}
@@ -1390,6 +1390,8 @@ type evidenceContext struct {
 	requestID       string
 	clientRequestID string
 	excerptChars    int
+	// excerptStatus is why there is no excerpt when excerptChars is 0.
+	excerptStatus string
 }
 
 // maxEvidenceSegments bounds the segments one compliance event lists; count
@@ -1399,13 +1401,35 @@ const maxEvidenceSegments = 5
 // excerptChars is the excerpt length the filter's events may carry: 0 unless
 // evidence.excerpt is on, the LLM logs bodies, and a masker is registered.
 func excerptChars(cfg guardrails.Config, input *ScriptInput) int {
-	if !cfg.Evidence.Excerpt || !guardrails.CanExcerpt() {
-		return 0
-	}
-	if v, _ := input.Context["dont_log_bodies"].(bool); v {
+	if excerptStatus(cfg, input) != "" {
 		return 0
 	}
 	return cfg.Evidence.ExcerptLimit()
+}
+
+// Why a flagged segment in a compliance event has an excerpt or not, as its
+// excerpt_status says.
+const (
+	excerptShown           = "shown"
+	excerptOff             = "off"               // evidence.excerpt is off
+	excerptBodiesNotLogged = "bodies_not_logged" // the LLM does not log bodies
+	excerptUnavailable     = "unavailable"       // no masker in this build, or nothing to show
+	excerptNotScanned      = "not_scanned"       // the text was not checked: no match to show
+)
+
+// excerptStatus is why the filter's events carry no excerpt, "" when they
+// may.
+func excerptStatus(cfg guardrails.Config, input *ScriptInput) string {
+	switch {
+	case !cfg.Evidence.Excerpt:
+		return excerptOff
+	case !guardrails.CanExcerpt():
+		return excerptUnavailable
+	}
+	if v, _ := input.Context["dont_log_bodies"].(bool); v {
+		return excerptBodiesNotLogged
+	}
+	return ""
 }
 
 // requestIDOf is the gateway's id for the request (pkg/requestid: the
@@ -1429,7 +1453,8 @@ func safeRef(s string) string {
 }
 
 // segmentEvidence is one flagged segment as a compliance event lists it.
-func segmentEvidence(seg guardrails.Segment, idx int, f guardrails.Finding, excerptLen int) map[string]any {
+func segmentEvidence(seg guardrails.Segment, idx int, f guardrails.Finding, ec evidenceContext) map[string]any {
+	excerptLen := ec.excerptChars
 	ref := map[string]any{"index": idx, "role": seg.Role, "kind": segmentKind(seg)}
 	if name := safeLabel(seg.ToolName); name != "" {
 		ref["tool"] = name
@@ -1444,8 +1469,14 @@ func segmentEvidence(seg guardrails.Segment, idx int, f guardrails.Finding, exce
 		}
 	}
 	ref["sha256"] = ev.SHA256
-	if ev.Excerpt != "" {
+	switch {
+	case ev.Excerpt != "":
 		ref["excerpt"] = ev.Excerpt
+		ref["excerpt_status"] = excerptShown
+	case ec.excerptStatus != "":
+		ref["excerpt_status"] = ec.excerptStatus
+	default:
+		ref["excerpt_status"] = excerptUnavailable
 	}
 	return ref
 }
@@ -1490,7 +1521,7 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 			g.roles[seg.Role] = true
 			g.kinds[segmentKind(seg)] = true
 			if len(g.refs) < maxEvidenceSegments {
-				ref := segmentEvidence(seg, f.SegmentIndex, f, ec.excerptChars)
+				ref := segmentEvidence(seg, f.SegmentIndex, f, ec)
 				if key := fmt.Sprintf("%d/%v", f.SegmentIndex, ref["sha256"]); !g.seen[key] {
 					g.seen[key] = true
 					g.refs = append(g.refs, ref)
@@ -1539,6 +1570,12 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 		}
 		if len(tools) > 0 {
 			metadata["tool_names"] = tools
+		}
+		// The threshold the score was held against, when the filter sets one.
+		for _, d := range cfg.Detectors {
+			if d.Name == det && d.Threshold != nil {
+				metadata["threshold"] = *d.Threshold
+			}
 		}
 		if len(g.refs) > 0 {
 			metadata["segments"] = g.refs
