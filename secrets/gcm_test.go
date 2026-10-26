@@ -3,6 +3,7 @@ package secrets
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/fips140"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -21,13 +22,26 @@ import (
 // with a proper KDF (scrypt + per-value salt), while legacy AES-CFB values
 // remain readable for migration.
 
+// writtenPrefix is the prefix this process writes: v2, or "v3:<iter>:" in
+// FIPS mode (make test-fips).
+func writtenPrefix(t *testing.T, enc string) string {
+	t.Helper()
+	if fipsEnabled() {
+		_, encoded, ok := splitV3(enc)
+		require.True(t, ok, "FIPS mode writes v3, got %q", enc)
+		return strings.TrimSuffix(enc, encoded)
+	}
+	require.True(t, strings.HasPrefix(enc, encVersionPrefix), "standard builds write v2, got %q", enc)
+	return encVersionPrefix
+}
+
 func TestEncryptProducesVersionedGCMFormat(t *testing.T) {
 	enc, err := encrypt("my-key", "hello world")
 	require.NoError(t, err)
-	assert.True(t, strings.HasPrefix(enc, encVersionPrefix), "new ciphertext should carry the %q version prefix, got %q", encVersionPrefix, enc)
+	prefix := writtenPrefix(t, enc)
 
 	// Payload must be valid base64 and long enough for salt+nonce+tag
-	raw, err := base64.URLEncoding.DecodeString(strings.TrimPrefix(enc, encVersionPrefix))
+	raw, err := base64.URLEncoding.DecodeString(strings.TrimPrefix(enc, prefix))
 	require.NoError(t, err)
 	assert.Greater(t, len(raw), saltLength+12, "payload must include salt, nonce, and ciphertext")
 }
@@ -54,10 +68,11 @@ func TestGCMTamperDetection(t *testing.T) {
 	enc, err := encrypt("tamper-key", "sensitive-value")
 	require.NoError(t, err)
 
-	raw, err := base64.URLEncoding.DecodeString(strings.TrimPrefix(enc, encVersionPrefix))
+	prefix := writtenPrefix(t, enc)
+	raw, err := base64.URLEncoding.DecodeString(strings.TrimPrefix(enc, prefix))
 	require.NoError(t, err)
 	raw[len(raw)-1] ^= 0xFF // flip a bit in the ciphertext/tag
-	tampered := encVersionPrefix + base64.URLEncoding.EncodeToString(raw)
+	tampered := prefix + base64.URLEncoding.EncodeToString(raw)
 
 	_, err = decrypt("tamper-key", tampered)
 	assert.Error(t, err, "tampered ciphertext must fail authentication")
@@ -84,8 +99,11 @@ func legacyCFBEncrypt(t *testing.T, keyString, plaintext string) string {
 	_, err = io.ReadFull(rand.Reader, iv)
 	require.NoError(t, err)
 
-	stream := cipher.NewCFBEncrypter(block, iv) //nolint:staticcheck // intentionally reproducing legacy format
-	stream.XORKeyStream(ciphertext[aes.BlockSize:], []byte(plaintext))
+	// AES-CFB panics under fips140=only; this builds a legacy fixture.
+	fips140.WithoutEnforcement(func() {
+		stream := cipher.NewCFBEncrypter(block, iv) //nolint:staticcheck // intentionally reproducing legacy format
+		stream.XORKeyStream(ciphertext[aes.BlockSize:], []byte(plaintext))
+	})
 	return base64.URLEncoding.EncodeToString(ciphertext)
 }
 
@@ -105,7 +123,7 @@ func TestDecryptValueHandlesBothFormats(t *testing.T) {
 
 	// New value written by the current code
 	fresh := EncryptValue("fresh-payload")
-	assert.True(t, strings.HasPrefix(fresh, "$ENC/"+encVersionPrefix))
+	writtenPrefix(t, strings.TrimPrefix(fresh, "$ENC/"))
 	assert.Equal(t, "fresh-payload", DecryptValue(fresh))
 }
 
@@ -155,7 +173,7 @@ func TestReencryptLegacySecrets(t *testing.T) {
 	// The legacy secret is now stored in GCM format and still decrypts
 	var s Secret
 	require.NoError(t, db.Where("var_name = ?", "LEGACY").First(&s).Error)
-	assert.True(t, strings.HasPrefix(s.Value, encVersionPrefix), "migrated value should be in v2 format, got %q", s.Value)
+	writtenPrefix(t, s.Value) // migrated to the format this process writes
 
 	got, err := GetSecretByVarName(db, "LEGACY", false)
 	require.NoError(t, err)
@@ -194,7 +212,11 @@ func TestReencryptLegacySecretsInBatches(t *testing.T) {
 
 	// Every row is now v2 format and still decrypts to its original value
 	var remaining int64
-	require.NoError(t, db.Model(&Secret{}).Where("value NOT LIKE ?", encVersionPrefix+"%").Count(&remaining).Error)
+	current := encVersionPrefix
+	if fipsEnabled() {
+		current = encV3Prefix
+	}
+	require.NoError(t, db.Model(&Secret{}).Where("value NOT LIKE ?", current+"%").Count(&remaining).Error)
 	assert.Zero(t, remaining, "no legacy-format rows should remain")
 
 	got, err := GetSecretByVarName(db, fmt.Sprintf("S%d", total-1), false)

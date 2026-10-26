@@ -22,7 +22,7 @@
 pkg/pwhash/pwhash.go                             golang.org/x/crypto/bcrypt  standard builds write bcrypt and every build reads it (dual-format reader); FIPS mode writes PBKDF2 and upgrades bcrypt on use (.14)
 
 # --- Secrets at rest (midsommar-clean-8dy7.10, .13)
-secrets/models.go                                golang.org/x/crypto/scrypt  v2 secrets KDF; the v2 reader stays, FIPS-mode writes move to v3 PBKDF2 in .13
+secrets/models.go                                golang.org/x/crypto/scrypt  v2 secrets KDF: standard builds write v2 and every build reads it (dual-format reader); FIPS mode writes v3 PBKDF2 and the sweep moves v2 to v3 (.13)
 secrets/models.go                                cipher.NewCFBDecrypter      legacy (pre-v2) secrets reader; stays so the re-encrypt sweep can read old values
 secrets/gcm_test.go                              cipher.NewCFBEncrypter      test builds a legacy CFB secret fixture for the reader above
 secrets/gcm_compat_test.go                       cipher.NewGCM               test reproduces the pre-.10 v2 reader (caller nonce) to prove new ciphertexts stay readable by older builds; skipped under fips140.Enforced()
