@@ -95,9 +95,41 @@ Two properties are deliberate, because both were sources of broken releases:
 | `SKIP_UI=1` | Skip the npm build |
 | `SKIP_SIGN=1` | Push unsigned — test pushes only |
 | `FORCE=1` | Overwrite a version directory that already exists |
+| `FIPS=1` | Publish the FIPS 140-3 variant of a version already published (see below) |
 
 The full flag list is in `./tools/publish-plugin.sh --help`; every variable
 above has a matching long flag.
+
+## FIPS 140-3 variants
+
+A plugin is a separate process with its own cryptography (TLS to vendors, to
+the gateway), so a [FIPS deployment](./fips.md) needs FIPS builds of its
+plugins too. Publish the standard build of a version first, then its FIPS
+variant:
+
+```bash
+make plugin-publish NAME=llm-cache SIGN_KEY=~/keys/plugin-ci.key
+make plugin-publish NAME=llm-cache SIGN_KEY=~/keys/plugin-ci.key FIPS=1
+```
+
+With `FIPS=1` the script:
+
+- builds each platform with `GOFIPS140=v1.0.0` (the Go Cryptographic Module
+  v1.0.0, CMVP #5247), `-trimpath` and the `fips` build tag;
+- checks every binary with `scripts/fips-verify.sh` and stops before pushing
+  anything if one is not a FIPS build;
+- pushes the same repository under the tag `<version>-fips` (platform tags
+  `<version>-fips-<os>_<arch>`), and signs and verifies it by digest like the
+  standard build;
+- adds an `oci_fips` block (`tag`, `digest`, `platform`; same registry and
+  repository as `oci`) to that version's marketplace entry and commits it.
+  The next version's entry does not carry it forward: publish its FIPS
+  variant again.
+
+It refuses to run when the version's entry does not exist yet. To install the
+FIPS variant, use its tag or digest in the plugin's command, for example
+`oci://docker.tyk.io/studio-plugins/llm-cache:1.4.0-fips` or
+`oci://docker.tyk.io/studio-plugins/llm-cache@<oci_fips.digest>`.
 
 ## Compatibility metadata
 

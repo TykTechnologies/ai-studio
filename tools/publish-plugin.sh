@@ -43,6 +43,10 @@ FORCE="${FORCE:-0}"
 MARKETPLACE_ONLY="${MARKETPLACE_ONLY:-0}"
 MIN_STUDIO_VERSION="${MIN_STUDIO_VERSION:-}"
 ALLOW_FUTURE_MIN_VERSION="${ALLOW_FUTURE_MIN_VERSION:-0}"
+# FIPS=1 publishes the FIPS 140-3 variant of a version that is already
+# published: built with GOFIPS140=v1.0.0, checked with scripts/fips-verify.sh,
+# pushed as <version>-fips and recorded in the version's marketplace entry.
+FIPS="${FIPS:-0}"
 
 info()  { printf '%s\n' "$*" >&2; }
 step()  { printf '\n==> %s\n' "$*" >&2; }
@@ -74,6 +78,10 @@ Flags (publish):
       --no-push         write and commit the marketplace entry but do not push
       --force           overwrite a version directory that already exists
       --dry-run         print every step, build locally, push nothing
+      --fips            publish the FIPS 140-3 variant (env: FIPS=1) of a
+                        version whose standard build is already published:
+                        GOFIPS140=v1.0.0, checked with scripts/fips-verify.sh,
+                        tag <version>-fips, added to that version's entry
   -y, --yes             do not prompt for confirmation
 
 Full guide: docs/site/docs/plugins-publishing.md
@@ -109,6 +117,7 @@ while [ $# -gt 0 ]; do
     --no-push)        NO_PUSH=1; shift ;;
     --force)          FORCE=1; shift ;;
     --dry-run)        DRY_RUN=1; shift ;;
+    --fips)           FIPS=1; shift ;;
     -y|--yes)         ASSUME_YES=1; shift ;;
     -h|--help)        usage ;;
     *)                die "unknown flag: $1" ;;
@@ -531,6 +540,10 @@ do_publish() {
 
   TARGET="$REG/$REPO_PATH"
   VERSION_DIR="$MP_PLUGIN_DIR/$VERSION"
+  # The OCI tag of what this run publishes: the version, or <version>-fips for
+  # the FIPS variant (its platform tags are <version>-fips-<os>_<arch>).
+  OCI_TAG="$VERSION"
+  [ "$FIPS" = "1" ] && OCI_TAG="$VERSION-fips"
 
   if [ "$MARKETPLACE_ONLY" = "1" ] && [ -z "$PUB_KEY" ] && [ -n "$SIGN_KEY" ]; then
     PUB_KEY="${SIGN_KEY%.key}.pub"
@@ -545,7 +558,13 @@ do_publish() {
 
   if [ "$SKIP_MARKETPLACE" != "1" ]; then
     prepare_marketplace
-    if [ -d "$VERSION_DIR" ] && [ "$FORCE" != "1" ]; then
+    if [ "$FIPS" = "1" ]; then
+      # The FIPS variant is recorded in the entry of the standard build, so
+      # that build has to be published first.
+      [ "$DRY_RUN" = "1" ] || [ -f "$VERSION_DIR/manifest.yaml" ] || die "$VERSION_DIR/manifest.yaml does not exist.
+       FIPS=1 adds the FIPS variant to an entry the standard build of $VERSION
+       already wrote: publish $PLUGIN $VERSION without FIPS=1 first."
+    elif [ -d "$VERSION_DIR" ] && [ "$FORCE" != "1" ]; then
       die "$VERSION_DIR already exists.
        Bump the version in $SRC_MANIFEST to cut a new release, or pass --force
        to overwrite the entry. To repair an entry for a version that is already
@@ -573,7 +592,7 @@ do_publish() {
 
 Publish plan
 ------------
-  plugin        $PLUGIN ($CHANNEL${BUILD_TAGS:+, build tag: $BUILD_TAGS})
+  plugin        $PLUGIN ($CHANNEL${BUILD_TAGS:+, build tag: $BUILD_TAGS})$([ "$FIPS" = "1" ] && printf '\n  variant       FIPS 140-3 (GOFIPS140=v1.0.0)')
   id            $PLUGIN_ID
   version       $VERSION${PREV_VERSION:+  (previous: $PREV_VERSION)}
   source        ${SRC_DIR#$REPO_ROOT/}
@@ -581,7 +600,7 @@ Publish plan
   ui bundle     $ui_display
   platforms     $PLATFORMS
   min studio    $min_studio_display
-  registry      $TARGET:$VERSION
+  registry      $TARGET:$OCI_TAG
   signing       $sign_display
   marketplace   $mp_display
 EOF
@@ -590,7 +609,7 @@ EOF
 
   # --- build ---
   if [ "$MARKETPLACE_ONLY" = "1" ]; then
-    step "Marketplace-only: reading $TARGET:$VERSION back from the registry"
+    step "Marketplace-only: reading $TARGET:$OCI_TAG back from the registry"
   else
     if [ -n "$UI_DIR" ] && [ "$SKIP_UI" != "1" ]; then
       step "Building UI bundle in ${UI_DIR#$REPO_ROOT/}"
@@ -608,14 +627,23 @@ EOF
       goarch="${platform##*/}"
       binary="$PLUGIN-$goos-$goarch"
       step "Building $binary"
-      if [ -n "$BUILD_TAGS" ]; then
+      if [ "$FIPS" = "1" ]; then
+        # The Go Cryptographic Module v1.0.0 (CMVP #5247), as the -fips
+        # Studio and microgateway builds; the fips tag is Tyk's marker.
+        ( cd "$GO_DIR" && run env GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 GOFIPS140=v1.0.0 \
+            go build -trimpath -tags "fips${BUILD_TAGS:+,$BUILD_TAGS}" -o "$SRC_DIR/$binary" . )
+        local edition=ce
+        [ "$BUILD_TAGS" = "enterprise" ] && edition=ent
+        run "$REPO_ROOT/scripts/fips-verify.sh" --edition "$edition" --fips "$SRC_DIR/$binary" \
+          || die "$binary is not a FIPS build; nothing was pushed"
+      elif [ -n "$BUILD_TAGS" ]; then
         ( cd "$GO_DIR" && run env GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 \
             go build -tags "$BUILD_TAGS" -o "$SRC_DIR/$binary" . )
       else
         ( cd "$GO_DIR" && run env GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 \
             go build -o "$SRC_DIR/$binary" . )
       fi
-      PLATFORM_TAGS="$PLATFORM_TAGS $VERSION-${goos}_${goarch}"
+      PLATFORM_TAGS="$PLATFORM_TAGS $OCI_TAG-${goos}_${goarch}"
     done
 
     # --- push ---
@@ -623,7 +651,7 @@ EOF
       goos="${platform%%/*}"
       goarch="${platform##*/}"
       binary="$PLUGIN-$goos-$goarch"
-      tag="$VERSION-${goos}_${goarch}"
+      tag="$OCI_TAG-${goos}_${goarch}"
       step "Pushing $TARGET:$tag ($platform)"
       # Per-platform tags carry the version so a half-finished release can never
       # leave the index pointing at a previous version's binary.
@@ -633,15 +661,15 @@ EOF
           "./$binary:$LAYER_TYPE" )
     done
 
-    step "Creating multi-platform index $TARGET:$VERSION"
-    run oras manifest index create "$TARGET:$VERSION" $PLATFORM_TAGS
+    step "Creating multi-platform index $TARGET:$OCI_TAG"
+    run oras manifest index create "$TARGET:$OCI_TAG" $PLATFORM_TAGS
   fi
 
   if [ "$DRY_RUN" = "1" ]; then
     DIGEST="sha256:<resolved-after-push>"
   else
-    DIGEST="$(resolve_digest "$TARGET:$VERSION")"
-    [ -n "$DIGEST" ] || die "could not resolve the index digest for $TARGET:$VERSION"
+    DIGEST="$(resolve_digest "$TARGET:$OCI_TAG")"
+    [ -n "$DIGEST" ] || die "could not resolve the index digest for $TARGET:$OCI_TAG"
   fi
   info "    index digest: $DIGEST"
 
@@ -681,6 +709,29 @@ EOF
   # --- marketplace entry ---
   if [ "$SKIP_MARKETPLACE" = "1" ]; then
     step "Done (marketplace entry skipped)"
+    print_summary
+    return 0
+  fi
+
+  if [ "$FIPS" = "1" ]; then
+    step "Adding the FIPS variant to ${VERSION_DIR#$REPO_ROOT/}/manifest.yaml"
+    local platform_csv
+    platform_csv="$(printf '%s' "$PLATFORMS" | tr ' ' ',')"
+    run python3 "$REPO_ROOT/tools/plugin_marketplace_manifest.py" --add-fips \
+      --manifest "$VERSION_DIR/manifest.yaml" \
+      --tag "$OCI_TAG" --digest "$DIGEST" --platforms "$platform_csv"
+    step "Committing the marketplace entry"
+    run git -C "$MARKETPLACE_DIR" add "plugins/$PLUGIN/$VERSION"
+    run git -C "$MARKETPLACE_DIR" commit -m "$PLUGIN $VERSION (FIPS 140-3 variant)
+
+Published to $TARGET:$OCI_TAG
+Digest: $DIGEST"
+    if [ "$NO_PUSH" = "1" ]; then
+      warn "not pushing: the index will not rebuild until you run 'git -C $MARKETPLACE_DIR push origin $MARKETPLACE_BRANCH'"
+    else
+      step "Pushing to origin/$MARKETPLACE_BRANCH (this triggers the index rebuild)"
+      run git -C "$MARKETPLACE_DIR" push origin "$MARKETPLACE_BRANCH"
+    fi
     print_summary
     return 0
   fi
@@ -774,7 +825,7 @@ print_summary() {
 
 Published
 ---------
-  $TARGET:$VERSION
+  $TARGET:$OCI_TAG
   $DIGEST
   platforms: $PLATFORMS
   signed:    $SIGNED_SUMMARY
