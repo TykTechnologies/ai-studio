@@ -143,6 +143,9 @@ type offer struct {
 	// means something against a FIPS build (and fails against a standard
 	// one, which is how it is shown to work).
 	fipsOnly bool
+	// optional: skip the check when this openssl cannot make the offer
+	// (older OpenSSL has no ML-KEM).
+	optional bool
 }
 
 var offers = []offer{
@@ -156,6 +159,14 @@ var offers = []offer{
 	{name: "tls1.3-x25519-only-refused", args: []string{"-tls1_3", "-groups", "X25519"}, fipsOnly: true},
 	{name: "tls1.2-p256-aes-gcm-accepted", args: []string{"-tls1_2", "-groups", "P-256", "-cipher", "ECDHE-ECDSA-AES128-GCM-SHA256"},
 		accept: true, wantProtocol: "TLSv1.2", wantCipher: "ECDHE-ECDSA-AES128-GCM-SHA256"},
+	// CBC with HMAC-SHA1: in Go's standard defaults, not in FIPS mode. (The
+	// control gRPC port refuses it in standard builds too: HTTP/2 forbids
+	// CBC suites.)
+	{name: "tls1.2-aes-cbc-sha1-refused", args: []string{"-tls1_2", "-groups", "P-256", "-cipher", "ECDHE-ECDSA-AES128-SHA"}, fipsOnly: true},
+	// The hybrid post-quantum key share FIPS mode allows (docs/site/docs/fips.md);
+	// needs OpenSSL 3.5 or later.
+	{name: "tls1.3-x25519mlkem768-accepted", args: []string{"-tls1_3", "-groups", "X25519MLKEM768", "-ciphersuites", "TLS_AES_128_GCM_SHA256"},
+		accept: true, wantProtocol: "TLSv1.3", wantCipher: "TLS_AES_128_GCM_SHA256", optional: true},
 	{name: "tls1.3-p256-aes-gcm-accepted", args: []string{"-tls1_3", "-groups", "P-256", "-ciphersuites", "TLS_AES_128_GCM_SHA256"},
 		accept: true, wantProtocol: "TLSv1.3", wantCipher: "TLS_AES_128_GCM_SHA256"},
 }
@@ -189,12 +200,13 @@ func checkTLSPosture(t *testing.T, addr, control string, fips bool) {
 	}
 	for _, o := range offers {
 		t.Run(o.name, func(t *testing.T) {
-			if !o.accept {
-				// The client must be able to make the offer: a permissive
-				// server accepts it.
-				if ok, _, _, out := handshake(t, control, o); !ok {
-					t.Fatalf("openssl cannot make this offer (the permissive control server refused it), so a refusal would prove nothing:\n%s", out)
+			// The client must be able to make the offer: a permissive
+			// server accepts it.
+			if ok, _, _, out := handshake(t, control, o); !ok {
+				if o.optional {
+					t.Skipf("this openssl cannot make the offer:\n%s", out)
 				}
+				t.Fatalf("openssl cannot make this offer (the permissive control server refused it), so the check would prove nothing:\n%s", out)
 			}
 			ok, negotiated, alert, out := handshake(t, addr, o)
 			switch {
@@ -233,7 +245,7 @@ func startPermissiveServer(t *testing.T) string {
 		Certificates:     []tls.Certificate{cert},
 		MinVersion:       tls.VersionTLS10,
 		CipherSuites:     suites,
-		CurvePreferences: []tls.CurveID{tls.X25519, tls.CurveP256, tls.CurveP384},
+		CurvePreferences: []tls.CurveID{tls.X25519MLKEM768, tls.X25519, tls.CurveP256, tls.CurveP384},
 		NextProtos:       []string{"h2"},
 	}
 	ln, err := tls.Listen("tcp", "127.0.0.1:0", cfg)

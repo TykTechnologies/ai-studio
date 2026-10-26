@@ -138,6 +138,8 @@ wait_health() { # wait_health <url>
 
 license=()
 [ -z "${TYK_AI_LICENSE:-}" ] || license=(-e TYK_AI_LICENSE)
+# supervisord (deb mode) needs it set, even empty.
+export TYK_AI_LICENSE="${TYK_AI_LICENSE:-}"
 
 case "$mode" in
   image)
@@ -158,7 +160,7 @@ case "$mode" in
       -v "$work/tls:/etc/fips-smoke-tls:ro" \
       -v "$work/studio.env:/etc/default/tyk-ai-studio:ro" \
       -v "$work/gateway.env:/etc/default/tyk-microgateway:ro" \
-      -e TYK_AI_LICENSE="${TYK_AI_LICENSE:-}" "$2" >/dev/null # supervisord needs it set
+      -e TYK_AI_LICENSE "$2" >/dev/null # by name: the value stays out of argv
     ;;
 esac
 
