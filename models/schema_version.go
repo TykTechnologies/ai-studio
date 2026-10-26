@@ -84,8 +84,17 @@ const (
 	// 25: allow_internal_host on llms, embedders, tools, datasources,
 	//     plugins and mcp_servers (defaulted false, additive): the per-asset
 	//     "Allow internal host" switch (w4e).
-	SchemaVersion          = 25
-	MinReaderSchemaVersion = 23
+	// 26: data formats only, no schema change (FIPS, midsommar-clean-8dy7.28).
+	//     A FIPS 140-3 mode Studio writes v3 secrets (PBKDF2 + AES-GCM,
+	//     "v3:<iter>:..." in secrets and $ENC/ values), which older code
+	//     misreads: it returns the ciphertext as the secret. It also writes
+	//     PBKDF2 password and OAuth client secret hashes ("$pbkdf2-sha256$..."),
+	//     which older code cannot verify (fails closed). Standard builds never
+	//     write either format, but the minimum reader is raised for every
+	//     deployment so that an older headless replica cannot misread a
+	//     database a FIPS Studio has written.
+	SchemaVersion          = 26
+	MinReaderSchemaVersion = 26
 )
 
 // studioSchemaRowID is the one row of studio_schema.
