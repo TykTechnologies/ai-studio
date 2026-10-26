@@ -140,19 +140,25 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-${{ runner.arch }}-ms-playwright-${{ steps.pw.outputs.version }}
 
-      # install-deps runs apt, which once hung for 14 minutes: give each try
-      # five minutes, and try twice.
+      # install-deps runs apt, which once hung for 14 minutes on a slow
+      # mirror: give each try four minutes, and try three times. The timeout
+      # kills npx, not the apt-get it started as root, which would keep the
+      # dpkg lock, so stop that and repair dpkg before the next try.
       - name: Install Playwright
         working-directory: tests/ui
         run: |
           npm ci --ignore-scripts
           npm rebuild
           npx playwright install chromium
-          for attempt in 1 2; do
-            if timeout -k 10 300 npx playwright install-deps chromium; then
+          for attempt in 1 2 3; do
+            if timeout -k 10 240 npx playwright install-deps chromium; then
               exit 0
             fi
             echo "::warning::playwright install-deps failed or timed out (attempt $attempt)"
+            sudo pkill -9 -x apt-get || true
+            sudo pkill -9 -x dpkg || true
+            sleep 2
+            sudo dpkg --configure -a || true
           done
           exit 1
 
