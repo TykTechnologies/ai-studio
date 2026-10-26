@@ -87,9 +87,11 @@ EOF
 package p
 
 import (
-	"crypto/cipher"
+	cipher "crypto/cipher"
 	"crypto/sha256"
 )
+
+import "crypto/cipher"
 
 func g(b cipher.Block) { _, _ = cipher.NewGCMWithRandomNonce(b) }
 EOF
@@ -185,7 +187,8 @@ while IFS= read -r l; do
     rule=$(sed -E 's/^[^"]*"([^"]+)".*$/\1/' <<< "$text")
     echo "$path $rule $path:$line"
   elif [[ "$text" =~ $CIPHER_ALIAS_RE ]]; then
-    [ "${BASH_REMATCH[2]}" = cipher ] || echo "$path crypto/cipher-alias $path:$line"
+    # (import "crypto/cipher" captures the keyword as the name)
+    case "${BASH_REMATCH[2]}" in cipher | import) ;; *) false ;; esac || echo "$path crypto/cipher-alias $path:$line"
   else
     grep -oE "$CALL_RE" <<< "$text" | sed -E 's/[^A-Za-z0-9_]$//' | while IFS= read -r rule; do
       echo "$path $rule $path:$line"
