@@ -393,10 +393,16 @@ jobs:
       -
         name: Scan the FIPS image
         if: matrix.fips_docker_image != ''
+        # The scanner gets only the saved image, not the Docker socket (this
+        # job is logged in to Docker Hub), and is pinned by digest.
         run: |
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy:0.58.1 image --no-progress --severity HIGH,CRITICAL \
-            --ignore-unfixed --exit-code 0 fips-check:${{ github.run_id }}
+          mkdir -p fips-scan
+          docker save fips-check:${{ github.run_id }} -o fips-scan/image.tar
+          docker run --rm -v "$PWD/fips-scan:/work:ro" \
+            aquasec/trivy:0.58.1@sha256:ab70a02200597efa04748f210f793936eb647cbcdb0ea69cc30b226d6f5a22c7 \
+            image --no-progress --severity HIGH,CRITICAL --ignore-unfixed --exit-code 0 \
+            --input /work/image.tar
+          rm -rf fips-scan
       -
         name: Push the FIPS image
         if: matrix.fips_docker_image != ''
