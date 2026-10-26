@@ -128,13 +128,16 @@ func setupTest(t *testing.T) (*gorm.DB, context.CancelFunc) {
 //
 // A test calls t.Parallel() only when it touches no process-wide state: the
 // global analytics handler (setupTest, analytics.SetHandler), agent tracing
-// (withAgentTracing, agenttrace sinks), a package var it overrides
-// (upstreamTransport, streamHeaderHookTimeout, fastNativeWorkers' timings),
-// t.Setenv, metrics, Bedrock's SDK client cache (keyed by LLM ID, which every
-// test database restarts at 1: bedrockHarness), or $SECRET references (they
-// resolve against the database the latest services.NewService registered).
-// Parallel tests run once every serial test has finished, so a serial test
-// may still change such state and restore it.
+// (withAgentTracing, agenttrace sinks), the tracing globals (pkg/tracing's
+// propagator, outbound propagation and baggage allowlist, otel's providers,
+// declared's extractor: withW3CPropagation, withPropagation,
+// withDeclaredExtractor), a package var it overrides (upstreamTransport,
+// streamHeaderHookTimeout, fastNativeWorkers' timings), t.Setenv, metrics,
+// Bedrock's SDK client cache (keyed by LLM ID, which every test database
+// restarts at 1: bedrockHarness), or $SECRET references (they resolve against
+// the database the latest services.NewService registered). Parallel tests run
+// once every serial test has finished, so a serial test may still change such
+// state and restore it. Helpers that change such state call requireSerial.
 func setupParallelTest(t *testing.T) (*gorm.DB, analytics.AnalyticsHandler) {
 	db := setupDB(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -147,6 +150,15 @@ func setupParallelTest(t *testing.T) (*gorm.DB, analytics.AnalyticsHandler) {
 		}
 	})
 	return db, recorder
+}
+
+// requireSerial makes t fail if it is, or later becomes, a parallel test:
+// helpers that change process-wide state call it. It uses t.Setenv's own
+// check (testing panics when a test both sets the environment and calls
+// t.Parallel, whichever comes first); the variable it sets means nothing.
+func requireSerial(t *testing.T) {
+	t.Helper()
+	t.Setenv("MIDSOMMAR_PROXY_TEST_SERIAL", "1")
 }
 
 // serveWithRecorder serves next with recorder on every request's context, so

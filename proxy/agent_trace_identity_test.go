@@ -23,12 +23,14 @@ const (
 // production (tests do not run Init).
 func withW3CPropagation(t *testing.T) {
 	t.Helper()
+	requireSerial(t)
 	tracing.Use(nil, propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 	t.Cleanup(func() { tracing.Use(nil, nil) })
 }
 
 func withAgentTracing(t *testing.T, on bool) {
 	t.Helper()
+	requireSerial(t)
 	agenttrace.SetEnabled(on)
 	t.Cleanup(func() { agenttrace.SetEnabled(false) })
 }
@@ -123,7 +125,6 @@ func TestAgentTraceIdentity_StreamingHygiene(t *testing.T) {
 // A client that sends the gateway's hop headers on the native /llm/ route
 // gets them stripped before the vendor, like the loopback's own.
 func TestAgentTraceIdentity_ClientHopHeadersStrippedOnLLMRoute(t *testing.T) {
-	t.Parallel()
 	withW3CPropagation(t)
 	h := newFailoverHarness(t, serveOpenAIText("direct"), serveOpenAIText("never"), nil)
 
@@ -139,7 +140,6 @@ func TestAgentTraceIdentity_ClientHopHeadersStrippedOnLLMRoute(t *testing.T) {
 // An LLM that opted out of propagation gets no trace context at all; the
 // other LLMs keep today's behaviour.
 func TestAgentTraceIdentity_PerLLMPropagationOptOut(t *testing.T) {
-	t.Parallel()
 	withW3CPropagation(t)
 	h := newFailoverHarness(t, serveStatus(503), serveOpenAIText("from the fallback"), func(primary, fallback *models.LLM) {
 		fallback.TracingPropagationOptOut = true

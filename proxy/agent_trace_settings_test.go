@@ -13,6 +13,7 @@ import (
 
 func withPropagation(t *testing.T, llm, httpUpstreams, mcp bool) {
 	t.Helper()
+	requireSerial(t)
 	tracing.SetOutboundPropagation(llm, httpUpstreams, mcp)
 	t.Cleanup(func() { tracing.SetOutboundPropagation(true, true, true) })
 }
