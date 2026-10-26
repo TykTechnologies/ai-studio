@@ -143,9 +143,6 @@ type offer struct {
 	// means something against a FIPS build (and fails against a standard
 	// one, which is how it is shown to work).
 	fipsOnly bool
-	// optional: skip the check when this openssl cannot make the offer
-	// (older OpenSSL has no ML-KEM).
-	optional bool
 }
 
 var offers = []offer{
@@ -163,10 +160,6 @@ var offers = []offer{
 	// control gRPC port refuses it in standard builds too: HTTP/2 forbids
 	// CBC suites.)
 	{name: "tls1.2-aes-cbc-sha1-refused", args: []string{"-tls1_2", "-groups", "P-256", "-cipher", "ECDHE-ECDSA-AES128-SHA"}, fipsOnly: true},
-	// The hybrid post-quantum key share FIPS mode allows (docs/site/docs/fips.md);
-	// needs OpenSSL 3.5 or later.
-	{name: "tls1.3-x25519mlkem768-accepted", args: []string{"-tls1_3", "-groups", "X25519MLKEM768", "-ciphersuites", "TLS_AES_128_GCM_SHA256"},
-		accept: true, wantProtocol: "TLSv1.3", wantCipher: "TLS_AES_128_GCM_SHA256", optional: true},
 	{name: "tls1.3-p256-aes-gcm-accepted", args: []string{"-tls1_3", "-groups", "P-256", "-ciphersuites", "TLS_AES_128_GCM_SHA256"},
 		accept: true, wantProtocol: "TLSv1.3", wantCipher: "TLS_AES_128_GCM_SHA256"},
 }
@@ -203,9 +196,6 @@ func checkTLSPosture(t *testing.T, addr, control string, fips bool) {
 			// The client must be able to make the offer: a permissive
 			// server accepts it.
 			if ok, _, _, out := handshake(t, control, o); !ok {
-				if o.optional {
-					t.Skipf("this openssl cannot make the offer:\n%s", out)
-				}
 				t.Fatalf("openssl cannot make this offer (the permissive control server refused it), so the check would prove nothing:\n%s", out)
 			}
 			ok, negotiated, alert, out := handshake(t, addr, o)
@@ -224,6 +214,31 @@ func checkTLSPosture(t *testing.T, addr, control string, fips bool) {
 			}
 		})
 	}
+	// The hybrid post-quantum key share FIPS mode allows
+	// (docs/site/docs/fips.md). OpenSSL offers it only from 3.5, so this
+	// one offer comes from crypto/tls (this test binary is a standard build).
+	t.Run("tls1.3-x25519mlkem768-accepted", func(t *testing.T) {
+		pem, err := os.ReadFile(os.Getenv(envCA))
+		if err != nil {
+			t.Fatal(err)
+		}
+		pool := x509.NewCertPool()
+		pool.AppendCertsFromPEM(pem)
+		conn, err := tls.DialWithDialer(&net.Dialer{Timeout: 10 * time.Second}, "tcp", addr, &tls.Config{
+			RootCAs:          pool,
+			ServerName:       "localhost",
+			MinVersion:       tls.VersionTLS13,
+			CurvePreferences: []tls.CurveID{tls.X25519MLKEM768},
+			NextProtos:       []string{"h2"},
+		})
+		if err != nil {
+			t.Fatalf("a TLS 1.3 X25519MLKEM768-only offer was refused: %v", err)
+		}
+		defer conn.Close()
+		if got := conn.ConnectionState().CurveID; got != tls.X25519MLKEM768 {
+			t.Errorf("negotiated key exchange %v, want X25519MLKEM768", got)
+		}
+	})
 }
 
 // startPermissiveServer starts a TLS server (this test binary's standard

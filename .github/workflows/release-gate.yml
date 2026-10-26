@@ -14,10 +14,19 @@ name: Release Gate
 
 on:
   workflow_call:
+    inputs:
+      include_fips_smoke:
+        description: "Build the ENT packages and run the FIPS 140-3 smoke test of the -fips images and packages (release.yml sets it)"
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       include_package_smoke:
         description: "Also build the ENT .deb/.rpm packages and smoke-test them, with the FIPS 140-3 images and packages (about 50 minutes)"
+        type: boolean
+        default: false
+      include_fips_smoke:
+        description: "Build the ENT packages and run only the FIPS 140-3 smoke test of the -fips images and packages (included in the package smoke)"
         type: boolean
         default: false
   schedule:
@@ -99,9 +108,14 @@ jobs:
   # goreleaser builds the ENT packages in Docker, and Playwright checks the
   # installed result. release.yml builds the same packages, so this only runs
   # when asked for.
+  # include_fips_smoke (every tagged release: release.yml sets it) runs only
+  # the FIPS 140-3 smoke test (tests/fipssmoke: self-report, TLS posture,
+  # hub-edge sync, a proxied call) of the -fips images and .debs; the full
+  # package smoke includes it. release.yml reuses a passing gate run only if
+  # this job passed in it.
   package-smoke:
     name: Package Smoke Tests (ENT)
-    if: inputs.include_package_smoke == true
+    if: inputs.include_package_smoke == true || inputs.include_fips_smoke == true
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -133,9 +147,16 @@ jobs:
           (cd microgateway && go mod download)
 
       - name: Build packages and run smoke tests
+        if: inputs.include_package_smoke == true
         env:
           TYK_AI_LICENSE: ${{ secrets.TYK_AI_LICENSE }}
         run: make test-package-smoke-ent
+
+      - name: Build packages and run the FIPS smoke test
+        if: inputs.include_package_smoke != true
+        env:
+          TYK_AI_LICENSE: ${{ secrets.TYK_AI_LICENSE }}
+        run: make package-ent test-fips-smoke
 
       # goreleaser's post hooks already ran scripts/fips-verify.sh on every
       # binary; this re-checks what is left in dist/ (the microgateway build).
