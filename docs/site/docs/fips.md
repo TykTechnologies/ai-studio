@@ -56,7 +56,7 @@ FIPS-mode processes write approved formats; every build reads both the old and t
 - **Postgres.** Use SCRAM-SHA-256 password authentication, not `md5`.
 - **Skipping TLS verification** (`InsecureSkipVerify`-style options) is outside the scope of FIPS compliance; do not use it in a FIPS deployment.
 - **Resource signing.** LLM resource IDs (native API extensions) are signed with a key from the hub's signing secret, or, without one, from the vendor credential. Set a hub signing secret for every LLM: a key derived from a short or placeholder credential (such as Ollama's `none`) is guessable in any build. Short-credential IDs signed in standard mode do not verify in FIPS mode, and the other way round.
-- **Plugins.** Every plugin is a separate process with its own cryptography (TLS to vendors and to the gateway). The deployment is only FIPS compliant if every plugin is a FIPS build too: build plugins with `GOFIPS140=v1.0.0` (see [Publishing Plugins](./plugins-publishing.md)).
+- **Plugins.** Every plugin is a separate process with its own cryptography (TLS to vendors and to the gateway). The deployment is only FIPS compliant if every plugin is a FIPS build too: build plugins with `GOFIPS140=v1.0.0` (see [Publishing Plugins](./plugins-publishing.md)). In FIPS mode, AI Studio and the microgateway log a warning when they start a plugin binary that is not a FIPS build (or not a Go binary they can inspect); the plugin still starts.
 
 ## Known exceptions
 
