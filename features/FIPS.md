@@ -15,7 +15,7 @@ Internal spec. Customer docs: `docs/site/docs/fips.md`. Plan and history: beads 
 
 ## Rule: gate writers on `fips140.Enabled()`
 
-Every build reads old and new formats; only FIPS-mode processes write the approved ones, so a database moves between standard and FIPS builds both ways. Schema version 25 marks the formats (older code misreads them).
+Every build reads old and new formats; only FIPS-mode processes write the approved ones, so a database moves between standard and FIPS builds both ways. Schema version 26 marks the formats (older code misreads them).
 
 | Data | Code | Standard | FIPS mode |
 |---|---|---|---|
