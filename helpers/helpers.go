@@ -2,12 +2,12 @@ package helpers
 
 import (
 	"bytes"
+	crand "crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
 	"strings"
 	"time"
@@ -174,12 +174,30 @@ func DecodeToUTF8(s string) (string, error) {
 	return string(utf8Bytes), nil
 }
 
+// GenerateRandomString returns a random alphanumeric string of the given
+// length, drawn from crypto/rand. It is used for security tokens (the SSO
+// nonce), so it must stay unpredictable.
 func GenerateRandomString(length int) string {
 	const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	b := make([]byte, length)
+	// Reject bytes at or above the largest multiple of len(letterBytes) that
+	// fits in a byte, so every letter is equally likely.
+	const limit = 256 - 256%len(letterBytes)
 
-	for i := range b {
-		b[i] = letterBytes[rand.Int63()%int64(len(letterBytes))]
+	b := make([]byte, 0, length)
+	buf := make([]byte, length+length/4+1)
+	for len(b) < length {
+		// crypto/rand.Read never returns an error (Go 1.24+); it crashes the
+		// program instead if the system source fails.
+		_, _ = crand.Read(buf)
+		for _, v := range buf {
+			if int(v) >= limit {
+				continue
+			}
+			b = append(b, letterBytes[int(v)%len(letterBytes)])
+			if len(b) == length {
+				break
+			}
+		}
 	}
 
 	return string(b)

@@ -263,6 +263,17 @@ func TestGenerateRandomString(t *testing.T) {
 	}
 }
 
+func TestGenerateRandomString_UsesWholeAlphabet(t *testing.T) {
+	const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	// 62*200 draws: the chance that any one letter never appears is negligible
+	// unless selection is broken (for example, stuck on part of the alphabet).
+	result := GenerateRandomString(len(alphabet) * 200)
+	assert.Len(t, result, len(alphabet)*200)
+	for _, c := range alphabet {
+		assert.Contains(t, result, string(c), "every alphabet character should appear")
+	}
+}
+
 func TestIntToObjectId(t *testing.T) {
 	// Test with various uint values
 	tests := []struct {
