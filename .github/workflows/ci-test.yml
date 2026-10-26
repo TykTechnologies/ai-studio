@@ -170,14 +170,18 @@ jobs:
             golanglint.xml
 
   # ==========================================================================
-  # Frontend Tests (Jest)
+  # Frontend Tests (Jest) and Frontend Build, side by side: the production
+  # build does not depend on the tests.
+  #
+  # Jest runs (CPUs - 1) workers in CI, so the tests get the bigger runner;
+  # on 2 CPUs they ran in one worker.
   # ==========================================================================
   frontend-tests:
     needs: [dep-guard, changes]
     # Runs when dep-guard passed or was skipped (outside pull requests).
     if: ${{ !cancelled() && !failure() && needs.changes.outputs.frontend == 'true' }}
     name: Frontend Tests
-    runs-on: warp-ubuntu-latest-arm64-2x
+    runs-on: warp-ubuntu-latest-arm64-8x
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -199,9 +203,28 @@ jobs:
           npm rebuild
           npm test -- --forceExit
 
+  frontend-build:
+    needs: [dep-guard, changes]
+    if: ${{ !cancelled() && !failure() && needs.changes.outputs.frontend == 'true' }}
+    name: Frontend Build
+    runs-on: warp-ubuntu-latest-arm64-2x
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "**/package-lock.json"
+
       - name: Build Frontend
         run: |
           cd ui/admin-frontend
+          npm ci --ignore-scripts
+          npm rebuild
           CI=false npm run build
 
   # ==========================================================================
@@ -793,7 +816,7 @@ jobs:
     name: CI Gate
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [dep-guard, changes, frontend-tests, go-unit-tests, go-postgres-tests, gorm-verify, module-check, docs-build, agent-tracing-bench]
+    needs: [dep-guard, changes, frontend-tests, frontend-build, go-unit-tests, go-postgres-tests, gorm-verify, module-check, docs-build, agent-tracing-bench]
     if: always()
     steps:
       - name: Download Coverage Artifacts
@@ -810,6 +833,7 @@ jobs:
             Dependency Guard=${{ needs.dep-guard.result }}
             Detect Changes=${{ needs.changes.result }}
             Frontend Tests=${{ needs.frontend-tests.result }}
+            Frontend Build=${{ needs.frontend-build.result }}
             Go Unit Tests=${{ needs.go-unit-tests.result }}
             Go Postgres Tests=${{ needs.go-postgres-tests.result }}
             Agent Tracing Perf Gate=${{ needs.agent-tracing-bench.result }}
@@ -855,6 +879,7 @@ jobs:
           !contains(fromJSON('["success","skipped"]'), needs.dep-guard.result) ||
           needs.changes.result != 'success' ||
           !contains(fromJSON('["success","skipped"]'), needs.frontend-tests.result) ||
+          !contains(fromJSON('["success","skipped"]'), needs.frontend-build.result) ||
           !contains(fromJSON('["success","skipped"]'), needs.go-unit-tests.result) ||
           !contains(fromJSON('["success","skipped"]'), needs.go-postgres-tests.result) ||
           !contains(fromJSON('["success","skipped"]'), needs.agent-tracing-bench.result) ||
