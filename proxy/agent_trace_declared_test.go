@@ -21,6 +21,7 @@ const (
 
 func withDeclaredExtractor(t *testing.T) {
 	t.Helper()
+	requireSerial(t)
 	declared.SetDefault(declared.New(declared.Options{
 		CompatFamilies: []string{declared.FamilyHelicone, declared.FamilyMCPSession},
 		Harness:        []string{declared.HarnessClaudeCode, declared.HarnessCodexCLI, declared.HarnessOpenCode},
