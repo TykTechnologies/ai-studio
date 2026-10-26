@@ -137,6 +137,11 @@ jobs:
           TYK_AI_LICENSE: ${{ secrets.TYK_AI_LICENSE }}
         run: make test-package-smoke-ent
 
+      # goreleaser's post hooks already ran scripts/fips-verify.sh on every
+      # binary; this re-checks what is left in dist/ (the microgateway build).
+      - name: Verify FIPS build metadata
+        run: scripts/fips-verify.sh --edition ent --dist dist
+
   gate:
     name: Release Gate
     runs-on: ubuntu-latest

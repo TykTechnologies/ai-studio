@@ -184,6 +184,40 @@ build-darwin-arm64: ## Darwin ARM64 with CGO
 	-o $(DIST_DIR)/$(BINARY_NAME)-$(EDITION)-darwin-arm64 $(CMD_DIR)
 
 # ============================================================================
+# FIPS 140-3 Builds (Go Cryptographic Module v1.0.0, CMVP #5247)
+# ============================================================================
+# GOFIPS140 pins the frozen, CMVP-validated module; the binaries default to
+# fips140=on. The fips tag is Tyk's marker for FIPS builds. Each binary is
+# checked with ../scripts/fips-verify.sh.
+
+FIPS_GOFIPS140=v1.0.0
+FIPS_TAGS=-tags $(if $(filter ent,$(EDITION)),fips$(comma)enterprise,fips)
+comma:=,
+
+.PHONY: build-fips build-linux-amd64-fips build-linux-arm64-fips
+
+build-fips: ## Build FIPS server and CLI binaries for the native platform
+	@mkdir -p $(DIST_DIR)
+	GOFIPS140=$(FIPS_GOFIPS140) CGO_ENABLED=1 $(GOBUILD) $(FIPS_TAGS) $(PROD_LDFLAGS) -o $(DIST_DIR)/$(BINARY_NAME)-$(EDITION)-fips $(CMD_DIR)
+	GOFIPS140=$(FIPS_GOFIPS140) CGO_ENABLED=1 $(GOBUILD) $(FIPS_TAGS) -trimpath $(LDFLAGS) -o $(DIST_DIR)/$(CLI_BINARY_NAME)-$(EDITION)-fips $(CLI_CMD_DIR)
+	../scripts/fips-verify.sh --edition $(EDITION) --fips $(DIST_DIR)/$(BINARY_NAME)-$(EDITION)-fips $(DIST_DIR)/$(CLI_BINARY_NAME)-$(EDITION)-fips
+
+build-linux-amd64-fips: ## Linux AMD64 FIPS server binary with CGO
+	@mkdir -p $(DIST_DIR)
+	GOFIPS140=$(FIPS_GOFIPS140) CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
+	$(GOBUILD) $(FIPS_TAGS) $(PROD_LDFLAGS) \
+	-o $(DIST_DIR)/$(BINARY_NAME)-$(EDITION)-fips-linux-amd64 $(CMD_DIR)
+	../scripts/fips-verify.sh --edition $(EDITION) --fips $(DIST_DIR)/$(BINARY_NAME)-$(EDITION)-fips-linux-amd64
+
+build-linux-arm64-fips: ## Linux ARM64 FIPS server binary with CGO (requires cross-compiler)
+	@mkdir -p $(DIST_DIR)
+	GOFIPS140=$(FIPS_GOFIPS140) CGO_ENABLED=1 GOOS=linux GOARCH=arm64 \
+	CC=aarch64-linux-gnu-gcc \
+	$(GOBUILD) $(FIPS_TAGS) $(PROD_LDFLAGS) \
+	-o $(DIST_DIR)/$(BINARY_NAME)-$(EDITION)-fips-linux-arm64 $(CMD_DIR)
+	../scripts/fips-verify.sh --edition $(EDITION) --fips $(DIST_DIR)/$(BINARY_NAME)-$(EDITION)-fips-linux-arm64
+
+# ============================================================================
 # Legacy Targets (for backward compatibility)
 # ============================================================================
 
