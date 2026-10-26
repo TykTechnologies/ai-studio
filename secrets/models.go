@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	log "github.com/sirupsen/logrus"
@@ -56,11 +57,37 @@ var deriveGroup singleflight.Group
 // scryptComputations counts actual scrypt executions (test observability).
 var scryptComputations atomic.Int64
 
+// scryptCostN is the scrypt N every key is derived with: scryptN in every
+// binary. N is not stored in the ciphertext, so a value encrypted with one N
+// only decrypts with the same N. Only a test binary can lower it
+// (UseMinScryptCostForTests), so production always reads and writes at
+// scryptN.
+var scryptCostN atomic.Int64
+
+// scryptTestN is the N UseMinScryptCostForTests sets.
+const scryptTestN = 16
+
+func init() { scryptCostN.Store(scryptN) }
+
+// UseMinScryptCostForTests lowers the scrypt N to scryptTestN for the rest of
+// the test binary. One derivation at scryptN takes ~0.5-1 s under -race, and
+// every encrypt derives a fresh key (a new random salt). It panics outside a
+// test binary. Call it from an init(), before anything is encrypted: values
+// encrypted earlier, and fixtures encrypted at scryptN, no longer decrypt.
+func UseMinScryptCostForTests() {
+	if !testing.Testing() {
+		panic("secrets.UseMinScryptCostForTests called outside a test binary")
+	}
+	scryptCostN.Store(scryptTestN)
+}
+
 // deriveKeyScrypt derives a 32-byte AES-256 key from the configured secret
 // and a per-value salt using scrypt. Concurrent calls for the same
 // (secret, salt) pair share a single computation.
 func deriveKeyScrypt(input string, salt []byte) ([]byte, error) {
-	cacheKey := input + "\x00" + string(salt)
+	n := int(scryptCostN.Load())
+	// N is part of the key: a key derived at another N is a different key.
+	cacheKey := fmt.Sprintf("%d\x00", n) + input + "\x00" + string(salt)
 
 	if k, ok := derivedKeyCache.get(cacheKey); ok {
 		return k, nil
@@ -74,7 +101,7 @@ func deriveKeyScrypt(input string, salt []byte) ([]byte, error) {
 		}
 
 		scryptComputations.Add(1)
-		key, err := scrypt.Key([]byte(input), salt, scryptN, scryptR, scryptP, 32)
+		key, err := scrypt.Key([]byte(input), salt, n, scryptR, scryptP, 32)
 		if err != nil {
 			return nil, fmt.Errorf("scrypt key derivation failed: %w", err)
 		}
