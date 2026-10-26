@@ -23,9 +23,9 @@
 # directory). The summary is printed, and appended to $GITHUB_STEP_SUMMARY
 # when set. Exits 1 if anything failed.
 #
-# The enterprise module is tested only when enterprise/go.mod is the real
-# module (not the CE stub). The ent edition needs make ent-link first, which
-# make test-fips does.
+# The ent edition fails at once unless enterprise/go.mod is the real module
+# (not the CE stub), and needs make ent-link first, which make test-fips
+# does.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -37,6 +37,11 @@ case "$edition" in
   ent) tags=(-tags enterprise) ;;
   *) echo "usage: $0 [ce|ent]" >&2; exit 2 ;;
 esac
+if [ "$edition" = ent ] && ! grep -q '^require' enterprise/go.mod 2>/dev/null; then
+  echo "test-fips: the ent edition needs the enterprise module, but enterprise/go.mod is missing or a stub" >&2
+  echo "(git submodule update --init enterprise)" >&2
+  exit 1
+fi
 
 out=${FIPS_TEST_OUT:-$(mktemp -d)}
 mkdir -p "$out"
@@ -66,13 +71,9 @@ run() {
 run root . ./...
 run microgateway microgateway ./...
 if [ "$edition" = ent ]; then
-  if grep -q '^require' enterprise/go.mod 2>/dev/null; then
-    # The enterprise module has no canary of its own: run the root one
-    # built in the enterprise module.
-    run enterprise enterprise ./... "$canary"
-  else
-    echo "test-fips: enterprise/go.mod is missing or a stub; not testing the enterprise module" >&2
-  fi
+  # The enterprise module has no canary of its own: run the root one built
+  # in the enterprise module.
+  run enterprise enterprise ./... "$canary"
 fi
 
 status=0

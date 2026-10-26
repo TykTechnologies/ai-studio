@@ -38,7 +38,10 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           submodules: ${{ matrix.edition == 'ent' }}
-          token: ${{ secrets.CI_SUBMODULE_PAT || github.token }}
+          # Only the ent leg needs the PAT (private submodule), and nothing
+          # after the checkout needs git credentials.
+          token: ${{ matrix.edition == 'ent' && secrets.CI_SUBMODULE_PAT || github.token }}
+          persist-credentials: false
 
       - name: Create enterprise stub for CE builds
         if: matrix.edition == 'ce'
