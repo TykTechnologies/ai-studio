@@ -399,8 +399,8 @@ curl https://studio.example.com/llm/rest/my-llm/v1/chat/completions \
 
 A session opens as:
 
-- **Transcript:** the conversation, with tool calls and results inline, and gateway decisions as chips.
-- **Timeline:** every span on a time axis, with each provider attempt.
+- **Transcript:** the conversation, with tool calls and results inline, and gateway decisions as chips. A session captured with content mode `off` or `metadata` shows its structure, timing, tokens and cost, and a notice says how to capture content (see [Content modes](#content-modes)).
+- **Timeline:** every span on a time axis, one labelled row per span, with each provider attempt. Ctrl/⌘-scroll zooms; Shift-scroll, a sideways swipe or the scrollbar under the timeline pans; a drag selects a time range.
 
 The find bar searches names and metadata. With `trace-content:read` it also searches captured content, and that search is audited.
 

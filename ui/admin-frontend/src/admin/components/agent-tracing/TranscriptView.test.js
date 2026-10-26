@@ -2,6 +2,7 @@ import React from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { ThemeProvider } from "@mui/material/styles";
+import { MemoryRouter } from "react-router-dom";
 import testTheme from "../../utils/testTheme";
 import { SessionDetailProvider, useSessionDetail } from "./SessionDetailContext";
 import TranscriptView from "./TranscriptView";
@@ -295,5 +296,28 @@ describe("TranscriptView", () => {
     expect(screen.getAllByTestId("transcript-row").length).toBeLessThan(80);
     // eslint-disable-next-line testing-library/no-node-access
     expect(feed.querySelectorAll("*").length).toBeLessThan(5000);
+  });
+
+  it("explains once, with how to enable it, when the session captured no content", () => {
+    const bare = [
+      { ...llm2, parts: [{ part: "request", content_state: "metadata", media_type: "application/json", original_bytes: 2048 }] },
+      { ...client, parts: [] },
+    ];
+    render(
+      <MemoryRouter>
+        <ThemeProvider theme={testTheme}>
+          <SessionDetailProvider detail={{ ...detail(), session: { ...detail().session, content_mode: "metadata" }, agents: [] }} spans={bare} resources={[]} previews="included">
+            <TranscriptView height={4000} />
+          </SessionDetailProvider>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
+    const notice = screen.getByTestId("content-mode-notice");
+    expect(notice).toHaveTextContent("content mode: metadata");
+    expect(notice).toHaveTextContent("AGENT_TRACING_CONTENT_CEILING");
+    expect(within(notice).getByRole("link", { name: "App's Tracing settings" })).toHaveAttribute("href", "/admin/apps/7");
+    // Rows no longer repeat "Content not captured (mode: …)".
+    expect(screen.queryByText(/Content not captured/)).not.toBeInTheDocument();
+    expect(screen.getAllByText("2.0 KB, not captured").length).toBeGreaterThan(0);
   });
 });

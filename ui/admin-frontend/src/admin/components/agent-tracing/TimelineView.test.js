@@ -5,7 +5,7 @@ import { ThemeProvider } from "@mui/material/styles";
 import testTheme from "../../utils/testTheme";
 import { SessionDetailProvider, useSessionDetail } from "./SessionDetailContext";
 import TimelineView from "./TimelineView";
-import { buildLanes, findGaps, packRows, turnRules, zoomView } from "./timelineModel";
+import { buildLanes, findGaps, packRows, panView, turnRules, zoomView } from "./timelineModel";
 
 const T0 = Date.parse("2026-10-20T10:00:00Z");
 const at = (s) => new Date(T0 + s * 1000).toISOString();
@@ -80,6 +80,13 @@ describe("timeline model", () => {
     expect(turnRules(spans, detail.traces)).toEqual([{ traceId: B, at: T0 + 5000, turn: 1 }]);
   });
 
+  it("pans within the session without changing the zoom", () => {
+    const bounds = { from: 0, to: 1000 };
+    expect(panView({ from: 100, to: 300 }, 50, bounds)).toEqual({ from: 150, to: 350 });
+    expect(panView({ from: 100, to: 300 }, -500, bounds)).toEqual({ from: 0, to: 200 });
+    expect(panView({ from: 100, to: 300 }, 5000, bounds)).toEqual({ from: 800, to: 1000 });
+  });
+
   it("zooms around an anchor within the session", () => {
     const bounds = { from: 0, to: 1000 };
     expect(zoomView(bounds, 0.5, 500, bounds)).toEqual({ from: 250, to: 750 });
@@ -142,7 +149,32 @@ describe("TimelineView", () => {
     }));
     renderTimeline(many, { ...detail, agents: [] });
     expect(screen.getAllByTestId("timeline-bar").length).toBeLessThan(800);
-    // Zoomed out with 5,000 rows in 600 px, rows are single-pixel bars.
-    expect(screen.getAllByRole("group", { name: / spans$/ })[0]).toHaveStyle({ height: "1px" });
+    // Rows keep a readable height and the list scrolls instead of squashing them.
+    expect(screen.getAllByRole("group", { name: / spans$/ })[0]).toHaveStyle({ height: "22px" });
+  });
+
+  it("labels each row with the span's kind and model or tool, with a legend", () => {
+    renderTimeline();
+    const labels = screen.getAllByTestId("timeline-label").map((l) => l.textContent);
+    expect(labels.slice(0, 3)).toEqual(["LLM · plan", "Client tool · read_file", "LLM · answer"]);
+    expect(screen.getByTestId("timeline-legend")).toHaveTextContent("LLM call");
+    fireEvent.click(screen.getAllByTestId("timeline-label")[1]);
+    expect(ctx.drawerSpanId).toBe(tool.span_id);
+  });
+
+  it("pans a zoomed view with Shift-scroll and the scrollbar, never past the session", () => {
+    renderTimeline();
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    expect(viewOf()).toEqual({ from: T0 + 1500, to: T0 + 4500 });
+    const grid = screen.getByRole("group", { name: "Timeline" });
+    // 780 px of track shows 3 s, so 260 px is 1 s.
+    fireEvent.wheel(grid, { deltaY: 260, shiftKey: true });
+    expect(viewOf()).toEqual({ from: T0 + 2500, to: T0 + 5500 });
+    fireEvent.wheel(grid, { deltaY: 2600, shiftKey: true });
+    expect(viewOf()).toEqual({ from: T0 + 3000, to: T0 + 6000 });
+    const bar = screen.getByTestId("timeline-scroll");
+    bar.scrollLeft = 0;
+    fireEvent.scroll(bar);
+    expect(viewOf()).toEqual({ from: T0, to: T0 + 3000 });
   });
 });

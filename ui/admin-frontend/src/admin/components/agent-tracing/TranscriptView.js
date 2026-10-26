@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Link as RouterLink } from "react-router-dom";
 import { observeElementRect, useVirtualizer } from "@tanstack/react-virtual";
 import { Alert, Box, Button, Chip, Collapse, Divider, Link, Stack, Tooltip, Typography } from "@mui/material";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
@@ -18,7 +19,7 @@ import {
   rowIndexOf,
   stepLatency,
 } from "./transcriptModel";
-import { attrNames, attributionOf, attrsOf, catalogueMatchText, ms, partPlaceholder, resourceName, spanTimes, withheldText } from "./spanModel";
+import { attrNames, attributionOf, attrsOf, catalogueMatchText, formatBytes, ms, partPlaceholder, resourceName, spanTimes, withheldText } from "./spanModel";
 import { formatCost, formatDuration, formatTokens } from "./sessionFilters";
 import { RedactedText } from "./SpanDrawer";
 import CapturedMarkdown from "./CapturedMarkdown";
@@ -30,7 +31,13 @@ import CapturedMarkdown from "./CapturedMarkdown";
 const USER_LINES = 6;
 const ROW_ESTIMATE = 96;
 
-const Placeholder = ({ span, part }) => {
+// Session content modes that keep no content: the transcript says so once,
+// at the top (ContentModeNotice), instead of on every row.
+const NO_CONTENT_MODES = new Set(["off", "metadata", "hashed"]);
+const NOT_CAPTURED_STATES = new Set(["off", "not_captured", "metadata", "hashed"]);
+
+const Placeholder = ({ span, part, fallback }) => {
+  const { detail } = useSessionDetail();
   const withheld = withheldText(span);
   if (withheld) {
     return (
@@ -40,10 +47,15 @@ const Placeholder = ({ span, part }) => {
     );
   }
   const p = partOf(span, part);
-  if (!p) return null;
+  const quiet = NO_CONTENT_MODES.has(detail?.session?.content_mode);
+  let text = p ? partPlaceholder(p).text : null;
+  if (quiet && (!p || NOT_CAPTURED_STATES.has(p.content_state || "not_captured"))) {
+    text = p?.content_state === "metadata" && p.original_bytes ? `${formatBytes(p.original_bytes)}, not captured` : fallback;
+  }
+  if (!text) return null;
   return (
     <Typography variant="caption" color="text.secondary" display="block" data-testid="content-placeholder">
-      {partPlaceholder(p).text}
+      {text}
     </Typography>
   );
 };
@@ -126,7 +138,7 @@ const UserMessage = ({ span }) => {
           )}
         </>
       ) : (
-        <Placeholder span={span} part={partOf(span, "user_message") ? "user_message" : "request"} />
+        <Placeholder span={span} part={partOf(span, "user_message") ? "user_message" : "request"} fallback="Not captured" />
       )}
     </SelectableBox>
   );
@@ -449,6 +461,39 @@ const PreviewsNotice = () => {
   return null;
 };
 
+// Explains a session captured without content and how to capture it; the
+// mode resolution is in docs/site/docs/agent-tracing.md ("Content modes").
+const ContentModeNotice = () => {
+  const { detail } = useSessionDetail();
+  const session = detail?.session || {};
+  const mode = session.content_mode;
+  if (!NO_CONTENT_MODES.has(mode)) return null;
+  return (
+    <Alert severity="info" sx={{ mb: 1 }} data-testid="content-mode-notice">
+      <Typography variant="body2" sx={{ mb: 0.5 }}>
+        {mode === "off"
+          ? "No content was captured for this session (content mode: off)."
+          : `Only message sizes and structure were captured for this session (content mode: ${mode}).`}{" "}
+        You can see each step's model, tool calls, timing, tokens and cost, but not the prompts, responses or tool
+        payloads.
+      </Typography>
+      <Typography variant="body2">
+        To capture content for new traffic, set <code>AGENT_TRACING_CONTENT_CEILING</code> to <code>redacted</code> or{" "}
+        <code>full</code>, then raise the content mode in the{" "}
+        {session.app_id ? (
+          <Link component={RouterLink} to={`/admin/apps/${session.app_id}`}>
+            App's Tracing settings
+          </Link>
+        ) : (
+          "App's Tracing settings"
+        )}{" "}
+        or set <code>AGENT_TRACING_CONTENT_DEFAULT_MODE</code> for every App. Sessions already recorded keep what they
+        captured.
+      </Typography>
+    </Alert>
+  );
+};
+
 const TranscriptView = ({ height = 640 }) => {
   const { index, detail, selectedId } = useSessionDetail();
   const parent = useRef(null);
@@ -483,6 +528,7 @@ const TranscriptView = ({ height = 640 }) => {
   }
   return (
     <>
+      <ContentModeNotice />
       <PreviewsNotice />
       <Box
         ref={parent}

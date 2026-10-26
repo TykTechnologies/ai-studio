@@ -78,13 +78,24 @@ export const packRows = (laneSpans) => {
   return { rows, ticks };
 };
 
-/** The flat list the virtualised body renders: lane headers, then rows. */
+/**
+ * The flat list the virtualised body renders: lane headers, then one row per
+ * span in start order (a waterfall, so every bar has a label), then a row of
+ * the lane's gateway events that belong to no span.
+ */
 export const buildTimelineRows = (spans, agents) => {
   const out = [];
   for (const lane of buildLanes(spans, agents)) {
     out.push({ type: "lane", key: `lane-${lane.id}`, lane });
     const { rows, ticks } = packRows(lane.spans);
-    rows.forEach((r, i) => out.push({ type: "row", key: `${lane.id}-${i}`, lane, spans: r, ticks }));
+    const bars = rows
+      .flat()
+      .filter((s) => s.kind !== "gateway_event")
+      .sort((a, b) => ms(a.start_time) - ms(b.start_time) || (a.span_id < b.span_id ? -1 : 1));
+    bars.forEach((s) => out.push({ type: "row", key: `${lane.id}-${s.span_id}`, lane, spans: [s], ticks }));
+    const barIds = new Set(bars.map((s) => s.span_id));
+    const orphans = lane.spans.filter((s) => s.kind === "gateway_event" && !barIds.has(s.parent_span_id));
+    if (orphans.length) out.push({ type: "row", key: `${lane.id}-events`, lane, spans: orphans, ticks, events: true });
   }
   return out;
 };
@@ -148,4 +159,11 @@ export const viewForSpan = (span, bounds) => {
   const { start, end } = spanTimes(span);
   const pad = Math.max((end - start) * 0.1, 5);
   return { from: Math.max(bounds.from, start - pad), to: Math.min(bounds.to, Math.max(end, start + 1) + pad) };
+};
+
+/** The view moved by deltaMs, kept inside bounds without changing its width. */
+export const panView = (view, deltaMs, bounds) => {
+  const width = view.to - view.from;
+  const from = Math.min(Math.max(bounds.from, view.from + deltaMs), bounds.to - width);
+  return { from, to: from + width };
 };
