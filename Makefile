@@ -257,6 +257,47 @@ build-darwin-arm64:
 	-o bin/midsommar-$(EDITION)-darwin-arm64
 
 # ============================================================================
+# FIPS 140-3 Builds (Go Cryptographic Module v1.0.0, CMVP #5247)
+# ============================================================================
+# GOFIPS140 pins the frozen, CMVP-validated module; the binaries default to
+# fips140=on. The fips tag is Tyk's marker for FIPS builds. Each binary is
+# checked with scripts/fips-verify.sh. Release packages come from goreleaser
+# (ci/goreleaser/*.yml, fips-* build ids).
+
+FIPS_GOFIPS140 := v1.0.0
+comma := ,
+FIPS_TAGS = -tags $(if $(filter ent,$(EDITION)),fips$(comma)enterprise,fips)
+
+.PHONY: build-fips build-linux-amd64-fips build-linux-arm64-fips
+
+# Build FIPS Studio and microgateway binaries for the native platform
+build-fips: build-frontend build-docs
+	@echo "🔐 Building FIPS $(EDITION) for native platform..."
+	@mkdir -p bin
+	GOFIPS140=$(FIPS_GOFIPS140) CGO_ENABLED=1 go build $(FIPS_TAGS) $(PROD_LDFLAGS) -o bin/midsommar-$(EDITION)-fips
+	scripts/fips-verify.sh --edition $(EDITION) --fips bin/midsommar-$(EDITION)-fips
+	cd microgateway && $(MAKE) build-fips EDITION=$(EDITION)
+	cp microgateway/dist/microgateway-$(EDITION)-fips bin/mgw-$(EDITION)-fips
+	@echo "✅ FIPS build complete: bin/midsommar-$(EDITION)-fips and bin/mgw-$(EDITION)-fips"
+
+# Linux AMD64 FIPS with CGO
+build-linux-amd64-fips:
+	@mkdir -p bin
+	GOFIPS140=$(FIPS_GOFIPS140) CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
+	go build $(FIPS_TAGS) $(PROD_LDFLAGS) \
+	-o bin/midsommar-$(EDITION)-fips-linux-amd64
+	scripts/fips-verify.sh --edition $(EDITION) --fips bin/midsommar-$(EDITION)-fips-linux-amd64
+
+# Linux ARM64 FIPS with CGO (requires cross-compiler)
+build-linux-arm64-fips:
+	@mkdir -p bin
+	GOFIPS140=$(FIPS_GOFIPS140) CGO_ENABLED=1 GOOS=linux GOARCH=arm64 \
+	CC=aarch64-linux-gnu-gcc \
+	go build $(FIPS_TAGS) $(PROD_LDFLAGS) \
+	-o bin/midsommar-$(EDITION)-fips-linux-arm64
+	scripts/fips-verify.sh --edition $(EDITION) --fips bin/midsommar-$(EDITION)-fips-linux-arm64
+
+# ============================================================================
 # Backward Compatibility Targets
 # ============================================================================
 

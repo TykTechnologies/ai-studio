@@ -302,6 +302,18 @@ jobs:
           -w /go/src/github.com/TykTechnologies/midsommar                      \
           tykio/golang-cross:${{ matrix.golang_cross }} /tmp/build.sh
       -
+        # Each goreleaser build already runs scripts/fips-verify.sh as a post
+        # hook, which fails the release before anything is published. This
+        # re-checks the whole dist/ (FIPS binaries are FIPS, standard ones are
+        # not, ENT ones carry the enterprise tag) before images are built.
+        name: Verify FIPS build metadata
+        run: |
+          docker run --rm \
+          -v ${{github.workspace}}/midsommar:/go/src/github.com/TykTechnologies/midsommar \
+          -w /go/src/github.com/TykTechnologies/midsommar \
+          tykio/golang-cross:${{ matrix.golang_cross }} \
+          scripts/fips-verify.sh --edition '${{ matrix.edition }}' --dist dist
+      -
         name: Docker metadata for tag push
         id: tag_metadata
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
