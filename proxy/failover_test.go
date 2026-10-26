@@ -216,8 +216,7 @@ type failoverHarness struct {
 
 func newFailoverHarness(t *testing.T, servePrimary, serveFallback http.HandlerFunc, mutate func(primary, fallback *models.LLM)) *failoverHarness {
 	t.Helper()
-	db, cancel := setupTest(t)
-	t.Cleanup(func() { tearDownTest(db, cancel) })
+	db, recorder := setupParallelTest(t)
 
 	h := &failoverHarness{t: t, db: db}
 	h.primaryVendor = newFakeVendor(t, servePrimary)
@@ -265,7 +264,7 @@ func newFailoverHarness(t *testing.T, servePrimary, serveFallback http.HandlerFu
 	require.NoError(t, p.loadResources())
 	h.proxy = p
 	// Handler, as Studio and the Microgateway mount it (request ids included).
-	srv := &http.Server{Handler: p.Handler()}
+	srv := &http.Server{Handler: serveWithRecorder(p.Handler(), recorder)}
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(func() {
 		// Shutdown (not Close) waits for in-flight handlers. A streaming inner
@@ -372,6 +371,7 @@ func streamedText(t *testing.T, body []byte) (string, []ChatCompletionChunk) {
 // --- two-hop cases ---------------------------------------------------------
 
 func TestFailover_PrimaryFailsFallbackServes(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveStatus(503), serveOpenAIText("from the fallback"), nil)
 
 	resp, body := h.post("/ai/primary/v1/chat/completions", failoverChatBody)
@@ -423,6 +423,7 @@ func TestFailover_PrimaryFailsFallbackServes(t *testing.T) {
 }
 
 func TestFailover_CallerErrorsDoNotFailOver(t *testing.T) {
+	t.Parallel()
 	for _, code := range []int{400, 401, 403, 404} {
 		t.Run(strconv.Itoa(code), func(t *testing.T) {
 			h := newFailoverHarness(t, serveStatus(code), serveOpenAIText("never"), nil)
@@ -444,6 +445,7 @@ func TestFailover_CallerErrorsDoNotFailOver(t *testing.T) {
 }
 
 func TestFailover_EveryRungFailsReturnsTheLastError(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveStatus(503), serveStatus(502), nil)
 
 	resp, body := h.post("/ai/primary/v1/chat/completions", failoverChatBody)
@@ -454,6 +456,7 @@ func TestFailover_EveryRungFailsReturnsTheLastError(t *testing.T) {
 }
 
 func TestFailover_StreamingBeforeFirstFrame(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveStatus(503), serveOpenAIText("streamed by the fallback"), nil)
 
 	resp, body := h.post("/ai/primary/v1/chat/completions", failoverStreamBody)
@@ -472,6 +475,7 @@ func TestFailover_StreamingBeforeFirstFrame(t *testing.T) {
 }
 
 func TestFailover_StreamingAfterFirstFrameIsCommitted(t *testing.T) {
+	t.Parallel()
 	// The primary gets one frame out, then drops the connection.
 	primary := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -491,6 +495,7 @@ func TestFailover_StreamingAfterFirstFrameIsCommitted(t *testing.T) {
 }
 
 func TestFailover_RungSkippedWhenTargetNoLongerAllowsTheModel(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveStatus(503), serveOpenAIText("never"), func(primary, fallback *models.LLM) {
 		fallback.AllowedModels = []string{"^gpt-3.5-turbo$"}
 	})
@@ -501,6 +506,7 @@ func TestFailover_RungSkippedWhenTargetNoLongerAllowsTheModel(t *testing.T) {
 }
 
 func TestFailover_RungSkippedWhenTargetInactive(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveStatus(503), serveOpenAIText("never"), func(primary, fallback *models.LLM) {
 		fallback.Active = false
 	})
@@ -549,6 +555,7 @@ func TestPlanFailover_RungSkippedWhenFallbackBudgetExhausted(t *testing.T) {
 }
 
 func TestFailover_SpoofedMarkerCannotTaintAnalytics(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIText("direct"), serveOpenAIText("never"), nil)
 
 	// Straight at the inner hop for an LLM the app IS allowed, carrying a
@@ -574,6 +581,7 @@ func TestFailover_SpoofedMarkerCannotTaintAnalytics(t *testing.T) {
 }
 
 func TestFailover_UnifiedRouterInheritsTheWaterfall(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveStatus(503), serveOpenAIText("via unified"), nil)
 
 	resp, body := h.post("/v1/chat/completions",
@@ -586,6 +594,7 @@ func TestFailover_UnifiedRouterInheritsTheWaterfall(t *testing.T) {
 }
 
 func TestFailover_TimeoutTrigger(t *testing.T) {
+	t.Parallel()
 	slow := func(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-r.Context().Done():

@@ -27,6 +27,7 @@ func withCacheHeaders(next http.HandlerFunc, kv ...string) http.HandlerFunc {
 }
 
 func TestLoopbackRelay_CacheHeadersReachOpenAICompatibleClients(t *testing.T) {
+	t.Parallel()
 	hit := withCacheHeaders(serveOpenAIText("cached answer"),
 		"X-Cache-Status", "HIT",
 		"X-Cache-Match", "semantic",
@@ -62,6 +63,7 @@ func TestLoopbackRelay_CacheHeadersReachOpenAICompatibleClients(t *testing.T) {
 // After a failover the cache headers describe the rung that served, never a
 // failed one.
 func TestLoopbackRelay_FailedRungHeadersDoNotLeak(t *testing.T) {
+	t.Parallel()
 	failed := withCacheHeaders(serveStatus(503), "X-Cache-Status", "MISS")
 	for _, body := range []string{failoverChatBody, failoverStreamBody} {
 		h := newFailoverHarness(t, failed, serveOpenAIText("from the fallback"), nil)

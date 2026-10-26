@@ -17,6 +17,7 @@ import (
 // rewrites only its line in the forwarded upload, a block refuses the upload
 // naming the line's custom_id.
 func TestOpenAIBatches_UploadFilters(t *testing.T) {
+	t.Parallel()
 	h := newBatchesHarness(t)
 	for i, s := range []string{nativeRedactScript, nativeBlockScript} {
 		h.primary.Filters = append(h.primary.Filters, &models.Filter{Name: "oai-filter-" + string(rune('a'+i)), Script: []byte(s)})

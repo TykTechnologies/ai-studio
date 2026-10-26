@@ -13,6 +13,7 @@ import (
 // streaming upstream paths, in every edition; compat headers and W3C trace
 // context pass through (spec §4.3, bead jyx.13).
 func TestAgentTracingHeadersAreStrippedUpstream(t *testing.T) {
+	t.Parallel()
 	sent := []string{
 		"X-Tyk-Session-Id", "conv-42",
 		"X-Tyk-Session-Name", "triage",

@@ -247,6 +247,7 @@ func (f *fakeBatchAPI) serve(w http.ResponseWriter, r *http.Request) {
 type nativeHarness struct {
 	t                *testing.T
 	db               *gorm.DB
+	recorder         analytics.AnalyticsHandler // the test's own (setupParallelTest)
 	port             int
 	proxy            *Proxy
 	service          *services.Service
@@ -274,8 +275,7 @@ type nativeHarnessOpts struct {
 
 func newNativeHarness(t *testing.T, opts nativeHarnessOpts) *nativeHarness {
 	t.Helper()
-	db, cancel := setupTest(t)
-	t.Cleanup(func() { tearDownTest(db, cancel) })
+	db, recorder := setupParallelTest(t)
 	if opts.vendorKey == "" {
 		opts.vendorKey = "anthropic-vendor-key"
 	}
@@ -283,7 +283,7 @@ func newNativeHarness(t *testing.T, opts nativeHarnessOpts) *nativeHarness {
 		opts.vendorKey = ""
 	}
 
-	h := &nativeHarness{t: t, db: db, vendor: newFakeBatchAPI(t)}
+	h := &nativeHarness{t: t, db: db, recorder: recorder, vendor: newFakeBatchAPI(t)}
 	h.service = services.NewService(db)
 	var budgetSvc budget.Service = budget.NewService(db, services.NewTestNotificationService(db))
 	if opts.wrapBudget != nil {
@@ -342,9 +342,12 @@ func newNativeHarness(t *testing.T, opts nativeHarnessOpts) *nativeHarness {
 		svc = opts.wrapService(svc)
 	}
 	p := New(svc, budgetSvc, cfg)
+	// Usage the reconciler or a later download settles is recorded on no
+	// request's context: give it the test's recorder too.
+	p.usageCtx = analytics.WithHandler(context.Background(), recorder)
 	require.NoError(t, p.loadResources())
 	h.proxy = p
-	handler := p.createHandler()
+	handler := serveWithRecorder(p.createHandler(), recorder)
 	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.inflight.Add(1)
 		defer h.inflight.Add(-1)
@@ -484,8 +487,7 @@ func (h *nativeHarness) settle() {
 // replaced by a new one.
 func (h *nativeHarness) flushAnalytics() {
 	h.t.Helper()
-	handler := analytics.GetHandler()
-	require.NotNil(h.t, handler, "analytics recording is not started")
+	handler := h.recorder
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		marker := fmt.Sprintf("__native_harness_flush_%d", time.Now().UnixNano())

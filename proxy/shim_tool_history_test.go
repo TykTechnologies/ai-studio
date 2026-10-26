@@ -76,6 +76,7 @@ func upstreamJSON(t *testing.T, h *failoverHarness) map[string]any {
 // turn), so the vendor sees the conversation the client sent and the inner
 // hop's guardrails see tool results as tool results, not as user text.
 func TestShimToolHistory_ReachesTheVendor(t *testing.T) {
+	t.Parallel()
 	cases := shimCases()
 	check := map[models.Vendor]func(t *testing.T, doc map[string]any){
 		models.OPENAI: func(t *testing.T, doc map[string]any) {

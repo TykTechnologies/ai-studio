@@ -14,6 +14,7 @@ import (
 // requests, sync and as batch lines; token arrays are refused while filters
 // are attached.
 func TestOpenAIInputFilters(t *testing.T) {
+	t.Parallel()
 	h := newBatchesHarness(t)
 	h.primary.AllowedModels = nil
 	withPrimaryFilters(t, h, nativeRedactScript, responsesBlockScript)

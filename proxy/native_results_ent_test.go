@@ -20,6 +20,7 @@ import (
 // untouched, and the blocked request's usage is still billed (the vendor
 // charged it).
 func TestNativeResults_ResponseFilterReplacesBlockedLine(t *testing.T) {
+	t.Parallel()
 	const script = `
 text := import("text")
 output := {block: text.contains(input.raw_input, "answer b"), message: "withheld by policy"}

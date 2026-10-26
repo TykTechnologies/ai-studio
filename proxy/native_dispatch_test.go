@@ -30,6 +30,7 @@ func decodeBatch(t *testing.T, body []byte) map[string]any {
 // The vendor sees the raw ID, the LLM's key and only allow-listed headers and
 // query parameters.
 func TestNative_RetrieveWrapsIDsAndPinsTheUpstream(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.vendor.addBatch("msgbatch_A1", "ended")
 	id := h.wrap(h.llm, h.appA, "msgbatch_A1")
@@ -87,6 +88,7 @@ func TestNative_RetrieveWrapsIDsAndPinsTheUpstream(t *testing.T) {
 
 // An in-progress batch has no results_url; it stays null.
 func TestNative_RetrieveInProgressKeepsNullResultsURL(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.vendor.addBatch("msgbatch_RUN", "in_progress")
 	resp, body := h.do(h.keyA, http.MethodGet, "/llm/rest/claude/v1/messages/batches/"+h.wrap(h.llm, h.appA, "msgbatch_RUN"), "")
@@ -100,6 +102,7 @@ func TestNative_RetrieveInProgressKeepsNullResultsURL(t *testing.T) {
 // With a configured public URL the results_url is absolute, on the route the
 // request came in on; the request's Host never feeds it.
 func TestNative_ResultsURLFromConfiguredPublicURL(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{config: &Config{NativePublicURL: "https://gw.example.com/"}})
 	h.vendor.addBatch("msgbatch_A1", "ended")
 	id := h.wrap(h.llm, h.appA, "msgbatch_A1")
@@ -112,6 +115,7 @@ func TestNative_ResultsURLFromConfiguredPublicURL(t *testing.T) {
 // An endpoint behind a corporate prefix still matches on the canonical path,
 // and the upstream keeps the prefix.
 func TestNative_EndpointWithPathPrefix(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{endpointPath: "/corp/anthropic/v1"})
 	h.vendor.addBatch("msgbatch_A1", "ended")
 	id := h.wrap(h.llm, h.appA, "msgbatch_A1")
@@ -126,6 +130,7 @@ func TestNative_EndpointWithPathPrefix(t *testing.T) {
 
 // Cancel forwards a POST to the vendor and answers with the wrapped batch.
 func TestNative_Cancel(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.vendor.addBatch("msgbatch_RUN", "in_progress")
 	id := h.wrap(h.llm, h.appA, "msgbatch_RUN")
@@ -144,6 +149,7 @@ func TestNative_Cancel(t *testing.T) {
 // and never reaches the vendor: another App's, another LLM's on the same
 // vendor key, a tampered MAC, a raw vendor ID.
 func TestNative_ForeignOrForgedIDsAreNotFound(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.vendor.addBatch("msgbatch_A1", "ended")
 	idA := h.wrap(h.llm, h.appA, "msgbatch_A1")
@@ -175,6 +181,7 @@ func TestNative_ForeignOrForgedIDsAreNotFound(t *testing.T) {
 // Access inherited as a failover rung passes the ACL for synchronous calls
 // but not for native resources.
 func TestNative_FailoverInheritedAccessRefused(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.vendor.addBatch("msgbatch_A1", "ended")
 	id := h.wrap(h.llm, h.appC, "msgbatch_A1")
@@ -194,6 +201,7 @@ func TestNative_FailoverInheritedAccessRefused(t *testing.T) {
 // shape; it never falls through to the legacy chain (which would answer a
 // GET with 405 and a POST by forwarding it).
 func TestNative_MissingPrerequisitesAre501(t *testing.T) {
+	t.Parallel()
 	for name, opts := range map[string]nativeHarnessOpts{
 		"no ledger": {wrapService: func(s services.ServiceInterface) services.ServiceInterface {
 			return serviceWithoutNativeStore{s}
@@ -224,6 +232,7 @@ func TestNative_MissingPrerequisitesAre501(t *testing.T) {
 // A native path asked with a method no operation declares is the vendor's
 // 405, with Allow.
 func TestNative_WrongMethodOnNativePath(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	id := h.wrap(h.llm, h.appA, "msgbatch_A1")
 	resp, body := h.do(h.keyA, http.MethodPut, "/llm/rest/claude/v1/messages/batches/"+id, `{}`)
@@ -236,6 +245,7 @@ func TestNative_WrongMethodOnNativePath(t *testing.T) {
 
 // The native route changes nothing for the calls it does not claim.
 func TestNative_LegacyChainUnchanged(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	msg := `{"model":"claude-luna","max_tokens":10,"messages":[{"role":"user","content":"hi"}]}`
 
@@ -272,6 +282,7 @@ func TestNative_LegacyChainUnchanged(t *testing.T) {
 // On the creator node a retrieve refreshes the ledger row with the vendor's
 // latest view, IDs wrapped, so list can serve it.
 func TestNative_RetrieveUpdatesLedgerSnapshot(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.vendor.addBatch("msgbatch_A1", "ended")
 	store := h.service.NativeResourceStore()
@@ -301,6 +312,7 @@ func TestNative_RetrieveUpdatesLedgerSnapshot(t *testing.T) {
 // node's ledger row for the same App still authorises them. Without the row
 // (another node, or another App) they are not found.
 func TestNative_KeyRotationFallbackToLedger(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.vendor.addBatch("msgbatch_A1", "ended")
 	oldID := wrapBatchID(t, "the-old-vendor-key", h.llm.ID, h.appA.ID, "msgbatch_A1")

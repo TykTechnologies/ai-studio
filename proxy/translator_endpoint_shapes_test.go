@@ -39,8 +39,7 @@ type endpointShapeHarness struct {
 
 func newEndpointShapeHarness(t *testing.T, vendor models.Vendor, endpointSuffix string, serve func(w http.ResponseWriter, r *http.Request)) *endpointShapeHarness {
 	t.Helper()
-	db, cancel := setupTest(t)
-	t.Cleanup(func() { tearDownTest(db, cancel) })
+	db, recorder := setupParallelTest(t)
 
 	h := &endpointShapeHarness{t: t}
 	h.upstream = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -80,7 +79,7 @@ func newEndpointShapeHarness(t *testing.T, vendor models.Vendor, endpointSuffix 
 
 	p := NewProxy(service, &Config{Port: h.port}, budgetSvc)
 	require.NoError(t, p.loadResources())
-	srv := &http.Server{Handler: p.createHandler()}
+	srv := &http.Server{Handler: serveWithRecorder(p.createHandler(), recorder)}
 	go func() { _ = srv.Serve(ln) }()
 	// Cleanups run last-registered first: stop accepting requests, then wait
 	// for the background analysis each request spawned, and only then (the
@@ -201,6 +200,7 @@ const openAIChatBody = `{"model":"any","messages":[{"role":"user","content":"Say
 // on the endpoint must never be doubled, and one missing from it must be
 // supplied.
 func TestAnthropicRoute_AllEntryPointsForEveryEndpointShape(t *testing.T) {
+	t.Parallel()
 	for _, shape := range v1EndpointShapes {
 		t.Run(shape.name, func(t *testing.T) {
 			h := newEndpointShapeHarness(t, models.ANTHROPIC, shape.suffix, serveAnthropic(t))
@@ -267,6 +267,7 @@ func TestAnthropicRoute_AllEntryPointsForEveryEndpointShape(t *testing.T) {
 // /v1/chat/completions, so a configured /inference/v1 used to become
 // /inference/v1/v1/chat/completions.
 func TestOpenAIRoute_BridgeAndPassthroughForEveryEndpointShape(t *testing.T) {
+	t.Parallel()
 	shapes := append([]struct {
 		name     string
 		suffix   string
@@ -300,6 +301,7 @@ func TestOpenAIRoute_BridgeAndPassthroughForEveryEndpointShape(t *testing.T) {
 // ?alt=sse and ?key=), and a proxy prefix must not be mistaken for an overlap
 // just because it shares text with the caller's path.
 func TestPassthrough_QueryStringAndLookalikePrefixSurviveJoin(t *testing.T) {
+	t.Parallel()
 	var gotQuery, gotPath string
 	h := newEndpointShapeHarness(t, models.OPENAI, "/v1beta-compat", func(w http.ResponseWriter, r *http.Request) {
 		gotPath, gotQuery = r.URL.Path, r.URL.RawQuery

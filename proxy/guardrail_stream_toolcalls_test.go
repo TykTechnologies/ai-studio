@@ -129,6 +129,7 @@ func callStreamHarness(t *testing.T, tc callStreamCase, body string, scan bool) 
 // client, the stream ends with the vendor's error event, and the guardrail
 // saw the assembled call with the request's goal.
 func TestStreamedToolCalls_FlaggedNeverEmitted(t *testing.T) {
+	t.Parallel()
 	for _, tc := range callStreamCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			before := len(theCallFlagger.calls())
@@ -158,6 +159,7 @@ func TestStreamedToolCalls_FlaggedNeverEmitted(t *testing.T) {
 // A clean call is released byte for byte and in order; with tool-call
 // scanning off the stream is not held at all (and is identical too).
 func TestStreamedToolCalls_CleanReleasedIdentical(t *testing.T) {
+	t.Parallel()
 	for _, tc := range callStreamCases() {
 		for _, scan := range []bool{true, false} {
 			t.Run(tc.name, func(t *testing.T) {

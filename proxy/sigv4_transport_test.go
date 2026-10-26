@@ -70,6 +70,7 @@ func sigV4Between(s, start, end string) string {
 // Connection-listed headers (removed) used to break the signature, a 403
 // from AWS.
 func TestBedrockREST_SigV4SurvivesForwardedAndConnectionHeaders(t *testing.T) {
+	t.Parallel()
 	var received http.Header
 	h := newFailoverHarness(t, sigV4VerifyHandler("AKIDTEST", "secret", "us-east-1", &received), serveOpenAIText("never"), func(primary, _ *models.LLM) {
 		primary.Vendor = models.BEDROCK
@@ -109,6 +110,7 @@ func awsFrontEnd(next http.HandlerFunc) http.HandlerFunc {
 // checks. The forwarding headers are now left out of the signature, on
 // /llm/rest/ and on the bridges, whose inner hop is /llm/rest/.
 func TestBedrockREST_SigV4SurvivesAWSAppendingXForwardedFor(t *testing.T) {
+	t.Parallel()
 	var received http.Header
 	h := newFailoverHarness(t, awsFrontEnd(sigV4VerifyHandler("AKIDTEST", "secret", "us-east-1", &received)), serveOpenAIText("never"), func(primary, _ *models.LLM) {
 		primary.Vendor = models.BEDROCK

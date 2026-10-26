@@ -16,6 +16,7 @@ import (
 // refusal passed through it) the caller must get that envelope's message,
 // type and code, not our wrapper around the driver's wrapper around it.
 func TestUpstreamEnvelope_RelayedVerbatim(t *testing.T) {
+	t.Parallel()
 	const envelope = `{"error":{"message":"prompt has 3 images, max is 2","type":"invalid_request_error","code":"too_many_images"}}`
 	refuse := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -46,6 +47,7 @@ func TestUpstreamEnvelope_RelayedVerbatim(t *testing.T) {
 // An error with no envelope in it keeps the existing wrapper, so a vendor
 // that answers with plain text is still reported with its status.
 func TestUpstreamPlainTextError_KeepsTheWrapper(t *testing.T) {
+	t.Parallel()
 	refuse := func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		_, _ = w.Write([]byte("nope"))

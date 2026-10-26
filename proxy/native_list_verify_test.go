@@ -116,6 +116,7 @@ func TestNativeDeleteVerify_ConcurrentDeletesAndReconcilerOnPostgres(t *testing.
 // A listing never forwards to the vendor (which would list every App's
 // batches in the workspace), even with vendor-style query parameters.
 func TestNativeListVerify_NeverForwarded(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.seedBatchRow(h.llm, h.appA, "msgbatch_L1")
 	h.vendor.addBatch("msgbatch_OTHER", "ended") // another App's batch at the vendor

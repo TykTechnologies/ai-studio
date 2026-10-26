@@ -73,6 +73,7 @@ func (h *failoverHarness) addPrice(model string, vendor models.Vendor, cpit floa
 // Before decision support, a native OpenAI /v1/decisions call failed
 // response analysis and left no proxy log, no chat record and no spend.
 func TestDecisions_NativeOpenAIPassThroughIsRecordedAndPriced(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIDecision(), serveStatus(500), noFailover)
 	h.addPrice("gpt-6-luna", models.OPENAI, 0.0000001)
 
@@ -115,6 +116,7 @@ func TestDecisions_NativeOpenAIPassThroughIsRecordedAndPriced(t *testing.T) {
 }
 
 func TestDecisions_NativeSystemOnePassThroughIsRecordedAndPriced(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveSystemOneDecision(), serveStatus(500), asSystemOne)
 	h.addPrice("jev-1.13.0", models.SYSTEMONE, 0.000000042)
 
@@ -147,6 +149,7 @@ func TestDecisions_NativeSystemOnePassThroughIsRecordedAndPriced(t *testing.T) {
 // answers as jev-1.13.0. An admin prices the name they configured; pricing by
 // the reported name alone recorded the call at zero cost, outside budgets.
 func TestDecisions_AliasIsPricedByTheRequestedModel(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveSystemOneDecision(), serveStatus(500), asSystemOne)
 	h.addPrice("jev-latest", models.SYSTEMONE, 0.000000042)
 
@@ -163,6 +166,7 @@ func TestDecisions_AliasIsPricedByTheRequestedModel(t *testing.T) {
 
 // The reported model's own price wins when it has one.
 func TestDecisions_ReportedModelPriceWins(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveSystemOneDecision(), serveStatus(500), asSystemOne)
 	h.addPrice("jev-latest", models.SYSTEMONE, 0.000000042)
 	h.addPrice("jev-1.13.0", models.SYSTEMONE, 0.0000001)
@@ -192,6 +196,7 @@ func serveDatedChat(dated string) http.HandlerFunc {
 // name the caller uses, answering as a dated snapshot, was also recorded at
 // zero cost. Chat records keep naming the snapshot that answered.
 func TestPricing_ChatSnapshotIsPricedByTheRequestedModel(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveDatedChat("gpt-4o-2024-08-06"), serveStatus(500), noFailover)
 	require.NoError(t, h.db.Create(&models.ModelPrice{ModelName: "gpt-4o", Vendor: "openai", CPIT: 0.0000025, CPT: 0.00001, Currency: "USD"}).Error)
 
@@ -209,6 +214,7 @@ func TestPricing_ChatSnapshotIsPricedByTheRequestedModel(t *testing.T) {
 
 // Neither name priced: the exchange is still recorded, at zero cost, as before.
 func TestPricing_UnpricedModelsStayZero(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveDatedChat("gpt-4o-2024-08-06"), serveStatus(500), noFailover)
 
 	resp, body := h.post("/llm/rest/primary/v1/chat/completions", failoverChatBody)
@@ -225,6 +231,7 @@ func TestPricing_UnpricedModelsStayZero(t *testing.T) {
 // A model whose reported and requested names match takes one lookup and is
 // priced exactly as before the fallback existed.
 func TestPricing_ExactModelUnchanged(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveDatedChat("gpt-4o"), serveStatus(500), noFailover)
 	require.NoError(t, h.db.Create(&models.ModelPrice{ModelName: "gpt-4o", Vendor: "openai", CPIT: 0.0000025, CPT: 0.00001, Currency: "USD"}).Error)
 
@@ -239,6 +246,7 @@ func TestPricing_ExactModelUnchanged(t *testing.T) {
 }
 
 func TestDecisions_NativeSystemOneScreening(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveSystemOneDecision(), serveStatus(500), asSystemOne)
 	for name, body := range map[string]string{
 		"no state":           `{"model":"jev-latest","questions":{"q":{"type":"noul","instructions":"?"}}}`,
@@ -259,6 +267,7 @@ func TestDecisions_NativeSystemOneScreening(t *testing.T) {
 // were not refused by the model: a refusal is the model declining a question
 // it was asked, not an upstream error, a budget denial or a policy block.
 func TestDecisions_FailuresAreRecordedWithoutRefusals(t *testing.T) {
+	t.Parallel()
 	t.Run("upstream validation error", func(t *testing.T) {
 		serve := func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
@@ -313,6 +322,7 @@ func TestDecisions_FailuresAreRecordedWithoutRefusals(t *testing.T) {
 }
 
 func TestDecisions_NativePassThroughRejectsStreaming(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveSystemOneDecision(), serveStatus(500), asSystemOne)
 
 	var req map[string]any
@@ -326,6 +336,7 @@ func TestDecisions_NativePassThroughRejectsStreaming(t *testing.T) {
 }
 
 func TestDecisions_SystemOneLLMServesOnlyItsDecisionEndpoint(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveSystemOneDecision(), serveStatus(500), asSystemOne)
 
 	resp, _ := h.post("/llm/rest/primary/v1/chat/completions", failoverChatBody)

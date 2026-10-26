@@ -66,6 +66,32 @@ var (
 	handlerMu sync.RWMutex
 )
 
+// handlerKey is the context key WithHandler stores a handler under.
+type handlerKey struct{}
+
+// WithHandler returns a copy of ctx whose records go to h rather than to the
+// global handler: the Record functions that take a context (RecordExchange,
+// RecordProxyLog, RecordChatRecord, ...) look for it first. Values survive
+// context.WithoutCancel, so analysis detached from a request still finds it.
+// Tests use it to give each test its own recorder, so tests that record
+// analytics can run in parallel; production installs the global handler.
+func WithHandler(ctx context.Context, h AnalyticsHandler) context.Context {
+	return context.WithValue(ctx, handlerKey{}, h)
+}
+
+// handlerFor returns the handler for ctx's records (WithHandler's, else the
+// global one) and the function to call once the record has been handed over:
+// the global handler is read under handlerMu, held until then.
+func handlerFor(ctx context.Context) (AnalyticsHandler, func()) {
+	if ctx != nil {
+		if h, ok := ctx.Value(handlerKey{}).(AnalyticsHandler); ok && h != nil {
+			return h, func() {}
+		}
+	}
+	handlerMu.RLock()
+	return globalHandler, handlerMu.RUnlock
+}
+
 // SetHandler sets the global analytics handler implementation
 func SetHandler(handler AnalyticsHandler) {
 	handlerMu.Lock()

@@ -57,6 +57,7 @@ func (h *nativeHarness) getBatch(key, id string) (int, map[string]any) {
 // IDs are signed with the hub-generated secret, so rotating the vendor
 // credential leaves them valid on every node.
 func TestNative_VendorKeyRotationKeepsIDs(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.vendor.addBatch("msgbatch_A1", "ended")
 	require.NotEmpty(t, h.llm.ResourceSigningSecret, "a new LLM gets a signing secret")
@@ -75,6 +76,7 @@ func TestNative_VendorKeyRotationKeepsIDs(t *testing.T) {
 // old ones verifiable for the grace period; a rotation without grace revokes
 // them at once.
 func TestNative_SigningSecretRotation(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.vendor.addBatch("msgbatch_A1", "ended")
 	first := h.wrap(h.llm, h.appA, "msgbatch_A1")
@@ -107,6 +109,7 @@ func TestNative_SigningSecretRotation(t *testing.T) {
 // handed out valid until the grace period ends, even across a vendor key
 // change.
 func TestNative_BackfillKeepsVendorCredentialIDs(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{mutateLLM: func(l *models.LLM) {
 		l.ResourceSigningSecret, l.ResourceSigningRotatedAt = "", nil
 	}})

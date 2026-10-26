@@ -16,6 +16,7 @@ import (
 // caller's App credential to generativelanguage.googleapis.com and fail there;
 // HuggingFace answered 500.
 func TestAI_UnsupportedVendorIsAClearClientError(t *testing.T) {
+	t.Parallel()
 	for _, vendor := range []models.Vendor{models.VERTEX, models.HUGGINGFACE} {
 		for name, body := range map[string]string{"buffered": failoverChatBody, "streaming": failoverStreamBody} {
 			t.Run(string(vendor)+"/"+name, func(t *testing.T) {
@@ -47,6 +48,7 @@ func TestAI_UnsupportedVendorIsAClearClientError(t *testing.T) {
 // An unsupported primary still fails over: the rung's driver cannot be built,
 // which says nothing about the next rung's vendor.
 func TestAI_UnsupportedVendorFailsOverToTheNextRung(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIText("never"), serveOpenAIText("from the fallback"), func(primary, _ *models.LLM) {
 		primary.Vendor = models.VERTEX
 	})

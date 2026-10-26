@@ -40,6 +40,7 @@ func TestOpenAIModelExtractorModerationsDefault(t *testing.T) {
 // no allow-list or allows the default model, and is refused (403) when its
 // allow-list leaves the default out. /v1/responses still needs a model.
 func TestModerationsWithoutModelThroughTheGateway(t *testing.T) {
+	t.Parallel()
 	h := newResponsesHarness(t)
 	setAllowed := func(patterns []string) {
 		t.Helper()

@@ -57,6 +57,7 @@ func requireScreenedElsewhere(t *testing.T, h *responsesHarness, resp *http.Resp
 // file was uploaded: it is refused unless the LLM still applies the request
 // filters that screened them.
 func TestOpenAIBatches_CreateNeedsTheFiltersThatScreenedTheFile(t *testing.T) {
+	t.Parallel()
 	h := newBatchesHarness(t)
 	ctx := context.Background()
 	store := h.service.NativeResourceStore()
@@ -105,6 +106,7 @@ func TestOpenAIBatches_CreateNeedsTheFiltersThatScreenedTheFile(t *testing.T) {
 // and a file that was never screened (a batch's output file) do not run on
 // an LLM with request filters.
 func TestOpenAIBatches_CreateRefusesUnrecordedScreening(t *testing.T) {
+	t.Parallel()
 	h := newBatchesHarness(t)
 	h.setFilters(remoteGuardFilter())
 	ctx := context.Background()
@@ -139,6 +141,7 @@ func TestOpenAIBatches_CreateRefusesUnrecordedScreening(t *testing.T) {
 
 // A ledger that cannot be read is a 503, not a request to upload again.
 func TestOpenAIBatches_CreateScreeningCheckLedgerDown(t *testing.T) {
+	t.Parallel()
 	h := newBatchesHarness(t)
 	h.setFilters(remoteGuardFilter())
 
@@ -221,6 +224,7 @@ func TestRequestFilterDigest(t *testing.T) {
 // config carries the resolved key) leaves the file usable; a policy change
 // in the same filter does not.
 func TestOpenAIBatches_CreateSurvivesKeyRotation(t *testing.T) {
+	t.Parallel()
 	h := newBatchesHarness(t)
 	guard := remoteGuardFilter()
 	guard.Config["connection"] = map[string]any{"api_key": "sk-resolved-1"}

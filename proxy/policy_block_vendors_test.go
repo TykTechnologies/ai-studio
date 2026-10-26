@@ -19,6 +19,7 @@ import (
 // driver cannot read the inner hop's OpenAI envelope, so the reason (and which
 // guardrail blocked) was lost although the block itself worked.
 func TestPolicyBlock_ReasonReachesTheClientOnEveryVendor(t *testing.T) {
+	t.Parallel()
 	const wantMessage = "[ERROR] msg: policy_violation err: Policy error: no-secrets - no secrets"
 	for _, vendor := range []models.Vendor{models.GOOGLEAI, models.ANTHROPIC} {
 		for name, body := range map[string]string{"non-streaming": failoverChatBody, "streaming": failoverStreamBody} {

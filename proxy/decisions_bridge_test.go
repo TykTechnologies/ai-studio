@@ -35,6 +35,7 @@ func decodeDecision(t *testing.T, body []byte) decisions.Response {
 }
 
 func TestDecisionBridge_OpenAIRouteForwardsTheBodyAsSent(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIDecision(), serveStatus(500), noFailover)
 
 	body := unifiedDecisionBody(t, "primary/gpt-6-luna")
@@ -66,6 +67,7 @@ func TestDecisionBridge_OpenAIRouteForwardsTheBodyAsSent(t *testing.T) {
 }
 
 func TestDecisionBridge_SystemOneRouteIsTranslatedBothWays(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveSystemOneDecision(), serveStatus(500), asSystemOne)
 	h.addPrice("jev-1.13.0", models.SYSTEMONE, 0.000000042)
 
@@ -99,6 +101,7 @@ func TestDecisionBridge_SystemOneRouteIsTranslatedBothWays(t *testing.T) {
 }
 
 func TestDecisionBridge_RejectsBeforeTheUpstream(t *testing.T) {
+	t.Parallel()
 	images := `{"model":"primary/jev-latest","input":[{"role":"user","content":[{"type":"input_image","image_url":"data:image/png;base64,AAAA"}]}],` +
 		`"questions":[{"type":"predicate","name":"q","instructions":"?"}]}`
 	cases := []struct {
@@ -131,6 +134,7 @@ func TestDecisionBridge_RejectsBeforeTheUpstream(t *testing.T) {
 }
 
 func TestDecisionBridge_Unauthenticated(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveSystemOneDecision(), serveStatus(500), asSystemOne)
 	h.apiKey = "wrong"
 	resp, _ := h.post("/v1/decisions", unifiedDecisionBody(t, "primary/jev-latest"))
@@ -139,6 +143,7 @@ func TestDecisionBridge_Unauthenticated(t *testing.T) {
 }
 
 func TestDecisionBridge_UpstreamErrorsUseTheOpenAIContract(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name     string
 		upstream int
@@ -169,6 +174,7 @@ func TestDecisionBridge_UpstreamErrorsUseTheOpenAIContract(t *testing.T) {
 }
 
 func TestDecisionBridge_FailsOverAcrossDecisionVendors(t *testing.T) {
+	t.Parallel()
 	// A System One primary that is down falls over to an OpenAI fallback; the
 	// body is re-shaped per rung.
 	h := newFailoverHarness(t, serveStatus(503), serveOpenAIDecision(), func(primary, fallback *models.LLM) {
@@ -192,6 +198,7 @@ func TestDecisionBridge_FailsOverAcrossDecisionVendors(t *testing.T) {
 }
 
 func TestDecisionBridge_SkipsFailoverRungsWithoutDecisionModels(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveStatus(503), serveOpenAIText("chat"), func(primary, fallback *models.LLM) {
 		primary.Vendor = models.SYSTEMONE
 		fallback.Vendor = models.ANTHROPIC
@@ -213,6 +220,7 @@ func closedURL(t *testing.T) string {
 }
 
 func TestDecisionBridge_RequestErrors(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveSystemOneDecision(), serveStatus(500), asSystemOne)
 
 	cases := []struct {
@@ -287,6 +295,7 @@ func bodyExcerptForTest(b []byte) string {
 }
 
 func TestDecisionBridge_UpstreamFailures(t *testing.T) {
+	t.Parallel()
 	t.Run("a System One 200 without answers is a 502", func(t *testing.T) {
 		serve := func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
@@ -353,6 +362,7 @@ func TestDecisionBridge_UpstreamFailures(t *testing.T) {
 // own failure rather than "vendor not supported on /ai", which named a
 // workaround (/llm/rest) that cannot serve chat either.
 func TestChatBridge_SkipsDecisionOnlyFailoverRungs(t *testing.T) {
+	t.Parallel()
 	for name, body := range map[string]string{"buffered": failoverChatBody, "streaming": failoverStreamBody} {
 		t.Run(name, func(t *testing.T) {
 			h := newFailoverHarness(t, serveStatus(503), serveSystemOneDecision(), func(primary, fallback *models.LLM) {
@@ -369,6 +379,7 @@ func TestChatBridge_SkipsDecisionOnlyFailoverRungs(t *testing.T) {
 }
 
 func TestChatBridge_RejectsDecisionOnlyRoutes(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveSystemOneDecision(), serveStatus(500), asSystemOne)
 	for _, body := range []string{
 		`{"model":"primary/jev-latest","messages":[{"role":"user","content":"hi"}]}`,
@@ -385,6 +396,7 @@ func TestChatBridge_RejectsDecisionOnlyRoutes(t *testing.T) {
 // loopback hop, the vendor is never called, and the reason reaches the
 // caller in the OpenAI envelope.
 func TestDecisionBridge_BudgetRefusal(t *testing.T) {
+	t.Parallel()
 	for name, tc := range map[string]struct {
 		mutate func(primary, fallback *models.LLM)
 		model  string
@@ -407,6 +419,7 @@ func TestDecisionBridge_BudgetRefusal(t *testing.T) {
 }
 
 func TestUnifiedListModels_ReportsCapabilities(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveSystemOneDecision(), serveStatus(500), asSystemOne)
 	req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+strconv.Itoa(h.port)+"/v1/models", nil)
 	require.NoError(t, err)

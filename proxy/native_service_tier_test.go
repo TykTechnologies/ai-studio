@@ -15,6 +15,7 @@ import (
 // Batch usage is recorded with its service tier on the chat record and the
 // proxy log; list-price traffic has none.
 func TestNative_ServiceTierRecorded(t *testing.T) {
+	t.Parallel()
 	h := newNativeHarness(t, nativeHarnessOpts{})
 	h.addPrice("claude-luna", 0.00001, 0.000002)
 	h.vendor.addBatch("msgbatch_T1", "ended")

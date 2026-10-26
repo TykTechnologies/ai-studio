@@ -16,6 +16,7 @@ import (
 // the vendor reads only the exact key. A params object carrying both
 // spellings must not let the filters see one prompt and the vendor another.
 func TestNativeCreateVerify_CaseVariantKeysDoNotBypassFilters(t *testing.T) {
+	t.Parallel()
 	for name, params := range map[string]string{
 		"Messages after messages": `{"model":"claude-luna","max_tokens":5,` +
 			`"messages":[{"role":"user","content":"something forbidden"}],` +

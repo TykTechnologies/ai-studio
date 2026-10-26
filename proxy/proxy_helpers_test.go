@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"net/http"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -87,13 +88,17 @@ func setupDB(t *testing.T) *gorm.DB {
 	return db
 }
 
+// Clear the signup domain filter for every test (allows any email domain).
+// It is set once, before any test runs: parallel tests read the config.
+func init() { config.Get("").FilterSignupDomains = nil }
+
 // setupTest initializes DB, does migrations, and starts analytics in one place.
 // The returned cancel stops the analytics recorder and waits for its writer to
 // return, so nothing is written to the database after it.
+//
+// The recorder is the process-wide analytics handler, so a test that uses
+// setupTest must not call t.Parallel(); see setupParallelTest.
 func setupTest(t *testing.T) (*gorm.DB, context.CancelFunc) {
-	// Clear signup domain filter for tests (allows any email domain)
-	config.Get("").FilterSignupDomains = nil
-
 	// Reset global analytics handler state before test
 	analytics.ResetHandler()
 
@@ -110,6 +115,46 @@ func setupTest(t *testing.T) (*gorm.DB, context.CancelFunc) {
 			s.Stop()
 		}
 	}
+}
+
+// setupParallelTest is setupTest for a test that may run in parallel with
+// others. Its analytics recorder belongs to the test rather than being the
+// process-wide handler: records reach it only through a request context that
+// carries it (analytics.WithHandler), which serveWithRecorder sets on every
+// request a harness's server handles. A record made on a context without it
+// goes to the process-wide handler, which no parallel test reads, so a lost
+// context shows up as a missing record, never as another test's. On cleanup
+// the recorder is stopped (its writer waited for) and the database closed.
+//
+// A test calls t.Parallel() only when it touches no process-wide state: the
+// global analytics handler (setupTest, analytics.SetHandler), agent tracing
+// (withAgentTracing, agenttrace sinks), a package var it overrides
+// (upstreamTransport, streamHeaderHookTimeout, fastNativeWorkers' timings),
+// t.Setenv, metrics, Bedrock's SDK client cache (keyed by LLM ID, which every
+// test database restarts at 1: bedrockHarness), or $SECRET references (they
+// resolve against the database the latest services.NewService registered).
+// Parallel tests run once every serial test has finished, so a serial test
+// may still change such state and restore it.
+func setupParallelTest(t *testing.T) (*gorm.DB, analytics.AnalyticsHandler) {
+	db := setupDB(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	recorder := analytics.NewDatabaseHandler(ctx, db)
+	t.Cleanup(func() {
+		cancel()
+		recorder.Stop()
+		if sqlDB, err := db.DB(); err == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	return db, recorder
+}
+
+// serveWithRecorder serves next with recorder on every request's context, so
+// the analytics of the requests it handles go to the test's own recorder.
+func serveWithRecorder(next http.Handler, recorder analytics.AnalyticsHandler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r.WithContext(analytics.WithHandler(r.Context(), recorder)))
+	})
 }
 
 // tearDownTest stops the analytics recorder, waiting for its writer so it

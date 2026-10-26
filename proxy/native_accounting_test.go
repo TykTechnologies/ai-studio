@@ -51,6 +51,7 @@ func (s *claimSettleFlakyStore) Settle(ctx context.Context, id uint, token, stat
 // settle retries them: the batch ends accounted by the download, recorded
 // once. Errors that persist leave the row to the reconciler, unrecorded.
 func TestNativeResults_DownloadAccountingRetriesStoreErrors(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name                    string
 		failClaims, failSettles int

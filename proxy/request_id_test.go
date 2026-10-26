@@ -15,6 +15,7 @@ import (
 // attempt included; the caller's X-Request-ID is recorded beside it and never
 // overwritten; and a client cannot choose the gateway's id.
 func TestRequestID_OneIDPerRequestAcrossTheLoopbackAndFailover(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveStatus(503), serveOpenAIText("from the fallback"), nil)
 
 	resp, body := h.post("/ai/primary/v1/chat/completions", failoverChatBody,

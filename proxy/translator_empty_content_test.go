@@ -50,6 +50,7 @@ func serveAnthropicEmpty(stopReason string) func(w http.ResponseWriter, r *http.
 // An empty Anthropic turn must reach an OpenAI client as a normal, empty
 // completion with the mapped finish_reason, not as a 502 "no response".
 func TestTranslator_AnthropicEmptyContent(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		stopReason string
 		finish     string

@@ -91,6 +91,7 @@ func streamCases() []streamCase {
 // events are cut, and a block ends the stream with the vendor's error
 // event; the event that tripped it never reaches the client.
 func TestStreamingGuardrail_BlocksEveryFormat(t *testing.T) {
+	t.Parallel()
 	for _, tc := range streamCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			h := newFailoverHarness(t, dribble(tc.contentType, tc.body), serveOpenAIText("never"), func(primary, _ *models.LLM) {
@@ -113,6 +114,7 @@ func TestStreamingGuardrail_BlocksEveryFormat(t *testing.T) {
 // A buffered Responses API answer's text reaches response guardrails (it has
 // output items, not choices, and was let through unread).
 func TestResponseGuardrail_BufferedResponsesText(t *testing.T) {
+	t.Parallel()
 	for _, text := range []string{"safe text", "FORBIDDEN text"} {
 		body := `{"id":"resp_1","object":"response","status":"completed","model":"gpt-4o","output":[{"type":"message","id":"m1","role":"assistant","content":[{"type":"output_text","text":"` + text + `","annotations":[]}]}],"usage":{"input_tokens":3,"output_tokens":2,"total_tokens":5}}`
 		serve := func(w http.ResponseWriter, r *http.Request) {
@@ -139,6 +141,7 @@ func TestResponseGuardrail_BufferedResponsesText(t *testing.T) {
 // must not get the upstream's length: it would read a truncated body (or
 // lose the error event) instead of the block.
 func TestStreamingGuardrail_UpstreamContentLength(t *testing.T) {
+	t.Parallel()
 	for _, tc := range streamCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			sized := func(w http.ResponseWriter, r *http.Request) {
@@ -164,6 +167,7 @@ func TestStreamingGuardrail_UpstreamContentLength(t *testing.T) {
 // events at a time. (Responses streams are rewritten by the native chain,
 // which changes their bytes with or without filters.)
 func TestStreamingGuardrail_CleanStreamUnchanged(t *testing.T) {
+	t.Parallel()
 	for _, tc := range streamCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			clean := strings.ReplaceAll(tc.body, "FORB", "PERM")
@@ -189,6 +193,7 @@ func TestStreamingGuardrail_CleanStreamUnchanged(t *testing.T) {
 // Bedrock invoke-with-response-stream cannot be read, so with response
 // filters it is refused rather than passed unfiltered.
 func TestStreamingGuardrail_BedrockInvokeStreamRefused(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, dribble("application/vnd.amazon.eventstream", "x"), serveOpenAIText("never"), func(primary, _ *models.LLM) {
 		primary.Vendor = models.BEDROCK
 		primary.Failover = models.LLMFailover{}

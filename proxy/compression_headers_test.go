@@ -51,6 +51,7 @@ func (s *postAuthSeen) at(path string) []string {
 // sees it (on the native routes directly, on the bridges on the /llm/call/
 // hop), and no vendor ever does, on any route.
 func TestCompressionHeader_ReachesPluginsNeverTheVendor(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name, path, body string
 		viaLoopback      bool
@@ -93,6 +94,7 @@ func TestCompressionHeader_ReachesPluginsNeverTheVendor(t *testing.T) {
 // The decisions bridge makes its own loopback request: the header reaches
 // the plugin on the inner hop there too, and not the vendor.
 func TestCompressionHeader_DecisionsBridge(t *testing.T) {
+	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIDecision(), serveStatus(500), noFailover)
 	seen := &postAuthSeen{}
 	h.proxy.SetAuthHooks(&AuthHooks{PostAuth: seen.hook})

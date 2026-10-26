@@ -49,6 +49,7 @@ func brokenStream(contentType string, start []byte) http.HandlerFunc {
 // plugins release their in-flight state there (a load balancer's count, a
 // rate limiter's slots, a cache's pending entry).
 func TestStreamCompletion_EveryExitCompletesOnce(t *testing.T) {
+	t.Parallel()
 	const path = "/llm/stream/primary/v1/chat/completions"
 	const req = `{"model":"gpt-4o","stream":true,"messages":[{"role":"user","content":"hi"}]}`
 	cases := []struct {
@@ -94,6 +95,7 @@ func TestStreamCompletion_EveryExitCompletesOnce(t *testing.T) {
 
 // The same on the native Bedrock stream.
 func TestBedrockNativeStream_EveryExitCompletesOnce(t *testing.T) {
+	t.Parallel()
 	const path = "/llm/stream/primary/model/m/converse-stream"
 	const req = `{"messages":[{"role":"user","content":[{"text":"tidy my inbox"}]}]}`
 	cases := []struct {

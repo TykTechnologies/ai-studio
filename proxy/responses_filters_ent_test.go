@@ -37,6 +37,7 @@ func withPrimaryFilters(t *testing.T, h *responsesHarness, scripts ...string) {
 // input, message items, tool outputs and prompt variables, on every path
 // that carries one.
 func TestResponsesFilters_BlockOnEveryPath(t *testing.T) {
+	t.Parallel()
 	h := newResponsesHarness(t)
 	withPrimaryFilters(t, h, responsesBlockScript)
 
@@ -69,6 +70,7 @@ func TestResponsesFilters_BlockOnEveryPath(t *testing.T) {
 
 // A redacting filter's edits are written back into the Responses fields.
 func TestResponsesFilters_RedactWritesBack(t *testing.T) {
+	t.Parallel()
 	h := newResponsesHarness(t)
 	withPrimaryFilters(t, h, nativeRedactScript)
 	resp, out := h.do(h.keyC, http.MethodPost, "/llm/rest/primary/v1/responses",
@@ -87,6 +89,7 @@ func TestResponsesFilters_RedactWritesBack(t *testing.T) {
 // With filters attached, a prompt the gateway cannot read is refused rather
 // than screened as empty; without filters it is the vendor's to judge.
 func TestResponsesFilters_UnreadableInputFailsClosed(t *testing.T) {
+	t.Parallel()
 	h := newResponsesHarness(t)
 	unreadable := `{"model":"gpt-4o","input":[{"role":"user","content":[{"type":"input_text","text":{"nested":"forbidden"}}]}]}`
 	resp, _ := h.do(h.keyC, http.MethodPost, "/llm/rest/primary/v1/responses", unreadable)
@@ -102,6 +105,7 @@ func TestResponsesFilters_UnreadableInputFailsClosed(t *testing.T) {
 
 // Batch lines with url /v1/responses are screened as Responses requests.
 func TestResponsesFilters_BatchLines(t *testing.T) {
+	t.Parallel()
 	h := newBatchesHarness(t)
 	withPrimaryFilters(t, h, responsesBlockScript)
 	line := `{"custom_id":"r1","method":"POST","url":"/v1/responses","body":{"model":"gpt-4o","input":"something forbidden"}}`
@@ -119,6 +123,7 @@ func TestResponsesFilters_BatchLines(t *testing.T) {
 // Items stored in a conversation reach the model through every response
 // that names it, so the filters screen them when they are stored.
 func TestResponsesFilters_ConversationItems(t *testing.T) {
+	t.Parallel()
 	h := newResponsesHarness(t)
 	h.primary.AllowedModels = []string{"^gpt-4o$"} // conversation items name no model
 	withPrimaryFilters(t, h, nativeRedactScript, responsesBlockScript)
