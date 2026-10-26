@@ -56,8 +56,9 @@ type Recorder struct {
 	// Finish hands the events to it rather than to the Sink installed by
 	// then: work that outlives the request (Hold) finishes the capture late,
 	// and must not land in a Sink installed after the request arrived (the
-	// next test's, when tests swap the Sink). With none at Begin, Finish
-	// uses the Sink installed when it runs.
+	// next test's, when tests swap the Sink). A capture begun with no Sink
+	// installed is dropped (DroppedNoSink), as it was when finished with
+	// none; hosts install the Sink before they serve requests.
 	sink *sinkHolder
 }
 
@@ -298,7 +299,7 @@ func (r *Recorder) Emit(ev *Event) {
 }
 
 // Finish completes the capture and hands the events to the Sink installed
-// when the capture began (else the one installed now): the primary
+// when the capture began (none: the events are dropped): the primary
 // span when it has a Kind, then the extra events. A zero EndTime is stamped
 // now and an empty Status becomes ok. Only the first call has an effect.
 func (r *Recorder) Finish() {
@@ -341,9 +342,6 @@ func (r *Recorder) Finish() {
 	}
 
 	h := r.sink
-	if h == nil {
-		h = currentSink.Load()
-	}
 	if h == nil {
 		n := uint64(len(extra))
 		if primary != nil {

@@ -7,8 +7,8 @@ import (
 
 // A capture finished after the Sink was replaced (work held past the
 // request: Hold) goes to the Sink installed when it began, and so does a
-// capture forked from it. With no Sink at Begin, Finish uses the one
-// installed by then. midsommar-clean-vrc.19.
+// capture forked from it. A capture begun with no Sink is dropped.
+// midsommar-clean-vrc.19.
 func TestFinishUsesTheSinkInstalledAtBegin(t *testing.T) {
 	withEnabled(t, true)
 	atBegin := withSink(t)
@@ -29,12 +29,16 @@ func TestFinishUsesTheSinkInstalledAtBegin(t *testing.T) {
 		t.Fatalf("sink at Begin got %d events, later sink %d; want 2 and 0", len(atBegin.events), len(later.events))
 	}
 
+	// Begun with no Sink installed: dropped, even if a Sink is installed
+	// before it finishes (a test without a sink must not feed the next
+	// test's).
 	SetSink(nil)
+	dropped := DroppedNoSink()
 	_, unbound := Begin(context.Background())
 	unbound.Update(func(ev *Event) { ev.Kind = KindLLMInference })
 	SetSink(later)
 	unbound.Finish()
-	if len(later.events) != 1 {
-		t.Fatalf("with no Sink at Begin, Finish uses the one installed then: got %d events", len(later.events))
+	if len(later.events) != 0 || DroppedNoSink() != dropped+1 {
+		t.Fatalf("a capture begun with no Sink is dropped: later sink got %d events, dropped %d", len(later.events), DroppedNoSink()-dropped)
 	}
 }
