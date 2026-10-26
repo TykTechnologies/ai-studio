@@ -51,7 +51,7 @@ func (v *converseVendor) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body = io.NopCloser(strings.NewReader(string(body)))
 	var signed http.Header
-	check := sigV4VerifyHandler("AKIDTEST", "secret", "us-east-1", &signed)
+	check := sigV4VerifyHandler("AKIDTEST", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "us-east-1", &signed)
 	if strings.HasSuffix(r.URL.Path, "/converse-stream") {
 		sigV4StreamHandlerWith(v.stream, check)(w, r)
 		return
@@ -89,7 +89,7 @@ func converseHarness(t *testing.T, failover bool, filters ...*models.Filter) (*f
 			primary.Failover = models.LLMFailover{}
 		}
 		primary.DefaultModel = "anthropic.claude-3"
-		primary.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "secret", "aws_region": "us-east-1"}
+		primary.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "aws_region": "us-east-1"}
 		primary.Filters = filters
 	})
 	bedrockVendor.InvalidateClientCache(h.primary.ID)
@@ -458,7 +458,7 @@ func TestBedrockBridges_Failover(t *testing.T) {
 			h := newFailoverHarness(t, serveStatus(503), v.serve, func(_, fallback *models.LLM) {
 				fallback.Vendor = models.BEDROCK
 				fallback.DefaultModel = "anthropic.claude-3"
-				fallback.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "secret", "aws_region": "us-east-1"}
+				fallback.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "aws_region": "us-east-1"}
 			})
 			h.primary.Failover.Targets[0].Model = "anthropic.claude-3"
 			require.NoError(t, h.db.Save(h.primary).Error)
@@ -497,7 +497,7 @@ func TestBedrockBridges_Router(t *testing.T) {
 					h.big.Vendor = models.BEDROCK
 					h.big.APIEndpoint = newFakeVendor(t, v.serve).server.URL
 					h.big.DefaultModel = "anthropic.claude-3"
-					h.big.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "secret", "aws_region": "us-east-1"}
+					h.big.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "aws_region": "us-east-1"}
 					require.NoError(t, h.db.Save(h.big).Error)
 					big := h.resolver.routes["big"]
 					big.model = "anthropic.claude-3"

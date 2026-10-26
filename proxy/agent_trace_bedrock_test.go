@@ -43,7 +43,7 @@ func withCapture(t *testing.T) *captureSink {
 	withAgentTracing(t, true)
 	sink := &captureSink{}
 	agenttrace.SetSink(sink)
-	agenttrace.SetFingerprinter(agenttrace.StaticFingerprinter{ID: 1, Key: []byte("k")})
+	agenttrace.SetFingerprinter(agenttrace.StaticFingerprinter{ID: 1, Key: []byte("proxy-agent-trace-test-key-32by")})
 	t.Cleanup(func() { agenttrace.SetSink(nil); agenttrace.SetFingerprinter(nil) })
 	return sink
 }
@@ -167,7 +167,7 @@ func TestAgentTraceBedrock_AIConverseKeepsToolCalls(t *testing.T) {
 		primary.Vendor = models.BEDROCK
 		primary.Failover = models.LLMFailover{}
 		primary.DefaultModel = "anthropic.claude-3"
-		primary.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "secret", "aws_region": "us-east-1"}
+		primary.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "aws_region": "us-east-1"}
 	})
 	bedrockVendor.InvalidateClientCache(h.primary.ID)
 	t.Cleanup(func() { bedrockVendor.InvalidateClientCache(h.primary.ID) })

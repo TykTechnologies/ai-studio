@@ -64,7 +64,7 @@ func sigV4StreamHandler(t *testing.T, region string, got *http.Header) http.Hand
 	return func(w http.ResponseWriter, r *http.Request) {
 		rec := httptest.NewRecorder()
 		var h http.Header
-		sigV4VerifyHandler("AKIDTEST", "secret", region, &h)(rec, r)
+		sigV4VerifyHandler("AKIDTEST", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", region, &h)(rec, r)
 		mu.Lock()
 		*got = h
 		mu.Unlock()
@@ -86,7 +86,7 @@ func bedrockOverrideHarness(t *testing.T, serve http.HandlerFunc, endpoint strin
 		if endpoint != "" {
 			primary.APIEndpoint = endpoint
 		}
-		primary.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "secret", "aws_region": "us-east-1"}
+		primary.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "aws_region": "us-east-1"}
 	})
 	return h, routeUpstreamTo(t, h.primaryVendor.server.URL)
 }
@@ -96,7 +96,7 @@ func bedrockOverrideHarness(t *testing.T, serve http.HandlerFunc, endpoint strin
 // LLM's (AWS answered 403).
 func TestBedrockREST_UpstreamOverrideSignsForItsRegion(t *testing.T) {
 	var received http.Header
-	h, host := bedrockOverrideHarness(t, sigV4VerifyHandler("AKIDTEST", "secret", "eu-west-1", &received), "https://bedrock-runtime.us-east-1.amazonaws.com")
+	h, host := bedrockOverrideHarness(t, sigV4VerifyHandler("AKIDTEST", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "eu-west-1", &received), "https://bedrock-runtime.us-east-1.amazonaws.com")
 	h.proxy.SetAuthHooks(overridePostAuth("https://bedrock-runtime.eu-west-1.amazonaws.com"))
 
 	resp, body := h.post("/llm/rest/primary/model/anthropic.claude-3/converse", `{"messages":[{"role":"user","content":[{"text":"hi"}]}]}`)

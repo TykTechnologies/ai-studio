@@ -73,7 +73,7 @@ func TestResponseHooks_ExchangeMetadata(t *testing.T) {
 		{"openai stream", models.OPENAI, serveOpenAIText("hi"), "/llm/stream/primary/v1/chat/completions", failoverStreamBody, "gpt-4o", true},
 		{"anthropic", models.ANTHROPIC, serveAnthropic(t), "/llm/rest/primary/v1/messages", `{"model":"claude-sonnet-5","max_tokens":64,"messages":[{"role":"user","content":"hi"}]}`, "claude-sonnet-5", false},
 		{"google", models.GOOGLEAI, serveGemini, "/llm/rest/primary/v1beta/models/gemini-2.5-flash:generateContent", `{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`, "gemini-2.5-flash", false},
-		{"bedrock", models.BEDROCK, sigV4VerifyHandler("AKIDTEST", "secret", "us-east-1", &signed), "/llm/rest/primary/model/" + sdkEscapedARN + "/converse", converse, profileARN, false},
+		{"bedrock", models.BEDROCK, sigV4VerifyHandler("AKIDTEST", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "us-east-1", &signed), "/llm/rest/primary/model/" + sdkEscapedARN + "/converse", converse, profileARN, false},
 		{"bedrock stream", models.BEDROCK, sigV4StreamHandler(t, "us-east-1", &signed), "/llm/stream/primary/model/" + sdkEscapedARN + "/converse-stream", converse, profileARN, true},
 	}
 	for _, tc := range cases {
@@ -82,7 +82,7 @@ func TestResponseHooks_ExchangeMetadata(t *testing.T) {
 				primary.Vendor = tc.vendor
 				primary.Failover = models.LLMFailover{}
 				if tc.vendor == models.BEDROCK {
-					primary.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "secret", "aws_region": "us-east-1"}
+					primary.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "aws_region": "us-east-1"}
 				}
 			})
 			hook := newMetadataHook()

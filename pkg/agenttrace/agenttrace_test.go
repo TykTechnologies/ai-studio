@@ -42,7 +42,7 @@ func withSink(t testing.TB) *captureSink {
 
 func fullEvent() *Event {
 	ts := func(sec int64) time.Time { return time.Unix(1760000000+sec, 123456789).UTC() }
-	f := StaticFingerprinter{ID: 7, Key: []byte("k")}
+	f := StaticFingerprinter{ID: 7, Key: []byte("agenttrace-test-key-32-bytes-long")} // HMAC keys under 112 bits panic under fips140=only
 	return &Event{
 		Kind:           KindLLMInference,
 		SpanID:         SpanID{1, 2, 3, 4, 5, 6, 7, 8},
@@ -251,7 +251,7 @@ func TestIdempotencyKey(t *testing.T) {
 }
 
 func TestStaticFingerprinter(t *testing.T) {
-	f := StaticFingerprinter{ID: 3, Key: []byte("secret")}
+	f := StaticFingerprinter{ID: 3, Key: []byte("agenttrace-static-test-secret")}
 	a, b := f.Fingerprint([]byte("x")), f.Fingerprint([]byte("x"))
 	if a.String() != b.String() || a.KeyID() != 3 || len(a) != 33 {
 		t.Fatalf("fingerprint not deterministic or wrong shape: %s", a)

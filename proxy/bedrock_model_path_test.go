@@ -53,7 +53,7 @@ func bedrockARNHarness(t *testing.T, serve http.HandlerFunc) *failoverHarness {
 		primary.Failover = models.LLMFailover{}
 		primary.DefaultModel = "anthropic.claude-3"
 		primary.AllowedModels = []string{`^arn:aws:bedrock:us-east-1:123456789012:inference-profile/us\.anthropic\.claude-3$`}
-		primary.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "secret", "aws_region": "us-east-1"}
+		primary.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "aws_region": "us-east-1"}
 	})
 	bedrockVendor.InvalidateClientCache(h.primary.ID)
 	t.Cleanup(func() { bedrockVendor.InvalidateClientCache(h.primary.ID) })
@@ -66,7 +66,7 @@ func bedrockARNHarness(t *testing.T, serve http.HandlerFunc) *failoverHarness {
 func TestBedrockREST_EscapedARNModelID(t *testing.T) {
 	var received http.Header
 	rec := &pathRecorder{}
-	h := bedrockARNHarness(t, rec.wrap(sigV4VerifyHandler("AKIDTEST", "secret", "us-east-1", &received)))
+	h := bedrockARNHarness(t, rec.wrap(sigV4VerifyHandler("AKIDTEST", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "us-east-1", &received)))
 
 	for _, route := range []string{"/llm/rest/primary", "/llm/call/primary"} {
 		t.Run(route, func(t *testing.T) {
@@ -99,7 +99,7 @@ func TestBedrockNativeStream_EscapedARNModelID(t *testing.T) {
 // "/") is still refused: validation runs on the whole ID.
 func TestBedrockREST_ARNModelValidationRefusesOthers(t *testing.T) {
 	var received http.Header
-	h := bedrockARNHarness(t, sigV4VerifyHandler("AKIDTEST", "secret", "us-east-1", &received))
+	h := bedrockARNHarness(t, sigV4VerifyHandler("AKIDTEST", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "us-east-1", &received))
 	other := url.PathEscape("arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.meta.llama3")
 	resp, body := h.post("/llm/rest/primary/model/"+other+"/converse", `{"messages":[{"role":"user","content":[{"text":"hi"}]}]}`)
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode, "%s", body)
@@ -110,7 +110,7 @@ func TestBedrockREST_ARNModelValidationRefusesOthers(t *testing.T) {
 // runtime endpoint, signed for it.
 func TestBedrockREST_RegionOnlyEndpoint(t *testing.T) {
 	var received http.Header
-	h, host := bedrockOverrideHarness(t, sigV4VerifyHandler("AKIDTEST", "secret", "eu-west-1", &received), "eu-west-1")
+	h, host := bedrockOverrideHarness(t, sigV4VerifyHandler("AKIDTEST", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "eu-west-1", &received), "eu-west-1")
 
 	resp, body := h.post("/llm/rest/primary/model/anthropic.claude-3/converse", `{"messages":[{"role":"user","content":[{"text":"hi"}]}]}`)
 	require.Equal(t, http.StatusOK, resp.StatusCode, "%s", body)
