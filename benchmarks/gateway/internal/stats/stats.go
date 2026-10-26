@@ -116,9 +116,7 @@ func DiffOfPercentiles(a, b []float64, p, level float64, seed uint64) CI {
 		for j := range rb {
 			rb[j] = b[r.IntN(len(b))]
 		}
-		sort.Float64s(ra)
-		sort.Float64s(rb)
-		diffs[i] = PercentileSorted(rb, p) - PercentileSorted(ra, p)
+		diffs[i] = percentileInPlace(rb, p) - percentileInPlace(ra, p)
 	}
 	return interval(est, diffs, level)
 }
@@ -139,10 +137,100 @@ func MedianOfPaired(diffs []float64, level float64, seed uint64) CI {
 		for j := range rs {
 			rs[j] = d[r.IntN(len(d))]
 		}
-		sort.Float64s(rs)
-		boot[i] = PercentileSorted(rs, 50)
+		boot[i] = percentileInPlace(rs, 50)
 	}
 	return interval(est, boot, level)
+}
+
+// percentileInPlace returns PercentileSorted of s sorted, bit for bit, but
+// selects the two ranks it reads instead of sorting: O(n) rather than
+// O(n log n), which is most of a bootstrap's time. s is reordered.
+func percentileInPlace(s []float64, p float64) float64 {
+	n := len(s)
+	if n == 0 {
+		return math.NaN()
+	}
+	if p <= 0 || p >= 100 {
+		k := 0
+		for i := 1; i < n; i++ {
+			if (p <= 0 && floatLess(s[i], s[k])) || (p >= 100 && floatLess(s[k], s[i])) {
+				k = i
+			}
+		}
+		return s[k]
+	}
+	rank := p / 100 * float64(n-1)
+	lo := int(math.Floor(rank))
+	hi := int(math.Ceil(rank))
+	frac := rank - float64(lo)
+	selectKth(s, lo)
+	sHi := s[lo]
+	if hi != lo {
+		// After selectKth everything right of lo ranks at or above it, so
+		// the next rank is their minimum.
+		k := lo + 1
+		for i := lo + 2; i < n; i++ {
+			if floatLess(s[i], s[k]) {
+				k = i
+			}
+		}
+		sHi = s[k]
+	}
+	return s[lo] + (sHi-s[lo])*frac
+}
+
+// floatLess is the order sort.Float64s uses: NaNs before everything else.
+func floatLess(a, b float64) bool {
+	return a < b || (math.IsNaN(a) && !math.IsNaN(b))
+}
+
+// selectKth reorders s so that s[k] holds the element a sort would put
+// there, nothing left of k ranks above it and nothing right of k below it
+// (Hoare's quickselect with a median-of-three pivot).
+func selectKth(s []float64, k int) {
+	lo, hi := 0, len(s)-1
+	for hi-lo > 16 {
+		mid := lo + (hi-lo)/2
+		if floatLess(s[mid], s[lo]) {
+			s[mid], s[lo] = s[lo], s[mid]
+		}
+		if floatLess(s[hi], s[lo]) {
+			s[hi], s[lo] = s[lo], s[hi]
+		}
+		if floatLess(s[hi], s[mid]) {
+			s[hi], s[mid] = s[mid], s[hi]
+		}
+		pivot := s[mid]
+		i, j := lo, hi
+		for i <= j {
+			for floatLess(s[i], pivot) {
+				i++
+			}
+			for floatLess(pivot, s[j]) {
+				j--
+			}
+			if i <= j {
+				s[i], s[j] = s[j], s[i]
+				i++
+				j--
+			}
+		}
+		// Now s[lo..j] <= pivot <= s[i..hi], and s[j+1..i-1] == pivot.
+		switch {
+		case k <= j:
+			hi = j
+		case k >= i:
+			lo = i
+		default:
+			return
+		}
+	}
+	// Insertion sort the short remainder.
+	for i := lo + 1; i <= hi; i++ {
+		for j := i; j > lo && floatLess(s[j], s[j-1]); j-- {
+			s[j], s[j-1] = s[j-1], s[j]
+		}
+	}
 }
 
 func interval(est float64, boot []float64, level float64) CI {

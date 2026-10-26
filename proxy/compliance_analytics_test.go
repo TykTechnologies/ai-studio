@@ -70,7 +70,7 @@ func TestFilterBlockAnalytics(t *testing.T) {
 	proxy.analyzeResponse(llm, app, http.StatusBadRequest, respBody, reqBody, req)
 
 	// Wait for analytics to process
-	time.Sleep(100 * time.Millisecond)
+	waitForProxyLog(t, db, app.ID, http.StatusBadRequest)
 
 	// Verify ProxyLog was created with correct status code
 	var proxyLog models.ProxyLog
@@ -139,7 +139,7 @@ func TestStreamingFilterBlockAnalytics(t *testing.T) {
 	proxy.analyzeStreamingResponse(llm, app, req, http.StatusBadRequest, respBody, reqBody, chunks, now, "")
 
 	// Wait for analytics to process
-	time.Sleep(100 * time.Millisecond)
+	waitForProxyLog(t, db, app.ID, http.StatusBadRequest)
 
 	// Verify ProxyLog was created
 	var proxyLog models.ProxyLog
@@ -199,7 +199,7 @@ func TestInactiveCredentialAnalytics(t *testing.T) {
 	assert.False(t, valid, "Inactive credential should not be valid")
 
 	// Wait for analytics to process
-	time.Sleep(100 * time.Millisecond)
+	waitForProxyLog(t, db, app.ID, http.StatusUnauthorized)
 
 	// Verify ProxyLog was created for the inactive credential attempt
 	var proxyLog models.ProxyLog
