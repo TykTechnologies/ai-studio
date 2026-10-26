@@ -276,9 +276,8 @@ jobs:
         uses: WarpBuilds/cache/restore@f643a1ba29942d56621d07fc2d4284c7219868ad # v1
         with:
           path: ~/.cache/go-build
-          key: ${{ runner.os }}-gotest2pr11b-${{ matrix.edition }}-${{ github.run_id }}
+          key: ${{ runner.os }}-gotest2-${{ matrix.edition }}-${{ github.run_id }}
           restore-keys: |
-            ${{ runner.os }}-gotest2pr11b-${{ matrix.edition }}-
             ${{ runner.os }}-gotest2-${{ matrix.edition }}-
 
       - name: Setup Go
@@ -431,7 +430,7 @@ jobs:
       # JOB_START - 60 min; anything older was not used and goes. The
       # top-level README and trim.txt are kept.
       - name: Trim the Go build cache
-        if: ${{ !cancelled() && (github.event_name == 'push' && github.ref == 'refs/heads/main' || github.head_ref == 'test/cacheable-packages') && env.MODE == 'pr' }}
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && env.MODE == 'pr' }}
         run: |
           cache=$(go env GOCACHE)
           cutoff=$((JOB_START - 61 * 60))
@@ -442,11 +441,11 @@ jobs:
       # Saved even when a test failed: the build cache is still good, and Go
       # never caches a failing result.
       - name: Save Go build cache
-        if: ${{ !cancelled() && (github.event_name == 'push' && github.ref == 'refs/heads/main' || github.head_ref == 'test/cacheable-packages') && env.MODE == 'pr' }}
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && env.MODE == 'pr' }}
         uses: WarpBuilds/cache/save@f643a1ba29942d56621d07fc2d4284c7219868ad # v1
         with:
           path: ~/.cache/go-build
-          key: ${{ runner.os }}-gotest2pr11b-${{ matrix.edition }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ${{ runner.os }}-gotest2-${{ matrix.edition }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Save Go module cache
         if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' && env.MODE == 'pr' && steps.gomod.outputs.cache-hit != 'true' }}
