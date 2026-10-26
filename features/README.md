@@ -236,6 +236,12 @@ Each feature specification below provides detailed documentation on the individu
 - Admin UI for secret management
 - Secure deployment configuration
 
+### [FIPS 140-3 Builds](FIPS.md)
+- GOFIPS140=v1.0.0 builds, -fips packages and images, fips-verify gate
+- Runtime self-report (startup log, /health, edge heartbeats)
+- Approved formats written only in FIPS mode, every format read by every build
+- Strict-mode testing (make test-fips) and the fips-guard static check
+
 ### [Single Sign-On (SSO) Support](SSOSupport.md)
 - Multiple identity provider integration (OpenID Connect, SAML, LDAP)
 - Profile management with Monaco editor-based UI
