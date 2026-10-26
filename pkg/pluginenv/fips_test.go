@@ -16,6 +16,14 @@ import (
 // buildPlugin compiles a trivial Go program, with GOFIPS140=v1.0.0 when fips.
 func buildPlugin(t *testing.T, fips bool) string {
 	t.Helper()
+	if fips {
+		return buildPluginWith(t, "v1.0.0")
+	}
+	return buildPluginWith(t, "off")
+}
+
+func buildPluginWith(t *testing.T, gofips140 string) string {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("builds Go binaries")
 	}
@@ -26,11 +34,7 @@ func buildPlugin(t *testing.T, fips bool) string {
 	cmd := exec.Command("go", "build", "-o", out, ".")
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=")
-	if fips {
-		cmd.Env = append(cmd.Env, "GOFIPS140=v1.0.0")
-	} else {
-		cmd.Env = append(cmd.Env, "GOFIPS140=off")
-	}
+	cmd.Env = append(cmd.Env, "GOFIPS140="+gofips140)
 	b, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(b))
 	return out
@@ -43,6 +47,11 @@ func TestFIPSBuild(t *testing.T) {
 	ok, why = FIPSBuild(buildPlugin(t, false))
 	assert.False(t, ok)
 	assert.Equal(t, "built without GOFIPS140", why)
+
+	// "latest" is the toolchain's module, not the CMVP-validated v1.0.0.
+	ok, why = FIPSBuild(buildPluginWith(t, "latest"))
+	assert.False(t, ok)
+	assert.Equal(t, "built with GOFIPS140=latest, not the validated v1.0.0", why)
 
 	script := filepath.Join(t.TempDir(), "plugin.sh")
 	require.NoError(t, os.WriteFile(script, []byte("#!/bin/sh\n"), 0o755))

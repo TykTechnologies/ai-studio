@@ -12,7 +12,8 @@ import (
 var fipsEnabled = fips140.Enabled
 
 // FIPSBuild reports whether the Go binary at path is a FIPS 140-3 build:
-// built with GOFIPS140 and defaulting to fips140=on (or only). why says
+// built against the validated module (GOFIPS140=v1.0.0) and defaulting to
+// fips140=on (or only). why says
 // what is missing when it is not, including that the file is not a readable
 // Go binary (a plugin in another language cannot be told apart).
 func FIPSBuild(path string) (ok bool, why string) {
@@ -31,6 +32,9 @@ func FIPSBuild(path string) (ok bool, why string) {
 	}
 	if gofips == "" || gofips == "off" {
 		return false, "built without GOFIPS140"
+	}
+	if gofips != "v1.0.0" && !strings.HasPrefix(gofips, "v1.0.0-") {
+		return false, "built with GOFIPS140=" + gofips + ", not the validated v1.0.0"
 	}
 	for _, kv := range strings.Split(godebug, ",") {
 		if kv == "fips140=on" || kv == "fips140=only" {
