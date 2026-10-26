@@ -133,34 +133,26 @@ jobs:
         id: pw
         run: echo "version=$(jq -r '.packages["node_modules/@playwright/test"].version' tests/ui/package-lock.json)" >> "$GITHUB_OUTPUT"
 
-      # The browser download, keyed on the Playwright version.
-      - name: Cache Playwright browsers
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-${{ runner.arch }}-ms-playwright-${{ steps.pw.outputs.version }}
+      # The tests run in Microsoft's Playwright image for this version, which
+      # has the browser and its system libraries: installing them with apt
+      # (playwright install --with-deps) hung for up to 14 minutes on a slow
+      # mirror, and retries did not help.
+      - name: Pull the Playwright image
+        env:
+          IMAGE: mcr.microsoft.com/playwright:v${{ steps.pw.outputs.version }}-noble
+        run: |
+          for attempt in 1 2 3; do
+            timeout 300 docker pull -q "$IMAGE" && exit 0
+            echo "::warning::docker pull $IMAGE failed (attempt $attempt)"
+            sleep 5
+          done
+          exit 1
 
-      # install-deps runs apt, which once hung for 14 minutes on a slow
-      # mirror: give each try four minutes, and try three times. The timeout
-      # kills npx, not the apt-get it started as root, which would keep the
-      # dpkg lock, so stop that and repair dpkg before the next try.
-      - name: Install Playwright
+      - name: Install test dependencies
         working-directory: tests/ui
         run: |
           npm ci --ignore-scripts
           npm rebuild
-          npx playwright install chromium
-          for attempt in 1 2 3; do
-            if timeout -k 10 240 npx playwright install-deps chromium; then
-              exit 0
-            fi
-            echo "::warning::playwright install-deps failed or timed out (attempt $attempt)"
-            sudo pkill -9 -x apt-get || true
-            sudo pkill -9 -x dpkg || true
-            sleep 2
-            sudo dpkg --configure -a || true
-          done
-          exit 1
 
       - name: Wait for AI Studio
         run: |
@@ -255,7 +247,17 @@ jobs:
           TEST_MOCK_UPSTREAM_HOST: host.docker.internal
           DEBUG: pw:api
           PWDEBUG: 0
-        run: npx playwright test --project='chromium' --reporter=list,html --timeout=60000 ${{ steps.specs.outputs.list }}
+          IMAGE: mcr.microsoft.com/playwright:v${{ steps.pw.outputs.version }}-noble
+        # Host networking: the suite reaches the stack on localhost, and the
+        # mock LLM upstream it starts is reached from the studio container
+        # as host.docker.internal, as when it ran on the runner itself.
+        run: |
+          docker run --rm --network host --ipc=host \
+            -e CI -e BOOTSTRAP_ADMIN_EMAIL -e BOOTSTRAP_ADMIN_PASSWORD \
+            -e TEST_PROXY_URL -e TEST_MOCK_UPSTREAM_HOST -e DEBUG -e PWDEBUG \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -w "$PWD" \
+            "$IMAGE" \
+            npx playwright test --project='chromium' --reporter=list,html --timeout=60000 ${{ steps.specs.outputs.list }}
 
       # Saved even when a test failed: the caches only hold build inputs.
       - name: Save container caches
