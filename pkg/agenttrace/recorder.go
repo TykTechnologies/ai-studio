@@ -52,6 +52,13 @@ type Recorder struct {
 	// discarded is set by Discard; From then returns nil, so every hook on
 	// the request stops at its first check.
 	discarded atomic.Bool
+	// sink is the Sink installed when the capture began (nil: none was).
+	// Finish hands the events to it rather than to the Sink installed by
+	// then: work that outlives the request (Hold) finishes the capture late,
+	// and must not land in a Sink installed after the request arrived (the
+	// next test's, when tests swap the Sink). With none at Begin, Finish
+	// uses the Sink installed when it runs.
+	sink *sinkHolder
 }
 
 func noRelease() {}
@@ -97,7 +104,7 @@ func Begin(ctx context.Context) (context.Context, *Recorder) {
 	if r, ok := ctx.Value(ctxKey{}).(*Recorder); ok && r != nil {
 		return ctx, r
 	}
-	r := &Recorder{}
+	r := &Recorder{sink: currentSink.Load()}
 	r.span.SpanID = NewSpanID()
 	r.span.StartTime = time.Now()
 	if n := gatewayNode.Load(); n != nil {
@@ -132,7 +139,7 @@ func Fork(ctx context.Context) (context.Context, *Recorder) {
 	if parent == nil {
 		return ctx, nil
 	}
-	r := &Recorder{}
+	r := &Recorder{sink: parent.sink}
 	parent.mu.Lock()
 	r.span.TraceID = parent.span.TraceID
 	r.span.ParentSpanID = parent.span.ParentSpanID
@@ -290,7 +297,8 @@ func (r *Recorder) Emit(ev *Event) {
 	r.extra = append(r.extra, ev)
 }
 
-// Finish completes the capture and hands the events to the Sink: the primary
+// Finish completes the capture and hands the events to the Sink installed
+// when the capture began (else the one installed now): the primary
 // span when it has a Kind, then the extra events. A zero EndTime is stamped
 // now and an empty Status becomes ok. Only the first call has an effect.
 func (r *Recorder) Finish() {
@@ -332,7 +340,10 @@ func (r *Recorder) Finish() {
 		}
 	}
 
-	h := currentSink.Load()
+	h := r.sink
+	if h == nil {
+		h = currentSink.Load()
+	}
 	if h == nil {
 		n := uint64(len(extra))
 		if primary != nil {
