@@ -141,7 +141,25 @@ type scanResult struct {
 	// rather than the whole request blocked. toolErr is that failure.
 	failedTools map[int]bool
 	toolErr     error
+	// errorClass is, per unscanned reason, the guardrails.ErrorClass of the
+	// first provider failure that gave it, so the event can name the cause.
+	errorClass map[string]string
+	// runChars is the text the run sent; notSmall why the run was not
+	// small, so a provider failure did not follow the fail mode (one of the
+	// notSmall* values, "" for a small run).
+	runChars int
+	notSmall string
 }
+
+// Why a run was not small (scanResult.notSmall): the fail mode did not
+// decide a provider failure in it.
+const (
+	notSmallChars   = "run_chars" // more text than budget.single_call_chars
+	notSmallCalls   = "run_calls" // more calls per trust class than a small run makes
+	notSmallSeams   = "seams"     // a redacting run that scans seams afterwards
+	notSmallResplit = "resplit"   // a refused call re-sent one segment per call
+	notSmallLocal   = "local"     // an in-process provider, never left to the fail mode
+)
 
 // piece is a slice of one segment sent to the provider.
 type piece struct {
@@ -211,7 +229,7 @@ type scanJob struct {
 
 // scan runs the provider over the segments.
 func (j *scanJob) scan() scanResult {
-	j.res = scanResult{rewritten: map[int]string{}, unscanned: map[int]string{}, failedTools: map[int]bool{}}
+	j.res = scanResult{rewritten: map[int]string{}, unscanned: map[int]string{}, failedTools: map[int]bool{}, errorClass: map[string]string{}}
 	j.pieces = map[int][]piece{}
 	j.rewrites = map[int]map[int]string{}
 	j.unpinned = map[int]bool{}
@@ -251,7 +269,18 @@ func (j *scanJob) scan() scanResult {
 	// Small: within single_call_chars and few calls per trust class (see
 	// callsWithinSmallRun), so neither the split by trust nor a provider's
 	// request per segment makes an ordinary request lose the fail mode.
-	small := !seamsLater && runeTotal(all) <= j.cfg.Budget.SingleCallChars && j.callsWithinSmallRun(calls)
+	j.res.runChars = runeTotal(all)
+	small := !seamsLater && j.res.runChars <= j.cfg.Budget.SingleCallChars && j.callsWithinSmallRun(calls)
+	switch {
+	case j.caps.Local:
+		j.res.notSmall = notSmallLocal
+	case seamsLater:
+		j.res.notSmall = notSmallSeams
+	case j.res.runChars > j.cfg.Budget.SingleCallChars:
+		j.res.notSmall = notSmallChars
+	case !small:
+		j.res.notSmall = notSmallCalls
+	}
 
 	ctx, cancel := j.budgetContext()
 	defer cancel()
@@ -661,6 +690,9 @@ func (j *scanJob) eachResult(budget context.Context, calls []call, results []cal
 // not fit is unscanned.
 func (j *scanJob) resplit(ctx context.Context, c call, redact *guardrails.RedactionSpec) ([]call, []callResult) {
 	j.small = false
+	if j.res.notSmall == "" {
+		j.res.notSmall = notSmallResplit
+	}
 	var calls []call
 	for _, parent := range parents(c) {
 		var group call
@@ -687,6 +719,9 @@ func (j *scanJob) recordFailure(budget context.Context, r callResult, small bool
 	reason := failureReason(budget, r, small, j.request, j.caps.Local)
 	slog.Debug("guardrail provider call failed", "provider", j.cfg.Provider, "error", r.err)
 	if reason != "" {
+		if _, ok := j.res.errorClass[reason]; !ok {
+			j.res.errorClass[reason] = guardrails.ErrorClass(r.err)
+		}
 		metrics.RecordGuardrailError(j.ctx, j.cfg.Provider, "unscanned")
 		slog.Warn("guardrail provider call failed; its segments are unscanned",
 			"provider", j.cfg.Provider, "error_class", guardrails.ErrorClass(r.err), "reason", reason)
@@ -918,9 +953,11 @@ func (r scanResult) unscannedFindings() []guardrails.Finding {
 
 // unscannedEvents records unscanned segments: one event per reason, with
 // the roles and kinds of the segments, how many there were, the largest
-// one's size and the limit that applied. Like every guardrail event it
-// carries no text.
-func unscannedEvents(filterName string, cfg guardrails.Config, segs []guardrails.Segment, unscanned map[int]string, action string) []ComplianceEventOutput {
+// one's size and the limit that applied. A provider failure also names its
+// error class and, when the fail mode did not decide it, why (fail_mode_skipped).
+// Like every guardrail event it carries no text.
+func unscannedEvents(filterName string, cfg guardrails.Config, segs []guardrails.Segment, res scanResult, action string) []ComplianceEventOutput {
+	unscanned := res.unscanned
 	type group struct {
 		count    int
 		maxChars int
@@ -944,7 +981,7 @@ func unscannedEvents(filterName string, cfg guardrails.Config, segs []guardrails
 		// Which messages or tool results were not checked: never their text.
 		if len(g.segments) < maxEvidenceSegments {
 			ref := map[string]any{"index": i, "role": segs[i].Role, "kind": segmentKind(segs[i]), "chars": chars,
-				"sha256": guardrails.TextSHA256(segs[i].Text)}
+				"sha256": guardrails.TextSHA256(segs[i].Text), "excerpt_status": excerptNotScanned}
 			if name := safeLabel(segs[i].ToolName); name != "" {
 				ref["tool"] = name
 			}
@@ -988,6 +1025,19 @@ func unscannedEvents(filterName string, cfg guardrails.Config, segs []guardrails
 		case unscannedTimeBudget:
 			meta["limit"] = cfg.Budget.TimeMs
 			meta["setting"] = "budget.time_ms"
+		}
+		if class := res.errorClass[reason]; class != "" {
+			meta["error_class"] = class
+		}
+		switch reason {
+		case unscannedProviderError, unscannedProviderPanic, unscannedBusy, unscannedInputRejected, unscannedTimeBudget:
+			// Why the fail mode did not let this through (or block it all).
+			meta["fail_mode"] = cfg.FailMode
+			meta["run_chars"] = res.runChars
+			meta["single_call_chars"] = cfg.Budget.SingleCallChars
+			if res.notSmall != "" {
+				meta["fail_mode_skipped"] = res.notSmall
+			}
 		}
 		events = append(events, ComplianceEventOutput{
 			EventType:   "guardrail." + unscannedDetector,

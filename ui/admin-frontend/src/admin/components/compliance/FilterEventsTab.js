@@ -317,7 +317,7 @@ const FilterEventsTab = ({ startDate, endDate }) => {
                           <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                             <Box sx={{ px: 4, py: 2, bgcolor: "action.hover" }}>
                               <EventGuide event={e} />
-                              <FlaggedText metadata={e.metadata} appId={e.app_id} />
+                              <FlaggedText metadata={e.metadata} appId={e.app_id} eventType={e.event_type} />
                               <Typography variant="caption" color="text.secondary">
                                 Metadata
                               </Typography>
