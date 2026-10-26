@@ -28,6 +28,7 @@ api/auth_handlers_test.go                        golang.org/x/crypto/bcrypt  tes
 auth/auth_test.go                                golang.org/x/crypto/bcrypt  test builds and checks bcrypt hashes; .14
 auth/auth_lifecycle_test.go                      golang.org/x/crypto/bcrypt  test seeds a bcrypt-hashed user; .14
 services/oauth_client_service_test.go            golang.org/x/crypto/bcrypt  test checks the stored OAuth secret is bcrypt; .14
+models/password_cost_test.go                     golang.org/x/crypto/bcrypt  test checks new hashes use bcrypt.MinCost in test binaries and a DefaultCost-style hash still verifies; .14
 
 # --- Secrets at rest (midsommar-clean-8dy7.10, .13)
 secrets/models.go                                golang.org/x/crypto/scrypt  v2 secrets KDF; the v2 reader stays, FIPS-mode writes move to v3 PBKDF2 in .13
