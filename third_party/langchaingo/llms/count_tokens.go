@@ -3,6 +3,7 @@ package llms
 import (
 	"log"
 
+	_ "github.com/TykTechnologies/midsommar/v2/pkg/tiktokenbpe" // Tyk: SHA-1-free rank-file cache in FIPS mode
 	"github.com/pkoukk/tiktoken-go"
 )
 
