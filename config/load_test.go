@@ -65,8 +65,10 @@ func TestNormalizeBasePath(t *testing.T) {
 }
 
 // A process started outside the repository still has the documentation links.
+// The working directory is / rather than a fresh temporary directory, whose
+// name would change go test's result cache key on every run.
 func TestDocsLinksAreEmbedded(t *testing.T) {
-	t.Chdir(t.TempDir())
+	t.Chdir("/")
 	conf := LoadFrom(func(string) string { return "" })
 	if len(conf.DocsLinks) == 0 {
 		t.Fatal("no documentation links without config/docs_links.json on disk")

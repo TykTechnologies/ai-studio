@@ -110,6 +110,7 @@ func TestUpdateBrandingSettings_AdminOnly(t *testing.T) {
 }
 
 func TestUploadLogo_AdminOnly(t *testing.T) {
+	useTempBrandingStorage(t)
 	db := apitest.SetupTestDB(t)
 	svc := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, svc)
@@ -175,6 +176,7 @@ func TestUploadLogo_AdminOnly(t *testing.T) {
 }
 
 func TestUploadFavicon_AdminOnly(t *testing.T) {
+	useTempBrandingStorage(t)
 	db := apitest.SetupTestDB(t)
 	svc := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, svc)
@@ -216,6 +218,7 @@ func TestUploadFavicon_AdminOnly(t *testing.T) {
 }
 
 func TestResetBranding_AdminOnly(t *testing.T) {
+	useTempBrandingStorage(t)
 	db := apitest.SetupTestDB(t)
 	svc := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, svc)
@@ -262,6 +265,7 @@ func TestResetBranding_AdminOnly(t *testing.T) {
 }
 
 func TestServeLogo_Public(t *testing.T) {
+	useTempBrandingStorage(t)
 	db := apitest.SetupTestDB(t)
 	svc := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, svc)
@@ -283,6 +287,7 @@ func TestServeLogo_Public(t *testing.T) {
 }
 
 func TestServeFavicon_Public(t *testing.T) {
+	useTempBrandingStorage(t)
 	db := apitest.SetupTestDB(t)
 	svc := apitest.SetupTestService(db)
 	config := apitest.SetupTestAuthConfig(db, svc)

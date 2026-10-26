@@ -26,6 +26,7 @@ func TestNewStartsWithAStoredPluginWhoseSourceIsDisallowed(t *testing.T) {
 		"MARKETPLACE_ENABLED":              "false",
 		"DOCS_DISABLED":                    "true",
 		"TYK_AI_SECRET_KEY":                "embedded-test-secret-key",
+		"BRANDING_STORAGE_PATH":            t.TempDir(),
 		"SKIP_FILTER_DEFAULTS":             "true",
 		"AI_STUDIO_PLUGIN_ALLOWED_SOURCES": "oci",
 	}

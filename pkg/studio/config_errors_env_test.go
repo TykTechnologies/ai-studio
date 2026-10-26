@@ -22,6 +22,7 @@ func TestNewRefusesInvalidOCIRequireSignatureFromEnv(t *testing.T) {
 				"MARKETPLACE_ENABLED":             "false",
 				"DOCS_DISABLED":                   "true",
 				"TYK_AI_SECRET_KEY":               "embedded-test-secret-key",
+				"BRANDING_STORAGE_PATH":           t.TempDir(),
 				"AI_STUDIO_OCI_CACHE_DIR":         t.TempDir(),
 				"AI_STUDIO_OCI_REQUIRE_SIGNATURE": value,
 			}

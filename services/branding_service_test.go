@@ -18,6 +18,7 @@ func setupBrandingTest(t *testing.T) (*Service, *gorm.DB) {
 	assert.NoError(t, err)
 
 	service := NewService(db)
+	useTempBrandingStorage(t)
 	return service, db
 }
 

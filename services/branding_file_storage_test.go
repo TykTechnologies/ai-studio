@@ -63,6 +63,9 @@ func TestNewBrandingFileStorage(t *testing.T) {
 	})
 
 	t.Run("Create with empty path uses default", func(t *testing.T) {
+		// The default is relative to the working directory.
+		inScratchDir(t)
+
 		storage, err := NewBrandingFileStorage("")
 		assert.NoError(t, err)
 		assert.Equal(t, DefaultBrandingStoragePath, storage.BasePath)
