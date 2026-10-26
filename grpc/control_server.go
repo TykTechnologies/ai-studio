@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/base64"
@@ -100,6 +99,11 @@ type ControlServer struct {
 
 	// Governed metadata reader (Enterprise); nil means no governed metadata in snapshots.
 	governedMetadata governed_metadata.SnapshotReader
+
+	// snapshotDigests holds the keyed plaintext digest of each secret
+	// ciphertext encryptForMicrogateway returned, until the snapshot that
+	// carries it is checksummed (snapshot_secret_digests.go).
+	snapshotDigests snapshotDigests
 
 	// Edge instance management
 	edgeConnections      map[string]*EdgeInstanceConnection
@@ -2669,7 +2673,9 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	}
 
 	// Compute checksum for the snapshot
-	checksum, err := ComputeSnapshotChecksum(snapshot)
+	checksum, err := computeSnapshotChecksum(snapshot, func(b []byte) []byte {
+		return s.snapshotDigests.normalize(b, time.Now())
+	})
 	if err != nil {
 		logger.Log.Error().Err(err).Str("namespace", namespace).Msg("Failed to compute snapshot checksum")
 		// Don't fail the snapshot, just log the error - edge can still sync
@@ -2800,44 +2806,26 @@ func (s *ControlServer) encryptForMicrogateway(plaintext string) (string, error)
 		return "", fmt.Errorf("failed to create AES cipher: %w", err)
 	}
 
-	// Create GCM mode
-	gcm, err := cipher.NewGCM(block)
+	// AES-GCM with a random nonce (cipher.NewGCMWithRandomNonce, the FIPS
+	// 140-3 approved construction), prepended to the ciphertext: the layout
+	// edges of every version decrypt. The same secret encrypts differently
+	// each time, so the sync checksum is computed over a keyed digest of the
+	// plaintext instead (snapshot_secret_digests.go), recorded here.
+	gcm, err := cipher.NewGCMWithRandomNonce(block)
 	if err != nil {
 		return "", fmt.Errorf("failed to create GCM: %w", err)
 	}
 
-	// Derive the nonce from the plaintext instead of drawing it at random.
-	//
-	// The snapshot checksum edges report back is computed over the encrypted
-	// snapshot, so a random nonce made every regeneration hash differently:
-	// edges could never be "in sync" once an LLM carried an API key, and every
-	// heartbeat logged an out-of-sync audit row. A synthetic nonce keyed by
-	// HMAC-SHA256 over the plaintext (with a key derived from, but distinct
-	// from, the AES key) gives identical ciphertext for identical secrets while
-	// keeping the GCM invariant that distinct plaintexts never share a nonce.
-	// The only thing this reveals is that two objects hold the same secret,
-	// which the edge (holding the key) can see anyway. The wire format is
-	// unchanged: the 12-byte nonce still prefixes the ciphertext, so existing
-	// edges decrypt it as before.
-	nonce := deriveSnapshotNonce(encryptionKey, plaintext, gcm.NonceSize())
+	// Encrypt the plaintext; the output is nonce || ciphertext
+	ciphertext := base64.StdEncoding.EncodeToString(gcm.Seal(nil, nil, []byte(plaintext), nil))
 
-	// Encrypt the plaintext
-	ciphertext := gcm.Seal(nonce, nonce, []byte(plaintext), nil)
+	digest, err := digestFor(encryptionKey, plaintext)
+	if err != nil {
+		return "", fmt.Errorf("failed to digest secret for the snapshot checksum: %w", err)
+	}
+	s.snapshotDigests.record(ciphertext, digest)
 
-	// Encode to base64 for transmission
-	return base64.StdEncoding.EncodeToString(ciphertext), nil
-}
-
-// snapshotNonceDomain separates the nonce-derivation key from the AES key.
-const snapshotNonceDomain = "midsommar:microgateway:snapshot-nonce:v1"
-
-// deriveSnapshotNonce returns a deterministic GCM nonce for a plaintext.
-// nonceKey = SHA-256(domain || encryptionKey); nonce = HMAC-SHA256(nonceKey, plaintext)[:size].
-func deriveSnapshotNonce(encryptionKey, plaintext string, size int) []byte {
-	nonceKey := sha256.Sum256([]byte(snapshotNonceDomain + encryptionKey))
-	mac := hmac.New(sha256.New, nonceKey[:])
-	mac.Write([]byte(plaintext))
-	return mac.Sum(nil)[:size]
+	return ciphertext, nil
 }
 
 // PushDelivery is the durable push coordinator (services/pushes.Coordinator),

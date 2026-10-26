@@ -33,9 +33,8 @@ func TestSnapshotChecksumStableAcrossSavesOfEncryptedCredentials(t *testing.T) {
 		for _, l := range snap.Llms {
 			assert.False(t, strings.Contains(l.Metadata, "$ENC/"), "the at-rest ciphertext never goes to an edge")
 		}
-		sum, err := ComputeSnapshotChecksum(snap)
-		require.NoError(t, err)
-		return sum
+		require.NotEmpty(t, snap.Checksum)
+		return snap.Checksum // the hub's: over keyed digests, not ciphertexts
 	}
 	before := checksum()
 
