@@ -70,7 +70,7 @@ func TestAgentTraceAllocGate(t *testing.T) {
 
 	agenttrace.SetEnabled(true)
 	agenttrace.SetSink(discardSink{})
-	agenttrace.SetFingerprinter(agenttrace.StaticFingerprinter{ID: 1, Key: []byte("k")})
+	agenttrace.SetFingerprinter(agenttrace.StaticFingerprinter{ID: 1, Key: []byte("proxy-agent-trace-test-key-32by")})
 	agenttrace.SetContentProcessor(offModeProcessor{})
 	t.Cleanup(func() {
 		agenttrace.SetEnabled(false)
