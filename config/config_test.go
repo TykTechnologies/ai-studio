@@ -42,6 +42,9 @@ func TestConfigWithoutEnvFile(t *testing.T) {
 }
 
 func TestConfigWithEnvFile(t *testing.T) {
+	// The test writes .env into the working directory and removes it.
+	inScratchDir(t)
+
 	// Save original env vars
 	origPort := os.Getenv("SERVER_PORT")
 	origDBURL := os.Getenv("DATABASE_URL")
@@ -85,6 +88,9 @@ func TestConfigWithEnvFile(t *testing.T) {
 }
 
 func TestConfigEnvOverridesFile(t *testing.T) {
+	// The test writes .env into the working directory and removes it.
+	inScratchDir(t)
+
 	// Save original env vars
 	origPort := os.Getenv("SERVER_PORT")
 	origDBURL := os.Getenv("DATABASE_URL")

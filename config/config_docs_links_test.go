@@ -122,31 +122,14 @@ func TestAppConfLoadDocsLinks(t *testing.T) {
 
 // TestDocsLinksReadFromFile tests the ReadFromFile method of the DocsLinks type
 func TestDocsLinksReadFromFile(t *testing.T) {
-	// Create a temporary directory
+	// The file goes in a temporary directory, by absolute path: changing the
+	// working directory to a fresh temporary directory would make go test's
+	// result cache key differ on every run.
 	tempDir := t.TempDir()
-
-	// Save the original working directory
-	originalWd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get current working directory: %v", err)
-	}
-
-	// Change to the temporary directory
-	err = os.Chdir(tempDir)
-	if err != nil {
-		t.Fatalf("Failed to change to temporary directory: %v", err)
-	}
-
-	// Ensure we change back to the original directory when the test is done
-	defer func() {
-		err := os.Chdir(originalWd)
-		if err != nil {
-			t.Fatalf("Failed to change back to original directory: %v", err)
-		}
-	}()
+	linksFile := filepath.Join(tempDir, "config", "docs_links.json")
 
 	// Create the config directory
-	err = os.Mkdir("config", 0755)
+	err := os.Mkdir(filepath.Dir(linksFile), 0755)
 	if err != nil {
 		t.Fatalf("Failed to create config directory: %v", err)
 	}
@@ -166,14 +149,14 @@ func TestDocsLinksReadFromFile(t *testing.T) {
 		t.Fatalf("Failed to marshal test data: %v", err)
 	}
 
-	err = os.WriteFile("config/docs_links.json", testData, 0644)
+	err = os.WriteFile(linksFile, testData, 0644)
 	if err != nil {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
 
 	// Create a DocsLinks instance and call ReadFromFile with the file path
 	docsLinks := make(DocsLinks)
-	docsLinks.ReadFromFile("config/docs_links.json")
+	docsLinks.ReadFromFile(linksFile)
 
 	// Verify the loaded links match the test data
 	if len(docsLinks) != len(testLinks) {

@@ -10,9 +10,16 @@
 # Each tracked file gets 2000-01-01 plus an offset taken from its git blob
 # hash: the same content always gets the same mtime, and changed content
 # gets a different one, so a cached result is reused only when what the
-# test read is identical. Directories get a fixed mtime; their listings are
-# hashed by name, not by mtime. Initialised submodules (enterprise/) are
-# stamped too.
+# test read is identical. Directories get a fixed mtime. A test that lists
+# a directory (the source-walking guard tests list the whole tree) has every
+# entry's size and mtime in its cache key, so the entries that are not
+# tracked files get a fixed mtime too: .git, the directories of submodules,
+# initialised or not, and untracked symlinks (from their target).
+# Initialised submodules (enterprise/) are stamped as repositories of their
+# own. Run git with GIT_OPTIONAL_LOCKS=0
+# afterwards (CI sets it for the job): the new mtimes make every index entry
+# look stale, and git status (go's VCS stamping runs it) would otherwise
+# take index.lock to refresh the index, moving .git's mtime mid-run.
 #
 #   scripts/stamp-mtimes.sh [extra-file ...]
 #
@@ -44,11 +51,13 @@ sep = args.index("--")
 repos, extras = args[:sep], args[sep + 1:]
 
 dirs = {"."}
+done = set()
 stamped = 0
 
 
 def stamp(path, t):
     global stamped
+    done.add(path)
     try:
         os.utime(path, (t, t), follow_symlinks=False)
         stamped += 1
@@ -71,10 +80,13 @@ for repo in repos:
         meta, path = entry.split(b"\t", 1)
         mode, sha, _stage = meta.split()
         if mode == b"160000":  # submodule: stamped as a repo of its own
+            dirs.add(os.path.normpath(os.path.join(repo, os.fsdecode(path))))
             continue
         path = os.path.normpath(os.path.join(repo, os.fsdecode(path)))
         stamp(path, BASE + int(sha[:7], 16))
     dirs.add(os.path.normpath(repo))
+    # A directory in a clone, a file in a submodule or worktree.
+    dirs.add(os.path.normpath(os.path.join(repo, ".git")))
 
 for path in extras:
     if not os.path.isfile(path):
@@ -83,6 +95,17 @@ for path in extras:
         data = f.read()
     sha = hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
     stamp(os.path.normpath(path), BASE + int(sha[:7], 16))
+
+# Untracked symlinks (`make ent-link` links the enterprise tests of core
+# packages into them) are listed with their own mtime, the time the link
+# was made: stamp them from their target.
+for top, subdirs, files in os.walk("."):
+    subdirs[:] = [d for d in subdirs if d not in (".git", "node_modules")]
+    for name in files:
+        path = os.path.normpath(os.path.join(top, name))
+        if path not in done and os.path.islink(path):
+            target = os.fsencode(os.readlink(path))
+            stamp(path, BASE + int(hashlib.sha1(target).hexdigest()[:7], 16))
 
 for d in dirs:
     try:
