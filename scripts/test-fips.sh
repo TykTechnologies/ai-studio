@@ -68,7 +68,13 @@ run() {
   summary_args+=("$name ($edition)=$file.json")
 }
 
-run root . ./...
+# Three of gorm's own schema tests exercise the SHA-1 shortening of names
+# over 64 characters, which fips140=only refuses. The vendored gorm is not
+# edited by hand; no Studio or microgateway model generates such a name
+# (TestSchemaIdentifiersNeedNoSHA1Shortening checks the schema goldens), so
+# those upstream tests are skipped here (.27).
+gorm_sha1_tests='^(TestFormatNameWithStringLongerThan6[34]Characters|TestParseConstraintNameWithSchemaQualifiedLongTableName)$'
+run root . -skip "$gorm_sha1_tests" ./...
 run microgateway microgateway ./...
 if [ "$edition" = ent ]; then
   # The enterprise module has no canary of its own: run the root one built
