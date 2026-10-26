@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/pwhash"
-	"golang.org/x/crypto/pbkdf2"
 )
 
 // gcmNonceSize is the AES-GCM nonce size that cipher.NewGCMWithRandomNonce
@@ -154,15 +153,6 @@ func (c *CryptoService) GenerateKeyPair() (keyID, secret string, err error) {
 	secret = base64.URLEncoding.EncodeToString(secretBytes)
 
 	return keyID, secret, nil
-}
-
-// DeriveKey derives a key from a password using PBKDF2
-func (c *CryptoService) DeriveKey(password, salt string, iterations int) []byte {
-	if salt == "" {
-		salt = "microgateway-default-salt" // Should be random in production
-	}
-	
-	return pbkdf2.Key([]byte(password), []byte(salt), iterations, 32, sha256.New)
 }
 
 // ValidateEncryptionKey validates that an encryption key is suitable

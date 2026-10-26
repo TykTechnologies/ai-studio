@@ -20,7 +20,6 @@
 
 # --- Password and secret hashing: bcrypt (PBKDF2 in FIPS mode, midsommar-clean-8dy7.14)
 pkg/pwhash/pwhash.go                             golang.org/x/crypto/bcrypt  standard builds write bcrypt and every build reads it (dual-format reader); FIPS mode writes PBKDF2 and upgrades bcrypt on use (.14)
-microgateway/internal/services/crypto_service.go golang.org/x/crypto/pbkdf2  unused DeriveKey: x/crypto PBKDF2 (outside the validated module) with a fixed salt; removed in .16
 
 # --- Secrets at rest (midsommar-clean-8dy7.10, .13)
 secrets/models.go                                golang.org/x/crypto/scrypt  v2 secrets KDF; the v2 reader stays, FIPS-mode writes move to v3 PBKDF2 in .13

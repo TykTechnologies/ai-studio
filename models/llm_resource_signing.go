@@ -1,6 +1,7 @@
 package models
 
 import (
+	"crypto/fips140"
 	"crypto/hkdf"
 	"crypto/rand"
 	"crypto/sha256"
@@ -81,13 +82,37 @@ func (k ResourceSigningKeys) PreviousIsCredential() bool {
 	return k.Previous == ResourceSigningLegacyKey || strings.HasPrefix(k.Previous, ResourceSigningDerivedKeyPrefix)
 }
 
+// minHKDFKeyBytes is the shortest HKDF input key FIPS 140-3 mode approves:
+// 112 bits. Under GODEBUG=fips140=only crypto/hkdf refuses shorter keys.
+const minHKDFKeyBytes = 112 / 8
+
+// fipsEnabled is crypto/fips140.Enabled; tests replace it.
+var fipsEnabled = fips140.Enabled
+
+// HKDFKeyMaterial returns the HKDF input key for resource signing material
+// (a vendor credential or a hub signing secret). Standard builds use the
+// material as is, so their keys, and the IDs signed with them, never change.
+// In FIPS 140-3 mode material shorter than 112 bits is hashed with SHA-256
+// first, since the module does not approve (and under fips140=only refuses)
+// shorter HKDF keys. Material of 14 bytes or more, which includes every
+// hub-generated secret and real vendor key, derives the same key in every
+// build; only a short credential derives a different one in FIPS mode.
+func HKDFKeyMaterial(material string) []byte {
+	if fipsEnabled() && len(material) < minHKDFKeyBytes {
+		sum := sha256.Sum256([]byte(material))
+		return sum[:]
+	}
+	return []byte(material)
+}
+
 // DeriveCredentialSigningKey derives the resource signing key of a vendor
-// credential: HKDF-SHA256(credential, info "tyk-native-resource/v1").
+// credential: HKDF-SHA256(credential, info "tyk-native-resource/v1"), with a
+// short credential hashed first in FIPS mode (HKDFKeyMaterial).
 func DeriveCredentialSigningKey(credential string) ([]byte, error) {
 	if credential == "" {
 		return nil, errors.New("empty credential")
 	}
-	return hkdf.Key(sha256.New, []byte(credential), nil, credentialKeyInfo, sha256.Size)
+	return hkdf.Key(sha256.New, HKDFKeyMaterial(credential), nil, credentialKeyInfo, sha256.Size)
 }
 
 // storedCredentialKey is the previous-key value that keeps IDs signed with
