@@ -198,7 +198,7 @@ AI Studio and every microgateway report their FIPS 140-3 status: whether FIPS mo
   ```
 
   A standard build reports `"enabled": false` and `"version": "latest"`. A FIPS build started with `GODEBUG=fips140=off` reports `"enabled": false` with its module version, so check this field rather than the package name.
-- **Edge gateways** send their status with registration and heartbeats. The edge list shows it under the version, and the detail view in **FIPS 140-3**: `On (v1.0.0)` (`, enforced` in strict mode), `Off`, or `Unknown` for an edge released before this field. The edge API returns it as `attributes.fips` (`null` when unknown).
+- **Edge gateways** send their status with registration and heartbeats. The edge list shows it under the version, and the detail view in **FIPS 140-3 (reported by edge)**: `On (v1.0.0)` (`, enforced` in strict mode), `Off`, or `Unknown` for an edge released before this field. The edge API returns it as `attributes.fips` (`null` when unknown). The status is what the edge reports, not something the hub verifies; a reported version longer than 64 characters or outside `[A-Za-z0-9.+_-]` is treated as unknown.
 
 ## Removing Edge Gateways
 

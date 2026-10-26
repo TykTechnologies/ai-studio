@@ -9,6 +9,7 @@ package fipsinfo
 
 import (
 	"crypto/fips140"
+	"regexp"
 	"strconv"
 )
 
@@ -46,8 +47,14 @@ func (s Status) Metrics() map[string]string {
 	}
 }
 
+// versionPattern bounds a reported module version ("v1.0.0", "latest",
+// "v1.26.0"): the hub stores and shows what an edge reports, so a version
+// that is long or reads like a label is refused.
+var versionPattern = regexp.MustCompile(`^[A-Za-z0-9.+_-]{0,64}$`)
+
 // FromMetrics reads a status from heartbeat health metrics; ok is false when
-// the edge did not report one (or reported something unreadable).
+// the edge did not report one, or reported something unreadable (including a
+// version over 64 characters or outside [A-Za-z0-9.+_-]).
 func FromMetrics(m map[string]string) (s Status, ok bool) {
 	enabled, err := strconv.ParseBool(m[MetricEnabled])
 	if err != nil {
@@ -57,5 +64,9 @@ func FromMetrics(m map[string]string) (s Status, ok bool) {
 	if err != nil {
 		return Status{}, false
 	}
-	return Status{Enabled: enabled, Version: m[MetricVersion], Enforced: enforced}, true
+	version := m[MetricVersion]
+	if !versionPattern.MatchString(version) {
+		return Status{}, false
+	}
+	return Status{Enabled: enabled, Version: version, Enforced: enforced}, true
 }
