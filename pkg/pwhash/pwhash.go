@@ -102,10 +102,7 @@ func Hash(secret string) (string, error) {
 
 // HashPBKDF2 hashes secret with PBKDF2-HMAC-SHA256 regardless of mode.
 func HashPBKDF2(secret string) (string, error) {
-	iter := Iterations
-	if testing.Testing() {
-		iter = testIterations
-	}
+	iter := currentIterations()
 	salt := make([]byte, saltBytes)
 	if _, err := rand.Read(salt); err != nil {
 		return "", err
@@ -115,6 +112,15 @@ func HashPBKDF2(secret string) (string, error) {
 		return "", err
 	}
 	return fmt.Sprintf("%s%d$%s$%s", PBKDF2Prefix, iter, b64.EncodeToString(salt), b64.EncodeToString(key)), nil
+}
+
+// currentIterations is the count new hashes use: Iterations, or
+// testIterations inside a test binary.
+func currentIterations() int {
+	if testing.Testing() {
+		return testIterations
+	}
+	return Iterations
 }
 
 // IsPBKDF2 reports whether hash is in the PBKDF2 format.
@@ -134,31 +140,52 @@ func Verify(secret, hash string) bool {
 }
 
 // NeedsUpgrade reports whether a hash that just verified should be replaced
-// with a new one from Hash: true in FIPS mode for anything but PBKDF2.
+// with a new one from Hash: true in FIPS mode for anything but PBKDF2, and
+// for a PBKDF2 hash with fewer iterations than new hashes get (one written by
+// a test binary, say).
 func NeedsUpgrade(hash string) bool {
-	return fipsEnabled() && !IsPBKDF2(hash)
+	if !fipsEnabled() {
+		return false
+	}
+	if !IsPBKDF2(hash) {
+		return true
+	}
+	iter, _, _, err := parsePBKDF2(hash)
+	return err == nil && iter < currentIterations()
 }
 
 var errMalformed = errors.New("pwhash: malformed PBKDF2 hash")
 
-func verifyPBKDF2(secret, hash string) (bool, error) {
+// parsePBKDF2 splits a PBKDF2 hash, refusing parameters this package never
+// writes: a key other than 32 bytes, a salt under 16 bytes, or an iteration
+// count out of range. A short key would let a corrupted or crafted row match
+// random passwords.
+func parsePBKDF2(hash string) (iter int, salt, key []byte, err error) {
 	parts := strings.Split(strings.TrimPrefix(hash, PBKDF2Prefix), "$")
 	if len(parts) != 3 {
-		return false, errMalformed
+		return 0, nil, nil, errMalformed
 	}
-	iter, err := strconv.Atoi(parts[0])
+	iter, err = strconv.Atoi(parts[0])
 	if err != nil || iter < 1 || iter > maxIterations {
-		return false, errMalformed
+		return 0, nil, nil, errMalformed
 	}
-	salt, err := b64.DecodeString(parts[1])
-	if err != nil || len(salt) == 0 {
-		return false, errMalformed
+	salt, err = b64.DecodeString(parts[1])
+	if err != nil || len(salt) < saltBytes {
+		return 0, nil, nil, errMalformed
 	}
-	want, err := b64.DecodeString(parts[2])
-	if err != nil || len(want) == 0 {
-		return false, errMalformed
+	key, err = b64.DecodeString(parts[2])
+	if err != nil || len(key) != keyBytes {
+		return 0, nil, nil, errMalformed
 	}
-	got, err := pbkdf2.Key(sha256.New, secret, salt, iter, len(want))
+	return iter, salt, key, nil
+}
+
+func verifyPBKDF2(secret, hash string) (bool, error) {
+	iter, salt, want, err := parsePBKDF2(hash)
+	if err != nil {
+		return false, err
+	}
+	got, err := pbkdf2.Key(sha256.New, secret, salt, iter, keyBytes)
 	if err != nil {
 		return false, err
 	}

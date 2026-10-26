@@ -74,6 +74,22 @@ func TestAuthenticateUser_StandardModeKeepsBcryptAndReadsPBKDF2(t *testing.T) {
 	assert.Equal(t, pbkdf2Hash, storedPassword(t, svc, user.ID))
 }
 
+// A password change that lands while the upgrade hash is computed wins: the
+// upgrade only writes over the hash it verified.
+func TestUpgradePasswordHash_DoesNotRevertAConcurrentChange(t *testing.T) {
+	svc := NewService(setupUserTestDB(t))
+	user := seedBcryptUser(t, svc)
+	pwhash.ForceFIPSModeForTest(t)
+
+	changed, err := pwhash.Hash("new password after reset")
+	require.NoError(t, err)
+	require.NoError(t, svc.DB.Model(&models.User{}).Where("id = ?", user.ID).Update("password", changed).Error)
+
+	_, ok := svc.upgradePasswordHash(user.ID, bcryptCorrectHorse, "correct horse")
+	assert.False(t, ok)
+	assert.Equal(t, changed, storedPassword(t, svc, user.ID), "the newer hash survives")
+}
+
 func TestSetPassword_FIPSModeWritesPBKDF2(t *testing.T) {
 	pwhash.ForceFIPSModeForTest(t)
 	user := models.NewUser()
@@ -106,6 +122,24 @@ func TestValidateClientSecret_FIPSModeUpgradesBcrypt(t *testing.T) {
 	ok, err = svc.ValidateClientSecret(&stored, "correct horse")
 	require.NoError(t, err)
 	assert.True(t, ok)
+}
+
+func TestUpgradeClientSecretHash_DoesNotRevertARotation(t *testing.T) {
+	db := setupUserTestDB(t)
+	svc := NewOAuthClientService(db)
+	client := &models.OAuthClient{ClientID: "rotated-client", ClientSecret: bcryptCorrectHorse, RedirectURIs: "http://localhost/cb"}
+	require.NoError(t, db.Create(client).Error)
+	pwhash.ForceFIPSModeForTest(t)
+
+	rotated, err := pwhash.Hash("rotated secret")
+	require.NoError(t, err)
+	require.NoError(t, db.Model(&models.OAuthClient{}).Where("id = ?", client.ID).Update("client_secret", rotated).Error)
+
+	_, ok := svc.upgradeClientSecretHash(client.ID, bcryptCorrectHorse, "correct horse")
+	assert.False(t, ok)
+	var stored models.OAuthClient
+	require.NoError(t, db.First(&stored, client.ID).Error)
+	assert.Equal(t, rotated, stored.ClientSecret, "the rotated secret survives")
 }
 
 func TestCreateClient_FIPSModeWritesPBKDF2(t *testing.T) {

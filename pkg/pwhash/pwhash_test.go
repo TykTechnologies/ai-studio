@@ -72,7 +72,9 @@ func TestNeedsUpgrade_OnlyBcryptInFIPSMode(t *testing.T) {
 	}
 	ForceFIPSModeForTest(t)
 	assert.True(t, NeedsUpgrade(bcryptFixture))
-	assert.False(t, NeedsUpgrade(pbkdf2Fixture))
+	assert.False(t, NeedsUpgrade(pbkdf2Fixture), "1000 iterations is current inside a test binary")
+	weak := PBKDF2Prefix + "999$AAECAwQFBgcICQoLDA0ODw$yRTMTwbMbo9G0VfjobWqerzuuxe7BETNTErBbKKumGQ"
+	assert.True(t, NeedsUpgrade(weak), "fewer iterations than new hashes get")
 }
 
 func TestVerify_MalformedNeverMatches(t *testing.T) {
@@ -87,6 +89,10 @@ func TestVerify_MalformedNeverMatches(t *testing.T) {
 		PBKDF2Prefix + "1000$!!$yRTMTwbMbo9G0VfjobWqerzuuxe7BETNTErBbKKumGQ",
 		PBKDF2Prefix + "1000$AAECAwQFBgcICQoLDA0ODw$",
 		"$2a$10$short",
+		// A 1-byte key would match 1 in 256 random passwords.
+		PBKDF2Prefix + "1000$AAECAwQFBgcICQoLDA0ODw$yQ",
+		// Salt under 16 bytes.
+		PBKDF2Prefix + "1000$AAECAwQFBgcICQoLDA0O$yRTMTwbMbo9G0VfjobWqerzuuxe7BETNTErBbKKumGQ",
 	} {
 		assert.False(t, Verify("correct horse", h), "%q", h)
 	}
