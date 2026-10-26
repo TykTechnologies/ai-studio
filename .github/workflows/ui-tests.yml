@@ -24,15 +24,34 @@ env:
   # (tyk-identity-broker, storage, ...) is public and comes through the proxy.
   # (Fetching those with git broke CI when a cached clone missed a new tag.)
   GOPRIVATE: github.com/TykTechnologies/ai-studio-enterprise
+  # The suite is split by spec file across three jobs, each with its own
+  # compose stack and database; inside a job the specs still run one at a
+  # time (playwright.config.ts: they share database state). Shard 1 and 2
+  # list their specs; shard 3 runs every spec not listed here, so a new spec
+  # file always runs. Balanced on the spec times of main run 40343437511
+  # (agent-tracing alone is ~100 s).
+  SHARD1_SPECS: >-
+    tests/agent-tracing.spec.ts
+    tests/agent-tracing-ce.spec.ts
+    tests/profile-menu.spec.ts
+  SHARD2_SPECS: >-
+    tests/asset-catalog-rbac.spec.ts
+    tests/embedders.spec.ts
+    tests/navigation.spec.ts
+    tests/unsaved-changes.spec.ts
 
 jobs:
   ui-e2e-tests:
-    name: UI E2E Tests
+    name: UI E2E Tests (${{ matrix.shard }}/3)
     # The suite runs the enterprise build, and fork pull requests get no
     # secrets to check out the private enterprise submodule (see CONTRIBUTING.md).
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -51,7 +70,7 @@ jobs:
       # the UI embedded in the Go binary, so the binary only needs something
       # to embed. The public/ assets give it index.html and the logos the
       # backend serves itself (/logos, the default branding logo). The
-      # production build is checked by ci-test.yml's Frontend Tests job; it
+      # production build is checked by ci-test.yml's Frontend Build job; it
       # took 2 to 3 minutes here.
       - name: Create frontend embed placeholder
         run: |
@@ -63,8 +82,9 @@ jobs:
       # "Wait for AI Studio" (issue #147). Its Go module and build caches are
       # bind-mounted from here (STUDIO_GOMODCACHE / STUDIO_GOCACHE in
       # tests/compose.yml), and so is the frontend container's npm cache.
-      # Pull requests only restore; pushes to main save, like ci-test.yml.
-      # Release tags and the nightly Release Gate stay cold.
+      # Pull requests only restore; pushes to main save (from shard 1: every
+      # shard builds the same binary), like ci-test.yml. Release tags and the
+      # nightly Release Gate stay cold.
       - name: Prepare container caches
         run: |
           mkdir -p "$RUNNER_TEMP/studio-gomod" "$RUNNER_TEMP/studio-gobuild" "$RUNNER_TEMP/frontend-npm"
@@ -109,12 +129,32 @@ jobs:
         run: |
           docker compose -f tests/compose.yml up -d
 
+      - name: Playwright version
+        id: pw
+        run: echo "version=$(jq -r '.packages["node_modules/@playwright/test"].version' tests/ui/package-lock.json)" >> "$GITHUB_OUTPUT"
+
+      # The browser download, keyed on the Playwright version.
+      - name: Cache Playwright browsers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-${{ runner.arch }}-ms-playwright-${{ steps.pw.outputs.version }}
+
+      # install-deps runs apt, which once hung for 14 minutes: give each try
+      # five minutes, and try twice.
       - name: Install Playwright
         working-directory: tests/ui
         run: |
           npm ci --ignore-scripts
           npm rebuild
-          npx playwright install --with-deps chromium
+          npx playwright install chromium
+          for attempt in 1 2; do
+            if timeout -k 10 300 npx playwright install-deps chromium; then
+              exit 0
+            fi
+            echo "::warning::playwright install-deps failed or timed out (attempt $attempt)"
+          done
+          exit 1
 
       - name: Wait for AI Studio
         run: |
@@ -173,6 +213,30 @@ jobs:
           echo "=== Checking for React app root ==="
           curl -s http://localhost:8081/login | grep -o '<div id="root"' || echo "React root not found!"
 
+      # Every listed spec must exist: a renamed file would otherwise drop out
+      # of its shard without an error.
+      - name: Select this shard's specs
+        id: specs
+        working-directory: tests/ui
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          for f in $SHARD1_SPECS $SHARD2_SPECS; do
+            [ -f "$f" ] || { echo "::error::$f is listed in a UI E2E shard but does not exist"; exit 1; }
+          done
+          case "$SHARD" in
+            1) specs="$SHARD1_SPECS" ;;
+            2) specs="$SHARD2_SPECS" ;;
+            *)
+              specs=""
+              for f in tests/*.spec.ts; do
+                case " $SHARD1_SPECS $SHARD2_SPECS " in *" $f "*) ;; *) specs="$specs $f" ;; esac
+              done
+              ;;
+          esac
+          echo "Shard $SHARD:" $specs
+          echo "list=$(echo $specs)" >> "$GITHUB_OUTPUT"
+
       - name: Run Playwright Tests
         id: playwright
         working-directory: tests/ui
@@ -185,11 +249,11 @@ jobs:
           TEST_MOCK_UPSTREAM_HOST: host.docker.internal
           DEBUG: pw:api
           PWDEBUG: 0
-        run: npx playwright test --project='chromium' --reporter=list --reporter=html --timeout=60000
+        run: npx playwright test --project='chromium' --reporter=list,html --timeout=60000 ${{ steps.specs.outputs.list }}
 
       # Saved even when a test failed: the caches only hold build inputs.
       - name: Save container caches
-        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        if: ${{ !cancelled() && matrix.shard == 1 && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
@@ -204,7 +268,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.shard }}
           path: tests/ui/playwright-report/
           retention-days: 7
 
@@ -236,7 +300,7 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: failure()
         with:
-          name: docker-compose-logs
+          name: docker-compose-logs-${{ matrix.shard }}
           path: docker-compose.log
           retention-days: 3
 
