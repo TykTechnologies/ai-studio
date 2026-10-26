@@ -184,6 +184,22 @@ For debugging sync issues, the UI displays checksum information:
 
 Hover over the Config Sync status chip in the list view to see a truncated checksum comparison.
 
+Secrets in a snapshot (LLM API keys, signing secrets, plugin and guardrail credentials) are encrypted with a fresh random nonce each time a snapshot is built. The checksum covers a keyed digest of each secret rather than its ciphertext, so it changes when configuration changes, including a rotated secret, and stays the same otherwise.
+
+## FIPS 140-3 Status
+
+AI Studio and every microgateway report their FIPS 140-3 status: whether FIPS mode is on, the Go Cryptographic Module version, and whether non-approved algorithms are refused (`GODEBUG=fips140=only`).
+
+- **At startup**, each logs a `FIPS 140-3` line with `enabled`, `version` and `enforced`.
+- **`GET /health`** on AI Studio and on a microgateway includes the same fields:
+
+  ```json
+  {"status": "ok", "fips": {"enabled": true, "version": "v1.0.0", "enforced": false}}
+  ```
+
+  A standard build reports `"enabled": false` and `"version": "latest"`. A FIPS build started with `GODEBUG=fips140=off` reports `"enabled": false` with its module version, so check this field rather than the package name.
+- **Edge gateways** send their status with registration and heartbeats. The edge list shows it under the version, and the detail view in **FIPS 140-3**: `On (v1.0.0)` (`, enforced` in strict mode), `Off`, or `Unknown` for an edge released before this field. The edge API returns it as `attributes.fips` (`null` when unknown).
+
 ## Removing Edge Gateways
 
 To remove an edge gateway entry from the control plane:

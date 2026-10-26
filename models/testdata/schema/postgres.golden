@@ -719,6 +719,7 @@ TABLE edge_instances
   column loaded_version character varying(varchar) nullable=YES len=64
   column sync_status character varying(varchar) nullable=YES len=20 default='unknown'::character varying
   column last_sync_ack timestamp with time zone(timestamptz) nullable=YES
+  column fips text(text) nullable=YES
 TABLE edge_push_commands
   constraint edge_push_commands_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX edge_push_commands_pkey ON edge_push_commands USING btree (id)

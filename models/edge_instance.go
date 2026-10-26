@@ -3,21 +3,22 @@ package models
 import (
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/fipsinfo"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // EdgeInstance represents a registered edge instance in hub-and-spoke mode
 type EdgeInstance struct {
 	gorm.Model
-	ID             uint                   `json:"id" gorm:"primaryKey"`
-	EdgeID         string                 `json:"edge_id" gorm:"uniqueIndex;not null"`
-	Namespace      string                 `json:"namespace" gorm:"default:'';index:idx_edge_instances_namespace"`
-	Version        string                 `json:"version"`
-	BuildHash      string                 `json:"build_hash"`
-	Metadata       map[string]interface{} `json:"metadata" gorm:"serializer:json"`
-	LastHeartbeat  *time.Time             `json:"last_heartbeat" gorm:"index:idx_edge_instances_heartbeat"`
-	Status         string                 `json:"status" gorm:"default:'registered';index:idx_edge_instances_status"`
-	SessionID      string                 `json:"session_id"`
+	ID            uint                   `json:"id" gorm:"primaryKey"`
+	EdgeID        string                 `json:"edge_id" gorm:"uniqueIndex;not null"`
+	Namespace     string                 `json:"namespace" gorm:"default:'';index:idx_edge_instances_namespace"`
+	Version       string                 `json:"version"`
+	BuildHash     string                 `json:"build_hash"`
+	Metadata      map[string]interface{} `json:"metadata" gorm:"serializer:json"`
+	LastHeartbeat *time.Time             `json:"last_heartbeat" gorm:"index:idx_edge_instances_heartbeat"`
+	Status        string                 `json:"status" gorm:"default:'registered';index:idx_edge_instances_status"`
+	SessionID     string                 `json:"session_id"`
 	// OwnerNodeID is the Studio replica holding the edge's configuration
 	// stream, and StreamSessionID identifies that stream. Writes that end a
 	// stream are conditional on StreamSessionID, so a replica the edge has
@@ -29,12 +30,22 @@ type EdgeInstance struct {
 	LoadedVersion  string     `json:"loaded_version" gorm:"size:64"`
 	SyncStatus     string     `json:"sync_status" gorm:"size:20;default:'unknown';index:idx_edge_instances_sync_status"`
 	LastSyncAck    *time.Time `json:"last_sync_ack"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
-	DeletedAt      gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index"`
+	// FIPS is the edge's FIPS 140-3 status from its registration and
+	// heartbeats (pkg/fipsinfo); nil (unknown) for an edge that does not
+	// report it, such as one released before the field.
+	FIPS      *fipsinfo.Status `json:"fips" gorm:"column:fips;serializer:json"`
+	CreatedAt time.Time        `json:"created_at"`
+	UpdatedAt time.Time        `json:"updated_at"`
+	DeletedAt gorm.DeletedAt   `json:"deleted_at,omitempty" gorm:"index"`
 }
 
 type EdgeInstances []EdgeInstance
+
+// UpdateFIPS records the edge's FIPS 140-3 status (nil: unknown).
+func (e *EdgeInstance) UpdateFIPS(db *gorm.DB, status *fipsinfo.Status) error {
+	e.FIPS = status
+	return db.Model(e).Select("FIPS").Updates(&EdgeInstance{FIPS: status}).Error
+}
 
 // Edge instance status constants
 const (
@@ -236,6 +247,7 @@ func (edges *EdgeInstances) ListEdgesBySyncStatus(db *gorm.DB, syncStatus string
 	return db.Where("sync_status = ? AND status IN ?", syncStatus, []string{EdgeStatusConnected, EdgeStatusRegistered}).
 		Order("created_at DESC").Find(edges).Error
 }
+
 // ClaimEdgeStream records that nodeID now holds the edge's configuration
 // stream, identified by session. The newest stream always wins: an edge has
 // one live stream at a time, so a new one means the old one is gone.
