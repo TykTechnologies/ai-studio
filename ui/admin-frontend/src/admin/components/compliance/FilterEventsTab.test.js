@@ -91,9 +91,11 @@ describe("FilterEventsTab", () => {
 
     expect(await screen.findByText("Total Events")).toBeInTheDocument();
 
-    // Locate each card by its label and assert the count above it.
+    // Locate each card by its label and assert the count above it. The
+    // labels render before the response arrives (with 0s), so wait for the
+    // total; the other counts come from the same response.
     const cardFor = (label) => screen.getByText(label).closest("div");
-    expect(within(cardFor("Total Events")).getByText("12")).toBeInTheDocument();
+    expect(await within(cardFor("Total Events")).findByText("12")).toBeInTheDocument();
     expect(within(cardFor("Critical")).getByText("3")).toBeInTheDocument();
     expect(within(cardFor("Warning")).getByText("7")).toBeInTheDocument();
     expect(within(cardFor("Info")).getByText("2")).toBeInTheDocument();
@@ -183,7 +185,8 @@ describe("FilterEventsTab", () => {
     fireEvent.mouseDown(eventTypeSelect);
 
     const listbox = await screen.findByRole("listbox");
-    expect(within(listbox).getByText(/pii_redacted \(5\)/)).toBeInTheDocument();
+    // "Total Events" renders before the response; the options come from it.
+    expect(await within(listbox).findByText(/pii_redacted \(5\)/)).toBeInTheDocument();
     expect(
       within(listbox).getByText(/content_rewritten \(2\)/)
     ).toBeInTheDocument();
