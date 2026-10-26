@@ -19,16 +19,8 @@
 # cipher.NewGCMWithRandomNonce, ...) instead.
 
 # --- Password and secret hashing: bcrypt (PBKDF2 in FIPS mode, midsommar-clean-8dy7.14)
-models/util.go                                   golang.org/x/crypto/bcrypt  HashPassword/IsPasswordValid; bcrypt verify stays as the legacy reader, writer moves to PBKDF2 in .14
-auth/auth.go                                     golang.org/x/crypto/bcrypt  password set/reset hash bcrypt directly instead of models.HashPassword; .14
-services/oauth_client_service.go                 golang.org/x/crypto/bcrypt  OAuth client secret hash; .14
-microgateway/internal/services/crypto_service.go golang.org/x/crypto/bcrypt  microgateway HashSecret/VerifySecret; .14
-microgateway/internal/services/crypto_service.go golang.org/x/crypto/pbkdf2  x/crypto PBKDF2 (outside the validated module) with a fixed salt; stdlib crypto/pbkdf2 in .14
-api/auth_handlers_test.go                        golang.org/x/crypto/bcrypt  test checks the stored hash is bcrypt; .14 makes it format-agnostic or keeps it as a legacy fixture
-auth/auth_test.go                                golang.org/x/crypto/bcrypt  test builds and checks bcrypt hashes; .14
-auth/auth_lifecycle_test.go                      golang.org/x/crypto/bcrypt  test seeds a bcrypt-hashed user; .14
-services/oauth_client_service_test.go            golang.org/x/crypto/bcrypt  test checks the stored OAuth secret is bcrypt; .14
-models/password_cost_test.go                     golang.org/x/crypto/bcrypt  test checks new hashes use bcrypt.MinCost in test binaries and a DefaultCost-style hash still verifies; .14
+pkg/pwhash/pwhash.go                             golang.org/x/crypto/bcrypt  standard builds write bcrypt and every build reads it (dual-format reader); FIPS mode writes PBKDF2 and upgrades bcrypt on use (.14)
+microgateway/internal/services/crypto_service.go golang.org/x/crypto/pbkdf2  unused DeriveKey: x/crypto PBKDF2 (outside the validated module) with a fixed salt; removed in .16
 
 # --- Secrets at rest (midsommar-clean-8dy7.10, .13)
 secrets/models.go                                golang.org/x/crypto/scrypt  v2 secrets KDF; the v2 reader stays, FIPS-mode writes move to v3 PBKDF2 in .13

@@ -2,8 +2,11 @@
 package services
 
 import (
+	"crypto/fips140"
 	"strings"
 	"testing"
+
+	"github.com/TykTechnologies/midsommar/v2/pkg/pwhash"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -84,7 +87,9 @@ func TestCryptoService_HashVerifySecret(t *testing.T) {
 		hash := crypto.HashSecret(secret)
 		assert.NotEmpty(t, hash)
 		assert.NotEqual(t, secret, hash)
-		assert.True(t, strings.HasPrefix(hash, "bcrypt:"))
+		if !fips140.Enabled() {
+			assert.True(t, strings.HasPrefix(hash, "bcrypt:"), "standard builds keep bcrypt")
+		}
 
 		// Verify secret
 		isValid := crypto.VerifySecret(secret, hash)
@@ -120,6 +125,25 @@ func TestCryptoService_HashVerifySecret(t *testing.T) {
 
 		isValid = crypto.VerifySecret("not-empty", sha256Hash)
 		assert.False(t, isValid)
+	})
+
+	t.Run("PBKDF2InFIPSMode", func(t *testing.T) {
+		pwhash.ForceFIPSModeForTest(t)
+		hash := crypto.HashSecret("my-secret-password")
+		assert.True(t, strings.HasPrefix(hash, pwhash.PBKDF2Prefix), "got %q", hash)
+		assert.True(t, crypto.VerifySecret("my-secret-password", hash))
+		assert.False(t, crypto.VerifySecret("wrong-secret", hash))
+	})
+
+	t.Run("BcryptFixtureVerifiesInEveryMode", func(t *testing.T) {
+		// bcrypt("correct horse"), as standard builds have always stored it.
+		const stored = "bcrypt:$2a$10$Q28z2xyQnAaw3y7XgwQEF.DQtiAfhYrYUDv4tJBI8E3l.tNo6WncG"
+		assert.True(t, crypto.VerifySecret("correct horse", stored))
+		assert.False(t, crypto.VerifySecret("wrong", stored))
+	})
+
+	t.Run("NoPlaintextFallback", func(t *testing.T) {
+		assert.False(t, crypto.VerifySecret("stored-in-clear", "stored-in-clear"))
 	})
 
 	t.Run("InvalidHashFormat", func(t *testing.T) {

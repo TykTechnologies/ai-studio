@@ -20,7 +20,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/templates"
 	"github.com/gin-gonic/gin"
-	"golang.org/x/crypto/bcrypt"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -543,12 +542,12 @@ func (a *AuthService) UpdatePassword(user *models.User, oldPassword, newPassword
 		return err
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), models.PasswordHashCost())
+	hashedPassword, err := models.HashPassword(newPassword)
 	if err != nil {
 		return err
 	}
 
-	user.Password = string(hashedPassword)
+	user.Password = hashedPassword
 	user.ResetToken = ""
 	user.ResetTokenExpiry = time.Time{}
 
@@ -614,7 +613,7 @@ func (a *AuthService) Register(email, name, password string, showPortal, showCha
 		return err
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), models.PasswordHashCost())
+	hashedPassword, err := models.HashPassword(password)
 	if err != nil {
 		return err
 	}
@@ -628,7 +627,7 @@ func (a *AuthService) Register(email, name, password string, showPortal, showCha
 	user := models.NewUser()
 	user.Email = email
 	user.Name = name
-	user.Password = string(hashedPassword)
+	user.Password = hashedPassword
 	user.ShowPortal = showPortal
 	user.ShowChat = showChat
 

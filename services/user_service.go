@@ -10,6 +10,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/rbac"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/pwhash"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -553,6 +554,18 @@ func (s *Service) AuthenticateUser(email, password string) (*models.User, error)
 
 	if !user.DoesPasswordMatch(password) {
 		return nil, LoginFailedError
+	}
+
+	// In FIPS mode, replace a bcrypt hash with a PBKDF2 one while the
+	// password is at hand (upgrade on login). Only the password column is
+	// written; a failure is logged and the login goes ahead.
+	if pwhash.NeedsUpgrade(user.Password) {
+		if err := user.SetPassword(password); err != nil {
+			logger.Warn(fmt.Sprintf("Failed to upgrade password hash for user %d: %v", user.ID, err))
+		} else if err := s.DB.Model(&models.User{}).Where("id = ?", user.ID).
+			Update("password", user.Password).Error; err != nil {
+			logger.Warn(fmt.Sprintf("Failed to store upgraded password hash for user %d: %v", user.ID, err))
+		}
 	}
 
 	if !user.EmailVerified {

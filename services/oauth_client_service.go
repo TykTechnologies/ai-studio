@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"errors"
+	"github.com/TykTechnologies/midsommar/v2/pkg/pwhash"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
-	"golang.org/x/crypto/bcrypt"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 )
@@ -50,12 +50,12 @@ func (s *OAuthClientService) CreateClientWithAuthMethod(name string, redirectURI
 		}
 		plainClientSecret = hex.EncodeToString(rawClientSecret)
 
-		// Hash the ClientSecret
-		hashedSecretBytes, err := bcrypt.GenerateFromPassword([]byte(plainClientSecret), models.PasswordHashCost())
+		// Hash the ClientSecret (bcrypt, or PBKDF2 in FIPS mode)
+		var err error
+		hashedSecret, err = pwhash.Hash(plainClientSecret)
 		if err != nil {
 			return nil, "", err
 		}
-		hashedSecret = string(hashedSecretBytes)
 	} else {
 		// For public clients, store empty secret
 		hashedSecret = ""
@@ -100,14 +100,22 @@ func (s *OAuthClientService) ValidateClientSecret(client *models.OAuthClient, se
 		return false, nil
 	}
 
-	err := bcrypt.CompareHashAndPassword([]byte(client.ClientSecret), []byte(secret))
-	if err == nil {
-		return true, nil
-	}
-	if err == bcrypt.ErrMismatchedHashAndPassword {
+	if !pwhash.Verify(secret, client.ClientSecret) {
 		return false, nil
 	}
-	return false, err
+
+	// In FIPS mode, replace a bcrypt hash with a PBKDF2 one now that the
+	// secret is known. A failed upgrade does not fail the request; the next
+	// use tries again.
+	if pwhash.NeedsUpgrade(client.ClientSecret) && client.ID != 0 {
+		if upgraded, err := pwhash.Hash(secret); err == nil {
+			if err := s.db.Model(&models.OAuthClient{}).Where("id = ?", client.ID).
+				Update("client_secret", upgraded).Error; err == nil {
+				client.ClientSecret = upgraded
+			}
+		}
+	}
+	return true, nil
 }
 
 // ValidateRedirectURI checks if the provided redirectURI is valid for the client.

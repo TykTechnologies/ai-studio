@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/crypto/bcrypt"
+	"github.com/TykTechnologies/midsommar/v2/pkg/pwhash"
 )
 
 // Account lifecycle: the disabled switch, the empty-key guard, the SSO
@@ -111,7 +111,7 @@ func (suite *AuthServiceTestSuite) TestGetAuthenticatedUser_Lifecycle() {
 }
 
 func (suite *AuthServiceTestSuite) TestLogin_Lifecycle() {
-	hashed, err := bcrypt.GenerateFromPassword([]byte("Password1!"), bcrypt.DefaultCost)
+	hashed, err := pwhash.Hash("Password1!")
 	require.NoError(suite.T(), err)
 
 	suite.Run("disabled account gets a distinct 401", func() {
