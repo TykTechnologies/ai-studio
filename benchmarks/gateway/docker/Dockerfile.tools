@@ -11,6 +11,8 @@ COPY microgateway/go.mod microgateway/go.sum ./microgateway/
 # The module's replace directive points at the enterprise submodule, so its
 # go.mod must be present for `go mod download`, even for a CE-only build.
 COPY enterprise/go.mod ./enterprise/
+# The mgo.v2 replace (third_party/README.md) needs the fork's go.mod too.
+COPY third_party/mgo.v2/go.mod ./third_party/mgo.v2/
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/mockllm ./benchmarks/gateway/cmd/mockllm && \

@@ -178,3 +178,55 @@ it. The copy's tests run with the rest of the root module.
 
 langchaingo is MIT licensed (Copyright (c) Travis Cline). The licence
 file is kept in `langchaingo/LICENSE`.
+
+## mgo.v2: a fork of mgo, so FIPS strict mode gets past init
+
+`third_party/mgo.v2` is a copy of `gopkg.in/mgo.v2` at
+`v2.0.0-20190816093944-a6b53ec6cb22`, selected with
+`replace gopkg.in/mgo.v2 => ./third_party/mgo.v2` in the root `go.mod`
+(`../third_party/mgo.v2` in `microgateway/go.mod`).
+
+### Why
+
+Studio does not use MongoDB, but SSO needs the Tyk Identity Broker, and
+`models` → `tyk-identity-broker/tap` → `TykTechnologies/storage/persistent/model`
+imports `gopkg.in/mgo.v2/bson` (storage v1.7.0, the latest, still does).
+`bson` computes its ObjectId machine id with MD5 in a package-level
+initialiser, so under `GODEBUG=fips140=only` every binary and test binary that
+links `models` panicked before `main` (`crypto/md5: use of MD5 is not allowed
+in FIPS 140-only mode`). See the FIPS epic, midsommar-clean-8dy7.11.
+
+Unlike gorm and langchaingo the import path cannot change, because the
+importers are third-party code, hence the `replace`.
+
+### What the copy is
+
+- The non-test files of the packages the build links: `mgo` itself, `bson`,
+  `internal/json`, `internal/scram` and `internal/sasl`, plus the licence
+  files and README. Not copied: tests, `txn`, `dbtest`, `harness`.
+- `go.mod` is new (upstream has none): `module gopkg.in/mgo.v2`, `go 1.16`.
+- One change, marked `Tyk:` in `bson/bson.go`: the machine id hashes the
+  hostname with SHA-256 instead of MD5. It only spreads ObjectIds across hosts,
+  so the different bytes do not matter.
+
+The driver's other MD5 and SHA-1 uses (MongoDB authentication, user
+management, GridFS checksums) run only when talking to MongoDB, which Studio
+never does; they are listed in `scripts/fips-guard.allowlist`.
+
+### Limits
+
+Go ignores a `replace` in a dependency. A program that imports this module
+(the Tyk Dashboard through `pkg/studio`, or a plugin module that imports
+`models`) builds with upstream mgo unless it adds the same `replace`. The
+Gateway and Dashboard have the same class of problem (TT-18294). The
+`fips140=on` mode used in production allows MD5, so this matters only for
+strict-mode testing.
+
+Dockerfiles that run `go mod download` before copying the source must copy
+`third_party/mgo.v2/go.mod` first (see `benchmarks/gateway/docker/Dockerfile.tools`).
+
+### Licence
+
+mgo is BSD-2-Clause licensed (Copyright (c) 2010-2013 Gustavo Niemeyer); the
+`bson` and `internal/json` packages carry their own licence files. All are
+kept in the copy.
