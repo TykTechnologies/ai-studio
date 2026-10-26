@@ -3,7 +3,6 @@ package models
 import (
 	"testing"
 
-	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/logger"
 	"github.com/stretchr/testify/assert"
@@ -12,8 +11,7 @@ import (
 
 func teamTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
-	require.NoError(t, err)
+	db := openPrivateMemoryDB(t, &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	require.NoError(t, InitModels(db))
 	return db
 }
