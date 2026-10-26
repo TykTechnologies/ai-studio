@@ -127,7 +127,8 @@ EOF
   expect 0 "allowlisted uses pass" 'fips-guard: OK'
 
   local got=0
-  out=$(FIPS_GUARD_ROOT="$dir" FIPS_GUARD_ALLOWLIST="$dir/allow" "$0" 2>&1) || got=$?
+  # (env -u: make fips-guard runs with CE_ONLY=1 on fork pull requests)
+  out=$(env -u CE_ONLY FIPS_GUARD_ROOT="$dir" FIPS_GUARD_ALLOWLIST="$dir/allow" "$0" 2>&1) || got=$?
   if [ "$got" -eq 0 ] || ! grep -q 'enterprise submodule is not checked out' <<< "$out"; then
     echo "fips-guard self-test FAILED: a missing enterprise submodule without CE_ONLY=1 must fail (exit $got). Output:" >&2
     echo "$out" >&2
