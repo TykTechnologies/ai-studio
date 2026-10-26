@@ -12,7 +12,7 @@ import (
 func setupManifestTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	err = InitModels(db)
+	err = migrateTestSchema(db)
 	require.NoError(t, err)
 	return db
 }

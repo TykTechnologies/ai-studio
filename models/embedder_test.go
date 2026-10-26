@@ -15,7 +15,7 @@ func setupEmbedderTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, InitModels(db))
+	require.NoError(t, migrateTestSchema(db))
 	return db
 }
 

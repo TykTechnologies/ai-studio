@@ -14,7 +14,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	assert.NoError(t, err)
 
-	err = InitModels(db)
+	err = migrateTestSchema(db)
 	assert.NoError(t, err)
 
 	return db

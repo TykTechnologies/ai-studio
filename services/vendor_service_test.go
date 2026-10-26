@@ -4,7 +4,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/data_session"
 	"testing"
 
-	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/testinfra/studiodb"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/stretchr/testify/assert"
@@ -14,7 +14,7 @@ func setupVendorTest(t *testing.T) *Service {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	assert.NoError(t, err)
 
-	err = models.InitModels(db)
+	err = studiodb.Migrate(db)
 	assert.NoError(t, err)
 
 	return NewService(db)

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/testinfra/studiodb"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/stretchr/testify/assert"
@@ -106,7 +107,7 @@ func setupPortalRPCTest(t *testing.T) (*API, *gorm.DB) {
 
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, models.InitModels(db))
+	require.NoError(t, studiodb.Migrate(db))
 
 	pluginService := services.NewPluginService(db)
 	pluginManager := services.NewAIStudioPluginManager(db, nil)

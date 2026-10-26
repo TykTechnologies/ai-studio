@@ -7,6 +7,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/marketplace"
+	"github.com/TykTechnologies/midsommar/v2/pkg/testinfra/studiodb"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/stretchr/testify/assert"
@@ -16,7 +17,7 @@ func setupMarketplaceTest(t *testing.T) (*MarketplaceService, *gorm.DB) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	assert.NoError(t, err)
 
-	err = models.InitModels(db)
+	err = studiodb.Migrate(db)
 	assert.NoError(t, err)
 
 	// Create marketplace service with test configuration
@@ -591,7 +592,7 @@ func TestMarketplaceService_SyncAll(t *testing.T) {
 
 	t.Run("SyncAll with no default URL", func(t *testing.T) {
 		db, _ := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-		models.InitModels(db)
+		studiodb.Migrate(db)
 
 		ms := NewMarketplaceService(db, nil, nil, nil, "./cache", "", 1*time.Hour)
 

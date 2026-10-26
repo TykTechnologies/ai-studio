@@ -8,6 +8,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins/ocitest"
+	"github.com/TykTechnologies/midsommar/v2/pkg/testinfra/studiodb"
 	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -19,7 +20,7 @@ func setupSecurityWiringTest(t *testing.T) (*gorm.DB, *ociplugins.OCIConfig) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, models.InitModels(db))
+	require.NoError(t, studiodb.Migrate(db))
 
 	cfg := ociplugins.DefaultOCIConfig()
 	cfg.CacheDir = t.TempDir()

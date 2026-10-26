@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/testinfra/studiodb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
@@ -14,7 +15,7 @@ import (
 func setupSecurityTestDB(t *testing.T) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	err = models.InitModels(db)
+	err = studiodb.Migrate(db)
 	require.NoError(t, err)
 	return db
 }

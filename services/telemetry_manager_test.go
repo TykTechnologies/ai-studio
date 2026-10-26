@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/testinfra/studiodb"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/stretchr/testify/assert"
@@ -17,7 +18,7 @@ func setupTelemetryManagerTest(t *testing.T) (*gorm.DB, *TelemetryManager) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	assert.NoError(t, err)
 
-	err = models.InitModels(db)
+	err = studiodb.Migrate(db)
 	assert.NoError(t, err)
 
 	tm := NewTelemetryManager(db, true, "1.0.0-test")
@@ -28,7 +29,7 @@ func TestNewTelemetryManager(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	assert.NoError(t, err)
 
-	err = models.InitModels(db)
+	err = studiodb.Migrate(db)
 	assert.NoError(t, err)
 
 	t.Run("Create enabled telemetry manager", func(t *testing.T) {
@@ -108,7 +109,7 @@ func TestTelemetryManager_CollectAndSend(t *testing.T) {
 	t.Run("CollectAndSend with disabled telemetry", func(t *testing.T) {
 		db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 		assert.NoError(t, err)
-		err = models.InitModels(db)
+		err = studiodb.Migrate(db)
 		assert.NoError(t, err)
 
 		tm := NewTelemetryManager(db, false, "1.0.0")
@@ -208,7 +209,7 @@ func TestTelemetryManager_Start(t *testing.T) {
 	t.Run("Start with disabled telemetry", func(t *testing.T) {
 		db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 		assert.NoError(t, err)
-		err = models.InitModels(db)
+		err = studiodb.Migrate(db)
 		assert.NoError(t, err)
 
 		tm := NewTelemetryManager(db, false, "1.0.0")

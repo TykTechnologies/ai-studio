@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/testinfra/studiodb"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -23,7 +24,7 @@ func TestCreateSubmission_PluginSchemaEnforcedAtAPI(t *testing.T) {
 
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, models.InitModels(db))
+	require.NoError(t, studiodb.Migrate(db))
 	service := services.NewService(db)
 	service.NotificationService = services.NewTestNotificationService(db)
 	api := &API{service: service}
