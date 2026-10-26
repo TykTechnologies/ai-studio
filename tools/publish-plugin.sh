@@ -473,6 +473,14 @@ prepare_marketplace() {
 # --- publish ----------------------------------------------------------------
 
 do_publish() {
+  # A FIPS entry is only written for binaries this run built and checked with
+  # scripts/fips-verify.sh; reading a -fips tag back from the registry would
+  # record whatever that tag holds as FIPS.
+  if [ "$FIPS" = "1" ] && [ "$MARKETPLACE_ONLY" = "1" ]; then
+    die "FIPS=1 cannot be combined with --marketplace-only: the FIPS variant is only recorded
+       for binaries this run builds and checks with scripts/fips-verify.sh. Publish it
+       again with FIPS=1 instead (it replaces the version's oci_fips block)."
+  fi
   require_tool go "Install Go 1.26.10+."
   require_tool git ""
   require_tool python3 ""

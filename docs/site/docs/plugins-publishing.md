@@ -126,7 +126,9 @@ With `FIPS=1` the script:
   The next version's entry does not carry it forward: publish its FIPS
   variant again.
 
-It refuses to run when the version's entry does not exist yet. To install the
+It refuses to run when the version's entry does not exist yet, and together
+with `--marketplace-only`: a FIPS variant is only recorded for binaries the
+run built and checked itself. Running it again replaces the `oci_fips` block. To install the
 FIPS variant, use its tag or digest in the plugin's command, for example
 `oci://docker.tyk.io/studio-plugins/llm-cache:1.4.0-fips` or
 `oci://docker.tyk.io/studio-plugins/llm-cache@<oci_fips.digest>`.
