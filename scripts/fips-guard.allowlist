@@ -23,6 +23,7 @@ models/util.go                                   golang.org/x/crypto/bcrypt  Has
 auth/auth.go                                     golang.org/x/crypto/bcrypt  password set/reset hash bcrypt directly instead of models.HashPassword; .14
 services/oauth_client_service.go                 golang.org/x/crypto/bcrypt  OAuth client secret hash; .14
 microgateway/internal/services/crypto_service.go golang.org/x/crypto/bcrypt  microgateway HashSecret/VerifySecret; .14
+microgateway/internal/services/crypto_service.go golang.org/x/crypto/pbkdf2  x/crypto PBKDF2 (outside the validated module) with a fixed salt; stdlib crypto/pbkdf2 in .14
 api/auth_handlers_test.go                        golang.org/x/crypto/bcrypt  test checks the stored hash is bcrypt; .14 makes it format-agnostic or keeps it as a legacy fixture
 auth/auth_test.go                                golang.org/x/crypto/bcrypt  test builds and checks bcrypt hashes; .14
 auth/auth_lifecycle_test.go                      golang.org/x/crypto/bcrypt  test seeds a bcrypt-hashed user; .14
