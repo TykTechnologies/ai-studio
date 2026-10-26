@@ -19,6 +19,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/testinfra/sqlitetemplate"
 	"github.com/TykTechnologies/midsommar/v2/services"
 )
 
@@ -26,7 +27,29 @@ import (
 // database with an earlier one whose background writers are still draining.
 var setupDBSeq atomic.Int64
 
-// setupDB opens a private in-memory SQLite database for one test.
+// setupDBTemplate is migrated once per test binary (models.InitModels and the
+// analytics tables) and copied into every test's database: migrating each one
+// cost ~300 ms a test under -race. Migration itself still runs for real, here
+// and in the schema goldens in models.
+var setupDBTemplate = sqlitetemplate.New(func(db *gorm.DB) error {
+	if err := models.InitModels(db); err != nil {
+		return err
+	}
+	if err := db.AutoMigrate(
+		&models.LLMChatRecord{},
+		&models.LLMChatLogEntry{},
+		&models.ToolCallRecord{},
+		&models.ProxyLog{},
+		&models.Notification{},
+	); err != nil {
+		return err
+	}
+	// What setupTest used to run on each test's database.
+	return analytics.Migrate(db)
+})
+
+// setupDB opens a private in-memory SQLite database for one test, holding a
+// copy of the migrated template.
 //
 // It used to open "file::memory:?cache=shared" with 10 pooled connections:
 // one database for the whole package, and table-level locks between those
@@ -56,35 +79,17 @@ func setupDB(t *testing.T) *gorm.DB {
 	sqlDB.SetMaxIdleConns(1)
 	sqlDB.SetConnMaxLifetime(0)
 
-	// Migrate main models with retry logic
-	err = models.InitModels(db)
-	require.NoError(t, err)
-
-	// Migrate analytics tables explicitly with retry logic
-	for attempt := 0; attempt < 3; attempt++ {
-		err = db.AutoMigrate(
-			&models.LLMChatRecord{},
-			&models.LLMChatLogEntry{},
-			&models.ToolCallRecord{},
-			&models.ProxyLog{},
-			&models.Notification{},
-		)
-		if err == nil {
-			break
-		}
-		if strings.Contains(err.Error(), "database table is locked") {
-			t.Logf("Database locked during migration, retrying... (attempt %d/3)", attempt+1)
-			time.Sleep(time.Duration(100*(attempt+1)) * time.Millisecond)
-			continue
-		}
-		require.NoError(t, err)
-	}
-	require.NoError(t, err)
+	require.NoError(t, setupDBTemplate.CopyInto(db))
+	// The join models InitModels registers live on the gorm handle, not in
+	// the database, so this handle registers them itself.
+	require.NoError(t, models.RegisterJoinModels(db))
 
 	return db
 }
 
 // setupTest initializes DB, does migrations, and starts analytics in one place.
+// The returned cancel stops the analytics recorder and waits for its writer to
+// return, so nothing is written to the database after it.
 func setupTest(t *testing.T) (*gorm.DB, context.CancelFunc) {
 	// Clear signup domain filter for tests (allows any email domain)
 	config.Get("").FilterSignupDomains = nil
@@ -92,21 +97,25 @@ func setupTest(t *testing.T) (*gorm.DB, context.CancelFunc) {
 	// Reset global analytics handler state before test
 	analytics.ResetHandler()
 
+	// The template is migrated for analytics already (analytics.Migrate).
 	db := setupDB(t)
 
-	// Now start analytics AFTER migrations, ensuring the table is ready.
-	require.NoError(t, analytics.Migrate(db))
 	ctx, cancel := context.WithCancel(context.Background())
 	analytics.StartRecording(ctx, db)
+	recorder := analytics.GetHandler()
 
-	return db, cancel
+	return db, func() {
+		cancel()
+		if s, ok := recorder.(interface{ Stop() }); ok {
+			s.Stop()
+		}
+	}
 }
 
-// tearDownTest ensures the analytics background goroutine does not outlive the DB.
+// tearDownTest stops the analytics recorder, waiting for its writer so it
+// does not outlive the DB, then closes the DB.
 func tearDownTest(db *gorm.DB, cancel context.CancelFunc) {
-	time.Sleep(25 * time.Millisecond)
 	cancel()
-	time.Sleep(25 * time.Millisecond)
 	sqlDB, err := db.DB()
 	if err == nil {
 		_ = sqlDB.Close()
