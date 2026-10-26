@@ -10,8 +10,9 @@ import (
 )
 
 // encryptedColumns lists every column that holds secrets.EncryptValue output
-// ("$ENC/..."), either as the whole value or inside a JSON document. The
-// Secret rows have their own sweep (secrets.ReencryptLegacySecrets).
+// ("$ENC/..."): as the whole value, or (jsonColumns) as top-level string
+// values of a JSON object. The Secret rows have their own sweep
+// (secrets.ReencryptLegacySecrets).
 var encryptedColumns = []struct {
 	table   string
 	columns []string
@@ -22,6 +23,24 @@ var encryptedColumns = []struct {
 	{"tyk_gateway_definitions", []string{"definition"}},
 	{"submissions", []string{"resource_payload"}},
 	{"mcp_credentials", []string{"tyk_key_plain_token"}},
+}
+
+// jsonColumns are the encryptedColumns that hold a JSON object whose
+// top-level string values are EncryptValue outputs (LLM credential metadata,
+// the credential fields of a submission's payload).
+var jsonColumns = map[string]bool{"llms.metadata": true, "submissions.resource_payload": true}
+
+// reencryptColumn re-encrypts what the read path would decrypt in one
+// column value: the whole value, or the top-level string values of a JSON
+// column. Text that only contains "$ENC/" is never touched.
+func reencryptColumn(table, column, value string) (string, int) {
+	if jsonColumns[table+"."+column] {
+		return secrets.ReencryptEncJSON(value)
+	}
+	if updated, ok := secrets.ReencryptEncValue(value); ok {
+		return updated, 1
+	}
+	return value, 0
 }
 
 // reencryptBatch bounds the rows read at a time.
@@ -122,7 +141,7 @@ func reencryptTable(db *gorm.DB, table string, columns []string) (int, error) {
 				if old == "" {
 					continue
 				}
-				updated, n := secrets.ReencryptEncValues(old)
+				updated, n := reencryptColumn(table, c, old)
 				if n == 0 {
 					continue
 				}

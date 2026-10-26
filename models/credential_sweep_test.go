@@ -2,6 +2,7 @@ package models
 
 import (
 	"crypto/fips140"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -62,6 +63,18 @@ func testReencryptStoredCredentials(t *testing.T, db *gorm.DB) {
 	require.Equal(t, "v2", encVersion(rawColumn(t, db, "llms", "api_key", l.ID)))
 	require.Equal(t, "v2", encVersion(rawColumn(t, db, "webhook_targets", "signing_secret", w.ID)))
 
+	// User text that merely contains "$ENC/" is never touched: a free-text
+	// metadata value, and a scalar column holding a token inside longer text.
+	const note = "note: $ENC/AAAAAAAAAAAAAAAAAAAAAAAAAAAA end"
+	var meta map[string]any
+	require.NoError(t, json.Unmarshal([]byte(rawColumn(t, db, "llms", "metadata", l.ID)), &meta))
+	meta["note"] = note
+	metaJSON, err := json.Marshal(meta)
+	require.NoError(t, err)
+	require.NoError(t, db.Exec("UPDATE llms SET metadata = ? WHERE id = ?", string(metaJSON), l.ID).Error)
+	const header = "X-Note: $ENC/AAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	require.NoError(t, db.Exec("UPDATE webhook_targets SET headers = ? WHERE id = ?", header, w.ID).Error)
+
 	n, err := ReencryptStoredCredentials(db)
 	require.NoError(t, err)
 	assert.Zero(t, n, "standard builds do not sweep")
@@ -77,6 +90,8 @@ func testReencryptStoredCredentials(t *testing.T, db *gorm.DB) {
 	raw := rawLLM(t, db, l.ID)
 	assert.Equal(t, "v3", encVersion(raw.Metadata["aws_secret_access_key"].(string)))
 	assert.Equal(t, "$SECRET/AWS_SESSION", raw.Metadata["aws_session_token"], "references are left alone")
+	assert.Equal(t, note, raw.Metadata["note"], "free text containing a token is left alone")
+	assert.Equal(t, header, rawColumn(t, db, "webhook_targets", "headers", w.ID), "a token inside longer text is left alone")
 
 	var got LLM
 	require.NoError(t, db.First(&got, l.ID).Error)
@@ -106,8 +121,8 @@ func TestReencryptStoredCredentials_DoesNotRevertAConcurrentChange(t *testing.T)
 	require.NoError(t, db.Session(&gorm.Session{NewDB: true}).Table("llms").Where("id = ?", l.ID).Update("api_key", changed).Error)
 
 	secrets.ForceFIPSModeForTest(t)
-	updated, n := secrets.ReencryptEncValues(stale)
-	require.Equal(t, 1, n)
+	updated, ok := secrets.ReencryptEncValue(stale)
+	require.True(t, ok)
 	res := db.Exec("UPDATE llms SET api_key = ? WHERE id = ? AND CAST(api_key AS TEXT) = ?", updated, l.ID, stale)
 	require.NoError(t, res.Error)
 	assert.Zero(t, res.RowsAffected, "the compare-and-swap the sweep uses refuses a stale row")

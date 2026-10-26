@@ -1,61 +1,84 @@
 package secrets
 
 import (
+	"bytes"
+	"encoding/json"
 	"regexp"
 	"strings"
 	"testing"
 )
 
-// encToken matches a value EncryptValue wrote: "$ENC/" and a legacy
-// (base64url) or v2 ("v2:" + base64url) ciphertext. A v3 value
-// ("$ENC/v3:<iter>:...") is excluded by the caller: the pattern stops at
-// "v3" and the next character is ':'.
-var encToken = regexp.MustCompile(`\$ENC/(?:v2:)?[A-Za-z0-9_\-]+=*`)
+// encValue matches a whole value EncryptValue wrote: "$ENC/" and a legacy
+// (base64url) or v2 ("v2:" + base64url) ciphertext, and nothing else, which
+// is exactly what DecryptValue decrypts. A v3 value ("$ENC/v3:<iter>:...")
+// does not match. Text that merely contains such a token (a description, a
+// header value) is not a value we wrote and is never touched: the legacy
+// reader is unauthenticated and would turn it into garbage.
+var encValue = regexp.MustCompile(`^\$ENC/(?:v2:)?[A-Za-z0-9_\-]+=*$`)
 
 // WritesFIPSFormat reports whether this process writes the FIPS 140-3
 // formats (v3 secrets): crypto/fips140.Enabled.
 func WritesFIPSFormat() bool { return fipsEnabled() }
 
-// ReencryptEncValues re-encrypts, in the format this process writes, every
-// legacy or v2 "$ENC/" value in text: a column holding one EncryptValue
-// output, or a JSON document holding several (LLM credential metadata, a
-// submission's payload). v3 values are left alone, and so is a token that
-// does not decrypt with the configured key (it is not ours, or was written
-// under another key). It reads legacy AES-CFB values outside FIPS 140-only
-// enforcement (decryptForMigration): it is a migration. It returns the new
-// text and how many values it re-encrypted; with no key configured it
-// changes nothing.
-func ReencryptEncValues(text string) (string, int) {
+// ReencryptEncValue re-encrypts, in the format this process writes, a column
+// value that is wholly a legacy or v2 EncryptValue output. Anything else (a
+// v3 value, plain text, text containing a token, a value that does not
+// decrypt with the configured key) comes back unchanged, with ok false.
+// Legacy AES-CFB values are read outside FIPS 140-only enforcement
+// (decryptForMigration): this is a migration.
+func ReencryptEncValue(value string) (string, bool) {
 	key := encryptionKey()
-	if key == "" || !strings.Contains(text, "$ENC/") {
-		return text, 0
+	if key == "" || !encValue.MatchString(value) {
+		return value, false
 	}
-	var b strings.Builder
-	last, n := 0, 0
-	for _, loc := range encToken.FindAllStringIndex(text, -1) {
-		start, end := loc[0], loc[1]
-		if end < len(text) && text[end] == ':' {
-			continue // "$ENC/v3:..." (or not a value we wrote)
-		}
-		token := text[start:end]
-		plain, err := decryptForMigration(key, strings.TrimPrefix(token, "$ENC/"))
-		if err != nil {
+	plain, err := decryptForMigration(key, strings.TrimPrefix(value, "$ENC/"))
+	if err != nil {
+		return value, false
+	}
+	enc, err := encrypt(key, plain)
+	if err != nil {
+		return value, false
+	}
+	return "$ENC/" + enc, true
+}
+
+// ReencryptEncJSON is ReencryptEncValue for a JSON object column (LLM
+// credential metadata, a submission's payload): it re-encrypts the top-level
+// string values that are wholly a legacy or v2 EncryptValue output, which is
+// where those writers put them, and re-marshals the object. Numbers keep
+// their text. It returns the new document and how many values changed;
+// anything that is not a JSON object comes back unchanged.
+func ReencryptEncJSON(doc string) (string, int) {
+	if !strings.Contains(doc, "$ENC/") {
+		return doc, 0
+	}
+	dec := json.NewDecoder(strings.NewReader(doc))
+	dec.UseNumber()
+	var obj map[string]any
+	if err := dec.Decode(&obj); err != nil || obj == nil {
+		return doc, 0
+	}
+	n := 0
+	for k, v := range obj {
+		s, ok := v.(string)
+		if !ok {
 			continue
 		}
-		enc, err := encrypt(key, plain)
-		if err != nil {
-			continue
+		if enc, changed := ReencryptEncValue(s); changed {
+			obj[k] = enc
+			n++
 		}
-		b.WriteString(text[last:start])
-		b.WriteString("$ENC/" + enc)
-		last = end
-		n++
 	}
 	if n == 0 {
-		return text, 0
+		return doc, 0
 	}
-	b.WriteString(text[last:])
-	return b.String(), n
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(obj); err != nil {
+		return doc, 0
+	}
+	return strings.TrimSuffix(buf.String(), "\n"), n
 }
 
 // ForceFIPSModeForTest makes this package write the FIPS formats (v3) until
