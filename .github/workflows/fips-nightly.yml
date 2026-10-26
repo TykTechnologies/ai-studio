@@ -1,0 +1,85 @@
+name: FIPS Strict-Mode Tests
+
+# make test-fips: the Go unit tests built with GOFIPS140=v1.0.0 and run with
+# GODEBUG=fips140=only, so any non-approved algorithm errors or panics (see
+# scripts/test-fips.sh). It tracks FIPS Phase 2 remediation (epic
+# midsommar-clean-8dy7): the job summary lists the failing packages and
+# tests.
+#
+# Non-blocking for now: nothing requires this workflow, and a failing run
+# only raises a warning. midsommar-clean-8dy7.20 makes strict mode a
+# blocking CI check once the suite is clean.
+on:
+  schedule:
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fips-nightly-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOPRIVATE: github.com/TykTechnologies/ai-studio-enterprise
+
+jobs:
+  test-fips:
+    name: FIPS Strict-Mode Tests (${{ matrix.edition }})
+    runs-on: warp-ubuntu-latest-arm64-4x
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [ce, ent]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: ${{ matrix.edition == 'ent' }}
+          token: ${{ secrets.CI_SUBMODULE_PAT || github.token }}
+
+      - name: Create enterprise stub for CE builds
+        if: matrix.edition == 'ce'
+        run: |
+          mkdir -p enterprise
+          cat > enterprise/go.mod << 'EOF'
+          module github.com/TykTechnologies/ai-studio-enterprise/v2
+
+          go 1.26.5
+          EOF
+
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Create placeholders for embeds
+        run: |
+          mkdir -p docs/site/dist ui/admin-frontend/build
+          echo "placeholder" > docs/site/dist/index.html
+          echo "placeholder" > ui/admin-frontend/build/index.html
+          cp dev/.env.dev .env
+
+      # make test-fips links the enterprise tests of core packages (ent-link),
+      # and writes its Markdown summary to the job summary.
+      - name: Run the tests in FIPS strict mode
+        id: test
+        continue-on-error: true
+        env:
+          FIPS_TEST_OUT: fips-test-results
+        run: make test-fips EDITION=${{ matrix.edition }}
+
+      - name: Upload the results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fips-test-results-${{ matrix.edition }}
+          path: fips-test-results/
+          retention-days: 14
+
+      - name: Report
+        if: steps.test.outcome == 'failure'
+        run: echo "::warning title=FIPS strict mode (${{ matrix.edition }})::Tests fail under GODEBUG=fips140=only; see the job summary (non-blocking until midsommar-clean-8dy7.20)."
