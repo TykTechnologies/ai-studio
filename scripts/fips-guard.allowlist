@@ -31,12 +31,12 @@ services/oauth_client_service_test.go            golang.org/x/crypto/bcrypt  tes
 
 # --- Secrets at rest (midsommar-clean-8dy7.10, .13)
 secrets/models.go                                golang.org/x/crypto/scrypt  v2 secrets KDF; the v2 reader stays, FIPS-mode writes move to v3 PBKDF2 in .13
-secrets/models.go                                cipher.NewGCM               AES-GCM with caller-supplied nonces; NewGCMWithRandomNonce in .10
 secrets/models.go                                cipher.NewCFBDecrypter      legacy (pre-v2) secrets reader; stays so the re-encrypt sweep can read old values
 secrets/gcm_test.go                              cipher.NewCFBEncrypter      test builds a legacy CFB secret fixture for the reader above
+secrets/gcm_compat_test.go                       cipher.NewGCM               test reproduces the pre-.10 v2 reader (caller nonce) to prove new ciphertexts stay readable by older builds; skipped under fips140.Enforced()
 
 # --- Microgateway and hub->edge snapshot (midsommar-clean-8dy7.10, .15)
-microgateway/internal/services/crypto_service.go cipher.NewGCM               microgateway secret encryption with caller nonces; NewGCMWithRandomNonce in .10
+microgateway/internal/services/crypto_service_compat_test.go cipher.NewGCM test reproduces the pre-.10 reader (caller nonce) to prove new ciphertexts stay readable by older builds; skipped under fips140.Enforced()
 grpc/control_server.go                           cipher.NewGCM               deterministic HMAC-derived snapshot nonce for the sync checksum; capability-gated change in .15
 grpc/snapshot_encryption_test.go                 cipher.NewGCM               test decrypts a snapshot the way the microgateway does; follows grpc/control_server.go in .10/.15
 
