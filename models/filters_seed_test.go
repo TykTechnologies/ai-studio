@@ -4,15 +4,11 @@ import (
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
-	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 func TestGetOrCreateDefaultFilters(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared&_seed_filters=1"), &gorm.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := openPrivateMemoryDB(t, &gorm.Config{})
 	if err := db.AutoMigrate(&Filter{}); err != nil {
 		t.Fatal(err)
 	}

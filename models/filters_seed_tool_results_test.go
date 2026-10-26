@@ -6,18 +6,14 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
-	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 const toolResultsFilterName = "Prompt injection in tool results (quarantine)"
 
-func seedTestDB(t *testing.T, name string) *gorm.DB {
+func seedTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open("file:"+name+"?mode=memory&cache=shared"), &gorm.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	db := openPrivateMemoryDB(t, &gorm.Config{})
 	if err := db.AutoMigrate(&Filter{}); err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +24,7 @@ func seedTestDB(t *testing.T, name string) *gorm.DB {
 // injection heuristics, a matching user message only logged, a matching
 // tool result quarantined.
 func TestDefaultFilters_ToolResultsFilterOnFreshInstall(t *testing.T) {
-	db := seedTestDB(t, "seed_tool_results_fresh")
+	db := seedTestDB(t)
 	if err := GetOrCreateDefaultFilters(db); err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +73,7 @@ func TestDefaultFilters_ToolResultsFilterOnFreshInstall(t *testing.T) {
 // possibly edited, renamed away or deleted. Starting v2.3 adds the new
 // filter and leaves every existing row exactly as it was.
 func TestDefaultFilters_ToolResultsFilterOnUpgrade(t *testing.T) {
-	db := seedTestDB(t, "seed_tool_results_upgrade")
+	db := seedTestDB(t)
 
 	// The v2.2 seed: the four filters as that release stored them
 	// (normalised, without tool_results, quarantine or budget keys).
