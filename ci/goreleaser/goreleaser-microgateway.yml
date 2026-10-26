@@ -217,6 +217,11 @@ nfpms:
         type: origin
 publishers:
   - name: packagecloud
+    # Only the std packages are published. The fips build is not a FIPS build
+    # yet (no GOFIPS140), so its tyk-microgateway-fips packages are built but must
+    # not be published until the real FIPS build lands.
+    ids:
+      - mgw-std
     env:
       - PACKAGECLOUD_TOKEN={{ .Env.PACKAGECLOUD_TOKEN }}
     cmd: packagecloud publish --debvers "{{ .Env.DEBVERS }}" --rpmvers "{{ .Env.RPMVERS }}" {{ .Env.PACKAGECLOUD_REPO }} {{ .ArtifactPath }}
