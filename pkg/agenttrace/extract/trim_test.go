@@ -2,7 +2,9 @@ package extract
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -266,21 +268,52 @@ func TestTrimHistory_Truncated(t *testing.T) {
 }
 
 // Hostile shapes stay linear: deep nesting, long backslash runs, a sea of
-// quotes and many tiny messages, 1 MiB each.
+// quotes and many tiny messages, up to 1 MiB each.
+//
+// Linearity is checked by growth, not by a wall-clock budget: each shape is
+// timed at a quarter of its size and at full size, and the time may grow
+// about fourfold, never the sixteenfold a quadratic scan would take. A fixed
+// budget failed under the release gate's -race -covermode=atomic, which
+// slows the scan several times over without changing its shape.
 func TestTrimHistory_Linear(t *testing.T) {
 	const mib = 1 << 20
 	tail := `,{"role":"assistant","content":"a"},{"role":"user","content":"u"}]}`
-	for name, body := range map[string]string{
-		"deep nesting":   `{"messages":[{"role":"user","content":` + strings.Repeat("[", mib/2) + strings.Repeat("]", mib/2) + `}` + tail,
-		"backslash runs": `{"messages":[{"role":"user","content":"` + strings.Repeat(`\\\\\\\\\"`, mib/10) + `"}` + tail,
-		"quotes":         `{"messages":[{"role":"user","content":[` + strings.Repeat(`"",`, mib/3) + `""]}` + tail,
-		"tiny messages":  `{"messages":[` + strings.Repeat(`{"role":"assistant"},`, mib/20) + `{}` + tail,
-		"unclosed":       `{"messages":[{"role":"user","content":"` + strings.Repeat(`\"`, mib/2),
+	for name, body := range map[string]func(size int) string{
+		"deep nesting": func(n int) string {
+			return `{"messages":[{"role":"user","content":` + strings.Repeat("[", n/2) + strings.Repeat("]", n/2) + `}` + tail
+		},
+		"backslash runs": func(n int) string {
+			return `{"messages":[{"role":"user","content":"` + strings.Repeat(`\\\\\\\\\"`, n/10) + `"}` + tail
+		},
+		"quotes": func(n int) string {
+			return `{"messages":[{"role":"user","content":[` + strings.Repeat(`"",`, n/3) + `""]}` + tail
+		},
+		"tiny messages": func(n int) string {
+			return `{"messages":[` + strings.Repeat(`{"role":"assistant"},`, n/20) + `{}` + tail
+		},
+		"unclosed": func(n int) string { return `{"messages":[{"role":"user","content":"` + strings.Repeat(`\"`, n/2) },
 	} {
-		start := time.Now()
-		_, _ = trimHistory(FormatAnthropic, []byte(body))
-		assert.Less(t, time.Since(start), 200*time.Millisecond, name)
+		small, large := trimTimes([]byte(body(mib/4)), []byte(body(mib)))
+		// A hang guard; the growth check below is what catches a slow scan.
+		assert.Less(t, large, 10*time.Second, name)
+		assert.Less(t, float64(large), 8*float64(small), "%s: %v at 1/4 MiB, %v at 1 MiB", name, small, large)
 	}
+}
+
+// trimTimes returns the fastest of four trims of each body. The two are
+// trimmed in turn, so load from other packages' tests slows both alike, and
+// taking the fastest keeps a scheduler or GC pause out of the measurement.
+func trimTimes(small, large []byte) (time.Duration, time.Duration) {
+	best := [2]time.Duration{math.MaxInt64, math.MaxInt64}
+	for i := 0; i < 4; i++ {
+		for j, body := range [2][]byte{small, large} {
+			runtime.GC()
+			start := time.Now()
+			_, _ = trimHistory(FormatAnthropic, body)
+			best[j] = min(best[j], time.Since(start))
+		}
+	}
+	return best[0], best[1]
 }
 
 // A history the segmenter would refuse is not read: an old message with a
