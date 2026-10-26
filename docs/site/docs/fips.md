@@ -1,6 +1,6 @@
 # FIPS 140-3
 
-AI Studio and the microgateway are available as FIPS 140-3 builds, like Tyk Gateway, Dashboard, Pump and MDCB. They are **FIPS 140-3 compliant**: all their cryptography goes through a validated module. They are not themselves certified products.
+AI Studio and the microgateway are available as FIPS 140-3 builds, like Tyk Gateway, Dashboard, Pump and MDCB. They are **FIPS 140-3 compliant**: the approved algorithms they use come from a validated module, and the few non-approved read paths left are listed under [Known exceptions](#known-exceptions). They are not themselves certified products.
 
 ## What is covered
 
@@ -46,12 +46,13 @@ FIPS-mode processes write approved formats; every build reads both the old and t
 - **Secrets.** At startup a FIPS-mode AI Studio re-encrypts stored secrets (the Secrets page) from older formats to `v3`. Encrypted values in other tables (such as LLM API keys) stay in the `v2` format until they are next saved: they are still read, but the key behind them comes from scrypt, which is not an approved algorithm.
 - **Passwords.** A user's bcrypt hash is replaced with a PBKDF2 one the next time they log in on a FIPS build; an OAuth client secret on its next successful use.
 - **Schema version.** These formats raise the database schema version to 25, so an older AI Studio refuses a database a newer one has migrated instead of misreading it.
-- **Legacy secrets.** Values encrypted before the `v2` format (AES-CFB) are read only by the startup re-encryption under `fips140=only`; let AI Studio start once (in FIPS mode or not) before enforcing strict mode.
+- **Legacy secrets.** Under `fips140=only`, values encrypted before the `v2` format (AES-CFB) are read only by the startup re-encryption, which covers the Secrets page: let AI Studio start once before enforcing strict mode. Any other value still in that format (an encrypted value in another table, such as an older LLM API key) returns an error under `fips140=only` until it is saved again, because the startup re-encryption does not reach it.
 
 ## Operational requirements
 
-- **TLS.** FIPS mode accepts TLS 1.2 and 1.3 with approved cipher suites and curves only. Peers that offer only ChaCha20-Poly1305, or only X25519 key exchange, fail to connect. This applies to LLM vendors, the hub-edge gRPC link, plugins over gRPC, and your own TLS endpoints.
-- **Certificates and keys.** Use RSA keys of 2048 bits or more, or ECDSA P-256/P-384/P-521, for TLS certificates, cosign plugin-signing keys and SSO identity providers (JWKS). FIPS mode on (`fips140=on`) still accepts smaller RSA keys; strict mode does not.
+- **TLS.** FIPS mode accepts TLS 1.2 and 1.3 with approved cipher suites and curves only. Peers that offer only ChaCha20-Poly1305, or only plain X25519 key exchange, fail to connect; the hybrid post-quantum X25519MLKEM768 key exchange of TLS 1.3 is allowed. This applies to LLM vendors, the hub-edge gRPC link, plugins over gRPC, and your own TLS endpoints.
+- **TLS certificates** must use RSA keys of 2048 bits or more, ECDSA P-256/P-384/P-521, or Ed25519 in FIPS mode; others are refused (with `fips140=on` and `fips140=only` alike).
+- **Signing keys outside TLS** (cosign plugin-signing keys, SSO identity providers' JWKS): use RSA 2048+ or ECDSA. FIPS mode on (`fips140=on`) still accepts smaller RSA keys there; strict mode does not.
 - **Postgres.** Use SCRAM-SHA-256 password authentication, not `md5`.
 - **Skipping TLS verification** (`InsecureSkipVerify`-style options) is outside the scope of FIPS compliance; do not use it in a FIPS deployment.
 - **Resource signing.** LLM resource IDs (native API extensions) are signed with a key from the hub's signing secret, or, without one, from the vendor credential. Set a hub signing secret for every LLM: a key derived from a short or placeholder credential (such as Ollama's `none`) is guessable in any build. Short-credential IDs signed in standard mode do not verify in FIPS mode, and the other way round.
@@ -59,7 +60,7 @@ FIPS-mode processes write approved formats; every build reads both the old and t
 
 ## Known exceptions
 
-Until the strict-mode work is complete, these uses are not approved in FIPS mode. They are read paths for older data or upstream code that a FIPS deployment does not reach:
+These uses are not approved in FIPS mode. The first three are read paths for data written by standard builds (or older releases), reached until that data is rewritten in an approved format; the last is MongoDB driver code that AI Studio never reaches:
 
 | Use | Where | Notes |
 |---|---|---|
