@@ -1,686 +1,515 @@
 # Tyk AI Studio 2.3.0
 
 **Status:** Unreleased. This file collects what has merged to `main` since 2.2.1 and is updated as more merges land.
-**Diff so far:** [`v2.2.1...main`](https://github.com/TykTechnologies/ai-studio/compare/v2.2.1...main)
 
-2.3.0 so far adds five capabilities, a chat billing fix, one edge fix, and the fixes from a bugsmash of the GitHub issue backlog.
+AI Studio 2.3 is built for teams running AI agents. You can now **see what your agents do**, step by step, without changing them. You can **protect agents from prompt injection** hidden in the pages, files and API responses they read. And you can **cut what agents spend on tokens**. Alongside that, 2.3 brings **FIPS 140-3 builds**, a new class of **decision models**, the **native SDK features** of OpenAI and Anthropic (batches, the Responses API and more) under full governance, **MCP governance on open-source Tyk Gateways**, and around seventy fixes from a sweep of the issue backlog.
 
-- **Decision models.** AI Studio now governs a new class of model that answers typed questions about a piece of evidence, with calibrated probabilities, instead of generating text. OpenAI's Decisions API (`gpt-6-luna`) and System One models (TypeSafe's Jev and wire-compatible self-hosts) are supported. Clients use one contract, the **OpenAI Decisions schema on `/v1/decisions`**, whatever the provider. Auth, filters, plugins, budgets and analytics apply to decision calls as they do to chat.
-- **Tyk OSS Gateway connections (Enterprise).** AI Studio can manage MCP proxies and keys directly on open-source Tyk Gateways, without a Tyk Dashboard.
-- **Guardrails for tool results (Enterprise).** Request guardrails now screen what tools return (a fetched page, a file, an MCP or API response) for indirect prompt injection, in every vendor format, in the Responses API and native batches, and in Studio chat. A new `quarantine` action replaces a flagged tool result with a placeholder so the agent goes on without it. **Existing guardrails start scanning tool results on upgrade, and remote providers start receiving tool output.**
-- **Native SDK features.** Anthropic Message Batches and `count_tokens`, and OpenAI's Responses, Conversations, Batches and Files APIs, now work through the native `/llm/` endpoints with the same governance as a chat call: filters, model allow-lists, budgets, analytics, and resources that belong to the App that created them.
-- **FIPS 140-3 builds.** AI Studio and the Microgateway are available as FIPS 140-3 compliant builds, on the Go Cryptographic Module v1.0.0 (CMVP certificate #5247), as `-fips` packages and the `tykio/tyk-ai-studio-fips` and `tykio/tyk-microgateway-fips` images.
-- **Chat billing.** Chat sessions are priced like gateway calls: Anthropic turns with tool calls are no longer billed two or three times, and cached tokens are billed at the cache price.
-- **Edge stability.** Two data races in the edge's control-plane client are fixed. One of them left an extra heartbeat worker running after every reconnect.
-- **Bugsmash.** Around seventy fixes from the GitHub issue backlog, across AI Studio, the Microgateway and eight plugins:
-  - Credential references (`$SECRET/`, `$ENV/`) follow one operator policy everywhere.
-  - Plugins get an explicit environment and only the service-API scopes they declare.
-  - Vendor clients no longer read keys or endpoints from the environment.
-  - Tool and LLM names must have unique slugs, and edges apply what they can store instead of refusing a whole configuration.
-  - AI Studio opens SQLite files in WAL mode.
-  - Long chat sessions send their newest messages.
+## At a glance
 
-Read **Breaking changes and upgrade notes** before upgrading. **Internal network addresses are now blocked by default** for LLM upstreams, Studio chat, embedders, tools, data sources and vector stores, guardrail providers and filter HTTP calls: a local Ollama, an in-cluster model server or vector database needs its **Allow internal host** switch, or `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` (or `LLM_UPSTREAM_BLOCK_INTERNAL=false`) on AI Studio and every edge. Edges must run 2.3.0 to serve decision models and to scan tool results, and should be upgraded with the hub for native API resource IDs. Existing request guardrails scan tool results after the upgrade, and a guardrail on a remote provider (Lakera, Azure, Bedrock Guardrails, Presidio, an HTTP classifier) sends them to that provider: check each one before you upgrade. Plugins attached to Bedrock LLMs start running on `/ai/`, `/v1`, routers and `/anthropic/`: upgrade the published plugins to their 2.3.0 versions (see **Plugins**), and check your own plugins and filter scripts for Bedrock: filters there now read the Converse body.
+- **Agent Call Tracing** (Enterprise): sessions, transcripts and timelines of what each agent did, built from the traffic the gateway already sees.
+- **Guardrails for agents** (Enterprise): screen tool results, tool calls and tool definitions for prompt injection, and quarantine a poisoned tool result instead of stopping the agent.
+- **Prompt Compressor** (community plugin): smaller requests and lower token bills, without breaking the vendor's prompt cache.
+- **FIPS 140-3 builds** of AI Studio and the Microgateway, as packages and container images.
+- **Decision models**: govern models that answer typed questions with calibrated probabilities, through one OpenAI-compatible endpoint.
+- **Native SDK features**: Anthropic Message Batches and `count_tokens`, and OpenAI Responses, Conversations, Batches and Files, governed like any chat call.
+- **Tyk OSS Gateway connections and MCP analytics** (Enterprise): manage MCP proxies and keys on open-source Tyk Gateways, and see how your MCP servers are used.
+- **Plugins work on Bedrock everywhere**: plugins attached to a Bedrock LLM now run on every endpoint.
+- **Safer by default**: internal network addresses are blocked unless you allow them, plugin signatures are required, credentials are encrypted at rest, and plugins get only the access they declare.
+- **More accurate billing**: chat turns with tool calls are no longer billed two or three times, and cached tokens are billed at the cache price.
 
-The bugsmash adds upgrade notes of its own:
-- list the `$ENV/` names your configuration uses in `AI_STUDIO_ENV_REF_ALLOWLIST`, or move those credentials to the secret store;
-- set keys and endpoints on each LLM, embedder and datasource rather than through vendor environment variables;
-- set `TYK_AI_SECRET_KEY` if you use SSO;
-- give plugins that read host environment variables a `PLUGIN_ENV_PASSTHROUGH` entry.
+## Before you upgrade
+
+2.3 changes several defaults to make deployments safer. Check these before upgrading. Each one is explained in [Upgrade notes](#upgrade-notes).
+
+1. **Internal addresses are blocked by default.** If an LLM, embedder, tool, data source, vector store or guardrail provider runs on your own network (a local Ollama, an in-cluster model server), allow it first. [Details](#network-access).
+2. **`$ENV/` references only resolve for names you allow.** List them in `AI_STUDIO_ENV_REF_ALLOWLIST`, or move those credentials to the secret store. [Details](#credentials-and-secrets).
+3. **Vendor keys are no longer read from environment variables** such as `OPENAI_API_KEY`. Set keys and endpoints on each LLM, embedder and data source. [Details](#credentials-and-secrets).
+4. **OCI plugins must be signed** (Enterprise), and plugins no longer inherit the host's environment. [Details](#plugins).
+5. **Upgrade the shipped plugins** to their 2.3.0 versions, and rebuild your own request-path plugins on the 2.3 SDK. [Details](#plugins) and [Plugin releases](#plugin-releases).
+6. **Existing guardrails start scanning tool results** (Enterprise), and remote guardrail providers start receiving tool output. [Details](#guardrails).
+7. **Upgrade edges together with AI Studio.** Several features and credential changes need both on 2.3. [Details](#edges).
+8. **Take a database backup.** Once 2.3 has migrated a database, older AI Studio versions refuse it, so rolling back means restoring the backup. [Details](#database).
+9. **Set `TYK_AI_SECRET_KEY`** if you use SSO, and so that LLM credentials are encrypted at rest. [Details](#credentials-and-secrets).
+10. **Using the quickstart?** Replace its placeholder secrets before the first start. [Details](#other-changes-in-behaviour).
 
 ---
 
-## Highlights
+## What's new
 
-- **Decision models** ([#724](https://github.com/TykTechnologies/ai-studio/pull/724)).
-  - **One client contract:** `POST {base}/decisions` on the unified `/v1` endpoint and `POST /ai/{slug}/v1/decisions` take OpenAI's Decisions schema. Each call is translated to the provider's own format and back.
-  - **New System One provider:** decisions only, for TypeSafe's hosted API or a self-hosted model.
-  - **Governed like chat:** each call is logged, priced and counted against budgets. A new Dashboard panel reports decision calls, questions answered, refusals and cost.
+### See what your agents are doing: Agent Call Tracing (Enterprise)
 
-  See `docs/site/docs/decision-models.md`.
-- **Tyk OSS Gateway connections** (Enterprise, [#721](https://github.com/TykTechnologies/ai-studio/pull/721), [ai-studio-enterprise#70](https://github.com/TykTechnologies/ai-studio-enterprise/pull/70)). A new connection kind for teams that want governed MCP without the full Tyk Dashboard APIM.
-  - Open-source Gateways have no cluster API, so AI Studio stores the proxies it owns, finds the nodes on every sync (a single URL, a list, or DNS) and reconciles each node. A new **Nodes** panel shows each node as In sync, Pending, Unreachable or Gone.
-  - Keys carry their rights inline rather than through policies, so a key works on every node at once. Each MCP server has a **Key access** section for the tool allow-list, rate and quota.
-  - **MCP only:** every Gateway call is checked against a fixed allow-list, and AI Studio never changes or deletes proxies it did not create.
+When an agent misbehaves, the question is always "what did it actually do?". The gateway already sees every LLM call, tool call, MCP call and datasource query an agent makes. AI Studio now turns that traffic into a readable account of each agent session. Nothing changes in the agent: no SDK and no code changes.
 
-  See `docs/site/docs/tyk-oss-gateway-mcp.md`.
-- **Native API extensions** ([#730](https://github.com/TykTechnologies/ai-studio/pull/730), [#737](https://github.com/TykTechnologies/ai-studio/pull/737)). SDK features that are not a single synchronous `POST` now work on `/llm/{rest,stream,call}/{slug}/...`, through a small extension framework (`pkg/nativeapi`).
-  - **Anthropic:** Message Batches (create, retrieve, list, cancel, results, delete) and `count_tokens`.
-  - **OpenAI:** Responses (including background responses), Conversations, and Batches with batch input Files.
-  - **Governed like chat:** every batch request and uploaded batch line passes the model allow-list and the LLM's filters, results lines pass the response filters, and batch usage is recorded once, at the batch price, on the hub or the edge that created it.
-  - **Owned resources:** batch, file, response and conversation IDs are signed for the App and LLM that created them. Another App's ID gets `404`, and the request never reaches the vendor.
+- **Agent Sessions** in the admin console: a filterable list of sessions, with a **transcript** and a **timeline** for each one, and a find bar. The timeline shows one labelled row per step, with a colour legend, zoom and pan, and stays usable for sessions with hundreds of turns.
+- **The whole picture.** Captures traffic everywhere the gateway runs: the `/llm/` and `/ai/` endpoints, Bedrock, Studio tools, MCP, datasources and edge plugin endpoints, on AI Studio and on edges. The gateway's own decisions appear too: a filter or budget block, a fallback to another model, a routing choice.
+- **Tool calls linked to the LLM call that asked for them**, with how confident the link is. Tools that an agent runs itself are inferred from its LLM traffic.
+- **Private by default.** Tracing is off until you turn it on (`AGENT_TRACING_ENABLED`). Capturing prompt and response content is a separate choice: `off`, `metadata`, `redacted` or `full`. You set it globally, per App and per request, under a ceiling you control. Secrets are always stripped, and captured content is encrypted at rest.
+- **Access is controlled and audited.** Reading captured content needs the new `trace-content:read` permission, and every read is audited. Viewers, Editors and Auditors see end users as stable pseudonyms rather than real ids.
+- **Export and erase.** Export a session as JSON or Markdown, purge sessions, and erase everything held about an end user.
+- **Send traces to your observability stack.** Finished turns can be exported over OpenTelemetry (GenAI semantic conventions), with presets for Langfuse and Datadog LLM Observability.
+- **Built to scale.** Measured at about 8,000 spans per second on a 2-CPU Postgres 16, holding steady from about 4 to 10 million stored spans.
 
-  See `docs/site/docs/proxy.md` and `features/NativeAPIExtensions.md`.
-- **Guardrails for tool results** (Enterprise). Tool output is how instructions reach a model without the user typing them. Request guardrails now inspect every tool result, across the whole conversation history, whatever the filter's scope.
-  - **Every format:** OpenAI, Ollama, Anthropic (including server-tool and MCP results), Google AI and Vertex, Bedrock Converse, the Responses API's tool outputs, each item of an Anthropic Message Batch and each line of an OpenAI batch file, and the tools of Studio chat.
-  - **Quarantine, not block:** a flagged tool result is replaced with a placeholder and the request goes on, because blocking stops an agent for good (its next request carries the same tool result). A `block` filter quarantines tool results unless told otherwise.
-  - **Affordable to run:** each node caches provider verdicts, so history an agent sends again is not classified again, and per-request budgets bound what a sender can make the gateway scan. Text past a budget is flagged as unscanned, never passed as clean.
-  - **A new seeded filter**, **Prompt injection in tool results (quarantine)**, unattached.
+See the [agent tracing guide](docs/site/docs/agent-tracing.md).
 
-  See `docs/site/docs/guardrails.md` (Tool results, Quarantine, Budgets and the verdict cache).
-- **A prompt-injection guardrail image ships with 2.3** (Enterprise: the HTTP guardrail provider). `tykio/ai-studio-guardrail-wolf` (CPU) and `tykio/ai-studio-guardrail-wolf-gpu` (NVIDIA) run the Wolf Defender Jev classifier behind the HTTP guardrail contract, scoring tool results, tool calls, user messages and tool definitions. Source: [TykTechnologies/ai-studio-guardrail-wolf](https://github.com/TykTechnologies/ai-studio-guardrail-wolf), MIT. See **Wolf Defender guardrail images** below.
-- **Credential references follow an operator policy** ([#794](https://github.com/TykTechnologies/ai-studio/pull/794), [#789](https://github.com/TykTechnologies/ai-studio/pull/789), [#788](https://github.com/TykTechnologies/ai-studio/pull/788), [#766](https://github.com/TykTechnologies/ai-studio/pull/766)).
-  - **`$ENV/NAME` resolves only for names in `AI_STUDIO_ENV_REF_ALLOWLIST`**, which is empty by default. This applies on every path: LLMs, tools, datasources, embedders, guardrail connections and plugin configuration.
-  - **Setting or changing a `$SECRET/` or `$ENV/` reference needs `secrets:read`.** Keeping a stored reference needs nothing extra. Submissions and plugins cannot set references.
-  - **Edges receive resolved values.** A reference the hub does not resolve reaches an edge as an unusable value, never as a name the edge could resolve itself.
-  - **Tool auth keys stored as references are resolved when AI Studio calls the tool**, in chat and on the embedded gateway, and stay references when the tool is edited.
+### Protect agents from prompt injection: guardrails for agent traffic (Enterprise)
 
-  See `docs/site/docs/secrets.md`.
-- **Plugin hardening** ([#750](https://github.com/TykTechnologies/ai-studio/pull/750), [#775](https://github.com/TykTechnologies/ai-studio/pull/775), [#741](https://github.com/TykTechnologies/ai-studio/pull/741), [#776](https://github.com/TykTechnologies/ai-studio/pull/776), [#745](https://github.com/TykTechnologies/ai-studio/pull/745), [#768](https://github.com/TykTechnologies/ai-studio/pull/768), [#749](https://github.com/TykTechnologies/ai-studio/pull/749)).
-  - **Explicit environment.** Plugins run with an environment allowlist instead of the host's environment. `PLUGIN_ENV_PASSTHROUGH` adds variables.
-  - **Declared scopes.** Brokered service-API calls are checked against the scopes the plugin's manifest declares and an admin approved. A plugin reads and writes its own configuration without a scope.
-  - **Plugin hosts.** Hosts are classified by parsed address, not by substring, and `100.64.0.0/10` counts as internal.
-  - **Cached binaries.** Cached OCI plugin binaries are checked against their fetch-time hash before they load.
-  - **Broker readiness.** The plugin broker waits for the plugin's ready signal.
+Agents read web pages, files and API responses, and any of them can carry hidden instructions. This is "indirect" prompt injection: the attacker never talks to the model directly. 2.3 extends guardrails to every part of an agent conversation.
 
-  See `docs/site/docs/plugins-security.md`.
-- **FIPS 140-3 builds** ([#865](https://github.com/TykTechnologies/ai-studio/pull/865), [#866](https://github.com/TykTechnologies/ai-studio/pull/866), [#867](https://github.com/TykTechnologies/ai-studio/pull/867), [#868](https://github.com/TykTechnologies/ai-studio/pull/868), [#869](https://github.com/TykTechnologies/ai-studio/pull/869), [#870](https://github.com/TykTechnologies/ai-studio/pull/870), [#871](https://github.com/TykTechnologies/ai-studio/pull/871), [#876](https://github.com/TykTechnologies/ai-studio/pull/876), [#873](https://github.com/TykTechnologies/ai-studio/pull/873), [ai-studio-enterprise#103](https://github.com/TykTechnologies/ai-studio-enterprise/pull/103)).
-  - **Real FIPS builds.** The FIPS builds of AI Studio and the Microgateway link the Go Cryptographic Module v1.0.0 ([CMVP certificate #5247](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/5247)), selected with `GOFIPS140=v1.0.0`, and start in FIPS mode (`fips140=on`). They are FIPS 140-3 compliant: the approved algorithms they use come from a validated module, and the few non-approved read paths left are listed in the docs. Standard builds are unchanged.
-  - **Packages and images.** `tyk-ai-studio-fips`, `tyk-ai-studio-fips-ee`, `tyk-microgateway-fips` and `tyk-microgateway-fips-ee` (amd64, arm64, s390x), and the images `tykio/tyk-ai-studio-fips` and `tykio/tyk-microgateway-fips` (amd64, arm64, Enterprise edition, on Tyk's FIPS base image).
-  - **Self-report.** Both binaries log a `FIPS 140-3` line at startup, `GET /health` returns `fips` (`enabled`, `version`, `enforced`), and edges report their status in heartbeats to the Edge Gateways page.
-  - **FIPS-mode data formats.** In FIPS mode, passwords and client secrets are hashed with PBKDF2-HMAC-SHA256 and secrets are encrypted as `v3:` (PBKDF2 + AES-GCM). Every build reads both the old and the new formats, so a database moves between standard and FIPS builds in both directions. A user's bcrypt hash is replaced on their next login on a FIPS build, and at startup a FIPS-mode AI Studio re-encrypts stored secrets to `v3`.
-  - **Plugins.** `make plugin-publish ... FIPS=1` publishes a FIPS variant of a plugin, and in FIPS mode AI Studio and the Microgateway log a warning when they start a plugin binary that is not a FIPS build.
+- **Tool results are screened.** Request guardrails now inspect everything tools return, across the whole conversation history. This covers every vendor format: OpenAI, Anthropic (including server tools and MCP), Google, Bedrock, Ollama, the Responses API, each item of a batch, and Studio chat's own tools.
+- **Quarantine instead of block.** Blocking a request stops an agent for good, because its next request carries the same tool result. The new `quarantine` action replaces just the flagged tool result with a placeholder, and the agent carries on without it.
+- **Tool calls are screened** (opt-in). A guardrail can check the arguments of each tool call the model makes, judged against the user's goal, and refuse a dangerous call before the client runs it, even in a stream. In Studio chat, a blocked call never runs.
+- **Tool definitions are screened** (opt-in). A poisoned tool description can be removed from the request before the model sees it.
+- **Shadow mode.** Try a guardrail on live traffic without adding latency: it logs what it would have done, in the background.
+- **Affordable at agent scale.** Each node caches verdicts, so the history an agent resends on every turn isn't classified again. Per-request budgets cap the cost of a single request. Text over a budget is flagged as unscanned, never passed as clean. The built-in pattern library is up to 16 times faster on prose.
+- **Works with the providers you use.** Lakera Guard, Azure AI Content Safety Prompt Shields, Azure AI Language PII, Presidio, Bedrock Guardrails and HTTP classifiers all handle tool results. HTTP classifiers can also run over a local Unix socket, with no network.
+- **A ready-made filter**, *Prompt injection in tool results (quarantine)*, is added unattached so you can try it straight away.
+- **Wolf Defender guardrail images.** Two open-source images (`tykio/ai-studio-guardrail-wolf` for CPU and `tykio/ai-studio-guardrail-wolf-gpu` for NVIDIA) run Patronus AI's Wolf Defender Jev classifier as an HTTP guardrail provider. They score tool results, tool calls, user messages and tool definitions. The CPU image runs next to the gateway with no network access and suits log-only rollouts; the GPU image takes about 20 ms per message, fast enough to enforce inline. See the [Wolf Defender guide](docs/site/docs/guardrails-wolf-defender.md).
 
-  See `docs/site/docs/fips.md`.
+**Blocks now explain themselves.** When a guardrail blocks a request, the client gets the reason, a stable reason code and a request id, for example "a tool result from fetch_results of 321,097 characters is longer than this guardrail scans". The matched text is never included. In the console, each compliance event opens with what happened, why, and how to fix it. You can optionally show an excerpt of the flagged text, with credentials and personal data masked. App owners can be allowed to see their own App's recent blocks in the portal.
 
-## New features
+See the [guardrails guide](docs/site/docs/guardrails.md).
 
-### Decision models
-- **Unified ingress `POST {base}/decisions`** (OpenAI schema, `route/model` naming as for chat) and **`POST /ai/{slug}/v1/decisions`** ([#724](https://github.com/TykTechnologies/ai-studio/pull/724)). The bridge validates the request, shapes the body for the provider and calls the native `/llm/call/` hop, so auth, filters, plugins, budgets and analytics run once, on that hop.
-- **`systemone` vendor** (System One, decisions only). The endpoint defaults to `https://api.typesafe.ai`. A self-host (llama.cpp serving Kev, OpenJev, Laya and others) sets its own endpoint and may omit the key.
-- **`pkg/decisions`:** a dependency-free translator between the OpenAI and System One formats.
-  - Question and option order are preserved.
-  - A question the model leaves unanswered becomes a `refusal`.
-  - System One's `422` and `529` answer as OpenAI-style `400` and `503`.
-- **Vendor capabilities.** The vendor interface gains `ProvidesChat()` and `DecisionEndpoint()`. Entries from `GET /v1/models` gain a `capabilities` field listing what the route serves (`chat`, `embeddings`, `decisions`).
-- **Failover per request kind.**
-  - A decision call skips fallbacks that serve no decision models, or that cannot take the request (image input to a text-only System One model), and is reshaped for each fallback's provider.
-  - A chat call skips decision-only fallbacks.
-  - A skipped fallback never replaces the primary's own error.
-- **Analytics.**
-  - `request_kind`, `decision_questions` and `decision_refusals` on `proxy_logs`, `llm_chat_records` and the edge's `analytics_events`, carried to AI Studio in the edge pulse.
-  - `GET /api/v1/analytics/decisions` and the Dashboard **Decision Models** panel.
-  - The Prometheus metric `aistudio_decision_questions_total{vendor,model,outcome}`, with `outcome` `answered` or `refused`.
-- **Filters and guardrails.**
-  - A decision request is read as messages: each question's instructions as a system message, and the evidence as the last user message.
-  - Redactions are written back in the provider's own format.
-  - Response filters see the answers rendered as text.
-  - Scripts get `input.context.request_kind`.
-- **Plugins and SDK.**
-  - `PluginContext.request_kind` is set on edge auth, middleware and response hooks, and data-collector requests carry the decision fields.
-  - The plugin SDK adds `ParseDecisionRequest` and `ParseDecisionResponse`, which normalise either wire format to the OpenAI shape.
-  - It also adds `CallDecision`, backed by a new `CallDecision` management RPC with the same agent access checks as `CallLLM`.
-- **Admin console.** The LLM form offers the System One provider. Chat, router and wizard pickers leave decision-only LLMs out, and the failover picker only offers fallbacks that share a request kind with the primary.
-- **Live conformance.** `make test-vendors-decisions` runs the decision suite against real providers, configured in `test-secrets/vendors.env` (see `features/VendorConformance.md` §10).
+### Spend fewer tokens: Prompt Compressor (community plugin)
 
-### Tyk connections (Enterprise)
-- **Gateway connection kind** ([#721](https://github.com/TykTechnologies/ai-studio/pull/721), [ai-studio-enterprise#70](https://github.com/TykTechnologies/ai-studio-enterprise/pull/70)).
-  - The connection form has a **Connect to** toggle (Dashboard or Gateway), a **Nodes** section and a **Gateway nodes** table.
-  - Discovery is `single`, `static` or `dns`, with an optional shared-storage mode that writes once and reloads the group.
-  - Nodes are reconciled on every sync: new and empty nodes are filled in, and edits made behind AI Studio's back are restored.
-  - Requires Tyk Gateway 5.13 or later.
-- **Key access per MCP server**, with `PUT /api/v1/mcp-servers/{id}/key-access`. Saving it rewrites live keys.
-- **Node status**, with `GET /api/v1/tyk-connections/{id}/nodes`.
-- **Partial proxies.** An operator proxy found on only some nodes is flagged "On n/m nodes". It is never copied, gets no keys and cannot be bound to an App.
-- **Performance and safety.**
-  - Gateway clients are pooled per connection and node.
-  - Work on nodes runs in parallel, at most 8 at a time. Shared storage stays sequential.
-  - A literal upstream credential (rather than a `$secret_env` reference) on a gateway connection shows a warning.
-- **`pkg/netguard`:** `NewPinnedHTTPClient` reaches one of several servers behind a hostname. It dials one resolved address while the URL, `Host` header and TLS name keep the hostname, and applies the internal-address rule to the hostname.
+Agents send a lot of tool output back to the model: test runs, logs, directory listings, long JSON. The new **Prompt Compressor** plugin (`com.tyk.prompt-compressor`) shrinks these requests on edge gateways before they reach the vendor, so you pay for fewer input tokens. It works on Community and Enterprise.
 
-### Native API extensions
-- **Extension framework** ([#730](https://github.com/TykTechnologies/ai-studio/pull/730)). `pkg/nativeapi` lets a vendor declare SDK operations (exact method and path, the resources they create, how items are admitted and results read) without changing the proxy's generic code. A native route claims only the paths its vendor declares, and everything else stays on the existing chain unchanged. Resource IDs look like `msgbatch_01Hk….t1k3f2a9c1d.9b…`: they are signed and verify on any replica, hub or edge without shared state.
-- **Anthropic Message Batches** ([#730](https://github.com/TykTechnologies/ai-studio/pull/730)).
-  - Create: each `requests[].params.model` must be allowed (403 naming the `custom_id`), and request filters run on every request with `custom_id` and `batch_index` in the script context. Only requests a filter changed are re-encoded.
-  - Results are streamed line by line, response filters run on each line, and a blocked line becomes an `errored` result with the same `custom_id`.
-  - Usage is recorded once per batch at half the list price, by whichever comes first: a complete results download on the creating node, or a background reconciler. Edge usage reaches AI Studio budgets and analytics through the existing pulse.
-  - List is served from the gateway's own ledger (`native_resources`), never forwarded. Delete answers `409` until the batch's usage is accounted.
-  - `results_url` points at the gateway, absolute when `PROXY_URL` (edge: `GATEWAY_PUBLIC_URL`) is set.
-- **Anthropic `count_tokens`** ([#737](https://github.com/TykTechnologies/ai-studio/pull/737)). A native operation: the model allow-list and request filters apply, and each call writes one proxy log row and no chat record.
-- **OpenAI Responses** ([#737](https://github.com/TykTechnologies/ai-studio/pull/737)).
-  - Response IDs are signed in JSON and streamed responses, and `previous_response_id` is checked before the filters run. Retrieve, delete, cancel and `input_items` are owned operations.
-  - Background responses are recorded in the ledger and accounted once by the reconciler when they end. Deleting one accounts it first.
-  - Usage is recorded for synchronous and streamed calls (it was not recorded at all before; see Bug fixes).
-- **OpenAI Conversations** ([#737](https://github.com/TykTechnologies/ai-studio/pull/737)). Signed `conv_` IDs on every `/v1/conversations` route and on the `conversation` parameter of `/v1/responses`. Items stored in a conversation pass the request filters.
-- **OpenAI Batches and Files** ([#737](https://github.com/TykTechnologies/ai-studio/pull/737)). `files.create` with `purpose=batch` admits every line of the file (model allow-list, request filters). `batches.create` takes only the App's own file IDs. Output and error files are wrapped and listed with the App's files, and an output file cannot be deleted before its batch is accounted. Usage is recorded once at half the list price.
-- **Request screening on OpenAI** ([#737](https://github.com/TykTechnologies/ai-studio/pull/737)). Filters and guardrails now read the prompt of `/v1/responses` (instructions, input items of every built-in type, prompt variables) and of `/v1/embeddings`, `/v1/completions` and `/v1/moderations` (`input`, `prompt`, `suffix`), and redactions are written back into the same field.
-- **Per-LLM resource signing keys** ([#737](https://github.com/TykTechnologies/ai-studio/pull/737)). The hub generates a signing secret per LLM, stores it encrypted and syncs it to edges, so rotating a vendor API key no longer invalidates outstanding IDs. Keys can be rotated with a grace period (30 days by default, at most a year) during which the previous key still verifies. The LLM details page shows the key status and has **Rotate signing key**.
-- **Anthropic workspace pin** ([#737](https://github.com/TykTechnologies/ai-studio/pull/737)). An LLM's `vendor_workspace_id` (**Anthropic workspace ID** under **Access Details** in the LLM form) is sent as `anthropic-workspace-id` on every call the gateway makes for that LLM: messages, batches, the reconciler, Chat sessions and the `/ai/` and `/v1` bridges, on AI Studio and on edges.
-- **Price multiplier overrides** ([#737](https://github.com/TykTechnologies/ai-studio/pull/737)). An LLM's `price_multipliers` maps a service tier to the share of the list price it is billed at, for example `{"batch": 0.4}` for negotiated batch pricing (**Add price override** in the LLM form). It applies to the recorded cost and the budget charge of usage recorded after the change, on AI Studio and on edges.
-- **Service tier analytics** ([#737](https://github.com/TykTechnologies/ai-studio/pull/737)). Chat records, proxy logs and edge analytics events carry the tier a call was billed at (`batch`, `flex`, `priority`...). `GET /api/v1/analytics/service-tier-usage` reports requests, tokens and cost by tier and model, and the Dashboard has a **Service Tiers** panel.
-- **Metrics** ([#730](https://github.com/TykTechnologies/ai-studio/pull/730)). `aistudio_native_requests_total`, `aistudio_native_request_duration_seconds`, `aistudio_native_results_bytes_total` and `aistudio_native_reconcile_outcomes_total`.
+- **Keeps your prompt cache working.** The same input always compresses to the same output, so the vendor's prompt cache keeps hitting.
+- **Three levels:** lossless clean-up (JSON, colour codes, progress bars, whitespace); noise reduction for test runs, logs and listings that keeps every failure; and cutting to a size budget, optionally with an external engine (Headroom or LLMLingua-2).
+- **Try it safely.** By default it runs in audit mode: it records what it would save and sends the original request. Switch to enforce mode when you're ready. If anything goes wrong, the request goes through unchanged.
+- **See what you save.** A savings dashboard shows tokens and cost saved, with a warning if the cache-read share drops. There is also a policy editor (per LLM or per App) and a preview tool.
+- **Trim unused tools.** The dashboard shows what each App's tool definitions cost and which tools it never calls, and a policy can drop named tool definitions from requests.
+- Works with OpenAI, Anthropic, Google AI, Vertex, Bedrock and Ollama, on the `/llm/`, `/ai/`, `/v1`, router and `/anthropic/` endpoints. It doesn't apply to Studio Chat or AI Studio's embedded gateway.
 
-### Guardrails for tool results (Enterprise)
-- **Tool results are read where they are.** A guardrail reads a request body block by block in every vendor format (`guardrails/segments`): each message's text and each tool result (OpenAI `tool` and `function` messages, Anthropic `tool_result` and server-tool results such as `web_fetch_tool_result` and `mcp_tool_result`, Google `functionResponse`, Bedrock `toolResult`, Responses `function_call_output`, `custom_tool_call_output` and the outputs of built-in tool items). A redaction rewrites only the matched strings, so tool calls, ids, images and `cache_control` reach the vendor unchanged. A JSON body in another shape is read as all of its decoded strings.
-- **Scanned by default, across the history.** `tool_results.scan` (default on) inspects every tool result whatever the scope, and `tool_results.on_detect` sets an action for them; unset, they get the filter's action, except that `block` becomes `quarantine`. The scope `last_user` now means the user text of the current turn.
-- **`quarantine` action** (requests only). The flagged tool result, or message, is replaced whole with a placeholder (`quarantine.placeholder`, default `[content removed by policy: {{detector}} detected in {{source}}]`, with `{{category}}` and `{{tool_name}}` too), keeping its tool call id and name. Tool names are reduced to safe characters before they are inserted. Where nothing can be replaced in place, the request is blocked.
-- **What the model reads is what is scanned.** A tool result whose text is JSON, or holds JSON escapes, is also classified decoded, so an instruction behind `\u` or `\n` escapes is caught. A message or tool result of several blocks is classified as a whole, so text split across blocks, even inside a word, is caught. Text documents sent as base64 (Bedrock `txt`, `md`, `html`, `csv`; Anthropic `text/` documents) are decoded and classified.
-- **Verdict cache and budgets.** Each node caches the provider's verdict per segment (`GUARDRAIL_VERDICT_CACHE_*`), keyed on the filter version and configuration, the provider and its version, the direction, the segment's role, kind and tool name, its text and the app (or user or chat session); a request with none of those is not cached. For remote providers, a filter's `budget` (`max_scan_chars`, `max_pieces`, `time_ms`, `single_call_chars`) bounds one request. Text beyond a budget, refused by the provider (HTTP 400, 413, 422) or left unfinished is **unscanned** and takes the filter's action; a call the provider refuses is re-sent segment by segment, so only the refused text is flagged. Tool results never share a provider call with the user's or the system's text. `"cache": false` turns the cache off for one filter.
-- **Built-in library on agent traffic.** The library is up to 16 times faster on prose (16 MiB in 1.1 s instead of 17.7 s); text dense in numbers gains less. On tool results it uses narrower variants of `role_hijack`, `pseudo_tags`, `markdown_exfil`, `indirect_marker` and `base64_blob`, measured against a corpus of realistic tool output on which `secrets` and `injection` raise nothing. In-process scans run in two pools (small and large), with a per-tenant share and queue, so a request with at most 32K characters of tool results (and of other text) never waits behind a flood of large tool results. A segment larger than `GUARDRAIL_LOCAL_MAX_SCAN_BYTES` (8 MiB) is unscanned.
-- **Vendor providers handle tool results.** Lakera Guard gets each tool result as a `tool` message (screened as untrusted content), Azure AI Content Safety Prompt Shields as a document (indirect attacks), Presidio and Azure AI Language PII analyse and redact it like any other text, and Bedrock Guardrails assesses it as input. The HTTP classifier contract adds `kind: "tool_result"`, `tool_name` and `tool_call_id` (cut to 256 bytes) on tool segments; other segments are unchanged, so existing services keep working.
-- **Provider SDK.** `guardrails.Capabilities` gains `ToolSegments`, `SegmentPerCall`, `MaxCallChars`, `Contextual` and `Version`. Every provider must pass the new conformance suite, `guardrails/conformance`: mixed roles, empty and maximum-size tool results, findings tied to the right segment, no panics, and a provider that ignores its context fails. A provider that panics is recovered, and on requests its text counts as unscanned (quarantined or blocked whatever the fail mode); one that does not return after its timeout is given up on (`aistudio_guardrail_calls_abandoned_total`), and a remote provider whose calls in small requests keep being given up on, across tenants, is suspended (one probe every 10 seconds).
-- **Studio chat.** The guardrails attached to a chat as request filters screen what its REST and client tools return (and the error text of a failed call) before the model, the user's screen or the stored conversation sees it: quarantine replaces it, redact rewrites it, block stops the turn and stores a policy notice. The chat's script request filters also run on a user's answer to a client tool card.
-- **Native batches.** Each item of an Anthropic Message Batch and each line of an OpenAI batch file is screened, and a quarantine rewrites only that item. One batch may make at most `NATIVE_API_MAX_GUARDRAIL_CALLS` remote provider calls (10,000); a batch that needs more is refused with HTTP 400 naming the limit. An OpenAI batch runs only under the request filters that screened its file.
-- **Script filters.** `input.segments` lists each message's text and each tool result (`index`, `role`, `kind`, `tool_name`, `text`), `input.segments_readable` says whether the body could be read, and `tyk.quarantine_segment(input, index, placeholder)` returns the body with one segment replaced. The template **Built-in library: scan tool results** uses them.
-- **Admin console.** The guardrail form has a **Tool results** section (**Scan tool results**, **Action on tool results**, **Quarantine placeholder**) and puts the verdict cache and the budgets under **Advanced: verdict cache and budgets**; quarantine is offered as an action on request filters only; the detail page shows them. The **Test** panel reads raw input as a vendor request body (**Request body format**), can insert a tool-result sample, and shows the body as it would reach the vendor. The compliance **Filter Events** tab has a **Source** column (`Tool result from fetch_url`).
-- **Compliance events and metrics.**
-  - Guardrail events carry `kinds` and `tool_names` beside `roles`.
-  - `guardrail.unscanned` records segments not scanned in full, with the reason (`size`, `pieces`, `time_budget`, `busy`, `input_rejected`, `provider_error`, `provider_panic`, `seam`, `undecodable`), `guardrail.unredactable` a redaction that could not be written into the body (the tool result was quarantined or the request blocked instead), and `guardrail.unreadable_request` a request refused because its keys read differently to different parsers.
-  - New metrics `aistudio_guardrail_segments_total{provider,segment_kind,result}`, `aistudio_guardrail_cache_total{provider,outcome}` and `aistudio_guardrail_calls_abandoned_total{provider}`. `aistudio_guardrail_latency_seconds` gains a `segment_kind` label, and `aistudio_guardrail_errors_total` a `fail_mode` value of `unscanned`.
-- **New seeded filter.** **Prompt injection in tool results (quarantine)**: the built-in injection heuristics, recording a flagged user message and quarantining a flagged tool result. It is seeded unattached on new installs, and on upgraded ones on their next start (unless `SKIP_FILTER_DEFAULTS=true`); existing filters are left as they are. Measured before release: none of 16 benign tool-output samples flagged, every injected sample caught.
-- **Live end-to-end suite.** `tests/guardrail_tool_results/` runs an Enterprise AI Studio and an edge against a recording mock upstream and checks every vendor format through both, buffered and streamed, plus Studio chat and native batches. It needs no vendor account.
-
-### Guardrails for agent actions (Enterprise)
-New settings default to off, so existing filters behave exactly as before.
-- **Tool calls as segments.** With `tool_calls.scan` on, a guardrail reads the arguments of every tool call the model makes, in a request's history and in a buffered response, in every vendor format (OpenAI `tool_calls` and `function_call`, Ollama, Anthropic `tool_use`, `server_tool_use` and `mcp_tool_use`, Google `functionCall`, Bedrock `toolUse`, Responses `function_call`, `custom_tool_call`, `mcp_call` and `mcp_approval_request`), on `/llm/`, on the Bedrock bridges and in native batch results. `tool_calls.on_detect` is `block` or `log` (unset: `block` on a Block filter, else `log`); on a response, `block` refuses it before the client can run the call. Calls are classified as the body holds them and decoded, across the whole history, never in a provider call with the client's own text or with tool results. Compliance events gain the `tool_call` kind, and the `segment_kind` metric label the `tool_call` value. The admin form has a **Tool calls** section, and the detail page shows it.
-- **Streamed tool calls are held until classified** (native `/llm/` streams, and the `/ai/` bridge's inner hop) when a response guardrail scans tool calls: OpenAI, Anthropic, Responses, Google (SSE and JSON array) and Ollama. Text before a call streams as before; from the call on, events are held in order, released byte for byte when the calls are clean, and never sent when one is flagged under `block` (the stream ends with the vendor's error event). A call over 1 MiB or held over 30 s is unscanned and gets the tool-call action. Zero overhead without tool-call scanning.
-- **Studio chat refuses flagged tool calls.** The chat's request guardrails that scan tool calls screen each call the model asks for, with the user's latest message as its goal, before a REST tool runs or a client tool card is shown. A blocked call is never executed: a policy notice is stored as its result and the turn stops.
-- **Goal context.** Each tool call carries the latest user text before it and, with `tool_calls.include_system`, the system prompt (each cut to 4,096 characters), for providers that judge a call against the goal: `guardrails.Capabilities.WantsGoal`, declared by the HTTP classifier, whose contract gains `kind: "tool_call"` and a `context` object on tool call segments only. The verdict cache keys a call on its context. Tool results never carry one.
-
-- **Tool definitions as segments.** With `tool_definitions.scan` on, a request guardrail classifies each tool a request offers the model (OpenAI `tools` and `functions`, Ollama, Anthropic, Google `functionDeclarations`, Bedrock `toolConfig`, Responses function and custom tools), once per definition thanks to the verdict cache (reordered lists hit too). `tool_definitions.on_detect` is `remove` (drop the tool from the request and go on; blocked when that would leave no tool or the request forces it), `block` or `log`; unset, `remove` on a Block or Quarantine filter, else `log`. The tools of a Studio tool served over MCP are screened by the tool's request guardrails when its MCP server is built, and a Studio chat's tools by the chat's request guardrails each turn. Events gain the `tool_definition` kind; the HTTP contract sends `kind: "tool_definition"` with `tool_name`. The form has a **Tool definitions** section on request filters.
-- **Shadow (don't wait).** `"shadow": true` on a guardrail whose every action is `log` (anything else is refused with 400) returns at once and classifies in a bounded background pool per node (`GUARDRAIL_SHADOW_WORKERS`, `GUARDRAIL_SHADOW_QUEUE_BYTES`, half per tenant), recording the same compliance events as an inline log run (marked `"shadow": true` in their metadata) when it finishes, on requests, responses, Studio chat and tool filters, at the hub and at edges. A full pool drops the evaluation (`aistudio_guardrail_shadow_dropped_total`, one `guardrail.unscanned` event with reason `shadow_dropped`) rather than delay anything; shutdown waits up to 5 s. The form has a **Shadow (don't wait)** toggle.
-- **Which text was flagged.** Guardrail compliance events now list the flagged segments (`segments`: index, role, kind, tool, and the SHA-256 of the exact text the provider was sent, which is the key of Wolf Defender's decision log and flag store) and the gateway's request id (`request_id`, the `X-Request-ID` it answers with, now also what an HTTP classifier receives in `meta` instead of the client's header). With the new **Show flagged text in compliance events** (`"evidence": {"excerpt": true}`, off by default; `excerpt_chars` 200, at most 1000) each segment also carries an excerpt around the finding, with credentials and personal data masked by the built-in library; never on an LLM that does not log bodies. The Compliance page shows them under **Flagged text** in an event's details. Response-filter events now name their App (they recorded none).
-- **HTTP classifier over a Unix socket.** The endpoint can be `unix:///path/to.sock` (with the new `path` connection field for the request path), so a classifier on the same host needs no port and can run with `network_mode: none`. Sockets are refused unless listed in the new `GUARDRAIL_UNIX_SOCKET_ALLOWLIST` (exact paths, or directories ending in `/`; empty by default), checked when a filter is saved or tested and before every call on every node, with symlinks resolved (an entry and an endpoint written through the same symlinked directory match) and the target required to be a socket. A socket a node refuses is a provider error there.
-
-### Agent Call Tracing (Enterprise)
-Off by default (`AGENT_TRACING_ENABLED`). The gateway turns the LLM, tool, MCP and datasource traffic it already sees into sessions, turns and span trees, without an SDK in the agent. See `docs/site/docs/agent-tracing.md`.
-- **Capture everywhere the gateway runs.** `/llm/` REST and streaming, `/ai/` with each provider attempt, native dispatch, Bedrock, Studio tools, the MCP shim, datasources and edge plugin endpoints, in the embedded gateway and on edges. Edges send captures in their analytics pulse.
-- **Gateway decisions on the trace.** Filter and budget blocks, fallbacks and routing become `gateway_event` spans.
-- **Correlation with confidence.** Tool calls are linked to the LLM call that requested them by `tool_call_id`, `previous_response_id`, or tool name and arguments, and each link records its confidence (declared, exact, strong, weak) and rule. Tools the agent runs itself are inferred from the LLM traffic.
-- **Content off by default.** Modes are `off`, `metadata`, `hashed` (accepted now, stored as `metadata` until fingerprints ship), `redacted` and `full`, set globally, per App, per request (within a ceiling) and capped per LLM, tool or datasource. The global ceiling (`AGENT_TRACING_CONTENT_CEILING`) bounds every App, the default and request headers; it and the global default (`AGENT_TRACING_CONTENT_DEFAULT_MODE`) are set in the environment and shown read-only under **Capture settings**. An invalid content-mode value is read as `off`. Secrets are always stripped. Content is encrypted at rest with keys derived from `AGENT_TRACING_KEY`.
-- **Audited content access.** Content reads need the new `trace-content:read` permission and a working audit trail; without the audit trail, content reads answer 503. Changing any tracing setting needs `traces:write`.
-- **End users as pseudonyms.** The built-in Viewer, Editor and Auditor roles do not hold `trace-content:read`: they see end users and external session ids as pseudonyms (a keyed HMAC, stable per id) in the list, session detail and both export formats. Filtering by the exact id still finds its sessions. `trace-content:read` shows the raw values. Studio users are shown as they are.
-- **Portal content opt-in held back.** The App setting `owner_may_view_content` is refused until the Portal trace views ship.
-- **Agent Sessions** in the admin UI: a filterable list, a transcript and a timeline per session, and a find bar. Captured Markdown never loads images or HTML.
-- **Assembly in batches.** The assembler reads and writes each batch of captures with a fixed number of database statements, however many sessions the batch touches. Measured at about 8,000 spans/s on a 2-CPU Postgres 16, holding steady as the tables grew from about 4 to 10 million spans.
-- **Export** as JSON (agent-trace v1 schema) or Markdown, session purge, and end-user erasure. A purge or erasure is never undone by assembly already in progress. An inferred session's captures still waiting to be assembled carry no session id, so a later call can re-create that session after a purge; end-user erasure is the complete path for a data subject.
-- **OpenTelemetry export** of finished turns to any OTLP backend, with Langfuse and Datadog LLM Observability presets, using GenAI semantic convention names (`genai-1.41`, semconv v1.41). The end user reaches exporters as `user.id` under `AGENT_TRACING_EXPORT_USER_ID_MODE`: `hashed` (a keyed pseudonym, the default), `raw` or `off`; the pre-release `AGENT_TRACING_EXPORT_INCLUDE_USER_ID` maps to `raw` or `off` when set. A pre-release setting of `AGENT_TRACING_EXPORT_SEMCONV_PROFILE=genai-1.37` falls back to `genai-1.41` with a warning; cache writes export as `gen_ai.usage.cache_creation.input_tokens`. Metadata only; content export is planned. While Studio exports, gateways leave out their own live span for captured calls; an edge that sends its spans to a different collector keeps it with `AGENT_TRACING_KEEP_LIVE_SPAN=true`. Agent and tracing-health metrics go to Prometheus, and over OTLP to exporters that ask for them.
-
-### Wolf Defender guardrail images (Enterprise)
-
-Two images, released with 2.3 from [TykTechnologies/ai-studio-guardrail-wolf](https://github.com/TykTechnologies/ai-studio-guardrail-wolf) (MIT), run [Patronus AI's Wolf Defender Jev](https://huggingface.co/patronus-studio/wolf-defender-jev) (151M parameters, MIT) as an HTTP guardrail provider. Both carry SBOM and build-provenance attestations, bake in the model weights at a pinned revision, and verify every file's SHA-256 at build time.
-
-- **`tykio/ai-studio-guardrail-wolf`** (CPU, linux/amd64 and arm64) runs next to the gateway on a Unix socket with no network (`unix:///run/wolfguard/wolfguard.sock`, listed in `GUARDRAIL_UNIX_SOCKET_ALLOWLIST`), as a non-root, read-only container. It suits shadow (log-only) rollouts and short content; on a shared 4-vCPU x86 host it takes about 0.4 s for a short message and about 18 s for a 6,000-token tool result.
-- **`tykio/ai-studio-guardrail-wolf-gpu`** (NVIDIA, CUDA 12.6, linux/amd64) is the same service on a GPU host, such as an owned Runpod pod, reached over HTTPS with a bearer token and a client-IP allowlist. On an NVIDIA A40 it takes about 20 ms for a short message and 0.3 s for a 6,000-token tool result, which is fast enough to enforce inline. Its scores match the CPU image's to within 1e-4.
-- **What it scores.** Each segment kind the 2.3 contract sends is scored by its own stage, and each stage reports graded detectors (`<stage>.review`, `.block`, `.critical`) for filters to act on: tool results (indirect injection, read as untrusted content), tool calls (judged against the user's goal: alignment, exfiltration, reversibility), user messages, and tool definitions (poisoning).
-- **Rules decided without the model.** A tool call that reads credentials (`/proc/*/environ`, `.env`, `~/.ssh`, cloud credential files, secret environment variables) or carries a planted canary token is critical at once, whatever the tool is called. Hidden text (Unicode tag characters, bidirectional controls, spoofed scene headers) is revealed to the model and flagged.
-- **Deferred enforcement for agents.** With its verdict store on, content it has not seen before is answered at once and scored in the background. Because an agent resends its whole history, the next request that carries a flagged tool result is stopped, and so is every later one in that conversation; false flags are lifted by hash. User messages and shell, execute, write and edit tool calls are scored inline.
-- **Policy as code.** Thresholds, question sets, per-app system context, per-stage modes and kill switches live in a versioned YAML policy that is hot-reloaded. The decision log records hashes, sizes and scores, never text; optional previews of flagged text have secrets masked before they are written.
-
-### Tyk MCP analytics (Enterprise)
-- **Analytics for MCP servers proxied by Tyk Gateway**, on Dashboard and OSS Gateway connections. Tyk Pump delivers the Gateway's analytics records (Gateway 5.14 or later, Pump 1.16 or later) to **`POST /api/v1/ingest/tyk-analytics`**, and AI Studio keeps the MCP calls.
-  - Delivery is by the `http` pump (contributed to tyk-pump upstream) or, until it is released, by the stdout pump through Vector. Both configurations are on the connection's **Analytics** section and in `docs/site/docs/tyk-mcp-integration.md`; `tests/tykmcp/oss/vector.toml` is the tested bridge.
-  - The body is a JSON array of Tyk analytics records, optionally gzip. Limits: 16 MiB as sent and after expansion, 5000 records, 20 batches a second per connection. A bad or revoked token gets `401` (the pump drops the batch), a full recorder `503` (the pump retries). Community Edition answers `404`.
-- **Ingest token per connection.** Generated, rotated and revoked on the connection's **Analytics** section (`POST`/`DELETE /api/v1/tyk-connections/{id}/ingest-token`, `tyk-connections` write) and shown once; only its SHA-256 is stored. `GET /api/v1/tyk-connections/{id}/ingest-status` reports the last batch and the last 24 hours (stored, not-MCP, unknown API, unattributed).
-- **Attribution.** Records are matched only against the token's connection's MCP servers (and, on a Dashboard connection, its organisation). A call is attributed to an App by the key AI Studio minted for it (the key hash the Gateway records, or the key on a Gateway with `hash_keys` off), else by the key alias when that App holds a key on the connection. No API key, request or response body or client address is stored.
-- **Usage views.** An MCP server's **Usage** tab (calls and errors over time, p50 and p95 latency, per-tool table, top Apps), MCP usage on the App pages (admin and portal: an App's owner sees their own App only) and an **MCP traffic** panel on the Dashboard. API: `GET /api/v1/analytics/mcp/overview`, `/analytics/mcp/servers/{id}/summary|timeseries|tools|apps`, `/analytics/mcp/apps/{id}` (`analytics` read) and `GET /common/apps/{id}/analytics/mcp`. An error is an HTTP status of 400 or more or a JSON-RPC error the Gateway detected.
-- **Recorder.** AI Studio's database handler writes MCP calls through a writer of their own, so an ingest burst never delays the chat records budgets are computed from. Recording them is the optional `analytics.MCPCallRecorder` interface (`RecordMCPCalls(ctx, []models.MCPCallRecord) error`): `pkg/studio` analytics sinks that implement it receive the calls, and existing `AnalyticsHandler` implementations compile unchanged.
-
-### Prompt Compressor (community plugin)
-- **A new community plugin, `com.tyk.prompt-compressor`, shrinks LLM request bodies on edge gateways** (Community and Enterprise) before they reach the vendor, starting with tool outputs ([#813](https://github.com/TykTechnologies/ai-studio/pull/813), [ai-studio-community-plugins#31](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/31)).
-  - **Cache-safe:** the output depends only on the text and the policy, so a compressed conversation prefix stays byte-identical and the vendor's prompt cache keeps hitting.
-  - **Levels:** 1 is lossless (JSON compaction, ANSI codes, progress frames, whitespace). 2 reduces noise in test runs, logs, listings and long JSON arrays, keeping every failure. 3 cuts to a size budget, can mask old tool results (off by default) and can call an external engine (Headroom or LLMLingua-2).
-  - **Modes:** `audit` (the default) records what would be saved and forwards the original; `enforce` forwards the compressed body. Any failure forwards the request unchanged.
-  - **Policies** per LLM or App, and per App through the `prompt_compressor.policy` metadata key. Where an admin allows it (`allow_client_bypass`, off by default), a client can turn compression off for one request with `X-Tyk-Compression: off`; responses carry `X-Tyk-Compression`, `-Tokens-Saved` and `-Policy`.
-  - **Tool definitions:** the dashboard shows what each App's tool definitions cost and which tools it never called, and a policy's `drop_tools` removes named definitions from requests. It saves tokens and is not an access control: a client can always keep a tool.
-  - **Studio pages:** a savings dashboard (tokens and cost saved at the input and cache-read price, cache-read share, policy-change markers and a cache-drop warning), a Policies editor, and a preview tool. Each has its own plugin permission.
-  - Covers OpenAI Chat Completions and Responses, Anthropic, Google AI, Vertex, Bedrock Converse and Ollama bodies on `/llm/`, and the `/ai/`, unified `/v1`, `/router/` and `/anthropic/` endpoints, Bedrock included (it runs on their internal `/llm/call/` hop, on the Converse body; see **Bedrock plugin parity**). Not covered: Studio Chat and Studio's embedded gateway.
-  - See `docs/site/docs/prompt-compressor.md`.
-  - Released at version 1.0.2, which needs AI Studio 2.3.0. 1.0.2 reads a Bedrock or Google model from the request path, so those records are priced.
-- **Core changes the plugin relies on**, available to every plugin:
-  - response header hooks run on streaming responses and get the real LLM slug;
-  - the `/ai/` bridges relay `X-Tyk-Compression*` response headers, and the `X-Tyk-Compression` request header is removed before the vendor;
-  - multi-value request and response headers survive plugin hooks;
-  - the plugin gRPC message limit is 64 MiB, and edge `/llm/` request bodies are capped;
-  - the plugin management API's LLM info carries the LLM's slug and whether it has request filters;
-  - `guardrails/segments` reads OpenAI Responses bodies, and `pkg/requestformat` exports the request-format resolver.
-
-### Bedrock plugin parity
-- **Plugins attached to a Bedrock LLM now run on every endpoint.** The Bedrock bridges (`/ai/{slug}`, the unified `/v1`, routers and `/anthropic/{slug}`) used to call AWS directly, so only auth plugins ran there. They now send the translated request through the gateway's own `/llm/call/{slug}/` hop, as the bridges to every other vendor do. Pre-auth, post-auth and response plugins, model checks, budgets, filters, signing and analytics run there once per attempt, on the Converse request and response. Auth plugins still run once, on the endpoint the client called.
-  - **What plugins see:** `Vendor` `bedrock`, the path `/llm/call/{slug}/model/{modelId}/converse[-stream]` (the model is in the path, not the body), a Converse body, and a Converse response; `OnStreamComplete` gets one SSE `data:` line per Converse event. Native Bedrock streams on `/llm/` now call `OnStreamComplete` too.
-  - **Plugin SDK helpers** `plugin_sdk.RequestModel`, `IsStreamingRequest` and `ResponseUsage` read the model, the streaming flag and the token usage in each vendor's shape (Bedrock's path model, escaped ARNs and camelCase usage included). Pure functions, no host call. From 2.3 the host also sets `model` and `stream` in `PluginContext.Metadata`, as a convenience; plugins should keep using the helpers.
-  - **`upstream_override` on Bedrock** (llm-load-balancer) is signed for the region of the host it points to, so a cross-region override is no longer refused with a `403`, and the native Bedrock stream honours it.
-  - **Escaped ARN and inference-profile model IDs** pass model validation whole and reach AWS intact on `/llm/rest`, `/llm/stream` and `/llm/call`.
-  - **Plugin headers reach clients.** The load balancer's `X-LB-*` and the rate limiter's `X-RateLimit-*` response headers set on the internal hop now reach clients of `/ai/`, `/v1`, routers and `/anthropic/`, buffered and streaming, alongside `X-Cache*` and `X-Tyk-Compression*`, for every vendor. A rate limiter's `429` keeps its retry headers.
-  - **Plugin refusals in AWS's format.** When a plugin refuses a call to Bedrock's own API (`/llm/.../model/{id}/converse[-stream]`, the bridges' internal hop included) with a status of 400 or more and sets no `X-Amzn-ErrorType`, the edge answers in AWS's shape: `X-Amzn-ErrorType` from the status (`AccessDeniedException` for 401 and 403, `ThrottlingException` for 429, `ValidationException` for other 4xx, ...) and `{"message": ...}` carrying the plugin's message. AWS SDK clients report the refusal and its message instead of an unknown error.
-  - See `docs/site/docs/plugins-microgateway.md` (Where Request Plugins Run) and `docs/site/docs/proxy.md`.
+Version 1.0.2 needs AI Studio 2.3.0. See the [Prompt Compressor guide](docs/site/docs/prompt-compressor.md).
 
 ### FIPS 140-3 builds
-- **Builds** ([#866](https://github.com/TykTechnologies/ai-studio/pull/866)). The FIPS packages and binaries are built with `GOFIPS140=v1.0.0` (the Go Cryptographic Module v1.0.0, CMVP #5247), `-trimpath` and the `fips` build tag, and start with `fips140=on`. `scripts/fips-verify.sh` checks each binary's build metadata (`GOFIPS140`, `DefaultGODEBUG=fips140=on`, the `fips` tag), and the release refuses a FIPS artifact that fails it. `make build-fips` (root and `microgateway/`) builds and checks FIPS binaries from source.
-- **Packages and images** ([#866](https://github.com/TykTechnologies/ai-studio/pull/866), [#876](https://github.com/TykTechnologies/ai-studio/pull/876)). Packages for both editions on amd64, arm64 and s390x: `tyk-ai-studio-fips` and `tyk-ai-studio-fips-ee`, `tyk-microgateway-fips` and `tyk-microgateway-fips-ee` (server and `mgw` CLI). Images `tykio/tyk-ai-studio-fips` and `tykio/tyk-microgateway-fips` for amd64 and arm64, built from the Enterprise edition on `tykio/dhi-busybox:1.37-fips`, with provenance and an SBOM attestation; paths, ports and settings are those of the standard images, and they run as uid 65532. Every tagged release runs a smoke test of the FIPS images and packages.
-- **Self-report** ([#876](https://github.com/TykTechnologies/ai-studio/pull/876)). AI Studio and the Microgateway log a `FIPS 140-3` line at startup and return `"fips": {"enabled", "version", "enforced"}` from `GET /health`. Edges send their status in heartbeats; the Edge Gateways list and detail pages show it, and the edge API returns it as `attributes.fips` (the edge's own report; unknown for edges that do not send it). `GODEBUG=fips140=off` turns FIPS mode off even in a FIPS build, so check the self-report, not the package or image name.
-- **FIPS-mode data formats** ([#869](https://github.com/TykTechnologies/ai-studio/pull/869), [#871](https://github.com/TykTechnologies/ai-studio/pull/871), [#873](https://github.com/TykTechnologies/ai-studio/pull/873)). FIPS-mode processes write approved formats, and every build reads both:
-  - secrets at rest (`TYK_AI_SECRET_KEY`): `v3:` (PBKDF2-HMAC-SHA256 + AES-GCM) instead of `v2:` (scrypt + AES-GCM);
-  - user passwords, OAuth client secrets and Microgateway credential secrets: PBKDF2-HMAC-SHA256 instead of bcrypt. A user's bcrypt hash is replaced on their next login on a FIPS build, an OAuth client secret on its next successful use;
-  - hub-to-edge snapshot secrets: AES-GCM with a random nonce, in every build.
 
-  At startup, in the background, a FIPS-mode AI Studio re-encrypts stored secrets to `v3`: the Secrets page, and the encrypted values in other tables (LLM API keys and credential metadata, LLM resource signing secrets, webhook headers and signing secrets, Tyk connection tokens and gateway definitions, submission credentials, MCP credential tokens). A standard build does not re-encrypt.
-- **Strict-mode readiness** ([#867](https://github.com/TykTechnologies/ai-studio/pull/867), [#868](https://github.com/TykTechnologies/ai-studio/pull/868), [#870](https://github.com/TykTechnologies/ai-studio/pull/870), [ai-studio-enterprise#103](https://github.com/TykTechnologies/ai-studio-enterprise/pull/103)). Secrets are sealed with `cipher.NewGCMWithRandomNonce` (wire-compatible), the MongoDB driver used by SSO's identity broker is forked so FIPS binaries start under `GODEBUG=fips140=only`, and tiktoken rank files load without SHA-1. `make fips-guard` fails CI on non-approved cryptography outside a reviewed allowlist, and `make test-fips` runs the Go suites under `fips140=only`.
-- **Plugins** ([#873](https://github.com/TykTechnologies/ai-studio/pull/873)). `make plugin-publish NAME=<plugin> FIPS=1` publishes the FIPS variant of a version already published: built with `GOFIPS140=v1.0.0`, checked with `scripts/fips-verify.sh`, pushed as `<version>-fips` and recorded as `oci_fips` in the marketplace entry. In FIPS mode, AI Studio and the Microgateway log a warning when they start a plugin binary that is not a FIPS build (or not a Go binary they can inspect); the plugin still starts.
+AI Studio and the Microgateway are now available as FIPS 140-3 compliant builds, using the Go Cryptographic Module v1.0.0 ([CMVP certificate #5247](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/5247)). Standard builds are unchanged.
 
-  See `docs/site/docs/fips.md` and `docs/site/docs/plugins-publishing.md`.
+- **Packages** for both editions on amd64, arm64 and s390x: `tyk-ai-studio-fips`, `tyk-ai-studio-fips-ee`, `tyk-microgateway-fips` and `tyk-microgateway-fips-ee`.
+- **Images** `tykio/tyk-ai-studio-fips` and `tykio/tyk-microgateway-fips` (amd64 and arm64, Enterprise edition), with the same paths, ports and settings as the standard images.
+- **Check what you're running.** Both binaries log a `FIPS 140-3` line at startup and report `fips` from `GET /health`. Edges report their FIPS status to the Edge Gateways page.
+- **Move databases both ways.** In FIPS mode, passwords and secrets are stored in approved formats, and every build reads both old and new formats. A database can therefore move between standard and FIPS builds. Existing secrets are re-encrypted in the background, and passwords are updated at each user's next login.
+- **FIPS plugins.** Plugins can be published as FIPS variants, and AI Studio warns when it starts a plugin that isn't a FIPS build.
 
-### Platform and console
-- **Guardrail blocks explain themselves.** A guardrail block's `400` adds the reason, a stable code (`guardrail_detected`, `guardrail_too_large_to_scan`, `guardrail_scan_budget_exceeded`, `guardrail_unavailable`, `guardrail_unscanned`, `guardrail_unreadable_request`) and the request id to the message, on every path (bridges and Bedrock included); the gateway's own endpoints also return `reason_code`, `reason`, `filter` and `request_id` in the body and an `X-Tyk-AI-Guardrail-Reason` header. The reason names the cause and where it was (for example "a tool result from fetch_results of 321,097 characters is longer than this guardrail scans"), never the matched text. Compliance event details open with **What happened** and **How to fix**; unscanned events list their segments and the setting that applies. With **Show this filter's blocks to app owners** (`evidence.share_with_app_owners`, off by default) the portal's App page lists the App's recent guardrail blocks with the reason and request id.
-- **Request IDs.** Every gateway request (AI Studio's and every edge's) has an id of its own, `tyai_` and a UUIDv7, so ids from different nodes never collide, answered in **`X-Tyk-AI-Request-ID`**. One request keeps one id across the `/ai/` and `/anthropic/` bridges' loopback hop and every failover attempt; a client cannot set it. The caller's own `X-Request-ID` is never overwritten and is recorded beside it as the client request id. Both are on request log rows (App and LLM pages, where the search matches either), on guardrail compliance events (whose details link to the request log), in an HTTP classifier's `meta`, and on the pulse from edges.
-- **`$SECRET/` references in plugin configuration** ([#766](https://github.com/TykTechnologies/ai-studio/pull/766)). A plugin's config fields can name a stored secret, which is resolved for the plugin and stays masked in the config form. Adding one needs `secrets:read`.
-  - **Edge plugins get them too** ([#813](https://github.com/TykTechnologies/ai-studio/pull/813)). AI Studio resolves a top-level `$SECRET/` reference in the config of a plugin that edges run and sends the value encrypted, like an LLM's API key; the plain configuration keeps the reference, edges keep the value encrypted at rest, and it is never echoed. A reference that cannot be resolved, or names a secret stored empty, reaches the plugin as a refused credential, never as the reference text. Rotating, changing or deleting a secret marks the edges that use it as pending a configuration push.
-- **`tyk.llm` `return_errors`** ([ai-studio-enterprise#76](https://github.com/TykTechnologies/ai-studio-enterprise/pull/76)). With `return_errors: true`, a failed call returns an error value instead of stopping the script, so a guardrail script can block when its checker is unavailable.
-- **Startup warning for `FILTER_SCRIPT_ALLOW_OS`** ([#790](https://github.com/TykTechnologies/ai-studio/pull/790), [ai-studio-enterprise#85](https://github.com/TykTechnologies/ai-studio-enterprise/pull/85)). AI Studio and the Microgateway log a warning at startup when filter scripts get Tengo's `os` module, and the runner and the warning read the switch the same way.
-- **Catalogue picker on the submission Approve dialog** ([#756](https://github.com/TykTechnologies/ai-studio/pull/756)).
-- **Privacy warning** ([#757](https://github.com/TykTechnologies/ai-studio/pull/757)). The tool and datasource forms warn when the chosen privacy level is above every active LLM provider.
-- **Push reminder** ([#752](https://github.com/TykTechnologies/ai-studio/pull/752)). After you save an object edges use, the console says straight away that edges need a configuration push.
-- **Helm `config.logLevel`** ([#748](https://github.com/TykTechnologies/ai-studio/pull/748)) sets AI Studio's `LOG_LEVEL` (default `info`).
+See the [FIPS guide](docs/site/docs/fips.md). Moving an existing deployment to FIPS has its own [upgrade notes](#moving-to-fips-140-3-builds).
 
-## Bug fixes
+### Decision models
 
-### Chat
-- **Long sessions sent their oldest messages** ([#791](https://github.com/TykTechnologies/ai-studio/pull/791)). A session loaded its first 100 messages, so once it passed 100 the newest ones, including the question being asked, were not sent. Sessions now send the newest 100 messages, with the system prompt kept in front.
-- **History trimming broke tool-using conversations** ([#791](https://github.com/TykTechnologies/ai-studio/pull/791)).
-  - Trimming to the LLM settings' max length removed single messages, so a tool call could lose its results and the vendor refused the request. History is now trimmed a whole turn at a time, and tool calls count toward the estimate.
-  - The latest user message and what follows it are never trimmed.
-  - An unset max length now means no limit. It used to drop almost the whole history.
-- **Long replies failed on the Postgres chat queue** ([#761](https://github.com/TykTechnologies/ai-studio/pull/761)) with `payload string too long (SQLSTATE 22023)`. Messages over the `NOTIFY` limit are now split.
-- **`$SECRET/` tool auth keys were sent as the literal reference** on chat and embedded-gateway tool calls ([#788](https://github.com/TykTechnologies/ai-studio/pull/788)).
+AI Studio now governs a new kind of model. Instead of generating text, a decision model answers typed questions about a piece of evidence, with calibrated probabilities. Supported: OpenAI's Decisions API (`gpt-6-luna`), and System One models (TypeSafe's hosted Jev, or a compatible self-hosted model).
 
-### Tools
-- **An `oas_spec` the tool cannot use is refused** ([#758](https://github.com/TykTechnologies/ai-studio/pull/758)). A spec that was not base64-encoded OpenAPI was stored and left the tool unusable. A REST tool now gets `400`, on create and on an update that changes the spec, and **Import from URL** says why a document was refused.
-- **One duplicate tool name froze an edge's configuration** ([#785](https://github.com/TykTechnologies/ai-studio/pull/785), [#786](https://github.com/TykTechnologies/ai-studio/pull/786)). Two tools whose names give the same slug made every push to an edge fail as a whole. A name whose slug is taken is now refused, and the console shows the conflict under the Name field. Edges skip entries they cannot store and report them on the push. See the upgrade notes.
-- **Editing a tool with an `$ENV/` auth key stored the environment value** in place of the reference ([#788](https://github.com/TykTechnologies/ai-studio/pull/788)).
+- **One contract for every provider.** Clients call `POST /v1/decisions` with OpenAI's Decisions schema (also available as `POST /ai/{slug}/v1/decisions`), and AI Studio translates for each provider.
+- **Governed like chat.** Authentication, filters, guardrails, plugins, budgets and analytics all apply. A new Dashboard panel shows decision calls, questions answered, refusals and cost.
+- **Failover that understands decisions.** A decision call only fails over to models that can answer it, and chat calls skip decision-only models.
+- **New System One provider** in the LLM form.
 
-### Filters and scripts
-- **Built-in filter templates** ([#739](https://github.com/TykTechnologies/ai-studio/pull/739)). The pattern-match template matches case-insensitively, and the LLM Check template fences the screened text and blocks when the check fails.
-- **A response filter let the response through when `tyk.llm` failed** ([ai-studio-enterprise#76](https://github.com/TykTechnologies/ai-studio-enterprise/pull/76)). Scripts can now handle the failure with `return_errors` (see New features).
-- **Guardrail Redact on response filters** ([#746](https://github.com/TykTechnologies/ai-studio/pull/746)). The form now says up front that Redact only logs on a response filter.
+See the [decision models guide](docs/site/docs/decision-models.md).
 
-### Plugins
-- **The plugin broker gave up waiting after 500 ms** ([#768](https://github.com/TykTechnologies/ai-studio/pull/768)) and carried on whether the plugin was ready or not. It now waits for the plugin's ready signal, and the SDK buffers events until the broker is up instead of dropping them.
-- **Plugin config forms showed secret fields in clear** when a field had a long description ([#769](https://github.com/TykTechnologies/ai-studio/pull/769)).
-- **A plugin's sidebar section showed Configuration twice** when the plugin had its own Configuration page ([#744](https://github.com/TykTechnologies/ai-studio/pull/744)).
-- **The plugin examples, scaffold and docs warm up the broker with a call that needs no scope** ([#774](https://github.com/TykTechnologies/ai-studio/pull/774), [ai-studio-community-plugins#28](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/28)), so they keep working under scope enforcement.
+### Native SDK features, fully governed
 
-### Console
-- **Deep links survive sign-in** ([#742](https://github.com/TykTechnologies/ai-studio/pull/742)). Navigation names are unique, and the catalogs and datasources routes are consistent.
-- **View in Catalog on a submission** opens the resource it created ([#754](https://github.com/TykTechnologies/ai-studio/pull/754)).
-- **The quick start names empty provider secrets**, and the onboarding cards state their prerequisites ([#751](https://github.com/TykTechnologies/ai-studio/pull/751)).
-- **Edit app** sits in the App details header ([#759](https://github.com/TykTechnologies/ai-studio/pull/759)).
-- **Multi-select fields release outside clicks**, and a failed submit scrolls to the first error ([#762](https://github.com/TykTechnologies/ai-studio/pull/762)).
-- **Credential status says an unresolved `$ENV/` provider key is an unset environment variable** ([#763](https://github.com/TykTechnologies/ai-studio/pull/763)). The credential help texts point at the secret store ([#796](https://github.com/TykTechnologies/ai-studio/pull/796)).
+Some of the most useful OpenAI and Anthropic SDK features aren't a simple request and response. They now work through AI Studio's native `/llm/` endpoints, with the same model allow-lists, filters, budgets and analytics as any chat call.
 
-### Management API
-- **A partial `PATCH` wiped the attributes it left out** (midsommar-clean-96e). Most update endpoints bound the body onto plain values and wrote every attribute, so an omitted one was stored empty: renaming a group removed its members and catalogues, a role lost its permissions, a chat its groups and filters, a datasource or tool its owner, privacy score and credentials, a consumption policy its limits, a secret its name (breaking every `$SECRET/` reference). Every `PATCH` now changes only the attributes its body holds, as `PATCH /apps/{id}` and `PATCH /llms/{id}` already did; an attribute that is present, an empty list, `0`, `false` or `""` included, still replaces the stored value. `/model-prices/{id}/recalculate` no longer writes zeroed prices into history. `PATCH /model-routers/{id}/toggle` needs `{"active": ...}` (an empty body deactivated the router), and `PATCH /secrets/{id}` refuses an empty `var_name`.
+- **Anthropic:** Message Batches and `count_tokens`.
+- **OpenAI:** the Responses API (including background responses), Conversations, and Batches with batch input files.
+- **Each App's resources stay its own.** Batch, file, response and conversation ids are tied to the App that created them. Another App using the same LLM gets `404`, and its request never reaches the vendor.
+- **Batches are screened and billed correctly.** Every request in a batch passes the model allow-list and the LLM's filters, and batch usage is recorded once, at the batch price.
+- **Billing to match your contract.** Set a price multiplier per service tier, for example `{"batch": 0.4}` for negotiated batch pricing. A new **Service Tiers** Dashboard panel reports usage by tier (`batch`, `flex`, `priority`).
+- **Anthropic workspaces.** Pin an LLM to an Anthropic workspace, and every call made for it runs there.
+- **Signing keys you can rotate.** Each LLM has its own signing key for resource ids, so rotating the vendor API key no longer breaks outstanding ids. You can rotate the signing key from the LLM page, with a grace period.
+- **Better screening on OpenAI.** Filters and guardrails now read the prompts of `/v1/responses`, `/v1/embeddings`, `/v1/completions` and `/v1/moderations`.
 
-### Datasources
-- **PDF extraction** ([#753](https://github.com/TykTechnologies/ai-studio/pull/753), [#765](https://github.com/TykTechnologies/ai-studio/pull/765)). `pdftotext` is looked up once, only on the `PATH`, and runs with a minimal environment. The log names the extractor in use once.
-- **The vector store list** ([#777](https://github.com/TykTechnologies/ai-studio/pull/777)) offers the stores datasources implement (it listed Milvus and left out PGVector and Redis).
+See the [proxy guide](docs/site/docs/proxy.md).
 
-### Guardrails
-- **A guardrail redaction flattened tool-using conversations.** Redacting anything in a request rebuilt the body as plain `{role, content}` messages, dropping tool calls, tool results and their ids, images and `cache_control`, so the vendor refused the request or saw a different conversation. Redactions are now written into the body in place.
-- **A redaction that could not be applied fell to the fail mode**, so a fail-open guardrail forwarded the unredacted text. Such a request is now blocked (or, for a tool result, quarantined) whatever the fail mode.
-- **JSON escapes hid text from guardrails.** A body in a shape the guardrail did not read was classified as raw JSON, so an instruction after an escaped newline, or spelled with `\u` escapes, was not matched. Every string is now decoded first.
-- **False positives on placeholder passwords.** `secrets.connection_string` and `secrets.basic_auth_url` skip a password that is a variable (`$DB_PASSWORD`, `${DB_PASSWORD}`), a placeholder of words in angle brackets (`<password>`), or a mask (`****`), as configuration files and READMEs write them.
-- **Response filters missed text in streams** (native `/llm/` paths). Text was read per 1 KiB network read, so an event cut across two reads was lost, and Responses API, Google JSON-array and Ollama streams yielded no text at all, so response guardrails never ran on them. Streams are now read event by event in every format, and each event reaches the client once the filters have seen it (unchanged bytes; without response filters, unchanged relaying).
-- **Native Bedrock `converse-stream` dropped tools and every non-text block.** The streaming path rebuilt the request from its text only, so `toolConfig`, tool use and tool results, images, documents and model-specific fields never reached Bedrock (no tool use when streaming, and nothing for tool-result guardrails to act on), and it re-encoded the response events, dropping reasoning and citations. It now forwards the request as the client wrote it, signed like the native REST path, and relays the event stream frame by frame, byte for byte. Response guardrails now run on it (per chunk and once at the end; they never did before) and hold its `toolUse` when they scan tool calls; a block ends the stream with a `validationException`. A non-streaming operation on the streaming route is refused (400) rather than reinterpreted. A Bedrock endpoint that names no region takes it from the LLM's `metadata.aws_region`.
-- **Guardrails never ran on the Bedrock bridges' streams.** The `/ai/` and `/anthropic/` bridges to Bedrock handed response filters text they could not read, so guardrails never evaluated a streamed Bedrock answer there, and neither bridge had an end-of-stream pass. Both now screen the SSE they write as the native streams are screened: text per event and at the end, tool calls held until classified, a block ending the stream with an OpenAI error and `[DONE]` or an Anthropic `event: error`.
-- **A Bedrock LLM moved to another endpoint kept calling the old one** until the gateway restarted, when its credentials stayed the same: the cached client is now keyed on the endpoint too.
-- **A response filter's block on the `/ai/` bridge was swallowed** (and so on the unified `/v1` route and the microgateway's `/router/`). The inner hop's error did not reach the bridge's SDK driver for OpenAI and Google upstreams, so the client saw a clean `finish_reason: "stop"`, and the tool calls the driver had assembled were still emitted. The inner hop now also reports a block in a trailer that the bridge always reads: the client gets an HTTP 400 `policy_violation` with the block message before any frame, or an error chunk and `[DONE]` after, and a blocked tool call is never emitted. The fork's OpenAI stream reader also raises on an error object in the stream, as the official SDK does.
-- **A blocked stream ended with an error SDKs ignored.** The gateway wrote bare JSON with no `data:` line. It now ends the stream with the vendor's own error event (OpenAI error object and `[DONE]`, Anthropic and Responses `event: error`, Google error object, Ollama error line), which the official OpenAI, Anthropic and Google SDKs raise.
-- **The `/ai/` and unified `/v1` bridge dropped tool calls and tool results from the conversation** (and the microgateway's `/router/`). An assistant message's `tool_calls` went to the vendor as an empty turn (which Anthropic and Bedrock refuse) and a tool message as plain user text without its `tool_call_id` (which OpenAI refuses), so agent loops through the bridge failed or the vendor saw a different conversation; and message content sent as an array of parts was dropped altogether. On the inner hop, guardrails read the tool result as the user's own text, so `tool_results` rules (quarantine) never applied there. The bridge now hands OpenAI, Anthropic, Google, Vertex and Bedrock upstreams the history's tool calls and results in their own shape (ids and names kept, the results of parallel calls in one turn), and array content is read.
-- **Response filters let buffered OpenAI Responses API text through unread.** The text of a non-streaming Responses answer (`output` items rather than `choices`) was not extracted, so response guardrails never saw it. It is now read (`output_text` and refusals).
-- **A broken Bedrock stream ended as a complete answer on the `/ai/` and `/anthropic/` bridges.** When the Converse stream failed part-way, the client got `[DONE]` (or a synthesised `message_stop`), which reads as a finished, possibly empty, answer. It now ends with the vendor's error event.
-- **A filtered stream sent with a `Content-Length` arrived truncated.** When the upstream sized its stream (a Google JSON-array stream behind some proxies), the gateway passed the length on and then ended the body early with a block, so the client read a broken response instead of the error event. With response filters the length is no longer passed on.
-- **`/llm/rest` with a streaming body was not filtered.** With response filters it buffered the stream and then let it through unread; it now streams through the streaming path and is filtered. Bedrock `invoke-with-response-stream` on an LLM with response filters is refused (HTTP 400) instead of passing unfiltered.
-- **The filter form said response filters do not run on tools.** They run on a tool's output; the help text now says what each kind of filter does there.
+### MCP on Tyk Gateway: OSS Gateway connections and MCP analytics (Enterprise)
 
-### Gateway
-- **OpenAI `/v1/responses` calls were not recorded** (issue [#697](https://github.com/TykTechnologies/ai-studio/issues/697), [#737](https://github.com/TykTechnologies/ai-studio/pull/737)). Response analysis rejected the path, so those calls wrote no proxy log, no cost and no budget spend, which let an App use the Responses API past its budget.
-- **The service tier of synchronous OpenAI calls was ignored** ([#737](https://github.com/TykTechnologies/ai-studio/pull/737)). `flex` and `priority` calls are now recorded with their tier, so price overrides and the tier report apply to them. With no override they are still billed at the list price.
-- **Anthropic `count_tokens` and batch calls wrote zero-cost chat records** ([#730](https://github.com/TykTechnologies/ai-studio/pull/730)). Only a `/messages` path is now read as a Messages call; the others still write their proxy log.
-- **Native OpenAI decision calls were not recorded** ([#724](https://github.com/TykTechnologies/ai-studio/pull/724)). `/llm/rest/{openai-llm}/v1/decisions` already passed through, but response analysis rejected the path, so those calls wrote no proxy log, no cost and no budget spend.
-- **OpenAI and Ollama `/llm/` requests with array content were refused.** A chat completions body whose message content is a list of parts (text and `image_url` parts, a tool message with text parts) got `400` ("cannot unmarshal array") from the gateway's request screen before reaching the vendor. The screen now reads only the fields it needs.
-- **Calls to a model alias were recorded at zero cost** ([#724](https://github.com/TykTechnologies/ai-studio/pull/724)). When the model a provider reports has no price, the call is now priced by the model that was requested. Jev answers `jev-latest` as `jev-1.13.0`, and OpenAI reports dated snapshots of chat models.
-- **OpenAI moderations without a `model` were refused** ([#755](https://github.com/TykTechnologies/ai-studio/pull/755)). They pass, since the moderations endpoint picks its own model.
-- **Bedrock streams on the `/ai/` and `/anthropic/` bridges could end early under load** ([#813](https://github.com/TykTechnologies/ai-studio/pull/813)). When Bedrock answered before the gateway had finished sending the request, the AWS SDK's own request-body handling closed the connection, and the stream ended with "use of closed network connection" before its first event. The same could cut any Bedrock SDK call. Also, the event received just before a broken frame was dropped, so the client never saw text Bedrock had already sent.
+- **Govern MCP without the Tyk Dashboard.** AI Studio can now manage MCP proxies and keys directly on open-source Tyk Gateways (5.13 or later). It discovers the nodes (a single URL, a list, or DNS), keeps every node in sync and repairs out-of-band edits. A **Nodes** panel shows each node as In sync, Pending, Unreachable or Gone.
+- **Per-server key access.** Each MCP server has a **Key access** section for its tool allow-list, rate and quota. Keys work on every node at once.
+- **Stays in its lane.** AI Studio only manages MCP proxies, and never changes or deletes proxies it didn't create. See the [OSS Gateway MCP guide](docs/site/docs/tyk-oss-gateway-mcp.md).
+- **MCP analytics.** Tyk Pump can now deliver Tyk Gateway analytics to AI Studio, for Dashboard and OSS Gateway connections. Each MCP server gets a **Usage** tab (calls, errors, latency, per-tool and per-App breakdowns), App pages show MCP usage (App owners see their own Apps in the portal), and the Dashboard has an **MCP traffic** panel. No API keys, bodies or client addresses are stored. See the [Tyk MCP integration guide](docs/site/docs/tyk-mcp-integration.md).
 
-### Analytics
-- **Anthropic Chat turns with several content blocks were billed two or three times** ([#736](https://github.com/TykTechnologies/ai-studio/pull/736)). The usage of a turn with text and a tool call (or a thinking block) was counted once per block, in tokens, cost and budget. It is now read once per turn.
-- **Cached tokens in Chat sessions were billed at the input price** ([#736](https://github.com/TykTechnologies/ai-studio/pull/736)). Chat-session records now use the same pricing as gateway records: cached tokens are billed at the cache price, and an unset cache price falls back to the input price as before.
-- **The cost breakdown of batch records did not add up** ([#730](https://github.com/TykTechnologies/ai-studio/pull/730)). The per-model breakdown is scaled to each record's recorded cost, and OpenAI and Google cache cost with an unset cache price is no longer reported as zero.
-- **Model price recalculation** ([#730](https://github.com/TykTechnologies/ai-studio/pull/730)) keeps each past record's ratio to the list price, so batch records stay at half price, and it now runs on SQLite too.
+### Plugins on Bedrock work on every endpoint
 
-### Control plane and edges
-- **Edges ran an LLM's plugins in install order.** An edge fed by AI Studio ran pre-auth, post-auth and response plugins in the order the plugins were installed, not the order set on the LLM (a standalone microgateway already honoured it). AI Studio already sent each LLM's order in the configuration snapshot; the edge now applies it, so the order set in Studio holds on edges too. This matters for chains such as a cache before the Prompt Compressor. The snapshot and its checksum are unchanged.
-- **Edges did not enforce an LLM's monthly budget** (Enterprise). An edge refused a spent App budget, but served an LLM past its own `monthly_budget` indefinitely; only AI Studio's embedded gateway enforced it. The budget sync now carries each budgeted LLM's spend across AI Studio and every edge, in the LLM's own budget period, and the LLMs to refuse (a budget of $0, or one spent). Edges refuse such an LLM with no upstream call, with the same 403 and bridge envelopes as an App budget refusal, and keep refusing across a restart. An edge also counts its own spend on the LLM between syncs, and a change to the LLM's budget in AI Studio applies on edges at the next budget sync. A refusal's amounts no longer round sub-cent values to `0.00` (`limit=0.0005`). Enterprise only, as AI Studio's own LLM budget check is; Community Edition is unchanged. Edges and AI Studio must both be on 2.3 for LLM budgets to apply on edges: an older AI Studio sends none, and an older edge ignores them. A restarted edge re-learns the spend of an LLM still under budget at the next budget sync (30 seconds by default); LLMs already refused stay refused across the restart.
-- **Edge control-client data races** ([#725](https://github.com/TykTechnologies/ai-studio/pull/725)).
-  - The connected flag was shared between the connect path, the stream's receive loop and the heartbeat worker without synchronisation. A stream that dropped immediately could also be left marked as connected.
-  - The heartbeat worker watched the client's current stream context, which a reconnect replaces. The old worker then waited on the new stream and never stopped, so every reconnect left one more heartbeat worker running.
-- **An edge that dropped mid-heartbeat could stay marked as connected** ([#779](https://github.com/TykTechnologies/ai-studio/pull/779)).
-- **A push could lose an edge's READY report** under contention ([#773](https://github.com/TykTechnologies/ai-studio/pull/773)), leaving the push waiting.
-- **Heartbeats report the configuration an edge applied** ([#785](https://github.com/TykTechnologies/ai-studio/pull/785)), not the last one it received. An edge whose last sync failed now shows as not in sync.
-- **SQLite writes failed with "database is locked" under concurrent writes** ([#800](https://github.com/TykTechnologies/ai-studio/pull/800)). AI Studio opens SQLite files with the Microgateway's defaults (WAL, a busy timeout, write transactions that take the lock up front). See the upgrade notes.
-- **One record that was not valid UTF-8 stopped an edge's analytics pulse for good** ([#818](https://github.com/TykTechnologies/ai-studio/pull/818)). The edge stored bodies cut at `ANALYTICS_MAX_BODY_SIZE` bytes, which can split a multi-byte character; gRPC refuses to send such a string, and the failed pulse was kept for the next one, so no analytics, budget usage or compliance events reached AI Studio from then on. Bodies are now cut on a character boundary, and the pulse replaces any invalid UTF-8 with U+FFFD before sending. The pulse buffer is held in memory, so what a stuck edge buffered before the upgrade does not reach AI Studio (it stays in the edge's own database).
-- **Stop waits for background work** ([#728](https://github.com/TykTechnologies/ai-studio/pull/728), [#792](https://github.com/TykTechnologies/ai-studio/pull/792)). The legacy secret re-encryption and the notification body backfill are cancelled and waited for, so they no longer outlive a stopped Studio.
+Until now, only authentication plugins ran when clients reached a Bedrock LLM through `/ai/`, the unified `/v1`, routers or `/anthropic/`. Now every plugin runs there, as for every other vendor: caches, rate limiters, load balancers, firewalls and the Prompt Compressor.
 
-### Tyk connections (Enterprise)
-- **A changed base URL now reaches imported servers** ([ai-studio-enterprise#70](https://github.com/TykTechnologies/ai-studio-enterprise/pull/70)). Changing a connection's public base URL updates the portal URL of every server on the next sync. Before, servers kept the old URL until their definition changed. This applies to Dashboard connections too.
-- **Custom domains are honoured.** A proxy with an enabled custom domain gets that host as its portal URL. It used to get a URL that returned 404.
+- Plugin response headers (`X-RateLimit-*`, `X-LB-*`, `X-Cache*`) now reach clients on those endpoints, for every vendor.
+- Load-balancer overrides to another AWS region now work.
+- Bedrock inference profiles and ARN model ids work on every `/llm/` route.
+- When a plugin refuses a Bedrock call, AWS SDK clients get a proper AWS error with the plugin's message.
+- New Plugin SDK helpers (`RequestModel`, `IsStreamingRequest`, `ResponseUsage`) read the model, streaming flag and token usage in every vendor's format.
 
-### Deployment
-- **The CE quickstart works with the 2.2 images** (`725d561a`).
-  - The images are distroless and run as a non-root user from `/opt`. The CE quickstart still used the `/app` layout.
-  - The edge dialled port 9080 while CE AI Studio listened on 50051, so the edge crash-looped.
-  - The plugin cache directory was unwritable, so OCI plugins and the marketplace were off.
-  - CE now uses the enterprise quickstart's `/opt` layout, and the database stays at the same host path.
-- **The Helm chart, quickstarts and deployment docs default to v2.2.1** (`725d561a`).
-- **The Helm chart renders `extraEnv`, `extraVolumes` and `extraVolumeMounts` for AI Studio** ([#735](https://github.com/TykTechnologies/ai-studio/pull/735)).
-- **The quickstart ships placeholders instead of sample secrets** ([#729](https://github.com/TykTechnologies/ai-studio/pull/729)). Its env files carry placeholders that must be replaced before the first start, and the deployment docs' sample outputs are marked as samples.
+This changes what plugins and filter scripts see for Bedrock traffic. Read the [Bedrock upgrade notes](#bedrock) before upgrading.
+
+### Other improvements
+
+- **Request ids you can trace.** Every gateway request gets its own id, returned in `X-Tyk-AI-Request-ID`. It stays the same across failover attempts and appears in request logs, compliance events and edge analytics. Your own `X-Request-ID` is kept and recorded alongside it, and you can search request logs by either.
+- **Secrets in plugin configuration.** Plugin config fields can reference a stored secret (`$SECRET/name`). The value stays masked in the form, and edges receive it encrypted.
+- **Credential references are consistent everywhere.** `$SECRET/` and `$ENV/` references work the same way for LLMs, tools, datasources, embedders, guardrails and plugins, and edges only ever receive resolved values. See the [secrets guide](docs/site/docs/secrets.md).
+- **Guardrail scripts can handle checker failures.** With `return_errors: true`, a failed `tyk.llm` call returns an error instead of stopping the script, so a script can decide to block when its checker is unavailable.
+- **Privacy warning.** The tool and datasource forms warn when the chosen privacy level is higher than every active LLM can accept.
+- **Push reminder.** After you save something that edges use, the console tells you straight away that edges need a configuration push.
+- **Catalogue picker when approving a submission.**
+- **Helm:** `config.logLevel` sets AI Studio's log level.
+- **Startup warning** when filter scripts are given access to the operating system (`FILTER_SCRIPT_ALLOW_OS`).
+- **New Prometheus metrics** for decision models (`aistudio_decision_questions_total`), native API operations (`aistudio_native_*`) and guardrails (`aistudio_guardrail_segments_total`, `aistudio_guardrail_cache_total`, `aistudio_guardrail_calls_abandoned_total`, `aistudio_guardrail_shadow_dropped_total`).
+
+---
 
 ## Security
-- **Unauthenticated admin access to the microgateway, leading to malicious plugin loading** ([#731](https://github.com/TykTechnologies/ai-studio/pull/731), also released as 2.2.2). `POST /api/v1/auth/token` needed no credentials and issued a token for any App with any scopes, `admin` included. Anyone who could reach a microgateway's HTTP port could use it to load a malicious plugin of their own onto the gateway and attach it to its LLMs, where it sees and can change every prompt and response. They could also change LLMs, Apps, filters and prices, read analytics with stored bodies, and mint tokens. Edges and standalone microgateways were both affected. The route is removed in every mode, and an edge gateway (`GATEWAY_MODE=edge`) now mounts no `/api/v1` at all, since its configuration comes only from the control plane. See `CHANGELOG-v2.2.2.md` for what to check on existing gateways.
-- **Internal-address blocking covers every managed asset, with a per-asset Allow internal host switch.** The default-on block (`LLM_UPSTREAM_BLOCK_INTERNAL`) now applies to every outbound call AI Studio and the Microgateway make for a managed asset: LLM upstreams on every route, Studio chat's LLM calls and semantic routing, embedders, tool (OpenAPI) calls from chat, the gateway's tool endpoints and edges, data source and vector store connections (Chroma, Pinecone, pgvector, Qdrant, Redis, Weaviate), guardrail providers, plugin registries and hosts, and the MCP registration wizard's tool discovery. Tool calls and vector store connections used to reach any address, so a community-submitted tool or data source could probe internal services. Each LLM, embedder, tool, data source, guardrail, plugin and MCP server now has an **Allow internal host** switch (`allow_internal_host`, off by default) that lets only that asset's own host be internal, on AI Studio and on the edges it is pushed to; blocking stays on for every other host, redirects included, and `LLM_UPSTREAM_ALLOWED_HOSTS` still applies. Only administrators can set or change it (`403` otherwise; an update that leaves it out keeps it), plugins cannot change it through object hooks or the service API, and portal submissions cannot carry it: an approved submission starts with it off. The environment settings stay global overrides; filter scripts have no switch of their own. Edges before 2.3 ignore the switch and keep blocking. See [Outbound network policy](docs/site/docs/proxy.md#outbound-network-policy).
-- **Gateway connections are MCP only** ([#721](https://github.com/TykTechnologies/ai-studio/pull/721)). Every call to a Tyk Gateway goes through a fixed allow-list, and AI Studio never changes or deletes proxies it did not create.
-- **Proxies that AI Studio creates on Gateways set `stripAuthorizationData`**, so a client's Tyk key is not forwarded to the upstream MCP server. Dashboard connections do not; see Known issues.
-- **The internal-address rule applies to every Gateway node.** With DNS discovery, AI Studio reaches each node by its resolved address. Whether an internal address may be dialled is still decided for the connection's hostname, as for any other outbound call.
-- **Cross-App reuse of OpenAI responses and conversations** ([#737](https://github.com/TykTechnologies/ai-studio/pull/737)). Any App sharing an OpenAI LLM could continue another App's conversation (`previous_response_id`, `conversation`) or read and delete its stored responses and conversations. IDs are now signed for the App and LLM; another App's ID gets `404` without reaching OpenAI. Anthropic batches got the same ownership in [#730](https://github.com/TykTechnologies/ai-studio/pull/730).
-- **Filters saw an empty prompt** on OpenAI `/v1/responses`, `/v1/embeddings`, `/v1/completions` and `/v1/moderations`, and on batch requests ([#730](https://github.com/TykTechnologies/ai-studio/pull/730), [#737](https://github.com/TykTechnologies/ai-studio/pull/737)), so filters and guardrails did not screen those calls. With request filters attached, a prompt the gateway cannot read is now refused rather than passed unscreened.
-- **Batch file upload smuggling** ([#737](https://github.com/TykTechnologies/ai-studio/pull/737)). Multipart forms that another parser could read differently (escaped or RFC 2231 field names, repeated or unknown fields, data after the closing boundary) are refused, so an unscreened part cannot become the vendor's batch file.
-- **Path spellings that skipped ownership checks** ([#737](https://github.com/TykTechnologies/ai-studio/pull/737)). A different spelling of a native path (`/v1/Responses`, `/V1/responses`) reached the vendor on the ordinary chain without its checks. It now gets the vendor's `404`.
-- **Duplicate JSON keys** ([#730](https://github.com/TykTechnologies/ai-studio/pull/730), [#737](https://github.com/TykTechnologies/ai-studio/pull/737)). A body with a key given twice, or twice in different case where the gateway reads it case-insensitively (`messages` and `Messages`), is refused on batches, `count_tokens`, batch file lines and synchronous Anthropic `/v1/messages`, so the filters and the vendor cannot read different prompts. Body keys that differ only in case from a checked field (`Previous_Response_Id`) are refused too.
-- **Ambiguous request bodies with request filters attached.** With any request filter on the LLM, a request whose JSON repeats a key is now refused with `400` on every `/llm/` route and format, not only on the native batch and Anthropic messages paths, and a guardrail also refuses a body that spells a field it reads in different case (`"Content"`). A filter and the vendor could otherwise read different copies of the text. The refusal names only the format's own field names, never other keys, since keys can be tool data.
-- **Guardrail error events no longer quote the provider.** `guardrail.error` names the class of failure (`timeout`, `http_503`, `input_rejected`) instead of the provider's error message, which could quote the screened text. A provider panic is logged without its value for the same reason.
-- **Decision-metric labels.** `aistudio_decision_questions_total` counts only calls that a model answered or refused, so a failed call that names an invented model adds no series ([#724](https://github.com/TykTechnologies/ai-studio/pull/724)).
-- **Credential references follow an operator policy** ([#794](https://github.com/TykTechnologies/ai-studio/pull/794), [#789](https://github.com/TykTechnologies/ai-studio/pull/789), [#788](https://github.com/TykTechnologies/ai-studio/pull/788)). See Highlights and the upgrade notes.
-- **Plugin service-API calls are checked against the plugin's approved scopes** ([#775](https://github.com/TykTechnologies/ai-studio/pull/775), [ai-studio-enterprise#80](https://github.com/TykTechnologies/ai-studio-enterprise/pull/80), [ai-studio-community-plugins#28](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/28)), and a plugin can update only its own configuration.
-- **Vendor clients take keys and endpoints only from the object they serve** ([#797](https://github.com/TykTechnologies/ai-studio/pull/797)). The OpenAI, Anthropic, Google AI, Hugging Face and Ollama clients, and the Pinecone and Chroma vector stores, no longer fill an empty key or endpoint from environment variables.
-- **The SSO nonce endpoint requires the identity broker's shared secret** ([#787](https://github.com/TykTechnologies/ai-studio/pull/787)). With `TYK_AI_SECRET_KEY` unset, every call is refused, and the secret is compared in constant time.
-- **Assigning catalogues while approving a submission needs catalogue write permission** ([#772](https://github.com/TykTechnologies/ai-studio/pull/772)), as assigning them anywhere else does.
-- **Predictable SSO nonce tokens** ([#865](https://github.com/TykTechnologies/ai-studio/pull/865), all builds). SSO nonce tokens, and other random strings from the same helper, came from `math/rand`. They now come from `crypto/rand`.
-- **Earlier `-fips` packages were not FIPS builds** ([#866](https://github.com/TykTechnologies/ai-studio/pull/866)). The `tyk-ai-studio-fips` and `tyk-microgateway-fips` packages (and their `-ee` variants) published before this release were standard builds under FIPS names. The `-fips` packages are now real FIPS builds (`GOFIPS140=v1.0.0`), checked with `scripts/fips-verify.sh` before release. To check a binary, run `go version -m <binary>` or `scripts/fips-verify.sh --fips <binary>`, or read `fips` from `GET /health`.
-- **Plugin host checks** ([#741](https://github.com/TykTechnologies/ai-studio/pull/741), [#776](https://github.com/TykTechnologies/ai-studio/pull/776), [ai-studio-enterprise#81](https://github.com/TykTechnologies/ai-studio-enterprise/pull/81)). Plugin hosts are classified by parsed address rather than by substring, `100.64.0.0/10` counts as internal, and the Enterprise validator resolves a hostname and refuses one that does not resolve.
-- **Cached OCI plugin binaries are verified against their fetch-time hash** before they load ([#745](https://github.com/TykTechnologies/ai-studio/pull/745)).
-- **OCI plugin signatures are verified in-process** (Enterprise). AI Studio and the Microgateway no longer run the `cosign` binary: signatures are checked with sigstore-go against the plugin's key, so verification works in the distroless images too. Both cosign formats are accepted: the legacy `sha256-<digest>.sig` tag (cosign v2, which `publish-plugin.sh` writes) and a Sigstore bundle attached as an OCI referrer (cosign v3's default). The signed payload must name the digest that was pulled, the Rekor entry must record the verification key, and the transparency-log entry is checked offline against an embedded Sigstore trusted root.
-- **Signature fixes** (Enterprise). Every OCI client, including the plugin-manifest and marketplace clients and every Microgateway mode, verifies through the Enterprise plugin security service. A tag that points at a multi-arch index is verified against the index digest that `publish-plugin.sh` signs, and a plugin signed on its platform manifest is still accepted. With signatures required and no verifier, a plugin is refused instead of loaded. Community Edition no longer reports OCI plugins as signature-verified.
-- **`pdftotext` runs only from the `PATH`, with a minimal environment** ([#765](https://github.com/TykTechnologies/ai-studio/pull/765)).
-- **Go 1.26.10 toolchain.** Studio, the Microgateway and their release and Docker builds move from Go 1.26.6 to 1.26.10, which fixes reachable standard library vulnerabilities in `crypto/x509` (GO-2026-6809), `crypto/tls` (GO-2026-6607), `net/http` (GO-2026-6603, GO-2026-6605, GO-2026-6609, GO-2026-6611, GO-2026-6613), `net/textproto` (GO-2026-6608) and `html/template` (GO-2026-6599, GO-2026-6600). govulncheck now reports none in the Microgateway and three without upstream fixes in Studio (`docker/docker` GO-2026-4883 and GO-2026-4887, `gorilla/csrf` GO-2025-3884).
-- **Secret fields stay masked in plugin config forms** ([#769](https://github.com/TykTechnologies/ai-studio/pull/769)), including the Redis passwords of advanced-llm-cache ([ai-studio-enterprise#78](https://github.com/TykTechnologies/ai-studio-enterprise/pull/78)) and rate-limiter ([ai-studio-community-plugins#27](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/27)).
 
-- **LLM credentials are no longer stored or passed on in plaintext.** An LLM's API key, and the values of its metadata fields whose name contains `key`, `secret` or `token` (a Bedrock LLM's `aws_access_key_id`, `aws_secret_access_key` and `aws_session_token`), were stored as typed when they were not a `$SECRET/` reference. They were also copied in plaintext into places that should never hold them:
-  - every `system.llm.*` event, which reaches plugins and the cluster event log;
-  - every object hook;
-  - the SQL log, at `debug` and on slow or failed queries at any level;
-  - and, for metadata, the configuration sent to edges and the edge database.
+- **Microgateway admin API could be used without credentials** (also fixed in 2.2.2). `POST /api/v1/auth/token` issued admin tokens to anyone who could reach a microgateway's HTTP port. That was enough to load a malicious plugin and read or change all traffic. The route is removed, and edge gateways no longer expose `/api/v1` at all. See `CHANGELOG-v2.2.2.md` for what to check on existing gateways.
+- **Internal networks are protected by default.** Outbound calls for every managed asset are now covered by the internal-address block: LLMs, Studio chat, embedders, tools, data sources and vector stores, guardrail providers, plugin registries and the MCP wizard. Previously, a submitted tool or data source could probe internal services. Each asset has an admin-only **Allow internal host** switch for legitimate internal services.
+- **LLM credentials are encrypted at rest.** API keys and credential fields (such as Bedrock's AWS keys) are encrypted with `TYK_AI_SECRET_KEY`. They are no longer copied into events, object hooks, SQL logs or the edge database in plain text.
+- **Credentials stay out of events and hooks.** Tool auth keys, datasource connection strings, user password hashes and tokens, App gateway keys and guardrail secrets now appear as `[redacted]` in system events and object hooks.
+- **Guardrail provider credentials reach edges encrypted**, like LLM keys.
+- **Chat no longer loads images from model responses by default.** A prompt injection could otherwise make the user's browser send data to any address through an image URL. Turn on **Render images in responses** for chats that should show images.
+- **One App can't use another App's OpenAI responses, conversations or batches.** Ids are tied to the App that created them.
+- **Requests that filters and the vendor could read differently are refused.** This covers duplicate JSON keys, keys differing only in case, ambiguous multipart uploads and alternative path spellings. Otherwise a filter could screen one prompt while the vendor received another.
+- **Prompts filters couldn't read are no longer passed unscreened** when request filters are attached.
+- **Plugins get only what they declare.** Plugins run with an explicit environment instead of the host's, can call only the service APIs whose scopes an admin approved, and can only change their own configuration.
+- **Plugin signatures are verified in-process** (Enterprise), with no external `cosign` binary, so verification also works in the distroless images. Both cosign v2 and v3 signature formats are accepted, and transparency-log entries are checked.
+- **Cached plugin binaries are checked** against their original hash before they load.
+- **Plugin hosts are checked properly.** Plugin hosts are classified by parsed address, and shared address space (`100.64.0.0/10`) counts as internal.
+- **Vendor clients no longer pick up keys or endpoints from environment variables.**
+- **`$ENV/` references only resolve for allowlisted names**, and changing a credential reference needs the `secrets:read` permission.
+- **SSO nonce endpoint now requires the identity broker's shared secret.** SSO nonce tokens are now generated with a cryptographically secure random source.
+- **A credential pointing at an empty secret no longer reaches edges as an empty key**, which a client could fill from the edge's own environment.
+- **Guardrail error events no longer quote the provider's error message**, which could contain the screened text.
+- **Approving a submission into catalogues needs catalogue write permission.**
+- **Secret fields stay masked in plugin config forms**, including the Redis passwords of advanced-llm-cache and rate-limiter.
+- **`pdftotext` runs only from the `PATH`, with a minimal environment.**
+- **Earlier `-fips` packages were not FIPS builds.** Packages published under `-fips` names before this release were standard builds. 2.3's `-fips` packages are real FIPS builds, checked before release.
+- **Go 1.26.10.** Fixes reachable standard library vulnerabilities in `crypto/x509`, `crypto/tls`, `net/http`, `net/textproto` and `html/template`.
 
-  Now:
-  - **At rest:** they are stored encrypted with `TYK_AI_SECRET_KEY`, existing rows included.
-  - **To edges:** metadata credentials travel and are stored encrypted with `MICROGATEWAY_ENCRYPTION_KEY`, as API keys already were.
-  - **Events and hooks:** they carry `[redacted]`.
-  - **SQL logs:** statements are logged without their values.
+---
 
-  See the upgrade notes.
-- **Guardrail provider credentials reach edges encrypted.** The resolved secret connection values of a guardrail (its provider API key or token) travelled to edges in plaintext in the configuration snapshot, protected only by the gRPC connection, so the edge token alone was enough to read them. They now travel, and are stored on the edge, encrypted with `MICROGATEWAY_ENCRYPTION_KEY`, as LLM API keys are. Edges older than 2.3.0 receive `refused-credential-reference` for those fields and the guardrail's fail mode set to `closed`, so they block guardrailed traffic rather than pass it unscreened. **Upgrade edges together with the hub: pre-2.3 edges block guardrailed traffic until upgraded.** 2.3 edges apply the fail mode you chose. Plugin configuration is not treated as secret and still travels as stored: keep credentials out of it, or use a top-level `$SECRET/` reference, which edges receive encrypted.
-- **Chat no longer loads images from model responses by default.** A Markdown image in a chat response (`![](https://host/?d=...)`) was fetched by the user's browser, so a prompt injection could make the chat send data to any address. Each chat has a new setting, **Render images in responses** (`render_images`), off by default: images then appear as links that are never loaded. Turn it on for chats that should show images. Agent chats never render images.
-- **A credential that references an empty secret no longer reaches edges empty.** An LLM API key or metadata credential, tool auth key, datasource key, embedder key or guardrail provider credential set to a `$SECRET/` reference whose secret is stored with an empty value went to edges as an empty key, which a client may fill from the edge's own environment (an AWS client's default credential chain, the host's instance role). Edges now get `refused-credential-reference`, which the provider rejects. A key left empty on purpose (an Ollama LLM) is still sent empty.
-- **Tool, datasource and user credentials no longer travel whole in events and object hooks.** `system.tool.*`, `system.datasource.*` and `system.user.*` events, which reach every subscribed plugin and the cluster event log, and `before_*` object hooks for those types, carried a tool's auth key, a datasource's connection string, connection API key and embedder key, and a user's password hash, API key and tokens. They now carry `[redacted]` (references kept), as LLM events and hooks do; a `before_*` hook that leaves a value `[redacted]` keeps the stored one. `after_*` hooks already redacted these fields, as `[REDACTED]`, and now use `[redacted]` and show references as written. The same goes for a guardrail filter's literal connection secrets in `system.filter.*` events and in the filters of tool and LLM events and hooks, for `system.app.*` events, which carried the App's gateway key and the credentials of its LLMs, tools and datasources, and for `system.group.*` events, which carried members' credentials.
+## Fixes
 
-## Breaking changes and upgrade notes
+### Chat
+- **Long chat sessions forgot the latest message.** Once a session passed 100 messages, the newest ones (including the question being asked) weren't sent. Sessions now send the newest 100 messages, with the system prompt kept.
+- **Tool-using conversations broke when history was trimmed.** History is now trimmed a whole turn at a time, so a tool call never loses its results. The latest user message is never trimmed. An unset max length now means no limit, rather than dropping almost all of the history.
+- **Long replies failed on the Postgres chat queue** with `payload string too long`.
+- **Anthropic turns with tool calls were billed two or three times**, and cached tokens were billed at the full input price. Chat sessions are now priced exactly like gateway calls.
+- **Tool auth keys stored as `$SECRET/` references were sent as the literal reference text.**
 
-> **Warning: internal network addresses are blocked by default.** `LLM_UPSTREAM_BLOCK_INTERNAL` now defaults to `true` in AI Studio and the Microgateway. After the upgrade, an LLM, embedder, tool, data source or vector store, guardrail provider or filter `tyk.makeHTTPRequest` call that reaches a loopback, private, link-local or other internal address (a local Ollama at `http://localhost:11434`, an in-cluster model server, a classifier on `10.x`) fails, by IP or by a hostname that resolves to one. Before upgrading, either:
-> - name those hosts in `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` (comma-separated; `.svc.cluster.local` matches every Service), which keeps blocking on for everything else (recommended); or
-> - set `LLM_UPSTREAM_BLOCK_INTERNAL=false` to restore the 2.2 behaviour.
+### Guardrails and filters
+- **Redacting a request flattened tool-using conversations**, dropping tool calls, images and cache settings, so the vendor refused the request. Redactions are now made in place.
+- **A redaction that couldn't be applied could let unredacted text through** on a fail-open guardrail. Such requests are now blocked, or the tool result quarantined.
+- **Escaped text could hide from guardrails**, for example instructions after an escaped newline or written as `\u` escapes. Text is now decoded before it's checked.
+- **Response guardrails missed text in streams**, and never ran on Responses API, Google and Ollama streams or on Bedrock streams through the bridges. Every stream format is now screened.
+- **A blocked stream ended with an error the SDKs ignored.** It now ends with the vendor's own error event, which the OpenAI, Anthropic and Google SDKs raise.
+- **A response filter's block on `/ai/` and `/v1` could be swallowed**, so the client saw a normal finish. Clients now get a clear policy error.
+- **Buffered Responses API answers weren't screened** by response filters.
+- **False positives on placeholder passwords** such as `$DB_PASSWORD`, `<password>` or `****` in configuration files and READMEs.
+- **The filter script editor crashed** if a chat page had been opened earlier in the same browser session.
+- **Built-in filter templates:** pattern matching is case-insensitive, and the LLM Check template blocks when its check fails.
+- **A response filter let responses through when its `tyk.llm` call failed.** Scripts can now handle this with `return_errors`.
+- **The filter form's help text** now says correctly what each kind of filter does on tools, and that Redact only logs on a response filter.
+
+### Gateway
+- **OpenAI `/v1/responses` calls weren't recorded**, so they cost nothing against budgets and an App could exceed its budget through them.
+- **Agent loops through `/ai/` and `/v1` failed.** Tool calls and tool results in the conversation were dropped or sent in the wrong shape, and multi-part message content was lost. They now reach every vendor intact.
+- **Bedrock streaming dropped tools, images and documents** on `converse-stream`, so tool use didn't work when streaming. Requests and events are now passed through intact.
+- **Bedrock streams could end early under load** on the `/ai/` and `/anthropic/` bridges, and a broken Bedrock stream looked like a complete answer. It now ends with an error.
+- **A Bedrock LLM moved to a new endpoint kept calling the old one** until a restart.
+- **OpenAI and Ollama requests with multi-part content** (text and images) were refused with `400`.
+- **Calls to a model alias were recorded at zero cost.** They're now priced by the requested model when the reported one has no price.
+- **`flex` and `priority` OpenAI calls** are now recorded with their service tier.
+- **Anthropic `count_tokens` and batch calls** no longer create zero-cost chat records.
+- **OpenAI moderations without a `model`** are no longer refused.
+- **Native OpenAI decision calls weren't recorded.**
+- **A filtered stream with a `Content-Length` could arrive truncated.**
+- **`/llm/rest` with a streaming request skipped response filters.** It's now filtered.
+
+### Edges and control plane
+- **Edges ran an LLM's plugins in install order** instead of the order set in AI Studio. The order you set now applies on edges too.
+- **Edges didn't enforce an LLM's monthly budget** (Enterprise). An LLM budget now applies across AI Studio and every edge, and is kept across restarts. AI Studio and the edges must all run 2.3.
+- **One non-UTF-8 record stopped an edge's analytics for good**, along with its budget usage and compliance events.
+- **One duplicate tool name froze an edge's configuration.** Edges now skip entries they can't store and report them on the push, and duplicate names are refused up front.
+- **Edges could leave extra heartbeat workers running** after reconnecting, or stay marked as connected after dropping.
+- **A push could wait forever** if it lost an edge's ready report.
+- **Heartbeats report the configuration an edge applied**, not just the last one it received, so a failed sync shows as not in sync.
+- **"Database is locked" errors on SQLite** under concurrent writes. SQLite now runs in WAL mode.
+
+### Console and management API
+- **A partial `PATCH` wiped the fields it left out.** For example, renaming a group removed its members, and a secret could lose its name and break every reference to it. Every `PATCH` now changes only the fields you send.
+- **Deep links survive sign-in.**
+- **View in Catalog on a submission** opens the resource it created.
+- **Secret fields in plugin config forms** were shown in clear when a field had a long description.
+- **A plugin's sidebar showed Configuration twice.**
+- **Multi-select fields** close on outside clicks, and a failed submit scrolls to the first error.
+- **Edit app** is now in the App details header.
+- **Credential status explains an unresolved `$ENV/` key**, and credential help points to the secret store.
+- **The quick start names empty provider secrets**, and onboarding cards list their prerequisites.
+- **An unusable OpenAPI spec is refused** when creating or updating a REST tool, instead of leaving the tool broken. **Import from URL** says why.
+- **The vector store list** shows the stores actually supported (PGVector and Redis, not Milvus).
+- **Model price recalculation** keeps batch records at batch price and works on SQLite. The cost breakdown of batch records now adds up.
+
+### Plugin runtime
+- **The plugin broker gave up waiting for plugins after 500 ms.** It now waits until the plugin is ready, and plugin events are no longer dropped during startup.
+- **The plugin examples and scaffold** keep working with scope enforcement.
+
+### Tyk connections (Enterprise)
+- **Changing a connection's base URL** now updates the portal URL of every imported server.
+- **Custom domains** are used as the portal URL instead of a URL that returned 404.
+
+### Deployment
+- **The Community Edition quickstart works with the distroless images** (the edge no longer crash-loops, and OCI plugins work).
+- **The Helm chart** renders `extraEnv`, `extraVolumes` and `extraVolumeMounts` for AI Studio.
+- **The quickstart ships placeholders instead of sample secrets.**
+- **Stopping AI Studio** waits for background work to finish.
+
+---
+
+## Upgrade notes
+
+### Network access
+
+> **Internal network addresses are blocked by default.** `LLM_UPSTREAM_BLOCK_INTERNAL` now defaults to `true` on AI Studio and the Microgateway. After the upgrade, calls fail if they reach a loopback, private, link-local or other internal address, by IP or by a hostname that resolves to one. This covers an LLM, embedder, tool, data source or vector store, guardrail provider, or a filter's `tyk.makeHTTPRequest`; for example a local Ollama at `http://localhost:11434`, an in-cluster model server, or a classifier on `10.x`. Before upgrading, do one of the following:
+> - name those hosts in `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` (comma-separated; `.svc.cluster.local` matches every Service), which keeps blocking on for everything else (recommended);
+> - have an administrator turn on **Allow internal host** on that LLM, embedder, tool, data source, guardrail, plugin or MCP server, which exempts only its own host;
+> - or set `LLM_UPSTREAM_BLOCK_INTERNAL=false` to restore the 2.2 behaviour.
 >
-> - or have an administrator turn on **Allow internal host** on that LLM, embedder, tool, data source, guardrail, plugin or MCP server, which exempts only its own host (on AI Studio and on the edges it is pushed to).
->
-> Set it on every edge too: each process applies its own setting to the upstreams the hub pushes. A value other than `true` or `false` now stops startup. Studio's Helm chart sets `config.blockInternalUpstreams: "true"` and takes `config.allowedInternalHosts`; the Microgateway chart's `config.blockInternalUpstreams` now defaults to `true` and `false` is passed through. `ALLOW_INTERNAL_NETWORK_ACCESS=true` still lifts every internal-address check (development only), and both opt-outs log a warning at startup. The block also covers more ranges: multicast, reserved, benchmarking (`198.18.0.0/15`), `192.0.0.0/24`, IPv6 site-local, NAT64 and 6to4. It also covers Studio chat's own LLM calls, semantic routing, embedders, tools, data sources and vector stores, and the MCP registration wizard's discovery call; see [Outbound network policy](docs/site/docs/proxy.md#outbound-network-policy).
+> Set this on every edge too, because each process applies its own setting. A value other than `true` or `false` now stops startup.
 
-- **AI Studio requires OCI plugin signatures by default.** `AI_STUDIO_OCI_REQUIRE_SIGNATURE` now defaults to `true`, as the Microgateway's `OCI_PLUGINS_REQUIRE_SIGNATURE` already did. The Helm charts now require signatures too: `config.ociRequireSignature` and the Microgateway's `config.ociPluginsRequireSignature` (in its chart and in the umbrella chart's `microgateway` values) are `"true"`, where they were `"false"`. In Enterprise, an unsigned OCI plugin, or one signed with a key that is not configured, no longer loads. Sign your plugins (`tools/publish-plugin.sh` does) and configure their keys (`OCI_PLUGINS_PUBKEY_*`), or set `AI_STUDIO_OCI_REQUIRE_SIGNATURE=false` to keep loading unsigned plugins. Community Edition cannot verify signatures: it logs a warning once at startup and loads OCI plugins recorded as unverified.
-  - An invalid value (`ture`, `yes`) of `AI_STUDIO_OCI_REQUIRE_SIGNATURE` now stops AI Studio at startup instead of falling back to the default.
-  - The first start after the upgrade verifies every cached OCI plugin against its registry once more, because cache entries from earlier releases do not record which digest was verified. With signatures required, a plugin whose registry is unreachable at that moment fails to load rather than loading from the cache.
-- **The `cosign` binary is no longer needed or shipped.** The AI Studio, Microgateway and development images no longer download it, and nothing runs it. Keep using the cosign CLI to sign plugins.
-- **Transparency-log entries are required by default** (Enterprise). A signature must have a Rekor entry, as `cosign verify --key` requires. For plugins signed with `--tlog-upload=false` (air-gapped signing), set `AI_STUDIO_OCI_TLOG_POLICY` / `OCI_PLUGINS_TLOG_POLICY` to `disabled`; `optional` checks an entry when there is one, so it does not protect against someone who can write to the registry and remove the entry. A private Sigstore deployment sets `*_TRUSTED_ROOT_FILE`. See **New configuration**.
-- **`VerifyWithPolicy` (cosign policy files) is not supported** by the plugin security service any more (Enterprise) and is deprecated. Nothing in AI Studio called it.
+- **Helm.** Studio's chart sets `config.blockInternalUpstreams: "true"` and takes `config.allowedInternalHosts`. The Microgateway chart's `config.blockInternalUpstreams` now defaults to `true`.
+- **More ranges count as internal**: multicast, reserved, benchmarking (`198.18.0.0/15`), `192.0.0.0/24`, IPv6 site-local, NAT64, 6to4, and shared address space (`100.64.0.0/10`, used by Tailscale and some Kubernetes CNIs). A guardrail provider or plugin host in one of these ranges is refused unless allowed.
+- **`ALLOW_INTERNAL_NETWORK_ACCESS=true`** still lifts every internal-address check, platform-wide. Use it for development only. Both opt-outs log a warning at startup.
+- **Allow internal host** can only be set by administrators. Portal submissions can't set it, and edges older than 2.3 ignore it and keep blocking.
+- See [Outbound network policy](docs/site/docs/proxy.md#outbound-network-policy).
 
-- **Edge gateways answer `404` on every `/api/v1` path**, and the `mgw` CLI no longer works against an edge. Configure edges from AI Studio. A standalone microgateway keeps its authenticated management API, but `POST /api/v1/auth/token` is removed: create tokens with `POST /api/v1/tokens` (admin token) or `microgateway -create-admin-token`.
-- **LLM credentials are encrypted at rest, and a rollback needs a restore** (schema version 23).
-  - **Rollback and mixed replicas.** On first start, AI Studio encrypts every literal LLM API key and metadata credential with `TYK_AI_SECRET_KEY`. The schema is unchanged, but `MinReaderSchemaVersion` rises to 23. An AI Studio older than 2.3.0, including a headless replica sharing the database, then refuses the database instead of sending ciphertext as a key. To roll back past 2.3.0, restore a backup taken before the upgrade.
-  - **No `TYK_AI_SECRET_KEY`.** The values stay as written and AI Studio logs a security warning at startup. Setting the key later encrypts them at the next start.
-  - **A changed or missing key.** The stored LLM credentials become unreadable. They are refused (`refused-credential-reference` goes to the provider, which rejects the call) and the error is logged. Re-enter them, or set the key back. `$SECRET/` references are unaffected by this change.
-- **Upgrade edges with AI Studio.** An LLM's metadata credentials (a Bedrock LLM's AWS keys) now reach edges only encrypted, in a new snapshot field. Edges older than 2.3.0 read only the plain metadata, which holds `refused-credential-reference` for those fields. Their Bedrock calls then fail closed: AWS refuses the credential, and the edge never falls back to its own AWS credentials. Guardrail provider credentials likewise reach edges only encrypted; an older edge gets `refused-credential-reference` for them and the guardrail's fail mode as `closed`, so pre-2.3 edges block guardrailed traffic until upgraded, even for a guardrail set to `fail_mode: open`.
-- **Edges show pending once after the upgrade.** The configuration of LLMs with metadata credentials changes, so the namespace's checksum changes once. Push the configuration after upgrading; unchanged LLMs keep a stable checksum afterwards.
-- **Plugins no longer see LLM credentials.** `system.llm.*` events and every object hook (before and after) carry `[redacted]` for an LLM's API key and metadata credentials; `$SECRET/` and `$ENV/` references are shown as written. A `before_*` hook that returns the object with those values still `[redacted]` keeps the stored credentials. `after_*` hooks for datasources, tools and users also get their credentials redacted now (a datasource's connection key, connection string and embedder key, a tool's auth key, a user's password, API key and tokens); their `before_*` hooks and events are unchanged.
-- **SQL logs carry no values.** AI Studio and the Microgateway log SQL statements with placeholders only. Set `DB_LOG_SQL_PARAMS=true` to log the values for local debugging; never in production.
-- **Edges must run 2.3.0 to serve decision models.** Older edges do not know the `systemone` vendor and refuse that LLM. OpenAI decision calls pass through older edges but are not recorded there.
-- **Price decision models.** Decision models are billed by input tokens, and output is usually free. Add a model price with the provider's input price and an output price of `0`. You can price the alias (`jev-latest`) or the version it resolves to (`jev-1.13.0`). An unpriced call is recorded at zero cost.
-- **Edge response plugins now receive the LLM's `vendor`** in their context. It used to be sent empty.
-- **On `/ai/`, `/v1`, routers and `/anthropic/`, plugins on Bedrock LLMs start running and filters read the Converse body.** Pre-auth, post-auth and response plugins attached to a Bedrock LLM used to be skipped on those endpoints and now run, on the Converse body (see **Bedrock plugin parity**). Before you upgrade:
-  - **Upgrade the plugins below to their 2.3.0 versions** (see **Plugins**): advanced-llm-cache 1.3.0, llm-cache 1.3.0, llm-load-balancer 1.2.0, rate-limiter 1.2.0 and llm-firewall 1.2.0. Earlier versions mishandle Bedrock: caches key and cache Bedrock calls wrongly (different models sharing entries, errors cached), token rules and token-saving metrics count no Bedrock tokens, firewall model rules never match Bedrock model IDs, and the load balancer counts Bedrock errors as successes.
-  - **Check your own plugins** for Bedrock: no `model` in the body, the model ID in the path, camelCase usage, and streams that are chosen by the path (`converse-stream`) rather than by `"stream": true`. Use the SDK helpers `RequestModel`, `IsStreamingRequest` and `ResponseUsage`.
-  - **Filters see the Converse body.** The Bedrock bridges no longer run request filters, response filters (including the stream screen) or the budget check themselves; the internal hop runs them, as for every other vendor, on the Converse request and response. So filter scripts on Bedrock traffic on these endpoints get `input.format == "bedrock"` and a Converse `raw_input` (`messages[].content[].text`, `system[].text`, `toolUse` and `toolResult` blocks) instead of the OpenAI or Anthropic shape the client sent. Check custom filter scripts attached to Bedrock LLMs: a script that parses `raw_input` as OpenAI or Anthropic JSON, or expects string `content`, should read `input.messages` or handle Converse. Guardrails and the redaction helpers (`tyk.redact_pattern`, `tyk.redact`) already handle Converse.
-  - **Data collectors** see Converse request and response bodies for Bedrock traffic on these endpoints, as they see each vendor's own API for every other vendor.
-  - **No transparent AWS SDK retries.** A Bedrock call on these endpoints is tried once per failover rung; the waterfall retries a 5xx or 429 on the next rung.
-  - **Status codes.** A refusal on the internal hop reaches the client with its real status in the endpoint's error format: a guardrail block `400`, a plugin block its own status and message, a budget refusal `403`, a plugin block with a `200` and a non-Converse body `502`. On `/anthropic/`, a stream refused before it opens gets that status instead of a `200` with an error event.
-  - **Request logs.** A buffered Bedrock call on these endpoints is logged (ProxyLog `ModelName`) with the LLM's name as its model, as on every vendor's `/llm/rest` rows; the chat record keeps the model ID. Dashboards or exports that group Bedrock request logs by model see the LLM name instead.
-  - **Studio's embedded gateway too.** It shares the proxy code, so Studio's own `/ai/` traffic to Bedrock (Chat included) also goes through the internal hop. Plugins do not run on the embedded gateway, but its budget check, filters and analytics for Bedrock now run on the internal hop, on the Converse body, as described above.
-  - **Plugin order on edges.** Edges now run an LLM's plugins in the order set in Studio instead of install order (see **Control plane and edges**). Check the order on each LLM that has more than one plugin before upgrading edges.
-- **`CallLLM` returns `FailedPrecondition`** when the agent's App has no credential. It used to fail with a `401` from the gateway.
-- **Price auto-creation.** When the model a provider reports has no price and differs from the requested model, AI Studio's price lookup may also create a zero-priced row for the requested model name.
-- **Admin console pickers.** Chat rooms, agents, Model Routers, Semantic Routers and the wizards no longer offer decision-only LLMs. The failover picker only offers fallbacks that share a request kind with the primary.
-- **Schema version 8** (7 for [#721](https://github.com/TykTechnologies/ai-studio/pull/721), 8 for [#724](https://github.com/TykTechnologies/ai-studio/pull/724)).
-  - New tables: `tyk_gateway_nodes` and `tyk_gateway_definitions`.
-  - New columns:
-    - `tyk_connections.kind` (defaulted) and its `gateway_*` columns;
-    - `mcp_servers.key_access`, `gateway_coverage` and `gateway_partial`;
-    - `proxy_logs.request_kind` and `llm_chat_records.request_kind` (defaulted to `''`, read as generative, with an index on `request_kind` and `time_stamp`);
-    - `llm_chat_records.decision_questions` and `decision_refusals`.
-  - The edge's `analytics_events` gains `request_kind`, `decision_questions` and `decision_refusals`.
+### Credentials and secrets
 
-  Every change is additive, and `MinReaderSchemaVersion` stays 1 for these versions. Schema version 23 later raises it to 23 (see **LLM credentials are encrypted at rest**), so a 2.2.1 binary does not run on a 2.3.0 database. After a rollback, System One LLMs stop working (their vendor is unknown), and Gateway connections need 2.3.0.
-- **Schema versions 9 and 10** (9 for [#730](https://github.com/TykTechnologies/ai-studio/pull/730), 10 for [#737](https://github.com/TykTechnologies/ai-studio/pull/737)).
-  - New table: `native_resources` (the native API ledger; each edge keeps its own).
-  - New columns: `llms.vendor_workspace_id`, `price_multipliers` and the `resource_signing_*` columns; `llm_chat_records.service_tier` and `proxy_logs.service_tier`. The edge's `llms` and `analytics_events` gain the matching columns.
+- **`$ENV/` references resolve only for allowlisted names.** List the environment variables your configuration uses in `AI_STUDIO_ENV_REF_ALLOWLIST` (comma-separated, empty by default), or move those credentials to the secret store as `$SECRET/` references. This applies to LLMs, tools, datasources, embedders, guardrails and plugin configuration.
+  - Do this **before** upgrading. To list the names in use: `pg_dump --data-only "$DATABASE_URL" | grep -oE '\$ENV/[A-Za-z_][A-Za-z0-9_]*' | sort -u` (or `sqlite3 midsommar.db .dump | …`).
+  - A reference that isn't allowlisted is not resolved: the provider or tool answers `401`, and a guardrail applies its fail mode. The console shows the credential as unresolved, even when the variable is set. See the [secrets guide](docs/site/docs/secrets.md) (Upgrading from 2.2).
+- **Vendor keys and endpoints are no longer read from the environment.** An LLM, embedder or datasource with an empty key or endpoint is no longer filled from `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `HF_TOKEN`, `PINECONE_API_KEY`, `CHROMA_URL` or `OLLAMA_HOST`. Set them on the object. Don't set these variables on edges: older edges still read them.
+- **Setting or changing a `$SECRET/` or `$ENV/` reference needs `secrets:read`** (`403` otherwise). Keeping an existing reference needs nothing extra. Submissions and plugins can't set references.
+- **LLM credentials are encrypted at rest.** On first start, AI Studio encrypts every literal LLM API key and credential field with `TYK_AI_SECRET_KEY`.
+  - Without `TYK_AI_SECRET_KEY`, values stay as written and AI Studio logs a security warning. Setting the key later encrypts them at the next start.
+  - If the key changes or goes missing, stored LLM credentials become unreadable and calls with them fail. Re-enter them, or restore the key. `$SECRET/` references are unaffected.
+- **SSO needs `TYK_AI_SECRET_KEY`.** Without it, every SSO login is refused, and AI Studio warns at startup.
+- **SQL logs no longer contain values.** Set `DB_LOG_SQL_PARAMS=true` only for local debugging, never in production.
+- **The quickstart needs your own secrets.** Replace the `__REPLACE_WITH_…__` placeholders in its env files before the first start. Otherwise AI Studio and the Microgateway stop with a key-length error. If your deployment uses values copied from an earlier quickstart or documentation sample, replace them with values you generate.
 
-  Every change is additive and `MinReaderSchemaVersion` stays 1. On first start, AI Studio gives every LLM a signing secret and keeps the key derived from its API key as the previous key for 30 days, so IDs handed out before the upgrade keep working.
-- **Upgrade edges with the hub.** An older edge ignores the signing secret and keeps signing with the API key. The hub accepts its IDs for the 30-day backfill grace, but IDs the hub mints do not verify on an old edge, except for resources in that edge's own ledger.
-- **OpenAI response IDs handed out before 2.3.0 no longer verify** as `previous_response_id` or on retrieve: the first call gets `404`, and the client starts a new chain.
-- **OpenAI `/v1/responses`, `input_tokens` and `compact` must name `model`.** A call that relies on a stored prompt's model or names only a conversation gets `400` ("model field is required"), because the gateway checks the model against the allow-list. Batch lines must name `body.model`.
-- **`/v1/files` accepts only `purpose=batch`**, in the plain multipart form the SDKs send. Uploads are limited to 64 MiB and, on an LLM with request filters, to 10,000 lines (`NATIVE_API_MAX_BODY_BYTES`, `NATIVE_API_MAX_FILTERED_ITEMS`; OpenAI accepts 200 MB and 50,000 lines).
-- **Screening fails closed when request filters are attached.** Unknown Responses input item types, Responses input the gateway cannot read and token-array inputs on embeddings, completions and moderations get `400`. Without filters, these calls are unchanged.
-- **Non-canonical native paths.** A path that differs from a declared native path only in case or empty segments gets the vendor's `404` instead of reaching the vendor.
-- **Headers not forwarded.** `OpenAI-Organization` and `OpenAI-Project` are dropped on every OpenAI native call and every Responses call, and `anthropic-user-profile-id` and a client's `anthropic-workspace-id` on every Anthropic call. Resources live in the API key's project or workspace, or in the LLM's pinned workspace.
-- **Plugin upstream overrides** no longer apply to `count_tokens` or the OpenAI native operations, which always go to the LLM's own endpoint.
-- **Chat-session costs change** ([#736](https://github.com/TykTechnologies/ai-studio/pull/736)). Anthropic turns with tool calls or thinking drop to the correct single amount, OpenAI and Google cached tokens are billed at the cache price when one is set, and Anthropic chat rows' total tokens now include cache tokens, as gateway rows do.
-- **Existing request guardrails scan tool results** (Enterprise). A guardrail saved before 2.3.0 has no `tool_results` setting, which means scanning on: after the upgrade it inspects every tool result in the conversation, whatever its scope, and applies its action to them, with `block` becoming `quarantine`. For the seeded filters this means:
-  - **Credentials in prompts (block)**, when attached, quarantines a tool result that contains a credential (a `.env` file an agent read, a config with a key in it). The agent goes on without that result.
-  - **Personal data before the vendor (redact)** redacts personal data in tool output.
-  - **Prompt injection heuristics (log)** records injection markers found in tool output.
+### Plugins
 
-  To keep a filter as it was, set `"tool_results": {"scan": false}` in its config (or untick **Scan tool results**).
-- **Remote guardrail providers receive tool output.** Existing filters on Lakera Guard, Azure AI Content Safety, Azure AI Language PII, Amazon Bedrock Guardrails, Microsoft Presidio or an HTTP classifier start sending tool results to that provider on upgrade. Tool output can hold file contents, database rows and credentials an agent read. If a provider must not see that data, set `tool_results.scan` to `false` **and** use a scope other than `all_messages` (which inspects tool messages with scanning off, as it always has).
-- **More provider calls.** Lakera Guard and Bedrock Guardrails now get one call per message and tool result (each screened in full, and every finding tied to its message). Lakera bills per request, and Bedrock per text unit with at least one per call, so a conversation of many short messages costs more than before. Azure AI Language PII sends one document per request instead of batching them: more requests, the same billed text records. The verdict cache answers history an agent sends again; `budget.max_pieces` (256) caps the calls of one request, and text beyond it is unscanned. A message or tool result of several blocks is classified twice (joined with a separator and run together), so it costs about twice.
-- **Guardrail providers in shared address space are refused when internal upstreams are blocked** ([#776](https://github.com/TykTechnologies/ai-studio/pull/776)). Guardrail providers connect under the same outbound policy as LLM upstreams (`pkg/netguard`), which now counts `100.64.0.0/10` (shared address space, used by Tailscale and some Kubernetes CNIs) as internal. With `LLM_UPSTREAM_BLOCK_INTERNAL` on, a provider endpoint there (an HTTP classifier, Presidio) is refused and every call to it fails: under fail mode `open` small requests then pass unscreened, recorded only as `guardrail.error` events, and larger ones are unscanned. Name the host in `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` to exempt it from internal-range blocking.
-- **Fail-open is narrower for large requests.**
-  - When a request holds more than `single_call_chars` (32,768) characters to scan, or needs more provider calls than an ordinary request (for the per-message providers, more than four messages or four tool results), a provider failure leaves the affected segments unscanned, and the filter's action applies: a fail-open filter can block or quarantine such a request during an outage. Ordinary requests keep the fail mode. There is no outage-only switch, and changing the fail mode does not help: raise `budget.single_call_chars` (up to `max_scan_chars`) to bring more requests under it. Setting `tool_results.on_detect` to `log` also lets large agent requests through, but it stops the filter quarantining injected tool results at all times, not only during the outage, so use it only as a deliberate, temporary measure and set it back once the provider has recovered.
-  - Text the provider refuses (HTTP 400, 413 or 422) is unscanned, not a fail-mode error.
-  - The built-in library leaves a segment larger than `GUARDRAIL_LOCAL_MAX_SCAN_BYTES` (8 MiB), a scan that does not finish in time, or one that gets no slot, unscanned on requests, whatever the fail mode.
-  - A native batch create or batch file upload whose screening needs more than `NATIVE_API_MAX_GUARDRAIL_CALLS` remote provider calls is refused with `400`.
-- **Guardrails protect what reaches the vendor, not what AI Studio stores.** The proxy log keeps the body as it was forwarded, so redactions and quarantines show there, but a request a guardrail blocked is logged as it was received, with the text it was blocked for, and responses are logged as the vendor sent them. Do not read "credentials in tool results are quarantined" as "removed from the platform": set the LLM's **Disable Request/Response Body Logging** (`dont_log_bodies`) where that traffic must not be stored, and keep `ANALYTICS_STORE_REQUESTS` and `ANALYTICS_STORE_RESPONSES` off (the default) on the edges that serve it.
-- **Edges must run 2.3.0 to scan tool results.** An older edge ignores the settings it does not know (tool-result scanning, the placeholder, budgets) and receives `block` in place of `quarantine`, so during a rolling upgrade it blocks a request a 2.3.0 edge would quarantine.
-- **OpenAI batch files uploaded before 2.3.0 must be uploaded again** on an LLM with request filters: a batch created from one is refused with `400`. The same applies whenever the LLM's request filters change after an upload (a rotated provider key or moved endpoint does not count). A batch on such an LLM must be created through the gateway that received its file (the same edge, or AI Studio, whose replicas share one ledger).
-- **Chat script filters see client tool answers.** A chat's script request filters now run on a user's answer to a client tool card, as on a typed message; a script that blocks also stops that turn.
-- **Schema version 11** (`native_resources.screening_digest`, additive). `MinReaderSchemaVersion` stays 1.
-- **Schema versions 12 and 13** (Tyk MCP analytics).
-  - New tables: `mcp_call_records` (12), `tyk_connection_ingests` and `tyk_ingest_stats` (13).
+- **OCI plugins must be signed** (Enterprise). `AI_STUDIO_OCI_REQUIRE_SIGNATURE` now defaults to `true`, as the Microgateway's `OCI_PLUGINS_REQUIRE_SIGNATURE` already did, and the Helm charts now require signatures too. An unsigned plugin, or one signed with a key that isn't configured, no longer loads. Sign your plugins (`tools/publish-plugin.sh` does) and configure their keys (`OCI_PLUGINS_PUBKEY_*`), or set `AI_STUDIO_OCI_REQUIRE_SIGNATURE=false`. Community Edition can't verify signatures: it warns once at startup and loads OCI plugins as unverified.
+  - An invalid value (such as `yes`) now stops startup.
+  - The first start after the upgrade checks every cached plugin against its registry once more. With signatures required, a plugin whose registry is unreachable then fails to load.
+- **Transparency-log entries are required by default** (Enterprise). For plugins signed without one (`--tlog-upload=false`, for example air-gapped signing), set `AI_STUDIO_OCI_TLOG_POLICY` / `OCI_PLUGINS_TLOG_POLICY` to `disabled`. A private Sigstore deployment sets `*_TRUSTED_ROOT_FILE`.
+- **The `cosign` binary is no longer shipped or needed** at runtime. Keep using the cosign CLI to sign plugins. Cosign policy files (`VerifyWithPolicy`) are no longer supported.
+- **Plugins no longer inherit the host's environment.** List any variables a plugin needs in `PLUGIN_ENV_PASSTHROUGH` (see [plugin deployment](docs/site/docs/plugins-deployment.md)).
+  - **github-rag-ingest** is the only shipped plugin whose setup this breaks. If you set `GITHUB_RAG_SECRET_ENCRYPTION_KEY` or `GITHUB_RAG_KNOWN_HOSTS`, add `PLUGIN_ENV_PASSTHROUGH=GITHUB_RAG_*` (or set `secret_encryption_key` and `known_hosts_path` in the plugin configuration) **before upgrading**. Without the key, repositories with encrypted credentials fail to sync, and credentials saved afterwards are stored **unencrypted**. Re-enter any credential saved while the key was missing.
+  - `ALLOW_INTERNAL_NETWORK_ACCESS` isn't passed through, so llm-price-sync and github-rag-ingest refuse internal URLs unless you pass it through.
+- **Plugins get only the scopes they declare.** A service-API call outside a plugin's approved scopes is refused. Upgrading a plugin that declares new scopes asks an admin to approve them (advanced-llm-cache adds `apps.write`).
+- **Rebuild your request-path plugins on the 2.3 SDK.** Plugins now accept messages up to 64 MiB (`PLUGIN_GRPC_MAX_MSG_BYTES`). One built on an older SDK keeps the 4 MiB limit: larger requests get `413`, and the log names the plugin. Run the 2.3.0 releases of the shipped plugins (see [Plugin releases](#plugin-releases)).
+- **Plugins on an internal registry or host are refused**, installed ones included, unless the host is named in `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` (on AI Studio and every Microgateway that loads them). Look for log lines that start `plugin host "…" is an internal address`. `PLUGIN_BLOCK_INTERNAL_URLS` is deprecated.
+  - If the registry name doesn't resolve (DNS unavailable), a cached plugin that passes its checks still loads, with a warning.
+  - Behind an HTTP(S) proxy, the registry name must still resolve on the host. On proxy-only networks, list the registry and the hosts it redirects downloads to in `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` (for `docker.tyk.io`: `docker.tyk.io,dl.cloudsmith.io`).
+- **Cached plugins are downloaded once more** after the upgrade, to record their hash. The registry should be reachable then.
+- **Plugins no longer see credentials.** LLM, tool, datasource and user credentials appear as `[redacted]` in system events and object hooks. A `before_*` hook that returns a value still `[redacted]` keeps the stored one.
+- **Edge response plugins now receive the LLM's `vendor`.**
+- **Plugin order on edges.** Edges now run an LLM's plugins in the order set in AI Studio, not install order. Check the order on each LLM with more than one plugin before upgrading edges.
 
-  Every change is additive and `MinReaderSchemaVersion` stays 1. `mcp_call_records` has no retention pruning yet; it grows with MCP traffic.
-- **The gateway's request id moved to `X-Tyk-AI-Request-ID`.** Edges used to set `X-Request-ID` on every response to their own `req_<nanoseconds>` id, overwriting any id a proxy in front of them, or the vendor, had set. They no longer touch `X-Request-ID`; read `X-Tyk-AI-Request-ID` instead (now on AI Studio's gateway too). Plugins and hooks see the new id format (`tyai_` and a UUIDv7) in the `request_id` context value and `PluginContext.RequestID`.
-- **Edge requests without usage reach AI Studio's request logs.** Policy blocks and vendor or gateway errors on an edge used to stay in the edge's own database; they now reach AI Studio on the analytics pulse (marked `no_usage`) as request log rows without a chat record or spend, as on AI Studio's own gateway. Edge analytics plugins receive them too, with `NoUsage` set and zero tokens and cost. Request counts from proxy logs now include an edge's errors.
-- **Guardrail block messages are longer.** A guardrail filter's block message is now followed by "Reason: ... (code). Request ID: ...". A client that matched the exact message text should match the reason code instead (`reason_code`, `X-Tyk-AI-Guardrail-Reason`). Script filters are unchanged.
-- **Schema version 15** (`compliance_events.owner_visible`, defaulted false and indexed; additive). `MinReaderSchemaVersion` stays 1.
-- **Schema version 14** (`proxy_logs.request_id`, indexed, and `client_request_id`; additive). The edge database gains `analytics_events.gateway_request_id` (indexed) and `client_request_id`. `MinReaderSchemaVersion` stays 1.
-- **MCP analytics need traffic logs on the proxy.** The Gateway writes analytics for an MCP proxy only when `x-tyk-api-gateway.middleware.global.trafficLogs.enabled` is true (and the Gateway has `enable_analytics`). Proxies AI Studio registers have it; proxies created on the Dashboard or the nodes by the platform team record nothing until they set it.
-- **Tyk Pump 1.16.0 fails at start without an uptime store.** Its uptime pump defaults to MongoDB: set `dont_purge_uptime_data: true` (`TYK_PMP_DONTPURGEUPTIMEDATA=true`) in the Pump that feeds AI Studio unless you run one.
-- **Embedding hosts.** `AppConf.FilterLimits` (and the filter limits of `pkg/studio`) apply only to the names in `config.FilterLimitNames`, which now include the `GUARDRAIL_*` tuning variables; other names fall back to the environment.
-- **Protocol.** The plugin, management and config-sync protos change additively: new fields and the new `CallDecision` RPC. [#737](https://github.com/TykTechnologies/ai-studio/pull/737) adds `LLMConfig` fields 27 to 31 (signing keys, workspace, price multipliers), `AnalyticsEvent.service_tier` and the plugin `AnalyticsRequest.service_tier`. `LLMConfig.metadata_secrets_encrypted` (field 34) carries an LLM's metadata credentials encrypted. The edge database gains `llms.metadata_secrets_encrypted`.
-- **Go embedders and plugin authors.** `models.LLMVendorProvider` gains `ProvidesChat()` and `DecisionEndpoint()`, so a custom vendor implementation must add them. The plugin `StudioServices` interface is unchanged: `CallDecision` is a package-level SDK function, so custom fakes keep compiling.
+### Bedrock
 
-- **`$ENV/` references resolve only for allowlisted names** ([#794](https://github.com/TykTechnologies/ai-studio/pull/794), [#789](https://github.com/TykTechnologies/ai-studio/pull/789)). List the environment variables your configuration names in `AI_STUDIO_ENV_REF_ALLOWLIST` (comma-separated, empty by default), or move those credentials to the secret store as `$SECRET/` references.
-  - This covers LLMs, tools, datasources, embedders, guardrail connections and plugin configuration.
-  - Do it **before** upgrading. References are stored as written, so a database dump lists the names in use: `pg_dump --data-only "$DATABASE_URL" | grep -oE '\$ENV/[A-Za-z_][A-Za-z0-9_]*' | sort -u` (or `sqlite3 midsommar.db .dump | …`).
-  - A reference that is not on the list is sent as written: chat and the embedded gateway use the text `$ENV/NAME` as the key, so the provider or tool answers `401` (edges send `refused-credential-reference`), and a guardrail applies its fail mode. The variable's value is never sent.
-  - Nothing is logged, and the console shows the LLM's credential as unresolved with "environment variable NAME, which is not set on the server" even when the variable is set: the cause is the allowlist. See `docs/site/docs/secrets.md` (Upgrading from 2.2).
-- **Setting or changing a reference needs `secrets:read`** ([#794](https://github.com/TykTechnologies/ai-studio/pull/794), [#789](https://github.com/TykTechnologies/ai-studio/pull/789), [#766](https://github.com/TykTechnologies/ai-studio/pull/766)). A create or update that adds or changes a `$SECRET/` or `$ENV/` value answers `403` without it. Keeping a stored reference, or sending the redacted placeholder back, needs nothing extra. Submissions and plugin service-API writes cannot set references.
-- **Vendor keys and endpoints are no longer read from the environment** ([#797](https://github.com/TykTechnologies/ai-studio/pull/797)). An LLM, embedder or datasource with an empty key or endpoint is no longer filled from `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `HF_TOKEN`, `PINECONE_API_KEY`, `CHROMA_URL` or `OLLAMA_HOST`. Set them on the object. Upgrade edges with the hub, and do not set vendor key variables on edges: older edges still read them.
-- **Plugins get an environment allowlist** ([#750](https://github.com/TykTechnologies/ai-studio/pull/750)). A plugin no longer inherits the host's environment. Name any variables a plugin needs in `PLUGIN_ENV_PASSTHROUGH` (see `docs/site/docs/plugins-deployment.md`).
-  - **github-rag-ingest** is the only shipped plugin whose 2.2 setup this breaks. It reads `GITHUB_RAG_SECRET_ENCRYPTION_KEY` and `GITHUB_RAG_KNOWN_HOSTS` from the host. If you set them, add `PLUGIN_ENV_PASSTHROUGH=GITHUB_RAG_*` (or set `secret_encryption_key` and `known_hosts_path` in the plugin configuration) **before upgrading**. Without the key, repositories whose PATs or SSH keys were stored encrypted fail to sync with "secret is encrypted but no encryption key is configured", and credentials saved afterwards are stored **unencrypted**; the plugin's warning about it is only visible at `LOG_LEVEL=debug`. Re-enter any credential saved while the key was missing, so it is stored encrypted.
-  - `ALLOW_INTERNAL_NETWORK_ACCESS` is withheld on purpose: llm-price-sync and github-rag-ingest refuse internal price-source and repository URLs that worked on 2.2 unless you pass it through.
-- **Rebuild request-path plugins on the 2.3.0 SDK.** Plugins now accept gRPC messages up to 64 MiB (`PLUGIN_GRPC_MAX_MSG_BYTES`). One built on an older SDK keeps gRPC's 4 MiB default, so a request over that (a long context, a few screenshots, one PDF) used to fail with a `500` in every `post_auth` plugin. The gateway now answers `413` (the log names the plugin), and still does not forward the request; a response hook that refuses a large response is skipped. A body over the limit is refused with `413` before an LLM's request-path plugins are called. Rebuild your own plugins, and run the 2.3.0 releases of the shipped request-path plugins (llm-cache, rate-limiter, llm-firewall, llm-load-balancer, advanced-llm-cache) (see `docs/site/docs/plugins-deployment.md#plugin-message-size`).
-- **Plugins get only the scopes they declare** ([#775](https://github.com/TykTechnologies/ai-studio/pull/775)). A brokered service-API call outside the plugin's approved scopes is refused. Upgrading a plugin whose manifest declares new scopes asks an admin to approve them: advanced-llm-cache 1.2.2 adds `apps.write`. `GetPluginsCount`, the broker warm-up the 2.2 examples and scaffold used, still answers without `plugins.read` (the count only, no plugin rows), so plugins built from them keep working without a refusal in the log.
-- **Cached OCI plugins are fetched once more after the upgrade** ([#745](https://github.com/TykTechnologies/ai-studio/pull/745)). Plugins cached by 2.2 have no recorded hash, so each is fetched from the registry again on its first load to record one; the registry should be reachable then. If it is not and signatures are optional, the cached copy loads unverified with a warning and the next load tries again. A rollback to 2.2 drops the recorded hashes, so rolling forward fetches the plugins once more.
-- **Plugin hosts in shared address space** ([#776](https://github.com/TykTechnologies/ai-studio/pull/776), [ai-studio-enterprise#81](https://github.com/TykTechnologies/ai-studio-enterprise/pull/81)). A plugin command or endpoint in `100.64.0.0/10` counts as internal. In Enterprise, a hostname is resolved when the plugin is validated, and one that does not resolve is refused.
-- **Plugins on an internal registry or host are refused on every path, installed plugins included.** Unless the host is named in `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` or `ALLOW_INTERNAL_NETWORK_ACCESS=true`, AI Studio and the Microgateway refuse an `oci://` plugin whose registry is, or resolves to, an internal address (loopback, private, shared, link-local, `0.0.0.0/8`, unique-local or unspecified) or does not resolve, and likewise a `grpc://` plugin's host. In 2.2, Enterprise checked these hosts only as IP literals, and the Microgateway did not check registries when it loaded or pre-warmed a plugin; Community AI Studio already resolved them at the API and when loading a plugin. The rule now covers create and update (API, management gRPC, marketplace install, upgrade), loading a stored plugin (even from the OCI cache), pre-warm and manifest reads, plugins an edge receives from AI Studio, and each registry, signature or token-server connection, checked on the address being dialled whatever `LLM_UPSTREAM_BLOCK_INTERNAL` says, so a DNS answer that changes later cannot reach an internal address (except behind a proxy, below). Create, install, upgrade and import fail up front (`400` from the API).
-  - **Installed plugins on an internal registry stop loading** after the upgrade, for example a registry at `registry.corp.internal` resolving to `10.x`, or at `localhost:5000`. To find them, look for log lines like `plugin host "registry.corp.internal" is an internal address, resolves to one, or does not resolve; add it to LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS to allow this host, or set ALLOW_INTERNAL_NETWORK_ACCESS=true to allow every internal host`. On a Microgateway the plugin also shows as failed in plugin health.
-  - **To keep using an internal registry**, name it in `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` (for example `registry.corp.internal`, or `.corp.internal` for a domain) on AI Studio and on every Microgateway that loads its plugins. This is the preferred route: it allows only the hosts named.
-  - **`ALLOW_INTERNAL_NETWORK_ACCESS=true` is platform-wide.** It allows every internal plugin host and OCI registry, on every path in AI Studio and the Microgateway; it turns off `LLM_UPSTREAM_BLOCK_INTERNAL`, so LLM upstreams, guardrail provider calls (Enterprise) and script HTTP calls (Enterprise) may reach internal addresses again; and it skips the internal-address check on submitted embed URLs.
-  - **`PLUGIN_BLOCK_INTERNAL_URLS` is deprecated.** Internal URL hosts are refused without it. It is still accepted and only adds refusals (internal `host:port` arguments), never loosens the rule.
-  - If the registry name does not resolve (DNS unavailable), a cached plugin that passes its integrity, signature and key checks still loads, with a warning naming the registry; anything that would contact the registry is refused.
-  - Behind an HTTP(S) proxy (`HTTPS_PROXY` / `HTTP_PROXY`, `NO_PROXY` honoured) the proxy endpoint itself may be internal; the target registry is still checked by name before the request is handed to the proxy, but connect-time rebinding protection does not apply to it, so the proxy is responsible for egress. The registry name must still resolve on the host running AI Studio or the Microgateway. On proxy-only networks, where that host cannot resolve public names, list the registry and every host it redirects blob downloads to in `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` (for `docker.tyk.io`: `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS=docker.tyk.io,dl.cloudsmith.io`).
-- **Tool and LLM names must have unique slugs** ([#785](https://github.com/TykTechnologies/ai-studio/pull/785)). A name that differs from an existing one only in case, spaces or punctuation is refused: `409` for tools and `400` for LLMs from the admin API, `AlreadyExists` from the plugin service API. Duplicates stored by earlier versions stay editable. Edges leave them out (the lowest ID keeps the slug) and show as Pending until they are renamed.
-- **LLMs and tools that need a filter or plugin from another namespace** ([#785](https://github.com/TykTechnologies/ai-studio/pull/785)). A global LLM or tool attached to a filter or plugin filed in another namespace is left out on that namespace's edges. An endpoint whose auth plugin an edge does not receive is left out too. Move the filter or plugin to the global namespace or to the LLM's namespace.
-- **Edge heartbeats report the configuration an edge applied** ([#785](https://github.com/TykTechnologies/ai-studio/pull/785)), so an edge whose last sync failed shows as not in sync.
-- **SSO needs `TYK_AI_SECRET_KEY`** ([#787](https://github.com/TykTechnologies/ai-studio/pull/787)). The identity broker authenticates its nonce requests with it. With it unset, every SSO login is refused, and AI Studio logs a warning at startup when the broker is enabled without it.
-- **SQLite runs in WAL mode** ([#800](https://github.com/TykTechnologies/ai-studio/pull/800)). AI Studio opens a SQLite file with `_journal_mode=WAL`, `_busy_timeout=5000`, `_synchronous=NORMAL` and `_txlock=immediate` unless `DATABASE_URL` sets them, and drops `cache=shared`. `-wal` and `-shm` files appear next to the database, so its directory must be writable. WAL does not work on network filesystems (NFS, SMB): set `_journal_mode=DELETE` in `DATABASE_URL` there. In-memory databases are unchanged.
-- **Chat sessions send their history** ([#791](https://github.com/TykTechnologies/ai-studio/pull/791)). On LLM settings without a max length, a session now sends its conversation (up to the newest 100 messages) instead of little more than the latest message. Set **Max Length** on the LLM settings to cap the input.
-- **Approving a submission into catalogues needs catalogue write permission** ([#772](https://github.com/TykTechnologies/ai-studio/pull/772)).
-- **The quickstart needs your own secrets** ([#729](https://github.com/TykTechnologies/ai-studio/pull/729)). Replace the `__REPLACE_WITH_…__` placeholders in its env files before the first start (`quickstart/README.md` lists them); left in place, AI Studio and the Microgateway stop at startup with an error about the key length. `TYK_AI_SECRET_KEY` is now a placeholder too. A deployment that still uses values copied from an earlier quickstart or documentation sample should replace them with values you generate.
-- **advanced-llm-cache 1.2.2** ([ai-studio-enterprise#75](https://github.com/TykTechnologies/ai-studio-enterprise/pull/75), [ai-studio-enterprise#84](https://github.com/TykTechnologies/ai-studio-enterprise/pull/84)).
-  - Redis `tls_enabled` now takes effect: check that your Redis endpoint accepts TLS before upgrading.
-  - The database and cluster addresses set in the configuration form now apply.
-  - A stored `tls_skip_verify` stays ignored, with a warning. Use `tls_insecure` to turn off certificate verification.
-  - The sharding, Redis timeout and cost-rule settings, which nothing implemented, are removed from the form.
-- **FIPS 140-3 data formats raise the minimum reader schema version to 26** (every deployment). A FIPS-mode AI Studio writes `v3:` secrets, which older code misreads, and PBKDF2 hashes, which older code cannot verify, so `MinReaderSchemaVersion` rises to 26 for every deployment: an AI Studio older than 2.3.0, including a headless replica sharing the database, refuses a database a 2.3.0 AI Studio has migrated. Upgrade replicas with the hub. Schema version 27 (`edge_instances.fips`, nullable, additive) keeps the minimum reader at 26.
-- **Moving a deployment to FIPS 140-3 builds.** See `docs/site/docs/fips.md`.
-  - **Re-encryption.** A FIPS-mode AI Studio re-encrypts stored secrets to `v3` at startup, in the background; until it has run, older values are still read. Under `GODEBUG=fips140=only`, values encrypted before the `v2` format (AES-CFB) are read only by that re-encryption, and a read of one returns an error until it has run: start AI Studio once in FIPS mode, and let the re-encryption finish (it logs how many values it re-encrypted), before enforcing strict mode.
-  - **Plugins.** Every plugin is a separate process with its own cryptography. The deployment is only FIPS compliant if every plugin is a FIPS build too (`GOFIPS140=v1.0.0`; see **Plugins** under **FIPS 140-3 builds**).
-  - **TLS.** FIPS mode accepts TLS 1.2 and 1.3 with approved cipher suites and curves only. Peers that offer only ChaCha20-Poly1305, or only plain X25519 key exchange, fail to connect; X25519MLKEM768 is allowed. This applies to LLM vendors, the hub-edge gRPC link, plugins over gRPC and your own TLS endpoints.
-  - **Keys.** TLS certificates must use RSA keys of 2048 bits or more, ECDSA P-256/P-384/P-521, or Ed25519 in FIPS mode; others are refused, with `fips140=on` and `fips140=only` alike. For signing keys outside TLS (cosign plugin-signing keys, SSO identity providers' JWKS), use RSA 2048+ or ECDSA: `fips140=on` still accepts smaller RSA keys there, strict mode does not.
-  - **Postgres.** Use SCRAM-SHA-256 password authentication, not `md5`.
-  - **Resource signing.** Set a hub signing secret for every LLM. Resource IDs signed with a key from a short credential in standard mode do not verify in FIPS mode, and the other way round.
+Plugins attached to a Bedrock LLM now run on `/ai/`, `/v1`, routers and `/anthropic/`, and filters there now read the Bedrock Converse format. Before upgrading:
 
-### New configuration
+- **Upgrade the shipped plugins** to advanced-llm-cache 1.3.0, llm-cache 1.3.0, llm-load-balancer 1.2.0, rate-limiter 1.2.0 and llm-firewall 1.2.0. Earlier versions mishandle Bedrock: caches mix up models and cache errors, token rules count no Bedrock tokens, firewall model rules never match, and the load balancer counts errors as successes.
+- **Check your own plugins.** On Bedrock there's no `model` in the body (it's in the path), usage is camelCase, and streaming is chosen by the path (`converse-stream`). Use the SDK helpers `RequestModel`, `IsStreamingRequest` and `ResponseUsage`.
+- **Check custom filter scripts on Bedrock LLMs.** They get `input.format == "bedrock"` and a Converse `raw_input`, not the OpenAI or Anthropic shape the client sent. Read `input.messages`, or handle Converse. Guardrails and the redaction helpers already handle it.
+- **Data collectors** see Converse bodies for Bedrock traffic on these endpoints.
+- **No automatic AWS SDK retries.** Each failover step tries a Bedrock call once, and failover handles 5xx and 429 errors.
+- **Status codes.** Refusals reach the client with their real status: `400` for a guardrail block, the plugin's own status for a plugin block, and `403` for a budget refusal.
+- **Request logs** show the LLM's name as the model for buffered Bedrock calls on these endpoints. Chat records keep the model id.
+- **AI Studio's embedded gateway** (including Chat) applies budgets, filters and analytics to Bedrock the same way.
 
-Agent Call Tracing (Enterprise) adds `AGENT_TRACING_*` settings, all off or inert by default; the operator guide (`docs/site/docs/agent-tracing.md`) lists them. The content ceiling and default (`AGENT_TRACING_CONTENT_CEILING`, `AGENT_TRACING_CONTENT_DEFAULT_MODE`) are set only here; the console shows them read-only. An invalid value of any content-mode setting is read as `off`. On an edge, `AGENT_TRACING_KEEP_LIVE_SPAN` (default `false`) keeps its own OTel span for captured calls. One applies in every edition: `AGENT_TRACING_BAGGAGE_ALLOWLIST` (default `session.id`) now cuts the W3C `baggage` header sent to every upstream down to the listed keys; set it to the keys your providers rely on, or `none`.
+### Guardrails
 
-No new runtime setting is required. Gateway connections are configured per connection in the console, not through the environment.
+- **Existing request guardrails scan tool results** (Enterprise). A guardrail saved before 2.3 inspects every tool result after the upgrade, and a `block` action becomes `quarantine` for tool results. For the seeded filters:
+  - *Credentials in prompts (block)* quarantines a tool result containing a credential, and the agent goes on without it.
+  - *Personal data before the vendor (redact)* redacts personal data in tool output.
+  - *Prompt injection heuristics (log)* records injection markers in tool output.
 
-FIPS 140-3 builds (see `docs/site/docs/fips.md`): `make build-fips` (root and `microgateway/`) builds FIPS binaries and checks them with `scripts/fips-verify.sh`. A FIPS build starts with `fips140=on`; `GODEBUG=fips140=off` turns FIPS mode off at run time, and `GODEBUG=fips140=only` additionally refuses every non-approved algorithm (meant for testing).
+  To keep a filter as it was, untick **Scan tool results** (or set `"tool_results": {"scan": false}`).
+- **Remote providers receive tool output.** Filters on Lakera Guard, Azure AI Content Safety, Azure AI Language PII, Bedrock Guardrails, Presidio or an HTTP classifier start sending tool results to that provider. Tool output can contain file contents, database rows and credentials. If a provider must not see that data, turn off tool-result scanning **and** use a scope other than `all_messages`.
+- **More provider calls.** Lakera Guard and Bedrock Guardrails now get one call per message and tool result, so conversations of many short messages cost more. Azure AI Language PII sends one document per request. The verdict cache answers history an agent resends, and `budget.max_pieces` (256) caps the calls of one request.
+- **Fail-open is narrower for large requests.** When a request is larger than `single_call_chars` (32,768 characters) or needs more provider calls than usual, a provider failure leaves that text unscanned and the filter's action applies, so a fail-open filter can block during an outage. Raise `budget.single_call_chars` to bring more requests under the fail mode. Text a provider refuses as too large, or that the built-in library can't scan in time, is also unscanned.
+- **Guardrails protect what reaches the vendor, not what AI Studio stores.** A blocked request is logged as received. Where that traffic must not be stored, turn on the LLM's **Disable Request/Response Body Logging**, and keep `ANALYTICS_STORE_REQUESTS` and `ANALYTICS_STORE_RESPONSES` off on its edges.
+- **Guardrail block messages are longer.** They now end with "Reason: … (code). Request ID: …". Match on the reason code (`reason_code`, `X-Tyk-AI-Guardrail-Reason`) rather than the exact text.
+- **Chat script filters see client tool answers**, as they see typed messages.
+- **Small hosts.** On a 2-CPU host, a flood of large tool results can keep both cores busy. Run gateways that scan agent traffic with the built-in library on 4 or more CPUs, or set `GUARDRAIL_LOCAL_SCAN_SLOTS=1`.
 
-Bugsmash settings, on AI Studio and the Microgateway:
+### Edges
+
+Upgrade edges together with AI Studio. Edges older than 2.3:
+
+- **block guardrailed traffic**, even under `fail_mode: open`, because guardrail credentials now reach edges only encrypted;
+- **fail Bedrock calls**, because AWS credentials now reach edges only encrypted (an old edge never falls back to its own AWS credentials);
+- **can't serve decision models** (the `systemone` vendor), and don't record OpenAI decision calls;
+- **don't scan tool results**, and block where a 2.3 edge would quarantine;
+- **don't enforce LLM budgets**, ignore **Allow internal host**, and don't verify resource ids minted by AI Studio.
+
+After the upgrade:
+
+- **Edges show Pending once.** Push the configuration.
+- **Duplicate tool or LLM names** stored by earlier versions are left out on edges (the lowest id keeps the name) until renamed. The edge shows as Pending until then.
+- **An LLM or tool that needs a filter or plugin from another namespace** is left out on that namespace's edges. Move the filter or plugin to the global namespace or the LLM's namespace.
+- **Edge errors now reach AI Studio's request logs.** Policy blocks and errors on edges appear as request log rows with no spend, so request counts include them.
+- **The request id header is `X-Tyk-AI-Request-ID`.** Edges no longer overwrite `X-Request-ID`.
+
+### Native APIs and OpenAI
+
+- **OpenAI response ids issued before 2.3 no longer verify**: the first call gets `404`, and the client starts a new chain.
+- **`/v1/responses` must name a `model`**, as must batch lines (`body.model`), so the model allow-list can be checked.
+- **`/v1/files` accepts only `purpose=batch` uploads**, up to 64 MiB and, on an LLM with request filters, 10,000 lines.
+- **With request filters attached, unreadable input is refused** (`400`) rather than passed unscreened.
+- **OpenAI batch files uploaded before 2.3** must be uploaded again on an LLM with request filters, and again whenever its request filters change. A batch must be created through the gateway that received its file.
+- **Some headers are no longer forwarded**: `OpenAI-Organization`, `OpenAI-Project`, `anthropic-user-profile-id` and a client's `anthropic-workspace-id`. Use the LLM's workspace setting instead.
+- **Plugin upstream overrides** no longer apply to `count_tokens` or OpenAI native operations.
+- **Decision models need a price.** Add a model price with the provider's input price and an output price of `0`. Unpriced calls are recorded at zero cost.
+
+### Database
+
+- **Rolling back needs a backup.** A 2.3 database can't be opened by an older AI Studio, including a headless replica sharing the database. Take a backup before upgrading, and upgrade replicas together.
+- **SQLite runs in WAL mode.** `-wal` and `-shm` files appear next to the database, so its directory must be writable. On network filesystems (NFS, SMB), set `_journal_mode=DELETE` in `DATABASE_URL`.
+- **MCP call records** have no retention pruning yet, so that table grows with MCP traffic.
+
+### Moving to FIPS 140-3 builds
+
+See the [FIPS guide](docs/site/docs/fips.md).
+
+- **Re-encryption.** A FIPS build re-encrypts stored secrets at startup, in the background, and logs when it's done. Before enforcing strict mode (`GODEBUG=fips140=only`), start once in FIPS mode and let it finish.
+- **Plugins.** A deployment is only FIPS compliant if every plugin is a FIPS build too.
+- **TLS.** FIPS mode allows only TLS 1.2 and 1.3 with approved ciphers and curves. Peers that offer only ChaCha20-Poly1305, or only plain X25519, fail to connect. This applies to LLM vendors, the hub-to-edge link, plugins over gRPC and your own endpoints.
+- **Keys.** TLS certificates must use RSA 2048+, ECDSA P-256/P-384/P-521 or Ed25519. Use RSA 2048+ or ECDSA for plugin-signing keys and SSO identity providers too.
+- **Postgres.** Use SCRAM-SHA-256 authentication, not `md5`.
+- **Resource signing.** Set a signing secret for every LLM. Resource ids signed in standard mode from a short credential don't verify in FIPS mode, and vice versa.
+
+### Other changes in behaviour
+
+- **Chat sessions send their history.** On LLM settings without a max length, a session now sends the conversation (up to the newest 100 messages), not just the latest message. Set **Max Length** to cap input.
+- **Chat costs change.** Anthropic turns with tool calls or thinking drop to the correct amount, cached tokens are billed at the cache price, and Anthropic chat records' total tokens include cache tokens.
+- **Tool and LLM names must be unique** ignoring case, spaces and punctuation. Duplicates stored earlier stay editable.
+- **Decision-only LLMs** don't appear in chat, agent, router and wizard pickers. The failover picker only offers compatible models.
+- **Edge gateways answer `404` on `/api/v1`**, and the `mgw` CLI no longer works against an edge; configure edges from AI Studio. A standalone microgateway keeps its management API, but create tokens with `POST /api/v1/tokens` or `microgateway -create-admin-token`.
+- **advanced-llm-cache 1.3.0:** Redis `tls_enabled` now takes effect, so check that your Redis accepts TLS. Use `tls_insecure` instead of `tls_skip_verify`. The cache starts empty after the upgrade.
+- **MCP analytics need traffic logs on the proxy.** Proxies created outside AI Studio record nothing until `trafficLogs` is enabled. Tyk Pump 1.16.0 needs `dont_purge_uptime_data: true` unless you run an uptime store.
+- **Agent tracing content ceiling.** If `AGENT_TRACING_CONTENT_CEILING` is unset, it is `metadata`, which overrides Apps set to Redacted or Full. Set it to the highest mode you want to allow.
+- **`AGENT_TRACING_BAGGAGE_ALLOWLIST`** (default `session.id`, all editions) limits the W3C `baggage` header sent upstream to the listed keys. Set it to the keys your providers rely on, or `none`.
+
+### For plugin authors and Go embedders
+
+- `models.LLMVendorProvider` gains `ProvidesChat()` and `DecisionEndpoint()`, so custom vendor implementations must add them.
+- `CallLLM` returns `FailedPrecondition` when the agent's App has no credential, instead of a `401`.
+- Plugins and hooks see the new request id format (`tyai_` + UUIDv7) in `request_id` and `PluginContext.RequestID`.
+- The plugin, management and config-sync protocols change additively (new fields and a `CallDecision` RPC).
+- When embedding with `pkg/studio`, `AppConf.FilterLimits` applies only to names in `config.FilterLimitNames`, which now include the `GUARDRAIL_*` settings.
+- Analytics sinks can implement `analytics.MCPCallRecorder` to receive MCP calls. Existing handlers compile unchanged.
+
+---
+
+## New configuration
+
+No new setting is required to run 2.3. Defaults that changed are listed in [Upgrade notes](#upgrade-notes).
+
+**General** (AI Studio and the Microgateway):
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `AI_STUDIO_ENV_REF_ALLOWLIST` | empty | Comma-separated environment variables a `$ENV/NAME` reference may resolve ([#794](https://github.com/TykTechnologies/ai-studio/pull/794)). Edges never resolve `$ENV/`; the hub sends resolved values |
-| `PLUGIN_ENV_PASSTHROUGH` | empty | Comma-separated host variables passed to plugin processes, besides the built-in allowlist; a trailing `*` matches a prefix ([#750](https://github.com/TykTechnologies/ai-studio/pull/750)) |
-| `PLUGIN_GRPC_MAX_MSG_BYTES` | `67108864` (64 MiB) | Largest gRPC message between a host and its plugins, in bytes; passed to plugin processes. Plugins built before 2.3.0 keep 4 MiB |
+| `AI_STUDIO_ENV_REF_ALLOWLIST` | empty | Environment variables a `$ENV/NAME` reference may resolve (comma-separated) |
+| `PLUGIN_ENV_PASSTHROUGH` | empty | Host variables passed to plugins, besides the built-in allowlist; a trailing `*` matches a prefix |
+| `PLUGIN_GRPC_MAX_MSG_BYTES` | `67108864` (64 MiB) | Largest message between the host and its plugins |
+| `DB_LOG_SQL_PARAMS` | `false` | Log SQL values (local debugging only) |
 
-The Helm chart adds `config.logLevel` ([#748](https://github.com/TykTechnologies/ai-studio/pull/748)), rendered as `LOG_LEVEL`.
+The Helm chart adds `config.logLevel` (AI Studio's `LOG_LEVEL`).
 
-OCI plugin signature verification (Enterprise; an invalid value stops startup):
+**Plugin signatures** (Enterprise; an invalid value stops startup):
 
 | Variable (AI Studio / Microgateway) | Default | Purpose |
 |---|---|---|
-| `AI_STUDIO_OCI_REQUIRE_SIGNATURE` / `OCI_PLUGINS_REQUIRE_SIGNATURE` | `true` / `true` | Require a valid signature on OCI plugins. AI Studio's default was `false` |
-| `AI_STUDIO_OCI_TLOG_POLICY` / `OCI_PLUGINS_TLOG_POLICY` | `required` | `required` (a Rekor entry must be present and valid), `optional` (checked when present), `disabled` (key only; logs a warning at startup) |
-| `AI_STUDIO_OCI_TRUSTED_ROOT_FILE` / `OCI_PLUGINS_TRUSTED_ROOT_FILE` | empty | A Sigstore `trusted_root.json` to use instead of the embedded public-good root (private Sigstore, Rekor key rotation) |
+| `AI_STUDIO_OCI_REQUIRE_SIGNATURE` / `OCI_PLUGINS_REQUIRE_SIGNATURE` | `true` / `true` | Require a valid signature on OCI plugins (AI Studio's default was `false`) |
+| `AI_STUDIO_OCI_TLOG_POLICY` / `OCI_PLUGINS_TLOG_POLICY` | `required` | `required`, `optional` (checked when present) or `disabled` (key only) |
+| `AI_STUDIO_OCI_TRUSTED_ROOT_FILE` / `OCI_PLUGINS_TRUSTED_ROOT_FILE` | empty | A Sigstore `trusted_root.json` for a private Sigstore deployment |
 
-Native API operations ([#730](https://github.com/TykTechnologies/ai-studio/pull/730)); AI Studio and the Microgateway read the same names, and unset or `0` keeps the default (see `docs/site/docs/configuration.md`):
+**Agent Call Tracing** (Enterprise): `AGENT_TRACING_*` settings, all off by default. The [agent tracing guide](docs/site/docs/agent-tracing.md) lists them. The content ceiling and default mode (`AGENT_TRACING_CONTENT_CEILING`, `AGENT_TRACING_CONTENT_DEFAULT_MODE`) can only be set in the environment; the console shows them read-only. An invalid content mode is read as `off`.
+
+**FIPS 140-3:** a FIPS build starts in FIPS mode. `GODEBUG=fips140=off` turns it off, and `GODEBUG=fips140=only` refuses every non-approved algorithm (for testing). `make build-fips` builds FIPS binaries from source.
+
+**Native API operations** (AI Studio and the Microgateway; unset or `0` keeps the default):
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `NATIVE_API_MAX_BODY_BYTES` | `67108864` (64 MiB, at most 256 MiB) | Body limit of a batch create or batch file upload |
-| `NATIVE_API_MAX_CONCURRENT_CREATES` | `4` | Creates admitted at once; others wait |
+| `NATIVE_API_MAX_BODY_BYTES` | `67108864` (64 MiB, at most 256 MiB) | Size limit of a batch create or batch file upload |
+| `NATIVE_API_MAX_CONCURRENT_CREATES` | `4` | Batch creates handled at once |
 | `NATIVE_API_MAX_FILTERED_ITEMS` | `10000` | Requests per batch or file when the LLM has request filters |
 | `NATIVE_API_MAX_IN_PROGRESS_PER_APP` | `0` (no cap) | In-progress batches per App and LLM |
-| `NATIVE_API_RECONCILE_INTERVAL` | `30s` | How often the reconciler looks for due batches |
-| `NATIVE_API_RECONCILE_BATCH` | `50` | Batches one reconciler pass takes |
+| `NATIVE_API_RECONCILE_INTERVAL` | `30s` | How often finished batches are looked for |
+| `NATIVE_API_RECONCILE_BATCH` | `50` | Batches checked per pass |
 | `NATIVE_API_RECONCILE_WORKERS` | `4` | Batches reconciled at once |
 | `NATIVE_API_POLL_INTERVAL` | `2m` | Wait before polling an unfinished batch again |
 | `NATIVE_API_POLL_MAX_BACKOFF` | `30m` | Longest wait after failed polls |
 
 `PROXY_URL` (Microgateway: `GATEWAY_PUBLIC_URL`) is the base of a batch's `results_url`.
 
-Guardrails (Enterprise), on AI Studio and the Microgateway; an embedding host can set them in its filter limits (see `docs/site/docs/guardrails.md`):
+**Guardrails** (Enterprise; AI Studio and the Microgateway; see the [guardrails guide](docs/site/docs/guardrails.md)):
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `NATIVE_API_MAX_GUARDRAIL_CALLS` | `10000` | Remote guardrail provider calls one batch create or batch file upload may make; cached verdicts and the built-in library do not count |
+| `NATIVE_API_MAX_GUARDRAIL_CALLS` | `10000` | Remote provider calls one batch may make |
 | `GUARDRAIL_VERDICT_CACHE_ENTRIES` | `100000` | Verdicts cached per node |
-| `GUARDRAIL_VERDICT_CACHE_MAX_BYTES` | `67108864` (64 MiB) | Memory the verdict cache may hold per node |
+| `GUARDRAIL_VERDICT_CACHE_MAX_BYTES` | `67108864` (64 MiB) | Memory the verdict cache may use per node |
 | `GUARDRAIL_VERDICT_CACHE_TTL` | `10m` | How long a verdict is reused; `0` turns the cache off |
 | `GUARDRAIL_LOCAL_SCAN_SLOTS` | half the CPUs (at least 1) | Large built-in library scans at once |
-| `GUARDRAIL_LOCAL_SCAN_SMALL_SLOTS` | a quarter of the CPUs (at least 1) | Small scans (at most `single_call_chars`) at once, besides the large ones |
-| `GUARDRAIL_LOCAL_SCAN_QUEUE_BYTES` | `67108864` (64 MiB) | Text one tenant may have waiting for a scan slot |
-| `GUARDRAIL_LOCAL_MAX_SCAN_BYTES` | `8388608` (8 MiB) | Largest request segment the built-in library scans (64 KiB to 64 MiB); a larger one is unscanned |
-| `GUARDRAIL_LOCAL_SCAN_MS_PER_MIB` | `2000` | Scan time per MiB of text, beyond the filter's `timeout_ms` (100 to 60000); text not scanned in time is unscanned |
-| `GUARDRAIL_SHADOW_WORKERS` | 4 per CPU, at least 8 | Shadow guardrail evaluations running at once per process |
-| `GUARDRAIL_SHADOW_QUEUE_BYTES` | `67108864` | Text waiting for a shadow evaluation (one tenant at most half); what does not fit is dropped and recorded as unscanned |
-| `GUARDRAIL_UNIX_SOCKET_ALLOWLIST` | empty | Comma-separated Unix socket paths, or directories ending in `/`, that an HTTP classifier endpoint `unix:///...` may use. Empty refuses every socket endpoint |
+| `GUARDRAIL_LOCAL_SCAN_SMALL_SLOTS` | a quarter of the CPUs (at least 1) | Small scans at once, besides the large ones |
+| `GUARDRAIL_LOCAL_SCAN_QUEUE_BYTES` | `67108864` (64 MiB) | Text one tenant may have waiting for a scan |
+| `GUARDRAIL_LOCAL_MAX_SCAN_BYTES` | `8388608` (8 MiB) | Largest segment the built-in library scans; larger ones are unscanned |
+| `GUARDRAIL_LOCAL_SCAN_MS_PER_MIB` | `2000` | Extra scan time per MiB of text, beyond the filter's timeout |
+| `GUARDRAIL_SHADOW_WORKERS` | 4 per CPU, at least 8 | Shadow evaluations running at once |
+| `GUARDRAIL_SHADOW_QUEUE_BYTES` | `67108864` | Text waiting for a shadow evaluation; overflow is dropped and recorded as unscanned |
+| `GUARDRAIL_UNIX_SOCKET_ALLOWLIST` | empty | Unix socket paths (or directories ending in `/`) an HTTP classifier may use |
 
-On a 2-CPU host both scan pools have one slot, so a flood of large tool results can keep both cores busy. Run gateways that scan agent traffic with the built-in library on 4 or more CPUs, and set `GUARDRAIL_LOCAL_SCAN_SLOTS=1` on small hosts.
+Per guardrail filter: `tool_results` (`scan`, `on_detect`), `tool_calls`, `tool_definitions`, the `quarantine` action and its `placeholder`, `shadow`, `evidence`, `budget` (`max_scan_chars` 262144, `max_pieces` 256, `time_ms` 4 × `timeout_ms`, `single_call_chars` 32768) and `cache`. The form only saves the keys you set.
 
-Per guardrail filter, in its config (the form saves only the keys you set, so untouched filters follow the defaults): `tool_results` (`scan`, `on_detect`), `on_detect: "quarantine"` with `quarantine.placeholder`, `budget` (`max_scan_chars` 262144, `max_pieces` 256, `time_ms` 4 × `timeout_ms`, `single_call_chars` 32768) and `cache`.
+**Per LLM**, in the LLM form and API: `vendor_workspace_id` (Anthropic workspace), `price_multipliers` (for example `{"batch": 0.4}`), **Allow internal host**, and the resource signing key (status and rotation on the LLM page).
 
-Per LLM ([#737](https://github.com/TykTechnologies/ai-studio/pull/737)), in the LLM form and the LLM API:
+---
 
-- `vendor_workspace_id`: the Anthropic workspace every call for the LLM runs in.
-- `price_multipliers`: service tier to share of the list price, for example `{"batch": 0.4}`.
-- `GET /api/v1/llms/{id}/resource-signing-key` shows the signing key status (never the secret), and `POST /api/v1/llms/{id}/resource-signing-key/rotate` rotates it with a grace period.
-- `GET /api/v1/analytics/service-tier-usage` reports usage by service tier.
+## Plugin releases
 
-For the live decision conformance suite only (`test-secrets/vendors.env`):
+These plugins are released to the marketplace for 2.3.0. Versions marked † need AI Studio 2.3.0 and are built on the 2.3 Plugin SDK. Each has its own `CHANGELOG.md`.
 
-| Variable | Purpose |
-|---|---|
-| `VT_OPENAI_MODEL_DECISION` | OpenAI decision model to test, for example `gpt-6-luna`; uses the OpenAI key |
-| `VT_SYSTEMONE_MODEL` | System One model to test, for example `jev-latest` |
-| `VT_SYSTEMONE_ENDPOINT` | System One endpoint; default `https://api.typesafe.ai` |
-| `VT_SYSTEMONE_API_KEY` | Key for the hosted System One API; optional for a self-host |
-
-## Plugins
-
-Plugins fixed in the bugsmash and for Bedrock plugin parity. Each is released to the marketplace for 2.3.0 at the version below. Versions marked † need AI Studio 2.3.0 (`min_studio_version`) and are built on the 2.3 Plugin SDK; each carries its own `CHANGELOG.md`.
-
-| Plugin | Version | Changes |
+| Plugin | Version | What changed |
 |---|---|---|
-| llm-cache | 1.3.0 † | Lifecycle, edge ID and logging fixes: no `/tmp` debug log, no leaked goroutine, no double-close panic ([ai-studio-community-plugins#15](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/15)). Bedrock: AWS errors never cached, Converse token savings counted, `converse-stream` uncached. Hits no longer replay other plugins' `X-Tyk-Compression*`, `X-RateLimit-*` and `X-LB-*` headers; non-2xx streams never cached; pending entries released when stream caching is off |
-| llm-load-balancer (Enterprise) | 1.2.0 † | Selection race, upstream URL validation and redaction, audit log file mode, invalid stored entries dropped at start-up with a logged error ([ai-studio-enterprise#74](https://github.com/TykTechnologies/ai-studio-enterprise/pull/74), [ai-studio-enterprise#83](https://github.com/TykTechnologies/ai-studio-enterprise/pull/83)). Bedrock errors count as failures (including exceptions after a `200` on a stream); streams detected per vendor; token-aware routing reads content blocks. Client errors (400, 413, 422) no longer count against an upstream; any other non-2xx stream does. Expired pending requests give back their active connection |
-| advanced-llm-cache (Enterprise) | 1.3.0 † | Backend swap race, Redis TLS, idempotent shutdown, masked Redis password, configuration swapped as one snapshot, form keys aligned with what the plugin reads, `apps.write` scope ([ai-studio-enterprise#75](https://github.com/TykTechnologies/ai-studio-enterprise/pull/75), [ai-studio-enterprise#78](https://github.com/TykTechnologies/ai-studio-enterprise/pull/78), [ai-studio-enterprise#80](https://github.com/TykTechnologies/ai-studio-enterprise/pull/80), [ai-studio-enterprise#84](https://github.com/TykTechnologies/ai-studio-enterprise/pull/84)). Exact keys cover the LLM, vendor, API path and model (the cache starts empty after the upgrade); Bedrock Converse fields and tool and media blocks are part of the key; Bedrock errors never cached, `converse-stream` uncached, Converse token savings counted. Hits no longer replay other plugins' headers |
-| rate-limiter | 1.2.0 † | Redis client closed, corrupt counters handled, serialised rule saves, masked `redis_password` ([ai-studio-community-plugins#16](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/16), [ai-studio-community-plugins#18](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/18), [ai-studio-community-plugins#27](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/27), [ai-studio-community-plugins#28](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/28)). Token rules count Bedrock and Google usage, and streamed responses. Concurrent slots of requests answered before the vendor are given back (at once on the limiter's own 429 or 503, else after ten minutes) |
-| llm-price-sync | 1.1.1 | Fetch URL checked against internal addresses, locked history updates, scheduler context, errors reported ([ai-studio-community-plugins#20](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/20), [ai-studio-community-plugins#22](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/22), [ai-studio-community-plugins#28](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/28)) |
-| llm-firewall | 1.2.0 † | JSON-safe block response, optional `fail_closed`, all prompt text inspected ([ai-studio-community-plugins#21](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/21), [ai-studio-community-plugins#25](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/25)). Model rules match Bedrock model IDs, inference profiles and ARNs; Bedrock text documents inspected; `hook_phase` honoured (every request used to be checked in both phases) |
-| github-rag-ingest | 1.1.1 | Private clone cache with path checks, random secret IDs, index errors reported, `CancelJob` stops the running ingestion, masked `vault_token`, secret references for credentials ([ai-studio-community-plugins#17](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/17), [ai-studio-community-plugins#19](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/19), [ai-studio-community-plugins#23](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/23), [ai-studio-community-plugins#24](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/24), [ai-studio-community-plugins#26](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/26), [ai-studio-community-plugins#28](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/28), [ai-studio-community-plugins#29](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/29)) |
-| oauth2-client-credentials (Enterprise) | 1.3.3 † | JWKS cache TTL and bounded stale keys; scopes documented; rebuilt on the 2.3 Plugin SDK (with 1.3.2, a 2.3 gateway answers `413` to every request it authenticates whose body is over 4 MiB) ([ai-studio-enterprise#77](https://github.com/TykTechnologies/ai-studio-enterprise/pull/77), [ai-studio-enterprise#80](https://github.com/TykTechnologies/ai-studio-enterprise/pull/80)) |
+| prompt-compressor (new) | 1.0.2 | New plugin, needs AI Studio 2.3.0: see [Prompt Compressor](#spend-fewer-tokens-prompt-compressor-community-plugin) |
+| llm-cache | 1.3.0 † | Works correctly with Bedrock (errors never cached, token savings counted). No longer replays other plugins' headers on a hit. Stability and logging fixes |
+| llm-load-balancer (Enterprise) | 1.2.0 † | Counts Bedrock errors as failures, and client errors (400, 413, 422) no longer count against an upstream. Fixes a selection race. Validates and redacts upstream URLs |
+| advanced-llm-cache (Enterprise) | 1.3.0 † | Works correctly with Bedrock. Cache keys include the LLM, vendor, path and model, so the cache starts empty after the upgrade. Redis TLS now applies, and the Redis password is masked. Needs the `apps.write` scope |
+| rate-limiter | 1.2.0 † | Token rules count Bedrock, Google and streamed usage. Concurrency slots are given back for requests answered before the vendor. Masked Redis password |
+| llm-firewall | 1.2.0 † | Model rules match Bedrock model ids, inference profiles and ARNs. Inspects all prompt text, including Bedrock text documents. Optional `fail_closed` |
+| llm-price-sync | 1.1.1 | Refuses internal fetch URLs. Reliability fixes |
+| github-rag-ingest | 1.1.1 | Secret references for credentials. Cancelling a job stops it. Masked `vault_token`. Hardened clone cache. Needs AI Studio 2.3.0 for secret references and `PLUGIN_ENV_PASSTHROUGH` |
+| oauth2-client-credentials (Enterprise) | 1.3.3 † | Rebuilt on the 2.3 SDK: with 1.3.2, a 2.3 gateway refuses authenticated requests over 4 MiB. Better JWKS caching |
 
-github-rag-ingest 1.1.1 needs AI Studio 2.3.0 for `$SECRET/` references in its configuration and for `PLUGIN_ENV_PASSTHROUGH`.
+---
 
 ## Known issues
 
-- **Rate limiter concurrent slots can be held for up to ten minutes** by a request that ends without a response (a request-filter block after the rate limiter, a broken stream), and are not given back if the plugin restarts in that time.
+- **Model and Semantic Routers don't route decision calls yet.** They answer `400`.
+- **Decision models haven't been tested against a self-hosted llama.cpp server.** They are tested against OpenAI `gpt-6-luna` and TypeSafe `jev-latest`.
+- **Some OpenAI ids aren't ownership-checked.** A `file_id` in an `input_file` or `input_image` part, and an `item_reference` id, are passed to OpenAI unchecked.
+- **`input_file` content isn't screened** by filters.
+- **Standalone microgateways sign resource ids with the vendor API key**, so rotating that key invalidates outstanding ids.
+- **A dropped database connection at the wrong moment can lose a batch's usage.** This is rare, and it undercounts; it never double-charges.
+- **The proxy-log API doesn't return `service_tier` yet.** The tier report and chat records have it.
+- **What guardrails don't inspect:** binary documents (PDF, Word) and images; files referenced by id and conversation state held by the vendor; results of tools the vendor runs within one call, until the client sends them back; and datasource context in Studio chat.
+- **The built-in injection heuristics are a baseline.** They are deliberately narrow on tool results to avoid false positives, so paraphrased attacks get through. Pair them with Lakera Guard, Azure Prompt Shields, Bedrock Guardrails or the Wolf Defender images for robust coverage.
+- **Script filters see tool results as sent**, not decoded as guardrails do. An empty `input.segments` with a non-empty `raw_input` means an unreadable body, which a script that screens tool results should block.
+- **Large tool results can wait on slow hosts** behind a flood of large scans.
+- **Keys that differ only in case** can still be read differently by a script filter and the upstream. Guardrails refuse such bodies.
+- **Dashboard-created MCP proxies don't set `stripAuthorizationData`**, so AI Studio-minted Tyk keys are forwarded to third-party upstreams. Gateway connections set it.
+- **Rate limiter concurrency slots can be held for up to ten minutes** by a request that ends without a response.
 
-- **Model and Semantic Routers do not route decision calls yet.** They answer `400`.
-- **Decision conformance has not been run against a llama.cpp self-host.** It is green against OpenAI `gpt-6-luna` and TypeSafe `jev-latest`.
-- **Raw OpenAI file and item IDs are forwarded unchecked.** A `file_id` in an `input_file` or `input_image` part and an `item_reference` ID are passed to OpenAI without an ownership check. Only batch input files can be uploaded through the gateway, and item IDs are only returned to the App that owns them, so such an ID comes from outside the gateway or from a leak. Whether to verify or refuse them is still being decided.
-- **`input_file` content is not screened** by the filters, as with files on Chat Completions.
-- **Standalone microgateways sign with the API key.** Without a hub there is no signing secret, so rotating a standalone microgateway's vendor API key still invalidates outstanding resource IDs.
-- **An ambiguous database commit can lose a batch's usage.** If the connection drops just after the gateway marks a batch as accounted, the batch stays accounted with no usage recorded: an undercount, never a double charge. This is rare.
-- **The proxy-log API does not return `service_tier` yet**; the tier report and chat records have it.
-- **What guardrails do not inspect.** Binary documents (PDF, Word) and images; files referenced by id and conversation state the vendor holds (`previous_response_id`, a stored conversation); results of tools the vendor runs within one call (Anthropic server tools, OpenAI built-in tools) until the client sends them back; datasource context in Studio chat. A tool result's JSON escapes are decoded one level, so text escaped twice inside it is read with the inner escapes left in.
-- **The built-in injection heuristics are a baseline.** On tool results they are deliberately narrower, to keep false positives on real tool output near zero, so paraphrased attacks get through. Pair them with Lakera Guard, Azure AI Content Safety Prompt Shields or Bedrock Guardrails for robust coverage. The narrower variants apply to anything labelled a tool result, including tool results a client writes itself, which matters only for direct-jailbreak policy. `markdown_exfil` is weak on tool output by design; use it on response filters (the seeded **Credential leakage in responses (block)** includes it).
-- **Script filters see segments, not decoded views.** `tyk.detect` scans the text it is given; it does not read a tool result's JSON escapes decoded as guardrails do. An empty `input.segments` with a non-empty `raw_input` means an unreadable body, which a script that screens tool results should block.
-- **Large tool results can still wait on slow hosts.** An ordinary request whose tool result is larger than `single_call_chars` uses the large scan pool and can wait behind a flood of near-limit scans. The per-tenant share limits one flooding tenant to half the slots; a lower `GUARDRAIL_LOCAL_MAX_SCAN_BYTES` shortens each flood scan.
-- **Keys that differ only in case** can still be read differently by a script filter and a pass-through upstream; guardrails refuse such bodies.
-- **Dashboard-created MCP proxies do not set `stripAuthorizationData`**, so AI Studio-minted Tyk keys are forwarded to third-party upstreams. Gateway connections set it. Changing it for Dashboard connections would alter existing proxies, so it is left for a separate decision.
+---
 
-## Submodules
-
-- **enterprise** `118ad19` → `d7094dd`: Tyk OSS Gateway connections for MCP proxies and keys ([ai-studio-enterprise#70](https://github.com/TykTechnologies/ai-studio-enterprise/pull/70)), with pooled Gateway clients, parallel node work and the literal-credential warning; plus the base URL and custom-domain fixes for Dashboard connections.
-  Bugsmash: plugin fixes and scopes ([ai-studio-enterprise#74](https://github.com/TykTechnologies/ai-studio-enterprise/pull/74), [ai-studio-enterprise#75](https://github.com/TykTechnologies/ai-studio-enterprise/pull/75), [ai-studio-enterprise#77](https://github.com/TykTechnologies/ai-studio-enterprise/pull/77), [ai-studio-enterprise#78](https://github.com/TykTechnologies/ai-studio-enterprise/pull/78), [ai-studio-enterprise#80](https://github.com/TykTechnologies/ai-studio-enterprise/pull/80), [ai-studio-enterprise#83](https://github.com/TykTechnologies/ai-studio-enterprise/pull/83), [ai-studio-enterprise#84](https://github.com/TykTechnologies/ai-studio-enterprise/pull/84)), `tyk.llm` `return_errors` ([ai-studio-enterprise#76](https://github.com/TykTechnologies/ai-studio-enterprise/pull/76)), plugin host classification ([ai-studio-enterprise#81](https://github.com/TykTechnologies/ai-studio-enterprise/pull/81)), the `FILTER_SCRIPT_ALLOW_OS` switch read in one place ([ai-studio-enterprise#85](https://github.com/TykTechnologies/ai-studio-enterprise/pull/85)), and guardrail tool-result scanning ([ai-studio-enterprise#82](https://github.com/TykTechnologies/ai-studio-enterprise/pull/82)).
-- **community** `2e23cdf` → `3afb9f8`: bugsmash fixes to llm-cache, rate-limiter, llm-price-sync, llm-firewall and github-rag-ingest ([ai-studio-community-plugins#15](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/15) to [ai-studio-community-plugins#29](https://github.com/TykTechnologies/ai-studio-community-plugins/pull/29)).
+Full list of changes: [`v2.2.1...main`](https://github.com/TykTechnologies/ai-studio/compare/v2.2.1...main)
