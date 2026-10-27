@@ -153,9 +153,9 @@ jobs:
       - name: Pull the FIPS base image
         run: |
           base=$(awk '$1 == "FROM" && $2 ~ /^tykio\/dhi-busybox:/ { print $2; exit }' ci/Dockerfile.fips.distroless)
+          trap 'docker logout' EXIT # also when the pull fails
           [ -n "$base" ] || { echo "::error::no tykio/dhi-busybox base in ci/Dockerfile.fips.distroless"; exit 1; }
           docker pull "$base"
-          docker logout
 
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
