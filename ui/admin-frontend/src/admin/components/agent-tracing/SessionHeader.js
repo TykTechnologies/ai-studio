@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Link as RouterLink } from "react-router-dom";
 import { Box, Button, Chip, Menu, MenuItem, Stack, Tooltip, Typography } from "@mui/material";
 import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
 import LinkIcon from "@mui/icons-material/Link";
@@ -83,6 +84,18 @@ export const SessionHeader = ({ onNotify }) => {
           <Tooltip title="Grouped by the gateway from traffic patterns">
             <Chip size="small" variant="outlined" label="inferred" />
           </Tooltip>
+        )}
+        {/* A long inferred session rolls over to a new one at a turn
+            boundary (AGENT_TRACING_SESSION_MAX_*): link the chain. */}
+        {detail.previous_session_id && (
+          <Button size="small" component={RouterLink} to={`/admin/agent-sessions/${detail.previous_session_id}`}>
+            ‹ Continued from {shortId(detail.previous_session_id)}
+          </Button>
+        )}
+        {detail.next_session_id && (
+          <Button size="small" component={RouterLink} to={`/admin/agent-sessions/${detail.next_session_id}`}>
+            Continues in {shortId(detail.next_session_id)} ›
+          </Button>
         )}
         <Box sx={{ flexGrow: 1 }} />
         <Button

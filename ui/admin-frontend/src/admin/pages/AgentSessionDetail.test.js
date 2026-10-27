@@ -7,7 +7,7 @@ import testTheme from "../utils/testTheme";
 import AgentSessionDetail from "./AgentSessionDetail";
 import agentTracingService from "../services/agentTracingService";
 import { useEdition } from "../context/EditionContext";
-import { SESSION_ID, detail, ids, spans } from "../components/agent-tracing/testFixture";
+import { SESSION_ID, T0, detail, ids, spans } from "../components/agent-tracing/testFixture";
 
 jest.mock("../services/agentTracingService", () => ({
   __esModule: true,
@@ -213,5 +213,40 @@ describe("AgentSessionDetail", () => {
     await waitFor(() => expect(agentTracingService.search).toHaveBeenCalledWith(SESSION_ID, "web"));
     expect(await screen.findByTestId("find-count")).toHaveTextContent("1 of 1");
     expect(row(ids.tool1)).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("opens a large session on a window of whole turns and steps it by turns", async () => {
+    const at = (sec) => new Date(T0 + sec * 1000).toISOString();
+    const big = detail();
+    big.session = { ...big.session, source: "inferred", totals: { ...big.session.totals, span_count: 60000 } };
+    big.traces = [
+      { trace_id: "t0", turn_index: 0, started_at: at(0), ended_at: at(2), status: "error", totals: { span_count: 3000, error_count: 1 } },
+      { trace_id: "t1", turn_index: 1, started_at: at(3), ended_at: at(6), status: "ok", totals: { span_count: 3000 } },
+    ];
+    big.previous_session_id = "0192a4c8-7f00-7000-8000-0000000000aa";
+    agentTracingService.getSession.mockResolvedValue(big);
+    agentTracingService.listSpans.mockImplementation((_id, params) => {
+      const from = Date.parse(params.from);
+      const to = Date.parse(params.to);
+      return Promise.resolve({ data: spans.filter((sp) => Date.parse(sp.start_time) >= from && Date.parse(sp.start_time) < to), next_cursor: null });
+    });
+    renderPage();
+    await screen.findByText("refund flow");
+    expect(screen.getByTestId("windowed-note")).toHaveTextContent("60,000 spans");
+    expect(screen.queryByRole("button", { name: "Clear range" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Continued from/ })).toHaveAttribute("href", "/admin/agent-sessions/0192a4c8-7f00-7000-8000-0000000000aa");
+
+    // It opens on the turn with the error, and loads only that turn's spans.
+    await waitFor(() => expect(agentTracingService.listSpans).toHaveBeenCalled());
+    expect(agentTracingService.listSpans.mock.calls[0][1]).toEqual({ limit: 1000, include: "previews", from: at(0), to: new Date(T0 + 2001).toISOString() });
+    fireEvent.keyDown(document.body, { key: "2" });
+    await waitFor(() => expect(row(ids.tool1)).toBeInTheDocument());
+    expect(row(ids.llm2)).toBeUndefined();
+    expect(screen.getByRole("button", { name: "‹ Earlier" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Later ›" }));
+    await waitFor(() => expect(row(ids.llm2)).toBeInTheDocument());
+    expect(row(ids.tool1)).toBeUndefined();
+    expect(agentTracingService.listSpans).toHaveBeenLastCalledWith(SESSION_ID, { limit: 1000, include: "previews", from: at(3), to: new Date(T0 + 6001).toISOString() });
   });
 });

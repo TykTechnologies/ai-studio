@@ -5,6 +5,8 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import CloseIcon from "@mui/icons-material/Close";
 import { useSessionDetail } from "./SessionDetailContext";
 import agentTracingService from "../../services/agentTracingService";
+import { ms } from "./spanModel";
+import { turnAt, windowAround } from "./sessionWindow";
 
 // In-session find (spec §6.2): searched on the server over span metadata
 // (and, for content readers, permitted content). The term lives in this
@@ -27,7 +29,7 @@ export const allMatches = (result) => {
 };
 
 const FindBar = () => {
-  const { detail, findOpen, dispatch } = useSessionDetail();
+  const { detail, findOpen, dispatch, windowed, turns, index, appId } = useSessionDetail();
   const [term, setTerm] = useState("");
   const [result, setResult] = useState(null);
   const [pos, setPos] = useState(0);
@@ -44,7 +46,19 @@ const FindBar = () => {
     if (!matches.length) return;
     const at = (i + matches.length) % matches.length;
     setPos(at);
-    dispatch({ type: "select", id: matches[at].span_id });
+    const id = matches[at].span_id;
+    dispatch({ type: "select", id });
+    // Search covers the whole session; in a windowed session a match may
+    // be outside the loaded window: load the turns around it.
+    if (windowed && !index.byId.has(id)) {
+      agentTracingService.getSpan(id, appId).then(
+        (res) => {
+          const t = ms(res?.span?.start_time);
+          if (Number.isFinite(t)) dispatch({ type: "range", range: windowAround(turns, turnAt(turns, t)) });
+        },
+        () => setError("Could not load that match"),
+      );
+    }
   };
 
   const run = async () => {

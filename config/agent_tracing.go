@@ -57,12 +57,17 @@ type AgentTracingConfig struct {
 	PayloadStoreBinary  bool
 
 	// Correlation (§4).
-	MinLinkConfidence      string // declared | exact | strong | weak
-	ToolMatchWindow        time.Duration
-	RetryWindow            time.Duration
-	ClockSkewTolerance     time.Duration
-	TurnIdleTimeout        time.Duration
-	SessionIdleTimeout     time.Duration
+	MinLinkConfidence  string // declared | exact | strong | weak
+	ToolMatchWindow    time.Duration
+	RetryWindow        time.Duration
+	ClockSkewTolerance time.Duration
+	TurnIdleTimeout    time.Duration
+	SessionIdleTimeout time.Duration
+	// SessionMaxDuration and SessionMaxSpans roll an inferred session over
+	// to a new one, at the next turn, once it is this old or this large.
+	// Declared sessions are never split.
+	SessionMaxDuration     time.Duration
+	SessionMaxSpans        int
 	CompatHeaders          []string
 	HarnessSessionHeaders  []string
 	DelegationToolPatterns []string
@@ -160,6 +165,8 @@ func DefaultAgentTracingConfig() AgentTracingConfig {
 		ClockSkewTolerance: 2 * time.Second,
 		TurnIdleTimeout:    5 * time.Minute,
 		SessionIdleTimeout: 30 * time.Minute,
+		SessionMaxDuration: 4 * time.Hour,
+		SessionMaxSpans:    5000,
 		CompatHeaders: []string{"helicone", "portkey", "openrouter", "bifrost", "agent_router",
 			"cloudflare", "agentcore", "mcp_session"},
 		// The coding-harness extractors verified against recorded traffic
@@ -254,6 +261,8 @@ func parseAgentTracingConfig(getenv func(string) string) (AgentTracingConfig, []
 	p.positiveDuration("AGENT_TRACING_CLOCK_SKEW_TOLERANCE", &cfg.ClockSkewTolerance)
 	p.positiveDuration("AGENT_TRACING_TURN_IDLE_TIMEOUT", &cfg.TurnIdleTimeout)
 	p.positiveDuration("AGENT_TRACING_SESSION_IDLE_TIMEOUT", &cfg.SessionIdleTimeout)
+	p.positiveDuration("AGENT_TRACING_SESSION_MAX_DURATION", &cfg.SessionMaxDuration)
+	p.positiveInt("AGENT_TRACING_SESSION_MAX_SPANS", &cfg.SessionMaxSpans)
 	p.list("AGENT_TRACING_COMPAT_HEADERS", &cfg.CompatHeaders)
 	p.list("AGENT_TRACING_HARNESS_SESSION_HEADERS", &cfg.HarnessSessionHeaders)
 	p.regexList("AGENT_TRACING_DELEGATION_TOOL_PATTERNS", &cfg.DelegationToolPatterns)

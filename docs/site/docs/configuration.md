@@ -182,6 +182,7 @@ Turns gateway traffic into sessions, turns and span trees. Off by default. It ru
 *   Content (`AGENT_TRACING_CONTENT_DEFAULT_MODE`, `AGENT_TRACING_CONTENT_MAX_REQUEST_OVERRIDE`, `AGENT_TRACING_STORE_CONTENT_MODE_CAP`): `off`, `metadata`, `hashed`, `redacted` or `full`; defaults `off`, `metadata`, `full`
 *   `AGENT_TRACING_CONTENT_CEILING`: the highest content mode any App, the default or a request header may reach. Unset, it is the higher of the default and the request override (`metadata` with the defaults), so an App set to `redacted` or `full` captures only `metadata`. The shipped `.env.example` files set it to `redacted`.
 *   Correlation timeouts (`AGENT_TRACING_TURN_IDLE_TIMEOUT`, `AGENT_TRACING_SESSION_IDLE_TIMEOUT`): defaults `5m`, `30m`
+*   Inferred session caps (`AGENT_TRACING_SESSION_MAX_DURATION`, `AGENT_TRACING_SESSION_MAX_SPANS`): defaults `4h`, `5000`; a longer or larger inferred session continues in a new one at its next turn
 *   Retention (`AGENT_TRACING_METADATA_RETENTION_DAYS`, `AGENT_TRACING_PAYLOAD_RETENTION_DAYS`): defaults `30`, `7`; payloads never outlive metadata
 *   OTel exporters (`AGENT_TRACING_EXPORTERS_FILE`): path to a YAML file with an `exporters:` list
 

@@ -206,6 +206,8 @@ All variables are read at start-up. An invalid value keeps the default and logs 
 | `AGENT_TRACING_CLOCK_SKEW_TOLERANCE` | `2s` | Allowed clock difference between gateways |
 | `AGENT_TRACING_TURN_IDLE_TIMEOUT` | `5m` | A turn closes after this long without activity |
 | `AGENT_TRACING_SESSION_IDLE_TIMEOUT` | `30m` | A session closes after this long without activity (per-App override) |
+| `AGENT_TRACING_SESSION_MAX_DURATION` | `4h` | An inferred session this old continues in a new session at its next turn |
+| `AGENT_TRACING_SESSION_MAX_SPANS` | `5000` | An inferred session with this many spans continues in a new session at its next turn |
 | `AGENT_TRACING_TOOL_NAME_PREFIX_STRIP` | `mcp__{server}__,{server}__,{server}.` | Tool-name prefixes ignored when matching |
 | `AGENT_TRACING_FORWARD_TYK_HEADERS` | `false` | Forward the `X-Tyk-*` tracing headers upstream |
 | `AGENT_TRACING_BAGGAGE_ALLOWLIST` | `session.id` | W3C baggage keys forwarded upstream; `none` forwards none. Applies in every edition. |
@@ -278,6 +280,12 @@ Changing any tracing setting needs `traces:write`. Without it the sections are r
 
 A session closes after its idle timeout, and a later call reopens it.
 
+An agent that is never idle for that long (a bot working through a queue) would stay in one inferred session indefinitely. So an inferred session that reaches `AGENT_TRACING_SESSION_MAX_DURATION` (4 hours) or `AGENT_TRACING_SESSION_MAX_SPANS` (5,000 spans) closes at its next turn, and the following calls start a new inferred session. A turn is never split. The session detail links each part to the one before and after it (**Continued from** / **Continues in**). Declared sessions are never split: the client chose their id.
+
+### Reading a large session
+
+A session with more than 5,000 spans opens on a window of whole turns: around its first turn with an error, or else on its latest turns. The timeline strip still shows the whole session, drawn from its turns. Drag on the strip, or use **Earlier** and **Later**, to load another part; find searches the whole session and moves the window to a match. A range with more than 5,000 spans loads only its first 5,000, and the strip says so.
+
 ### Turns
 
 A turn starts when the model is called without tool results: a new user message or trigger. It continues through the calls that bring tool results back, and ends when the model answers without asking for tools.
@@ -312,10 +320,6 @@ Each link also records its rule, for example `tool_call_id`, `mcp_name_args` or 
 ## Getting better traces
 
 The gateway works without any help, but a few headers let it group calls exactly instead of inferring.
-
-::: warning
-Wiring of the headers below into live traffic is in progress (jyx.113). Until it lands, only `traceparent`, `tracestate` and MCP `_meta.traceparent` are read.
-:::
 
 ### Recommended headers
 
