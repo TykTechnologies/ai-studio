@@ -6,11 +6,12 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"fmt"
+	"strings"
 
-	"golang.org/x/crypto/bcrypt"
-	"golang.org/x/crypto/pbkdf2"
+	"github.com/TykTechnologies/midsommar/v2/pkg/pwhash"
 )
 
 // gcmNonceSize is the AES-GCM nonce size that cipher.NewGCMWithRandomNonce
@@ -90,16 +91,19 @@ func (c *CryptoService) Decrypt(ciphertext string) (string, error) {
 	return string(plaintext), nil
 }
 
-// HashSecret creates a bcrypt hash of a secret
+// HashSecret hashes a secret: "bcrypt:<bcrypt hash>" in standard builds, a
+// PBKDF2 hash ("$pbkdf2-sha256$...", pkg/pwhash) in FIPS 140-3 mode.
 func (c *CryptoService) HashSecret(secret string) string {
-	// Use bcrypt with default cost for password-like secrets
-	hash, err := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
+	hash, err := pwhash.Hash(secret)
 	if err != nil {
-		// Fallback to SHA256 if bcrypt fails
+		// Fallback to SHA256 if hashing fails (bcrypt refuses over 72 bytes)
 		h := sha256.Sum256([]byte(secret))
 		return fmt.Sprintf("sha256:%x", h)
 	}
-	return fmt.Sprintf("bcrypt:%s", string(hash))
+	if pwhash.IsPBKDF2(hash) {
+		return hash
+	}
+	return "bcrypt:" + hash
 }
 
 // VerifySecret verifies a secret against its hash
@@ -108,21 +112,19 @@ func (c *CryptoService) VerifySecret(secret, hash string) bool {
 		return false
 	}
 
-	// Check hash type
-	if len(hash) > 7 {
-		switch hash[:7] {
-		case "bcrypt:":
-			err := bcrypt.CompareHashAndPassword([]byte(hash[7:]), []byte(secret))
-			return err == nil
-		case "sha256:":
-			h := sha256.Sum256([]byte(secret))
-			expectedHash := fmt.Sprintf("sha256:%x", h)
-			return expectedHash == hash
-		}
+	// Check hash type. Anything else never matches: there is no plaintext
+	// comparison.
+	switch {
+	case pwhash.IsPBKDF2(hash):
+		return pwhash.Verify(secret, hash)
+	case strings.HasPrefix(hash, "bcrypt:"):
+		return pwhash.Verify(secret, strings.TrimPrefix(hash, "bcrypt:"))
+	case strings.HasPrefix(hash, "sha256:"):
+		h := sha256.Sum256([]byte(secret))
+		expectedHash := fmt.Sprintf("sha256:%x", h)
+		return subtle.ConstantTimeCompare([]byte(expectedHash), []byte(hash)) == 1
 	}
-
-	// Fallback: direct comparison (not recommended for production)
-	return hash == secret
+	return false
 }
 
 // GenerateSecureToken generates a cryptographically secure random token
@@ -151,15 +153,6 @@ func (c *CryptoService) GenerateKeyPair() (keyID, secret string, err error) {
 	secret = base64.URLEncoding.EncodeToString(secretBytes)
 
 	return keyID, secret, nil
-}
-
-// DeriveKey derives a key from a password using PBKDF2
-func (c *CryptoService) DeriveKey(password, salt string, iterations int) []byte {
-	if salt == "" {
-		salt = "microgateway-default-salt" // Should be random in production
-	}
-	
-	return pbkdf2.Key([]byte(password), []byte(salt), iterations, 32, sha256.New)
 }
 
 // ValidateEncryptionKey validates that an encryption key is suitable

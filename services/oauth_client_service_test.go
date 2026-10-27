@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"golang.org/x/crypto/bcrypt"
+	"github.com/TykTechnologies/midsommar/v2/pkg/pwhash"
 
 	apitesting "github.com/TykTechnologies/midsommar/v2/api/testing" // For SetupTestDB
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -40,8 +40,7 @@ func TestOAuthClientService(t *testing.T) {
 		require.NotEmpty(t, client.ClientSecret)
 		require.NotEqual(t, secret, client.ClientSecret, "Stored secret should be hashed")
 
-		err = bcrypt.CompareHashAndPassword([]byte(client.ClientSecret), []byte(secret))
-		require.NoError(t, err, "Hashed secret should match plain text secret")
+		require.True(t, pwhash.Verify(secret, client.ClientSecret), "Hashed secret should match plain text secret")
 
 		require.Equal(t, clientName, client.ClientName)
 		require.Equal(t, strings.Join(redirectURIs, ","), client.RedirectURIs)
@@ -82,7 +81,7 @@ func TestOAuthClientService(t *testing.T) {
 
 		// Test with incorrect secret
 		invalid, err := service.ValidateClientSecret(createdClient, "wrongsecret")
-		require.NoError(t, err) // bcrypt.CompareHashAndPassword returns nil for mismatch, not an error
+		require.NoError(t, err) // a mismatch is not an error
 		require.False(t, invalid)
 	})
 

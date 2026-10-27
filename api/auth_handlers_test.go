@@ -20,7 +20,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-	"golang.org/x/crypto/bcrypt"
+	"github.com/TykTechnologies/midsommar/v2/pkg/pwhash"
 )
 
 func setupTestDB(t *testing.T) *gorm.DB {
@@ -138,8 +138,7 @@ func (suite *AuthHandlersTestSuite) TestLoginHandler() {
 		// Verify that the password was updated
 		var updatedUser models.User
 		suite.db.First(&updatedUser, user.ID)
-		err = bcrypt.CompareHashAndPassword([]byte(updatedUser.Password), []byte("NewPassword123!"))
-		assert.NoError(suite.T(), err)
+		assert.True(suite.T(), pwhash.Verify("NewPassword123!", updatedUser.Password))
 		assert.Empty(suite.T(), updatedUser.ResetToken)
 	})
 

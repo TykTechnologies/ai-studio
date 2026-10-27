@@ -20,7 +20,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-	"golang.org/x/crypto/bcrypt"
+	"github.com/TykTechnologies/midsommar/v2/pkg/pwhash"
 )
 
 func newMockMailService() *notifications.MailService {
@@ -81,8 +81,8 @@ func TestAuthServiceSuite(t *testing.T) {
 
 func (suite *AuthServiceTestSuite) TestLogin() {
 	suite.Run("Successful login", func() {
-		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
-		user := &models.User{Email: "test@example.com", Password: string(hashedPassword), EmailVerified: true}
+		hashedPassword, _ := pwhash.Hash("password123")
+		user := &models.User{Email: "test@example.com", Password: hashedPassword, EmailVerified: true}
 		err := suite.db.Create(user).Error
 		assert.NoError(suite.T(), err)
 
@@ -379,8 +379,8 @@ func (suite *AuthServiceTestSuite) TestValidateResetToken() {
 func (suite *AuthServiceTestSuite) TestUpdatePassword() {
 	suite.Run("Successful password update", func() {
 		initialPassword := "InitialPassword123!"
-		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(initialPassword), bcrypt.DefaultCost)
-		user := &models.User{Email: "test@example.com", Password: string(hashedPassword)}
+		hashedPassword, _ := pwhash.Hash(initialPassword)
+		user := &models.User{Email: "test@example.com", Password: hashedPassword}
 		err := suite.db.Create(user).Error
 		assert.NoError(suite.T(), err)
 
@@ -392,18 +392,16 @@ func (suite *AuthServiceTestSuite) TestUpdatePassword() {
 		suite.db.First(&updatedUser, user.ID)
 
 		// Verify that the old password no longer works
-		err = bcrypt.CompareHashAndPassword([]byte(updatedUser.Password), []byte(initialPassword))
-		assert.Error(suite.T(), err, "Old password should not work")
+		assert.False(suite.T(), pwhash.Verify(initialPassword, updatedUser.Password), "Old password should not work")
 
 		// Verify that the new password works
-		err = bcrypt.CompareHashAndPassword([]byte(updatedUser.Password), []byte(newPassword))
-		assert.NoError(suite.T(), err, "New password should work")
+		assert.True(suite.T(), pwhash.Verify(newPassword, updatedUser.Password), "New password should work")
 	})
 
 	suite.Run("Password update failure - weak password", func() {
 		initialPassword := "InitialPassword123!"
-		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(initialPassword), bcrypt.DefaultCost)
-		user := &models.User{Email: "test@example.com", Password: string(hashedPassword)}
+		hashedPassword, _ := pwhash.Hash(initialPassword)
+		user := &models.User{Email: "test@example.com", Password: hashedPassword}
 		err := suite.db.Create(user).Error
 		assert.NoError(suite.T(), err)
 

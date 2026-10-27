@@ -10,6 +10,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/rbac"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/pwhash"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -555,6 +556,14 @@ func (s *Service) AuthenticateUser(email, password string) (*models.User, error)
 		return nil, LoginFailedError
 	}
 
+	// In FIPS mode, replace a bcrypt hash with a PBKDF2 one while the
+	// password is at hand (upgrade on login).
+	if pwhash.NeedsUpgrade(user.Password) {
+		if upgraded, ok := s.upgradePasswordHash(user.ID, user.Password, password); ok {
+			user.Password = upgraded
+		}
+	}
+
 	if !user.EmailVerified {
 		return nil, EmailNotVerifiedError
 	}
@@ -564,6 +573,27 @@ func (s *Service) AuthenticateUser(email, password string) (*models.User, error)
 	}
 
 	return user, nil
+}
+
+// upgradePasswordHash stores a new hash of password for the user, but only
+// while the stored hash is still oldHash: a password change or reset that
+// lands while the new hash is computed wins, so a login with the old password
+// cannot reinstate it. Failures are logged; the login goes ahead regardless.
+func (s *Service) upgradePasswordHash(userID uint, oldHash, password string) (string, bool) {
+	upgraded, err := models.HashPassword(password)
+	if err != nil {
+		logger.Warn(fmt.Sprintf("Failed to upgrade password hash for user %d: %v", userID, err))
+		return "", false
+	}
+	res := s.DB.Model(&models.User{}).Where("id = ? AND password = ?", userID, oldHash).Update("password", upgraded)
+	if res.Error != nil {
+		logger.Warn(fmt.Sprintf("Failed to store upgraded password hash for user %d: %v", userID, res.Error))
+		return "", false
+	}
+	if res.RowsAffected == 0 {
+		return "", false // changed meanwhile; keep the newer hash
+	}
+	return upgraded, true
 }
 
 func (s *Service) SearchUsersByEmailStub(stub string) (models.Users, error) {

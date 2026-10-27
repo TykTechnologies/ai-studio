@@ -76,7 +76,7 @@ func deriveKey(material, info string) (Key, error) {
 	if material == "" {
 		return Key{}, ErrEmptyKey
 	}
-	key, err := hkdf.Key(sha256.New, []byte(material), nil, info, sha256.Size)
+	key, err := hkdf.Key(sha256.New, models.HKDFKeyMaterial(material), nil, info, sha256.Size)
 	if err != nil {
 		return Key{}, err
 	}

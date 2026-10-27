@@ -12,6 +12,9 @@ import (
 // ciphertext, and the derived-key cache is keyed by N, so a cached key from
 // one N is never used for the other.
 func TestScryptCostIsPartOfTheKey(t *testing.T) {
+	// The scrypt N is a property of the v2 format: FIPS mode writes v3
+	// (PBKDF2), which does not use scrypt.
+	forceStandard(t)
 	require.EqualValues(t, scryptN, scryptCostN.Load(), "this package's tests run at the production N")
 
 	atReal, err := encrypt("key", "plain")

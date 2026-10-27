@@ -1,6 +1,7 @@
 package nativeapi
 
 import (
+	"crypto/fips140"
 	"crypto/hkdf"
 	"crypto/sha256"
 	"encoding/base64"
@@ -149,6 +150,9 @@ func storedDerivedKey(t *testing.T, cred string) string {
 // The vendor-credential key keeps its derivation (IDs minted before 2.3
 // carry its kid), now computed in models for the backfill.
 func TestCredentialKeyDerivationUnchanged(t *testing.T) {
+	if fips140.Enabled() {
+		t.Skip("pins the standard-build derivation; FIPS mode hashes a short credential first (models.HKDFKeyMaterial)")
+	}
 	raw, err := hkdf.Key(sha256.New, []byte("sk-cred"), nil, "tyk-native-resource/v1", sha256.Size)
 	if err != nil {
 		t.Fatal(err)

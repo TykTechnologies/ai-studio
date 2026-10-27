@@ -3,12 +3,16 @@ package secrets
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/fips140"
+	"crypto/pbkdf2"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -26,6 +30,27 @@ const (
 	// bare-SHA256-derived key. The ':' character cannot appear in legacy
 	// base64url output, so the prefix is an unambiguous discriminator.
 	encVersionPrefix = "v2:"
+
+	// encV3Prefix marks values written in FIPS 140-3 mode: PBKDF2-HMAC-SHA256
+	// KDF + AES-GCM, "v3:<iterations>:" + base64url(salt || nonce || ct).
+	// scrypt (v2) is not a FIPS-approved KDF. Every build reads v3, v2 and
+	// legacy; only FIPS-mode processes write v3.
+	encV3Prefix = "v3:"
+
+	// pbkdf2Iterations is the v3 work factor. The input is the operator's
+	// TYK_AI_SECRET_KEY and each value has its own salt, so every uncached
+	// decryption pays one derivation: 210,000 iterations of HMAC-SHA256 cost
+	// about the same as v2's scrypt (~100 ms), where OWASP's 600,000 for
+	// passwords would triple start-up decryption time. The count is stored
+	// in each value, so it can be raised later without breaking reads.
+	pbkdf2Iterations = 210_000
+
+	// pbkdf2TestIterations is used inside test binaries, which encrypt many
+	// values; the count is stored, so such values decrypt anywhere.
+	pbkdf2TestIterations = 1_000
+
+	// pbkdf2MaxIterations bounds the count read from a stored value.
+	pbkdf2MaxIterations = 10_000_000
 
 	// saltLength is the per-value random scrypt salt size in bytes.
 	saltLength = 16
@@ -115,6 +140,51 @@ func deriveKeyScrypt(input string, salt []byte) ([]byte, error) {
 	return v.([]byte), nil
 }
 
+// fipsEnabled is crypto/fips140.Enabled; tests replace it to cover the FIPS
+// writer in standard runs.
+var fipsEnabled = fips140.Enabled
+
+// fipsEnforced is crypto/fips140.Enforced (GODEBUG=fips140=only); tests
+// replace it.
+var fipsEnforced = fips140.Enforced
+
+// errLegacyUnderEnforcement is returned for a legacy AES-CFB value read
+// outside the re-encryption sweep in a fips140=only process.
+var errLegacyUnderEnforcement = errors.New("legacy AES-CFB value is not readable under fips140=only; run the re-encryption sweep (it runs at start-up) before enabling fips140=only")
+
+// v3Iterations is the PBKDF2 count new v3 values get.
+func v3Iterations() int {
+	if testing.Testing() {
+		return pbkdf2TestIterations
+	}
+	return pbkdf2Iterations
+}
+
+// deriveKeyPBKDF2 derives the v3 AES-256 key from the configured secret, a
+// per-value salt and the stored iteration count, sharing the scrypt path's
+// cache and single-flight group.
+func deriveKeyPBKDF2(input string, salt []byte, iter int) ([]byte, error) {
+	cacheKey := "pbkdf2\x00" + strconv.Itoa(iter) + "\x00" + input + "\x00" + string(salt)
+	if k, ok := derivedKeyCache.get(cacheKey); ok {
+		return k, nil
+	}
+	v, err, _ := deriveGroup.Do(cacheKey, func() (interface{}, error) {
+		if k, ok := derivedKeyCache.get(cacheKey); ok {
+			return k, nil
+		}
+		key, err := pbkdf2.Key(sha256.New, input, salt, iter, 32)
+		if err != nil {
+			return nil, fmt.Errorf("pbkdf2 key derivation failed: %w", err)
+		}
+		derivedKeyCache.put(cacheKey, key)
+		return key, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v.([]byte), nil
+}
+
 type Secret struct {
 	gorm.Model
 	ID      uint   `gorm:"primaryKey" json:"id" access:"secrets"`
@@ -157,6 +227,18 @@ func (s *Secret) HasValue() bool {
 		payload, err := base64.URLEncoding.DecodeString(strings.TrimPrefix(s.Value, encVersionPrefix))
 		if err != nil {
 			return true // not something we wrote; treat the stored text as the value
+		}
+		return len(payload) > saltLength+gcmNonceSize+gcmTagSize
+	}
+	// v3 has the same payload layout after its "v3:<iterations>:" header.
+	if strings.HasPrefix(s.Value, encV3Prefix) {
+		_, encoded, ok := splitV3(s.Value)
+		if !ok {
+			return true // not something we wrote; treat the stored text as the value
+		}
+		payload, err := base64.URLEncoding.DecodeString(encoded)
+		if err != nil {
+			return true
 		}
 		return len(payload) > saltLength+gcmNonceSize+gcmTagSize
 	}
@@ -204,17 +286,27 @@ func encryptionKey() string {
 }
 
 // encrypt encrypts a value with the current scheme: a 32-byte key derived
-// from the configured secret via scrypt with a random per-value salt, then
-// AES-256-GCM (authenticated encryption). Output layout:
+// from the configured secret with a random per-value salt, then AES-256-GCM
+// (authenticated encryption). Standard builds derive with scrypt and write
+// v2; FIPS-mode processes derive with PBKDF2-HMAC-SHA256 and write v3:
 //
 //	"v2:" + base64url(salt[16] || nonce[12] || gcmCiphertext)
+//	"v3:<iterations>:" + base64url(salt[16] || nonce[12] || gcmCiphertext)
 func encrypt(keyString string, stringToEncrypt string) (encryptedString string, err error) {
 	salt := make([]byte, saltLength)
 	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
 		return "", fmt.Errorf("failed to generate salt: %w", err)
 	}
 
-	key, err := deriveKeyScrypt(keyString, salt)
+	prefix := encVersionPrefix
+	var key []byte
+	if fipsEnabled() {
+		iter := v3Iterations()
+		prefix = encV3Prefix + strconv.Itoa(iter) + ":"
+		key, err = deriveKeyPBKDF2(keyString, salt, iter)
+	} else {
+		key, err = deriveKeyScrypt(keyString, salt)
+	}
 	if err != nil {
 		return "", err
 	}
@@ -238,22 +330,60 @@ func encrypt(keyString string, stringToEncrypt string) (encryptedString string, 
 	payload = append(payload, salt...)
 	payload = append(payload, sealed...)
 
-	return encVersionPrefix + base64.URLEncoding.EncodeToString(payload), nil
+	return prefix + base64.URLEncoding.EncodeToString(payload), nil
 }
 
-// decrypt decrypts a stored value. Values with the "v2:" prefix use
-// scrypt+AES-GCM; anything else is treated as a legacy AES-CFB value.
-// Malformed input is reported as an error rather than a panic, since stored
-// values can be tampered with or truncated outside our control.
+// decrypt decrypts a stored value. Values with the "v3:" prefix use
+// PBKDF2+AES-GCM, "v2:" scrypt+AES-GCM; anything else is treated as a
+// legacy AES-CFB value. Every build reads all three. Malformed input is
+// reported as an error rather than a panic, since stored values can be
+// tampered with or truncated outside our control.
 func decrypt(keyString string, stringToDecrypt string) (string, error) {
-	if strings.HasPrefix(stringToDecrypt, encVersionPrefix) {
-		return decryptGCM(keyString, strings.TrimPrefix(stringToDecrypt, encVersionPrefix))
-	}
-	return decryptCFBLegacy(keyString, stringToDecrypt)
+	return decryptValue(keyString, stringToDecrypt, false)
 }
 
-// decryptGCM decrypts a value produced by encrypt (current scheme).
-func decryptGCM(keyString string, encoded string) (string, error) {
+// decryptForMigration is decrypt for the re-encryption sweep: the one place
+// that reads legacy AES-CFB values outside FIPS 140-only enforcement, so it
+// can move them to an approved format.
+func decryptForMigration(keyString string, stringToDecrypt string) (string, error) {
+	return decryptValue(keyString, stringToDecrypt, true)
+}
+
+func decryptValue(keyString string, stringToDecrypt string, migration bool) (string, error) {
+	if strings.HasPrefix(stringToDecrypt, encV3Prefix) {
+		iter, encoded, ok := splitV3(stringToDecrypt)
+		if !ok {
+			return "", fmt.Errorf("malformed v3 value header")
+		}
+		return decryptGCM(keyString, encoded, func(salt []byte) ([]byte, error) {
+			return deriveKeyPBKDF2(keyString, salt, iter)
+		})
+	}
+	if strings.HasPrefix(stringToDecrypt, encVersionPrefix) {
+		return decryptGCM(keyString, strings.TrimPrefix(stringToDecrypt, encVersionPrefix), func(salt []byte) ([]byte, error) {
+			return deriveKeyScrypt(keyString, salt)
+		})
+	}
+	return decryptCFBLegacy(keyString, stringToDecrypt, migration)
+}
+
+// splitV3 splits "v3:<iterations>:<payload>" into the iteration count and
+// the base64 payload, refusing a count out of range.
+func splitV3(value string) (iter int, encoded string, ok bool) {
+	countStr, encoded, found := strings.Cut(strings.TrimPrefix(value, encV3Prefix), ":")
+	if !found {
+		return 0, "", false
+	}
+	iter, err := strconv.Atoi(countStr)
+	if err != nil || iter < 1 || iter > pbkdf2MaxIterations {
+		return 0, "", false
+	}
+	return iter, encoded, true
+}
+
+// decryptGCM decrypts the base64 salt || nonce || ciphertext payload of a v2
+// or v3 value, deriving the key from the salt with derive.
+func decryptGCM(keyString string, encoded string, derive func(salt []byte) ([]byte, error)) (string, error) {
 	payload, err := base64.URLEncoding.DecodeString(encoded)
 	if err != nil {
 		return "", fmt.Errorf("failed to base64-decode ciphertext: %w", err)
@@ -264,7 +394,7 @@ func decryptGCM(keyString string, encoded string) (string, error) {
 	}
 	salt := payload[:saltLength]
 
-	key, err := deriveKeyScrypt(keyString, salt)
+	key, err := derive(salt)
 	if err != nil {
 		return "", err
 	}
@@ -295,7 +425,13 @@ func decryptGCM(keyString string, encoded string) (string, error) {
 
 // decryptCFBLegacy decrypts values written before the GCM scheme
 // (SHA256-derived key + AES-CFB). Retained for migration of stored values.
-func decryptCFBLegacy(keyString string, stringToDecrypt string) (string, error) {
+// AES-CFB is not approved and panics under GODEBUG=fips140=only, so in that
+// mode only the sweep (migration) reads it, outside enforcement; any other
+// read returns errLegacyUnderEnforcement.
+func decryptCFBLegacy(keyString string, stringToDecrypt string, migration bool) (string, error) {
+	if !migration && fipsEnforced() {
+		return "", errLegacyUnderEnforcement
+	}
 	key := deriveKey(keyString)
 	ciphertext, err := base64.URLEncoding.DecodeString(stringToDecrypt)
 	if err != nil {
@@ -315,10 +451,18 @@ func decryptCFBLegacy(keyString string, stringToDecrypt string) (string, error) 
 	iv := ciphertext[:aes.BlockSize]
 	ciphertext = ciphertext[aes.BlockSize:]
 
-	stream := cipher.NewCFBDecrypter(block, iv) //nolint:staticcheck // legacy format support only; new values use AES-GCM
+	read := func() {
+		stream := cipher.NewCFBDecrypter(block, iv) //nolint:staticcheck // legacy format support only; new values use AES-GCM
 
-	// XORKeyStream can work in-place if the two arguments are the same.
-	stream.XORKeyStream(ciphertext, ciphertext)
+		// XORKeyStream can work in-place if the two arguments are the same.
+		stream.XORKeyStream(ciphertext, ciphertext)
+	}
+	if migration {
+		// The sweep's read, which moves the value to an approved format.
+		fips140.WithoutEnforcement(read)
+	} else {
+		read()
+	}
 
 	return string(ciphertext), nil
 }
@@ -327,42 +471,38 @@ func decryptCFBLegacy(keyString string, stringToDecrypt string) (string, error) 
 // during migration. Variable so tests can exercise multi-batch runs cheaply.
 var reencryptBatchSize = 100
 
-// ReencryptLegacySecrets rewrites stored Secret rows that still use the
-// legacy AES-CFB format to the current scrypt+AES-GCM scheme. Rows that are
-// empty, already migrated, or fail to decrypt (e.g. written under a
-// different key) are left untouched. Rows are processed in batches to bound
-// memory usage, with each batch's updates applied in a single transaction.
-// Returns the number of migrated rows.
+// ReencryptLegacySecrets rewrites stored Secret rows to the format this
+// process writes. A standard build moves legacy AES-CFB rows to v2
+// (scrypt+AES-GCM) and leaves v2 and v3 rows alone; a FIPS-mode process moves
+// legacy and v2 rows to v3 (PBKDF2+AES-GCM). Rows that are empty, already
+// current, or fail to decrypt (e.g. written under a different key) are left
+// untouched. Rows are processed in batches to bound memory usage, with each
+// batch's updates applied in a single transaction. Returns the number of
+// migrated rows.
 func ReencryptLegacySecrets(db *gorm.DB) (int, error) {
 	key := encryptionKey()
 	if key == "" {
 		return 0, nil // nothing to do without a key
 	}
 
+	query := db.Where("value <> '' AND value NOT LIKE ? AND value NOT LIKE ?", encVersionPrefix+"%", encV3Prefix+"%")
+	if fipsEnabled() {
+		query = db.Where("value <> '' AND value NOT LIKE ?", encV3Prefix+"%")
+	}
+
 	migrated := 0
 	var batch []Secret
-	err := db.Where("value <> '' AND value NOT LIKE ?", encVersionPrefix+"%").
+	err := query.
 		FindInBatches(&batch, reencryptBatchSize, func(_ *gorm.DB, _ int) error {
 			return db.Transaction(func(tx *gorm.DB) error {
 				for i := range batch {
-					s := &batch[i]
-
-					plaintext, err := decryptCFBLegacy(key, s.Value)
+					ok, err := reencryptRow(tx, key, &batch[i])
 					if err != nil {
-						log.Warnf("skipping secret %q during re-encryption: %v", s.VarName, err)
-						continue
+						return err
 					}
-
-					reencrypted, err := encrypt(key, plaintext)
-					if err != nil {
-						log.Warnf("failed to re-encrypt secret %q: %v", s.VarName, err)
-						continue
+					if ok {
+						migrated++
 					}
-
-					if err := tx.Model(&Secret{}).Where("id = ?", s.ID).Update("value", reencrypted).Error; err != nil {
-						return fmt.Errorf("failed to save re-encrypted secret %q: %w", s.VarName, err)
-					}
-					migrated++
 				}
 				return nil
 			})
@@ -372,9 +512,33 @@ func ReencryptLegacySecrets(db *gorm.DB) (int, error) {
 	}
 
 	if migrated > 0 {
-		log.Infof("re-encrypted %d legacy secret(s) to authenticated encryption format", migrated)
+		log.Infof("re-encrypted %d secret(s) to the current encryption format", migrated)
 	}
 	return migrated, nil
+}
+
+// reencryptRow re-encrypts one row read by the sweep. It writes only over
+// the value that was read, so a secret updated meanwhile (through the API, or
+// by another replica during a rolling start) keeps its new value; ok is false
+// then, and for a row that cannot be decrypted.
+func reencryptRow(tx *gorm.DB, key string, s *Secret) (ok bool, err error) {
+	plaintext, err := decryptForMigration(key, s.Value)
+	if err != nil {
+		log.Warnf("skipping secret %q during re-encryption: %v", s.VarName, err)
+		return false, nil
+	}
+
+	reencrypted, err := encrypt(key, plaintext)
+	if err != nil {
+		log.Warnf("failed to re-encrypt secret %q: %v", s.VarName, err)
+		return false, nil
+	}
+
+	res := tx.Model(&Secret{}).Where("id = ? AND value = ?", s.ID, s.Value).Update("value", reencrypted)
+	if res.Error != nil {
+		return false, fmt.Errorf("failed to save re-encrypted secret %q: %w", s.VarName, res.Error)
+	}
+	return res.RowsAffected == 1, nil
 }
 
 // plaintextFallbackWarnOnce ensures the loud missing-key warning is emitted
