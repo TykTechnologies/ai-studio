@@ -4,7 +4,7 @@ import { Box, Button, Stack, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { useSessionDetail } from "./SessionDetailContext";
 import { KIND_LABELS, durationMs, isProblem, sessionBounds, spanTimes } from "./spanModel";
-import { buildTimelineRows, findGaps, panView, turnRules, viewForSpan, zoomView } from "./timelineModel";
+import { buildTimelineRows, currentTurn, findGaps, openingView, panView, turnRules, turnWindows, viewForSpan, viewForTurn, visibleTimelineRows, zoomView } from "./timelineModel";
 import { formatDuration, formatTokens } from "./sessionFilters";
 
 // The Timeline (waterfall) view (spec §6.2 View 2): agent lanes, spans as
@@ -19,6 +19,8 @@ const LABEL_WIDTH = 180;
 const ROW = 22;
 const LANE = 26;
 const MIN_DRAG_PX = 4;
+// Turn rules closer than this would cover the track, so none are drawn.
+const MIN_RULE_PX = 12;
 // Browsers cap element widths; past this the scrollbar just gets coarser.
 const MAX_SCROLL_WIDTH = 10_000_000;
 
@@ -57,7 +59,6 @@ const TimelineView = ({ height = 520 }) => {
   const list = useRef(null);
   const scroller = useRef(null);
 
-  useEffect(() => setView(bounds), [bounds]);
   useEffect(() => {
     const el = box.current;
     if (!el || typeof ResizeObserver === "undefined") return undefined;
@@ -70,13 +71,20 @@ const TimelineView = ({ height = 520 }) => {
   }, []);
 
   const rows = useMemo(() => buildTimelineRows(spans, detail.agents), [spans, detail.agents]);
+  // A large session opens on its first turn; the turn buttons step through
+  // the turns and Fit shows all of it.
+  const windows = useMemo(() => turnWindows(spans), [spans]);
+  const opening = useMemo(() => openingView(spans, bounds, windows), [spans, bounds, windows]);
+  useEffect(() => setView(opening), [opening]);
   const gaps = useMemo(() => findGaps(spans), [spans]);
   const rules = useMemo(() => turnRules(spans, detail.traces), [spans, detail.traces]);
   const fit = view.from <= bounds.from && view.to >= bounds.to;
+  const turnAt = currentTurn(windows, view);
+  const shown = useMemo(() => (fit ? rows : visibleTimelineRows(rows, view)), [fit, rows, view]);
 
   useEffect(() => {
     list.current?.resetAfterIndex(0);
-  }, [rows]);
+  }, [shown]);
 
   const span = view.to - view.from || 1;
   const total = bounds.to - bounds.from || 1;
@@ -198,7 +206,7 @@ const TimelineView = ({ height = 520 }) => {
   };
 
   const Row = ({ index: i, style }) => {
-    const r = rows[i];
+    const r = shown[i];
     if (r.type === "lane") {
       return (
         <Box style={style} data-testid="timeline-lane" sx={{ display: "flex", alignItems: "center", pl: 1 + r.lane.depth * 2, borderTop: 1, borderColor: "divider" }}>
@@ -253,7 +261,9 @@ const TimelineView = ({ height = 520 }) => {
     const n = 6;
     return Array.from({ length: n + 1 }, (_, i) => view.from + (span * i) / n);
   }, [view.from, span]);
-  const bodyHeight = Math.min(height, rows.reduce((h, r) => h + (r.type === "lane" ? LANE : ROW), 0) || LANE);
+  const bodyHeight = Math.min(height, shown.reduce((h, r) => h + (r.type === "lane" ? LANE : ROW), 0) || LANE);
+  const rulesInView = rules.filter((r) => r.at >= view.from && r.at <= view.to);
+  const shownRules = rulesInView.length * MIN_RULE_PX <= trackWidth ? rulesInView : [];
   const kindsShown = [...new Set(spans.map((s) => s.kind))].filter((k) => kindColour[k]);
 
   return (
@@ -268,8 +278,32 @@ const TimelineView = ({ height = 520 }) => {
         <Button size="small" onClick={() => setView((v) => zoomView(v, 2, (v.from + v.to) / 2, bounds))} aria-label="Zoom out" disabled={fit}>
           −
         </Button>
+        {windows.length > 1 && (
+          <>
+            <Button
+              size="small"
+              aria-label="Previous turn"
+              disabled={turnAt === 0}
+              onClick={() => setView(viewForTurn(windows[Math.max(0, turnAt - 1)], bounds))}
+            >
+              ‹ Turn
+            </Button>
+            <Typography variant="caption" data-testid="turn-position" sx={{ whiteSpace: "nowrap" }}>
+              {fit ? `${windows.length} turns` : `Turn ${turnAt + 1} of ${windows.length}`}
+            </Typography>
+            <Button
+              size="small"
+              aria-label="Next turn"
+              disabled={!fit && turnAt >= windows.length - 1}
+              onClick={() => setView(viewForTurn(windows[fit ? 0 : Math.min(windows.length - 1, turnAt + 1)], bounds))}
+            >
+              Turn ›
+            </Button>
+          </>
+        )}
         <Typography variant="caption" color="text.secondary">
-          Showing {formatDuration(Math.round(span))} of {formatDuration(Math.round(total))} · Ctrl/⌘-scroll to zoom · Shift-scroll or the
+          Showing {formatDuration(Math.round(span))} of {formatDuration(Math.round(total))}
+          {!fit && `, from ${formatDuration(Math.round(view.from - bounds.from))} in`} · Ctrl/⌘-scroll to zoom · Shift-scroll or the
           scrollbar to pan · drag to select a range · double-click a span to zoom to it
         </Typography>
       </Stack>
@@ -294,7 +328,7 @@ const TimelineView = ({ height = 520 }) => {
             <Typography variant="caption">Client time (waiting on the agent)</Typography>
           </Stack>
         )}
-        {rules.length > 0 && (
+        {shownRules.length > 0 && (
           <Stack direction="row" spacing={0.5} alignItems="center">
             <Box sx={{ width: 0, height: 12, borderLeft: 1, borderStyle: "dashed", borderColor: "text.secondary" }} />
             <Typography variant="caption">New turn</Typography>
@@ -319,7 +353,7 @@ const TimelineView = ({ height = 520 }) => {
           <Box sx={{ position: "relative", width: trackWidth }}>
             {ticksAxis.map((t) => (
               <Typography key={t} variant="caption" color="text.secondary" sx={{ position: "absolute", left: x(t), transform: "translateX(-50%)", whiteSpace: "nowrap" }}>
-                {formatDuration(Math.round(t - bounds.from))}
+                {fit ? formatDuration(Math.round(t - bounds.from)) : `+${formatDuration(Math.round(t - view.from))}`}
               </Typography>
             ))}
           </Box>
@@ -328,14 +362,19 @@ const TimelineView = ({ height = 520 }) => {
           ref={list}
           height={bodyHeight}
           width="100%"
-          itemCount={rows.length}
-          itemSize={(i) => (rows[i].type === "lane" ? LANE : ROW)}
+          itemCount={shown.length}
+          itemSize={(i) => (shown[i].type === "lane" ? LANE : ROW)}
           estimatedItemSize={ROW}
         >
           {Row}
         </VariableSizeList>
+        {!shown.length && (
+          <Typography variant="caption" color="text.secondary" sx={{ position: "absolute", top: 24, left: LABEL_WIDTH + 8 }}>
+            No spans in this window. Pan, zoom out or press Fit.
+          </Typography>
+        )}
         <Box aria-hidden sx={{ position: "absolute", top: 20, bottom: 0, left: LABEL_WIDTH, width: trackWidth, pointerEvents: "none", overflow: "hidden" }}>
-          {rules.map((r) => (
+          {shownRules.map((r) => (
             <Box key={r.traceId} data-testid="turn-rule" title={`Turn ${(r.turn ?? 0) + 1}`} sx={{ position: "absolute", top: 0, bottom: 0, left: x(r.at), borderLeft: 1, borderStyle: "dashed", borderColor: "text.secondary" }} />
           ))}
           {gaps.map((g) => (

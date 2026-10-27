@@ -1,4 +1,4 @@
-import { ms, spanTimes } from "./spanModel";
+import { inRange, ms, spanTimes } from "./spanModel";
 
 // The Timeline (waterfall) view model (spec §6.2 View 2): one lane per
 // agent (root first, sub-agents indented under their parent), spans packed
@@ -166,4 +166,67 @@ export const panView = (view, deltaMs, bounds) => {
   const width = view.to - view.from;
   const from = Math.min(Math.max(bounds.from, view.from + deltaMs), bounds.to - width);
   return { from, to: from + width };
+};
+
+// A session with more bar rows than this opens zoomed to its first turn.
+export const ZOOM_OPEN_ROWS = 200;
+
+/** Each turn's time window (its spans' extent), in start order. */
+export const turnWindows = (spans) => {
+  const by = new Map();
+  for (const s of spans) {
+    const { start, end } = spanTimes(s);
+    const w = by.get(s.trace_id);
+    if (!w) by.set(s.trace_id, { traceId: s.trace_id, from: start, to: end });
+    else {
+      w.from = Math.min(w.from, start);
+      w.to = Math.max(w.to, end);
+    }
+  }
+  return [...by.values()].sort((a, b) => a.from - b.from);
+};
+
+/** A turn's window with a margin either side, inside bounds. */
+export const viewForTurn = (w, bounds) => {
+  const pad = Math.max((w.to - w.from) * 0.05, 50);
+  return { from: Math.max(bounds.from, w.from - pad), to: Math.min(bounds.to, Math.max(w.to, w.from + 1) + pad) };
+};
+
+/** The index of the turn the view is on: the last one starting at or before its middle. */
+export const currentTurn = (windows, view) => {
+  const mid = (view.from + view.to) / 2;
+  let i = 0;
+  windows.forEach((w, j) => {
+    if (w.from <= mid) i = j;
+  });
+  return i;
+};
+
+/** The view a session opens on: all of it, or for a large one its first turn. */
+export const openingView = (orderedSpans, bounds, windows) => {
+  const bars = orderedSpans.filter((s) => s.kind !== "gateway_event");
+  if (bars.length <= ZOOM_OPEN_ROWS || !windows.length) return bounds;
+  return viewForTurn(windows[0], bounds);
+};
+
+/**
+ * The rows with a span in view, and the lane headers that still have rows:
+ * zoomed in, the list holds what the window shows instead of every span.
+ */
+export const visibleTimelineRows = (rows, view) => {
+  const out = [];
+  let lane = null;
+  for (const r of rows) {
+    if (r.type === "lane") {
+      lane = r;
+      continue;
+    }
+    if (!r.spans.some((s) => inRange(s, view))) continue;
+    if (lane) {
+      out.push(lane);
+      lane = null;
+    }
+    out.push(r);
+  }
+  return out;
 };
