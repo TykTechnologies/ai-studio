@@ -146,16 +146,29 @@ jobs:
           go mod download
           (cd microgateway && go mod download)
 
+      # make package-ent builds the admin UI (make build-frontend runs
+      # npm run build) but does not install its dependencies; install them
+      # as release.yml's Build UI step does.
+      - name: Install admin UI dependencies
+        working-directory: ui/admin-frontend
+        run: |
+          npm ci --ignore-scripts
+          npm rebuild
+
+      # CI=false: GitHub sets CI=true, under which the UI build fails on lint
+      # warnings (release.yml builds the UI with CI=false too).
       - name: Build packages and run smoke tests
         if: inputs.include_package_smoke == true
         env:
           TYK_AI_LICENSE: ${{ secrets.TYK_AI_LICENSE }}
+          CI: "false"
         run: make test-package-smoke-ent
 
       - name: Build packages and run the FIPS smoke test
         if: inputs.include_package_smoke != true
         env:
           TYK_AI_LICENSE: ${{ secrets.TYK_AI_LICENSE }}
+          CI: "false"
         run: make package-ent test-fips-smoke
 
       # goreleaser's post hooks already ran scripts/fips-verify.sh on every
