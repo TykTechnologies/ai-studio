@@ -368,7 +368,8 @@ const TimelineView = ({ height = 520 }) => {
         <Box
           ref={scroller}
           onScroll={onScroll}
-          aria-label="Pan the timeline"
+          // A pointer affordance only; it duplicates Shift-scroll panning.
+          aria-hidden="true"
           data-testid="timeline-scroll"
           sx={{ width: trackWidth, overflowX: fit ? "hidden" : "scroll", overflowY: "hidden" }}
         >
