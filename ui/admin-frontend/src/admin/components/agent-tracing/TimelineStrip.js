@@ -3,14 +3,42 @@ import { Box, Button, Collapse, Stack, Typography } from "@mui/material";
 import { useSessionDetail } from "./SessionDetailContext";
 import { isProblem, sessionBounds, spanTimes } from "./spanModel";
 import { formatDuration } from "./sessionFilters";
+import useWindowDrag from "./useWindowDrag";
 
 // The always-visible timeline strip (spec §6.2): the whole session's
 // activity at a glance, a drag sets the shared time range that filters
-// every view, and the selected span is marked. Activity is drawn in fixed
-// buckets, so the DOM stays the same size however many spans there are.
+// every view, and the selected span is marked. Once set, the range has
+// handles to move its start and end (by pointer or arrow keys), and its
+// body drags to move the whole window. Activity is drawn in fixed buckets,
+// so the DOM stays the same size however many spans there are.
 
 export const BUCKETS = 120;
 const MIN_DRAG_PX = 4;
+
+/**
+ * The range a drag produces. mode is "new" (from the press point), "start"
+ * or "end" (one edge), or "move" (the whole range by the pointer's travel).
+ * The result stays inside bounds and at least minMs wide.
+ */
+export const dragRange = (mode, { range, t0, t }, bounds, minMs) => {
+  const clamp = (x) => Math.max(bounds.from, Math.min(bounds.to, x));
+  t = clamp(t);
+  switch (mode) {
+    case "new":
+      return { from: Math.min(t0, t), to: Math.max(t0, t) };
+    case "start":
+      return { from: Math.min(t, range.to - minMs), to: range.to };
+    case "end":
+      return { from: range.from, to: Math.max(t, range.from + minMs) };
+    case "move": {
+      const width = range.to - range.from;
+      const from = Math.max(bounds.from, Math.min(bounds.to - width, range.from + (t - t0)));
+      return { from, to: from + width };
+    }
+    default:
+      return range;
+  }
+};
 
 export const bucketize = (spans, bounds, n = BUCKETS) => {
   const span = bounds.to - bounds.from;
@@ -30,8 +58,9 @@ export const bucketize = (spans, bounds, n = BUCKETS) => {
 const TimelineStrip = () => {
   const { spans, detail, range, selectedId, index, dispatch } = useSessionDetail();
   const [open, setOpen] = useState(true);
-  const [drag, setDrag] = useState(null); // { x0, x1 } in px
+  const [draft, setDraft] = useState(null); // the range while a drag is under way
   const ref = useRef(null);
+  const startDrag = useWindowDrag();
   const bounds = useMemo(() => sessionBounds(detail.session, spans), [detail.session, spans]);
   const buckets = useMemo(() => bucketize(spans, bounds), [spans, bounds]);
   const max = Math.max(1, ...buckets.map((b) => b.count));
@@ -44,29 +73,71 @@ const TimelineStrip = () => {
     return bounds.from + ((clientX - rect.left) / rect.width) * total;
   };
 
-  const onMouseDown = (e) => {
+  const minMs = Math.max(1, total / 1000);
+  // A drag edits a draft; the shared range (which re-filters every view)
+  // changes once, on release.
+  const begin = (mode) => (e) => {
     if (e.button !== 0) return;
-    setDrag({ x0: e.clientX, x1: e.clientX });
+    e.preventDefault();
+    e.stopPropagation();
+    const x0 = e.clientX;
+    const t0 = timeAt(x0);
+    if (t0 == null) return;
+    let last = mode === "new" ? null : range;
+    startDrag(
+      (m) => {
+        const t = timeAt(m.clientX);
+        if (t == null || (mode === "new" && Math.abs(m.clientX - x0) < MIN_DRAG_PX)) return;
+        last = dragRange(mode, { range, t0, t }, bounds, minMs);
+        setDraft(last);
+      },
+      () => {
+        setDraft(null);
+        if (last && last !== range) dispatch({ type: "range", range: last });
+      },
+    );
   };
-  const onMouseMove = (e) => {
-    if (drag) setDrag({ ...drag, x1: e.clientX });
+  const nudge = (edge) => (e) => {
+    const step = (e.shiftKey ? 0.1 : 0.01) * total;
+    const delta = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+    if (!delta || !range) return;
+    e.preventDefault();
+    const t = (edge === "start" ? range.from : range.to) + delta;
+    dispatch({ type: "range", range: dragRange(edge, { range, t0: 0, t }, bounds, minMs) });
   };
-  const onMouseUp = (e) => {
-    if (!drag) return;
-    const d = { ...drag, x1: e.clientX };
-    setDrag(null);
-    if (Math.abs(d.x1 - d.x0) < MIN_DRAG_PX) return;
-    const a = timeAt(Math.min(d.x0, d.x1));
-    const b = timeAt(Math.max(d.x0, d.x1));
-    if (a != null && b != null) dispatch({ type: "range", range: { from: a, to: b } });
-  };
+  const shown = draft || range;
 
   const selected = selectedId ? index.byId.get(selectedId)?.span : null;
-  const rect = ref.current?.getBoundingClientRect();
-  const dragRect =
-    drag && rect?.width
-      ? { left: Math.min(drag.x0, drag.x1) - rect.left, width: Math.abs(drag.x1 - drag.x0) }
-      : null;
+  const handle = (edge) => {
+    const at = edge === "start" ? shown.from : shown.to;
+    return (
+      <Box
+        role="slider"
+        tabIndex={0}
+        aria-label={edge === "start" ? "Range start" : "Range end"}
+        aria-valuemin={0}
+        aria-valuemax={Math.round(total)}
+        aria-valuenow={Math.round(at - bounds.from)}
+        aria-valuetext={formatDuration(Math.round(at - bounds.from))}
+        data-testid={`range-handle-${edge}`}
+        onMouseDown={begin(edge)}
+        onKeyDown={nudge(edge)}
+        sx={{
+          position: "absolute",
+          top: 0,
+          bottom: 0,
+          [edge === "start" ? "left" : "right"]: -7,
+          width: 14,
+          cursor: "ew-resize",
+          display: "flex",
+          justifyContent: "center",
+          zIndex: 1,
+          "&::after": { content: '""', width: 4, my: 1, borderRadius: 2, bgcolor: "primary.dark" },
+          "&:focus-visible": { outline: 2, outlineStyle: "solid", outlineColor: "primary.main" },
+        }}
+      />
+    );
+  };
 
   return (
     <Box sx={{ mb: 2 }} data-testid="timeline-strip">
@@ -74,10 +145,10 @@ const TimelineStrip = () => {
         <Typography variant="caption" color="text.secondary">
           Timeline · {formatDuration(total)}
         </Typography>
-        {range && (
+        {shown && (
           <>
             <Typography variant="caption" data-testid="range-label">
-              Showing {formatDuration(Math.round(range.to - range.from))} from {formatDuration(Math.round(range.from - bounds.from))}
+              Showing {formatDuration(Math.round(shown.to - shown.from))} from {formatDuration(Math.round(shown.from - bounds.from))}
             </Typography>
             <Button size="small" onClick={() => dispatch({ type: "range", range: null })}>
               Clear range
@@ -95,10 +166,7 @@ const TimelineStrip = () => {
           role="img"
           aria-label={`Session activity over ${formatDuration(total)}; drag to filter the views to a time range`}
           data-testid="timeline-strip-track"
-          onMouseDown={onMouseDown}
-          onMouseMove={onMouseMove}
-          onMouseUp={onMouseUp}
-          onMouseLeave={() => setDrag(null)}
+          onMouseDown={begin("new")}
           sx={{
             position: "relative",
             height: 40,
@@ -106,7 +174,7 @@ const TimelineStrip = () => {
             borderRadius: 1,
             cursor: "crosshair",
             userSelect: "none",
-            overflow: "hidden",
+            overflow: "visible",
           }}
         >
           {buckets.map((b, i) =>
@@ -125,23 +193,26 @@ const TimelineStrip = () => {
               />
             ) : null,
           )}
-          {range && (
+          {shown && (
             <Box
               data-testid="range-rect"
+              title="Drag to move the range; drag an edge to resize it"
+              onMouseDown={range ? begin("move") : undefined}
               sx={{
                 position: "absolute",
                 top: 0,
                 bottom: 0,
-                left: pct(range.from),
-                width: `calc(${pct(range.to)} - ${pct(range.from)})`,
+                left: pct(shown.from),
+                width: `calc(${pct(shown.to)} - ${pct(shown.from)})`,
                 border: 2,
                 borderColor: "primary.dark",
                 bgcolor: "action.selected",
+                cursor: range ? "grab" : "crosshair",
               }}
-            />
-          )}
-          {dragRect && (
-            <Box sx={{ position: "absolute", top: 0, bottom: 0, left: dragRect.left, width: dragRect.width, bgcolor: "action.focus" }} />
+            >
+              {range && handle("start")}
+              {range && handle("end")}
+            </Box>
           )}
           {selected && (
             <Box

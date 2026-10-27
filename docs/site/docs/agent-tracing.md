@@ -402,6 +402,8 @@ A session opens as:
 - **Transcript:** the conversation, with tool calls and results inline, and gateway decisions as chips. A session captured with content mode `off` or `metadata` shows its structure, timing, tokens and cost, and a notice says how to capture content (see [Content modes](#content-modes)).
 - **Timeline:** every span on a time axis, one labelled row per span, with each provider attempt. Zoomed in, it lists only the spans in view. **‹ Turn** and **Turn ›** step through the turns, and a session with more than 200 spans opens on its first turn; **Fit** shows the whole session. Ctrl/⌘-scroll zooms; Shift-scroll, a sideways swipe or the scrollbar under the timeline pans; a drag selects a time range.
 
+A drag on the activity strip above the views sets a time range that filters every view. Drag its edge handles (or focus one and use the arrow keys, Shift for bigger steps) to move the start or end, and drag the range itself to move it.
+
 The find bar searches names and metadata. With `trace-content:read` it also searches captured content, and that search is audited.
 
 Captured text renders as plain Markdown:

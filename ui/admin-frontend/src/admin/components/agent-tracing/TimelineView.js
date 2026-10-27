@@ -6,6 +6,7 @@ import { useSessionDetail } from "./SessionDetailContext";
 import { KIND_LABELS, durationMs, isProblem, sessionBounds, spanTimes } from "./spanModel";
 import { buildTimelineRows, currentTurn, findGaps, openingView, panView, turnRules, turnWindows, viewForSpan, viewForTurn, visibleTimelineRows, zoomView } from "./timelineModel";
 import { formatDuration, formatTokens } from "./sessionFilters";
+import useWindowDrag from "./useWindowDrag";
 
 // The Timeline (waterfall) view (spec §6.2 View 2): agent lanes, spans as
 // bars coloured by kind (errors red, inferred spans hatched), gateway events
@@ -54,6 +55,7 @@ const TimelineView = ({ height = 520 }) => {
   const bounds = useMemo(() => sessionBounds(detail.session, allSpans), [detail.session, allSpans]);
   const [view, setView] = useState(bounds);
   const [drag, setDrag] = useState(null);
+  const startDrag = useWindowDrag();
   const [trackWidth, setTrackWidth] = useState(780);
   const box = useRef(null);
   const list = useRef(null);
@@ -128,19 +130,22 @@ const TimelineView = ({ height = 520 }) => {
     if (!dx || fit) return;
     setView((v) => panView(v, (dx / trackWidth) * (v.to - v.from), bounds));
   };
+  // The drag is tracked on the window, so leaving the timeline or releasing
+  // outside it neither cancels nor loses the selection.
   const onMouseDown = (e) => {
     if (e.button !== 0 || e.clientX - (box.current?.getBoundingClientRect().left || 0) < LABEL_WIDTH) return;
-    setDrag({ x0: e.clientX, x1: e.clientX });
-  };
-  const onMouseMove = (e) => drag && setDrag({ ...drag, x1: e.clientX });
-  const onMouseUp = (e) => {
-    if (!drag) return;
-    const d = { ...drag, x1: e.clientX };
-    setDrag(null);
-    if (Math.abs(d.x1 - d.x0) < MIN_DRAG_PX) return;
-    const a = timeAt(Math.min(d.x0, d.x1));
-    const b = timeAt(Math.max(d.x0, d.x1));
-    if (a != null && b != null) dispatch({ type: "range", range: { from: a, to: b } });
+    const x0 = e.clientX;
+    setDrag({ x0, x1: x0 });
+    startDrag(
+      (m) => setDrag({ x0, x1: m.clientX }),
+      (u) => {
+        setDrag(null);
+        if (Math.abs(u.clientX - x0) < MIN_DRAG_PX) return;
+        const a = timeAt(Math.min(x0, u.clientX));
+        const b = timeAt(Math.max(x0, u.clientX));
+        if (a != null && b != null) dispatch({ type: "range", range: { from: a, to: b } });
+      },
+    );
   };
 
   const Bar = ({ s, ticks }) => {
@@ -343,9 +348,6 @@ const TimelineView = ({ height = 520 }) => {
         data-span-view="true"
         onWheel={onWheel}
         onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
-        onMouseLeave={() => setDrag(null)}
         sx={{ position: "relative", userSelect: "none", border: 1, borderColor: "divider", borderRadius: 1 }}
       >
         <Box sx={{ display: "flex", height: 20, borderBottom: 1, borderColor: "divider" }} aria-hidden>
