@@ -124,6 +124,9 @@ jobs:
         with:
           submodules: true
           token: ${{ secrets.CI_SUBMODULE_PAT }}
+          # The submodules are fetched here; nothing later needs git
+          # credentials, so the npm install scripts below cannot read the PAT.
+          persist-credentials: false
 
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
