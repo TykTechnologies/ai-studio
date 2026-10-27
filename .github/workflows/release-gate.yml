@@ -128,6 +128,35 @@ jobs:
           # credentials, so the npm install scripts below cannot read the PAT.
           persist-credentials: false
 
+      # The FIPS images build on tykio/dhi-busybox (Docker Hardened Images),
+      # which is private: pull it with the Docker Hub credentials release.yml
+      # uses, then log out at once, before any npm install script runs. The
+      # image builds later find it in the local image store. This job runs
+      # only on release.yml's call and on manual dispatch, where the secrets
+      # exist; a missing secret fails here, by name.
+      - name: Check the Docker Hub credentials
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        run: |
+          if [ -z "$DOCKER_USERNAME" ] || [ -z "$DOCKER_PASSWORD" ]; then
+            echo "::error::DOCKER_USERNAME and DOCKER_PASSWORD are needed to pull the private FIPS base image (tykio/dhi-busybox)"
+            exit 1
+          fi
+
+      - name: Login to DockerHub
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Pull the FIPS base image
+        run: |
+          base=$(awk '$1 == "FROM" && $2 ~ /^tykio\/dhi-busybox:/ { print $2; exit }' ci/Dockerfile.fips.distroless)
+          [ -n "$base" ] || { echo "::error::no tykio/dhi-busybox base in ci/Dockerfile.fips.distroless"; exit 1; }
+          docker pull "$base"
+          docker logout
+
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
