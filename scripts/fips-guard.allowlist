@@ -46,4 +46,8 @@ pkg/agenttrace/staging_test.go                   cipher.NewGCM               tes
 
 # --- Vendored and enterprise code
 third_party/gorm.io/gorm/schema/naming.go        crypto/sha1                 upstream gorm (never edited by hand) hashes over-long index names with SHA-1; fails under fips140=only only for names over 64 chars
-enterprise/features/agenttracing/keys/keys.go    cipher.NewGCM               agent tracing payload sealing (enterprise); covered by the enterprise crypto audit, .17
+third_party/mgo.v2/auth.go                       crypto/md5                  upstream MongoDB driver (fork for .11): MONGODB-CR/SCRAM password digest, only when authenticating to MongoDB, which Studio never does
+third_party/mgo.v2/auth.go                       crypto/sha1                 upstream MongoDB driver (fork for .11): SCRAM-SHA-1 to MongoDB, never used by Studio
+third_party/mgo.v2/session.go                    crypto/md5                  upstream MongoDB driver (fork for .11): user password digest for MongoDB user management, never used by Studio
+third_party/mgo.v2/gridfs.go                     crypto/md5                  upstream MongoDB driver (fork for .11): GridFS file checksums, never used by Studio
+enterprise/features/agenttracing/keys/keys_compat_test.go cipher.NewGCM test reproduces the pre-.21 payload reader (caller nonce) to prove new payloads stay readable by older hubs; skipped under fips140.Enforced()

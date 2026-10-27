@@ -347,3 +347,6 @@ require (
 )
 
 replace github.com/TykTechnologies/ai-studio-enterprise/v2 => ./enterprise
+
+// Tyk fork of mgo.v2 (bson machine id without MD5, for fips140=only). See third_party/README.md.
+replace gopkg.in/mgo.v2 => ./third_party/mgo.v2
