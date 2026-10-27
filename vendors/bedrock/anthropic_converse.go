@@ -1,6 +1,8 @@
 package bedrockVendor
 
 import (
+	"strings"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/document"
@@ -37,14 +39,17 @@ type AnthropicBlock struct {
 	ResultText string
 	IsError    bool
 
-	// prompt caching: a cache breakpoint sits at (and includes) this block
+	// prompt caching: a cache breakpoint sits at (and includes) this block.
+	// CacheTTL is "1h" to ask for a one-hour cache, empty for Bedrock's default.
 	CachePoint bool
+	CacheTTL   string
 }
 
 // AnthropicSystemBlock is a system-prompt block.
 type AnthropicSystemBlock struct {
 	Text       string
 	CachePoint bool
+	CacheTTL   string // see AnthropicBlock.CacheTTL
 }
 
 // AnthropicToolSpec is a tool definition.
@@ -53,6 +58,7 @@ type AnthropicToolSpec struct {
 	Description string
 	InputSchema map[string]any
 	CachePoint  bool
+	CacheTTL    string // see AnthropicBlock.CacheTTL
 }
 
 // AnthropicToolChoiceSpec controls tool selection ("auto" | "any" | "tool").
@@ -112,7 +118,7 @@ func AnthropicMessagesToConverse(msgs []AnthropicMsg, system []AnthropicSystemBl
 			}
 			if b.CachePoint {
 				content = append(content, &types.ContentBlockMemberCachePoint{
-					Value: types.CachePointBlock{Type: types.CachePointTypeDefault},
+					Value: cachePointBlock(b.CacheTTL),
 				})
 			}
 		}
@@ -132,12 +138,44 @@ func AnthropicMessagesToConverse(msgs []AnthropicMsg, system []AnthropicSystemBl
 		}
 		if s.CachePoint {
 			systemBlocks = append(systemBlocks, &types.SystemContentBlockMemberCachePoint{
-				Value: types.CachePointBlock{Type: types.CachePointTypeDefault},
+				Value: cachePointBlock(s.CacheTTL),
 			})
 		}
 	}
 
 	return converseMsgs, systemBlocks
+}
+
+// cachePointBlock builds a cache point, with a one-hour TTL when ttl is "1h".
+// Any other value leaves the TTL unset, which Bedrock reads as 5 minutes.
+func cachePointBlock(ttl string) types.CachePointBlock {
+	cp := types.CachePointBlock{Type: types.CachePointTypeDefault}
+	if ttl == "1h" {
+		cp.Ttl = types.CacheTTLOneHour
+	}
+	return cp
+}
+
+// SupportsOneHourCacheTTL reports whether a cache point for modelID may carry a
+// one-hour TTL. Claude 3 models (3.7 Sonnet, 3.5 Sonnet v2) only have 5-minute
+// caching, and Bedrock can reject any ttl on them with a
+// ValidationException; see the model table in the AWS Bedrock prompt-caching
+// guide. Model and inference-profile IDs name the model, so the check is
+// textual. An application-inference-profile ARN names no model and is assumed
+// to support it.
+func SupportsOneHourCacheTTL(modelID string) bool {
+	id := modelID
+	for {
+		i := strings.Index(id, "claude-3")
+		if i < 0 {
+			return true
+		}
+		rest := id[i+len("claude-3"):]
+		if rest == "" || rest[0] == '-' || rest[0] == '.' {
+			return false
+		}
+		id = rest
+	}
 }
 
 // AnthropicToolsToToolConfig converts Anthropic tool definitions and tool_choice
@@ -160,7 +198,7 @@ func AnthropicToolsToToolConfig(tools []AnthropicToolSpec, choice *AnthropicTool
 		})
 		if t.CachePoint {
 			bedrockTools = append(bedrockTools, &types.ToolMemberCachePoint{
-				Value: types.CachePointBlock{Type: types.CachePointTypeDefault},
+				Value: cachePointBlock(t.CacheTTL),
 			})
 		}
 	}
