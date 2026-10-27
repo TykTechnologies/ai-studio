@@ -43,10 +43,10 @@ FIPS-mode processes write approved formats; every build reads both the old and t
 | User passwords, OAuth client secrets, microgateway credential secrets | bcrypt | PBKDF2-HMAC-SHA256 |
 | Hub-to-edge snapshot secrets | AES-GCM, random nonce | AES-GCM, random nonce |
 
-- **Secrets.** At startup a FIPS-mode AI Studio re-encrypts stored secrets (the Secrets page) from older formats to `v3`. Encrypted values in other tables (such as LLM API keys) stay in the `v2` format until they are next saved: they are still read, but the key behind them comes from scrypt, which is not an approved algorithm.
+- **Secrets.** At startup, in the background, a FIPS-mode AI Studio re-encrypts stored secrets from older formats to `v3`: the Secrets page, and the encrypted values in other tables (LLM API keys and credential metadata, LLM resource signing secrets, webhook headers and signing secrets, Tyk connection tokens and gateway definitions, submission credentials, MCP credential tokens). Until it has run, older values are still read; a standard build does not re-encrypt.
 - **Passwords.** A user's bcrypt hash is replaced with a PBKDF2 one the next time they log in on a FIPS build; an OAuth client secret on its next successful use.
 - **Schema version.** These formats raise the database schema version to 26, so an older AI Studio refuses a database a newer one has migrated instead of misreading it.
-- **Legacy secrets.** Under `fips140=only`, values encrypted before the `v2` format (AES-CFB) are read only by the startup re-encryption, which covers the Secrets page: let AI Studio start once before enforcing strict mode. Any other value still in that format (an encrypted value in another table, such as an older LLM API key) returns an error under `fips140=only` until it is saved again, because the startup re-encryption does not reach it.
+- **Legacy secrets.** Under `fips140=only`, values encrypted before the `v2` format (AES-CFB) are read only by the startup re-encryption: until it has run, a read of one returns an error. Start AI Studio once in FIPS mode before enforcing strict mode, and let the re-encryption finish (it logs how many values it re-encrypted).
 
 ## Operational requirements
 
@@ -56,7 +56,7 @@ FIPS-mode processes write approved formats; every build reads both the old and t
 - **Postgres.** Use SCRAM-SHA-256 password authentication, not `md5`.
 - **Skipping TLS verification** (`InsecureSkipVerify`-style options) is outside the scope of FIPS compliance; do not use it in a FIPS deployment.
 - **Resource signing.** LLM resource IDs (native API extensions) are signed with a key from the hub's signing secret, or, without one, from the vendor credential. Set a hub signing secret for every LLM: a key derived from a short or placeholder credential (such as Ollama's `none`) is guessable in any build. Short-credential IDs signed in standard mode do not verify in FIPS mode, and the other way round.
-- **Plugins.** Every plugin is a separate process with its own cryptography (TLS to vendors and to the gateway). The deployment is only FIPS compliant if every plugin is a FIPS build too: build plugins with `GOFIPS140=v1.0.0` (see [Publishing Plugins](./plugins-publishing.md)).
+- **Plugins.** Every plugin is a separate process with its own cryptography (TLS to vendors and to the gateway). The deployment is only FIPS compliant if every plugin is a FIPS build too: build plugins with `GOFIPS140=v1.0.0` (see [Publishing Plugins](./plugins-publishing.md)). In FIPS mode, AI Studio and the microgateway log a warning when they start a plugin binary that is not a FIPS build (or not a Go binary they can inspect); the plugin still starts.
 
 ## Known exceptions
 
@@ -65,6 +65,6 @@ These uses are not approved in FIPS mode. The first three are read paths for dat
 | Use | Where | Notes |
 |---|---|---|
 | bcrypt verification | passwords and secrets stored by standard builds | replaced on next login or use |
-| scrypt key derivation | `v2:` secrets written by standard builds | Secrets page values are re-encrypted at startup; other values when saved |
+| scrypt key derivation | `v2:` secrets written by standard builds | re-encrypted to `v3` at startup in FIPS mode |
 | AES-CFB decryption | secrets written before `v2:` | read only by the startup re-encryption |
 | MD5 / SHA-1 | the vendored MongoDB driver used by SSO's identity broker | only when talking to MongoDB, which AI Studio never does |

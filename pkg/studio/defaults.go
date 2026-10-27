@@ -161,4 +161,14 @@ func reencryptLegacySecrets(ctx context.Context, db *gorm.DB) {
 	} else {
 		logger.Info("No legacy-format secrets to re-encrypt")
 	}
+	// In FIPS 140-3 mode, also move the encrypted values in other tables
+	// (LLM keys, webhook and Tyk connection secrets, ...) to v3; it does
+	// nothing in standard builds.
+	if migrated, err := models.ReencryptStoredCredentials(db.WithContext(ctx)); err != nil {
+		if ctx.Err() == nil {
+			logger.Errorf("Failed to re-encrypt stored credentials to the FIPS format: %v", err)
+		}
+	} else if migrated > 0 {
+		logger.Infof("Re-encrypted %d stored credential(s) to the FIPS (v3) format", migrated)
+	}
 }

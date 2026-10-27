@@ -19,7 +19,7 @@ Every build reads old and new formats; only FIPS-mode processes write the approv
 
 | Data | Code | Standard | FIPS mode |
 |---|---|---|---|
-| Secrets at rest | `secrets/models.go` | `v2:` scrypt + GCM | `v3:<iter>:` PBKDF2-HMAC-SHA256 (210k) + GCM; the startup sweep (`ReencryptLegacySecrets`) moves legacy and `v2` Secret rows to `v3` |
+| Secrets at rest | `secrets/models.go` | `v2:` scrypt + GCM | `v3:<iter>:` PBKDF2-HMAC-SHA256 (210k) + GCM; the startup sweep moves legacy and `v2` values to `v3`: Secret rows (`ReencryptLegacySecrets`) and the `$ENC/` values of other tables (`models.ReencryptStoredCredentials`, list in `encryptedColumns`; FIPS mode only, compare-and-swap) |
 | Passwords, OAuth client secrets, mgw secrets | `pkg/pwhash` | bcrypt | `$pbkdf2-sha256$<iter>$<salt>$<key>` (600k); bcrypt upgraded on successful use (compare-and-swap) |
 | LLM resource signing keys | `models.HKDFKeyMaterial` | HKDF over the material | material under 14 bytes SHA-256'd first |
 | Tiktoken rank-file cache | `pkg/tiktokenbpe` | tiktoken-go's loader (SHA-1 names) | SHA-256 names; SHA-1 names read from a precomputed table |

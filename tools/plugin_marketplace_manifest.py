@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate a marketplace manifest.yaml entry for a newly published plugin version.
 
-Two modes:
+Three modes:
 
   --prev <manifest.yaml>
       Carry the previous version's curated entry forward, rewriting only the
@@ -13,6 +13,11 @@ Two modes:
   (no --prev)
       First publish: render a fresh entry from the plugin's own manifest.json
       and report the curated fields that still need a human.
+
+  --add-fips --manifest <manifest.yaml> --tag T --digest D --platforms P
+      Record the version's FIPS 140-3 variant (tools/publish-plugin.sh --fips)
+      as an oci_fips block after oci. A later version's entry, carried forward
+      with --prev, drops it.
 
 Stdlib only, on purpose: this runs on developer laptops and in CI without a
 pip install step.
@@ -42,9 +47,60 @@ def utc_now():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def drop_fips_block(lines):
+    """Remove an oci_fips block: it describes one version's FIPS variant
+    (FIPS=1 adds it) and must not carry forward to the next version."""
+    out = []
+    skipping = False
+    for line in lines:
+        if re.match(r"^oci_fips:\s*$", line):
+            skipping = True
+            continue
+        if skipping and (line.startswith((" ", "\t")) or not line.strip()):
+            continue
+        skipping = False
+        out.append(line)
+    return out
+
+
+def add_fips(path, tag, digest, platforms):
+    """Record a version's FIPS 140-3 variant in its entry as an oci_fips block
+    (same registry and repository as oci), replacing any earlier one."""
+    with open(path, encoding="utf-8") as fh:
+        lines = drop_fips_block(fh.read().splitlines())
+    block = [
+        "",
+        "oci_fips:",
+        "  # FIPS 140-3 variant: built with GOFIPS140=v1.0.0 (Go Cryptographic",
+        "  # Module v1.0.0, CMVP #5247); same registry and repository as oci.",
+        "  tag: {}".format(yaml_str(tag)),
+        "  digest: {}".format(yaml_str(digest)),
+        "  platform: {}".format(yaml_list(platforms)),
+    ]
+    # After the oci block, which ends at the next top-level line.
+    out, inserted, in_oci = [], False, False
+    for line in lines:
+        if not inserted and in_oci and re.match(r"^[^\s]", line):
+            while out and not out[-1].strip():
+                out.pop()
+            out.extend(block)
+            out.append("")
+            inserted = True
+            in_oci = False
+        if re.match(r"^oci:\s*$", line):
+            in_oci = True
+        out.append(line)
+    if not inserted:
+        if not any(re.match(r"^oci:\s*$", line) for line in lines):
+            raise SystemExit("error: {} has no oci block".format(path))
+        out.extend(block)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(out).rstrip("\n") + "\n")
+
+
 def rewrite_previous(text, args, prev_version, stamp):
     """Line-edit the previous version's manifest instead of re-serialising it."""
-    lines = text.splitlines()
+    lines = drop_fips_block(text.splitlines())
     out = []
     seen = set()
     in_oci = False
@@ -266,6 +322,20 @@ def render_template(source, args, stamp):
 
 
 def main():
+    if "--add-fips" in sys.argv[1:]:
+        # tools/publish-plugin.sh --fips: add the FIPS variant to an entry.
+        fips = argparse.ArgumentParser(description="Add a FIPS 140-3 variant (oci_fips) to a manifest.yaml")
+        fips.add_argument("--add-fips", action="store_true")
+        fips.add_argument("--manifest", required=True)
+        fips.add_argument("--tag", required=True)
+        fips.add_argument("--digest", required=True)
+        fips.add_argument("--platforms", required=True, help="comma separated os/arch")
+        fargs = fips.parse_args()
+        add_fips(fargs.manifest, fargs.tag, fargs.digest,
+                 [p.strip() for p in fargs.platforms.split(",") if p.strip()])
+        print("added oci_fips ({}) to {}".format(fargs.tag, fargs.manifest), file=sys.stderr)
+        return
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plugin", required=True)
     parser.add_argument("--source-manifest", required=True)

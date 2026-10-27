@@ -95,7 +95,10 @@ func Environ() []string {
 // Command returns an exec.Cmd for a plugin binary whose environment is
 // Environ(). Pair it with go-plugin's ClientConfig.SkipHostEnv, or go-plugin
 // appends the host environment anyway.
+//
+// In FIPS 140-3 mode it also warns when the binary is not a FIPS build.
 func Command(path string) *exec.Cmd {
+	warnIfNotFIPS(path)
 	cmd := exec.Command(path)
 	cmd.Env = Environ()
 	return cmd
