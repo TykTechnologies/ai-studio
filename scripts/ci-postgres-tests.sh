@@ -55,6 +55,12 @@ mgw|microgateway||Postgres|MGW_TEST_POSTGRES_DSN=own|./internal/services/ ./inte
 # Real edges against several Studio replicas sharing DATABASE_URL (a schema
 # per test): pushes land whatever happens to the connections.
 mgw-cluster|microgateway||||./tests/cluster/
+# FIPS 140-3 cross-build migration (std -> FIPS -> std, on SQLite and
+# Postgres, with fips140=on and fips140=only): each test builds its package
+# as a standard and a GOFIPS140=v1.0.0 test binary and runs them in turn on
+# one database (a schema per case). -short skips them in the unit jobs.
+fips-migration|.||TestCrossBuildMigration||./tests/fipsmigration/
+fips-migration-mgw|microgateway||TestCrossBuildMigration|MGW_TEST_POSTGRES_DSN|./internal/fipsmigration/
 # Agent Call Tracing: the store and capture staging in core, and the
 # enterprise assembler, correlation goldens, JSON v1 and content API
 # (purge). Their gates read DATABASE_URL or AGENT_TRACE_TEST_POSTGRES_DSN,

@@ -119,9 +119,8 @@ func TestSnapshot_PluginSecretRotationChangesChecksum(t *testing.T) {
 	checksum := func() string {
 		snapshot, p := snapshotPlugin(t, server, plugin.ID)
 		require.NotEmpty(t, p.ConfigSecretsEncrypted["engine_main_token"])
-		sum, err := ComputeSnapshotChecksum(snapshot)
-		require.NoError(t, err)
-		return sum
+		require.NotEmpty(t, snapshot.Checksum)
+		return snapshot.Checksum // the hub's: over keyed digests, not ciphertexts
 	}
 	first := checksum()
 	assert.Equal(t, first, checksum(), "the same secret gives the same checksum")

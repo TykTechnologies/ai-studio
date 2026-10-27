@@ -16,6 +16,14 @@ import (
 // The checksum is computed from the protobuf-serialized bytes of the snapshot with
 // deterministic marshaling enabled to ensure consistent byte order for maps and repeated fields.
 func ComputeSnapshotChecksum(snapshot *pb.ConfigurationSnapshot) (string, error) {
+	return computeSnapshotChecksum(snapshot, nil)
+}
+
+// computeSnapshotChecksum is ComputeSnapshotChecksum with normalize, when not
+// nil, applied to the deterministic encoding before it is hashed: the hub
+// swaps each secret's random-nonce ciphertext for a keyed digest of its
+// plaintext there (snapshot_secret_digests.go).
+func computeSnapshotChecksum(snapshot *pb.ConfigurationSnapshot, normalize func([]byte) []byte) (string, error) {
 	if snapshot == nil {
 		return "", fmt.Errorf("snapshot is nil")
 	}
@@ -103,6 +111,9 @@ func ComputeSnapshotChecksum(snapshot *pb.ConfigurationSnapshot) (string, error)
 	data, err := opts.Marshal(checksumSnapshot)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal snapshot: %w", err)
+	}
+	if normalize != nil {
+		data = normalize(data)
 	}
 
 	// Compute SHA-256 hash

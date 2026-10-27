@@ -76,8 +76,9 @@ func TestSnapshotSendsMetadataCredentialsEncrypted(t *testing.T) {
 	}
 }
 
-// The encryption is deterministic: regenerating the snapshot, or saving the
-// LLM unchanged, keeps the checksum, so edges stay in sync.
+// Regenerating the snapshot, or saving the LLM unchanged, keeps the checksum,
+// so edges stay in sync, though each snapshot encrypts the credentials under
+// a fresh nonce (the checksum covers a keyed digest of the plaintext).
 func TestSnapshotChecksumStableWithMetadataCredentials(t *testing.T) {
 	server, db := setupTestServer(t, nil)
 	t.Cleanup(server.Stop)
@@ -90,7 +91,8 @@ func TestSnapshotChecksumStableWithMetadataCredentials(t *testing.T) {
 	require.NoError(t, db.Save(&reloaded).Error)
 
 	second, l2 := bedrockSnapshotLLM(t, server)
-	assert.Equal(t, l1.MetadataSecretsEncrypted, l2.MetadataSecretsEncrypted)
+	assert.NotEqual(t, l1.MetadataSecretsEncrypted, l2.MetadataSecretsEncrypted, "random nonces")
+	assert.NotEmpty(t, first.Checksum)
 	assert.Equal(t, first.Checksum, second.Checksum)
 }
 
