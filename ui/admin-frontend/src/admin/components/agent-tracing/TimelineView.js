@@ -396,7 +396,7 @@ const TimelineView = ({ height = 520 }) => {
         )}
         {shownRules.length > 0 && (
           <Stack direction="row" spacing={0.5} alignItems="center">
-            <Box sx={{ width: 0, height: 12, borderLeft: 1, borderStyle: "dashed", borderColor: "text.secondary" }} />
+            <Box sx={{ width: 0, height: 12, borderLeft: "1px dashed", borderLeftColor: "text.disabled" }} />
             <Typography variant="caption">New turn</Typography>
           </Stack>
         )}
@@ -438,7 +438,7 @@ const TimelineView = ({ height = 520 }) => {
         )}
         <Box aria-hidden sx={{ position: "absolute", top: 20, bottom: 0, left: LABEL_WIDTH, width: trackWidth, pointerEvents: "none", overflow: "hidden" }}>
           {shownRules.map((r) => (
-            <Box key={r.traceId} data-testid="turn-rule" title={`Turn ${(r.turn ?? 0) + 1}`} sx={{ position: "absolute", top: 0, bottom: 0, left: x(r.at), borderLeft: 1, borderStyle: "dashed", borderColor: "text.secondary" }} />
+            <Box key={r.traceId} data-testid="turn-rule" title={`Turn ${(r.turn ?? 0) + 1}`} sx={{ position: "absolute", top: 0, bottom: 0, left: x(r.at), borderLeft: "1px dashed", borderLeftColor: "text.disabled" }} />
           ))}
           {gaps.map((g) => (
             <Box
