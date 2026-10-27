@@ -33,10 +33,9 @@ grpc/control_server.go                           cipher.NewGCM               det
 grpc/snapshot_encryption_test.go                 cipher.NewGCM               test decrypts a snapshot the way the microgateway does; follows grpc/control_server.go in .10/.15
 
 # --- Tests outside the remediation beads
-pkg/agenttrace/staging_test.go                   cipher.NewGCM               test Sealer with a random nonce prefix; NewGCMWithRandomNonce would make it strict-mode clean (make test-fips, .12)
 
 # --- Vendored and enterprise code
-third_party/gorm.io/gorm/schema/naming.go        crypto/sha1                 upstream gorm (never edited by hand) hashes over-long index names with SHA-1; fails under fips140=only only for names over 64 chars
+third_party/gorm.io/gorm/schema/naming.go        crypto/sha1                 upstream gorm (never edited by hand) hashes over-long index names with SHA-1; fails under fips140=only only for names over 64 chars, which no Studio or microgateway model generates (TestSchemaIdentifiersNeedNoSHA1Shortening, .27)
 third_party/mgo.v2/auth.go                       crypto/md5                  upstream MongoDB driver (fork for .11): MONGODB-CR/SCRAM password digest, only when authenticating to MongoDB, which Studio never does
 third_party/mgo.v2/auth.go                       crypto/sha1                 upstream MongoDB driver (fork for .11): SCRAM-SHA-1 to MongoDB, never used by Studio
 third_party/mgo.v2/session.go                    crypto/md5                  upstream MongoDB driver (fork for .11): user password digest for MongoDB user management, never used by Studio

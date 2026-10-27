@@ -17,6 +17,7 @@ import (
 	dataSession "github.com/TykTechnologies/midsommar/v2/data_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
+	_ "github.com/TykTechnologies/midsommar/v2/pkg/tiktokenbpe" // SHA-1-free rank-file cache in FIPS mode
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/secrets"

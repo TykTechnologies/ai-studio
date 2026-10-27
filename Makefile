@@ -747,6 +747,10 @@ test-all: ## Run all tests with configurable options
 test-quick: ## Run only unit tests (fast feedback)
 	$(MAKE) test-all TEST_TYPES="unit" TEST_COMPONENTS="studio microgateway frontend"
 
+.PHONY: test-fips
+test-fips: ent-link ## Run the Go unit tests in FIPS 140-3 strict mode (GOFIPS140=v1.0.0 GODEBUG=fips140=only; EDITION=ent adds the enterprise module)
+	@scripts/test-fips.sh $(TEST_EDITION)
+
 .PHONY: test-ci
 test-ci: ## Run CI-appropriate tests (unit + integration, with coverage)
 	$(MAKE) test-all TEST_TYPES="unit integration" TEST_COVERAGE=true TEST_VERBOSE=true

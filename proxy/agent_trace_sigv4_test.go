@@ -20,11 +20,11 @@ func TestAgentTraceSigV4_TraceHeadersAreSignedAndAccepted(t *testing.T) {
 	withW3CPropagation(t)
 	withAgentTracing(t, true)
 	var received http.Header
-	srv := httptest.NewServer(sigV4VerifyHandler("AKIDEXAMPLE", "secret", "us-east-1", &received))
+	srv := httptest.NewServer(sigV4VerifyHandler("AKIDEXAMPLE", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "us-east-1", &received))
 	defer srv.Close()
 
 	llm := &models.LLM{Vendor: models.BEDROCK, APIEndpoint: srv.URL, Metadata: models.JSONMap{
-		"aws_access_key_id": "AKIDEXAMPLE", "aws_secret_access_key": "secret", "aws_region": "us-east-1",
+		"aws_access_key_id": "AKIDEXAMPLE", "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "aws_region": "us-east-1",
 	}}
 	in, _ := http.NewRequest(http.MethodPost, "http://gw/llm/rest/b", nil)
 	in.Header.Set("Traceparent", clientTraceparent)

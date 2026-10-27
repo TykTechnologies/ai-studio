@@ -124,7 +124,7 @@ func setupCaptureGateway(t *testing.T, appTracing ...string) (string, *pulseHub,
 		MaxEvents: 1000, MaxBytes: 1 << 20, FlushInterval: 50 * time.Millisecond, FlushMaxEvents: 1,
 	}))
 	agenttrace.SetSink(analytics.CaptureSink())
-	agenttrace.SetFingerprinter(agenttrace.StaticFingerprinter{ID: 1, Key: []byte("k")})
+	agenttrace.SetFingerprinter(agenttrace.StaticFingerprinter{ID: 1, Key: []byte("capture-test-key-32-bytes-long!!")})
 	agenttrace.SetEnabled(true)
 	t.Cleanup(func() {
 		agenttrace.SetEnabled(false)

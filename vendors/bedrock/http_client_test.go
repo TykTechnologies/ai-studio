@@ -105,7 +105,7 @@ func TestNewBedrockClientKeepsCABundle(t *testing.T) {
 	t.Setenv("AWS_CA_BUNDLE", ca)
 
 	llm := &models.LLM{APIEndpoint: srv.URL, Metadata: models.JSONMap{
-		"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "secret", "aws_region": "us-east-1"}}
+		"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "aws_region": "us-east-1"}}
 	llm.ID = 987654
 	t.Cleanup(func() { InvalidateClientCache(llm.ID) })
 	client, err := NewBedrockClient(llm)
@@ -146,7 +146,7 @@ func TestSDKHTTPClientRoundTrip(t *testing.T) {
 // call fail with "unsupported protocol scheme".
 func TestNewBedrockClientPlainRegion(t *testing.T) {
 	llm := &models.LLM{APIEndpoint: "ap-southeast-2", Metadata: models.JSONMap{
-		"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "secret"}}
+		"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"}}
 	llm.ID = 987655
 	t.Cleanup(func() { InvalidateClientCache(llm.ID) })
 	client, err := NewBedrockClient(llm)
@@ -156,7 +156,7 @@ func TestNewBedrockClientPlainRegion(t *testing.T) {
 
 	// A URL endpoint is still used as the base endpoint.
 	urlLLM := &models.LLM{APIEndpoint: "https://vpce-1.bedrock.example.com/v1", Metadata: models.JSONMap{
-		"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "secret", "aws_region": "eu-west-1"}}
+		"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "aws_region": "eu-west-1"}}
 	urlLLM.ID = 987656
 	t.Cleanup(func() { InvalidateClientCache(urlLLM.ID) })
 	client, err = NewBedrockClient(urlLLM)
@@ -181,7 +181,7 @@ func (c *recordingHTTPClient) Do(r *http.Request) (*http.Response, error) {
 // "/ap-southeast-2/model/..." and failed with "unsupported protocol scheme".
 func TestNewBedrockClientPlainRegionCallsRegionalHost(t *testing.T) {
 	llm := &models.LLM{APIEndpoint: "ap-southeast-2", Metadata: models.JSONMap{
-		"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "secret"}}
+		"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"}}
 	llm.ID = 987657
 	t.Cleanup(func() { InvalidateClientCache(llm.ID) })
 	client, err := NewBedrockClient(llm)

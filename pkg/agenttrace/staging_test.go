@@ -10,7 +10,8 @@ import (
 	"testing"
 )
 
-// gcmSealer is a test Sealer: AES-256-GCM with a random nonce prefix.
+// gcmSealer is a test Sealer: AES-256-GCM with a random nonce prefix
+// (cipher.NewGCMWithRandomNonce, so it also runs under fips140=only).
 type gcmSealer struct{ aead cipher.AEAD }
 
 func newGCMSealer(t *testing.T) gcmSealer {
@@ -21,7 +22,7 @@ func newGCMSealer(t *testing.T) gcmSealer {
 	if err != nil {
 		t.Fatal(err)
 	}
-	aead, err := cipher.NewGCM(block)
+	aead, err := cipher.NewGCMWithRandomNonce(block)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,17 +30,14 @@ func newGCMSealer(t *testing.T) gcmSealer {
 }
 
 func (g gcmSealer) Seal(plain, aad []byte) ([]byte, error) {
-	nonce := make([]byte, g.aead.NonceSize())
-	_, _ = rand.Read(nonce)
-	return g.aead.Seal(nonce, nonce, plain, aad), nil
+	return g.aead.Seal(nil, nil, plain, aad), nil
 }
 
 func (g gcmSealer) Open(sealed, aad []byte) ([]byte, error) {
-	n := g.aead.NonceSize()
-	if len(sealed) < n {
+	if len(sealed) < g.aead.Overhead() {
 		return nil, errors.New("short")
 	}
-	return g.aead.Open(nil, sealed[:n], sealed[n:], aad)
+	return g.aead.Open(nil, nil, sealed, aad)
 }
 
 var secretContent = []byte("TOP-SECRET-PROMPT-CONTENT")

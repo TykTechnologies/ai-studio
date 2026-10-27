@@ -20,7 +20,7 @@ import (
 func BenchmarkAgentTraceCapturePerRequest(b *testing.B) {
 	agenttrace.SetEnabled(true)
 	agenttrace.SetSink(discardSink{})
-	agenttrace.SetFingerprinter(agenttrace.StaticFingerprinter{ID: 1, Key: []byte("k")})
+	agenttrace.SetFingerprinter(agenttrace.StaticFingerprinter{ID: 1, Key: []byte("proxy-agent-trace-test-key-32by")})
 	b.Cleanup(func() {
 		agenttrace.SetEnabled(false)
 		agenttrace.SetSink(nil)

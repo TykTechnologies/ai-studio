@@ -106,7 +106,7 @@ func bedrockHarness(t *testing.T, rec *bedrockRecorder, filters ...*models.Filte
 		primary.Vendor = models.BEDROCK
 		primary.Failover = models.LLMFailover{}
 		primary.DefaultModel = "anthropic.claude-3"
-		primary.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "secret", "aws_region": "us-east-1"}
+		primary.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "aws_region": "us-east-1"}
 		primary.Filters = filters
 	})
 	// The SDK client cache is process-wide and keyed by LLM ID, which every

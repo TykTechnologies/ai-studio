@@ -72,11 +72,11 @@ func sigV4Between(s, start, end string) string {
 func TestBedrockREST_SigV4SurvivesForwardedAndConnectionHeaders(t *testing.T) {
 	t.Parallel()
 	var received http.Header
-	h := newFailoverHarness(t, sigV4VerifyHandler("AKIDTEST", "secret", "us-east-1", &received), serveOpenAIText("never"), func(primary, _ *models.LLM) {
+	h := newFailoverHarness(t, sigV4VerifyHandler("AKIDTEST", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "us-east-1", &received), serveOpenAIText("never"), func(primary, _ *models.LLM) {
 		primary.Vendor = models.BEDROCK
 		primary.Failover = models.LLMFailover{}
 		primary.DefaultModel = "anthropic.claude-3"
-		primary.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "secret", "aws_region": "us-east-1"}
+		primary.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "aws_region": "us-east-1"}
 	})
 	resp, body := h.post("/llm/rest/primary/model/anthropic.claude-3/converse",
 		`{"messages":[{"role":"user","content":[{"text":"hi"}]}]}`,
@@ -112,11 +112,11 @@ func awsFrontEnd(next http.HandlerFunc) http.HandlerFunc {
 func TestBedrockREST_SigV4SurvivesAWSAppendingXForwardedFor(t *testing.T) {
 	t.Parallel()
 	var received http.Header
-	h := newFailoverHarness(t, awsFrontEnd(sigV4VerifyHandler("AKIDTEST", "secret", "us-east-1", &received)), serveOpenAIText("never"), func(primary, _ *models.LLM) {
+	h := newFailoverHarness(t, awsFrontEnd(sigV4VerifyHandler("AKIDTEST", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "us-east-1", &received)), serveOpenAIText("never"), func(primary, _ *models.LLM) {
 		primary.Vendor = models.BEDROCK
 		primary.Failover = models.LLMFailover{}
 		primary.DefaultModel = "anthropic.claude-3"
-		primary.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "secret", "aws_region": "us-east-1"}
+		primary.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "aws_region": "us-east-1"}
 	})
 	converse := `{"messages":[{"role":"user","content":[{"text":"hi"}]}]}`
 	for _, tc := range []struct {
