@@ -168,7 +168,9 @@ export const panView = (view, deltaMs, bounds) => {
   return { from, to: from + width };
 };
 
-// A session with more bar rows than this opens zoomed to its first turn.
+// A window with more turns (or bar rows) than this opens zoomed to its
+// first turn: across many turns, sub-second spans are slivers at Fit.
+export const ZOOM_OPEN_TURNS = 20;
 export const ZOOM_OPEN_ROWS = 200;
 
 /** Each turn's time window (its spans' extent), in start order. */
@@ -202,10 +204,10 @@ export const currentTurn = (windows, view) => {
   return i;
 };
 
-/** The view a session opens on: all of it, or for a large one its first turn. */
+/** The view a session (or selected range) opens on: all of it, or for a large one its first turn. */
 export const openingView = (orderedSpans, bounds, windows) => {
   const bars = orderedSpans.filter((s) => s.kind !== "gateway_event");
-  if (bars.length <= ZOOM_OPEN_ROWS || !windows.length) return bounds;
+  if ((bars.length <= ZOOM_OPEN_ROWS && windows.length <= ZOOM_OPEN_TURNS) || !windows.length) return bounds;
   return viewForTurn(windows[0], bounds);
 };
 

@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { ThemeProvider } from "@mui/material/styles";
 import testTheme from "../../utils/testTheme";
@@ -70,5 +70,16 @@ describe("TimelineStrip", () => {
     expect(ctx.range.to).toBeCloseTo(T0 + 3600, 0);
     fireEvent.keyDown(screen.getByRole("slider", { name: "Range start" }), { key: "ArrowLeft" });
     expect(ctx.range.from).toBeCloseTo(T0 + 940, 0);
+  });
+});
+
+describe("TimelineStrip viewport cursor", () => {
+  it("marks the Timeline view's window, and hides it when the view shows everything", () => {
+    renderStrip();
+    expect(screen.queryByTestId("viewport-cursor")).not.toBeInTheDocument();
+    act(() => ctx.dispatch({ type: "viewport", viewport: { from: T0 + 1000, to: T0 + 2000 } }));
+    expect(screen.getByTestId("viewport-cursor")).toHaveAttribute("title", "Timeline view: 1.0 s from 1.0 s");
+    act(() => ctx.dispatch({ type: "viewport", viewport: { from: T0, to: T0 + 6000 } }));
+    expect(screen.queryByTestId("viewport-cursor")).not.toBeInTheDocument();
   });
 });

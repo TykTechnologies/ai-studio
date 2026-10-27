@@ -56,7 +56,7 @@ export const bucketize = (spans, bounds, n = BUCKETS) => {
 };
 
 const TimelineStrip = () => {
-  const { spans, detail, range, selectedId, index, dispatch } = useSessionDetail();
+  const { spans, detail, range, viewport, selectedId, index, dispatch } = useSessionDetail();
   const [open, setOpen] = useState(true);
   const [draft, setDraft] = useState(null); // the range while a drag is under way
   const ref = useRef(null);
@@ -213,6 +213,37 @@ const TimelineStrip = () => {
               {range && handle("start")}
               {range && handle("end")}
             </Box>
+          )}
+          {viewport && (viewport.from > bounds.from || viewport.to < bounds.to) && (
+            // Where the Timeline view is: a box, or a marked line when the
+            // window is too narrow to draw (one turn of a long session).
+            <Box
+              data-testid="viewport-cursor"
+              title={`Timeline view: ${formatDuration(Math.round(viewport.to - viewport.from))} from ${formatDuration(Math.round(viewport.from - bounds.from))}`}
+              sx={{
+                position: "absolute",
+                top: -4,
+                bottom: -4,
+                left: pct(viewport.from),
+                width: `calc(max(2px, ${pct(viewport.to)} - ${pct(viewport.from)}))`,
+                border: 2,
+                borderColor: "warning.main",
+                borderRadius: 0.5,
+                pointerEvents: "none",
+                zIndex: 2,
+                "&::before": {
+                  content: '""',
+                  position: "absolute",
+                  top: -7,
+                  left: "50%",
+                  transform: "translateX(-50%)",
+                  borderLeft: "6px solid transparent",
+                  borderRight: "6px solid transparent",
+                  borderTop: "6px solid",
+                  borderTopColor: "warning.main",
+                },
+              }}
+            />
           )}
           {selected && (
             <Box

@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { ThemeProvider } from "@mui/material/styles";
 import testTheme from "../../utils/testTheme";
@@ -218,5 +218,13 @@ describe("TimelineView", () => {
     expect(screen.getByTestId("turn-position")).toHaveTextContent("150 turns");
     // 150 turns 60 s apart: their rules would sit under 12 px apart, so none are drawn.
     expect(screen.queryAllByTestId("turn-rule")).toHaveLength(0);
+  });
+
+  it("uses a selected range as its axis, so Fit shows the range", () => {
+    renderTimeline();
+    act(() => ctx.dispatch({ type: "range", range: { from: T0 + 5000, to: T0 + 6000 } }));
+    expect(viewOf()).toEqual({ from: T0 + 5000, to: T0 + 6000 });
+    expect(screen.getByRole("button", { name: "Fit" })).toBeDisabled();
+    expect(ctx.viewport).toEqual({ from: T0 + 5000, to: T0 + 6000 });
   });
 });

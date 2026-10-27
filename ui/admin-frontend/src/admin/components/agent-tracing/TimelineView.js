@@ -50,9 +50,17 @@ const spanTooltip = (s) => {
 
 const TimelineView = ({ height = 520 }) => {
   const theme = useTheme();
-  const { index, spans: allSpans, detail, selectedId, dispatch } = useSessionDetail();
+  const { index, spans: allSpans, detail, selectedId, range, dispatch } = useSessionDetail();
   const spans = index.ordered;
-  const bounds = useMemo(() => sessionBounds(detail.session, allSpans), [detail.session, allSpans]);
+  const session = useMemo(() => sessionBounds(detail.session, allSpans), [detail.session, allSpans]);
+  // With a time range set on the strip, the range is the axis (Fit shows
+  // the range), so its spans spread across the track instead of bunching.
+  const bounds = useMemo(() => {
+    if (!range) return session;
+    const from = Math.max(session.from, range.from);
+    const to = Math.min(session.to, range.to);
+    return to > from ? { from, to } : session;
+  }, [session, range]);
   const [view, setView] = useState(bounds);
   const [drag, setDrag] = useState(null);
   const startDrag = useWindowDrag();
@@ -78,6 +86,11 @@ const TimelineView = ({ height = 520 }) => {
   const windows = useMemo(() => turnWindows(spans), [spans]);
   const opening = useMemo(() => openingView(spans, bounds, windows), [spans, bounds, windows]);
   useEffect(() => setView(opening), [opening]);
+  // Share the visible window so the strip can show where the view is.
+  useEffect(() => {
+    dispatch({ type: "viewport", viewport: { from: view.from, to: view.to } });
+  }, [view.from, view.to, dispatch]);
+  useEffect(() => () => dispatch({ type: "viewport", viewport: null }), [dispatch]);
   const gaps = useMemo(() => findGaps(spans), [spans]);
   const rules = useMemo(() => turnRules(spans, detail.traces), [spans, detail.traces]);
   const fit = view.from <= bounds.from && view.to >= bounds.to;
@@ -308,6 +321,7 @@ const TimelineView = ({ height = 520 }) => {
         )}
         <Typography variant="caption" color="text.secondary">
           Showing {formatDuration(Math.round(span))} of {formatDuration(Math.round(total))}
+          {range ? " selected" : ""}
           {!fit && `, from ${formatDuration(Math.round(view.from - bounds.from))} in`} · Ctrl/⌘-scroll to zoom · Shift-scroll or the
           scrollbar to pan · drag to select a range · double-click a span to zoom to it
         </Typography>
