@@ -362,6 +362,18 @@ define run_goreleaser
 		goreleaser release -f $(1) $(GORELEASER_FLAGS)
 endef
 
+# merge_staging copies the studio packages saved in .dist-staging/ back into
+# dist/ after the microgateway run. goreleaser writes dist/ as root inside
+# the container, so on Linux hosts and CI runners the user cannot write to
+# it: copy through the same container.
+define merge_staging
+	docker run --rm --platform linux/amd64 \
+		-v $(CURDIR):/go/src/github.com/TykTechnologies/midsommar \
+		-w /go/src/github.com/TykTechnologies/midsommar \
+		$(GOLANG_CROSS_IMAGE) \
+		sh -c 'cp .dist-staging/* dist/'
+endef
+
 clean-dist:
 	rm -rf dist/
 
@@ -396,7 +408,7 @@ package-ce: build-frontend build-docs
 	$(call run_goreleaser,ci/goreleaser/goreleaser.yml,)
 	@mkdir -p .dist-staging && cp dist/*.deb dist/*.rpm .dist-staging/ 2>/dev/null || true
 	$(call run_goreleaser,ci/goreleaser/goreleaser-microgateway.yml,)
-	@cp .dist-staging/* dist/ 2>/dev/null || true
+	$(call merge_staging)
 	@rm -rf .dist-staging
 	@echo "✅ CE packages:"
 	@ls dist/*.deb dist/*.rpm 2>/dev/null
@@ -411,7 +423,7 @@ package-ent: build-frontend build-docs
 	$(call run_goreleaser,ci/goreleaser/goreleaser.yml,-tags=enterprise)
 	@mkdir -p .dist-staging && cp dist/*.deb dist/*.rpm .dist-staging/ 2>/dev/null || true
 	$(call run_goreleaser,ci/goreleaser/goreleaser-microgateway.yml,-tags=enterprise)
-	@cp .dist-staging/* dist/ 2>/dev/null || true
+	$(call merge_staging)
 	@rm -rf .dist-staging
 	@echo "✅ ENT packages:"
 	@ls dist/*.deb dist/*.rpm 2>/dev/null
