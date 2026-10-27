@@ -14,6 +14,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
+	"github.com/TykTechnologies/midsommar/v2/pkg/fipsinfo"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
@@ -187,6 +188,7 @@ func (c *SimpleEdgeClient) registerWithControl() error {
 			Status:    pb.HealthStatus_HEALTHY,
 			Message:   "Starting up",
 			Timestamp: timestamppb.Now(),
+			Metrics:   fipsinfo.Current().Metrics(), // FIPS 140-3 status, for the hub
 		},
 	}
 
@@ -984,6 +986,7 @@ func (c *SimpleEdgeClient) sendHeartbeatMessage() {
 					Status:    pb.HealthStatus_HEALTHY,
 					Message:   "Operational",
 					Timestamp: timestamppb.Now(),
+					Metrics:   fipsinfo.Current().Metrics(), // FIPS 140-3 status, for the hub
 				},
 				Metrics:              c.collectBasicMetrics(),
 				Timestamp:            timestamppb.Now(),

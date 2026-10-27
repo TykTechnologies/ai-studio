@@ -93,7 +93,9 @@ const (
 	//     write either format, but the minimum reader is raised for every
 	//     deployment so that an older headless replica cannot misread a
 	//     database a FIPS Studio has written.
-	SchemaVersion          = 26
+	// 27: edge_instances.fips (nullable, additive): each edge's FIPS 140-3
+	//     status from its heartbeats (midsommar-clean-8dy7.5).
+	SchemaVersion          = 27
 	MinReaderSchemaVersion = 26
 )
 

@@ -321,6 +321,15 @@ const EdgeGatewayDetail = () => {
 
                 <Box mb={2}>
                   <Typography variant="body2" color="textSecondary">
+                    FIPS 140-3 (reported by edge)
+                  </Typography>
+                  <Typography variant="body1" data-testid="edge-fips-status">
+                    {edgeGatewayService.formatFipsStatus(edgeGateway.fips)}
+                  </Typography>
+                </Box>
+
+                <Box mb={2}>
+                  <Typography variant="body2" color="textSecondary">
                     Last Heartbeat
                   </Typography>
                   <Typography variant="body1">

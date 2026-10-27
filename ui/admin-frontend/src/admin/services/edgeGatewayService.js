@@ -69,6 +69,8 @@ class EdgeGatewayService {
             status: edge.attributes.status,
             version: edge.attributes.version,
             buildHash: edge.attributes.build_hash,
+            // FIPS 140-3 status from heartbeats; null when the edge has not reported one
+            fips: edge.attributes.fips || null,
             metadata: edge.attributes.metadata || {},
             lastHeartbeat: edge.attributes.last_heartbeat,
             sessionId: edge.attributes.session_id,
@@ -108,6 +110,8 @@ class EdgeGatewayService {
           status: edge.attributes.status,
           version: edge.attributes.version,
           buildHash: edge.attributes.build_hash,
+          // FIPS 140-3 status from heartbeats; null when the edge has not reported one
+          fips: edge.attributes.fips || null,
           metadata: edge.attributes.metadata || {},
           lastHeartbeat: edge.attributes.last_heartbeat,
           sessionId: edge.attributes.session_id,
@@ -145,6 +149,8 @@ class EdgeGatewayService {
             status: edge.attributes.status,
             version: edge.attributes.version,
             buildHash: edge.attributes.build_hash,
+            // FIPS 140-3 status from heartbeats; null when the edge has not reported one
+            fips: edge.attributes.fips || null,
             metadata: edge.attributes.metadata || {},
             lastHeartbeat: edge.attributes.last_heartbeat,
             sessionId: edge.attributes.session_id,
@@ -328,6 +334,20 @@ class EdgeGatewayService {
     } else {
       return heartbeatTime.toLocaleDateString();
     }
+  }
+
+  // FIPS 140-3 status as a label: "On (v1.0.0-…)", with ", enforced" under
+  // GODEBUG=fips140=only, "Off", or "Unknown" for an edge that has not
+  // reported it (released before the field, or no heartbeat yet).
+  formatFipsStatus(fips) {
+    if (!fips) {
+      return 'Unknown';
+    }
+    if (!fips.enabled) {
+      return 'Off';
+    }
+    const version = fips.version ? ` (${fips.version})` : '';
+    return `On${version}${fips.enforced ? ', enforced' : ''}`;
   }
 
   // Utility function to get sync status display info

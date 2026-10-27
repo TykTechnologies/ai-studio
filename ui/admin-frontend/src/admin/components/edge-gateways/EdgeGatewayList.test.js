@@ -32,6 +32,7 @@ jest.mock("../../services/edgeGatewayService", () => ({
     getConnectionStatus: () => ({ label: "Connected", color: "success" }),
     getSyncStatusDisplay: () => ({ label: "In Sync", color: "success" }),
     formatLastHeartbeat: () => "just now",
+    formatFipsStatus: (fips) => (fips ? (fips.enabled ? `On (${fips.version})` : "Off") : "Unknown"),
   },
 }));
 const edgeGatewayService = require("../../services/edgeGatewayService").default;
@@ -88,5 +89,25 @@ describe("EdgeGatewayList Held by column", () => {
     expect(await screen.findByText("edge-a")).toBeInTheDocument();
     expect(screen.queryByText("Held by")).not.toBeInTheDocument();
     expect(screen.queryAllByTestId("edge-held-by")).toHaveLength(0);
+  });
+});
+
+describe("EdgeGatewayList FIPS status", () => {
+  let edges;
+  beforeEach(() => {
+    edgeGatewayService.listEdgeGateways.mockImplementation(() => Promise.resolve({ data: edges, meta: {} }));
+  });
+
+  it("shows each edge's FIPS status, and Unknown for one that has not reported it", async () => {
+    edges = [
+      edge("edge-a", { fips: { enabled: true, version: "v1.0.0-c2097c7c", enforced: false } }),
+      edge("edge-b", { fips: { enabled: false, version: "latest", enforced: false } }),
+      edge("edge-c", { fips: null }),
+    ];
+    renderList();
+
+    expect(await screen.findByText("edge-a")).toBeInTheDocument();
+    const cells = screen.getAllByTestId("edge-fips").map((c) => c.textContent);
+    expect(cells).toEqual(["FIPS: On (v1.0.0-c2097c7c)", "FIPS: Off", "FIPS: Unknown"]);
   });
 });

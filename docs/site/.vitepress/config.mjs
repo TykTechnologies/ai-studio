@@ -34,6 +34,7 @@ export default defineConfig({
           { text: 'Docker Compose', link: '/docs/deployment-docker' },
           { text: 'Kubernetes / Helm', link: '/docs/deployment-helm-k8s' },
           { text: 'Bare Metal / VM', link: '/docs/deployment-packages' },
+          { text: 'FIPS 140-3 (Enterprise)', link: '/docs/fips' },
           { text: 'Initial Configuration', link: '/docs/configuration' }
         ]
       },

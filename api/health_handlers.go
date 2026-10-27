@@ -3,11 +3,14 @@ package api
 import (
 	"net/http"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/fipsinfo"
 	"github.com/gin-gonic/gin"
 )
 
+// handleHealth reports liveness and the process's FIPS 140-3 status
+// ("fips": {enabled, version, enforced}).
 func (a *API) handleHealth(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "fips": fipsinfo.Current()})
 }
 
 func (a *API) handleReadiness(c *gin.Context) {

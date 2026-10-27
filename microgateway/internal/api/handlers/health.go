@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
+	"github.com/TykTechnologies/midsommar/v2/pkg/fipsinfo"
 	"github.com/gin-gonic/gin"
 )
 
@@ -12,8 +13,10 @@ import (
 func HealthCheck(services *services.ServiceContainer) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"status": "ok",
+			"status":  "ok",
 			"service": "microgateway",
+			// FIPS 140-3 status: {enabled, version, enforced}
+			"fips": fipsinfo.Current(),
 		})
 	}
 }

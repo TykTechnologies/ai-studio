@@ -49,8 +49,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          url=$(gh api "repos/${{ github.repository }}/actions/workflows/release-gate.yml/runs?head_sha=${{ github.sha }}&status=success&per_page=1" \
-            --jq '.workflow_runs[0].html_url // empty')
+          # Only a run in which the package smoke job (and so the FIPS 140-3
+          # smoke test) passed counts: the nightly run and plain manual runs
+          # skip it.
+          url=
+          for id in $(gh api "repos/${{ github.repository }}/actions/workflows/release-gate.yml/runs?head_sha=${{ github.sha }}&status=success&per_page=20" \
+              --jq '.workflow_runs[].id'); do
+            if gh api "repos/${{ github.repository }}/actions/runs/$id/jobs?per_page=100" \
+                --jq '.jobs[] | select(.name == "Package Smoke Tests (ENT)" and .conclusion == "success") | .name' | grep -q .; then
+              url=$(gh api "repos/${{ github.repository }}/actions/runs/$id" --jq .html_url)
+              break
+            fi
+          done
           if [ -n "$url" ]; then
             echo "reuse=true" >> "$GITHUB_OUTPUT"
             echo "Release gate already passed on ${{ github.sha }}: $url" >> "$GITHUB_STEP_SUMMARY"
@@ -64,6 +74,8 @@ jobs:
     needs: [gate-check]
     if: needs.gate-check.outputs.reuse != 'true'
     uses: ./.github/workflows/release-gate.yml
+    with:
+      include_fips_smoke: true
     secrets: inherit
 
   goreleaser:
@@ -104,6 +116,10 @@ jobs:
             pc_repo: "tyk/tyk-ee-unstable"
             docker_image: "tykio/tyk-ai-studio-ent"
             dockerfile: "ci/Dockerfile.distroless"
+            # FIPS 140-3 image, from the ENT edition as Tyk's -fips images are
+            fips_docker_image: "tykio/tyk-ai-studio-fips"
+            fips_dockerfile: "ci/Dockerfile.fips.distroless"
+            fips_binary: "/opt/tyk-ai-studio/tyk-ai-studio"
           # Microgateway CE
           - component: microgateway
             edition: ce
@@ -128,6 +144,10 @@ jobs:
             pc_repo: "tyk/tyk-ee-unstable"
             docker_image: "tykio/tyk-microgateway-ent"
             dockerfile: "ci/Dockerfile.microgateway.distroless"
+            # FIPS 140-3 image, from the ENT edition as Tyk's -fips images are
+            fips_docker_image: "tykio/tyk-microgateway-fips"
+            fips_dockerfile: "ci/Dockerfile.microgateway.fips.distroless"
+            fips_binary: "/opt/tyk-microgateway/tyk-microgateway"
     outputs:
       tags: ${{ steps.tag_metadata.outputs.tags }}
       commit_author: ${{ steps.set_outputs.outputs.commit_author}}
@@ -340,6 +360,76 @@ jobs:
           push: ${{ startsWith(github.ref, 'refs/tags') }}
           tags: ${{ steps.tag_metadata.outputs.tags }}
           labels: ${{ steps.tag_metadata.outputs.labels }}
+      # FIPS 140-3 images (tykio/tyk-ai-studio-fips, tykio/tyk-microgateway-fips)
+      # from the ENT -fips packages, on Tyk's FIPS base. The amd64 image is
+      # built and loaded first: its binary must pass scripts/fips-verify.sh
+      # and the image is scanned, before the multi-arch image is pushed with
+      # provenance and an SBOM.
+      -
+        name: Docker metadata for the FIPS image
+        id: fips_metadata
+        if: matrix.fips_docker_image != ''
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: |
+            ${{ matrix.fips_docker_image }}
+          flavor: |
+            latest=false
+            prefix=v
+          tags: |
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{version}}
+          labels: "org.opencontainers.image.title=${{ matrix.component }} (FIPS 140-3)\norg.opencontainers.image.description=Tyk AI ${{ matrix.component == 'studio' && 'Studio' || 'Microgateway' }}, built with FIPS 140-3 compliant cryptography (Go Cryptographic Module v1.0.0, CMVP #5247)\norg.opencontainers.image.vendor=tyk.io\norg.opencontainers.image.version=${{ github.ref_name }}\n"
+      -
+        name: Build the FIPS image (amd64) for checks
+        if: matrix.fips_docker_image != ''
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: "midsommar/dist"
+          platforms: linux/amd64
+          file: midsommar/${{ matrix.fips_dockerfile }}
+          load: true
+          push: false
+          tags: fips-check:${{ github.run_id }}
+      -
+        name: Verify the FIPS image binary
+        if: matrix.fips_docker_image != ''
+        run: |
+          cid=$(docker create fips-check:${{ github.run_id }})
+          docker cp "$cid:${{ matrix.fips_binary }}" ./fips-image-binary
+          docker rm "$cid"
+          docker run --rm -v "$PWD/fips-image-binary:/bin.fips:ro" \
+            -v "$PWD/midsommar/scripts:/scripts:ro" \
+            tykio/golang-cross:${{ matrix.golang_cross }} \
+            /scripts/fips-verify.sh --edition '${{ matrix.edition }}' --fips /bin.fips
+      -
+        name: Scan the FIPS image
+        if: matrix.fips_docker_image != ''
+        # The scanner gets only the saved image, not the Docker socket (this
+        # job is logged in to Docker Hub), and is pinned by digest.
+        run: |
+          mkdir -p fips-scan
+          docker save fips-check:${{ github.run_id }} -o fips-scan/image.tar
+          docker run --rm -v "$PWD/fips-scan:/work:ro" \
+            aquasec/trivy:0.58.1@sha256:ab70a02200597efa04748f210f793936eb647cbcdb0ea69cc30b226d6f5a22c7 \
+            image --no-progress --severity HIGH,CRITICAL --ignore-unfixed --exit-code 0 \
+            --input /work/image.tar
+          rm -rf fips-scan
+      -
+        name: Push the FIPS image
+        if: matrix.fips_docker_image != ''
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: "midsommar/dist"
+          platforms: linux/amd64,linux/arm64
+          file: midsommar/${{ matrix.fips_dockerfile }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          push: ${{ startsWith(github.ref, 'refs/tags') }}
+          tags: ${{ steps.fips_metadata.outputs.tags }}
+          labels: ${{ steps.fips_metadata.outputs.labels }}
       -
         name: save deb
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
