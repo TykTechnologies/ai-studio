@@ -216,8 +216,14 @@ describe("TimelineView", () => {
     expect(screen.getByTestId("turn-position")).toHaveTextContent("Turn 1 of 150");
     fireEvent.click(screen.getByRole("button", { name: "Fit" }));
     expect(screen.getByTestId("turn-position")).toHaveTextContent("150 turns");
-    // 150 turns 60 s apart: their rules would sit under 12 px apart, so none are drawn.
     expect(screen.queryAllByTestId("turn-rule")).toHaveLength(0);
+    // Across 150 turns the view shows one segment per turn instead of span rows.
+    expect(screen.queryAllByTestId("timeline-label")).toHaveLength(0);
+    const segments = screen.getAllByTestId("turn-segment");
+    expect(segments).toHaveLength(150);
+    fireEvent.click(segments[41]);
+    expect(screen.getByTestId("turn-position")).toHaveTextContent("Turn 42 of 150");
+    expect(screen.getAllByTestId("timeline-label").map((l) => l.textContent)).toEqual(["LLM · ask 41", "Tool · tool 41"]);
   });
 
   it("uses a selected range as its axis, so Fit shows the range", () => {

@@ -232,3 +232,43 @@ export const visibleTimelineRows = (rows, view) => {
   }
   return out;
 };
+
+/**
+ * The overview rows for a window holding many turns: each lane's span rows
+ * become one row of turn segments (a turn's extent within the lane, whether
+ * any span in it failed, and how many spans it has). index numbers a turn
+ * by its place in the whole session's windows.
+ */
+export const overviewRows = (rows, view, windows, isProblem) => {
+  const order = new Map(windows.map((w, i) => [w.traceId, i]));
+  const out = [];
+  let lane = null;
+  let spans = [];
+  const flush = () => {
+    if (!lane) return;
+    const by = new Map();
+    for (const s of spans) {
+      if (s.kind === "gateway_event" || !inRange(s, view)) continue;
+      const { start, end } = spanTimes(s);
+      const g = by.get(s.trace_id) || { traceId: s.trace_id, from: start, to: end, count: 0, problem: false, index: order.get(s.trace_id) ?? 0 };
+      g.from = Math.min(g.from, start);
+      g.to = Math.max(g.to, end);
+      g.count += 1;
+      g.problem = g.problem || isProblem(s);
+      by.set(s.trace_id, g);
+    }
+    if (by.size) {
+      out.push(lane);
+      out.push({ type: "turns", key: `${lane.lane.id}-turns`, lane: lane.lane, segments: [...by.values()].sort((a, b) => a.from - b.from) });
+    }
+  };
+  for (const r of rows) {
+    if (r.type === "lane") {
+      flush();
+      lane = r;
+      spans = [];
+    } else spans.push(...r.spans);
+  }
+  flush();
+  return out;
+};

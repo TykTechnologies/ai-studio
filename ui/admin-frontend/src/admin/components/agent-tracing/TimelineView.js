@@ -4,7 +4,7 @@ import { Box, Button, Stack, Tooltip, Typography } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 import { useSessionDetail } from "./SessionDetailContext";
 import { KIND_LABELS, durationMs, isProblem, sessionBounds, spanTimes } from "./spanModel";
-import { buildTimelineRows, currentTurn, findGaps, openingView, panView, turnRules, turnWindows, viewForSpan, viewForTurn, visibleTimelineRows, zoomView } from "./timelineModel";
+import { ZOOM_OPEN_TURNS, buildTimelineRows, currentTurn, findGaps, openingView, overviewRows, panView, turnRules, turnWindows, viewForSpan, viewForTurn, visibleTimelineRows, zoomView } from "./timelineModel";
 import { formatDuration, formatTokens } from "./sessionFilters";
 import useWindowDrag from "./useWindowDrag";
 
@@ -95,7 +95,14 @@ const TimelineView = ({ height = 520 }) => {
   const rules = useMemo(() => turnRules(spans, detail.traces), [spans, detail.traces]);
   const fit = view.from <= bounds.from && view.to >= bounds.to;
   const turnAt = currentTurn(windows, view);
-  const shown = useMemo(() => (fit ? rows : visibleTimelineRows(rows, view)), [fit, rows, view]);
+  // Across many turns, sub-second spans are slivers, so the view shows each
+  // lane's turns as segments (click one to open it) instead of span rows.
+  const turnsInView = windows.filter((w) => w.to >= view.from && w.from <= view.to).length;
+  const overview = turnsInView > ZOOM_OPEN_TURNS;
+  const shown = useMemo(
+    () => (overview ? overviewRows(rows, view, windows, isProblem) : fit ? rows : visibleTimelineRows(rows, view)),
+    [overview, fit, rows, view, windows],
+  );
 
   useEffect(() => {
     list.current?.resetAfterIndex(0);
@@ -225,6 +232,46 @@ const TimelineView = ({ height = 520 }) => {
 
   const Row = ({ index: i, style }) => {
     const r = shown[i];
+    if (r.type === "turns") {
+      return (
+        <Box style={style} role="group" aria-label={`${r.lane.name} turns`} sx={{ display: "flex" }}>
+          <Box sx={{ width: LABEL_WIDTH, flexShrink: 0, pl: 1 + r.lane.depth * 2, pr: 1, display: "flex", alignItems: "center", borderRight: 1, borderColor: "divider" }}>
+            <Typography variant="caption" noWrap title="Click a turn to open it">
+              Turns · {r.segments.length}
+            </Typography>
+          </Box>
+          <Box sx={{ position: "relative", width: trackWidth, overflow: "hidden" }}>
+            {r.segments.map((g) => {
+              const left = x(g.from);
+              const width = Math.max(3, x(g.to) - left);
+              return (
+                <Tooltip key={g.traceId} title={`Turn ${g.index + 1} · ${g.count} span${g.count === 1 ? "" : "s"} · ${formatDuration(Math.round(g.to - g.from))}`} disableInteractive>
+                  <Box
+                    role="button"
+                    tabIndex={-1}
+                    aria-label={`Turn ${g.index + 1}`}
+                    data-testid="turn-segment"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={() => windows[g.index] && setView(viewForTurn(windows[g.index], bounds))}
+                    sx={{
+                      position: "absolute",
+                      top: 4,
+                      bottom: 4,
+                      left,
+                      width,
+                      borderRadius: 0.5,
+                      bgcolor: g.problem ? "error.main" : "primary.main",
+                      cursor: "pointer",
+                      "&:hover": { outline: 2, outlineStyle: "solid", outlineColor: "text.primary" },
+                    }}
+                  />
+                </Tooltip>
+              );
+            })}
+          </Box>
+        </Box>
+      );
+    }
     if (r.type === "lane") {
       return (
         <Box style={style} data-testid="timeline-lane" sx={{ display: "flex", alignItems: "center", pl: 1 + r.lane.depth * 2, borderTop: 1, borderColor: "divider" }}>
@@ -280,7 +327,7 @@ const TimelineView = ({ height = 520 }) => {
     return Array.from({ length: n + 1 }, (_, i) => view.from + (span * i) / n);
   }, [view.from, span]);
   const bodyHeight = Math.min(height, shown.reduce((h, r) => h + (r.type === "lane" ? LANE : ROW), 0) || LANE);
-  const rulesInView = rules.filter((r) => r.at >= view.from && r.at <= view.to);
+  const rulesInView = overview ? [] : rules.filter((r) => r.at >= view.from && r.at <= view.to);
   const shownRules = rulesInView.length * MIN_RULE_PX <= trackWidth ? rulesInView : [];
   const kindsShown = [...new Set(spans.map((s) => s.kind))].filter((k) => kindColour[k]);
 
