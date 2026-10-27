@@ -344,6 +344,9 @@ GORELEASER_FLAGS ?= --snapshot --skip=sign --skip=publish --clean
 # This matches CI exactly: same image, same env vars, same goreleaser invocation.
 # NOTE: does NOT use --clean to allow building both components into the same dist/.
 # Use `make clean-dist` to reset before a fresh build.
+# The container runs as root and the checkout belongs to the host user, so
+# git refuses it ("dubious ownership") and goreleaser and Go's VCS stamping
+# fail: mark it safe, as release.yml's build script does.
 define run_goreleaser
 	docker run --rm --platform linux/amd64 \
 		-e CGO_ENABLED=1 \
@@ -359,7 +362,8 @@ define run_goreleaser
 		-v $(HOME)/.cache/go-build:/cache/go-build \
 		-w /go/src/github.com/TykTechnologies/midsommar \
 		$(GOLANG_CROSS_IMAGE) \
-		goreleaser release -f $(1) $(GORELEASER_FLAGS)
+		sh -c 'git config --global --add safe.directory /go/src/github.com/TykTechnologies/midsommar && \
+			goreleaser release -f $(1) $(GORELEASER_FLAGS)'
 endef
 
 # merge_staging copies the studio packages saved in .dist-staging/ back into
