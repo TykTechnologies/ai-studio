@@ -46,18 +46,20 @@ const FindBar = () => {
     if (!matches.length) return;
     const at = (i + matches.length) % matches.length;
     setPos(at);
-    const id = matches[at].span_id;
+    const match = matches[at];
+    const id = match.span_id;
     dispatch({ type: "select", id });
     // Search covers the whole session; in a windowed session a match may
-    // be outside the loaded window: load the turns around it.
+    // be outside the loaded window: load the turns around it. Metadata
+    // matches carry their start time; content matches need the span.
     if (windowed && !index.byId.has(id)) {
-      agentTracingService.getSpan(id, appId).then(
-        (res) => {
-          const t = ms(res?.span?.start_time);
-          if (Number.isFinite(t)) dispatch({ type: "range", range: windowAround(turns, turnAt(turns, t)) });
-        },
-        () => setError("Could not load that match"),
-      );
+      const reveal = (t) => Number.isFinite(t) && dispatch({ type: "range", range: windowAround(turns, turnAt(turns, t)) });
+      if (match.start_time) reveal(ms(match.start_time));
+      else
+        agentTracingService.getSpan(id, appId).then(
+          (res) => reveal(ms(res?.span?.start_time)),
+          () => setError("Could not load that match"),
+        );
     }
   };
 

@@ -249,4 +249,38 @@ describe("AgentSessionDetail", () => {
     expect(row(ids.tool1)).toBeUndefined();
     expect(agentTracingService.listSpans).toHaveBeenLastCalledWith(SESSION_ID, { limit: 1000, include: "previews", from: at(3), to: new Date(T0 + 6001).toISOString() });
   });
+
+  it("moves a large session's window to a find match outside it, using the match's start time", async () => {
+    const at = (sec) => new Date(T0 + sec * 1000).toISOString();
+    const big = detail();
+    big.session = { ...big.session, totals: { ...big.session.totals, span_count: 60000 } };
+    big.traces = [
+      { trace_id: "t0", turn_index: 0, started_at: at(0), ended_at: at(2), status: "error", totals: { span_count: 3000, error_count: 1 } },
+      { trace_id: "t1", turn_index: 1, started_at: at(3), ended_at: at(6), status: "ok", totals: { span_count: 3000 } },
+    ];
+    agentTracingService.getSession.mockResolvedValue(big);
+    agentTracingService.listSpans.mockImplementation((_id, params) => {
+      const from = Date.parse(params.from);
+      const to = Date.parse(params.to);
+      return Promise.resolve({ data: spans.filter((sp) => Date.parse(sp.start_time) >= from && Date.parse(sp.start_time) < to), next_cursor: null });
+    });
+    agentTracingService.search.mockResolvedValue({
+      matches: [{ span_id: ids.client, field: "name", snippet: "read_file", start_time: at(4.5) }],
+      total: 1,
+      truncated: false,
+    });
+    renderPage();
+    await screen.findByText("refund flow");
+    fireEvent.keyDown(document.body, { key: "2" });
+    await waitFor(() => expect(row(ids.tool1)).toBeInTheDocument());
+
+    fireEvent.keyDown(document.body, { key: "/" });
+    const input = await screen.findByLabelText("Find in session");
+    fireEvent.change(input, { target: { value: "read" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(row(ids.client)).toBeInTheDocument());
+    expect(row(ids.client)).toHaveAttribute("aria-pressed", "true");
+    expect(agentTracingService.listSpans).toHaveBeenLastCalledWith(SESSION_ID, { limit: 1000, include: "previews", from: at(3), to: new Date(T0 + 6001).toISOString() });
+    expect(agentTracingService.getSpan).not.toHaveBeenCalledWith(ids.client, expect.anything());
+  });
 });
