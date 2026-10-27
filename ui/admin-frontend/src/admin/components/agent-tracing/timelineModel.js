@@ -1,4 +1,4 @@
-import { ms, spanTimes } from "./spanModel";
+import { inRange, ms, spanTimes } from "./spanModel";
 
 // The Timeline (waterfall) view model (spec §6.2 View 2): one lane per
 // agent (root first, sub-agents indented under their parent), spans packed
@@ -78,13 +78,24 @@ export const packRows = (laneSpans) => {
   return { rows, ticks };
 };
 
-/** The flat list the virtualised body renders: lane headers, then rows. */
+/**
+ * The flat list the virtualised body renders: lane headers, then one row per
+ * span in start order (a waterfall, so every bar has a label), then a row of
+ * the lane's gateway events that belong to no span.
+ */
 export const buildTimelineRows = (spans, agents) => {
   const out = [];
   for (const lane of buildLanes(spans, agents)) {
     out.push({ type: "lane", key: `lane-${lane.id}`, lane });
     const { rows, ticks } = packRows(lane.spans);
-    rows.forEach((r, i) => out.push({ type: "row", key: `${lane.id}-${i}`, lane, spans: r, ticks }));
+    const bars = rows
+      .flat()
+      .filter((s) => s.kind !== "gateway_event")
+      .sort((a, b) => ms(a.start_time) - ms(b.start_time) || (a.span_id < b.span_id ? -1 : 1));
+    bars.forEach((s) => out.push({ type: "row", key: `${lane.id}-${s.span_id}`, lane, spans: [s], ticks }));
+    const barIds = new Set(bars.map((s) => s.span_id));
+    const orphans = lane.spans.filter((s) => s.kind === "gateway_event" && !barIds.has(s.parent_span_id));
+    if (orphans.length) out.push({ type: "row", key: `${lane.id}-events`, lane, spans: orphans, ticks, events: true });
   }
   return out;
 };
@@ -148,4 +159,116 @@ export const viewForSpan = (span, bounds) => {
   const { start, end } = spanTimes(span);
   const pad = Math.max((end - start) * 0.1, 5);
   return { from: Math.max(bounds.from, start - pad), to: Math.min(bounds.to, Math.max(end, start + 1) + pad) };
+};
+
+/** The view moved by deltaMs, kept inside bounds without changing its width. */
+export const panView = (view, deltaMs, bounds) => {
+  const width = view.to - view.from;
+  const from = Math.min(Math.max(bounds.from, view.from + deltaMs), bounds.to - width);
+  return { from, to: from + width };
+};
+
+// A window with more turns (or bar rows) than this opens zoomed to its
+// first turn: across many turns, sub-second spans are slivers at Fit.
+export const ZOOM_OPEN_TURNS = 20;
+export const ZOOM_OPEN_ROWS = 200;
+
+/** Each turn's time window (its spans' extent), in start order. */
+export const turnWindows = (spans) => {
+  const by = new Map();
+  for (const s of spans) {
+    const { start, end } = spanTimes(s);
+    const w = by.get(s.trace_id);
+    if (!w) by.set(s.trace_id, { traceId: s.trace_id, from: start, to: end });
+    else {
+      w.from = Math.min(w.from, start);
+      w.to = Math.max(w.to, end);
+    }
+  }
+  return [...by.values()].sort((a, b) => a.from - b.from);
+};
+
+/** A turn's window with a margin either side, inside bounds. */
+export const viewForTurn = (w, bounds) => {
+  const pad = Math.max((w.to - w.from) * 0.05, 50);
+  return { from: Math.max(bounds.from, w.from - pad), to: Math.min(bounds.to, Math.max(w.to, w.from + 1) + pad) };
+};
+
+/** The index of the turn the view is on: the last one starting at or before its middle. */
+export const currentTurn = (windows, view) => {
+  const mid = (view.from + view.to) / 2;
+  let i = 0;
+  windows.forEach((w, j) => {
+    if (w.from <= mid) i = j;
+  });
+  return i;
+};
+
+/** The view a session (or selected range) opens on: all of it, or for a large one its first turn. */
+export const openingView = (orderedSpans, bounds, windows) => {
+  const bars = orderedSpans.filter((s) => s.kind !== "gateway_event");
+  if ((bars.length <= ZOOM_OPEN_ROWS && windows.length <= ZOOM_OPEN_TURNS) || !windows.length) return bounds;
+  return viewForTurn(windows[0], bounds);
+};
+
+/**
+ * The rows with a span in view, and the lane headers that still have rows:
+ * zoomed in, the list holds what the window shows instead of every span.
+ */
+export const visibleTimelineRows = (rows, view) => {
+  const out = [];
+  let lane = null;
+  for (const r of rows) {
+    if (r.type === "lane") {
+      lane = r;
+      continue;
+    }
+    if (!r.spans.some((s) => inRange(s, view))) continue;
+    if (lane) {
+      out.push(lane);
+      lane = null;
+    }
+    out.push(r);
+  }
+  return out;
+};
+
+/**
+ * The overview rows for a window holding many turns: each lane's span rows
+ * become one row of turn segments (a turn's extent within the lane, whether
+ * any span in it failed, and how many spans it has). index numbers a turn
+ * by its place in the whole session's windows.
+ */
+export const overviewRows = (rows, view, windows, isProblem) => {
+  const order = new Map(windows.map((w, i) => [w.traceId, i]));
+  const out = [];
+  let lane = null;
+  let spans = [];
+  const flush = () => {
+    if (!lane) return;
+    const by = new Map();
+    for (const s of spans) {
+      if (s.kind === "gateway_event" || !inRange(s, view)) continue;
+      const { start, end } = spanTimes(s);
+      const g = by.get(s.trace_id) || { traceId: s.trace_id, from: start, to: end, count: 0, problem: false, index: order.get(s.trace_id) ?? 0 };
+      g.from = Math.min(g.from, start);
+      g.to = Math.max(g.to, end);
+      g.count += 1;
+      g.problem = g.problem || isProblem(s);
+      by.set(s.trace_id, g);
+    }
+    if (by.size) {
+      out.push(lane);
+      out.push({ type: "turns", key: `${lane.lane.id}-turns`, lane: lane.lane, segments: [...by.values()].sort((a, b) => a.from - b.from) });
+    }
+  };
+  for (const r of rows) {
+    if (r.type === "lane") {
+      flush();
+      lane = r;
+      spans = [];
+    } else spans.push(...r.spans);
+  }
+  flush();
+  return out;
 };

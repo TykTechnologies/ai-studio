@@ -12,6 +12,7 @@ const initial = {
   selectedId: null,
   drawerSpanId: null,
   range: null, // { from, to } in epoch ms
+  viewport: null, // the Timeline view's visible window while it is open, for the strip's cursor
   expandAll: false,
   findOpen: false,
 };
@@ -28,6 +29,8 @@ export const reducer = (state, action) => {
       return { ...state, drawerSpanId: null };
     case "range":
       return { ...state, range: action.range };
+    case "viewport":
+      return { ...state, viewport: action.viewport };
     case "toggleExpandAll":
       return { ...state, expandAll: !state.expandAll };
     case "find":

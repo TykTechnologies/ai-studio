@@ -180,6 +180,7 @@ Turns gateway traffic into sessions, turns and span trees. Off by default. It ru
 *   Key (`AGENT_TRACING_KEY`): root key for fingerprints and payload encryption; falls back to `TYK_AI_SECRET_KEY`
 *   Capture queue (`AGENT_TRACING_QUEUE_MAX_EVENTS`, `AGENT_TRACING_QUEUE_MAX_BYTES`, `AGENT_TRACING_MAX_STREAM_BUFFER_BYTES`): defaults `10000`, `67108864`, `1048576`
 *   Content (`AGENT_TRACING_CONTENT_DEFAULT_MODE`, `AGENT_TRACING_CONTENT_MAX_REQUEST_OVERRIDE`, `AGENT_TRACING_STORE_CONTENT_MODE_CAP`): `off`, `metadata`, `hashed`, `redacted` or `full`; defaults `off`, `metadata`, `full`
+*   `AGENT_TRACING_CONTENT_CEILING`: the highest content mode any App, the default or a request header may reach. Unset, it is the higher of the default and the request override (`metadata` with the defaults), so an App set to `redacted` or `full` captures only `metadata`. The shipped `.env.example` files set it to `redacted`.
 *   Correlation timeouts (`AGENT_TRACING_TURN_IDLE_TIMEOUT`, `AGENT_TRACING_SESSION_IDLE_TIMEOUT`): defaults `5m`, `30m`
 *   Retention (`AGENT_TRACING_METADATA_RETENTION_DAYS`, `AGENT_TRACING_PAYLOAD_RETENTION_DAYS`): defaults `30`, `7`; payloads never outlive metadata
 *   OTel exporters (`AGENT_TRACING_EXPORTERS_FILE`): path to a YAML file with an `exporters:` list

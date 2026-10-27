@@ -190,7 +190,8 @@ const AgentSessions = () => {
         field: "started_at",
         headerName: "Started",
         sortable: true,
-        renderCell: (s) => new Date(s.started_at).toLocaleString(),
+        sx: { whiteSpace: "nowrap" },
+        renderCell: (s) => new Date(s.started_at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }),
       },
       {
         field: "session",
@@ -222,13 +223,33 @@ const AgentSessions = () => {
       },
       {
         field: "agents",
-        headerName: "Agents",
-        renderCell: (s) => (s.agent_names?.length ? `${s.agent_names.length} · ${names(s.agent_names)}` : "—"),
+        headerName: "Agents · models",
+        renderCell: (s) => (
+          <Box sx={{ minWidth: 0, maxWidth: 220 }}>
+            <Typography variant="body2" noWrap>
+              {s.agent_names?.length ? `${s.agent_names.length} · ${names(s.agent_names)}` : "—"}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" display="block" noWrap>
+              {names(s.models) || "—"}
+            </Typography>
+          </Box>
+        ),
       },
-      { field: "models", headerName: "Models", renderCell: (s) => names(s.models) || "—" },
-      { field: "turns", headerName: "Turns", sortable: true, align: "right", renderCell: (s) => s.totals?.turn_count ?? 0 },
-      { field: "llm_calls", headerName: "LLM calls", sortable: true, align: "right", renderCell: (s) => s.totals?.llm_call_count ?? 0 },
-      { field: "tool_calls", headerName: "Tool calls", sortable: true, align: "right", renderCell: (s) => s.totals?.tool_call_count ?? 0 },
+      // Turns, LLM and tool calls share one column (sorted by LLM calls) so
+      // the table fits the page width.
+      {
+        field: "llm_calls",
+        headerName: "Activity",
+        sortable: true,
+        sx: { whiteSpace: "nowrap" },
+        renderCell: (s) => (
+          <Tooltip title={`${s.totals?.turn_count ?? 0} turns · ${s.totals?.llm_call_count ?? 0} LLM calls · ${s.totals?.tool_call_count ?? 0} tool calls`}>
+            <Typography variant="body2">
+              {s.totals?.turn_count ?? 0} turns · {s.totals?.llm_call_count ?? 0} LLM · {s.totals?.tool_call_count ?? 0} tools
+            </Typography>
+          </Tooltip>
+        ),
+      },
       {
         field: "errors",
         headerName: "Errors",
@@ -240,20 +261,21 @@ const AgentSessions = () => {
           </Typography>
         ),
       },
-      { field: "duration", headerName: "Duration", sortable: true, align: "right", renderCell: (s) => formatDuration(s.duration_ms) },
-      {
-        field: "tokens",
-        headerName: "Tokens",
-        sortable: true,
-        align: "right",
-        renderCell: (s) => formatTokens((s.totals?.input_tokens || 0) + (s.totals?.output_tokens || 0)),
-      },
+      { field: "duration", headerName: "Duration", sortable: true, align: "right", sx: { whiteSpace: "nowrap" }, renderCell: (s) => formatDuration(s.duration_ms) },
       {
         field: "cost",
-        headerName: "Cost",
+        headerName: "Usage",
         sortable: true,
         align: "right",
-        renderCell: (s) => formatCost(s.totals?.cost_micros, s.totals?.currency),
+        sx: { whiteSpace: "nowrap" },
+        renderCell: (s) => (
+          <>
+            <Typography variant="body2">{formatCost(s.totals?.cost_micros, s.totals?.currency)}</Typography>
+            <Typography variant="caption" color="text.secondary">
+              {formatTokens((s.totals?.input_tokens || 0) + (s.totals?.output_tokens || 0))} tokens
+            </Typography>
+          </>
+        ),
       },
       {
         field: "status",

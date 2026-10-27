@@ -1,11 +1,11 @@
 import React from "react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { ThemeProvider } from "@mui/material/styles";
 import testTheme from "../../utils/testTheme";
 import { SessionDetailProvider, useSessionDetail } from "./SessionDetailContext";
 import TimelineView from "./TimelineView";
-import { buildLanes, findGaps, packRows, turnRules, zoomView } from "./timelineModel";
+import { buildLanes, buildTimelineRows, currentTurn, findGaps, openingView, packRows, panView, turnRules, turnWindows, visibleTimelineRows, zoomView } from "./timelineModel";
 
 const T0 = Date.parse("2026-10-20T10:00:00Z");
 const at = (s) => new Date(T0 + s * 1000).toISOString();
@@ -80,6 +80,31 @@ describe("timeline model", () => {
     expect(turnRules(spans, detail.traces)).toEqual([{ traceId: B, at: T0 + 5000, turn: 1 }]);
   });
 
+  it("pans within the session without changing the zoom", () => {
+    const bounds = { from: 0, to: 1000 };
+    expect(panView({ from: 100, to: 300 }, 50, bounds)).toEqual({ from: 150, to: 350 });
+    expect(panView({ from: 100, to: 300 }, -500, bounds)).toEqual({ from: 0, to: 200 });
+    expect(panView({ from: 100, to: 300 }, 5000, bounds)).toEqual({ from: 800, to: 1000 });
+  });
+
+  it("finds turn windows, the current turn, and opens a large session on its first turn", () => {
+    const windows = turnWindows(spans);
+    expect(windows.map((w) => [w.traceId, w.from - T0, w.to - T0])).toEqual([[A, 0, 5000], [B, 5000, 6000]]);
+    expect(currentTurn(windows, { from: T0 + 5200, to: T0 + 5800 })).toBe(1);
+    const bounds = { from: T0, to: T0 + 6000 };
+    expect(openingView(spans, bounds, windows)).toEqual(bounds);
+    const big = Array.from({ length: 300 }, (_, i) => ({ span_id: String(i), trace_id: `t${i}`, kind: "llm_inference", start_time: at(i * 10), end_time: at(i * 10 + 1) }));
+    const opened = openingView(big, { from: T0, to: T0 + 3001000 }, turnWindows(big));
+    expect(opened.from).toBe(T0);
+    expect(opened.to).toBeLessThan(T0 + 2000);
+  });
+
+  it("keeps only rows with a span in view, and their lane headers", () => {
+    const rows = buildTimelineRows(spans, agents);
+    const shown = visibleTimelineRows(rows, { from: T0 + 5200, to: T0 + 5800 });
+    expect(shown.map((r) => (r.type === "lane" ? `lane:${r.lane.name}` : r.spans[0].name))).toEqual(["lane:planner", "answer"]);
+  });
+
   it("zooms around an anchor within the session", () => {
     const bounds = { from: 0, to: 1000 };
     expect(zoomView(bounds, 0.5, 500, bounds)).toEqual({ from: 250, to: 750 });
@@ -142,7 +167,70 @@ describe("TimelineView", () => {
     }));
     renderTimeline(many, { ...detail, agents: [] });
     expect(screen.getAllByTestId("timeline-bar").length).toBeLessThan(800);
-    // Zoomed out with 5,000 rows in 600 px, rows are single-pixel bars.
-    expect(screen.getAllByRole("group", { name: / spans$/ })[0]).toHaveStyle({ height: "1px" });
+    // Rows keep a readable height and the list scrolls instead of squashing them.
+    expect(screen.getAllByRole("group", { name: / spans$/ })[0]).toHaveStyle({ height: "22px" });
+  });
+
+  it("labels each row with the span's kind and model or tool, with a legend", () => {
+    renderTimeline();
+    const labels = screen.getAllByTestId("timeline-label").map((l) => l.textContent);
+    expect(labels.slice(0, 3)).toEqual(["LLM · plan", "Client tool · read_file", "LLM · answer"]);
+    expect(screen.getByTestId("timeline-legend")).toHaveTextContent("LLM call");
+    fireEvent.click(screen.getAllByTestId("timeline-label")[1]);
+    expect(ctx.drawerSpanId).toBe(tool.span_id);
+  });
+
+  it("pans a zoomed view with Shift-scroll and the scrollbar, never past the session", () => {
+    renderTimeline();
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    expect(viewOf()).toEqual({ from: T0 + 1500, to: T0 + 4500 });
+    const grid = screen.getByRole("group", { name: "Timeline" });
+    // 780 px of track shows 3 s, so 260 px is 1 s.
+    fireEvent.wheel(grid, { deltaY: 260, shiftKey: true });
+    expect(viewOf()).toEqual({ from: T0 + 2500, to: T0 + 5500 });
+    fireEvent.wheel(grid, { deltaY: 2600, shiftKey: true });
+    expect(viewOf()).toEqual({ from: T0 + 3000, to: T0 + 6000 });
+    const bar = screen.getByTestId("timeline-scroll");
+    bar.scrollLeft = 0;
+    fireEvent.scroll(bar);
+    expect(viewOf()).toEqual({ from: T0, to: T0 + 3000 });
+  });
+
+  it("opens a large session on turn 1 and steps through turns, listing only that turn's rows", () => {
+    const turns = 150;
+    const many = [];
+    const traces = [];
+    for (let i = 0; i < turns; i++) {
+      const trace = String(i).padStart(32, "0");
+      traces.push({ trace_id: trace, turn_index: i });
+      many.push({ span_id: `${String(i).padStart(14, "0")}01`, trace_id: trace, kind: "llm_inference", name: `ask ${i}`, status: "ok", start_time: at(i * 60), end_time: at(i * 60 + 1) });
+      many.push({ span_id: `${String(i).padStart(14, "0")}02`, trace_id: trace, kind: "tool_call", name: `tool ${i}`, status: "ok", start_time: at(i * 60 + 1.1), end_time: at(i * 60 + 1.5) });
+    }
+    renderTimeline(many, { ...detail, agents: [], traces });
+    expect(screen.getByTestId("turn-position")).toHaveTextContent("Turn 1 of 150");
+    expect(screen.getAllByTestId("timeline-label").map((l) => l.textContent)).toEqual(["LLM · ask 0", "Tool · tool 0"]);
+    fireEvent.click(screen.getByRole("button", { name: "Next turn" }));
+    expect(screen.getByTestId("turn-position")).toHaveTextContent("Turn 2 of 150");
+    expect(screen.getAllByTestId("timeline-label").map((l) => l.textContent)).toEqual(["LLM · ask 1", "Tool · tool 1"]);
+    fireEvent.click(screen.getByRole("button", { name: "Previous turn" }));
+    expect(screen.getByTestId("turn-position")).toHaveTextContent("Turn 1 of 150");
+    fireEvent.click(screen.getByRole("button", { name: "Fit" }));
+    expect(screen.getByTestId("turn-position")).toHaveTextContent("150 turns");
+    expect(screen.queryAllByTestId("turn-rule")).toHaveLength(0);
+    // Across 150 turns the view shows one segment per turn instead of span rows.
+    expect(screen.queryAllByTestId("timeline-label")).toHaveLength(0);
+    const segments = screen.getAllByTestId("turn-segment");
+    expect(segments).toHaveLength(150);
+    fireEvent.click(segments[41]);
+    expect(screen.getByTestId("turn-position")).toHaveTextContent("Turn 42 of 150");
+    expect(screen.getAllByTestId("timeline-label").map((l) => l.textContent)).toEqual(["LLM · ask 41", "Tool · tool 41"]);
+  });
+
+  it("uses a selected range as its axis, so Fit shows the range", () => {
+    renderTimeline();
+    act(() => ctx.dispatch({ type: "range", range: { from: T0 + 5000, to: T0 + 6000 } }));
+    expect(viewOf()).toEqual({ from: T0 + 5000, to: T0 + 6000 });
+    expect(screen.getByRole("button", { name: "Fit" })).toBeDisabled();
+    expect(ctx.viewport).toEqual({ from: T0 + 5000, to: T0 + 6000 });
   });
 });
