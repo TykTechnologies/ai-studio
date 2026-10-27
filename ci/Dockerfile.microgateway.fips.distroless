@@ -1,0 +1,27 @@
+# FIPS 140-3 microgateway image (tykio/tyk-microgateway-fips): the -fips
+# package (GOFIPS140=v1.0.0, Go Cryptographic Module v1.0.0, CMVP #5247) on
+# Tyk's FIPS base, as tyk-gateway-fips uses. The base is a Debian 13 glibc
+# image (the cgo SQLite driver needs glibc; /lib64/ld-linux-x86-64.so.2 is
+# there) running as uid 65532, like distroless :nonroot.
+FROM debian:bookworm-slim@sha256:f06537653ac770703bc45b4b113475bd402f451e85223f0f2837acbf89ab020a as DEB
+ARG TARGETARCH
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+COPY *${TARGETARCH}.deb /
+RUN dpkg -i /tyk-microgateway-fips*${TARGETARCH}.deb && rm /*.deb
+
+FROM tykio/dhi-busybox:1.37-fips@sha256:f3600a497e38b3cd381bc41df15a84438b3e1ab7ba0feeb0d0f3f17189ee256e
+
+COPY --from=DEB /opt/tyk-microgateway /opt/tyk-microgateway
+
+EXPOSE 8080 9090
+
+WORKDIR /opt/tyk-microgateway/
+
+# In edge mode the analytics pulse (edge analytics, proxy logs and spend to the
+# control plane) is loaded from this file; other modes skip it. Override the
+# variable to use your own file, or set it empty to run without the pulse.
+ENV PLUGINS_CONFIG_PATH=/opt/tyk-microgateway/config/analytics-pulse-config.yaml
+
+ENTRYPOINT ["/opt/tyk-microgateway/tyk-microgateway"]

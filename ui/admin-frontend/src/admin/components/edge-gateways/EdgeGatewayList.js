@@ -374,6 +374,9 @@ const EdgeGatewayList = () => {
                             {edge.buildHash.substring(0, 8)}
                           </Typography>
                         )}
+                        <Typography variant="caption" color="textSecondary" display="block" data-testid="edge-fips">
+                          FIPS: {edgeGatewayService.formatFipsStatus(edge.fips)}
+                        </Typography>
                       </StyledTableCell>
                       <StyledTableCell>
                         <Typography variant="body2">

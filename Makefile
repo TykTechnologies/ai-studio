@@ -425,6 +425,23 @@ test-package-smoke: package-ce
 		(docker compose -f ../../tests/packaging/compose.yml logs; docker compose -f ../../tests/packaging/compose.yml down -v; exit 1)
 	docker compose -f tests/packaging/compose.yml down -v
 	@echo "✅ Package smoke tests passed"
+	$(MAKE) test-fips-smoke
+
+# FIPS 140-3 runtime smoke test (tests/fipssmoke) of the -fips packages in
+# dist/: as the -fips container images (ci/Dockerfile*.fips.distroless) and
+# as installed .debs (tests/packaging/Dockerfile.deb-smoke PACKAGES=fips).
+# Run by test-package-smoke[-ent]; on its own it needs dist/ from a package
+# build. FIPS_SMOKE_ARCH picks the packages (default amd64).
+.PHONY: test-fips-smoke
+FIPS_SMOKE_ARCH ?= amd64
+test-fips-smoke:
+	@echo "🧪 Running FIPS 140-3 smoke tests ($(FIPS_SMOKE_ARCH))..."
+	docker build -t fips-smoke-studio:local -f ci/Dockerfile.fips.distroless --build-arg TARGETARCH=$(FIPS_SMOKE_ARCH) dist
+	docker build -t fips-smoke-gateway:local -f ci/Dockerfile.microgateway.fips.distroless --build-arg TARGETARCH=$(FIPS_SMOKE_ARCH) dist
+	tests/fipssmoke/run.sh image fips-smoke-studio:local fips-smoke-gateway:local
+	docker build -t fips-smoke-deb:local -f tests/packaging/Dockerfile.deb-smoke --build-arg TARGETARCH=$(FIPS_SMOKE_ARCH) --build-arg PACKAGES=fips .
+	tests/fipssmoke/run.sh deb fips-smoke-deb:local
+	@echo "✅ FIPS smoke tests passed"
 
 test-package-smoke-ent: package-ent
 	@echo "🧪 Running package smoke tests (ENT)..."
@@ -440,6 +457,7 @@ test-package-smoke-ent: package-ent
 		(docker compose -f ../../tests/packaging/compose.yml logs; docker compose -f ../../tests/packaging/compose.yml down -v; exit 1)
 	docker compose -f tests/packaging/compose.yml down -v
 	@echo "✅ Package smoke tests passed"
+	$(MAKE) test-fips-smoke
 
 # Package help
 package-help:

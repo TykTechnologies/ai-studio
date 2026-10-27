@@ -5,6 +5,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/pkg/cluster"
+	"github.com/TykTechnologies/midsommar/v2/pkg/fipsinfo"
 )
 
 // EdgeOwner is the Studio replica holding an edge's configuration stream:
@@ -39,4 +40,11 @@ func (a *API) withEdgeOwners(ctx context.Context, resps []EdgeResponse) {
 			resps[i].Attributes.OwnerLive = o.Live
 		}
 	}
+}
+
+// EdgeFIPS is the edge's FIPS 140-3 status, from its registration and
+// heartbeats: null when it has not reported one (an edge released before the
+// field), which the UI shows as unknown.
+type EdgeFIPS struct {
+	FIPS *fipsinfo.Status `json:"fips"`
 }

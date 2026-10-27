@@ -35,6 +35,7 @@ type EdgeResponse struct {
 		CreatedAt      time.Time  `json:"created_at"`
 		UpdatedAt      time.Time  `json:"updated_at"`
 		EdgeOwner
+		EdgeFIPS
 	} `json:"attributes"`
 }
 
@@ -304,6 +305,7 @@ func serializeEdge(edge *models.EdgeInstance) EdgeResponse {
 			CreatedAt      time.Time              `json:"created_at"`
 			UpdatedAt      time.Time              `json:"updated_at"`
 			EdgeOwner
+			EdgeFIPS
 		}{
 			EdgeID:         edge.EdgeID,
 			Namespace:      namespace,
@@ -320,6 +322,7 @@ func serializeEdge(edge *models.EdgeInstance) EdgeResponse {
 			CreatedAt:      edge.CreatedAt,
 			UpdatedAt:      edge.UpdatedAt,
 			EdgeOwner:      EdgeOwner{OwnerNodeID: edge.OwnerNodeID},
+			EdgeFIPS:       EdgeFIPS{FIPS: edge.FIPS},
 		},
 	}
 }
@@ -349,6 +352,7 @@ func serializeEdgeWithHealth(edge *services.EdgeInstanceWithHealth) EdgeResponse
 			CreatedAt      time.Time              `json:"created_at"`
 			UpdatedAt      time.Time              `json:"updated_at"`
 			EdgeOwner
+			EdgeFIPS
 		}{
 			EdgeID:         edge.EdgeInstance.EdgeID,
 			Namespace:      namespace,
@@ -365,6 +369,7 @@ func serializeEdgeWithHealth(edge *services.EdgeInstanceWithHealth) EdgeResponse
 			CreatedAt:      edge.EdgeInstance.CreatedAt,
 			UpdatedAt:      edge.EdgeInstance.UpdatedAt,
 			EdgeOwner:      EdgeOwner{OwnerNodeID: edge.EdgeInstance.OwnerNodeID},
+			EdgeFIPS:       EdgeFIPS{FIPS: edge.EdgeInstance.FIPS},
 		},
 	}
 }

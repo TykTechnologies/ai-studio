@@ -17,6 +17,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/docs"
 	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/TykTechnologies/midsommar/v2/pkg/fipsinfo"
 	"github.com/TykTechnologies/midsommar/v2/pkg/studio"
 	// SQLite for DATABASE_TYPE=sqlite; it needs cgo, so pkg/studio leaves it out.
 	_ "github.com/TykTechnologies/midsommar/v2/pkg/studio/sqlitedb"
@@ -42,6 +43,8 @@ func main() {
 	// Initialize logger with configured level
 	logger.Init(appConf.LogLevel)
 	logger.Infof("Log level set to: %s", appConf.LogLevel)
+	fips := fipsinfo.Current()
+	logger.Infof("FIPS 140-3: enabled=%t version=%s enforced=%t", fips.Enabled, fips.Version, fips.Enforced)
 
 	// Report every configured path (grep 'startup path'); problems are WARNs.
 	startup.ReportPaths(appConf, *envFile)
