@@ -157,12 +157,14 @@ TABLE agent_trace_sessions
   column `sampled` numeric NOT NULL
   column `content_mode` text NOT NULL
   column `retention_until` datetime NOT NULL
+  column `previous_session_id` text
   constraint PRIMARY KEY (`id`)
   autoindex origin=pk unique=1 (id)
   index CREATE INDEX `idx_agent_trace_sessions_app_cost` ON `agent_trace_sessions`(`app_id`,`cost_micros`)
   index CREATE INDEX `idx_agent_trace_sessions_app_external` ON `agent_trace_sessions`(`app_id`,`external_id`)
   index CREATE INDEX `idx_agent_trace_sessions_app_started` ON `agent_trace_sessions`(`app_id`,`started_at`)
   index CREATE INDEX `idx_agent_trace_sessions_app_user_started` ON `agent_trace_sessions`(`app_id`,`user_id`,`started_at`)
+  index CREATE INDEX `idx_agent_trace_sessions_previous` ON `agent_trace_sessions`(`previous_session_id`)
   index CREATE INDEX `idx_agent_trace_sessions_retention` ON `agent_trace_sessions`(`retention_until`)
   index CREATE INDEX `idx_agent_trace_sessions_started` ON `agent_trace_sessions`(`started_at`,`id`)
   index CREATE INDEX `idx_agent_trace_sessions_status_activity` ON `agent_trace_sessions`(`status`,`last_activity_at`)

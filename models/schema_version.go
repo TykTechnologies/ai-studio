@@ -95,7 +95,9 @@ const (
 	//     database a FIPS Studio has written.
 	// 27: edge_instances.fips (nullable, additive): each edge's FIPS 140-3
 	//     status from its heartbeats (midsommar-clean-8dy7.5).
-	SchemaVersion          = 27
+	// 28: agent_trace_sessions.previous_session_id and its index (nullable,
+	//     additive): the session a rolled-over inferred session continues.
+	SchemaVersion          = 28
 	MinReaderSchemaVersion = 26
 )
 

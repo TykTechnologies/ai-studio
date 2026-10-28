@@ -24,6 +24,7 @@ func TestAgentTracingConfigDefaults(t *testing.T) {
 		cfg.QueueMaxEvents != 10000 || cfg.QueueMaxBytes != 67108864 || cfg.MaxStreamBufferBytes != 1048576 ||
 		cfg.PayloadMaxPartBytes != 262144 || cfg.PayloadMaxSpanBytes != 1048576 ||
 		cfg.TurnIdleTimeout != 5*time.Minute || cfg.SessionIdleTimeout != 30*time.Minute ||
+		cfg.SessionMaxDuration != 4*time.Hour || cfg.SessionMaxSpans != 5000 ||
 		cfg.ToolMatchWindow != 300*time.Second || cfg.MetadataRetentionDays != 30 || cfg.PayloadRetentionDays != 7 ||
 		cfg.CorrelationKeyTTL != 24*time.Hour || cfg.StoreSampleRate != 1.0 || cfg.ExportContent != "none" ||
 		cfg.ExportSemconvProfile != "genai-1.41" || !cfg.PropagateLLMProviders || cfg.ForwardTykHeaders ||
@@ -54,13 +55,16 @@ func TestAgentTracingConfigParse(t *testing.T) {
 				"AGENT_TRACING_PAYLOAD_BACKEND":         "postgres",
 				"AGENT_TRACING_EXPORTERS_FILE":          "/etc/tyk/exporters.yaml",
 				"AGENT_TRACING_PROPAGATE_LLM_PROVIDERS": "false",
+				"AGENT_TRACING_SESSION_MAX_DURATION":    "90m",
+				"AGENT_TRACING_SESSION_MAX_SPANS":       "800",
 			},
 			check: func(t *testing.T, c AgentTracingConfig) {
 				if !c.Enabled || c.Key != "k" || c.QueueMaxEvents != 500 || c.ContentDefaultMode != "redacted" ||
 					c.TurnIdleTimeout != 90*time.Second || c.StoreSampleRate != 0.25 ||
 					!reflect.DeepEqual(c.CompatHeaders, []string{"helicone", "portkey"}) ||
 					!reflect.DeepEqual(c.HarnessSessionHeaders, []string{"x-claude-code-session-id"}) ||
-					c.PayloadBackend != "db" || c.ExportersFile != "/etc/tyk/exporters.yaml" || c.PropagateLLMProviders {
+					c.PayloadBackend != "db" || c.ExportersFile != "/etc/tyk/exporters.yaml" || c.PropagateLLMProviders ||
+					c.SessionMaxDuration != 90*time.Minute || c.SessionMaxSpans != 800 {
 					t.Fatalf("overrides not applied: %+v", c)
 				}
 			},
@@ -77,14 +81,17 @@ func TestAgentTracingConfigParse(t *testing.T) {
 				"AGENT_TRACING_STORE_SAMPLE_RATE":    "1.5",
 				"AGENT_TRACING_MIN_LINK_CONFIDENCE":  "certain",
 				"AGENT_TRACING_EXPORT_CONTENT":       "all",
+				"AGENT_TRACING_SESSION_MAX_DURATION": "0s",
+				"AGENT_TRACING_SESSION_MAX_SPANS":    "0",
 			},
-			warnings: 9,
+			warnings: 11,
 			check: func(t *testing.T, c AgentTracingConfig) {
 				d := DefaultAgentTracingConfig()
 				if c.Enabled || c.QueueMaxEvents != d.QueueMaxEvents || c.QueueMaxBytes != d.QueueMaxBytes ||
 					c.ContentDefaultMode != "off" || c.TurnIdleTimeout != d.TurnIdleTimeout ||
 					c.SessionIdleTimeout != d.SessionIdleTimeout || c.StoreSampleRate != 1.0 ||
-					c.MinLinkConfidence != "weak" || c.ExportContent != "none" {
+					c.MinLinkConfidence != "weak" || c.ExportContent != "none" ||
+					c.SessionMaxDuration != d.SessionMaxDuration || c.SessionMaxSpans != d.SessionMaxSpans {
 					t.Fatalf("invalid values were not replaced by defaults: %+v", c)
 				}
 			},

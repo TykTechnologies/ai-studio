@@ -73,6 +73,11 @@ type AgentTraceSession struct {
 	Sampled        bool      `gorm:"not null" json:"sampled"`
 	ContentMode    string    `gorm:"size:16;not null" json:"content_mode"` // effective max mode in the session
 	RetentionUntil time.Time `gorm:"not null;index:idx_agent_trace_sessions_retention" json:"retention_until"`
+
+	// PreviousSessionID is the inferred session this one continues: the
+	// assembler rolls a long inferred session over at a turn boundary
+	// (AGENT_TRACING_SESSION_MAX_DURATION / _MAX_SPANS). Empty otherwise.
+	PreviousSessionID string `gorm:"size:36;index:idx_agent_trace_sessions_previous" json:"previous_session_id,omitempty"`
 }
 
 func (AgentTraceSession) TableName() string { return "agent_trace_sessions" }

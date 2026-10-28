@@ -142,6 +142,7 @@ TABLE agent_trace_sessions
   index CREATE INDEX idx_agent_trace_sessions_app_external ON agent_trace_sessions USING btree (app_id, external_id)
   index CREATE INDEX idx_agent_trace_sessions_app_started ON agent_trace_sessions USING btree (app_id, started_at)
   index CREATE INDEX idx_agent_trace_sessions_app_user_started ON agent_trace_sessions USING btree (app_id, user_id, started_at)
+  index CREATE INDEX idx_agent_trace_sessions_previous ON agent_trace_sessions USING btree (previous_session_id)
   index CREATE INDEX idx_agent_trace_sessions_retention ON agent_trace_sessions USING btree (retention_until)
   index CREATE INDEX idx_agent_trace_sessions_started ON agent_trace_sessions USING btree (started_at, id)
   index CREATE INDEX idx_agent_trace_sessions_status_activity ON agent_trace_sessions USING btree (status, last_activity_at)
@@ -175,6 +176,7 @@ TABLE agent_trace_sessions
   column sampled boolean(bool) nullable=NO
   column content_mode character varying(varchar) nullable=NO len=16
   column retention_until timestamp with time zone(timestamptz) nullable=NO
+  column previous_session_id character varying(varchar) nullable=YES len=36
 TABLE agent_trace_span_links
   constraint agent_trace_span_links_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX agent_trace_span_links_pkey ON agent_trace_span_links USING btree (id)

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Link as RouterLink, useParams } from "react-router-dom";
 import { Alert, Box, LinearProgress, Snackbar, Tab, Tabs, Typography } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -7,6 +7,7 @@ import EnterpriseFeatureBadge from "../components/common/EnterpriseFeatureBadge"
 import PermissionDeniedPanel from "../components/rbac/PermissionDeniedPanel";
 import { SessionDetailProvider, useSessionDetail } from "../components/agent-tracing/SessionDetailContext";
 import useSessionData from "../components/agent-tracing/useSessionData";
+import { openingWindow, turnsOf } from "../components/agent-tracing/sessionWindow";
 import useSessionKeyboard from "../components/agent-tracing/useSessionKeyboard";
 import { SessionHeader, SummaryStrip } from "../components/agent-tracing/SessionHeader";
 import TimelineStrip from "../components/agent-tracing/TimelineStrip";
@@ -89,11 +90,17 @@ const AgentSessionDetail = () => {
       </>
     );
   }
-  return <Loaded sessionId={sessionId} title={title} />;
+  // Keyed: following a rolled-over session's link starts afresh.
+  return <Loaded key={sessionId} sessionId={sessionId} title={title} />;
 };
 
 const Loaded = ({ sessionId, title }) => {
-  const { detail, spans, resources, previews, loadingSpans, error } = useSessionData(sessionId);
+  // The loaded window of a large session; the provider reports each new
+  // range here and useSessionData loads its spans.
+  const [win, setWin] = useState(null);
+  const { detail, spans, resources, previews, loadingSpans, truncated, windowed, error } = useSessionData(sessionId, win);
+  const turns = useMemo(() => (windowed ? turnsOf(detail) : []), [windowed, detail]);
+  const opening = useMemo(() => (windowed ? openingWindow(turns) : null), [windowed, turns]);
   if (error && isPermissionDenied(error)) return <PermissionDeniedPanel required={P.TRACES_READ} />;
   return (
     <>
@@ -107,7 +114,18 @@ const Loaded = ({ sessionId, title }) => {
         )}
         {!detail && !error && <LinearProgress aria-label="Loading session" />}
         {detail && (
-          <SessionDetailProvider detail={detail} spans={spans} resources={resources} previews={previews}>
+          <SessionDetailProvider
+            key={detail.session?.id}
+            detail={detail}
+            spans={spans}
+            resources={resources}
+            previews={previews}
+            windowed={windowed}
+            turns={turns}
+            truncated={truncated}
+            initialState={opening ? { range: opening } : undefined}
+            onRangeChange={windowed ? setWin : undefined}
+          >
             <Body loadingSpans={loadingSpans} />
           </SessionDetailProvider>
         )}

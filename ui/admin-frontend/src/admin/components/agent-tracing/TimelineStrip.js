@@ -1,16 +1,19 @@
 import React, { useMemo, useRef, useState } from "react";
-import { Box, Button, Collapse, Stack, Typography } from "@mui/material";
+import { Alert, Box, Button, Collapse, Stack, Typography } from "@mui/material";
 import { useSessionDetail } from "./SessionDetailContext";
 import { isProblem, sessionBounds, spanTimes } from "./spanModel";
 import { formatDuration } from "./sessionFilters";
 import useWindowDrag from "./useWindowDrag";
+import { adjacentWindow, bucketizeTurns, WINDOW_MAX_SPANS } from "./sessionWindow";
 
 // The always-visible timeline strip (spec §6.2): the whole session's
 // activity at a glance, a drag sets the shared time range that filters
 // every view, and the selected span is marked. Once set, the range has
 // handles to move its start and end (by pointer or arrow keys), and its
 // body drags to move the whole window. Activity is drawn in fixed buckets,
-// so the DOM stays the same size however many spans there are.
+// so the DOM stays the same size however many spans there are. In a
+// windowed (large) session the activity comes from the turn list, the range
+// is the window of spans loaded, and Earlier/Later step it by whole turns.
 
 export const BUCKETS = 120;
 const MIN_DRAG_PX = 4;
@@ -56,13 +59,16 @@ export const bucketize = (spans, bounds, n = BUCKETS) => {
 };
 
 const TimelineStrip = () => {
-  const { spans, detail, range, viewport, selectedId, index, dispatch } = useSessionDetail();
+  const { spans, detail, range, viewport, selectedId, index, dispatch, windowed, turns, truncated } = useSessionDetail();
   const [open, setOpen] = useState(true);
   const [draft, setDraft] = useState(null); // the range while a drag is under way
   const ref = useRef(null);
   const startDrag = useWindowDrag();
   const bounds = useMemo(() => sessionBounds(detail.session, spans), [detail.session, spans]);
-  const buckets = useMemo(() => bucketize(spans, bounds), [spans, bounds]);
+  const buckets = useMemo(
+    () => (windowed ? bucketizeTurns(turns, bounds, BUCKETS) : bucketize(spans, bounds)),
+    [windowed, turns, spans, bounds],
+  );
   const max = Math.max(1, ...buckets.map((b) => b.count));
   const total = bounds.to - bounds.from;
   const pct = (t) => `${Math.max(0, Math.min(100, ((t - bounds.from) / total) * 100))}%`;
@@ -106,6 +112,8 @@ const TimelineStrip = () => {
     dispatch({ type: "range", range: dragRange(edge, { range, t0: 0, t }, bounds, minMs) });
   };
   const shown = draft || range;
+  const earlier = windowed ? adjacentWindow(turns, range, -1) : null;
+  const later = windowed ? adjacentWindow(turns, range, 1) : null;
 
   const selected = selectedId ? index.byId.get(selectedId)?.span : null;
   const handle = (edge) => {
@@ -150,8 +158,20 @@ const TimelineStrip = () => {
             <Typography variant="caption" data-testid="range-label">
               Showing {formatDuration(Math.round(shown.to - shown.from))} from {formatDuration(Math.round(shown.from - bounds.from))}
             </Typography>
-            <Button size="small" onClick={() => dispatch({ type: "range", range: null })}>
-              Clear range
+            {!windowed && (
+              <Button size="small" onClick={() => dispatch({ type: "range", range: null })}>
+                Clear range
+              </Button>
+            )}
+          </>
+        )}
+        {windowed && (
+          <>
+            <Button size="small" disabled={!earlier} onClick={() => dispatch({ type: "range", range: earlier })}>
+              ‹ Earlier
+            </Button>
+            <Button size="small" disabled={!later} onClick={() => dispatch({ type: "range", range: later })}>
+              Later ›
             </Button>
           </>
         )}
@@ -160,6 +180,18 @@ const TimelineStrip = () => {
           {open ? "Hide timeline" : "Show timeline"}
         </Button>
       </Stack>
+      {windowed && (
+        <Typography variant="caption" color="text.secondary" display="block" data-testid="windowed-note">
+          Large session ({(detail.session?.totals?.span_count || 0).toLocaleString()} spans): the views show the highlighted
+          window of whole turns. Drag on the timeline, or step Earlier and Later, to load another part.
+        </Typography>
+      )}
+      {truncated && (
+        <Alert severity="warning" sx={{ my: 1 }} data-testid="window-truncated">
+          This range has more than {WINDOW_MAX_SPANS.toLocaleString()} spans; only the first {WINDOW_MAX_SPANS.toLocaleString()} are
+          shown. Narrow the range to see the rest.
+        </Alert>
+      )}
       <Collapse in={open}>
         <Box
           ref={ref}
