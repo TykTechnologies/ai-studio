@@ -198,13 +198,14 @@ func pairResults(format string, body []byte, turn int, results []ToolResult, fp 
 			calls = append(calls, u)
 		}
 	}
+	used := make([]bool, len(calls))
 	for i := range results {
 		if results[i].ID != "" {
 			continue
 		}
 		j := -1
 		for k, c := range calls {
-			if results[i].Name == "" || c.ToolName == results[i].Name {
+			if !used[k] && (results[i].Name == "" || c.ToolName == results[i].Name) {
 				j = k
 				break
 			}
@@ -212,8 +213,8 @@ func pairResults(format string, body []byte, turn int, results []ToolResult, fp 
 		if j < 0 {
 			continue
 		}
+		used[j] = true
 		c := calls[j]
-		calls = append(calls[:j], calls[j+1:]...)
 		if c.ToolCallID != "" {
 			results[i].ID = c.ToolCallID
 			continue
