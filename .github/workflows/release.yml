@@ -399,7 +399,7 @@ jobs:
           docker cp "$cid:${{ matrix.fips_binary }}" ./fips-image-binary
           docker rm "$cid"
           docker run --rm -v "$PWD/fips-image-binary:/bin.fips:ro" \
-            -v "$PWD/midsommar/scripts:/scripts:ro" \
+            -v "$PWD/scripts:/scripts:ro" \
             tykio/golang-cross:${{ matrix.golang_cross }} \
             /scripts/fips-verify.sh --edition '${{ matrix.edition }}' --fips /bin.fips
       -
