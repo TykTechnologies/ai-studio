@@ -166,8 +166,10 @@ type PluginMetadata struct {
 	// (signatures were required) and it passed. An entry cached without it
 	// is fetched again once signatures are required.
 	SignatureChecked bool `json:"signature_checked,omitempty"`
-	// SignatureKey is the public key ID the signature was checked with
-	// ("" for the default key).
+	// SignatureKey is the public key ID that verified the signature: the
+	// key the command named, or else the configured default key that
+	// verified it. "" is an entry cached by an earlier release for a
+	// command naming no key, which was checked with the first default key.
 	SignatureKey string `json:"signature_key,omitempty"`
 	// SignedDigest is the digest whose signature verified: ResolvedDigest,
 	// or ManifestDigest when only the platform manifest is signed. Set only

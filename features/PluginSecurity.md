@@ -233,6 +233,8 @@ OCI_PLUGINS_PUBKEY_FILE_COSIGN=/etc/ai-studio/cosign.pub
 # 6. The embedded Tyk key: "embedded:default" (always the first default key)
 ```
 
+**Which key is tried** (`OCIPluginClient.signatureKeys`): a command with `?pubkey=` is checked with that key only. A command without it (every marketplace install) is checked with each configured default key in turn (`DefaultPublicKeys`, from `LoadPublicKeysFromEnv`: the embedded Tyk key first, then `OCI_PLUGINS_PUBKEY_<n>`, named and file keys), for the index and then the platform-manifest fallback; the first key that verifies wins. Operators trust a third-party publisher by adding its key on Studio and every gateway, never by editing the install command; adding a key therefore lets it verify any unpinned plugin. The key that verified is recorded in the cache metadata (`SignatureKey`). A cache hit with `?pubkey=` needs that exact key recorded; one without needs the recorded key to still be configured, so removing a key revokes the plugins it verified (`""`, recorded by releases before this, is the default key and stays valid). The cache records the key ID, not the key's fingerprint, so replacing the PEM behind an existing name is not detected (midsommar-clean-0388).
+
 **Core seams the Enterprise verifier uses** (`pkg/ociplugins`, documented in `doc.go`):
 - `NewRemoteRepository(cfg, ref, authConfigName)`: the repository client plugin pulls use (insecure-registry list, registry auth, netguard SSRF guard).
 - `WithAuthConfig` / `AuthConfigFrom`: the plugin reference's `?auth=` name, carried on the context to `VerifySignature`.

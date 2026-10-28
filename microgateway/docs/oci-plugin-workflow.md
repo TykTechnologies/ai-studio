@@ -544,6 +544,9 @@ OCI_PLUGINS_PUBKEY_PROD="-----BEGIN PUBLIC KEY-----..."
 # Approach 3: File-based keys
 OCI_PLUGINS_PUBKEY_FILE_CI=/etc/microgateway/keys/ci.pub
 
+# A command without ?pubkey= is accepted if any configured key verifies it
+# (the Tyk key first); ?pubkey=KEY_NAME accepts only that key.
+
 # Registry Authentication
 OCI_PLUGINS_REGISTRY_NEXUS_USERNAME=plugin-reader
 OCI_PLUGINS_REGISTRY_NEXUS_PASSWORDENV=NEXUS_PASSWORD

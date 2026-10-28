@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -197,10 +198,10 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 	}
 
 	// Verify signature if required.
-	var signedDigest string
+	var signedDigest, signedKey string
 	if c.config.RequireSignature {
 		var err error
-		signedDigest, err = c.verifySignature(ctx, ref, pulled, params)
+		signedDigest, signedKey, err = c.verifySignature(ctx, ref, pulled, params)
 		if err != nil {
 			return nil, err
 		}
@@ -265,6 +266,7 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 	}
 	if enforced {
 		metadata.SignedDigest = signedDigest
+		metadata.SignatureKey = signedKey
 	}
 
 	if err := c.storage.StoreMetadata(cacheRef.Digest, params.Architecture, metadata); err != nil {
@@ -292,8 +294,13 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 }
 
 // verifySignature checks the signature of the pulled plugin and returns the
-// digest whose signature verified. Every failure is an
-// ErrSignatureVerificationFailed.
+// digest whose signature verified and the public key ID that verified it.
+// Every failure is an ErrSignatureVerificationFailed.
+//
+// A command that names a key (?pubkey=) is checked with that key only.
+// Otherwise every configured default key is tried in turn (signatureKeys),
+// so a plugin signed with a key the operator added installs, for example
+// from the marketplace, without its command being edited.
 //
 // The signature is checked against the top-level digest the reference
 // resolved to: the index for a multi-arch plugin, which publish-plugin.sh
@@ -305,12 +312,12 @@ func (c *OCIPluginClient) FetchPlugin(ctx context.Context, ref *OCIReference, pa
 // never consulted. Both checks use the digests as pulled, not the tag: a tag
 // moved between the pull and the check would otherwise get a signed image
 // verified and an unsigned one stored.
-func (c *OCIPluginClient) verifySignature(ctx context.Context, ref *OCIReference, pulled *PullResult, params *OCIPluginParams) (string, error) {
+func (c *OCIPluginClient) verifySignature(ctx context.Context, ref *OCIReference, pulled *PullResult, params *OCIPluginParams) (string, string, error) {
 	fail := func(reason string) error {
 		return &ErrSignatureVerificationFailed{Reference: ref.FullReference(), Reason: reason}
 	}
 	if c.securityService == nil {
-		return "", fail("no signature verifier configured")
+		return "", "", fail("no signature verifier configured")
 	}
 
 	var resolved string
@@ -318,18 +325,19 @@ func (c *OCIPluginClient) verifySignature(ctx context.Context, ref *OCIReference
 		resolved = pulled.Resolved.Digest.String()
 	}
 	if !isSHA256Digest(resolved) {
-		return "", fail(fmt.Sprintf("the reference resolved to no valid sha256 digest (%q)", resolved))
+		return "", "", fail(fmt.Sprintf("the reference resolved to no valid sha256 digest (%q)", resolved))
 	}
 	var platform string
 	if isIndexMediaType(pulled.Resolved.MediaType) && pulled.Manifest != nil && pulled.Manifest.Digest.String() != resolved {
 		platform = pulled.Manifest.Digest.String()
 		if !isSHA256Digest(platform) {
-			return "", fail(fmt.Sprintf("the platform manifest has no valid sha256 digest (%q)", platform))
+			return "", "", fail(fmt.Sprintf("the platform manifest has no valid sha256 digest (%q)", platform))
 		}
 	}
 
 	ctx = WithAuthConfig(ctx, params.AuthConfig)
-	firstErr := c.verifyDigest(ctx, ref, resolved, params.PublicKey)
+	keys := c.signatureKeys(params)
+	key, firstErr := c.verifyDigest(ctx, ref, resolved, keys)
 	if firstErr == nil {
 		kind := "manifest"
 		if platform != "" {
@@ -339,32 +347,81 @@ func (c *OCIPluginClient) verifySignature(ctx context.Context, ref *OCIReference
 			Str("reference", ref.FullReference()).
 			Str("verified_digest", resolved).
 			Str("digest_kind", kind).
+			Str("public_key", key).
 			Msg("OCI plugin signature check passed")
-		return resolved, nil
+		return resolved, key, nil
 	}
 	if platform == "" {
-		return "", fail(firstErr.Error())
+		return "", "", fail(firstErr.Error())
 	}
 
-	secondErr := c.verifyDigest(ctx, ref, platform, params.PublicKey)
+	key, secondErr := c.verifyDigest(ctx, ref, platform, keys)
 	if secondErr != nil {
-		return "", fail(fmt.Sprintf("index %s: %v; platform manifest %s: %v", resolved, firstErr, platform, secondErr))
+		return "", "", fail(fmt.Sprintf("index %s: %v; platform manifest %s: %v", resolved, firstErr, platform, secondErr))
 	}
 	log.Info().
 		Str("reference", ref.FullReference()).
 		Str("verified_digest", platform).
 		Str("digest_kind", "platform").
 		Str("index_digest", resolved).
+		Str("public_key", key).
 		Msg("OCI plugin signature check passed on the platform manifest (the index has no valid signature)")
-	return platform, nil
+	return platform, key, nil
+}
+
+// signatureKeys returns the public key IDs a signature check tries, in
+// order: the key the command names, or else every configured default key
+// (the embedded Tyk key first), without duplicates. With no default keys it
+// is the empty ID, which the verifier refuses.
+func (c *OCIPluginClient) signatureKeys(params *OCIPluginParams) []string {
+	if params.PublicKey != "" {
+		return []string{params.PublicKey}
+	}
+	var keys []string
+	seen := make(map[string]bool)
+	for _, key := range c.config.DefaultPublicKeys {
+		if key != "" && !seen[key] {
+			seen[key] = true
+			keys = append(keys, key)
+		}
+	}
+	if len(keys) == 0 {
+		return []string{""}
+	}
+	return keys
 }
 
 // verifyDigest checks the signature of the artifact with the given digest in
-// ref's repository.
-func (c *OCIPluginClient) verifyDigest(ctx context.Context, ref *OCIReference, digest, publicKey string) error {
+// ref's repository with each key in turn, and returns the first key that
+// verifies it. When none does, the error gives every key's reason.
+func (c *OCIPluginClient) verifyDigest(ctx context.Context, ref *OCIReference, digest string, keys []string) (string, error) {
 	pinned := *ref
 	pinned.Digest = digest
-	return c.securityService.VerifySignature(ctx, &pinned, publicKey)
+	var reasons []string
+	for _, key := range keys {
+		err := c.securityService.VerifySignature(ctx, &pinned, key)
+		if err == nil {
+			return key, nil
+		}
+		if len(keys) == 1 {
+			return "", err
+		}
+		reasons = append(reasons, fmt.Sprintf("key %q: %v", key, err))
+	}
+	return "", fmt.Errorf("no configured public key verified it (%s)", strings.Join(reasons, "; "))
+}
+
+// signatureKeyAccepted reports whether a cache entry whose signature was
+// verified with recorded may be served to a load that asks for requested.
+// A named key must be the one recorded. A load that names none accepts any
+// key still configured, so removing a key from the configuration revokes
+// the plugins it verified; "" is an entry cached before the key that
+// verified was recorded, which was checked with the default key.
+func (c *OCIPluginClient) signatureKeyAccepted(recorded, requested string) bool {
+	if requested != "" || recorded == "" {
+		return recorded == requested
+	}
+	return slices.Contains(c.config.DefaultPublicKeys, recorded)
 }
 
 // isSHA256Digest reports whether d is a well-formed "sha256:<64 hex>" digest.
@@ -426,8 +483,8 @@ func (c *OCIPluginClient) GetPlugin(ref *OCIReference, params *OCIPluginParams) 
 // by fetching it again to record its hash (loading the cached copy
 // unverified only when the registry cannot be reached), or as
 // ErrCacheCorrupted when signatures are required. So is an entry cached
-// while signatures were not required, or verified with a different public
-// key than the one now asked for.
+// while signatures were not required, or verified with a key the load does
+// not accept (signatureKeyAccepted).
 func (c *OCIPluginClient) getLocalPlugin(ref *OCIReference, params *OCIPluginParams) (*LocalPlugin, error) {
 	execPath := c.storage.GetExecutablePath(ref.Digest, params.Architecture)
 
@@ -449,7 +506,7 @@ func (c *OCIPluginClient) getLocalPlugin(ref *OCIReference, params *OCIPluginPar
 	if c.signaturesEnforced() && !metadata.SignatureChecked {
 		return nil, &ErrCacheCorrupted{Path: execPath, Reason: "cached without signature verification, which is now required"}
 	}
-	if c.signaturesEnforced() && metadata.SignatureKey != params.PublicKey {
+	if c.signaturesEnforced() && !c.signatureKeyAccepted(metadata.SignatureKey, params.PublicKey) {
 		return nil, &ErrCacheCorrupted{Path: execPath, Reason: "signature was verified with a different public key"}
 	}
 	// Serve the entry only if a fresh fetch of ref.Digest would verify the

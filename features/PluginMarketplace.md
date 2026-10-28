@@ -15,6 +15,8 @@ is set. Without it there is no index to compare against, so no plugin is linked 
 
 A marketplace install goes through the ordinary plugin creation wizard (`POST /plugins` →
 `validate-and-load` → `approve-scopes` → `PATCH`) with the marketplace entry's OCI reference as the command.
+The command names no signing key, so with signatures enforced it loads if any configured key verifies it (the
+Tyk key, or a third-party publisher's key the operator added; see `PluginSecurity.md`, "Which key is tried").
 Nothing is recorded at install time. Instead the link is **derived from the command**:
 
 `MarketplaceService.ReconcileInstalledVersions` (`services/marketplace_installed_versions.go`) is the single

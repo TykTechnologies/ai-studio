@@ -362,11 +362,13 @@ Configure public keys for signature verification:
 
 ```bash
 # Public keys for verifying plugin signatures (the Tyk signing key is always trusted)
-OCI_PLUGINS_PUBKEY_1="$(cat /path/to/cosign.pub)"   # key content, selected with ?pubkey=1
-OCI_PLUGINS_PUBKEY_FILE_CI=/path/to/ci-cosign.pub     # key file, selected with ?pubkey=CI
+OCI_PLUGINS_PUBKEY_1="$(cat /path/to/cosign.pub)"   # key content, pinned with ?pubkey=1
+OCI_PLUGINS_PUBKEY_FILE_CI=/path/to/ci-cosign.pub     # key file, pinned with ?pubkey=CI
 ```
 
 Key files must be regular files of at most 64 KiB.
+
+A command without `?pubkey=` (marketplace installs, for example) is checked against every configured key, the Tyk key first, and loads if any of them verifies it. To trust a third-party publisher's plugins, add their public key on AI Studio and on every Microgateway that loads them; the install command stays as it is. Add `?pubkey=<key>` to a command to accept only that key for the plugin. Removing a key from the configuration stops the plugins it verified from loading, cached copies included.
 
 To load unsigned plugins (for example, while developing one), set `AI_STUDIO_OCI_REQUIRE_SIGNATURE=false` on AI Studio and `OCI_PLUGINS_REQUIRE_SIGNATURE=false` on the Microgateway.
 
