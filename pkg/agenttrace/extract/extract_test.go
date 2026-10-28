@@ -598,3 +598,25 @@ func BenchmarkParseResponse_OpenAI32KiB(b *testing.B) {
 		}
 	}
 }
+
+// rawAt reads a value in place: through objects and arrays, past strings
+// holding brackets and escaped quotes, and not past a missing key or index.
+func TestRawAt(t *testing.T) {
+	body := []byte(` {"a":"x]}\"y","contents":[{"parts":[{"text":"[{"},{"functionCall":{"name":"s","args":{"q":"a,b","n":[1,2]}}}]},
+	  {"parts":[{"functionCall":{"args":{}}}]}], "a/b":{"~":true}} `)
+	for ptr, want := range map[string]string{
+		"/contents/0/parts/1/functionCall/args":   `{"q":"a,b","n":[1,2]}`,
+		"/contents/0/parts/1/functionCall/args/n": `[1,2]`,
+		"/contents/1/parts/0/functionCall/args":   `{}`,
+		"/a":                                      `"x]}\"y"`,
+		"/a~1b/~0":                                `true`,
+	} {
+		got, ok := rawAt(body, ptr)
+		assert.True(t, ok, ptr)
+		assert.Equal(t, want, string(got), ptr)
+	}
+	for _, ptr := range []string{"/missing", "/contents/2", "/contents/0/parts/x", "/a/0", "/contents/-1"} {
+		_, ok := rawAt(body, ptr)
+		assert.False(t, ok, ptr)
+	}
+}

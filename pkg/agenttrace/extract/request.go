@@ -198,7 +198,6 @@ func pairResults(format string, body []byte, turn int, results []ToolResult, fp 
 			calls = append(calls, u)
 		}
 	}
-	var doc any
 	for i := range results {
 		if results[i].ID != "" {
 			continue
@@ -222,50 +221,65 @@ func pairResults(format string, body []byte, turn int, results []ToolResult, fp 
 		if results[i].Name == "" {
 			results[i].Name = c.ToolName
 		}
-		if doc == nil {
-			d := json.NewDecoder(bytes.NewReader(body))
-			d.UseNumber()
-			if d.Decode(&doc) != nil {
-				return
-			}
-		}
-		// Missing arguments fingerprint as {} on both sides.
-		var args []byte
-		if v, ok := pointerValue(doc, c.Path); ok {
-			args, _ = json.Marshal(v)
-		}
+		// The arguments' raw bytes, read in place; missing ones fingerprint
+		// as {} on both sides.
+		args, _ := rawAt(body, c.Path)
 		if f, err := ArgsFingerprint(fp, args); err == nil {
 			results[i].CallArgsFP = f
 		}
 	}
 }
 
-// pointerValue resolves a JSON Pointer (RFC 6901) in a decoded document.
-func pointerValue(doc any, ptr string) (any, bool) {
-	if ptr == "" {
-		return doc, true
+// rawAt returns the raw bytes of the value at JSON Pointer ptr (RFC 6901)
+// in body, scanning in place (trim.go's scanner) rather than decoding the
+// body. Keys are compared as written, so a key spelled with escapes is not
+// found.
+func rawAt(body []byte, ptr string) ([]byte, bool) {
+	i := skipSpace(body, 0)
+	end := skipValue(body, i)
+	if end < 0 {
+		return nil, false
 	}
-	cur := doc
+	if ptr == "" {
+		return body[i:end], true
+	}
 	for _, tok := range strings.Split(strings.TrimPrefix(ptr, "/"), "/") {
 		tok = strings.ReplaceAll(strings.ReplaceAll(tok, "~1", "/"), "~0", "~")
-		switch v := cur.(type) {
-		case map[string]any:
-			next, ok := v[tok]
-			if !ok {
+		found := false
+		switch {
+		case i < len(body) && body[i] == '{':
+			members(body, i, func(k []byte, v, e int) bool {
+				if string(k) == tok {
+					i, end, found = v, e, true
+					return false
+				}
+				return true
+			})
+		case i < len(body) && body[i] == '[':
+			n, err := strconv.Atoi(tok)
+			if err != nil || n < 0 {
 				return nil, false
 			}
-			cur = next
-		case []any:
-			i, err := strconv.Atoi(tok)
-			if err != nil || i < 0 || i >= len(v) {
-				return nil, false
+			j := skipSpace(body, i+1)
+			for idx := 0; j < len(body) && body[j] != ']'; idx++ {
+				e := skipValue(body, j)
+				if e < 0 {
+					return nil, false
+				}
+				if idx == n {
+					i, end, found = j, e, true
+					break
+				}
+				if j = skipSpace(body, e); j < len(body) && body[j] == ',' {
+					j = skipSpace(body, j+1)
+				}
 			}
-			cur = v[i]
-		default:
+		}
+		if !found {
 			return nil, false
 		}
 	}
-	return cur, true
+	return body[i:end], true
 }
 
 // markErrors sets IsError from Anthropic tool_result is_error and Bedrock
