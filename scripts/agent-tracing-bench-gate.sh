@@ -26,6 +26,10 @@ edition=${2:-ce}
 tags=agenttracebench
 if [ "$edition" = enterprise ]; then
   tags="agenttracebench enterprise"
+  # The root module finds the enterprise module only through
+  # enterprise.work (its go.mod does not require it).
+  export GOWORK
+  GOWORK="$(cd "$(dirname "$0")/.." && pwd)/enterprise.work"
 fi
 
 soak() {

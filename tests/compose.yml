@@ -62,7 +62,10 @@ services:
         fi;
         echo "Building AI Studio ($$TARGET_EDITION edition)...";
         if [ "$$TARGET_EDITION" = "enterprise" ]; then
-          CGO_ENABLED=1 go build -tags enterprise -o /app/tmp/studio . || exit 1;
+          # The root go.mod does not require the enterprise module: link its
+          # registrations in and resolve it through enterprise.work.
+          bash /app/scripts/enterprise-link-tests.sh || exit 1;
+          GOWORK=/app/enterprise.work CGO_ENABLED=1 go build -tags enterprise -o /app/tmp/studio . || exit 1;
         else
           CGO_ENABLED=1 go build -o /app/tmp/studio . || exit 1;
         fi;

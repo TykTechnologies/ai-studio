@@ -20,11 +20,34 @@ package clause of the core package they test. `make ent-link`
 (`scripts/enterprise-link-tests.sh`) symlinks them into their core package
 directories, where `*_entlink_test.go` is gitignored; `make init-enterprise`,
 `make test`, `make test-studio-*` and the enterprise CI job run it. After
-that, `go test -tags enterprise ./api/...` works as before. Edit them in
-place: the links point into the enterprise submodule, so commit them there.
+that, `GOWORK=$PWD/enterprise.work go test -tags enterprise ./api/...`
+runs them. Edit them in place: the links point into the enterprise
+submodule, so commit them there.
 
-The microgateway module and the `tests/` tree are not imported by anything
-that embeds Studio, so their enterprise tests stay where they are.
+The root `go.mod` does not require the enterprise module at all: a plugin
+author or host inherits the root's requirements, and a private module there
+makes their `go list -m all` (govulncheck, Dependabot, Renovate) fail.
+`make sdk-consumer-check` (CI) checks this. Enterprise builds and tests of
+the root module therefore resolve it through the workspace file
+`enterprise.work` (`use . ./enterprise`), set explicitly with
+`GOWORK=$PWD/enterprise.work`; the Makefile targets, goreleaser, the dev
+environment and CI do so. It is not called `go.work` because Go would then
+apply it to the microgateway and plugin modules below the root, which are not
+in it. The enterprise registrations of `tests/`, the Studio binary and
+`examples/embed-host` (blank imports of `enterprise/all` and the guardrail
+providers) are linked in the same way, as `*_entlink_test.go` and
+`*_entlink.go`; the core file next to each refers to
+`enterpriseFeaturesLinked`, which only the linked file defines, so an
+enterprise build without `make ent-link` fails to compile instead of quietly
+building the Community Edition.
+
+`go mod tidy` does not use workspaces, so with the links in place it cannot
+resolve the enterprise imports: run `make tidy`, which unlinks, tidies and
+relinks.
+
+The microgateway module has its own `go.mod`, which requires the enterprise
+module, and is not imported by anything that embeds Studio, so its
+enterprise tests stay where they are.
 
 ## Problem
 
@@ -169,6 +192,7 @@ go test ./api/...                # Runs CE API tests
 ### Enterprise Edition
 ```bash
 make ent-link                    # Link enterprise tests of core packages first
+export GOWORK=$PWD/enterprise.work  # Resolve the enterprise module (root module only)
 go test -tags enterprise ./...   # Runs all ENT tests
 go test -tags enterprise ./api/... # Runs ENT API tests
 ```

@@ -6,11 +6,13 @@ package tests
 import (
 	"os"
 	"testing"
-
-	// Register every enterprise feature, as the enterprise Studio main
-	// (main_enterprise.go) does.
-	_ "github.com/TykTechnologies/ai-studio-enterprise/v2/all"
 )
+
+// Every enterprise feature is registered by enterprise_entlink_test.go,
+// linked in from enterprise/_coretests by `make ent-link`, as the enterprise
+// Studio main does. Without it this fails to compile, rather than running
+// the Community Edition under the enterprise tag.
+var _ = enterpriseFeaturesLinked
 
 func TestMain(m *testing.M) {
 	// Enterprise factories are now registered via init()

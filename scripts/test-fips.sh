@@ -53,6 +53,17 @@ export FIPS_STRICT_CANARY=1
 
 canary=github.com/TykTechnologies/midsommar/v2/pkg/fipstest
 
+# gowork_for <dir>: the GOWORK for a module. The root module finds the
+# enterprise module only through enterprise.work (its go.mod does not
+# require it); the others resolve it through their own go.mod.
+gowork_for() {
+  if [ "$1" = . ] && [ "$edition" = ent ]; then
+    echo "$ROOT/enterprise.work"
+  else
+    echo off
+  fi
+}
+
 # run <module> <dir> <package pattern ...>: go test -json into $out/<module>-<edition>.json.
 # A failing go test is recorded, not fatal: every module runs.
 summary_args=()
@@ -60,7 +71,7 @@ run() {
   local name=$1 dir=$2 file="$out/$1-$edition"
   shift 2
   echo ">>> $name ($edition): GOFIPS140=$GOFIPS140 GODEBUG=$GODEBUG go test ${tags[*]} -short -count=1 $* (in $dir)" >&2
-  (cd "$dir" && go test "${tags[@]}" -json -short -count=1 -timeout "$timeout" "$@") \
+  (cd "$dir" && GOWORK=$(gowork_for "$dir") go test "${tags[@]}" -json -short -count=1 -timeout "$timeout" "$@") \
     > "$file.json" 2> "$file.stderr" || true
   if [ -s "$file.stderr" ]; then
     tail -n 20 "$file.stderr" >&2

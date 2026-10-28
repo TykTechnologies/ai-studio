@@ -19,6 +19,15 @@ else
     $(info 🌍 Building Community Edition)
 endif
 
+# The root go.mod does not require the private enterprise module, so that the
+# module graph plugin authors inherit resolves from the public proxy.
+# Enterprise builds and tests of the root module find it through
+# enterprise.work: prefix those go commands with $(call root_gowork,<tags>),
+# which sets GOWORK when <tags> include enterprise. Never use it for
+# microgateway/ or the plugin modules, which are not in that workspace.
+ENT_GOWORK := GOWORK=$(CURDIR)/enterprise.work
+root_gowork = $(if $(findstring enterprise,$(1)),$(ENT_GOWORK))
+
 # Version information (from git tags)
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 BUILD_HASH ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -126,10 +135,10 @@ endif
 # ============================================================================
 
 # Build for native platform (auto-detect edition)
-build-native: build-frontend build-docs
+build-native: ent-link build-frontend build-docs
 	@echo "🔨 Building $(EDITION) for native platform with CGO..."
 	@mkdir -p bin
-	CGO_ENABLED=1 go build $(BUILD_TAGS) $(DEV_LDFLAGS) -o bin/midsommar-$(EDITION)
+	$(call root_gowork,$(BUILD_TAGS)) CGO_ENABLED=1 go build $(BUILD_TAGS) $(DEV_LDFLAGS) -o bin/midsommar-$(EDITION)
 	cd microgateway && $(MAKE) build
 	cp microgateway/dist/microgateway-$(EDITION) bin/mgw-$(EDITION)
 	chmod +x bin/*
@@ -146,7 +155,7 @@ build-native-ce: build-frontend build-docs
 	@echo "✅ Native CE build complete"
 
 # Build ENT for native platform
-build-native-ent: build-frontend build-docs
+build-native-ent: ent-link build-frontend build-docs
 	@if [ ! -f enterprise/.git ]; then \
 		echo "❌ ERROR: Enterprise submodule not initialized."; \
 		echo "Run: make init-enterprise"; \
@@ -154,7 +163,7 @@ build-native-ent: build-frontend build-docs
 	fi
 	@echo "🔨 Building ENT for native platform with CGO..."
 	@mkdir -p bin
-	CGO_ENABLED=1 go build -tags enterprise $(DEV_LDFLAGS) -o bin/midsommar-ent
+	$(ENT_GOWORK) CGO_ENABLED=1 go build -tags enterprise $(DEV_LDFLAGS) -o bin/midsommar-ent
 	cd microgateway && $(MAKE) build-enterprise
 	cp microgateway/dist/microgateway-ent bin/mgw-ent
 	chmod +x bin/*
@@ -165,7 +174,7 @@ build-native-ent: build-frontend build-docs
 # ============================================================================
 
 # Build production artifacts for all platforms (auto-detect edition)
-build-prod: build-frontend
+build-prod: ent-link build-frontend
 	@echo "🏗️  Building production $(EDITION) artifacts..."
 	@mkdir -p bin
 	$(MAKE) build-linux-amd64 EDITION=$(EDITION) BUILD_TAGS="$(BUILD_TAGS)"
@@ -197,7 +206,7 @@ build-prod-ce: build-frontend
 	@echo "✅ Production CE build complete"
 
 # Build production ENT for all platforms
-build-prod-ent: build-frontend
+build-prod-ent: ent-link build-frontend
 	@if [ ! -f enterprise/.git ]; then \
 		echo "❌ ERROR: Enterprise submodule not initialized."; \
 		echo "Run: make init-enterprise"; \
@@ -222,14 +231,14 @@ build-prod-ent: build-frontend
 # ============================================================================
 
 # Linux AMD64 with CGO
-build-linux-amd64:
+build-linux-amd64: ent-link
 	@echo "Building midsommar $(EDITION) for linux/amd64 with CGO..."
 	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
-	go build $(BUILD_TAGS) $(PROD_LDFLAGS) \
+	$(call root_gowork,$(BUILD_TAGS)) go build $(BUILD_TAGS) $(PROD_LDFLAGS) \
 	-o bin/midsommar-$(EDITION)-linux-amd64
 
 # Linux ARM64 with CGO (requires cross-compiler)
-build-linux-arm64:
+build-linux-arm64: ent-link
 	@echo "Building midsommar $(EDITION) for linux/arm64 with CGO..."
 	@if ! which aarch64-linux-gnu-gcc > /dev/null 2>&1; then \
 		echo "⚠️  Warning: aarch64-linux-gnu-gcc not found"; \
@@ -239,21 +248,21 @@ build-linux-arm64:
 	fi
 	CGO_ENABLED=1 GOOS=linux GOARCH=arm64 \
 	CC=aarch64-linux-gnu-gcc \
-	go build $(BUILD_TAGS) $(PROD_LDFLAGS) \
+	$(call root_gowork,$(BUILD_TAGS)) go build $(BUILD_TAGS) $(PROD_LDFLAGS) \
 	-o bin/midsommar-$(EDITION)-linux-arm64
 
 # Darwin AMD64 with CGO
-build-darwin-amd64:
+build-darwin-amd64: ent-link
 	@echo "Building midsommar $(EDITION) for darwin/amd64 with CGO..."
 	CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 \
-	go build $(BUILD_TAGS) $(PROD_LDFLAGS) \
+	$(call root_gowork,$(BUILD_TAGS)) go build $(BUILD_TAGS) $(PROD_LDFLAGS) \
 	-o bin/midsommar-$(EDITION)-darwin-amd64
 
 # Darwin ARM64 with CGO
-build-darwin-arm64:
+build-darwin-arm64: ent-link
 	@echo "Building midsommar $(EDITION) for darwin/arm64 with CGO..."
 	CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 \
-	go build $(BUILD_TAGS) $(PROD_LDFLAGS) \
+	$(call root_gowork,$(BUILD_TAGS)) go build $(BUILD_TAGS) $(PROD_LDFLAGS) \
 	-o bin/midsommar-$(EDITION)-darwin-arm64
 
 # ============================================================================
@@ -271,29 +280,29 @@ FIPS_TAGS = -tags $(if $(filter ent,$(EDITION)),fips$(comma)enterprise,fips)
 .PHONY: build-fips build-linux-amd64-fips build-linux-arm64-fips
 
 # Build FIPS Studio and microgateway binaries for the native platform
-build-fips: build-frontend build-docs
+build-fips: ent-link build-frontend build-docs
 	@echo "🔐 Building FIPS $(EDITION) for native platform..."
 	@mkdir -p bin
-	GOFIPS140=$(FIPS_GOFIPS140) CGO_ENABLED=1 go build $(FIPS_TAGS) $(PROD_LDFLAGS) -o bin/midsommar-$(EDITION)-fips
+	$(call root_gowork,$(FIPS_TAGS)) GOFIPS140=$(FIPS_GOFIPS140) CGO_ENABLED=1 go build $(FIPS_TAGS) $(PROD_LDFLAGS) -o bin/midsommar-$(EDITION)-fips
 	scripts/fips-verify.sh --edition $(EDITION) --fips bin/midsommar-$(EDITION)-fips
 	cd microgateway && $(MAKE) build-fips EDITION=$(EDITION)
 	cp microgateway/dist/microgateway-$(EDITION)-fips bin/mgw-$(EDITION)-fips
 	@echo "✅ FIPS build complete: bin/midsommar-$(EDITION)-fips and bin/mgw-$(EDITION)-fips"
 
 # Linux AMD64 FIPS with CGO
-build-linux-amd64-fips:
+build-linux-amd64-fips: ent-link
 	@mkdir -p bin
 	GOFIPS140=$(FIPS_GOFIPS140) CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
-	go build $(FIPS_TAGS) $(PROD_LDFLAGS) \
+	$(call root_gowork,$(FIPS_TAGS)) go build $(FIPS_TAGS) $(PROD_LDFLAGS) \
 	-o bin/midsommar-$(EDITION)-fips-linux-amd64
 	scripts/fips-verify.sh --edition $(EDITION) --fips bin/midsommar-$(EDITION)-fips-linux-amd64
 
 # Linux ARM64 FIPS with CGO (requires cross-compiler)
-build-linux-arm64-fips:
+build-linux-arm64-fips: ent-link
 	@mkdir -p bin
 	GOFIPS140=$(FIPS_GOFIPS140) CGO_ENABLED=1 GOOS=linux GOARCH=arm64 \
 	CC=aarch64-linux-gnu-gcc \
-	go build $(FIPS_TAGS) $(PROD_LDFLAGS) \
+	$(call root_gowork,$(FIPS_TAGS)) go build $(FIPS_TAGS) $(PROD_LDFLAGS) \
 	-o bin/midsommar-$(EDITION)-fips-linux-arm64
 	scripts/fips-verify.sh --edition $(EDITION) --fips bin/midsommar-$(EDITION)-fips-linux-arm64
 
@@ -595,12 +604,22 @@ gorm-verify: ## Check third_party/gorm.io matches its pins and nothing imports g
 	@scripts/gorm-verify.sh
 
 .PHONY: vet
-vet: ## go vet the root, microgateway and enterprise modules in both editions, excluding third_party/ (VET_EDITION=ce|ent|all)
+vet: ent-link ## go vet the root, microgateway and enterprise modules in both editions, excluding third_party/ (VET_EDITION=ce|ent|all)
 	@scripts/vet.sh $(or $(VET_EDITION),all)
 
 .PHONY: ent-link
-ent-link: ## Link enterprise tests of core packages in from enterprise/_coretests (no-op without the submodule)
+ent-link: ## Link enterprise tests and registrations of core packages in from enterprise/_coretests (no-op without the submodule)
 	@scripts/enterprise-link-tests.sh
+
+.PHONY: tidy
+tidy: ## go mod tidy the root module (unlinks the enterprise files first, which tidy cannot resolve, and relinks them)
+	@scripts/enterprise-link-tests.sh --unlink
+	GOWORK=off go mod tidy
+	@scripts/enterprise-link-tests.sh
+
+.PHONY: sdk-consumer-check
+sdk-consumer-check: ## Check a plugin importing the SDK resolves its whole module graph from the public Go proxy
+	@scripts/sdk-consumer-check.sh
 
 .PHONY: agent-tracing-docs agent-tracing-docs-verify
 agent-tracing-docs: ## Regenerate the OTel attribute tables in docs/site/docs/agent-tracing.md from the enterprise mapping profile
@@ -693,7 +712,7 @@ plugin-verify:
 
 # Test target (legacy - use test-all for more control)
 test: ent-link
-	go test $(BUILD_TAGS) ./...
+	$(call root_gowork,$(BUILD_TAGS)) go test $(BUILD_TAGS) ./...
 	cd microgateway && go test $(BUILD_TAGS) ./...
 
 # ============================================================================
@@ -796,13 +815,13 @@ test-ci: ## Run CI-appropriate tests (unit + integration, with coverage)
 .PHONY: test-studio-unit
 test-studio-unit: ent-link ## Run AI Studio unit tests
 	@echo "Running AI Studio unit tests ($(TEST_EDITION))..."
-	go test $(TEST_BUILD_TAGS) $(TEST_VERBOSE_FLAG) $(TEST_COVERAGE_FLAG) \
+	$(call root_gowork,$(TEST_BUILD_TAGS)) go test $(TEST_BUILD_TAGS) $(TEST_VERBOSE_FLAG) $(TEST_COVERAGE_FLAG) \
 		-timeout $(TEST_TIMEOUT) -race -short ./...
 
 .PHONY: test-studio-integration
 test-studio-integration: ent-link ## Run AI Studio integration tests
 	@echo "Running AI Studio integration tests ($(TEST_EDITION))..."
-	go test $(TEST_BUILD_TAGS) $(TEST_VERBOSE_FLAG) \
+	$(call root_gowork,$(TEST_BUILD_TAGS)) go test $(TEST_BUILD_TAGS) $(TEST_VERBOSE_FLAG) \
 		-timeout $(TEST_TIMEOUT) -count=1 ./tests/...
 
 # ============================================================================
@@ -893,7 +912,7 @@ test-vendors-harness: ## Run the credential-free unit tests that protect the con
 #   GUARDRAILS=lakera,azure_cs    VENDORS=openai   (both optional)
 
 .PHONY: test-guardrails
-test-guardrails: ## Live guardrail provider conformance (needs VT_GUARD_* in test-secrets/vendors.env; enterprise)
+test-guardrails: ent-link ## Live guardrail provider conformance (needs VT_GUARD_* in test-secrets/vendors.env; enterprise)
 	@if [ ! -f test-secrets/vendors.env ]; then \
 		echo "test-secrets/vendors.env not found."; \
 		echo "  cp test-secrets/vendors.env.example test-secrets/vendors.env"; \
@@ -901,18 +920,18 @@ test-guardrails: ## Live guardrail provider conformance (needs VT_GUARD_* in tes
 	fi
 	@echo "Running guardrail provider conformance (direct provider calls)..."
 	VENDOR_TESTS_GUARDRAILS="$(GUARDRAILS)" \
-		go test -tags "vendorlive enterprise" -v -count=1 \
+		$(ENT_GOWORK) go test -tags "vendorlive enterprise" -v -count=1 \
 		-timeout 15m ./tests/guardrailconformance/...
 	@echo "Running guardrail filters through the data plane..."
 	cd microgateway && VENDOR_TESTS_VENDORS="$(VENDORS)" \
 		VENDOR_TESTS_GUARDRAILS="$(GUARDRAILS)" \
-		go test -tags "vendorlive enterprise" -v -count=1 \
+		$(ENT_GOWORK) go test -tags "vendorlive enterprise" -v -count=1 \
 		-timeout 15m -run 'TestGuardrail' ./tests/vendorconformance/...
 
 .PHONY: test-guardrails-preflight
-test-guardrails-preflight: ## Verify guardrail provider credentials with one benign probe each
+test-guardrails-preflight: ent-link ## Verify guardrail provider credentials with one benign probe each
 	VENDOR_TESTS_GUARDRAILS="$(GUARDRAILS)" \
-		go test -tags "vendorlive enterprise" -v -count=1 \
+		$(ENT_GOWORK) go test -tags "vendorlive enterprise" -v -count=1 \
 		-timeout 5m -run 'TestGuardrailPreflight' ./tests/guardrailconformance/...
 
 # ============================================================================
@@ -1356,7 +1375,7 @@ dev-full:
 	cd dev && docker compose --profile plugins -f docker-compose.yml -f docker-compose.full.yml up --build
 
 # Start enterprise development environment (minimal)
-dev-ent:
+dev-ent: ent-link
 	@if [ ! -d "enterprise/.git" ] && [ ! -f "enterprise/.git" ]; then \
 		echo "❌ ERROR: Enterprise submodule not initialized."; \
 		echo "   Run: make init-enterprise"; \
@@ -1387,7 +1406,7 @@ dev-ent:
 	cd dev && docker compose -f docker-compose.yml -f docker-compose.ent.yml up --build
 
 # Start full enterprise development environment
-dev-full-ent:
+dev-full-ent: ent-link
 	@if [ ! -d "enterprise/.git" ] && [ ! -f "enterprise/.git" ]; then \
 		echo "❌ ERROR: Enterprise submodule not initialized."; \
 		echo "   Run: make init-enterprise"; \
@@ -1547,7 +1566,7 @@ dev-start-full:
 	@echo "✅ Environment started. Use 'make dev-status' to check."
 
 # Start enterprise dev env in detached mode
-dev-start-ent:
+dev-start-ent: ent-link
 	@if [ ! -d "enterprise/.git" ] && [ ! -f "enterprise/.git" ]; then \
 		echo "❌ ERROR: Enterprise submodule not initialized. Run: make init-enterprise"; \
 		exit 1; \
@@ -1572,7 +1591,7 @@ dev-start-ent:
 	@echo "✅ Environment started. Use 'make dev-status' to check."
 
 # Start full enterprise dev env in detached mode
-dev-start-full-ent:
+dev-start-full-ent: ent-link
 	@if [ ! -d "enterprise/.git" ] && [ ! -f "enterprise/.git" ]; then \
 		echo "❌ ERROR: Enterprise submodule not initialized. Run: make init-enterprise"; \
 		exit 1; \

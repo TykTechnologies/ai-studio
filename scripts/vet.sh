@@ -43,11 +43,18 @@ for run in "${runs[@]}"; do
     exit 1
   fi
   echo "vet: module $mod${tags:+ (-tags $tags)}"
+  # The root module finds the enterprise module only through enterprise.work
+  # (its go.mod does not require it); its enterprise registrations are the
+  # files make ent-link links in.
+  gowork=off
+  if [ "$mod" = . ] && [ -n "$tags" ]; then
+    gowork=$ROOT/enterprise.work
+  fi
   # go list runs on its own so that a failure stops the check rather than
   # vetting nothing.
-  pkgs=$(cd "$mod" && go list ${tags:+-tags "$tags"} ./... | grep -v '/third_party/')
+  pkgs=$(cd "$mod" && GOWORK=$gowork go list ${tags:+-tags "$tags"} ./... | grep -v '/third_party/')
   # shellcheck disable=SC2086 # one argument per package
-  if ! (cd "$mod" && go vet ${tags:+-tags "$tags"} $pkgs); then
+  if ! (cd "$mod" && GOWORK=$gowork go vet ${tags:+-tags "$tags"} $pkgs); then
     status=1
   fi
 done

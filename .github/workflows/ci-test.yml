@@ -315,10 +315,14 @@ jobs:
       - name: Set test flags
         id: flags
         run: |
+          # The root go.mod does not require the enterprise module: the ent
+          # edition of the root module resolves it through enterprise.work.
           if [ "${{ matrix.edition }}" == "ent" ]; then
             echo "BUILD_TAGS=-tags enterprise" >> $GITHUB_OUTPUT
+            echo "ROOT_GOWORK=$GITHUB_WORKSPACE/enterprise.work" >> $GITHUB_OUTPUT
           else
             echo "BUILD_TAGS=" >> $GITHUB_OUTPUT
+            echo "ROOT_GOWORK=off" >> $GITHUB_OUTPUT
           fi
           # The flags are part of Go's test cache key: pr mode must use the
           # same flags on pull requests and on main, or nothing is reused.
@@ -377,6 +381,7 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p "$RUNNER_TEMP/test-json"
+          GOWORK=${{ steps.flags.outputs.ROOT_GOWORK }} \
           go test ${{ steps.flags.outputs.BUILD_TAGS }} -json -v -race -short -timeout 25m \
             ${{ steps.flags.outputs.FULL }} \
             ${{ env.MODE == 'full' && format('-coverprofile=coverage-studio-{0}.out', matrix.edition) || '' }} \
@@ -719,6 +724,11 @@ jobs:
 
       - name: Check no public package imports the enterprise module
         run: make enterprise-import-guard
+
+      # A plugin importing the SDK must resolve its whole module graph from
+      # the public proxy (go list -m all: govulncheck, Dependabot, Renovate).
+      - name: Check the plugin SDK's module graph resolves publicly
+        run: make sdk-consumer-check
 
       - name: Check the control plane logs only through the logger package
         run: make logging-guard

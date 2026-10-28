@@ -1,0 +1,20 @@
+// Workspace for Enterprise Edition builds and tests of the root module.
+//
+// The root go.mod does not require the private enterprise module, so the
+// public module graph that plugin authors and hosts inherit stays resolvable
+// (`go list -m all`, govulncheck). Enterprise builds of the root module find
+// it through this workspace instead: the Makefile, Dockerfile, goreleaser and
+// CI set GOWORK=$PWD/enterprise.work for them (see TESTING_CE_ENT.md).
+//
+// It is deliberately not named go.work: Go would pick that up automatically
+// in every module below the root (microgateway/, the plugin modules), which
+// are not in it and would stop building.
+
+go 1.26.5
+
+toolchain go1.26.10
+
+use (
+	.
+	./enterprise
+)

@@ -7,6 +7,17 @@
 # - arm64
 # - amd64
 version: 2
+# The root go.mod does not require the private enterprise module (plugin
+# authors inherit its requirements): an enterprise build links its
+# registrations in from enterprise/_coretests and resolves the module through
+# enterprise.work. GOWORK must be an absolute path; both callers (release.yml
+# and make's run_goreleaser) mount the checkout at this one. The link script
+# does nothing without the submodule (CE).
+env:
+  - GOWORK={{ if eq .Env.EDITION "ent" }}/go/src/github.com/TykTechnologies/midsommar/enterprise.work{{ else }}off{{ end }}
+before:
+  hooks:
+    - scripts/enterprise-link-tests.sh
 builds:
   - id: std-amd64
     ldflags:

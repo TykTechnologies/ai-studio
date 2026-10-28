@@ -4,7 +4,7 @@
 FROM golang:1.26-alpine@sha256:27f2d3b83cfc5803c8078f8e730af0f7c431bf067afaec8f60a36fb763187cba AS builder
 
 # Install build dependencies
-RUN apk add --no-cache git make ca-certificates tzdata gcc musl-dev sqlite-dev npm nodejs
+RUN apk add --no-cache bash git make ca-certificates tzdata gcc musl-dev sqlite-dev npm nodejs
 
 # Set working directory
 WORKDIR /build
@@ -45,9 +45,12 @@ ARG VERSION=dev
 ARG BUILD_HASH=unknown
 ARG BUILD_TIME=unknown
 
-# Build the binary
+# Build the binary. The root go.mod does not require the enterprise module:
+# the enterprise build links its registrations in from enterprise/_coretests
+# and resolves the module through enterprise.work.
 RUN if [ "$EDITION" = "ent" ]; then \
         BUILD_TAGS="-tags enterprise"; \
+        scripts/enterprise-link-tests.sh && export GOWORK=/build/enterprise.work; \
     else \
         BUILD_TAGS=""; \
     fi && \

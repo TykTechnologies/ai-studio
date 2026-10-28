@@ -26,10 +26,6 @@ import (
 	"testing"
 	"time"
 
-	// Registers the enterprise provider implementations (builtin and remote).
-	_ "github.com/TykTechnologies/ai-studio-enterprise/v2/guardrails/builtin"
-	_ "github.com/TykTechnologies/ai-studio-enterprise/v2/guardrails/providers"
-
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	vc "github.com/TykTechnologies/midsommar/v2/pkg/testinfra/vendorconformance"
 	"github.com/stretchr/testify/assert"
@@ -41,6 +37,11 @@ var (
 	shared     *vc.GuardrailsConfig
 	sharedSkip string
 )
+
+// The enterprise provider implementations (builtin and remote) are
+// registered by enterprise_entlink_test.go, linked in from
+// enterprise/_coretests by `make ent-link`. Without it this fails to compile.
+var _ = enterpriseFeaturesLinked
 
 func setup(t *testing.T) *vc.GuardrailsConfig {
 	t.Helper()
