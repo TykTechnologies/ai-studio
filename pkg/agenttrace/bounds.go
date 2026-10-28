@@ -36,6 +36,7 @@ func (x *Extracts) Bound() {
 	}
 	for i := range x.ToolResults {
 		x.ToolResults[i].ID = boundID(x.ToolResults[i].ID)
+		x.ToolResults[i].Name = cutText(x.ToolResults[i].Name, maxExtractNameBytes)
 	}
 	if len(x.FinishReasons) > maxExtractReasons {
 		x.FinishReasons = x.FinishReasons[:maxExtractReasons]

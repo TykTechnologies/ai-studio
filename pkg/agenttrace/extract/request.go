@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
@@ -21,6 +22,10 @@ type ToolResult struct {
 	// Name is the called tool's, when the body names it. A result answering
 	// a call made before the model's last message may have none (jyx.57).
 	Name string
+	// CallArgsFP is set on a result without an id: the fingerprint of the
+	// arguments of the call it answers, from the request's history
+	// (pairResults). Nil without a Fingerprinter.
+	CallArgsFP agenttrace.Fingerprint
 	// ResultFP is nil without a Fingerprinter or when the result has no text.
 	ResultFP agenttrace.Fingerprint
 	IsError  bool
@@ -46,16 +51,22 @@ type Request struct {
 	LastRole string
 }
 
-// Apply copies the request extracts into x. Results without an id cannot be
-// linked by R1 and are left out, as are replayed server tool outputs.
+// Apply copies the request extracts into x. Replayed server tool outputs
+// are left out. A result without an id is kept, with its call's name and
+// argument fingerprint: it still continues the turn, and the assembler
+// matches it by name and arguments.
 func (r Request) Apply(x *agenttrace.Extracts) {
 	x.PreviousResponseID = r.PreviousResponseID
 	x.OfferedTools = r.OfferedTools
 	for _, t := range r.ToolResults {
-		if t.ID == "" || t.Server {
+		if t.Server {
 			continue
 		}
-		x.ToolResults = append(x.ToolResults, agenttrace.ToolResult{ID: t.ID, ResultFP: t.ResultFP, IsError: t.IsError})
+		tr := agenttrace.ToolResult{ID: t.ID, ResultFP: t.ResultFP, IsError: t.IsError}
+		if t.ID == "" {
+			tr.Name, tr.CallArgsFP = t.Name, t.CallArgsFP
+		}
+		x.ToolResults = append(x.ToolResults, tr)
 	}
 }
 
@@ -141,6 +152,9 @@ func parseUnits(format string, body []byte, fp agenttrace.Fingerprinter) (Reques
 		})
 		msgs = append(msgs, u.Message)
 	}
+	if len(r.ToolResults) > 0 {
+		pairResults(format, body, current, r.ToolResults, fp)
+	}
 	// A second decode costs as much as the segmenter; most requests carry no
 	// error result, so look for the marker first.
 	if len(r.ToolResults) > 0 &&
@@ -149,6 +163,124 @@ func parseUnits(format string, body []byte, fp agenttrace.Fingerprinter) (Reques
 		markErrors(body, msgs, r.ToolResults)
 	}
 	return r, settled, nil
+}
+
+// pairResults completes the trailing results sent back without the id of
+// the call they answer (§4.4 R1 fallback): Gemini makes the id optional,
+// Ollama has none, and some clients drop it on both the call and the
+// result (the AI SDK on Vertex). Each such result is paired with an
+// unclaimed call of the model's last message: the first of the same name,
+// or the next in order when the result names none. It takes the call's id
+// when the call kept one; otherwise the call's name and argument
+// fingerprint, for the assembler's name and arguments match. Only bodies
+// with such a result pay for the second pass.
+func pairResults(format string, body []byte, turn int, results []ToolResult, fp agenttrace.Fingerprinter) {
+	missing := false
+	for _, t := range results {
+		missing = missing || t.ID == ""
+	}
+	if !missing {
+		return
+	}
+	units, err := segments.ExtractUnitsWith(format, body, segments.Options{ToolCalls: true})
+	if err != nil {
+		return
+	}
+	answered := map[string]bool{}
+	for _, t := range results {
+		answered[t.ID] = t.ID != ""
+	}
+	var calls []segments.Unit
+	for _, u := range units {
+		// The model's last message is the one assistant message before the
+		// results' turn (Unit.Turn counts the assistant messages before).
+		if u.IsToolCall() && u.Turn == turn-1 && !answered[u.ToolCallID] {
+			calls = append(calls, u)
+		}
+	}
+	used := make([]bool, len(calls))
+	for i := range results {
+		if results[i].ID != "" {
+			continue
+		}
+		j := -1
+		for k, c := range calls {
+			if !used[k] && (results[i].Name == "" || c.ToolName == results[i].Name) {
+				j = k
+				break
+			}
+		}
+		if j < 0 {
+			continue
+		}
+		used[j] = true
+		c := calls[j]
+		if c.ToolCallID != "" {
+			results[i].ID = c.ToolCallID
+			continue
+		}
+		if results[i].Name == "" {
+			results[i].Name = c.ToolName
+		}
+		// The arguments' raw bytes, read in place; missing ones fingerprint
+		// as {} on both sides.
+		args, _ := rawAt(body, c.Path)
+		if f, err := ArgsFingerprint(fp, args); err == nil {
+			results[i].CallArgsFP = f
+		}
+	}
+}
+
+// rawAt returns the raw bytes of the value at JSON Pointer ptr (RFC 6901)
+// in body, scanning in place (trim.go's scanner) rather than decoding the
+// body. Keys are compared as written, so a key spelled with escapes is not
+// found.
+func rawAt(body []byte, ptr string) ([]byte, bool) {
+	i := skipSpace(body, 0)
+	end := skipValue(body, i)
+	if end < 0 {
+		return nil, false
+	}
+	if ptr == "" {
+		return body[i:end], true
+	}
+	for _, tok := range strings.Split(strings.TrimPrefix(ptr, "/"), "/") {
+		tok = strings.ReplaceAll(strings.ReplaceAll(tok, "~1", "/"), "~0", "~")
+		found := false
+		switch {
+		case i < len(body) && body[i] == '{':
+			members(body, i, func(k []byte, v, e int) bool {
+				if string(k) == tok {
+					i, end, found = v, e, true
+					return false
+				}
+				return true
+			})
+		case i < len(body) && body[i] == '[':
+			n, err := strconv.Atoi(tok)
+			if err != nil || n < 0 {
+				return nil, false
+			}
+			j := skipSpace(body, i+1)
+			for idx := 0; j < len(body) && body[j] != ']'; idx++ {
+				e := skipValue(body, j)
+				if e < 0 {
+					return nil, false
+				}
+				if idx == n {
+					i, end, found = j, e, true
+					break
+				}
+				if j = skipSpace(body, e); j < len(body) && body[j] == ',' {
+					j = skipSpace(body, j+1)
+				}
+			}
+		}
+		if !found {
+			return nil, false
+		}
+	}
+	return body[i:end], true
 }
 
 // markErrors sets IsError from Anthropic tool_result is_error and Bedrock

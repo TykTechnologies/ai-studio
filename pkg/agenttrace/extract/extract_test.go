@@ -203,6 +203,95 @@ func TestParseRequest_NewUserTurn(t *testing.T) {
 	assert.Equal(t, "user", r.LastRole)
 }
 
+// A result sent back without its id takes the id of the call it answers,
+// by name in order, from the model's last message; a call already answered
+// by id is not claimed twice, and an earlier message's call is never used.
+func TestParseRequest_ResultIDsFromCalls(t *testing.T) {
+	body := `{"contents":[
+	  {"role":"user","parts":[{"text":"who reviews?"}]},
+	  {"role":"model","parts":[{"functionCall":{"name":"search","args":{},"id":"old_1"}}]},
+	  {"role":"user","parts":[{"functionResponse":{"name":"search","response":{"r":0}}}]},
+	  {"role":"model","parts":[
+	    {"functionCall":{"name":"search","args":{"q":"a"},"id":"call_1"},"thoughtSignature":"x"},
+	    {"functionCall":{"name":"read","args":{},"id":"call_2"}},
+	    {"functionCall":{"name":"search","args":{"q":"b"},"id":"call_3"}}]},
+	  {"role":"user","parts":[
+	    {"functionResponse":{"name":"search","id":"call_1","response":{"r":1}}},
+	    {"functionResponse":{"name":"search","response":{"r":3}}},
+	    {"functionResponse":{"name":"read","response":{"r":2}}},
+	    {"functionResponse":{"name":"write","response":{"r":4}}}]}]}`
+	for _, f := range []string{FormatGoogleAI, FormatVertex} {
+		r, err := ParseRequest(f, []byte(body), testFP)
+		require.NoError(t, err)
+		var got []idName
+		for _, tr := range r.ToolResults {
+			got = append(got, idName{tr.ID, tr.Name})
+		}
+		assert.Equal(t, []idName{{"call_1", "search"}, {"call_3", "search"}, {"call_2", "read"}, {"", "write"}}, got, f)
+		assert.Nil(t, r.ToolResults[3].CallArgsFP, "no call to pair with")
+		assert.Equal(t, "tool", r.LastRole)
+	}
+}
+
+// When neither the call nor the result keeps an id (Gemini through clients
+// that drop it, Ollama), the result carries the call's name and argument
+// fingerprint, equal to the fingerprint the response's call got, whatever
+// the key order of the history's copy. A result without a name takes the
+// next call in order.
+func TestParseRequest_IDlessResultsCarryCallArgs(t *testing.T) {
+	cases := []struct {
+		format, response, request string
+	}{
+		{FormatGoogleAI,
+			`{"candidates":[{"content":{"role":"model","parts":[
+			  {"functionCall":{"name":"search","args":{"q":"a","page":2}}},
+			  {"functionCall":{"name":"search","args":{"q":"b"}}}]}}]}`,
+			`{"contents":[{"role":"user","parts":[{"text":"go"}]},
+			  {"role":"model","parts":[
+			    {"functionCall":{"name":"search","args":{"page":2,"q":"a"}},"thoughtSignature":"x"},
+			    {"functionCall":{"name":"search","args":{"q":"b"}}}]},
+			  {"role":"user","parts":[
+			    {"functionResponse":{"name":"search","response":{"r":1}}},
+			    {"functionResponse":{"name":"search","response":{"r":2}}}]}]}`},
+		{FormatVertex,
+			`{"candidates":[{"content":{"role":"model","parts":[
+			  {"functionCall":{"name":"search","args":{"q":"a","page":2}}},
+			  {"functionCall":{"name":"search","args":{"q":"b"}}}]}}]}`,
+			`{"contents":[{"role":"user","parts":[{"text":"go"}]},
+			  {"role":"model","parts":[
+			    {"functionCall":{"name":"search","args":{"page":2,"q":"a"}}},
+			    {"functionCall":{"name":"search","args":{"q":"b"}}}]},
+			  {"role":"user","parts":[
+			    {"functionResponse":{"name":"search","response":{"r":1}}},
+			    {"functionResponse":{"name":"search","response":{"r":2}}}]}]}`},
+		{FormatOllama,
+			`{"message":{"role":"assistant","content":"","tool_calls":[
+			  {"function":{"name":"search","arguments":{"q":"a","page":2}}},
+			  {"function":{"name":"search","arguments":{"q":"b"}}}]},"done":true}`,
+			`{"messages":[{"role":"user","content":"go"},
+			  {"role":"assistant","content":"","tool_calls":[
+			    {"function":{"name":"search","arguments":{"page":2,"q":"a"}}},
+			    {"function":{"name":"search","arguments":{"q":"b"}}}]},
+			  {"role":"tool","tool_name":"search","content":"1"},
+			  {"role":"tool","content":"2"}]}`},
+	}
+	for _, c := range cases {
+		resp, err := ParseResponse(c.format, []byte(c.response), testFP)
+		require.NoError(t, err, c.format)
+		require.Len(t, resp.ToolCalls, 2, c.format)
+		req, err := ParseRequest(c.format, []byte(c.request), testFP)
+		require.NoError(t, err, c.format)
+		require.Len(t, req.ToolResults, 2, c.format)
+		for i, tr := range req.ToolResults {
+			assert.Empty(t, tr.ID, c.format)
+			assert.Equal(t, "search", tr.Name, c.format)
+			require.NotNil(t, tr.CallArgsFP, c.format)
+			assert.Equal(t, resp.ToolCalls[i].ArgsFP, tr.CallArgsFP, "%s result %d", c.format, i)
+		}
+		assert.NotEqual(t, req.ToolResults[0].CallArgsFP, req.ToolResults[1].CallArgsFP, c.format)
+	}
+}
+
 func TestParseRequest_Responses(t *testing.T) {
 	body := `{"previous_response_id":"resp_prev","input":[
 	  {"type":"function_call","call_id":"call_1","name":"lookup","arguments":"{}"},
@@ -221,13 +310,14 @@ func TestParseRequest_Responses(t *testing.T) {
 }
 
 // Replayed server tool outputs (mcp_call) are reported but never become R1
-// results in the event.
-func TestRequestApply_SkipsServerAndIDless(t *testing.T) {
-	r := Request{ToolResults: []ToolResult{{ID: "a"}, {ID: "", Name: "get_weather"}, {ID: "mcp_1", Server: true}}}
+// results in the event. A result without an id is kept with its call's
+// name and argument fingerprint; one with an id needs neither.
+func TestRequestApply_SkipsServerKeepsIDless(t *testing.T) {
+	fp := agenttrace.Fingerprint{1, 2}
+	r := Request{ToolResults: []ToolResult{{ID: "a", Name: "lookup", CallArgsFP: fp}, {ID: "", Name: "get_weather", CallArgsFP: fp}, {ID: "mcp_1", Server: true}}}
 	var x agenttrace.Extracts
 	r.Apply(&x)
-	require.Len(t, x.ToolResults, 1)
-	assert.Equal(t, "a", x.ToolResults[0].ID)
+	assert.Equal(t, []agenttrace.ToolResult{{ID: "a"}, {Name: "get_weather", CallArgsFP: fp}}, x.ToolResults)
 }
 
 func TestParseRequest_Errors(t *testing.T) {
@@ -506,5 +596,27 @@ func BenchmarkParseResponse_OpenAI32KiB(b *testing.B) {
 		if _, err := ParseResponse(FormatOpenAI, body, testFP); err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+// rawAt reads a value in place: through objects and arrays, past strings
+// holding brackets and escaped quotes, and not past a missing key or index.
+func TestRawAt(t *testing.T) {
+	body := []byte(` {"a":"x]}\"y","contents":[{"parts":[{"text":"[{"},{"functionCall":{"name":"s","args":{"q":"a,b","n":[1,2]}}}]},
+	  {"parts":[{"functionCall":{"args":{}}}]}], "a/b":{"~":true}} `)
+	for ptr, want := range map[string]string{
+		"/contents/0/parts/1/functionCall/args":   `{"q":"a,b","n":[1,2]}`,
+		"/contents/0/parts/1/functionCall/args/n": `[1,2]`,
+		"/contents/1/parts/0/functionCall/args":   `{}`,
+		"/a":                                      `"x]}\"y"`,
+		"/a~1b/~0":                                `true`,
+	} {
+		got, ok := rawAt(body, ptr)
+		assert.True(t, ok, ptr)
+		assert.Equal(t, want, string(got), ptr)
+	}
+	for _, ptr := range []string{"/missing", "/contents/2", "/contents/0/parts/x", "/a/0", "/contents/-1"} {
+		_, ok := rawAt(body, ptr)
+		assert.False(t, ok, ptr)
 	}
 }

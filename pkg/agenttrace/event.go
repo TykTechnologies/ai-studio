@@ -323,11 +323,17 @@ type ToolCallRequest struct {
 	ArgsUnavailable bool
 }
 
-// ToolResult is one trailing tool result in an LLM request (R1).
+// ToolResult is one trailing tool result in an LLM request (R1). A result
+// sent back without its call's id (Gemini makes it optional, Ollama has
+// none, some clients drop it) carries instead the call's Name and
+// CallArgsFP, the fingerprint of the call's arguments as the request's
+// history repeats them, for the name and arguments fallback.
 type ToolResult struct {
-	ID       string
-	ResultFP Fingerprint
-	IsError  bool
+	ID         string
+	Name       string
+	CallArgsFP Fingerprint
+	ResultFP   Fingerprint
+	IsError    bool
 }
 
 // GatewayEvent is one policy outcome, attempt or fallback (§3.2, §4.5).
@@ -383,7 +389,7 @@ func (e *Event) ApproxSize() int {
 		n += len(e.Extracts.ToolCalls[i].ID) + len(e.Extracts.ToolCalls[i].Name) + 40
 	}
 	for i := range e.Extracts.ToolResults {
-		n += len(e.Extracts.ToolResults[i].ID) + 40
+		n += len(e.Extracts.ToolResults[i].ID) + len(e.Extracts.ToolResults[i].Name) + 40
 	}
 	for i := range e.GatewayEvents {
 		n += len(e.GatewayEvents[i].Detail) + len(e.GatewayEvents[i].Name) + 32

@@ -525,6 +525,10 @@ message CaptureToolResultProto {
   string id = 1;
   bytes result_fp = 2;
   bool is_error = 3;
+  // A result without an id: the name and argument fingerprint of the call
+  // it answers, from the request's history.
+  string name = 4;
+  bytes call_args_fp = 5;
 }
 
 message CaptureExtractsProto {

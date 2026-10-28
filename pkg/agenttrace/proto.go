@@ -191,7 +191,7 @@ func FromProto(p *pb.CaptureEventProto) *Event {
 		}
 		for _, tr := range x.ToolResults {
 			e.Extracts.ToolResults = append(e.Extracts.ToolResults, ToolResult{
-				ID: tr.Id, ResultFP: fp(tr.ResultFp), IsError: tr.IsError,
+				ID: tr.Id, Name: tr.Name, CallArgsFP: fp(tr.CallArgsFp), ResultFP: fp(tr.ResultFp), IsError: tr.IsError,
 			})
 		}
 		// An edge's lists are bounded again here, as the capture bounds its own.
@@ -270,7 +270,7 @@ func extractsToProto(x *Extracts) *pb.CaptureExtractsProto {
 	}
 	for _, tr := range x.ToolResults {
 		p.ToolResults = append(p.ToolResults, &pb.CaptureToolResultProto{
-			Id: tr.ID, ResultFp: tr.ResultFP, IsError: tr.IsError,
+			Id: tr.ID, Name: tr.Name, CallArgsFp: tr.CallArgsFP, ResultFp: tr.ResultFP, IsError: tr.IsError,
 		})
 	}
 	return p
