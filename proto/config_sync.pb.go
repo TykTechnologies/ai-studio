@@ -3664,10 +3664,14 @@ func (x *CaptureToolCallProto) GetArgsUnavailable() bool {
 }
 
 type CaptureToolResultProto struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	ResultFp      []byte                 `protobuf:"bytes,2,opt,name=result_fp,json=resultFp,proto3" json:"result_fp,omitempty"`
-	IsError       bool                   `protobuf:"varint,3,opt,name=is_error,json=isError,proto3" json:"is_error,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Id       string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ResultFp []byte                 `protobuf:"bytes,2,opt,name=result_fp,json=resultFp,proto3" json:"result_fp,omitempty"`
+	IsError  bool                   `protobuf:"varint,3,opt,name=is_error,json=isError,proto3" json:"is_error,omitempty"`
+	// A result without an id: the name and argument fingerprint of the call
+	// it answers, from the request's history.
+	Name          string `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
+	CallArgsFp    []byte `protobuf:"bytes,5,opt,name=call_args_fp,json=callArgsFp,proto3" json:"call_args_fp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3721,6 +3725,20 @@ func (x *CaptureToolResultProto) GetIsError() bool {
 		return x.IsError
 	}
 	return false
+}
+
+func (x *CaptureToolResultProto) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CaptureToolResultProto) GetCallArgsFp() []byte {
+	if x != nil {
+		return x.CallArgsFp
+	}
+	return nil
 }
 
 type CaptureExtractsProto struct {
@@ -4759,11 +4777,14 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x17\n" +
 	"\aargs_fp\x18\x03 \x01(\fR\x06argsFp\x12)\n" +
-	"\x10args_unavailable\x18\x04 \x01(\bR\x0fargsUnavailable\"`\n" +
+	"\x10args_unavailable\x18\x04 \x01(\bR\x0fargsUnavailable\"\x96\x01\n" +
 	"\x16CaptureToolResultProto\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tresult_fp\x18\x02 \x01(\fR\bresultFp\x12\x19\n" +
-	"\bis_error\x18\x03 \x01(\bR\aisError\"\xfd\x03\n" +
+	"\bis_error\x18\x03 \x01(\bR\aisError\x12\x12\n" +
+	"\x04name\x18\x04 \x01(\tR\x04name\x12 \n" +
+	"\fcall_args_fp\x18\x05 \x01(\fR\n" +
+	"callArgsFp\"\xfd\x03\n" +
 	"\x14CaptureExtractsProto\x12A\n" +
 	"\n" +
 	"tool_calls\x18\x01 \x03(\v2\".microgateway.CaptureToolCallProtoR\ttoolCalls\x12G\n" +

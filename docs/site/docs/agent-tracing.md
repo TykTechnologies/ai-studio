@@ -43,7 +43,7 @@ The gateway sees what passes through it. Coverage depends on where your tools ru
 | **Studio Chat and agent plugins** | Not traced yet (Phase 2). |
 | Calls that bypass the gateway | Not seen. |
 
-Providers whose tool calls carry no ids (some Gemini and Ollama responses) cannot be linked to their results.
+A tool result sent back without its call's id is still linked. Gemini makes the id optional, Ollama has none, and some clients drop it (the AI SDK on Vertex). If the model's call in the request's history kept its id, the result takes it. Otherwise the result is matched to the call by tool name and arguments, as `strong` or `weak` (see [Correlation and confidence](#correlation-and-confidence)). A tool call with no id and no result before the turn ends is not recorded as abandoned.
 
 ---
 
@@ -307,10 +307,10 @@ The gateway links calls that belong together and records how sure it is.
 |---|---|
 | `declared` | The client said so: `traceparent`, or `_meta.traceparent` on an MCP call |
 | `exact` | Matched by id: a `tool_call_id` coming back in the next request, a `previous_response_id`, or a gateway retry or fallback |
-| `strong` | A tool execution matched to the call that requested it by name and arguments, with a single candidate |
+| `strong` | A tool execution, or a tool result sent back without its call's id, matched to the call that requested it by name and arguments, with a single candidate |
 | `weak` | Name-only matches, several candidates (the nearest is chosen and the others kept as *candidate* links), or matches across a key rotation |
 
-Each link also records its rule, for example `tool_call_id`, `mcp_name_args` or `mcp_name_only`.
+Each link also records its rule, for example `tool_call_id`, `mcp_name_args`, `mcp_name_only` or, for a result without an id, `result_name_args` and `result_name_only`.
 
 - A parent below `AGENT_TRACING_MIN_LINK_CONFIDENCE` is kept as a candidate link instead of a parent.
 - The session shows its weakest link in the **Correlation quality** bar.

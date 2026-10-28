@@ -102,7 +102,7 @@ func fullEvent() *Event {
 		},
 		Extracts: Extracts{
 			ToolCalls:          []ToolCallRequest{{ID: "call_1", Name: "search", ArgsFP: f.Fingerprint([]byte(`{}`)), ArgsUnavailable: true}},
-			ToolResults:        []ToolResult{{ID: "call_0", ResultFP: f.Fingerprint([]byte(`"r"`)), IsError: true}},
+			ToolResults:        []ToolResult{{ID: "call_0", Name: "lookup", CallArgsFP: f.Fingerprint([]byte(`"a"`)), ResultFP: f.Fingerprint([]byte(`"r"`)), IsError: true}},
 			ResponseID:         "resp_1",
 			PreviousResponseID: "resp_0",
 			FinishReasons:      []string{"tool_calls"},
