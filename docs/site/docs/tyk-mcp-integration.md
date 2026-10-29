@@ -404,6 +404,7 @@ Once your Tyk Pump has the `http` pump, add it to `pump.conf`:
 
 ```json
 {
+  "dont_purge_uptime_data": true,
   "pumps": {
     "http": {
       "type": "http",
@@ -415,7 +416,7 @@ Once your Tyk Pump has the `http` pump, add it to `pump.conf`:
         "mcp_only": true,
         "gzip": true,
         "batch_size": 500,
-        "max_retries": 3
+        "max_retries": 8
       }
     }
   }
@@ -425,7 +426,17 @@ Once your Tyk Pump has the `http` pump, add it to `pump.conf`:
 `mcp_only` sends only MCP records; without it (or a `filters.api_ids` list)
 every API's records travel to AI Studio and are dropped on arrival.
 `omit_detailed_recording` keeps raw requests and responses out of the
-batches.
+batches. Keep `dont_purge_uptime_data: true` (a top-level `pump.conf`
+setting) unless you run an uptime pump: without it, Tyk Pump fails at start
+looking for MongoDB.
+
+Pump drains Redis as it reads, so a batch it gives up on is lost. When AI
+Studio can't be reached (a restart or upgrade of a single replica), the
+http pump retries a batch `max_retries` times with a backoff that doubles
+from half a second, within the pump `timeout`: with `max_retries: 3` that
+covers about 3 seconds of outage, with `max_retries: 8` up to the 30-second
+`timeout`. For longer outages, run several AI Studio replicas behind the
+ingest URL.
 
 ### Tyk Pump 1.16 with Vector (bridge)
 
@@ -445,7 +456,7 @@ its output:
 ```
 
 Set `dont_purge_uptime_data: true` in `pump.conf` unless you run an uptime
-pump; Tyk Pump 1.16.0 otherwise fails at start looking for MongoDB.
+pump; Tyk Pump otherwise fails at start looking for MongoDB.
 
 `vector.toml`, with `MCP_INGEST_URL` set to
 `https://studio.example.com/api/v1/ingest/tyk-analytics` and
@@ -516,6 +527,9 @@ the `read` action on `analytics`.
 
 - Delivery is at least once: records carry no id, so a retried batch can be
   counted twice.
+- Records Pump drains while AI Studio is unreachable for longer than the
+  http pump's retries cover (about 3 seconds with `max_retries: 3`, at most
+  the pump `timeout`) are lost. See [Tyk Pump with the http pump](#tyk-pump-with-the-http-pump).
 - The error rate counts HTTP errors and the JSON-RPC errors the Gateway
   detects (in the first 64 KiB of the response). A tool's `isError` result,
   and on Gateway 5.15 an upstream server's own JSON-RPC errors, arrive as

@@ -32,9 +32,14 @@ export const ingestURL = (path) => {
 // httpPumpSnippet is the pump.conf entry for the tyk-pump http pump (option
 // names from the upstream pump). The token is the one the admin has just
 // generated, or a placeholder; nothing else secret is ever embedded.
+// dont_purge_uptime_data: without an uptime store Tyk Pump otherwise fails
+// at start looking for MongoDB. max_retries 8 keeps a batch retried for up
+// to the pump timeout (30 s) when AI Studio is briefly down; Pump has
+// already drained Redis, so a batch it gives up on is lost.
 export const httpPumpSnippet = (url, token) =>
   JSON.stringify(
     {
+      dont_purge_uptime_data: true,
       pumps: {
         http: {
           type: "http",
@@ -46,7 +51,7 @@ export const httpPumpSnippet = (url, token) =>
             mcp_only: true,
             gzip: true,
             batch_size: 500,
-            max_retries: 3,
+            max_retries: 8,
           },
         },
       },

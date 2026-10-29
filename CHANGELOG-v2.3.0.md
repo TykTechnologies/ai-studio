@@ -399,7 +399,7 @@ See the [FIPS guide](docs/site/docs/fips.md).
 - **Decision-only LLMs** don't appear in chat, agent, router and wizard pickers. The failover picker only offers compatible models.
 - **Edge gateways answer `404` on `/api/v1`**, and the `mgw` CLI no longer works against an edge; configure edges from AI Studio. A standalone microgateway keeps its management API, but create tokens with `POST /api/v1/tokens` or `microgateway -create-admin-token`.
 - **advanced-llm-cache 1.3.0:** Redis `tls_enabled` now takes effect, so check that your Redis accepts TLS. Use `tls_insecure` instead of `tls_skip_verify`. The cache starts empty after the upgrade.
-- **MCP analytics need traffic logs on the proxy.** Proxies created outside AI Studio record nothing until `trafficLogs` is enabled. Tyk Pump 1.16.0 needs `dont_purge_uptime_data: true` unless you run an uptime store.
+- **MCP analytics need traffic logs on the proxy.** Proxies created outside AI Studio record nothing until `trafficLogs` is enabled. Tyk Pump needs `dont_purge_uptime_data: true` unless you run an uptime store. Pump drops a batch it can't deliver once its retries run out, so MCP records sent while AI Studio is restarting can be lost: use `max_retries: 8`, as in the AI Studio snippet.
 - **Agent tracing content ceiling.** If `AGENT_TRACING_CONTENT_CEILING` is unset, it is `metadata`, which overrides Apps set to Redacted or Full. Set it to the highest mode you want to allow.
 - **`AGENT_TRACING_BAGGAGE_ALLOWLIST`** (default `session.id`, all editions) limits the W3C `baggage` header sent upstream to the listed keys. Set it to the keys your providers rely on, or `none`.
 
