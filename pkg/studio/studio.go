@@ -57,6 +57,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/log_export"
 	"github.com/TykTechnologies/midsommar/v2/services/pushes"
 	"github.com/TykTechnologies/midsommar/v2/services/scheduler"
+	"github.com/TykTechnologies/midsommar/v2/services/sso"
 	"github.com/TykTechnologies/midsommar/v2/services/tykmcp"
 	"github.com/TykTechnologies/midsommar/v2/ui"
 )
@@ -196,6 +197,9 @@ type Authenticator = auth.Authenticator
 // ErrAlreadyRunning is returned by New while another Studio is running in
 // the process.
 var ErrAlreadyRunning = errors.New("studio: another instance is already running in this process")
+
+// ssoAvailable reports whether this build has SSO; tests replace it.
+var ssoAvailable = sso.IsEnterpriseAvailable
 
 // ErrGatewayNotLicensed is returned by StartProxy when the licence does not
 // include the gateway.
@@ -593,6 +597,13 @@ func New(opts Options) (_ *Studio, err error) {
 		Chromeless:             opts.Chromeless,
 	}
 	authService := auth.NewAuthService(authConfig, mailService, service, notificationService)
+
+	// SSO availability is by edition (TIB_ENABLED is deprecated), so warn
+	// whenever this build has SSO and the broker's shared secret is missing.
+	// A host that does its own authentication has no SSO login.
+	if conf.TIBAPISecret == "" && ssoAvailable() && opts.Auth == nil {
+		logger.Warn("TYK_AI_SECRET_KEY is not set: SSO logins are refused until it is set")
+	}
 
 	if opts.MeterProvider != nil {
 		metrics.InitWithProvider(opts.MeterProvider)
