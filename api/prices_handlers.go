@@ -469,6 +469,12 @@ func (a *API) updateModelPriceAndRecalculate(c *gin.Context) {
 		return
 	}
 
+	// The same event as a standard update: edges are flagged for a config
+	// push and plugins hear of the new price.
+	if a.service.SystemEvents != nil {
+		a.service.SystemEvents.EmitModelPriceUpdated(modelPrice, modelPrice.ID, 0)
+	}
+
 	c.JSON(http.StatusOK, gin.H{"data": serializeModelPrice(modelPrice)})
 }
 
