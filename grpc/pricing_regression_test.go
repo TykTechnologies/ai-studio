@@ -1,6 +1,7 @@
 package grpc
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,12 +11,15 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	protobuf "google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Pricing regression suite, hub budget side (the core suite is
@@ -25,34 +29,42 @@ import (
 func forEachBudgetSyncDB(t *testing.T, fn func(t *testing.T, db *gorm.DB)) {
 	t.Run("sqlite", func(t *testing.T) { fn(t, setupBudgetSyncTestDB(t)) })
 	t.Run("postgres", func(t *testing.T) {
-		dsn := os.Getenv("DATABASE_URL")
-		if !strings.HasPrefix(dsn, "postgres") {
-			t.Skip("DATABASE_URL is not a Postgres URL")
-		}
-		// Only the budget queries are under test, not the App's foreign keys.
-		cfg := &gorm.Config{Logger: logger.Default.LogMode(logger.Silent), DisableForeignKeyConstraintWhenMigrating: true}
-		admin, err := gorm.Open(postgres.Open(dsn), cfg)
-		require.NoError(t, err)
-		schema := fmt.Sprintf("budget_sync_regression_%d", time.Now().UnixNano())
-		require.NoError(t, admin.Exec("CREATE SCHEMA "+schema).Error)
-		sep := "?"
-		if strings.Contains(dsn, "?") {
-			sep = "&"
-		}
-		db, err := gorm.Open(postgres.Open(dsn+sep+"search_path="+schema), cfg)
-		require.NoError(t, err)
-		t.Cleanup(func() {
-			if sqlDB, err := db.DB(); err == nil {
-				sqlDB.Close()
-			}
-			admin.Exec("DROP SCHEMA " + schema + " CASCADE")
-			if sqlDB, err := admin.DB(); err == nil {
-				sqlDB.Close()
-			}
-		})
+		db := budgetSyncPostgresDB(t)
 		require.NoError(t, db.AutoMigrate(&models.LLMChatRecord{}, &models.App{}))
 		fn(t, db)
 	})
+}
+
+// budgetSyncPostgresDB opens DATABASE_URL in a schema of its own, skipping
+// unless it is a Postgres URL. Only the budget and pricing queries are under
+// test, not the foreign keys, so migrations skip them.
+func budgetSyncPostgresDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	dsn := os.Getenv("DATABASE_URL")
+	if !strings.HasPrefix(dsn, "postgres") {
+		t.Skip("DATABASE_URL is not a Postgres URL")
+	}
+	cfg := &gorm.Config{Logger: logger.Default.LogMode(logger.Silent), DisableForeignKeyConstraintWhenMigrating: true}
+	admin, err := gorm.Open(postgres.Open(dsn), cfg)
+	require.NoError(t, err)
+	schema := fmt.Sprintf("budget_sync_regression_%d", time.Now().UnixNano())
+	require.NoError(t, admin.Exec("CREATE SCHEMA "+schema).Error)
+	sep := "?"
+	if strings.Contains(dsn, "?") {
+		sep = "&"
+	}
+	db, err := gorm.Open(postgres.Open(dsn+sep+"search_path="+schema), cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		if sqlDB, err := db.DB(); err == nil {
+			sqlDB.Close()
+		}
+		admin.Exec("DROP SCHEMA " + schema + " CASCADE")
+		if sqlDB, err := admin.DB(); err == nil {
+			sqlDB.Close()
+		}
+	})
+	return db
 }
 
 // kq3b.4 at the hub: Apps anchored on the 29th, 30th and 31st, checked on
@@ -217,4 +229,91 @@ func TestPricingRegression_HubBudgetImpliedCurrency(t *testing.T) {
 		assert.NotContains(t, p.Blocks, uint32(apps["usd"].ID))
 		assert.Contains(t, p.Blocks[uint32(apps["mixed"].ID)], "spend in EUR, USD", "a mixed period is blocked")
 	})
+}
+
+// forEachPulseDB runs fn on a database set up for edge analytics pulses
+// (SQLite on one connection, for the analytics worker; Postgres in a schema
+// of its own), with model prices.
+func forEachPulseDB(t *testing.T, fn func(t *testing.T, db *gorm.DB)) {
+	tables := []any{&models.LLMChatRecord{}, &models.ProxyLog{}, &models.EdgeInstance{}, &models.ComplianceEvent{}, &models.ToolCallRecord{}, &models.ModelPrice{}, &models.App{}}
+	t.Run("sqlite", func(t *testing.T) {
+		db := setupPulseTestDB(t)
+		require.NoError(t, db.AutoMigrate(tables...))
+		fn(t, db)
+	})
+	t.Run("postgres", func(t *testing.T) {
+		db := budgetSyncPostgresDB(t)
+		require.NoError(t, db.AutoMigrate(tables...))
+		fn(t, db)
+	})
+}
+
+// kq3b.12/kq3b.13 end to end: rows an edge sends in an analytics pulse keep
+// the model asked for, the tier multiplier and the currency. So a
+// recalculation of the requested name's price reprices the versioned row,
+// and a batch row stays at 0.5x through a recalculation via a zero price.
+func TestPricingRegression_EdgeRowsRepricedLikeEmbedded(t *testing.T) {
+	forEachPulseDB(t, func(t *testing.T, db *gorm.DB) {
+		server := setupControlServer(t, db)
+		t.Cleanup(server.Stop)
+		svc := &services.Service{DB: db}
+		const vendor = "google_ai"
+		p := models.ModelPrice{CPT: 0.4e-6, CPIT: 0.1e-6, Currency: "EUR"}
+		price, err := svc.CreateModelPrice("gemini-2.0-flash", vendor, p.CPT, p.CPIT, 0, 0, "EUR")
+		require.NoError(t, err)
+		_, err = svc.GetModelPriceByModelNameAndVendor("gemini-2.0-flash-001", vendor) // the edge's unpriced reported row
+		require.NoError(t, err)
+
+		list := models.ChatRecordCost(vendor, p.CPT, p.CPIT, 0, 0, 1000, 200, 0, 0)
+		now := time.Now()
+		event := func(id string, mult *float64, at time.Duration) *pb.AnalyticsEvent {
+			cost := list
+			if mult != nil {
+				cost *= *mult
+			}
+			return &pb.AnalyticsEvent{RequestId: id, AppId: 1, LlmId: 1, ModelName: "gemini-2.0-flash-001", RequestedModel: "gemini-2.0-flash",
+				Vendor: vendor, StatusCode: 200, RequestTokens: 1000, ResponseTokens: 200, TotalTokens: 1200,
+				Cost: cost, Currency: "EUR", PriceMultiplier: mult, Timestamp: timestamppb.New(now.Add(at))}
+		}
+		resp, err := server.SendAnalyticsPulse(context.Background(), &pb.AnalyticsPulse{
+			EdgeId: "edge-1", EdgeNamespace: "default", SequenceNumber: 1, TotalRecords: 2,
+			AnalyticsEvents: []*pb.AnalyticsEvent{event("sync", protobuf.Float64(1), 0), event("batch", protobuf.Float64(0.5), time.Second)},
+		})
+		require.NoError(t, err)
+		require.True(t, resp.Success)
+		var recs []models.LLMChatRecord
+		require.Eventually(t, func() bool {
+			recs = nil
+			return db.Order("time_stamp asc").Find(&recs).Error == nil && len(recs) == 2
+		}, 5*time.Second, 20*time.Millisecond)
+		for _, r := range recs {
+			assert.Equal(t, "gemini-2.0-flash", r.RequestedModel)
+			assert.Equal(t, "EUR", r.Currency, "the edge's currency is kept")
+		}
+
+		reprice := func(f float64) {
+			t.Helper()
+			_, err := svc.UpdateModelPriceAndRecalculate(price.ID, "gemini-2.0-flash", vendor, p.CPT*f, p.CPIT*f, 0, 0, "EUR")
+			require.NoError(t, err)
+		}
+		costs := func() (sync, batch float64) {
+			t.Helper()
+			require.NoError(t, db.Order("time_stamp asc").Find(&recs).Error)
+			return recs[0].Cost, recs[1].Cost
+		}
+		reprice(2)
+		s, b := costs()
+		assertRel(t, 2*list, s, 1e-9, "the edge row requested by the repriced name is repriced")
+		assertRel(t, list, b, 1e-9, "the edge batch row at 0.5x of the doubled price")
+		reprice(0)
+		reprice(1)
+		s, b = costs()
+		assertRel(t, list, s, 1e-9, "sync row after p -> 0 -> p")
+		assertRel(t, 0.5*list, b, 1e-9, "batch row keeps 0.5x through a zero price")
+	})
+}
+
+func assertRel(t *testing.T, want, got, rel float64, msg string) {
+	t.Helper()
+	assert.InEpsilon(t, want, got, rel, msg)
 }
