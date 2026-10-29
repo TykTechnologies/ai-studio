@@ -82,6 +82,8 @@ func TestClients_EmbedAndComplete(t *testing.T) {
 	assert.Equal(t, `{"route": "complex"}`, answer)
 	last := stub.requests[len(stub.requests)-1]
 	assert.Equal(t, "gpt-4o-mini", last["model"])
+	// The OpenAI client always sends a temperature (0 when none is set) to a
+	// non-reasoning model; see TestClients_CompleteSendsNoTemperatureToAnthropic.
 	assert.EqualValues(t, 0, last["temperature"])
 
 	_, err = c.Embed(context.Background(), sr.ModelRef{LLMID: 2, Model: "x"}, []string{"a"})
@@ -90,6 +92,45 @@ func TestClients_EmbedAndComplete(t *testing.T) {
 	assert.Error(t, err)
 	_, err = c.Complete(context.Background(), sr.ModelRef{LLMID: 0}, "s", "u")
 	assert.Error(t, err)
+}
+
+// The judge sets no temperature (i7m2): Claude Sonnet 5 and later reject any
+// sampling parameter with a 400, and the Anthropic client sends one only
+// when it is set, so a judge on those models failed every judgement.
+func TestClients_CompleteSendsNoTemperatureToAnthropic(t *testing.T) {
+	var mu sync.Mutex
+	var got map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		_ = json.Unmarshal(body, &got)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"id": "msg_1", "type": "message", "role": "assistant", "model": "claude-sonnet-5",
+			"content":     []map[string]string{{"type": "text", "text": `{"route": "simple"}`}},
+			"stop_reason": "end_turn",
+			"usage":       map[string]int{"input_tokens": 1, "output_tokens": 1},
+		})
+	}))
+	defer srv.Close()
+
+	c := New(func(id uint) (*models.LLM, error) {
+		return &models.LLM{ID: id, Name: "Claude", Vendor: models.ANTHROPIC, APIEndpoint: srv.URL, APIKey: "sk-ant"}, nil
+	})
+	answer, err := c.Complete(context.Background(), sr.ModelRef{LLMID: 2, Model: "claude-sonnet-5"}, "sys", "user text")
+	require.NoError(t, err)
+	assert.Equal(t, `{"route": "simple"}`, answer)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.NotNil(t, got, "the judge call did not reach the stub")
+	assert.Equal(t, "claude-sonnet-5", got["model"])
+	_, hasTemperature := got["temperature"]
+	assert.False(t, hasTemperature, "temperature sent: %v", got["temperature"])
+	_, hasTopP := got["top_p"]
+	assert.False(t, hasTopP, "top_p sent")
+	assert.NotNil(t, got["max_tokens"], "max_tokens kept")
 }
 
 func TestSupportsEmbeddings(t *testing.T) {
