@@ -1318,6 +1318,28 @@ func (a *API) getBudgetUsageForApp(c *gin.Context) {
 		return
 	}
 
+	// A budget's currency is implied by its spend: the one currency of
+	// current_usage, or, when the period mixes currencies (which the budget
+	// refuses), the spend by currency and a current_usage of 0. Spend is
+	// tracked in Enterprise only.
+	var currency string
+	var mixed map[string]float64
+	if budget.IsEnterpriseAvailable() {
+		byCurrency, err := analytics.GetAppSpending(a.service.DB, []analytics.AppSpendWindow{{AppID: uint(appID), Start: start}}, now)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Internal Server Error", Detail: "Failed to get monthly spending"}},
+			})
+			return
+		}
+		if currency, _, mixed = budget.SplitCurrency(byCurrency[uint(appID)]); mixed != nil {
+			spent = 0
+		}
+	}
+
 	var percentage *float64
 	if app.MonthlyBudget != nil && *app.MonthlyBudget > 0 {
 		p := (spent / *app.MonthlyBudget) * 100
@@ -1325,15 +1347,19 @@ func (a *API) getBudgetUsageForApp(c *gin.Context) {
 	}
 
 	response := struct {
-		CurrentUsage  float64   `json:"current_usage"`
-		MonthlyBudget *float64  `json:"monthly_budget"`
-		Percentage    *float64  `json:"percentage"`
-		StartDate     time.Time `json:"start_date"`
+		CurrentUsage       float64            `json:"current_usage"`
+		MonthlyBudget      *float64           `json:"monthly_budget"`
+		Percentage         *float64           `json:"percentage"`
+		StartDate          time.Time          `json:"start_date"`
+		Currency           string             `json:"currency,omitempty"`
+		MixedCurrencySpend map[string]float64 `json:"mixed_currency_spend,omitempty"`
 	}{
-		CurrentUsage:  spent,
-		MonthlyBudget: app.MonthlyBudget,
-		Percentage:    percentage,
-		StartDate:     start,
+		CurrentUsage:       spent,
+		MonthlyBudget:      app.MonthlyBudget,
+		Percentage:         percentage,
+		StartDate:          start,
+		Currency:           currency,
+		MixedCurrencySpend: mixed,
 	}
 
 	c.JSON(http.StatusOK, response)

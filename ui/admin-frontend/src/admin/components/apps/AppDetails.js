@@ -878,8 +878,17 @@ const AppDetails = () => {
                     monthlyBudget: app.attributes.monthly_budget,
                     currentUsage: budgetUsageData?.current_usage,
                     percentage: budgetUsageData?.percentage,
-                    budgetStartDate: app.attributes.budget_start_date || budgetUsageData?.start_date
+                    budgetStartDate: app.attributes.budget_start_date || budgetUsageData?.start_date,
+                    currency: budgetUsageData?.currency
                   })}
+                  {budgetUsageData?.mixed_currency_spend && Object.keys(budgetUsageData.mixed_currency_spend).length > 0 && (
+                    <Typography variant="caption" display="block" color="error">
+                      Mixed currencies this period: {Object.entries(budgetUsageData.mixed_currency_spend)
+                        .sort(([a], [b]) => a.localeCompare(b))
+                        .map(([currency, amount]) => `${currency} ${Number(amount).toFixed(2)}`)
+                        .join(", ")}. Costs are not converted, so the budget refuses requests until the period ends.
+                    </Typography>
+                  )}
                 </FieldValue>
                 {app.attributes.monthly_budget && isEnterprise && (
                   <Button

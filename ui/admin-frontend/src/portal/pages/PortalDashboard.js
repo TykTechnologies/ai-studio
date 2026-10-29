@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { formatMoney, formatCurrencySpend } from "../utils/currency";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import {
   Box,
@@ -63,12 +64,6 @@ const CountTile = styled(Box)(({ theme }) => ({
   },
 }));
 
-// Budgets are dollar figures throughout the product (the app page prints
-// them as "$x.xx"); the same plain form is used here.
-const formatMoney = (value) => {
-  if (typeof value !== "number" || Number.isNaN(value)) return "—";
-  return `$${value.toFixed(2)}`;
-};
 
 /** Spend against budget, or what stands in for it. */
 export const BudgetCell = ({ summary, spendTracked }) => {
@@ -81,6 +76,16 @@ export const BudgetCell = ({ summary, spendTracked }) => {
   }
   const budget = summary.monthly_budget;
   const spent = summary.current_spend || 0;
+  const currency = summary.currency;
+  const mixed = summary.mixed_currency_spend;
+  if (spendTracked && mixed && Object.keys(mixed).length > 0) {
+    return (
+      <Typography variant="bodySmallDefault" color="error" data-testid="budget-cell">
+        Mixed currencies this period ({formatCurrencySpend(mixed)})
+        {typeof budget === "number" ? ": requests are refused" : ""}
+      </Typography>
+    );
+  }
   if (!spendTracked) {
     return (
       <Typography variant="bodySmallDefault" color="text.defaultSubdued" data-testid="budget-cell">
@@ -91,7 +96,7 @@ export const BudgetCell = ({ summary, spendTracked }) => {
   if (typeof budget !== "number") {
     return (
       <Typography variant="bodySmallDefault" data-testid="budget-cell">
-        {formatMoney(spent)} spent · No limit
+        {formatMoney(spent, currency)} spent · No limit
       </Typography>
     );
   }
@@ -107,7 +112,7 @@ export const BudgetCell = ({ summary, spendTracked }) => {
   return (
     <Box sx={{ minWidth: 160 }} data-testid="budget-cell">
       <Typography variant="bodySmallDefault">
-        {formatMoney(spent)} of {formatMoney(budget)}
+        {formatMoney(spent, currency)} of {formatMoney(budget, currency)}
       </Typography>
       <LinearProgress
         variant="determinate"
