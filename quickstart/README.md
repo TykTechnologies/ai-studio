@@ -11,7 +11,7 @@ This directory contains Docker Compose configurations to quickly spin up a demo 
 
 ### 1. Generate your secrets (both editions)
 
-The env files in `confs/` ship with `__REPLACE_WITH_…__` placeholders instead of sample secrets. Replace them before the first start: left in place, AI Studio and the Microgateway stop at startup with an error about the encryption key length.
+The env files in `confs/` ship with `__REPLACE_WITH_…__` placeholders instead of sample secrets. Replace them before the first start: left in place, AI Studio stops at startup with an error naming the setting that still holds a placeholder (before it sets up its database), and the Microgateway with an error about the encryption key length. If an older version was started once with the placeholders, its stored secrets are encrypted with the placeholder key: delete `ce/data` (or `enterprise/data`) before starting again, or save each secret again.
 
 | Placeholder | Variables | Generate with |
 |-------------|-----------|---------------|
