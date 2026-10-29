@@ -450,7 +450,9 @@ func (p *Proxy) Start() error {
 	if err := p.loadResources(); err != nil {
 		return fmt.Errorf("failed to load resources: %w", err)
 	}
-	handler := fixDoubleSlash(p.createHandler())
+	// Handler, so the gateway Studio serves on PROXY_PORT answers and records
+	// request ids like one that mounts Handler.
+	handler := p.Handler()
 
 	debugHTTPProxy := p.config.DebugHTTPProxy || os.Getenv("DEBUG_HTTP_PROXY") == "true"
 	if debugHTTPProxy {

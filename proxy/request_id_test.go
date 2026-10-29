@@ -1,9 +1,16 @@
 package proxy
 
 import (
+	"context"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
+
+	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 	"github.com/stretchr/testify/assert"
@@ -95,4 +102,34 @@ func TestWithRequestID_AnswersTheIDAndKeepsOneAlreadyInTheContext(t *testing.T) 
 	h.ServeHTTP(rec, r)
 	assert.Equal(t, pre, seen)
 	assert.Equal(t, pre, rec.Header().Get(requestid.Header))
+}
+
+// Start, which serves Studio's embedded gateway on PROXY_PORT, answers the
+// request id too, not only embedders that mount Handler.
+func TestStart_AnswersTheRequestID(t *testing.T) {
+	db, _ := setupParallelTest(t)
+	service := services.NewService(db)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	port := ln.Addr().(*net.TCPAddr).Port
+	require.NoError(t, ln.Close())
+
+	p := NewProxy(service, &Config{Port: port}, budget.NewService(db, services.NewTestNotificationService(db)))
+	done := make(chan error, 1)
+	go func() { done <- p.Start() }()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+		<-done
+	})
+
+	url := fmt.Sprintf("http://127.0.0.1:%d/llm/rest/no-such-llm/v1/chat/completions", port)
+	var resp *http.Response
+	require.Eventually(t, func() bool {
+		resp, err = http.Post(url, "application/json", nil)
+		return err == nil
+	}, 5*time.Second, 20*time.Millisecond)
+	defer resp.Body.Close()
+	assert.True(t, requestid.Valid(resp.Header.Get(requestid.Header)), "status %d, id %q", resp.StatusCode, resp.Header.Get(requestid.Header))
 }
