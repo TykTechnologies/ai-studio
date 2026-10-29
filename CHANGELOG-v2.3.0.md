@@ -310,7 +310,7 @@ This changes what plugins and filter scripts see for Bedrock traffic. Read the [
 - **Plugins on an internal registry or host are refused**, installed ones included, unless the host is named in `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` (on AI Studio and every Microgateway that loads them). Look for log lines that start `plugin host "…" is an internal address`. `PLUGIN_BLOCK_INTERNAL_URLS` is deprecated.
   - If the registry name doesn't resolve (DNS unavailable), a cached plugin that passes its checks still loads, with a warning.
   - Behind an HTTP(S) proxy, the registry name must still resolve on the host. On proxy-only networks, list the registry and the hosts it redirects downloads to in `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS` (for `docker.tyk.io`: `docker.tyk.io,dl.cloudsmith.io`).
-- **Cached plugins are downloaded once more** after the upgrade, to record their hash. The registry should be reachable then.
+- **Cached plugins are downloaded once more** after the upgrade, to record their hash. The registry should be reachable then. With signatures required, AI Studio and each edge log a warning per plugin (`Cached OCI plugin failed its integrity check, fetching it again`, `cache corrupted … no recorded binary hash`), followed by a passed signature check. This is expected, and happens again if an older version runs on the same plugin cache.
 - **Plugins no longer see credentials.** LLM, tool, datasource and user credentials appear as `[redacted]` in system events and object hooks. A `before_*` hook that returns a value still `[redacted]` keeps the stored one.
 - **Edge response plugins now receive the LLM's `vendor`.**
 - **Plugin order on edges.** Edges now run an LLM's plugins in the order set in AI Studio, not install order. Check the order on each LLM with more than one plugin before upgrading edges.
@@ -356,8 +356,8 @@ Upgrade edges together with AI Studio. Edges older than 2.3:
 
 After the upgrade:
 
-- **Edges show Pending once.** Push the configuration.
-- **Duplicate tool or LLM names** stored by earlier versions are left out on edges (the lowest id keeps the name) until renamed. The edge shows as Pending until then.
+- **Edges resync when they reconnect** to the upgraded AI Studio, and normally show In sync. An edge that starts without its local configuration shows Pending until you push the configuration.
+- **Duplicate tool or LLM names** stored by earlier versions are left out on edges (the lowest id keeps the name) until renamed. AI Studio logs which entry to rename, and a push succeeds with a warning that lists it as skipped; the edge still shows In sync.
 - **An LLM or tool that needs a filter or plugin from another namespace** is left out on that namespace's edges. Move the filter or plugin to the global namespace or the LLM's namespace.
 - **Edge errors now reach AI Studio's request logs.** Policy blocks and errors on edges appear as request log rows with no spend, so request counts include them.
 - **The request id header is `X-Tyk-AI-Request-ID`.** Edges no longer overwrite `X-Request-ID`.
