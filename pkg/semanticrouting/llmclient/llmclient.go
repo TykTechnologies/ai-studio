@@ -179,7 +179,9 @@ func (c *Clients) Embed(ctx context.Context, ref sr.ModelRef, texts []string) ([
 	return e.EmbedDocuments(ctx, texts)
 }
 
-// Complete asks the LLM for a short, deterministic answer.
+// Complete asks the LLM for a short answer. No temperature is sent: current
+// Anthropic models (Claude Sonnet 5 and later) reject any sampling
+// parameter with a 400, so a judge on one of them failed every judgement.
 func (c *Clients) Complete(ctx context.Context, ref sr.ModelRef, system, user string) (string, error) {
 	llm, err := c.resolved(ref.LLMID)
 	if err != nil {
@@ -192,7 +194,7 @@ func (c *Clients) Complete(ctx context.Context, ref sr.ModelRef, system, user st
 	resp, err := driver.GenerateContent(ctx, []llms.MessageContent{
 		llms.TextParts(llms.ChatMessageTypeSystem, system),
 		llms.TextParts(llms.ChatMessageTypeHuman, user),
-	}, llms.WithModel(ref.Model), llms.WithTemperature(0), llms.WithMaxTokens(judgeMaxTokens))
+	}, llms.WithModel(ref.Model), llms.WithMaxTokens(judgeMaxTokens))
 	if err != nil {
 		return "", err
 	}
