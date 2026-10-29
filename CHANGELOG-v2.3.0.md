@@ -320,7 +320,7 @@ This changes what plugins and filter scripts see for Bedrock traffic. Read the [
 
 Plugins attached to a Bedrock LLM now run on `/ai/`, `/v1`, routers and `/anthropic/`, and filters there now read the Bedrock Converse format. Before upgrading:
 
-- **Upgrade the shipped plugins** to advanced-llm-cache 1.3.0, llm-cache 1.3.0, llm-load-balancer 1.2.0, rate-limiter 1.2.0 and llm-firewall 1.2.0. Earlier versions mishandle Bedrock: caches mix up models and cache errors, token rules count no Bedrock tokens, firewall model rules never match, and the load balancer counts errors as successes.
+- **Upgrade the shipped plugins** to advanced-llm-cache 1.3.0, llm-cache 1.3.0, llm-load-balancer 1.2.1, rate-limiter 1.2.0 and llm-firewall 1.2.0. Earlier versions mishandle Bedrock: caches mix up models and cache errors, token rules count no Bedrock tokens, firewall model rules never match, and the load balancer counts errors as successes.
 - **Check your own plugins.** On Bedrock there's no `model` in the body (it's in the path), usage is camelCase, and streaming is chosen by the path (`converse-stream`). Use the SDK helpers `RequestModel`, `IsStreamingRequest` and `ResponseUsage`.
 - **Check custom filter scripts on Bedrock LLMs.** They get `input.format == "bedrock"` and a Converse `raw_input`, not the OpenAI or Anthropic shape the client sent. Read `input.messages`, or handle Converse. Guardrails and the redaction helpers already handle it.
 - **Data collectors** see Converse bodies for Bedrock traffic on these endpoints.
@@ -497,7 +497,7 @@ These plugins are released to the marketplace for 2.3.0. Versions marked † nee
 |---|---|---|
 | prompt-compressor (new) | 1.0.2 | New plugin, needs AI Studio 2.3.0: see [Prompt Compressor](#spend-fewer-tokens-prompt-compressor-community-plugin) |
 | llm-cache | 1.3.0 † | Works correctly with Bedrock (errors never cached, token savings counted). No longer replays other plugins' headers on a hit. Stability and logging fixes |
-| llm-load-balancer (Enterprise) | 1.2.0 † | Counts Bedrock errors as failures, and client errors (400, 413, 422) no longer count against an upstream. Fixes a selection race. Validates and redacts upstream URLs |
+| llm-load-balancer (Enterprise) | 1.2.1 † | Counts Bedrock errors as failures, and client errors (400, 413, 422) no longer count against an upstream. Fixes a selection race. Validates and redacts upstream URLs. Pools saved from the plugin's pages now load on edges and after a restart (with 1.2.0 they didn't, and edges sent every request to the LLM's own endpoint) |
 | advanced-llm-cache (Enterprise) | 1.3.0 † | Works correctly with Bedrock. Cache keys include the LLM, vendor, path and model, so the cache starts empty after the upgrade. Redis TLS now applies, and the Redis password is masked. Enter the Redis password itself: a `$SECRET/` reference there isn't resolved (it is nested), so Redis refuses it and the plugin quietly falls back to an unshared in-memory cache. Needs the `apps.write` scope |
 | rate-limiter | 1.2.0 † | Token rules count Bedrock, Google and streamed usage. Concurrency slots are given back for requests answered before the vendor. Masked Redis password |
 | llm-firewall | 1.2.0 † | Model rules match Bedrock model ids, inference profiles and ARNs. Inspects all prompt text, including Bedrock text documents. Optional `fail_closed` |
