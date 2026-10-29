@@ -210,6 +210,7 @@ This changes what plugins and filter scripts see for Bedrock traffic. Read the [
 - **The filter form's help text** now says correctly what each kind of filter does on tools, and that Redact only logs on a response filter.
 
 ### Gateway
+- **Semantic routers whose judge is Claude Sonnet 5 or later failed every judgement** with `400`. The judge call no longer sends `temperature: 0`. OpenAI and Ollama judges still run at temperature 0; Google AI judges now use the client's default of 0.5.
 - **Unresolved credential references were sent to vendors as the key.** An LLM key, embedder key or REST tool auth key whose `$SECRET/` can't be found or decrypted, or whose `$ENV/` name isn't allowlisted, was sent as the reference text (or, from an edge, as `refused-credential-reference`). It is now never sent: the gateway answers `502` (`LLM credential not usable`), and Studio Chat, embedders and tool calls fail with `credential is an unresolved reference`.
 - **OpenAI `/v1/responses` calls weren't recorded**, so they cost nothing against budgets and an App could exceed its budget through them.
 - **Agent loops through `/ai/` and `/v1` failed.** Tool calls and tool results in the conversation were dropped or sent in the wrong shape, and multi-part message content was lost. They now reach every vendor intact.
