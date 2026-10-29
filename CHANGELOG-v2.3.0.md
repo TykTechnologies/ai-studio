@@ -297,7 +297,7 @@ This changes what plugins and filter scripts see for Bedrock traffic. Read the [
   - If the key changes or goes missing, everything encrypted with it becomes unreadable: stored LLM credentials and the values in the secret store (so `$SECRET/` references fail too), as well as other encrypted settings. Calls that need them fail. Restore the key, or re-enter the LLM credentials and the secret values. `$ENV/` references are unaffected.
 - **SSO needs `TYK_AI_SECRET_KEY`.** Without it, every SSO login is refused, and AI Studio warns at startup.
 - **SQL logs no longer contain values.** Set `DB_LOG_SQL_PARAMS=true` only for local debugging, never in production.
-- **The quickstart needs your own secrets.** Replace the `__REPLACE_WITH_…__` placeholders in its env files before the first start. Otherwise AI Studio and the Microgateway stop with a key-length error. If your deployment uses values copied from an earlier quickstart or documentation sample, replace them with values you generate.
+- **The quickstart needs your own secrets.** Replace the `__REPLACE_WITH_…__` placeholders in its env files before the first start. Otherwise AI Studio refuses to start, naming the setting that still holds a placeholder (`TYK_AI_SECRET_KEY`, `MICROGATEWAY_ENCRYPTION_KEY` or `GRPC_AUTH_TOKEN`), and the Microgateway stops with a key-length error. If your deployment uses values copied from an earlier quickstart or documentation sample, replace them with values you generate.
 
 ### Plugins
 
