@@ -1,10 +1,12 @@
 const modelPresets = {
   // Default preset for custom configurations
+  // Temperature and top_p 0 are not sent, so the vendor's default applies:
+  // current Anthropic models (Claude Sonnet 5 and later) reject any value.
   default: {
     model_name: "",
-    temperature: 1.0,
+    temperature: 0,
     max_tokens: 4096,
-    top_p: 1.0,
+    top_p: 0,
     top_k: 0, // 0 means disabled/not used
     min_length: 0,
     max_length: 0,

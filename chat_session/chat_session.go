@@ -1390,10 +1390,12 @@ User message: %s`, userMessage)
 		llms.TextParts(llms.ChatMessageTypeHuman, titlePrompt),
 	}
 
-	// Use minimal options for title generation (no tools, etc.)
+	// Use minimal options for title generation (no tools, etc.). No
+	// temperature: current Anthropic models (Claude Sonnet 5 and later)
+	// reject any sampling parameter with a 400, so titles never generated
+	// there; the vendor's default is fine for a title.
 	opts := []llms.CallOption{
 		llms.WithMaxTokens(50), // Keep response short
-		llms.WithTemperature(0.7),
 	}
 
 	caller, err := cs.currentCaller()
