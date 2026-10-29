@@ -517,4 +517,4 @@ These plugins are released to the marketplace for 2.3.0. Versions marked † nee
 
 ---
 
-Full list of changes: [`v2.2.1...main`](https://github.com/TykTechnologies/ai-studio/compare/v2.2.1...main)
+Full list of changes: [`v2.2.1...v2.3.0`](https://github.com/TykTechnologies/ai-studio/compare/v2.2.1...v2.3.0)

@@ -5,7 +5,7 @@ services:
   midsommar:
     networks:
       - tyk-network
-    image: tykio/tyk-ai-studio:v2.2.2
+    image: tykio/tyk-ai-studio:v2.3.0
     volumes:
       - ../confs/midsommar-ce.env:/opt/tyk-ai-studio/.env
       - ./data/midsommar:/opt/tyk-ai-studio/data
@@ -19,7 +19,7 @@ services:
   mgw:
     networks:
       - tyk-network
-    image: tykio/tyk-microgateway:v2.2.2
+    image: tykio/tyk-microgateway:v2.3.0
     volumes:
       - ../confs/mgw-ce.env:/opt/tyk-microgateway/.env
       - ../confs/mgw-analytics.yaml:/opt/tyk-microgateway/mgw-analytics.yaml
