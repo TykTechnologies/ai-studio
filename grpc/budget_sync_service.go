@@ -350,12 +350,12 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 			for id, reason := range found {
 				blocks[uint32(id)] = reason
 			}
-			// An App budget whose period has spend in another currency
-			// cannot be enforced; edges refuse it, as Studio does.
+			// An App budget whose period mixes currencies cannot be
+			// enforced; edges refuse it, as Studio does.
 			for _, app := range apps {
-				if other := spend[app.ID].other; other != nil && app.MonthlyBudget != nil && *app.MonthlyBudget > 0 {
+				if bc := spend[app.ID].byCurrency; budget.MixedCurrency(bc) && app.MonthlyBudget != nil && *app.MonthlyBudget > 0 {
 					if _, ok := blocks[uint32(app.ID)]; !ok {
-						blocks[uint32(app.ID)] = budget.MixedCurrencyError("app monthly budget", otherDollars(other)).Error()
+						blocks[uint32(app.ID)] = budget.MixedCurrencyError("app monthly budget", bc).Error()
 					}
 				}
 			}
@@ -450,23 +450,13 @@ func (s *BudgetSyncService) llmBudgets(now time.Time) (map[uint32]AppBudgetData,
 		switch limit := *llm.MonthlyBudget; {
 		case limit <= 0:
 			blocks[uint32(llm.ID)] = "LLM monthly budget exceeded (budget is 0)"
-		case u.other != nil:
-			blocks[uint32(llm.ID)] = budget.MixedCurrencyError("LLM monthly budget", otherDollars(u.other)).Error()
+		case budget.MixedCurrency(u.byCurrency):
+			blocks[uint32(llm.ID)] = budget.MixedCurrencyError("LLM monthly budget", u.byCurrency).Error()
 		case dollars >= limit:
 			blocks[uint32(llm.ID)] = "LLM monthly budget exceeded"
 		}
 	}
 	return usages, blocks, nil
-}
-
-// otherDollars converts other-currency spend from cost units to amounts in
-// each currency.
-func otherDollars(other map[string]float64) map[string]float64 {
-	out := make(map[string]float64, len(other))
-	for c, v := range other {
-		out[c] = v / 10000.0
-	}
-	return out
 }
 
 // nextSequence returns a sequence number above both the previous one and

@@ -15,8 +15,12 @@ type BudgetUsage struct {
 	TotalTokens     int64      `json:"total_tokens"` // total tokens for the specified date range
 	UserID          uint       `json:"user_id"`      // ID of the user who owns the app
 	UserEmail       *string    `json:"user_email"`   // Email of the user who owns the app (pointer to handle null case)
-	// OtherCurrencySpend is the spend in the current budget period in
-	// currencies other than the budget currency (USD), by currency. It is
-	// not in Spent, and a budget with any refuses requests.
-	OtherCurrencySpend map[string]float64 `json:"other_currency_spend,omitempty"`
+	// Currency is the currency of Spent: the one currency of the period's
+	// spend (a budget's currency is implied by its spend). Empty when there
+	// is no spend, or when the period mixes currencies.
+	Currency string `json:"currency,omitempty"`
+	// MixedCurrencySpend is set when the period mixes currencies: the spend
+	// by currency. Costs are not converted, so Spent and Usage are 0 and the
+	// budget refuses requests.
+	MixedCurrencySpend map[string]float64 `json:"mixed_currency_spend,omitempty"`
 }
