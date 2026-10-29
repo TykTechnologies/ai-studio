@@ -405,6 +405,10 @@ func (c *AppConf) PublicPath(path string) string {
 	return c.BasePath + path
 }
 
+// PlaceholderMarker starts every placeholder the quickstart env files ship
+// in place of a secret (__REPLACE_WITH_RANDOM_SECRET_KEY__ and so on).
+const PlaceholderMarker = "__REPLACE_WITH_"
+
 // Err reports the invalid settings in ConfigErrors, or nil.
 func (c *AppConf) Err() error {
 	return errors.Join(c.ConfigErrors...)
@@ -952,6 +956,15 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 	// Agent tracing keys fall back to the secrets key (D4).
 	conf.AgentTracing.FallbackKey = conf.SecretKey
 	conf.MicrogatewayEncryptionKey = getenv("MICROGATEWAY_ENCRYPTION_KEY")
+	// A quickstart placeholder left in a key is refused here, before the
+	// database is migrated and seeded: started with it, Studio would store
+	// its seeded secrets under the placeholder key, and every later start
+	// with the real key would fail to decrypt them.
+	for _, name := range []string{"TYK_AI_SECRET_KEY", "MICROGATEWAY_ENCRYPTION_KEY", "GRPC_AUTH_TOKEN"} {
+		if strings.Contains(getenv(name), PlaceholderMarker) {
+			conf.ConfigErrors = append(conf.ConfigErrors, fmt.Errorf("%s still holds a %s... placeholder; replace it before the first start (quickstart/README.md)", name, PlaceholderMarker))
+		}
+	}
 	conf.CSRFTrustedOrigins = getenv("CSRF_TRUSTED_ORIGINS")
 	conf.CSRFKey = getenv("CSRF_KEY")
 	conf.CSRFCookieName = getenv("CSRF_COOKIE_NAME")
