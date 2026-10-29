@@ -1,10 +1,12 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -37,13 +39,15 @@ func validatePricePlausibility(attrs struct {
 }
 
 // @Summary Create a new model price
-// @Description Create a new model price with the provided information
+// @Description Create a new model price with the provided information. Traffic auto-creates an unpriced (all zero) price for every model it sees; when the model and vendor have one, it is filled in and 200 is returned. When they already have a priced row, 409 names it.
 // @Tags model-prices
 // @Accept json
 // @Produce json
 // @Param modelPrice body ModelPriceInput true "Model Price information"
+// @Success 200 {object} ModelPriceResponse
 // @Success 201 {object} ModelPriceResponse
 // @Failure 400 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /model-prices [post]
 // @Security BearerAuth
@@ -109,7 +113,7 @@ func (a *API) createModelPrice(c *gin.Context) {
 		return
 	}
 
-	modelPrice, err := a.service.CreateModelPrice(
+	modelPrice, filled, err := a.service.CreateOrFillModelPrice(
 		input.Data.Attributes.ModelName,
 		input.Data.Attributes.Vendor,
 		input.Data.Attributes.CPT,
@@ -118,6 +122,16 @@ func (a *API) createModelPrice(c *gin.Context) {
 		input.Data.Attributes.CacheReadPT,
 		input.Data.Attributes.Currency,
 	)
+	var exists *services.ModelPriceExistsError
+	if errors.As(err, &exists) {
+		c.JSON(http.StatusConflict, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Conflict", Detail: exists.Error()}},
+		})
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -125,6 +139,15 @@ func (a *API) createModelPrice(c *gin.Context) {
 				Detail string `json:"detail"`
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
 		})
+		return
+	}
+
+	// The model's unpriced row (auto-created by traffic) was filled in.
+	if filled {
+		if a.service.SystemEvents != nil {
+			a.service.SystemEvents.EmitModelPriceUpdated(modelPrice, modelPrice.ID, 0)
+		}
+		c.JSON(http.StatusOK, gin.H{"data": serializeModelPrice(modelPrice)})
 		return
 	}
 

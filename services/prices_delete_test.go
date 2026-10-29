@@ -94,3 +94,30 @@ func TestGetModelPriceByModelNameAndVendor_ConcurrentAutoCreate(t *testing.T) {
 		}
 	})
 }
+
+// Creating a price fills in the model's unpriced row and refuses a priced one.
+func TestCreateOrFillModelPrice(t *testing.T) {
+	forEachRecalcDB(t, func(t *testing.T, s *Service, model string) {
+		vendor := string(models.GOOGLEAI)
+		auto, err := s.GetModelPriceByModelNameAndVendor(model, vendor)
+		require.NoError(t, err)
+
+		mp, filled, err := s.CreateOrFillModelPrice(model, vendor, 0.000002, 0.000001, 0, 0.0000005, "EUR")
+		require.NoError(t, err)
+		assert.True(t, filled)
+		assert.Equal(t, auto.ID, mp.ID)
+		assert.Equal(t, 0.000001, mp.CPIT)
+		assert.Equal(t, 0.0000005, mp.CacheReadPT)
+		assert.Equal(t, "EUR", mp.Currency)
+
+		_, _, err = s.CreateOrFillModelPrice(model, vendor, 0.000009, 0.000009, 0, 0, "USD")
+		var exists *ModelPriceExistsError
+		require.ErrorAs(t, err, &exists)
+		assert.Equal(t, auto.ID, exists.ID)
+
+		fresh, filled, err := s.CreateOrFillModelPrice(model+"-fresh", vendor, 0.000002, 0.000001, 0, 0, "USD")
+		require.NoError(t, err)
+		assert.False(t, filled)
+		assert.NotEqual(t, auto.ID, fresh.ID)
+	})
+}
