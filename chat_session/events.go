@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/gofrs/uuid"
 )
 
@@ -183,6 +184,10 @@ func ClassifyError(err error) string {
 		return ErrCodeAuth
 	case strings.Contains(s, "api returned unexpected status code"), strings.Contains(s, "status code:"):
 		return ErrCodeAPI
+	case isUpstreamRefusal(s):
+		// The outbound network policy refused the LLM's endpoint: a
+		// configuration problem, not a connection one to retry.
+		return ErrCodeLLMConfig
 	case strings.Contains(s, "connection"), strings.Contains(s, "network"), strings.Contains(s, "timeout"),
 		strings.Contains(s, "context deadline exceeded"):
 		return ErrCodeConnection
@@ -194,6 +199,15 @@ func ClassifyError(err error) string {
 	default:
 		return ErrCodeInternal
 	}
+}
+
+// isUpstreamRefusal reports whether the lower-cased error text s is the
+// outbound network policy's refusal (netguard.RefusalError), which names
+// the setting that refused it. The text is matched because the chat wraps
+// errors with %v on the way up.
+func isUpstreamRefusal(s string) bool {
+	return strings.Contains(s, strings.ToLower(netguard.EnvBlockInternal)) ||
+		strings.Contains(s, strings.ToLower(netguard.EnvAllowedHosts))
 }
 
 // runState tracks the turn currently being processed by the session goroutine.

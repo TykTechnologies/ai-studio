@@ -164,6 +164,10 @@ func TestClassifyError(t *testing.T) {
 		"error calling tool operation [getPets]: 500":     ErrCodeTool,
 		"failed to create message: anthropic bad request": ErrCodeLLMConfig,
 		"something else entirely":                         ErrCodeInternal,
+		// The outbound network policy's refusals are configuration, not
+		// connection problems to retry.
+		"error generating content: upstream endpoint not permitted: connection to internal address 127.0.0.1 blocked by LLM_UPSTREAM_BLOCK_INTERNAL": ErrCodeLLMConfig,
+		`Post "x": upstream host "api.example.com" is not in LLM_UPSTREAM_ALLOWED_HOSTS`:                                                             ErrCodeLLMConfig,
 	}
 	for msg, want := range cases {
 		assert.Equal(t, want, ClassifyError(errors.New(msg)), msg)
