@@ -114,3 +114,44 @@ func TestUpdateModelPriceAndRecalculate_RenameBillsAtNewList(t *testing.T) {
 		assert.InDelta(t, tk.listCost(vendor, updated), recordCost(t, s, id).Cost, 1e-9)
 	})
 }
+
+// Records the vendor reported under a versioned name are priced by the
+// requested name while the versioned name is unpriced (proxy
+// priceForExchange), so recalculating the requested name reprices them too.
+// Once the versioned name has a price of its own, they are its rows.
+func TestUpdateModelPriceAndRecalculate_RepricesRowsRequestedByName(t *testing.T) {
+	forEachRecalcDB(t, func(t *testing.T, s *Service, model string) {
+		vendor := string(models.GOOGLEAI)
+		alias := models.ModelPrice{ModelName: model, Vendor: vendor, Currency: "USD"}
+		require.NoError(t, alias.Create(s.DB))
+		unpricedVersion := models.ModelPrice{ModelName: model + "-001", Vendor: vendor, Currency: "USD"}
+		require.NoError(t, unpricedVersion.Create(s.DB))
+		pricedVersion := models.ModelPrice{ModelName: model + "-002", Vendor: vendor, Currency: "USD", CPIT: 0.000001, CPT: 0.000002}
+		require.NoError(t, pricedVersion.Create(s.DB))
+
+		tk := recalcTokens{prompt: 100, response: 40}
+		requestedAs := func(name, requested string, cost float64) uint {
+			id := createRecalcRecord(t, s, name, vendor, tk, cost)
+			require.NoError(t, s.DB.Model(&models.LLMChatRecord{}).Where("id = ?", id).Update("requested_model", requested).Error)
+			return id
+		}
+		viaUnpriced := requestedAs(model+"-001", model, 0)
+		viaPriced := requestedAs(model+"-002", model, tk.listCost(vendor, pricedVersion))
+		// Another model's row that merely shares the reported name is not
+		// this row's to reprice.
+		otherRequest := requestedAs(model+"-001", model+"-other", 0)
+		// A row without a requested model (edge, older rows) matches by name only.
+		legacy := createRecalcRecord(t, s, model+"-001", vendor, tk, 0)
+
+		updated := models.ModelPrice{CPIT: 0.000004, CPT: 0.000012}
+		_, err := s.UpdateModelPriceAndRecalculate(alias.ID, model, vendor, updated.CPT, updated.CPIT, 0, 0, "EUR")
+		require.NoError(t, err)
+
+		got := recordCost(t, s, viaUnpriced)
+		assert.InDelta(t, tk.listCost(vendor, updated), got.Cost, 1e-9, "the versioned name is unpriced: priced by the requested name")
+		assert.Equal(t, "EUR", got.Currency)
+		assert.InDelta(t, tk.listCost(vendor, pricedVersion), recordCost(t, s, viaPriced).Cost, 1e-9, "the versioned name has its own price")
+		assert.Zero(t, recordCost(t, s, otherRequest).Cost)
+		assert.Zero(t, recordCost(t, s, legacy).Cost)
+	})
+}

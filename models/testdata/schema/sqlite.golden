@@ -876,6 +876,7 @@ TABLE llm_chat_records
   column `decision_questions` integer
   column `decision_refusals` integer
   column `service_tier` text
+  column `requested_model` text
   index CREATE INDEX `idx_llm_chat_records_app_time` ON `llm_chat_records`(`app_id`,`time_stamp`)
   index CREATE INDEX `idx_llm_chat_records_deleted_at` ON `llm_chat_records`(`deleted_at`)
   index CREATE INDEX `idx_llm_chat_records_kind_time` ON `llm_chat_records`(`request_kind`,`time_stamp`)

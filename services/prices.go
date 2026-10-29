@@ -38,6 +38,13 @@ func (s *Service) GetModelPriceByID(id uint) (*models.ModelPrice, error) {
 // recalculateChatRecordCosts reprices all chat records of a model at the
 // updated price and sets their currency.
 //
+// It reprices the rows the gateway prices with this row: those recorded
+// under the model's name, and those the caller asked for by this name that
+// the vendor reported under another (a versioned name) whose own price row
+// is unpriced, since the gateway then falls back to the requested name's
+// price (proxy priceForExchange). Rows recorded before the requested model
+// was stored (and edge rows) match by name only.
+//
 // Each row keeps the ratio of its recorded cost to its list cost at the old
 // price, so a batch row recorded at a price multiplier
 // (models.IPriceAdjustedResponse, e.g. 0.5x) stays at that multiplier, and a
@@ -48,12 +55,17 @@ func (s *Service) recalculateChatRecordCosts(tx *gorm.DB, modelName, vendor stri
 	oldList, oldArgs := chatRecordListCostSQL(vendor, old)
 	newList, newArgs := chatRecordListCostSQL(vendor, updated)
 
-	args := append(append(newArgs, oldArgs...), updated.Currency, modelName, vendor)
+	args := append(append(newArgs, oldArgs...), updated.Currency, vendor, modelName, modelName)
 	result := tx.Exec(`
 		UPDATE llm_chat_records
 		SET cost = `+newList+` * COALESCE(NULLIF(cost, 0) / NULLIF(`+oldList+`, 0), 1),
 		currency = ?
-		WHERE name = ? AND vendor = ?`,
+		WHERE vendor = ? AND (name = ? OR (
+			requested_model = ? AND name <> requested_model AND NOT EXISTS (
+				SELECT 1 FROM model_prices mp
+				WHERE mp.model_name = llm_chat_records.name AND mp.vendor = llm_chat_records.vendor
+				AND mp.deleted_at IS NULL
+				AND (mp.cpt <> 0 OR mp.cpit <> 0 OR mp.cache_write_pt <> 0 OR mp.cache_read_pt <> 0))))`,
 		args...,
 	)
 	return result.Error

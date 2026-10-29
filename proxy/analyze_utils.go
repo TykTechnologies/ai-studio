@@ -212,6 +212,7 @@ func buildChatRecordFor(service services.ServiceInterface, llm *models.LLM, app 
 		Cost:            models.ChatRecordCost(string(llm.Vendor), cpt, cpit, cacheWritePT, cacheReadPT, pt, rt, cacheWriteTokens, cacheReadTokens),
 		Currency:        currency, // Set the currency (defaults to USD if no price found)
 		InteractionType: models.ProxyInteraction,
+		RequestedModel:  requested,
 	}
 	if pa, ok := response.(models.IPriceAdjustedResponse); ok {
 		// The LLM's per-tier override (negotiated pricing) wins over the
