@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -82,8 +83,10 @@ func main() {
 
 	// An edge serves no /api/v1 management API, so an admin token minted
 	// there could never be used. Refuse before touching the database.
-	if *createAdminToken && cfg.IsEdge() {
-		log.Fatal().Msg("-create-admin-token is not available in edge mode (GATEWAY_MODE=edge): edges have no management API; configure them from AI Studio")
+	if *createAdminToken {
+		if err := adminTokenAllowed(cfg); err != nil {
+			log.Fatal().Msg(err.Error())
+		}
 	}
 
 	log.Info().
@@ -654,6 +657,15 @@ func setupLogging(cfg config.ObservabilityConfig) {
 	}
 	// For text format, we already set up console logging in setupEarlyLogging()
 	// so no need to reconfigure unless switching to JSON
+}
+
+// adminTokenAllowed refuses -create-admin-token where no management API
+// would accept the token: an edge serves no /api/v1.
+func adminTokenAllowed(cfg *config.Config) error {
+	if cfg.IsEdge() {
+		return errors.New("-create-admin-token is not available in edge mode (GATEWAY_MODE=edge): edges have no management API; configure them from AI Studio")
+	}
+	return nil
 }
 
 // createAdminTokenCommand creates an admin token for management API access
