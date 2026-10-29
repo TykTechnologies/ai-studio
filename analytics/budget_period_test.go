@@ -46,6 +46,13 @@ func TestGetBudgetUsage_MonthlyUsageIsTheBudgetPeriod(t *testing.T) {
 			assert.InDelta(t, 3, u.Spent, 1e-9, "%s spent", u.EntityType)
 			assert.InDelta(t, 3, u.Usage, 1e-9, "%s usage %%", u.EntityType)
 			assert.InDelta(t, 10, u.TotalCost, 1e-9, "%s total cost", u.EntityType)
+			// The period itself, for the dashboard to show rather than
+			// recompute.
+			_, next := budget.Period(&anchor, now)
+			require.NotNil(t, u.PeriodStart)
+			require.NotNil(t, u.PeriodEnd)
+			assert.True(t, start.Equal(*u.PeriodStart), "%s period start %v", u.EntityType, *u.PeriodStart)
+			assert.True(t, next.Equal(*u.PeriodEnd), "%s period end %v", u.EntityType, *u.PeriodEnd)
 		}
 	}
 	assert.Equal(t, 2, seen)

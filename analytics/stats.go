@@ -79,6 +79,8 @@ type budgetStats struct {
 	LLMID           uint
 	Name            string
 	MonthlyUsage    float64
+	PeriodStart     *time.Time         `gorm:"-"` // set by periodUsage
+	PeriodEnd       *time.Time         `gorm:"-"` // set by periodUsage
 	Currency        string             `gorm:"-"` // set by periodUsage
 	MixedCurrency   map[string]float64 `gorm:"-"` // set by periodUsage
 	TotalCost       float64
@@ -128,6 +130,8 @@ func (bs budgetStats) toBudgetUsage(entityType string) models.BudgetUsage {
 		UserID:          bs.UserID,
 		UserEmail:       userEmail,
 
+		PeriodStart:        bs.PeriodStart,
+		PeriodEnd:          bs.PeriodEnd,
 		Currency:           bs.Currency,
 		MixedCurrencySpend: bs.MixedCurrency,
 	}
@@ -1237,9 +1241,11 @@ func periodUsage(db *gorm.DB, column string, owner interface{}, stats []budgetSt
 
 	// One query per distinct period start.
 	groups := map[time.Time][]uint{}
+	periods := make(map[uint][2]time.Time, len(ids))
 	for _, id := range ids {
-		start := budget.PeriodStart(anchors[id], now)
+		start, next := budget.Period(anchors[id], now)
 		groups[start] = append(groups[start], id)
+		periods[id] = [2]time.Time{start, next}
 	}
 	spent := make(map[uint]map[string]float64, len(ids))
 	for start, group := range groups {
@@ -1261,6 +1267,8 @@ func periodUsage(db *gorm.DB, column string, owner interface{}, stats []budgetSt
 	}
 	for i := range stats {
 		stats[i].Currency, stats[i].MonthlyUsage, stats[i].MixedCurrency = budget.SplitCurrency(spent[stats[i].LLMID])
+		p := periods[stats[i].LLMID]
+		stats[i].PeriodStart, stats[i].PeriodEnd = &p[0], &p[1]
 	}
 	return nil
 }
