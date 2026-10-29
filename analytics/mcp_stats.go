@@ -234,8 +234,14 @@ func pageBounds(page, pageSize int) (int, int) {
 	return page, pageSize
 }
 
+// primitiveNameExpr is a call's primitive name, or its JSON-RPC method for a
+// call on no primitive (initialize, tools/list). Gateway 5.15 wrote the
+// method into primitive_name for those; 5.16 leaves it empty, and without
+// the fallback every such method would merge into one nameless row.
+const primitiveNameExpr = "COALESCE(NULLIF(primitive_name, ''), jsonrpc_method, '')"
+
 // toolKeyExpr identifies a tool within a server.
-const toolKeyExpr = "COALESCE(primitive_type, '') || ':' || COALESCE(primitive_name, '')"
+const toolKeyExpr = "COALESCE(primitive_type, '') || ':' || " + primitiveNameExpr
 
 // GetMCPToolStats returns one page of a server's tools (every primitive:
 // tools, resources, prompts, discovery), busiest first. search matches the
@@ -245,12 +251,12 @@ func GetMCPToolStats(db *gorm.DB, f MCPStatsFilter, page, pageSize int, search s
 	base := func() *gorm.DB {
 		q := f.apply(db.Model(&models.MCPCallRecord{}))
 		if search != "" {
-			q = q.Where(`LOWER(primitive_name) LIKE ? ESCAPE '\'`, likePattern(search))
+			q = q.Where("LOWER("+primitiveNameExpr+`) LIKE ? ESCAPE '\'`, likePattern(search))
 		}
 		return q
 	}
 	var total int64
-	if err := db.Table("(?) AS t", base().Select("primitive_type, primitive_name").Group("primitive_type, primitive_name")).
+	if err := db.Table("(?) AS t", base().Select("primitive_type, "+primitiveNameExpr+" AS primitive_name").Group("primitive_type, "+primitiveNameExpr)).
 		Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
@@ -262,8 +268,8 @@ func GetMCPToolStats(db *gorm.DB, f MCPStatsFilter, page, pageSize int, search s
 		AvgMs         float64
 		LastSeen      ScanTime
 	}
-	if err := base().Select("COALESCE(primitive_type, '') AS primitive_type, COALESCE(primitive_name, '') AS primitive_name, " + aggSelect).
-		Group("primitive_type, primitive_name").
+	if err := base().Select("COALESCE(primitive_type, '') AS primitive_type, " + primitiveNameExpr + " AS primitive_name, " + aggSelect).
+		Group("primitive_type, " + primitiveNameExpr).
 		Order("calls DESC, primitive_name, primitive_type").
 		Limit(pageSize).Offset((page - 1) * pageSize).
 		Scan(&rows).Error; err != nil {
@@ -403,9 +409,9 @@ func GetMCPOverview(db *gorm.DB, f MCPStatsFilter) (*MCPOverview, error) {
 		Joins("LEFT JOIN mcp_servers ON mcp_servers.id = mcp_call_records.mcp_server_id").
 		Where("mcp_call_records.mcp_server_id IS NOT NULL").
 		Select("mcp_call_records.mcp_server_id AS mcp_server_id, MAX(mcp_servers.name) AS server_name, " +
-			"COALESCE(primitive_type, '') AS primitive_type, COALESCE(primitive_name, '') AS primitive_name, " +
+			"COALESCE(primitive_type, '') AS primitive_type, " + primitiveNameExpr + " AS primitive_name, " +
 			"COUNT(*) AS calls, COALESCE(SUM(" + mcpErrorExpr + "), 0) AS errors").
-		Group("mcp_call_records.mcp_server_id, primitive_type, primitive_name").
+		Group("mcp_call_records.mcp_server_id, primitive_type, " + primitiveNameExpr).
 		Order("calls DESC, mcp_server_id, primitive_name").
 		Limit(overviewTopTools).
 		Scan(&rows).Error; err != nil {

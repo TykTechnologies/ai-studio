@@ -43,6 +43,8 @@ UPSTREAM = "http://host.docker.internal:4021"
 UPSTREAM_LOG = os.environ.get("UPSTREAM_LOG", "")
 COMPOSE = ["docker", "compose", "-f", os.path.join(HERE, "docker-compose.yml")]
 PUMP_PROFILE = os.environ.get("PUMP_PROFILE", "analytics")
+# The Gateway image tag docker-compose.yml runs (its default is v5.15.1).
+TYK_GW_TAG = os.environ.get("TYK_GW_TAG", "v5.15.1")
 KEEP_DATA = bool(os.environ.get("KEEP_DATA"))
 PUMP_SERVICES = {"analytics": ["pump", "vector"], "httppump": ["pump-http"]}
 INGEST_URL = os.environ.get("INGEST_URL", "http://host.docker.internal:%s/api/v1/ingest/tyk-analytics" % STUDIO.rsplit(":", 1)[-1].strip("/"))
@@ -97,6 +99,15 @@ def check(name, ok, detail=""):
     if not ok:
         failures.append(name)
     return ok
+
+
+def gw_version():
+    """(major, minor) of TYK_GW_TAG ("v5.16.0" -> (5, 16)); (0, 0) if unparsable."""
+    try:
+        major, minor = TYK_GW_TAG.lstrip("v").split(".")[:2]
+        return int(major), int(minor)
+    except ValueError:
+        return 0, 0
 
 
 def bootstrap():
@@ -420,8 +431,12 @@ def main():
         check("6b.other methods counted, the 401 as an error", ini.get("calls") == 7 and ini.get("errors") == 1 and lst.get("calls") == 3, (ini, lst))
         # Gateway 5.15.1 refuses a tool outside mcp_access_rights (403,
         # JSON-RPC -32002) without writing an analytics record
-        # (midsommar-clean-emn). This flags a Gateway that starts to.
-        check("6b.(Gateway gap) a tool refused by key access is not recorded", ("tool", "get-forecast") not in weather, weather.get(("tool", "get-forecast")))
+        # (midsommar-clean-emn); 5.16.0 records it as an error.
+        if gw_version() >= (5, 16):
+            gf_row = weather.get(("tool", "get-forecast"), {})
+            check("6b.a tool refused by key access is an error row", gf_row.get("calls") == 1 and gf_row.get("errors") == 1, gf_row)
+        else:
+            check("6b.(Gateway gap) a tool refused by key access is not recorded", ("tool", "get-forecast") not in weather, weather.get(("tool", "get-forecast")))
         check("6b.latency recorded", gw_row.get("avg_ms") is not None and gw_row.get("p95_ms") is not None, gw_row)
 
         code, apps = studio("GET", f"/api/v1/analytics/mcp/servers/{srv['id']}/apps?{stats_range()}&page_size=100")
