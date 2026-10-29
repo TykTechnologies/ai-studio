@@ -39,6 +39,8 @@ mkdir -p "$OUT"
 SUITES=$(cat <<'EOF'
 # Studio's Postgres-specific tests.
 studio|.||PostgreSQL|_Postgres|InTransaction|EnsureInDefaultCatalogue||./models/ ./services/ ./pkg/studio/ ./analytics/
+# The pricing regression suite: price changes against recorded history.
+pricing|.||TestPricingRegression||./proxy/
 # The chat queue (LISTEN/NOTIFY), config and startup.
 queue-config-startup|.||||./chat_session/ ./config/ ./startup/
 # The cluster code runs on every Postgres deployment: the event log and
