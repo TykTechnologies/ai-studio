@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/grpc"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/logger"
@@ -224,5 +226,78 @@ func TestPricingRegression_BackfillDateRange(t *testing.T) {
 				assert.Zero(t, rec.Cost, "row at %s is out of range", stamps[i])
 			}
 		}
+	})
+}
+
+// kq3b.9, the app budget views: /analytics/budget-usage-for-app and the
+// portal usage summary report the currency the period's spend implies (EUR
+// for EUR-only, USD for USD and rows with no currency), and for a mixed
+// period the spend by currency with nothing added up. Enterprise only (CE
+// tracks no spend and reports no currency); on SQLite and Postgres.
+func TestPricingRegression_AppBudgetViewsImpliedCurrency(t *testing.T) {
+	forEachPricingAPIDB(t, func(t *testing.T, db *gorm.DB) {
+		service := services.NewService(db)
+		api := NewAPI(service, true, apitest.SetupTestAuthService(db, service), apitest.SetupTestAuthConfig(db, service), nil, emptyFile, nil)
+		user := createTestUser(t, service)
+		cat := createTestCatalogue(t, service)
+		addCatalogueToUserGroup(t, service, user.ID, cat.ID)
+		llm := createTestLLM(t, service, "LLM")
+		require.NoError(t, service.AddLLMToCatalogue(llm.ID, cat.ID))
+		limit := 100.0
+		apps := map[string]*models.App{}
+		for _, name := range []string{"EUR", "USD", "Mixed"} {
+			app, err := service.CreateApp(name, "", user.ID, nil, []uint{llm.ID}, nil, &limit, nil, nil)
+			require.NoError(t, err)
+			apps[name] = app
+		}
+		now := time.Now()
+		for _, r := range []struct {
+			app      string
+			cost     float64
+			currency string
+		}{
+			{"EUR", 20000, "EUR"}, {"EUR", 5000, "eur"},
+			{"USD", 10000, ""}, {"USD", 20000, "USD"},
+			{"Mixed", 10000, ""}, {"Mixed", 20000, "EUR"},
+		} {
+			require.NoError(t, db.Create(&models.LLMChatRecord{AppID: apps[r.app].ID, LLMID: llm.ID, Cost: r.cost, Currency: r.currency, TimeStamp: now.Add(-time.Minute)}).Error)
+		}
+
+		w := portalGet(t, api.getUserAppsUsageSummary, user)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		var summary AppUsageSummaryResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &summary))
+		forApp := func(id uint) map[string]interface{} {
+			w := portalGetQuery(t, api.getBudgetUsageForApp, user, fmt.Sprintf("app_id=%d", id))
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			var out map[string]interface{}
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &out))
+			return out
+		}
+
+		if !budget.IsEnterpriseAvailable() {
+			assert.Empty(t, summary.Data[idOf(apps["EUR"].ID)].Currency, "CE reports no currency")
+			return
+		}
+		for name, want := range map[string]struct {
+			currency string
+			spend    float64
+		}{"EUR": {"EUR", 2.5}, "USD": {"USD", 3}} {
+			s := summary.Data[idOf(apps[name].ID)]
+			assert.True(t, strings.EqualFold(want.currency, s.Currency), "%s summary currency %q", name, s.Currency)
+			assert.InDelta(t, want.spend, s.CurrentSpend, 1e-9, "%s summary spend", name)
+			assert.Nil(t, s.MixedCurrencySpend)
+			v := forApp(apps[name].ID)
+			assert.True(t, strings.EqualFold(want.currency, fmt.Sprint(v["currency"])), "%s view currency %v", name, v["currency"])
+			assert.Nil(t, v["mixed_currency_spend"])
+		}
+		m := summary.Data[idOf(apps["Mixed"].ID)]
+		assert.Empty(t, m.Currency)
+		assert.Zero(t, m.CurrentSpend, "a mixed period is not added up")
+		assert.Equal(t, map[string]float64{"USD": 1, "EUR": 2}, m.MixedCurrencySpend)
+		v := forApp(apps["Mixed"].ID)
+		assert.Nil(t, v["currency"])
+		assert.Equal(t, 0.0, v["current_usage"])
+		assert.Equal(t, map[string]interface{}{"USD": 1.0, "EUR": 2.0}, v["mixed_currency_spend"])
 	})
 }
