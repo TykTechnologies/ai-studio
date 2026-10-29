@@ -30,6 +30,10 @@ filter() { grep -E '^(\s*--- |ok|FAIL|PASS)|pricing_regression_test'; }
 # Every suite runs; the script fails at the end if any did.
 status=0
 PRICING_REGRESSION_FULL=1 go test -count=1 -v -run 'TestPricingRegression' ./proxy/ ./grpc/ ./api/ | filter || status=1
+# The core API views report a budget currency in Enterprise only.
+if [ -f enterprise.work ]; then
+  GOWORK="$ROOT/enterprise.work" go test -count=1 -v -tags enterprise -run 'TestPricingRegression' ./api/ | filter || status=1
+fi
 # The edge suites run in both editions: the edge-to-hub test is CE only,
 # the edge budget check Enterprise only.
 for tags in "" enterprise; do
