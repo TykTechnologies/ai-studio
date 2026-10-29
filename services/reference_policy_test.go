@@ -52,9 +52,11 @@ func TestUnlistedEnvReferencesNeverResolve(t *testing.T) {
 
 	tool, err := svc.CreateTool("Probe", "d", models.ToolTypeREST, base64.StdEncoding.EncodeToString([]byte(spec)), 0, "apiKey", "$ENV/TYK_AI_SECRET_KEY")
 	require.NoError(t, err)
+	// The unresolved reference fails the call; its text is not sent either (lsj.7).
 	_, err = svc.CallToolOperation(tool.ID, "sendData", nil, map[string]interface{}{}, nil)
-	require.NoError(t, err)
+	require.ErrorIs(t, err, secrets.ErrUnresolvedCredential)
 	mu.Lock()
+	assert.Empty(t, seen, "the tool call reached the upstream")
 	for _, h := range seen {
 		assert.NotContains(t, h, canary, "the tool call sent the master key")
 	}

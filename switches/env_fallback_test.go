@@ -71,9 +71,10 @@ func assertNoCanary(t *testing.T, reqs []string) {
 	}
 }
 
-// A vendor client given an empty key, or the placeholder the hub sends for a
-// refused reference, never fills it (or its destination) from the host
-// environment, on the direct path and on the internal-routing path.
+// A vendor client given an empty key, or a configured one, never fills it
+// (or its destination) from the host environment, on the direct path and on
+// the internal-routing path. (The placeholder the hub sends for a refused
+// reference is refused before a driver is built: TestUnresolvedCredentialIsRefused.)
 func TestVendorClientsNeverFallBackToEnvironment(t *testing.T) {
 	setEnvCanaries(t)
 
@@ -105,9 +106,9 @@ func TestVendorClientsNeverFallBackToEnvironment(t *testing.T) {
 					t.Errorf("an empty key sent %d requests", n)
 				}
 
-				llm, err := fetch("refused-credential-reference")
+				llm, err := fetch("configured-key")
 				if err != nil {
-					t.Fatalf("placeholder key: %v", err)
+					t.Fatalf("configured key: %v", err)
 				}
 				_, _ = llms.GenerateFromSinglePrompt(context.Background(), llm, "hi")
 				reqs := rec.requests()
@@ -115,7 +116,7 @@ func TestVendorClientsNeverFallBackToEnvironment(t *testing.T) {
 					t.Fatal("no request reached the configured upstream")
 				}
 				for _, req := range reqs {
-					if !strings.Contains(req, "refused-credential-reference") {
+					if !strings.Contains(req, "configured-key") {
 						t.Errorf("request did not carry the configured key:\n%s", req)
 					}
 				}

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel"
@@ -392,6 +393,12 @@ func (c *Client) CallOperationWithContext(ctx context.Context, operationId strin
 
 	// Apply authentication
 	for _, scheme := range c.authConfig.Schemes {
+		// A key that did not resolve is never sent as the reference text.
+		for _, cred := range []string{scheme.Token, scheme.Username, scheme.Password} {
+			if err := secrets.CheckCredential(cred); err != nil {
+				return nil, fmt.Errorf("tool auth %q: %w", scheme.Name, err)
+			}
+		}
 		switch scheme.Method {
 		case AuthBearer:
 			slog.Info("universalclient", "set auth", "bearer")

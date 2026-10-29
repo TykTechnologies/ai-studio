@@ -1195,6 +1195,12 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusBadGateway, upstreamErrorMessage("upstream endpoint not permitted", err), err, false)
 		return
 	}
+	// The director cannot fail a request, so the key is checked here.
+	if err := switches.CheckLLMCredential(llm); err != nil {
+		respStatus = http.StatusBadGateway
+		respondWithError(w, http.StatusBadGateway, "LLM credential not usable", err, false)
+		return
+	}
 	r = r.WithContext(exempt.WithContext(r.Context()))
 	logger.Debugf("LLM proxy upstream host: %s (llm=%s)", upstreamURL.Host, llm.Name)
 
@@ -2076,6 +2082,11 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 		logger.Errorf("Streaming upstream URL blocked by SSRF policy: %v", err)
 		respStatus = http.StatusBadGateway
 		respondWithError(w, http.StatusBadGateway, upstreamErrorMessage("upstream endpoint not permitted", err), err, false)
+		return
+	}
+	if err := switches.CheckLLMCredential(llm); err != nil {
+		respStatus = http.StatusBadGateway
+		respondWithError(w, http.StatusBadGateway, "LLM credential not usable", err, false)
 		return
 	}
 	r = r.WithContext(exempt.WithContext(r.Context()))
