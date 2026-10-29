@@ -1,10 +1,12 @@
 package services
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/replicas"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -69,4 +71,32 @@ func TestBackfillUnpricedHistory(t *testing.T) {
 		_, err = s.BackfillUnpricedHistory(price.ID+1000, nil, nil)
 		assert.Error(t, err)
 	})
+}
+
+// A backfill that priced rows clears the budget spend summed from their old
+// zero costs, as a recalculation does; one that priced nothing does not.
+func TestBackfillUnpricedHistory_InvalidatesBudgetSpend(t *testing.T) {
+	s := setupTestService(t)
+	b, tb := &clearCountingBudget{}, &clearCountingTeamBudget{}
+	s.Budget, s.TeamBudget = b, tb
+	var signalled atomic.Int32
+	defer replicas.OnSignal(replicas.SignalSpendRecalculated, func() { signalled.Add(1) })()
+
+	vendor := string(models.GOOGLEAI)
+	price := models.ModelPrice{ModelName: "gemini-2.5-pro", Vendor: vendor, Currency: "USD", CPIT: 0.000001, CPT: 0.000004}
+	require.NoError(t, price.Create(s.DB))
+	createRecalcRecord(t, s, price.ModelName, vendor, recalcTokens{prompt: 100, response: 10}, 0)
+
+	n, err := s.BackfillUnpricedHistory(price.ID, nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), n)
+	assert.EqualValues(t, 1, b.cleared.Load())
+	assert.EqualValues(t, 1, tb.cleared.Load())
+	assert.EqualValues(t, 1, signalled.Load())
+
+	n, err = s.BackfillUnpricedHistory(price.ID, nil, nil)
+	require.NoError(t, err)
+	require.Zero(t, n)
+	assert.EqualValues(t, 1, b.cleared.Load(), "nothing priced, nothing to clear")
+	assert.EqualValues(t, 1, signalled.Load())
 }

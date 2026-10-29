@@ -167,7 +167,14 @@ func (s *Service) BackfillUnpricedHistory(id uint, from, to *time.Time) (int64, 
 		args = append(args, *to)
 	}
 	result := s.DB.Exec(query, args...)
-	return result.RowsAffected, result.Error
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	// Budget spend in memory was summed from the old (zero) costs.
+	if result.RowsAffected > 0 {
+		s.spendRecalculated()
+	}
+	return result.RowsAffected, nil
 }
 
 // CountUnpricedHistory returns, for each of the given model price rows, the
