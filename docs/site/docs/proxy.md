@@ -264,7 +264,7 @@ The operations are counted in the `aistudio_native_*` metrics (see [Observabilit
 *   **Prompt caching:** each `cache_control` marker becomes a Bedrock cache point after the same block (system, message or tool). The cache lifetime comes from the marker's `ttl`, which the client chooses per request (Claude Code sends `"1h"` when `promptCacheTtl` is `"1h"`). There is no admin setting.
     *   `"ttl": "1h"` is sent to Bedrock as a one-hour cache point.
     *   No `ttl`, `"5m"`, or any other value gives Bedrock's default 5-minute cache. An unknown value is logged at debug level.
-    *   Claude 3 models (for example Claude 3.7 Sonnet and Claude 3.5 Sonnet v2) only have 5-minute caching, so the `ttl` is dropped for them and the cache points stay.
+    *   Claude 3 models (for example Claude 3.7 Sonnet and Claude 3.5 Sonnet v2) only have 5-minute caching, and Bedrock rejects a `ttl` on non-Anthropic models such as Amazon Nova. For both, the `ttl` is dropped and the cache points stay.
     *   The model is recognised from the configured model id. An application inference profile ARN names no model, so a `"1h"` ttl is passed through; Bedrock can reject the request if the profile points at Claude 3.7 Sonnet or Claude 3.5 Sonnet v2.
     *   As with Anthropic, one-hour markers must come before five-minute ones in the request. The gateway keeps the order the client sent.
     *   Cost reporting records one-hour cache writes at the LLM's single cache-write price; see [Model Prices](./model-prices.md).

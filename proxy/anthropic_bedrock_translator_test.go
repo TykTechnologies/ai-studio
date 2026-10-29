@@ -444,12 +444,16 @@ func TestAnthropicCacheTTL_FromWireJSON(t *testing.T) {
 	}
 }
 
-// Claude 3 models only have 5-minute caching: the cache points stay, the ttl goes.
-func TestAnthropicCacheTTL_ClaudeThreeDropsTTL(t *testing.T) {
+// Claude 3 models only have 5-minute caching, and Bedrock rejects an extended
+// ttl on non-Anthropic models: the cache points stay, the ttl goes.
+func TestAnthropicCacheTTL_UnsupportedModelsDropTTL(t *testing.T) {
 	for _, model := range []string{
 		"anthropic.claude-3-7-sonnet-20250219-v1:0",
 		"us.anthropic.claude-3-7-sonnet-20250219-v1:0",
 		"us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+		"amazon.nova-lite-v1:0",
+		"apac.amazon.nova-pro-v1:0",
+		"global.amazon.nova-2-lite-v1:0",
 	} {
 		t.Run(model, func(t *testing.T) {
 			sys, msg, tool := cachePoints(t, model, cacheTTLRequest(&AnthropicCacheControl{Type: "ephemeral", TTL: "1h"}))

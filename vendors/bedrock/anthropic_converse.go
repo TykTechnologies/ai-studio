@@ -157,13 +157,20 @@ func cachePointBlock(ttl string) types.CachePointBlock {
 }
 
 // SupportsOneHourCacheTTL reports whether a cache point for modelID may carry a
-// one-hour TTL. Claude 3 models (3.7 Sonnet, 3.5 Sonnet v2) only have 5-minute
-// caching, and Bedrock can reject any ttl on them with a
-// ValidationException; see the model table in the AWS Bedrock prompt-caching
-// guide. Model and inference-profile IDs name the model, so the check is
+// one-hour TTL. Bedrock only accepts an extended TTL on Anthropic models (Nova
+// rejects it with a ValidationException), and Claude 3 models (3.7 Sonnet,
+// 3.5 Sonnet v2) only have 5-minute caching and can reject any ttl; see the
+// model table in the AWS Bedrock prompt-caching guide. Model IDs, system
+// inference profiles and foundation-model ARNs name the model, so the check is
 // textual. An application-inference-profile ARN names no model and is assumed
 // to support it.
 func SupportsOneHourCacheTTL(modelID string) bool {
+	if strings.Contains(modelID, ":application-inference-profile/") {
+		return true
+	}
+	if !strings.Contains(modelID, "anthropic.") {
+		return false
+	}
 	id := modelID
 	for {
 		i := strings.Index(id, "claude-3")
