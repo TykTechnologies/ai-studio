@@ -106,7 +106,7 @@ var ErrUnresolvedCredential = errors.New("credential is an unresolved reference 
 // it would hand the destination the reference text. Empty (no credential)
 // is allowed.
 func CheckCredential(v string) error {
-	if v == RefusedCredential || ForEdgeCredential(v) == RefusedCredential {
+	if v == RefusedCredential || IsReference(v) || strings.HasPrefix(v, "$ENC/") {
 		return ErrUnresolvedCredential
 	}
 	return nil
