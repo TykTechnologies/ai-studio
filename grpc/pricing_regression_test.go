@@ -1,6 +1,7 @@
 package grpc
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -8,6 +9,8 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/logger"
@@ -83,4 +86,84 @@ func TestPricingRegression_HubShortMonthAnchors(t *testing.T) {
 			})
 		})
 	}
+}
+
+// kq3b.3 at the hub, end to end: a running budget sync, then a price
+// recalculation through the service. The next sync carries each App's spend
+// at the new prices (a raise from unpriced and a lowering from overpriced)
+// and tells edges they may lower; the settled figures used to stand until
+// the next period.
+func TestPricingRegression_HubBudgetSyncFollowsRecalculation(t *testing.T) {
+	forEachBudgetSyncDB(t, func(t *testing.T, db *gorm.DB) {
+		require.NoError(t, db.AutoMigrate(&models.ModelPrice{}))
+		bus := eventbridge.NewBus()
+		payloads := make(chan map[string]json.RawMessage, 16)
+		bus.Subscribe(BudgetSyncTopic, func(e eventbridge.Event) {
+			var p map[string]json.RawMessage
+			if json.Unmarshal(e.Payload, &p) == nil {
+				payloads <- p
+			}
+		})
+		next := func() map[string]json.RawMessage {
+			t.Helper()
+			select {
+			case p := <-payloads:
+				return p
+			case <-time.After(5 * time.Second):
+				t.Fatal("no budget sync published")
+				return nil
+			}
+		}
+		usage := func(p map[string]json.RawMessage, appID uint) float64 {
+			t.Helper()
+			var apps map[string]struct {
+				Usage float64 `json:"usage"`
+			}
+			require.NoError(t, json.Unmarshal(p["app_budgets"], &apps))
+			a, ok := apps[fmt.Sprint(appID)]
+			require.True(t, ok, "app %d in the sync", appID)
+			return a.Usage
+		}
+
+		svc := &services.Service{DB: db}
+		type side struct {
+			app      models.App
+			price    models.ModelPrice
+			from, to float64 // per input token
+		}
+		sides := []*side{
+			{app: models.App{Name: "raise"}, price: models.ModelPrice{ModelName: "gemini-raise", Vendor: "google_ai", Currency: "USD"}, from: 0, to: 1e-5},
+			{app: models.App{Name: "lower"}, price: models.ModelPrice{ModelName: "gemini-lower", Vendor: "google_ai", CPIT: 1e-4, Currency: "USD"}, from: 1e-4, to: 1e-6},
+		}
+		at := time.Now().Add(-time.Hour)
+		for _, sd := range sides {
+			require.NoError(t, db.Create(&sd.app).Error)
+			require.NoError(t, sd.price.Create(db))
+			for i := 0; i < 20; i++ {
+				require.NoError(t, db.Create(&models.LLMChatRecord{AppID: sd.app.ID, LLMID: 1, Name: sd.price.ModelName, Vendor: "google_ai",
+					PromptTokens: 10000, TotalTokens: 10000, Cost: 10000 * sd.from * 10000, Currency: "USD", TimeStamp: at.Add(time.Duration(i) * time.Second)}).Error)
+			}
+		}
+
+		s := NewBudgetSyncService(db, bus)
+		s.syncInterval = time.Hour
+		s.Start()
+		t.Cleanup(s.Stop)
+		next() // the start-up cycle
+		for i := 0; i < budgetSettleCycles; i++ {
+			s.aggregateAndPublish()
+			next()
+		}
+
+		for _, sd := range sides {
+			_, err := svc.UpdateModelPriceAndRecalculate(sd.price.ID, sd.price.ModelName, "google_ai", 0, sd.to, 0, 0, "USD")
+			require.NoError(t, err)
+		}
+		s.aggregateAndPublish()
+		p := next()
+		assert.JSONEq(t, "true", string(p["spend_recalculated"]), "edges are told they may lower")
+		for _, sd := range sides {
+			assert.InDelta(t, 20*10000*sd.to, usage(p, sd.app.ID), 1e-9, "%s: spend at the new price", sd.app.Name)
+		}
+	})
 }
