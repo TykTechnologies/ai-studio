@@ -30,7 +30,11 @@ filter() { grep -E '^(\s*--- |ok|FAIL|PASS)|pricing_regression_test'; }
 # Every suite runs; the script fails at the end if any did.
 status=0
 PRICING_REGRESSION_FULL=1 go test -count=1 -v -run 'TestPricingRegression' ./proxy/ ./grpc/ ./api/ | filter || status=1
-(cd microgateway && MGW_TEST_POSTGRES_DSN="$DATABASE_URL" go test -count=1 -v -tags enterprise -run 'TestPricingRegression' ./internal/services/ | filter) || status=1
+# The edge suites run in both editions: the edge-to-hub test is CE only,
+# the edge budget check Enterprise only.
+for tags in "" enterprise; do
+  (cd microgateway && MGW_TEST_POSTGRES_DSN="$DATABASE_URL" go test -count=1 -v -tags "$tags" -run 'TestPricingRegression' ./internal/services/ | filter) || status=1
+done
 if [ -f enterprise/features/budget/pricing_regression_test.go ]; then
   (cd enterprise && go test -count=1 -v -tags enterprise -run 'TestPricingRegression' ./features/budget/ | filter) || status=1
 fi
