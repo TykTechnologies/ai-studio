@@ -274,7 +274,7 @@ The OpenAI-compatible endpoints (`/ai/{llmSlug}`, the Main Ingress `/v1`, router
 *   **Headers.** `X-Cache*`, `X-Tyk-Compression*`, `X-LB-*` and `X-RateLimit-*` response headers from plugins reach the client, buffered and streaming (for every vendor on these endpoints). A client's `X-Tyk-Compression` header reaches the plugins and never AWS.
 *   **Request logs.** A buffered Bedrock call's request log names the LLM in its model column, as for every vendor on the vendor-native endpoint; the chat record keeps the model ID. Cache read and write tokens are priced. A failed native Bedrock stream leaves a request log row.
 
-AI Studio's embedded gateway shares this code, so Studio's own `/ai/` traffic to Bedrock (Chat included) takes the internal hop too. Plugins do not run on the embedded gateway, but its budget check, filters and analytics for Bedrock run on the internal hop, on the Converse body.
+AI Studio's embedded gateway shares this code, so Studio's own `/ai/` traffic to Bedrock takes the internal hop too. Studio Chat does not support Bedrock LLMs: a chat session on one fails to start. Plugins do not run on the embedded gateway, but its budget check, filters and analytics for Bedrock run on the internal hop, on the Converse body.
 
 ### 5. Legacy Endpoints (`/llm/rest/...`, `/llm/stream/...`)
 

@@ -326,7 +326,7 @@ Plugins attached to a Bedrock LLM now run on `/ai/`, `/v1`, routers and `/anthro
 - **No automatic AWS SDK retries.** Each failover step tries a Bedrock call once, and failover handles 5xx and 429 errors.
 - **Status codes.** Refusals reach the client with their real status: `400` for a guardrail block, the plugin's own status for a plugin block, and `403` for a budget refusal.
 - **Request logs** show the LLM's name as the model for buffered Bedrock calls on these endpoints. Chat records keep the model id.
-- **AI Studio's embedded gateway** (including Chat) applies budgets, filters and analytics to Bedrock the same way.
+- **AI Studio's embedded gateway** applies budgets, filters and analytics to Bedrock the same way.
 
 ### Guardrails
 
@@ -509,6 +509,7 @@ These plugins are released to the marketplace for 2.3.0. Versions marked † nee
 ## Known issues
 
 - **Model and Semantic Routers don't route decision calls yet.** They answer `400`.
+- **Studio Chat can't use a Bedrock LLM.** A chat on one is saved, but its session fails to start. This is not new in 2.3.
 - **Decision models haven't been tested against a self-hosted llama.cpp server.** They are tested against OpenAI `gpt-6-luna` and TypeSafe `jev-latest`.
 - **Some OpenAI ids aren't ownership-checked.** A `file_id` in an `input_file` or `input_image` part, and an `item_reference` id, are passed to OpenAI unchecked.
 - **`input_file` content isn't screened** by filters.
