@@ -59,7 +59,9 @@ const PushReminderToast = () => {
           Edge gateways keep using the previous configuration until you push it.
         </Alert>
       </Snackbar>
-      <PushConfigurationModal open={pushOpen} onClose={() => setPushOpen(false)} />
+      {/* Mounted only while open: the modal loads namespaces, which needs
+          edges:read, and this toast is on every page for every user. */}
+      {pushOpen && <PushConfigurationModal open onClose={() => setPushOpen(false)} />}
     </>
   );
 };

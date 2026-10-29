@@ -8,7 +8,7 @@ jest.mock('../../context/SyncStatusContext', () => ({
   useOptionalSyncStatus: jest.fn(),
 }));
 jest.mock('../edge-gateways/PushConfigurationModal', () => ({ open }) =>
-  open ? <div data-testid="push-modal">push modal</div> : null
+  open ? <div data-testid="push-modal">push modal</div> : <div data-testid="push-modal-closed" />
 );
 
 describe('PushReminderToast (#506)', () => {
@@ -22,6 +22,16 @@ describe('PushReminderToast (#506)', () => {
     useOptionalSyncStatus.mockReturnValue({ pushReminder: null, dismissPushReminder });
     render(<PushReminderToast />);
     expect(screen.queryByTestId('push-reminder')).not.toBeInTheDocument();
+  });
+
+  // The modal loads namespaces (edges:read) when it mounts, and this toast is
+  // on every page: mounting it closed made every user without edges:read
+  // fetch /namespaces and get a 403 on each page load (lsj.29).
+  it('does not mount the push modal until it is opened', () => {
+    useOptionalSyncStatus.mockReturnValue({ pushReminder: { id: 1 }, dismissPushReminder });
+    render(<PushReminderToast />);
+    expect(screen.queryByTestId('push-modal-closed')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('push-modal')).not.toBeInTheDocument();
   });
 
   it('renders nothing outside the sync-status provider', () => {
