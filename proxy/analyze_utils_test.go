@@ -519,6 +519,7 @@ func TestBuildChatRecordFor_RequestedModelFallback(t *testing.T) {
 		&MockTokenResponse{promptTokens: 10, responseTokens: 10}, model, time.Now())
 
 	assert.Equal(t, model, rec.Name)
+	assert.Equal(t, model, rec.RequestedModel)
 	assert.Equal(t, "EUR", rec.Currency)
 	assert.InDelta(t, 2, rec.Cost, 1e-9)
 	assert.Equal(t, uint(3), rec.LLMID)

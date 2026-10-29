@@ -76,6 +76,13 @@ type LLMChatRecord struct {
 	// the response said (IPriceAdjustedResponse: "batch", "priority",
 	// "flex"...); empty for list-price traffic and older rows (NULL).
 	ServiceTier string `gorm:"size:32"`
+	// RequestedModel is the model the caller asked for, when it said. Name
+	// is the model the vendor reported, which can be a versioned name
+	// (gemini-2.0-flash-001 for gemini-2.0-flash); the gateway prices such a
+	// row by the requested name when the reported one is unpriced, and a
+	// recalculation of the requested name's price reaches it the same way.
+	// Empty on edge rows and older rows (NULL).
+	RequestedModel string
 }
 
 // LLMChatLogEntry for storing extra logs
