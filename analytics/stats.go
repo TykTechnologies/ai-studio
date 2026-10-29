@@ -1260,15 +1260,7 @@ func periodUsage(db *gorm.DB, column string, owner interface{}, stats []budgetSt
 		}
 	}
 	for i := range stats {
-		bc := spent[stats[i].LLMID]
-		switch currencies := budget.SortedCurrencies(bc); len(currencies) {
-		case 0:
-		case 1:
-			stats[i].Currency = currencies[0]
-			stats[i].MonthlyUsage = bc[currencies[0]]
-		default:
-			stats[i].MixedCurrency = bc
-		}
+		stats[i].Currency, stats[i].MonthlyUsage, stats[i].MixedCurrency = budget.SplitCurrency(spent[stats[i].LLMID])
 	}
 	return nil
 }

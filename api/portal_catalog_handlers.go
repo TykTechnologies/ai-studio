@@ -978,6 +978,12 @@ type AppUsageSummary struct {
 	BudgetStartDate time.Time  `json:"budget_start_date"`
 	LastAccessAt    *time.Time `json:"last_access_at"`
 	Requests30d     int64      `json:"requests_30d"`
+	// Currency is the currency of CurrentSpend: a budget's currency is
+	// implied by its spend. When the period mixes currencies,
+	// MixedCurrencySpend has the spend by currency instead, CurrentSpend is
+	// 0, and the budget refuses requests (costs are not converted).
+	Currency           string             `json:"currency,omitempty"`
+	MixedCurrencySpend map[string]float64 `json:"mixed_currency_spend,omitempty"`
 }
 
 // AppUsageSummaryResponse is the body of GET /common/apps/usage-summary.
@@ -1030,7 +1036,7 @@ func (a *API) getUserAppsUsageSummary(c *gin.Context) {
 		return
 	}
 	spendTracked := budget.IsEnterpriseAvailable()
-	spending := map[uint]float64{}
+	spending := map[uint]map[string]float64{}
 	if spendTracked {
 		spending, err = analytics.GetAppSpending(a.service.DB, windows, now)
 		if err != nil {
@@ -1041,12 +1047,14 @@ func (a *API) getUserAppsUsageSummary(c *gin.Context) {
 
 	data := make(map[string]AppUsageSummary, len(apps))
 	for _, app := range apps {
-		spent := spending[app.ID]
+		currency, spent, mixed := budget.SplitCurrency(spending[app.ID])
 		summary := AppUsageSummary{
-			AppID:           uintID(app.ID),
-			CurrentSpend:    spent,
-			MonthlyBudget:   app.MonthlyBudget,
-			BudgetStartDate: starts[app.ID],
+			AppID:              uintID(app.ID),
+			CurrentSpend:       spent,
+			MonthlyBudget:      app.MonthlyBudget,
+			BudgetStartDate:    starts[app.ID],
+			Currency:           currency,
+			MixedCurrencySpend: mixed,
 		}
 		if app.MonthlyBudget != nil && *app.MonthlyBudget > 0 {
 			pct := (spent / *app.MonthlyBudget) * 100

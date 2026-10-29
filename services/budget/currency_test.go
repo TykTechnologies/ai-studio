@@ -19,3 +19,21 @@ func TestMixedCurrencyError(t *testing.T) {
 	assert.True(t, errors.Is(err, ErrMixedCurrency))
 	assert.Equal(t, "budget cannot be enforced across currencies: the app monthly budget's period has spend in EUR, USD, which is not converted; price its models in one currency", err.Error())
 }
+
+func TestSplitCurrency(t *testing.T) {
+	c, total, mixed := SplitCurrency(nil)
+	assert.Equal(t, "", c)
+	assert.Zero(t, total)
+	assert.Nil(t, mixed)
+
+	c, total, mixed = SplitCurrency(map[string]float64{"EUR": 2.5, "USD": 0})
+	assert.Equal(t, "EUR", c)
+	assert.Equal(t, 2.5, total)
+	assert.Nil(t, mixed)
+
+	spend := map[string]float64{"EUR": 2, "USD": 1}
+	c, total, mixed = SplitCurrency(spend)
+	assert.Equal(t, "", c)
+	assert.Zero(t, total)
+	assert.Equal(t, spend, mixed)
+}
