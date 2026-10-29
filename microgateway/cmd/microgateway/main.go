@@ -80,6 +80,12 @@ func main() {
 	// Reconfigure logging based on config (may switch to JSON if explicitly requested)
 	setupLogging(cfg.Observability)
 
+	// An edge serves no /api/v1 management API, so an admin token minted
+	// there could never be used. Refuse before touching the database.
+	if *createAdminToken && cfg.IsEdge() {
+		log.Fatal().Msg("-create-admin-token is not available in edge mode (GATEWAY_MODE=edge): edges have no management API; configure them from AI Studio")
+	}
+
 	log.Info().
 		Str("version", Version).
 		Str("build", BuildHash).
