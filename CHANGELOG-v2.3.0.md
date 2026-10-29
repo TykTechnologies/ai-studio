@@ -514,6 +514,7 @@ These plugins are released to the marketplace for 2.3.0. Versions marked † nee
 - **Keys that differ only in case** can still be read differently by a script filter and the upstream. Guardrails refuse such bodies.
 - **Dashboard-created MCP proxies don't set `stripAuthorizationData`**, so AI Studio-minted Tyk keys are forwarded to third-party upstreams. Gateway connections set it.
 - **Rate limiter concurrency slots can be held for up to ten minutes** by a request that ends without a response.
+- **On Tyk Gateway 5.16.0, MCP analytics merge non-tool calls into one blank row.** Gateway 5.16.0 no longer records the method name of calls such as `initialize` and `tools/list`, so a server's per-tool breakdown and the top tools on the **MCP traffic** panel show them together as one row with no name. Per-server totals are unaffected. Gateway 5.15.1 records them correctly.
 
 ---
 
