@@ -154,8 +154,9 @@ for the host-facing API.
   directory); `api.New` takes it as an `fs.FS`, and `Options.UIAssets`
   overrides it.
 - `enterprise/all` (`github.com/TykTechnologies/ai-studio-enterprise/v2/all`)
-  imports every enterprise feature; `main_enterprise.go` and enterprise hosts
-  import it. The enterprise module is named after its own private repository,
+  imports every enterprise feature; enterprise hosts import it (the Studio
+  binary and `examples/embed-host` through linked `enterprise_entlink.go`
+  files, see below). The enterprise module is named after its own private repository,
   so a host with read access fetches it like any module; under the old path
   (`midsommar/v2/enterprise`, a directory of this repository that is really a
   submodule) Go could never resolve it.
@@ -168,9 +169,21 @@ for the host-facing API.
   (CI) enforces it. Tests may not import it either, because tidy also reads
   the tests of every package it imports: enterprise tests of core packages
   live in the enterprise repository (`enterprise/_coretests`) and
-  `make ent-link` links them in. Only the `main_enterprise.go` files, the
-  microgateway module and `tests/`, none of which a host imports, may import
-  it.
+  `make ent-link` links them in. Nothing in the root module imports it, not
+  even a main package: the root `go.mod` does not require the enterprise
+  module at all, because a plugin author or host inherits its requirements
+  and `go list -m all` (govulncheck, Dependabot) would then fail on the
+  private module. The blank imports of the Studio binary, `examples/embed-host`
+  and `tests/` are `*_entlink.go` / `*_entlink_test.go` files in
+  `enterprise/_coretests`, linked in by `make ent-link`; each core
+  `main_enterprise.go` (or test) references `enterpriseFeaturesLinked`, which
+  only the linked file defines, so an unlinked enterprise build fails to
+  compile instead of producing a CE binary. Enterprise builds and tests of the
+  root module resolve the module through `enterprise.work`
+  (`GOWORK=$PWD/enterprise.work`; the Makefile, goreleaser and CI set it).
+  `make sdk-consumer-check` (CI) proves the SDK's module graph resolves from
+  the public proxy. Only the microgateway module (its own `go.mod`) imports
+  the enterprise module directly.
 - `grpc.ControlServer.Serve(listener)` serves on a host-supplied listener;
   `API.Shutdown` stops the audit writer even when the host served the router.
 
@@ -336,9 +349,10 @@ One frontend build serves any base path:
 `examples/embed-host` is a runnable host: its own login page and cookie, an
 `Authenticator` over that cookie, Studio at `/ai-studio`, and the OAuth
 discovery document at the host root. `-tags enterprise` builds the
-Enterprise Edition (`examples/embed-host/main_enterprise.go`, allowed by
-`make enterprise-import-guard` like the root `main_enterprise.go`, since a
-main package is never imported); `-proxy-port` sets the gateway port.
+Enterprise Edition (`make ent-link` links in
+`examples/embed-host/enterprise_entlink.go`, which imports `enterprise/all`;
+build with `GOWORK=$PWD/enterprise.work`); `-proxy-port` sets the gateway
+port.
 
 `config.LoadFrom` (a host's settings) does not log the standalone binary's
 "environment variable is not set" notices, and leaves the docs link out

@@ -39,6 +39,12 @@ fi
 # (an extended regexp of import-path prefixes). Never add a Studio path.
 ALLOWED_GORM_IMPORTERS='github\.com/TykTechnologies/storage/'
 
+# gowork <module> <tags>: the root module finds the enterprise module only
+# through enterprise.work (its go.mod does not require it).
+gowork() {
+  if [ "$1" = . ] && [ -n "$2" ]; then echo "$ROOT/enterprise.work"; else echo off; fi
+}
+
 for mod in "${modules[@]}"; do
   if [ ! -f "$mod/go.mod" ]; then
     echo "gorm-verify: $mod/go.mod missing (is the enterprise submodule checked out?)" >&2
@@ -47,7 +53,7 @@ for mod in "${modules[@]}"; do
   for tags in "${editions[@]}"; do
     # go list runs on its own so that a failure stops the check rather
     # than reading as "no gorm.io packages".
-    deps=$(cd "$mod" && go list -deps -test ${tags:+-tags "$tags"} -f '{{.ImportPath}} {{join .Imports " "}}' ./...)
+    deps=$(cd "$mod" && GOWORK=$(gowork "$mod" "$tags") go list -deps -test ${tags:+-tags "$tags"} -f '{{.ImportPath}} {{join .Imports " "}}' ./...)
     # Who imports upstream gorm? Studio's own packages never may. A
     # third-party library may use its own gorm internally (it never sees
     # Studio's models): TykTechnologies/storage v1.5+, via TIB, has a

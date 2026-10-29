@@ -35,7 +35,7 @@ midsommar/                              # Public repository
 │   └── internal/services/
 │       ├── budget_service.go          # ENT impl with build tag
 │       └── budget_community.go        # CE stub
-└── main_enterprise.go                 # Enterprise imports (build tag)
+└── main_enterprise.go                 # Guard: needs the linked enterprise_entlink.go (enterprise/all)
 ```
 
 ### Module Dependencies
@@ -231,19 +231,22 @@ func init() {
 }
 ```
 
-### 6. Import in Main (Public with Build Tag)
+### 6. Register in enterprise/all (Enterprise Repository)
 
 ```go
-// main_enterprise.go
-//go:build enterprise
-// +build enterprise
-
-package main
+// enterprise/all/all.go
+package all
 
 import (
     _ "github.com/TykTechnologies/ai-studio-enterprise/v2/features/myfeature"
 )
 ```
+
+Nothing in the core repository imports the feature. The Studio binary imports
+`enterprise/all` through `enterprise_entlink.go`, which lives in
+`enterprise/_coretests` and is linked into the repository root by
+`make ent-link`; the root `go.mod` does not require the enterprise module, so
+enterprise builds use `GOWORK=$PWD/enterprise.work` (see `TESTING_CE_ENT.md`).
 
 ## Testing
 
@@ -1123,7 +1126,7 @@ Follow this checklist when adding a new enterprise feature:
 - [ ] Create CE stub: `services/myfeature/community.go`
 - [ ] Implement in enterprise: `enterprise/features/myfeature/service.go`
 - [ ] Add factory registration: `enterprise/features/myfeature/init.go`
-- [ ] Import in main: Update `main_enterprise.go`
+- [ ] Register it: import it from `enterprise/all/all.go`
 
 ### API Layer (if applicable)
 - [ ] Create ENT handlers with `//go:build enterprise` tag

@@ -211,6 +211,10 @@ jobs:
       - name: Build ENT Binaries
         run: |
           echo "Building ENT binaries with CGO enabled and enterprise tags..."
+          # The root go.mod does not require the enterprise module: link its
+          # registrations in and resolve it through enterprise.work.
+          scripts/enterprise-link-tests.sh
+          export GOWORK="$PWD/enterprise.work"
           echo "Building AMD64 binary..."
           CGO_ENABLED=1 GOOS=linux GOARCH=amd64 \
             go build -tags enterprise -ldflags="-w -s" -trimpath \

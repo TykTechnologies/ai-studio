@@ -56,12 +56,13 @@ func TestDirectImports(t *testing.T) {
 }
 
 // TestEnterpriseModuleNamesTheRealModule keeps the split deny-list entry
-// live: the root go.mod requires the enterprise module under that path, so a
-// typo in the pieces cannot quietly stop TestImportBoundary catching it.
+// live: the microgateway go.mod requires the enterprise module under that
+// path (the root go.mod never does), so a typo in the pieces cannot quietly
+// stop TestImportBoundary catching it.
 func TestEnterpriseModuleNamesTheRealModule(t *testing.T) {
-	gomod, err := os.ReadFile("../../go.mod")
+	gomod, err := os.ReadFile("../../microgateway/go.mod")
 	if err != nil {
-		t.Skipf("root go.mod unavailable: %v", err)
+		t.Skipf("microgateway go.mod unavailable: %v", err)
 	}
 	for _, line := range strings.Split(string(gomod), "\n") {
 		fields := strings.Fields(line)
@@ -72,5 +73,5 @@ func TestEnterpriseModuleNamesTheRealModule(t *testing.T) {
 			return
 		}
 	}
-	t.Fatalf("go.mod requires no module at %s; the deny-list entry is stale", enterpriseModule)
+	t.Fatalf("microgateway/go.mod requires no module at %s; the deny-list entry is stale", enterpriseModule)
 }

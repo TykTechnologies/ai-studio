@@ -72,7 +72,7 @@ The **Enterprise Edition Licensing System** provides a framework for validating 
    - **main.go** - Initializes licensing service at boot
    - **api.go** - Adds telemetry middleware for request tracking
    - **config.go** - License configuration from environment variables
-   - **main_enterprise.go** - Conditional import with build tag
+   - **main_enterprise.go** - Enterprise build guard; the enterprise import itself is the linked `enterprise_entlink.go` (`make ent-link`)
 
 3. **Data Flow:**
    - License validation occurs at startup and periodically during operation

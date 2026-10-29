@@ -58,7 +58,7 @@ services:
         echo "Building AI Studio...";
         if [ "$$EDITION" = "ent" ] && [ -d /app/enterprise ]; then
           echo "Building Enterprise Edition...";
-          CGO_ENABLED=1 go build -tags enterprise -o /app/tmp/studio . || exit 1;
+          GOWORK=/app/enterprise.work CGO_ENABLED=1 go build -tags enterprise -o /app/tmp/studio . || exit 1;
         else
           echo "Building Community Edition...";
           CGO_ENABLED=1 go build -o /app/tmp/studio . || exit 1;

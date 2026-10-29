@@ -12,20 +12,30 @@
 # Enterprise tests of core packages live in enterprise/_coretests and are
 # linked in, gitignored, by scripts/enterprise-link-tests.sh.
 #
-# Allowed: the enterprise binaries' main packages (main_enterprise.go, and
-# examples/embed-host/main_enterprise.go: a main package cannot be imported,
-# so no host's tidy reads it), and the microgateway module and tests/ tree,
-# which no program embedding Studio imports.
+# Nothing in the root module may import it, not even a main package or
+# tests/: the root go.mod does not require the enterprise module at all, so
+# that a plugin author's `go list -m all` (govulncheck, Dependabot) resolves.
+# The enterprise registrations of the Studio binary, examples/embed-host and
+# tests/ live in enterprise/_coretests as *_entlink.go and *_entlink_test.go,
+# linked in like the tests, and enterprise builds resolve the module through
+# enterprise.work. Only the microgateway module (its own go.mod) may import
+# it.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
 
+if grep -n 'ai-studio-enterprise' go.mod >&2; then
+  echo "The root go.mod must not mention the private enterprise module: plugin authors inherit its" >&2
+  echo "requirements, and \`go list -m all\` then fails for them. Enterprise builds use enterprise.work." >&2
+  exit 1
+fi
+
 if matches=$(git grep -n '"github\.com/TykTechnologies/ai-studio-enterprise' -- '*.go' \
-  ':!main_enterprise.go' ':!examples/embed-host/main_enterprise.go' ':!microgateway/' ':!tests/' ':!third_party/'); then
+  ':!microgateway/' ':!third_party/'); then
   echo "These files import the private enterprise module; register the feature through a core hook," >&2
-  echo "and put enterprise tests of core packages in enterprise/_coretests:" >&2
+  echo "and put enterprise tests and registrations of core packages in enterprise/_coretests:" >&2
   echo "$matches" >&2
   exit 1
 fi
-echo "No public package imports the enterprise module."
+echo "No public package imports the enterprise module, and the root go.mod does not require it."

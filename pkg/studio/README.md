@@ -170,8 +170,12 @@ shares the one-instance-per-process rule with `New`. See
 
 `examples/embed-host` is a small runnable host: `go run ./examples/embed-host`
 (after building the frontend), then open http://localhost:8090/. For the
-Enterprise Edition, run it with `-tags enterprise` and `TYK_AI_LICENSE` set
-(`examples/embed-host/main_enterprise.go` imports `enterprise/all` and passes
-the licence as `Options.License`). `-proxy-port` (or
+Enterprise Edition, run `make ent-link`, then run it with `-tags enterprise`,
+`GOWORK=$PWD/enterprise.work` and `TYK_AI_LICENSE` set
+(`examples/embed-host/main_enterprise.go` passes the licence as
+`Options.License`; the linked `enterprise_entlink.go` imports
+`enterprise/all`). Your own host, in its own module, imports
+`github.com/TykTechnologies/ai-studio-enterprise/v2/all` from its main
+package directly. `-proxy-port` (or
 `EMBED_HOST_PROXY_PORT`) moves the AI gateway off its default port 9095.
 

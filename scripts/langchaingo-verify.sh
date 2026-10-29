@@ -22,6 +22,12 @@ if [ "${CE_ONLY:-}" = 1 ]; then
   echo "langchaingo-verify: CE_ONLY=1, not checking the enterprise module or the enterprise edition" >&2
 fi
 
+# gowork <module> <tags>: the root module finds the enterprise module only
+# through enterprise.work (its go.mod does not require it).
+gowork() {
+  if [ "$1" = . ] && [ -n "$2" ]; then echo "$ROOT/enterprise.work"; else echo off; fi
+}
+
 status=0
 if matches=$(git grep -n --recurse-submodules '"github\.com/tmc/langchaingo' -- '*.go' ':!third_party/'); then
   echo "Import langchaingo from github.com/TykTechnologies/midsommar/v2/third_party/langchaingo, not github.com/tmc/langchaingo:" >&2
@@ -39,7 +45,7 @@ for mod in "${modules[@]}"; do
     status=1
   fi
   for tags in "${editions[@]}"; do
-    deps=$(cd "$mod" && go list -deps -test ${tags:+-tags "$tags"} ./...)
+    deps=$(cd "$mod" && GOWORK=$(gowork "$mod" "$tags") go list -deps -test ${tags:+-tags "$tags"} ./...)
     if found=$(grep '^github\.com/tmc/langchaingo' <<< "$deps"); then
       echo "langchaingo-verify: module $mod${tags:+ (-tags $tags)} builds with upstream langchaingo:" >&2
       echo "$found" >&2

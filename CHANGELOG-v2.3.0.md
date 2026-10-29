@@ -245,6 +245,7 @@ This changes what plugins and filter scripts see for Bedrock traffic. Read the [
 - **Model price recalculation** keeps batch records at batch price and works on SQLite. The cost breakdown of batch records now adds up.
 
 ### Plugin runtime
+- **Plugin SDK module graph referenced a private module.** A plugin importing `pkg/plugin_sdk` inherited a requirement on `github.com/TykTechnologies/ai-studio-enterprise/v2`, which nobody outside Tyk can fetch, so `go list -m all` (and tools built on it, such as govulncheck, Dependabot and Renovate) failed. Building was not affected. From 2.3.0 the SDK's module graph resolves from the public Go proxy. If you added a placeholder `replace` for that module to your plugin's `go.mod`, remove it after upgrading the SDK; existing plugin binaries don't need rebuilding.
 - **The plugin broker gave up waiting for plugins after 500 ms.** It now waits until the plugin is ready, and plugin events are no longer dropped during startup.
 - **The plugin examples and scaffold** keep working with scope enforcement.
 
