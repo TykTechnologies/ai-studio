@@ -596,3 +596,73 @@ func TestPricingRegression_TrafficAfterDeletedPrice(t *testing.T) {
 		assertRel(t, m.dayCost(), env.modelCostByDay(t, m.reported)[env.dayLabel(1)], 1e-9, "priced again")
 	})
 }
+
+// kq3b.6, the customer's other route: months of unpriced traffic, then the
+// admin creates prices for the models they asked for. Traffic auto-created
+// unpriced rows for those names, which the create fills in (it used to fail
+// on the unique key), with no duplicate rows, and the next traffic is priced
+// through them. The unpriced history stays at 0 (a backfill prices it).
+func TestPricingRegression_CreatePriceForModelSeenInTraffic(t *testing.T) {
+	forEachPricingDB(t, func(t *testing.T, db *gorm.DB) {
+		days, mix := pricingScale(geminiMix)
+		env := newStressEnvOn(t, db, days)
+		env.recordDays(t, mix, 0, days-1)
+
+		for _, m := range mix {
+			p := m.price
+			created, err := env.svc.CreateModelPrice(m.requested, string(m.vendor), p.CPT, p.CPIT, p.CacheWritePT, p.CacheReadPT, p.Currency)
+			require.NoError(t, err, "creating a price for %s, which traffic has seen", m.requested)
+			assert.Equal(t, p.CPIT, created.CPIT)
+			var n int64
+			require.NoError(t, env.db.Model(&models.ModelPrice{}).Where("model_name = ? AND vendor = ?", m.requested, string(m.vendor)).Count(&n).Error)
+			assert.Equal(t, int64(1), n, "one price row for %s", m.requested)
+		}
+		env.record(t, mix, days-1)
+
+		d := env.costByDay(t)
+		assertRel(t, mixDayCost(mix), d.byDay[env.lastDay()], 1e-9, "the day after the prices were created is priced")
+		assertRel(t, mixDayCost(mix), d.total, 1e-9, "the unpriced history stays unpriced")
+	})
+}
+
+// kq3b.6 after kq3b.5: a price is deleted, traffic carries on (auto-creating
+// an unpriced row), and the admin creates the price again: the create fills
+// that row and the following traffic is priced.
+func TestPricingRegression_RecreatePriceAfterTraffic(t *testing.T) {
+	forEachPricingDB(t, func(t *testing.T, db *gorm.DB) {
+		_, mix := pricingScale(geminiMix[:1])
+		m := mix[0]
+		env := newStressEnvOn(t, db, 3)
+		p := m.price
+		mp, err := env.svc.CreateModelPrice(m.reported, string(m.vendor), p.CPT, p.CPIT, p.CacheWritePT, p.CacheReadPT, p.Currency)
+		require.NoError(t, err)
+		env.record(t, mix, 0)
+		require.NoError(t, env.svc.DeleteModelPrice(mp.ID))
+		env.record(t, mix, 1)
+		_, err = env.svc.CreateModelPrice(m.reported, string(m.vendor), p.CPT, p.CPIT, p.CacheWritePT, p.CacheReadPT, p.Currency)
+		require.NoError(t, err, "re-creating the price after traffic auto-created an unpriced row")
+		env.record(t, mix, 2)
+
+		costs := env.modelCostByDay(t, m.reported)
+		assertRel(t, m.dayCost(), costs[env.dayLabel(0)], 1e-9, "day 0")
+		assert.Zero(t, costs[env.dayLabel(1)], "day 1, with no price")
+		assertRel(t, m.dayCost(), costs[env.dayLabel(2)], 1e-9, "day 2, priced again")
+	})
+}
+
+// kq3b.6: creating a price for a model that already has one is refused and
+// leaves that price alone.
+func TestPricingRegression_CreatePriceConflictKeepsPrice(t *testing.T) {
+	forEachPricingDB(t, func(t *testing.T, db *gorm.DB) {
+		svc := &services.Service{DB: db}
+		first, err := svc.CreateModelPrice("gpt-4o", string(models.OPENAI), 10e-6, 2.5e-6, 0, 1.25e-6, "USD")
+		require.NoError(t, err)
+		_, err = svc.CreateModelPrice("gpt-4o", string(models.OPENAI), 20e-6, 5e-6, 0, 2.5e-6, "EUR")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "already exists")
+		got, err := svc.GetModelPriceByID(first.ID)
+		require.NoError(t, err)
+		assert.Equal(t, 2.5e-6, got.CPIT)
+		assert.Equal(t, "USD", got.Currency)
+	})
+}

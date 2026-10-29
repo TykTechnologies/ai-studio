@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -106,3 +107,81 @@ func TestPricingRegression_RecalcMarksEdgesPending(t *testing.T) {
 		assert.NotEqual(t, before, checksum(), "the recalculated price changes the namespace checksum")
 	})
 }
+
+// kq3b.6 over HTTP: POST /model-prices for a model traffic has already seen
+// fills the auto-created unpriced row (200), a second POST is a 409, and a
+// new model is created (201). Each used to be a 500 unique violation.
+func TestPricingRegression_PostPriceForModelSeenInTraffic(t *testing.T) {
+	forEachPricingAPIDB(t, func(t *testing.T, db *gorm.DB) {
+		service := apitest.SetupTestService(db)
+		api := NewAPI(service, true, apitest.SetupTestAuthService(db, service), apitest.SetupTestAuthConfig(db, service), nil, emptyFile, nil)
+		_, err := service.GetModelPriceByModelNameAndVendor("gemini-2.0-flash", string(models.GOOGLEAI)) // the gateway's first request
+		require.NoError(t, err)
+
+		post := func(model string, cpit float64) int {
+			body := map[string]interface{}{"data": map[string]interface{}{"type": "ModelPrice", "attributes": map[string]interface{}{
+				"model_name": model, "vendor": string(models.GOOGLEAI), "cpt": 0.0000004, "cpit": cpit, "currency": "USD",
+			}}}
+			return performRequest(api.router, http.MethodPost, "/api/v1/model-prices", body).Code
+		}
+		assert.Equal(t, http.StatusOK, post("gemini-2.0-flash", 0.0000001), "fills the unpriced row")
+		assert.Equal(t, http.StatusConflict, post("gemini-2.0-flash", 0.0000002), "a priced row is a conflict")
+		assert.Equal(t, http.StatusCreated, post("gemini-unseen", 0.0000001), "a new model is created")
+
+		var rows []models.ModelPrice
+		require.NoError(t, db.Where("model_name = ?", "gemini-2.0-flash").Find(&rows).Error)
+		require.Len(t, rows, 1)
+		assert.Equal(t, 0.0000001, rows[0].CPIT)
+	})
+}
+
+// kq3b.6 under concurrency (the case Postgres exercises; SQLite serialises
+// it): the gateway's first lookups and several price creates for an unseen
+// model race. Exactly one create wins, the rest are told the price exists,
+// the lookups never fail, and one priced row remains.
+func TestPricingRegression_ConcurrentCreateAndAutoCreate(t *testing.T) {
+	forEachPricingAPIDB(t, func(t *testing.T, db *gorm.DB) {
+		service := apitest.SetupTestService(db)
+		const lookups, creates = 6, 6
+		var wg sync.WaitGroup
+		errs := make(chan error, lookups+creates)
+		start := make(chan struct{})
+		for i := 0; i < lookups+creates; i++ {
+			wg.Add(1)
+			go func(create bool) {
+				defer wg.Done()
+				<-start
+				var err error
+				if create {
+					_, err = service.CreateModelPrice("gemini-race", string(models.GOOGLEAI), 0.0000004, 0.0000001, 0, 0, "USD")
+					if err == nil {
+						err = errWon
+					}
+				} else {
+					_, err = service.GetModelPriceByModelNameAndVendor("gemini-race", string(models.GOOGLEAI))
+				}
+				errs <- err
+			}(i%2 == 0)
+		}
+		close(start)
+		wg.Wait()
+		close(errs)
+		won := 0
+		for err := range errs {
+			switch {
+			case err == nil: // a lookup
+			case err == errWon:
+				won++
+			default:
+				assert.Contains(t, err.Error(), "already exists", "only a conflict is expected")
+			}
+		}
+		assert.Equal(t, 1, won, "exactly one create wins")
+		var rows []models.ModelPrice
+		require.NoError(t, db.Where("model_name = ?", "gemini-race").Find(&rows).Error)
+		require.Len(t, rows, 1)
+		assert.Equal(t, 0.0000001, rows[0].CPIT, "the row is priced")
+	})
+}
+
+var errWon = fmt.Errorf("created or filled")
