@@ -666,3 +666,92 @@ func TestPricingRegression_CreatePriceConflictKeepsPrice(t *testing.T) {
 		assert.Equal(t, "USD", got.Currency)
 	})
 }
+
+// kq3b.2, the customer case: months of unpriced Gemini traffic, the admin
+// prices the models (on the name they asked for, or the one the vendor
+// reported) and backfills. Every day of the history then shows its real
+// cost, instead of all of it landing on the day the price was set, and
+// nothing is left to backfill.
+func TestPricingRegression_BackfillUnpricedHistory(t *testing.T) {
+	for _, c := range []struct {
+		name    string
+		nameFor func(m stressModel) string
+	}{
+		{"priced on the requested name", func(m stressModel) string { return m.requested }},
+		{"priced on the reported name", func(m stressModel) string { return m.reported }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			forEachPricingDB(t, func(t *testing.T, db *gorm.DB) {
+				days, mix := pricingScale(geminiMix)
+				env := newStressEnvOn(t, db, days)
+				env.recordDays(t, mix, 0, days-1)
+
+				var prices models.ModelPrices
+				for _, m := range mix {
+					p := m.price
+					mp, err := env.svc.CreateModelPrice(c.nameFor(m), string(m.vendor), p.CPT, p.CPIT, p.CacheWritePT, p.CacheReadPT, p.Currency)
+					require.NoError(t, err)
+					prices = append(prices, *mp)
+				}
+				before, err := env.svc.CountUnpricedHistory(prices)
+				require.NoError(t, err)
+				for i, m := range mix {
+					want := int64(m.perDay * (days - 1))
+					assert.Equal(t, want, before[prices[i].ID], "%s unpriced rows before the backfill", c.nameFor(m))
+					n, err := env.svc.BackfillUnpricedHistory(prices[i].ID, nil, nil)
+					require.NoError(t, err)
+					assert.Equal(t, want, n, "%s rows backfilled", c.nameFor(m))
+				}
+				env.record(t, mix, days-1)
+
+				d := env.costByDay(t)
+				for day := 0; day < days; day++ {
+					assertRel(t, mixDayCost(mix), d.byDay[env.dayLabel(day)], 1e-9, "day %d", day)
+				}
+				assertRel(t, mixDayCost(mix)*float64(days), d.total, 1e-9, "history total")
+				after, err := env.svc.CountUnpricedHistory(prices)
+				require.NoError(t, err)
+				assert.Empty(t, after, "nothing left to backfill")
+			})
+		})
+	}
+}
+
+// kq3b.2: a backfill prices only unpriced rows in its range ([from, to)),
+// at the current price; rows recorded with a cost keep it.
+func TestPricingRegression_BackfillRangeLeavesPricedRows(t *testing.T) {
+	forEachPricingDB(t, func(t *testing.T, db *gorm.DB) {
+		_, mix := pricingScale(otherVendors[:1])
+		m := mix[0]
+		env := newStressEnvOn(t, db, 20)
+		env.recordDays(t, mix, 0, 10) // unpriced
+		p := m.price
+		mp, err := env.svc.CreateModelPrice(m.reported, string(m.vendor), p.CPT, p.CPIT, p.CacheWritePT, p.CacheReadPT, p.Currency)
+		require.NoError(t, err)
+		env.recordDays(t, mix, 10, 20) // priced at p
+		doubled := p
+		doubled.CPT, doubled.CPIT, doubled.CacheReadPT = p.CPT*2, p.CPIT*2, p.CacheReadPT*2
+		_, err = env.svc.UpdateModelPrice(mp.ID, m.reported, string(m.vendor), doubled.CPT, doubled.CPIT, doubled.CacheWritePT, doubled.CacheReadPT, "EUR")
+		require.NoError(t, err)
+
+		from, to := env.day0.AddDate(0, 0, 3), env.day0.AddDate(0, 0, 7)
+		n, err := env.svc.BackfillUnpricedHistory(mp.ID, &from, &to)
+		require.NoError(t, err)
+		assert.Equal(t, int64(4*m.perDay), n)
+
+		costs := env.modelCostByDay(t, m.reported)
+		for day := 0; day < 20; day++ {
+			want := 0.0
+			switch {
+			case day >= 3 && day < 7:
+				want = m.dayCostAt(doubled)
+			case day >= 10:
+				want = m.dayCost()
+			}
+			assertRel(t, want, costs[env.dayLabel(day)], 1e-9, "day %d", day)
+		}
+		chart := env.costChart(t)
+		assertRel(t, 4*m.dayCostAt(doubled), chart["EUR"].total, 1e-9, "backfilled rows take the price's currency")
+		assertRel(t, 10*m.dayCost(), chart["USD"].total, 1e-9, "priced rows keep theirs")
+	})
+}

@@ -185,3 +185,44 @@ func TestPricingRegression_ConcurrentCreateAndAutoCreate(t *testing.T) {
 }
 
 var errWon = fmt.Errorf("created or filled")
+
+// kq3b.2 over HTTP: POST /model-prices/:id/backfill takes inclusive UTC
+// dates. Rows from the first instant of from to the last of to are priced,
+// the instant after is not, on both databases.
+func TestPricingRegression_BackfillDateRange(t *testing.T) {
+	forEachPricingAPIDB(t, func(t *testing.T, db *gorm.DB) {
+		service := apitest.SetupTestService(db)
+		api := NewAPI(service, true, apitest.SetupTestAuthService(db, service), apitest.SetupTestAuthConfig(db, service), nil, emptyFile, nil)
+		price, err := service.CreateModelPrice("gemini-2.0-flash", string(models.GOOGLEAI), 0.0000004, 0.0000001, 0, 0, "USD")
+		require.NoError(t, err)
+		at := func(day, h, m, s, ns int) time.Time { return time.Date(2026, 9, day, h, m, s, ns, time.UTC) }
+		stamps := []time.Time{
+			at(9, 23, 59, 59, 999_000_000),  // before from
+			at(10, 0, 0, 0, 0),              // first instant of from
+			at(12, 23, 59, 59, 999_000_000), // last instant of to
+			at(13, 0, 0, 0, 0),              // after to
+		}
+		ids := make([]uint, len(stamps))
+		for i, ts := range stamps {
+			rec := models.LLMChatRecord{Name: "gemini-2.0-flash", Vendor: string(models.GOOGLEAI), PromptTokens: 1000, ResponseTokens: 100, TotalTokens: 1100, Currency: "USD", TimeStamp: ts}
+			require.NoError(t, db.Create(&rec).Error)
+			ids[i] = rec.ID
+		}
+
+		body := map[string]interface{}{"from": "2026-09-10", "to": "2026-09-12"}
+		w := performRequest(api.router, http.MethodPost, fmt.Sprintf("/api/v1/model-prices/%d/backfill", price.ID), body)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		assert.Contains(t, w.Body.String(), `"rows_priced":2`)
+
+		want := models.ChatRecordCost(string(models.GOOGLEAI), 0.0000004, 0.0000001, 0, 0, 1000, 100, 0, 0)
+		for i, id := range ids {
+			var rec models.LLMChatRecord
+			require.NoError(t, db.First(&rec, id).Error)
+			if i == 1 || i == 2 {
+				assert.InDelta(t, want, rec.Cost, 1e-9, "row at %s is in range", stamps[i])
+			} else {
+				assert.Zero(t, rec.Cost, "row at %s is out of range", stamps[i])
+			}
+		}
+	})
+}
