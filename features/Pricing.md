@@ -107,6 +107,7 @@ graph TD
     *   `PATCH /model-prices/{id}/recalculate`: Update a price and recalculate historical costs.
         It emits `system.model_price.updated`, as the standard update does, so edges are flagged for a config push (they price new traffic at the new price once synced) and subscribed plugins are notified. The recalculation reprices the hub's `llm_chat_records` only: an edge's own `analytics_events` and `budget_usages` copies keep the costs they were recorded with.
 *   **Edge currency:** chat records ingested from microgateways (`grpc/control_server.go`, analytics pulse) keep the edge's `AnalyticsEvent.currency`, the currency of the model price the edge priced the request with (`edgeCurrency`: a three-letter code as given; empty, from older edges, or invalid is recorded as USD, logged on the first and every 100th invalid one). They used to be recorded as USD whatever the price's currency.
+*   **Microgateway prices:** the gateway's own pricing API (`DELETE /pricing/:id`, standalone mode) hard-deletes, as Studio does since kq3b.5: its `model_prices` unique index on (model_name, vendor) covered soft-deleted rows, so a deleted price could not be created again. `database.Migrate` purges rows older versions soft-deleted (`PurgeSoftDeletedModelPrices`, every start). Hub-managed edges were not affected: config sync clears the namespace's prices with a raw `DELETE` and re-creates them. The gateway's `CreateModelPrice` is still a plain create (Studio's fill-or-409 behaviour, kq3b.6, is not mirrored there).
 
 **4. Use Cases & Behavior**
 
