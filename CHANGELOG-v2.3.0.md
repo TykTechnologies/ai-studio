@@ -262,6 +262,7 @@ This changes what plugins and filter scripts see for Bedrock traffic. Read the [
 ### Deployment
 - **The Community Edition quickstart works with the distroless images** (the edge no longer crash-loops, and OCI plugins work).
 - **The Helm chart** renders `extraEnv`, `extraVolumes` and `extraVolumeMounts` for AI Studio.
+- **`config.ociRequireSignature: false` in the Helm chart was ignored** unless written as the string `"false"`, so signatures stayed required. An unquoted boolean, or `--set`, now turns them off.
 - **The quickstart ships placeholders instead of sample secrets.**
 - **Stopping AI Studio** waits for background work to finish.
 
