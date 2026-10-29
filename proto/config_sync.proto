@@ -352,6 +352,16 @@ message AnalyticsEvent {
   // Agent tracing gateway span id (16 hex) of the logical call; empty while
   // tracing is off. Lands in proxy_logs.trace_span_id.
   string trace_span_id = 49;
+
+  // The model the caller asked for; model_name is the one the vendor
+  // reported, which can be a versioned name. A price recalculation on the
+  // requested name reaches the row through it (llm_chat_records
+  // requested_model). Empty from older edges.
+  string requested_model = 50;
+  // The multiple of the list price cost was billed at (1 at list price,
+  // 0.5 for batch...); unset from older edges. Kept so a price
+  // recalculation can reprice the row (llm_chat_records price_multiplier).
+  optional double price_multiplier = 51;
 }
 
 // Budget usage event for pulse batching

@@ -1223,6 +1223,11 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 				OnBehalfOf:             event.OnBehalfOf,
 				ActingAgent:            event.ActingAgent,
 			}
+			// The requested model and price multiplier let a price
+			// recalculation reach and reprice the row (kq3b.1/.7); edge
+			// values are untrusted, so both are bounded.
+			chatRecords[i].RequestedModel = edgeRequestedModel(event.RequestedModel)
+			chatRecords[i].PriceMultiplier = edgePriceMultiplier(event.PriceMultiplier)
 			// Model class. A decision call's choices are its answered
 			// questions, so the edge's count is kept instead of the default.
 			kind := models.RequestKind(event.RequestKind)
