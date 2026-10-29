@@ -32,8 +32,10 @@ data:
   {{- if .Values.config.ociCacheDir }}
   AI_STUDIO_OCI_CACHE_DIR: {{ .Values.config.ociCacheDir | quote }}
   {{- end }}
-  {{- if .Values.config.ociRequireSignature }}
-  AI_STUDIO_OCI_REQUIRE_SIGNATURE: {{ .Values.config.ociRequireSignature | quote }}
+  {{- /* Rendered for true and for false (boolean or string): an unquoted
+         false must opt out, not drop the variable and leave the default (on) */}}
+  {{- if or .Values.config.ociRequireSignature (eq (toString .Values.config.ociRequireSignature) "false") }}
+  AI_STUDIO_OCI_REQUIRE_SIGNATURE: {{ toString .Values.config.ociRequireSignature | quote }}
   {{- end }}
   {{- if .Values.config.pluginAllowedSources }}
   AI_STUDIO_PLUGIN_ALLOWED_SOURCES: {{ .Values.config.pluginAllowedSources | quote }}
