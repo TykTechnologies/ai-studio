@@ -167,3 +167,22 @@ func TestPricingRegression_HubBudgetSyncFollowsRecalculation(t *testing.T) {
 		}
 	})
 }
+
+// kq3b.9 at the hub: the budget usage tracker counts USD spend (and rows with
+// no currency) only; EUR spend is not added to the dollars.
+func TestPricingRegression_HubBudgetCountsUSDOnly(t *testing.T) {
+	forEachBudgetSyncDB(t, func(t *testing.T, db *gorm.DB) {
+		app := models.App{Name: "mixed"}
+		require.NoError(t, db.Create(&app).Error)
+		now := time.Now()
+		for _, r := range []struct {
+			cost     float64
+			currency string
+		}{{30000, "USD"}, {10000, ""}, {580000, "EUR"}, {20000, "usd"}} {
+			require.NoError(t, db.Create(&models.LLMChatRecord{AppID: app.ID, LLMID: 1, Cost: r.cost, Currency: r.currency, TimeStamp: now.Add(-time.Minute)}).Error)
+		}
+		got, err := newBudgetUsageTracker().usage(db, []models.App{app}, now)
+		require.NoError(t, err)
+		assert.InDelta(t, 60000, got[app.ID].cost, 1e-9, "USD, lower-case usd and no currency; not EUR")
+	})
+}
