@@ -45,7 +45,7 @@ FIPS-mode processes write approved formats; every build reads both the old and t
 
 - **Secrets.** At startup, in the background, a FIPS-mode AI Studio re-encrypts stored secrets from older formats to `v3`: the Secrets page, and the encrypted values in other tables (LLM API keys and credential metadata, LLM resource signing secrets, webhook headers and signing secrets, Tyk connection tokens and gateway definitions, submission credentials, MCP credential tokens). Until it has run, older values are still read; a standard build does not re-encrypt.
 - **Passwords.** A user's bcrypt hash is replaced with a PBKDF2 one the next time they log in on a FIPS build; an OAuth client secret on its next successful use.
-- **Schema version.** These formats raise the database schema version to 26, so an older AI Studio refuses a database a newer one has migrated instead of misreading it.
+- **Schema version.** These formats raise the database schema version to 26, and the minimum version that can read the database with it. An older headless replica refuses a database a newer one has migrated. An older full AI Studio does not: it starts with a warning and cannot read the newer secrets, so roll back by restoring a database backup taken before the upgrade.
 - **Legacy secrets.** Under `fips140=only`, values encrypted before the `v2` format (AES-CFB) are read only by the startup re-encryption: until it has run, a read of one returns an error. Start AI Studio once in FIPS mode before enforcing strict mode, and let the re-encryption finish (it logs how many values it re-encrypted).
 
 ## Operational requirements

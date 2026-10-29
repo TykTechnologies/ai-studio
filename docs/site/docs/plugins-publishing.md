@@ -229,9 +229,8 @@ run produced.
 - `oras` and `cosign` on `PATH` — install instructions are in
   `microgateway/docs/oci-plugin-workflow.md`.
 - `oras login <registry>` for the target registry.
-- The cosign private key. The matching public key ships in
-  `keys/plugins/plugin-live.pub` and is embedded as `DefaultTykPublicKey` in
-  `pkg/ociplugins/config.go`.
+- The cosign private key. The matching public key is embedded as
+  `DefaultTykPublicKey` in `pkg/ociplugins/config.go`.
 - Go and, for plugins with a UI, Node.
 
 The marketplace repo is cloned automatically if it is missing

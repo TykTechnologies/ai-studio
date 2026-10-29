@@ -148,6 +148,12 @@ what each server's key access sets.
    **Tyk Gateway (open source)**.
 2. Enter the **Gateway API URL** of one node, the **gateway secret**, the
    **public gateway base URL** clients use, and how to find the nodes.
+   The Gateway API is normally on an internal address (a private range,
+   `localhost` or a cluster name), so tick **Allow the gateway hosts to be
+   on an internal network address** (needs the `execute` action on
+   `tyk-connections`). Without it, the probe reports the nodes unreachable
+   and saving is refused with `url is not allowed by the Tyk Dashboard URL
+   policy` (the message names the Dashboard for Gateway connections too).
 3. Pick a **trust mode**:
    - *Catalogue*: import the proxies.
    - *Broker*: also mint keys.

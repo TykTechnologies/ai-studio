@@ -144,7 +144,8 @@ describe("snippets", () => {
     expect(pump.type).toBe("http");
     expect(pump.timeout).toBe(30);
     expect(pump.meta).not.toHaveProperty("timeout");
-    expect(pump.meta.max_retries).toBe(3);
+    expect(pump.meta.max_retries).toBe(8);
+    expect(conf.dont_purge_uptime_data).toBe(true);
     expect(pump.meta.gzip).toBe(true);
     expect(pump.omit_detailed_recording).toBe(true);
     expect(pump.meta.url).toBe("https://studio.example.com/api/v1/ingest/tyk-analytics");

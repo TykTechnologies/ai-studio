@@ -1,7 +1,7 @@
 midsommar:
   image:
     repository: tykio/tyk-ai-studio
-    tag: v2.2.2
+    tag: v2.3.0
     pullPolicy: IfNotPresent
 
   # Deployment strategy. Recreate stops the running pod before starting the
@@ -168,7 +168,7 @@ microgateway:
   enabled: true
   image:
     repository: tykio/tyk-microgateway    # Enterprise: tykio/tyk-microgateway-ent
-    tag: v2.2.2
+    tag: v2.3.0
   service:
     type: ClusterIP
     port: 8080
