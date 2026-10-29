@@ -709,10 +709,9 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 		conf.TIBEnabled = true
 	}
 
+	// Warned about at startup (pkg/studio) when the edition has SSO, not on
+	// the deprecated TIB_ENABLED.
 	conf.TIBAPISecret = getenv("TYK_AI_SECRET_KEY")
-	if conf.TIBAPISecret == "" && conf.TIBEnabled {
-		cfgLog.Warn().Msg("TYK_AI_SECRET_KEY is not set but TIB is enabled: SSO logins are refused until it is set")
-	}
 
 	// Licensing configuration (Enterprise Edition)
 	conf.LicenseKey = getenv("TYK_AI_LICENSE")
