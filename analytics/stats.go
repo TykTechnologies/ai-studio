@@ -79,6 +79,7 @@ type budgetStats struct {
 	LLMID           uint
 	Name            string
 	MonthlyUsage    float64
+	OtherCurrency   map[string]float64 `gorm:"-"` // period spend in other currencies, set by periodUsage
 	TotalCost       float64
 	TotalTokens     int64
 	MonthlyBudget   *float64
@@ -125,6 +126,8 @@ func (bs budgetStats) toBudgetUsage(entityType string) models.BudgetUsage {
 		BudgetStartDate: budgetStartDate,
 		UserID:          bs.UserID,
 		UserEmail:       userEmail,
+
+		OtherCurrencySpend: bs.OtherCurrency,
 	}
 }
 
@@ -1107,7 +1110,9 @@ func maxTime(times ...time.Time) time.Time {
 
 // GetBudgetUsage returns usage statistics for all LLMs and Apps that have costs, with optional date range.
 // Each entity's monthly usage (Spent, Usage) is its spend in its current budget period, as budget
-// enforcement counts it (see periodUsage); TotalCost and TotalTokens cover the date range.
+// enforcement counts it (see periodUsage); TotalCost and TotalTokens cover the date range. Spent and
+// TotalCost count the budget currency only (budget.Currency); period spend in other currencies is
+// reported apart in OtherCurrencySpend.
 func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]models.BudgetUsage, error) {
 	var result []models.BudgetUsage
 
@@ -1141,7 +1146,7 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
 		Select(`
 			llm_chat_records.llm_id,
 			COALESCE(llms.name, NULLIF(llm_chat_records.vendor, ''), 'Unknown') AS name,
-			SUM(CASE WHEN time_stamp >= ? AND time_stamp < ? THEN COALESCE(cost, 0) ELSE 0 END) AS total_cost,
+			SUM(CASE WHEN time_stamp >= ? AND time_stamp < ? AND `+budget.InCurrencySQL+` THEN COALESCE(cost, 0) ELSE 0 END) AS total_cost,
 			SUM(CASE WHEN time_stamp >= ? AND time_stamp < ? THEN COALESCE(total_tokens, 0) ELSE 0 END) AS total_tokens,
 			llms.monthly_budget,
 			llms.budget_start_date
@@ -1174,7 +1179,7 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
 		Select(`
         COALESCE(llm_chat_records.app_id, 0) AS llm_id,
         COALESCE(apps.name, 'Tyk AI Studio Chat') AS name,
-        SUM(CASE WHEN time_stamp >= ? AND time_stamp < ? THEN COALESCE(cost, 0) ELSE 0 END) AS total_cost,
+        SUM(CASE WHEN time_stamp >= ? AND time_stamp < ? AND `+budget.InCurrencySQL+` THEN COALESCE(cost, 0) ELSE 0 END) AS total_cost,
         SUM(CASE WHEN time_stamp >= ? AND time_stamp < ? THEN COALESCE(total_tokens, 0) ELSE 0 END) AS total_tokens,
         apps.monthly_budget,
         apps.budget_start_date,
@@ -1201,7 +1206,9 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
 }
 
 // periodUsage sets each stat's MonthlyUsage, in dollars, to the entity's
-// spend in its current budget period, as budget enforcement counts it: from
+// spend in the budget currency in its current budget period (and
+// OtherCurrency to its spend in other currencies), as budget enforcement
+// counts it: from
 // budget.PeriodStart of its budget_start_date (the 1st of the month when
 // unset or the entity is gone) at now, in server-local time, with no upper
 // bound. column is the llm_chat_records column the stats are grouped by;
@@ -1233,24 +1240,34 @@ func periodUsage(db *gorm.DB, column string, owner interface{}, stats []budgetSt
 		groups[start] = append(groups[start], id)
 	}
 	spent := make(map[uint]float64, len(ids))
+	other := map[uint]map[string]float64{}
 	for start, group := range groups {
 		var rows []struct {
-			ID    uint
-			Total float64
+			ID            uint
+			CurrencyClass string
+			Total         float64
 		}
 		if err := db.Model(&models.LLMChatRecord{}).
-			Select("COALESCE("+column+", 0) AS id, COALESCE(SUM(cost), 0) AS total").
+			Select("COALESCE("+column+", 0) AS id, "+budget.CurrencyClassSQL+" AS currency_class, COALESCE(SUM(cost), 0) AS total").
 			Where("COALESCE("+column+", 0) IN ? AND time_stamp >= ?", group, start).
-			Group("COALESCE(" + column + ", 0)").
+			Group("COALESCE(" + column + ", 0), currency_class").
 			Scan(&rows).Error; err != nil {
 			return err
 		}
 		for _, r := range rows {
-			spent[r.ID] = r.Total
+			if r.CurrencyClass == "" {
+				spent[r.ID] += r.Total
+			} else if r.Total != 0 {
+				if other[r.ID] == nil {
+					other[r.ID] = map[string]float64{}
+				}
+				other[r.ID][r.CurrencyClass] += r.Total / 10000
+			}
 		}
 	}
 	for i := range stats {
 		stats[i].MonthlyUsage = spent[stats[i].LLMID] / 10000
+		stats[i].OtherCurrency = other[stats[i].LLMID]
 	}
 	return nil
 }

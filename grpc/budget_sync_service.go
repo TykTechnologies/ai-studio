@@ -269,7 +269,7 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 
 	// Get all apps with their budget_start_date
 	var apps []models.App
-	if err := s.db.Select("id", "budget_start_date").Find(&apps).Error; err != nil {
+	if err := s.db.Select("id", "budget_start_date", "monthly_budget").Find(&apps).Error; err != nil {
 		logger.Log.Error().Err(err).Msg("Failed to fetch apps for budget sync")
 		return
 	}
@@ -349,6 +349,15 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 			blocks = make(map[uint32]string, len(found))
 			for id, reason := range found {
 				blocks[uint32(id)] = reason
+			}
+			// An App budget whose period has spend in another currency
+			// cannot be enforced; edges refuse it, as Studio does.
+			for _, app := range apps {
+				if other := spend[app.ID].other; other != nil && app.MonthlyBudget != nil && *app.MonthlyBudget > 0 {
+					if _, ok := blocks[uint32(app.ID)]; !ok {
+						blocks[uint32(app.ID)] = budget.MixedCurrencyError("app monthly budget", otherDollars(other)).Error()
+					}
+				}
 			}
 		}
 
@@ -438,14 +447,26 @@ func (s *BudgetSyncService) llmBudgets(now time.Time) (map[uint32]AppBudgetData,
 		// when it starts again (a new month, a budget reset).
 		limit := *llm.MonthlyBudget
 		usages[uint32(llm.ID)] = AppBudgetData{Usage: dollars, PeriodStart: u.start, PeriodEnd: u.end, Limit: &limit}
-		switch budget := *llm.MonthlyBudget; {
-		case budget <= 0:
+		switch limit := *llm.MonthlyBudget; {
+		case limit <= 0:
 			blocks[uint32(llm.ID)] = "LLM monthly budget exceeded (budget is 0)"
-		case dollars >= budget:
+		case u.other != nil:
+			blocks[uint32(llm.ID)] = budget.MixedCurrencyError("LLM monthly budget", otherDollars(u.other)).Error()
+		case dollars >= limit:
 			blocks[uint32(llm.ID)] = "LLM monthly budget exceeded"
 		}
 	}
 	return usages, blocks, nil
+}
+
+// otherDollars converts other-currency spend from cost units to amounts in
+// each currency.
+func otherDollars(other map[string]float64) map[string]float64 {
+	out := make(map[string]float64, len(other))
+	for c, v := range other {
+		out[c] = v / 10000.0
+	}
+	return out
 }
 
 // nextSequence returns a sequence number above both the previous one and

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -43,14 +44,20 @@ type budgetUsageTracker struct {
 type periodSpend struct {
 	start, end time.Time
 	settled    float64 // llm_chat_records cost units (dollars * 10000)
+	// otherSettled is settled spend in currencies other than the budget
+	// currency, which is not counted (budget.Currency), by currency.
+	otherSettled map[string]float64
 }
 
 type periodKey struct{ start, end int64 }
 
 // appPeriodUsage is an App's spend in its current budget period.
 type appPeriodUsage struct {
-	cost       float64 // llm_chat_records cost units (dollars * 10000)
+	cost       float64 // llm_chat_records cost units (dollars * 10000), budget currency only
 	start, end time.Time
+	// other is the spend in other currencies, by currency, in cost units;
+	// nil when there is none. A budget with any cannot be enforced.
+	other map[string]float64
 }
 
 func newBudgetUsageTracker() *budgetUsageTracker {
@@ -136,7 +143,7 @@ func (t *budgetUsageTracker) usageOf(db *gorm.DB, apps []budgetOwner, now time.T
 				return nil, err
 			}
 			for _, id := range chunk {
-				t.totals[id] = &periodSpend{start: g.start, end: g.end, settled: sums[id]}
+				t.totals[id] = &periodSpend{start: g.start, end: g.end, settled: sums[id].budget, otherSettled: sums[id].other}
 			}
 		}
 	}
@@ -154,7 +161,8 @@ func (t *budgetUsageTracker) usageOf(db *gorm.DB, apps []budgetOwner, now time.T
 					return nil, err
 				}
 				for _, id := range g.apps {
-					t.totals[id].settled += sums[id]
+					t.totals[id].settled += sums[id].budget
+					t.totals[id].otherSettled = addOther(t.totals[id].otherSettled, sums[id].other)
 				}
 			}
 			t.settledID = target
@@ -169,7 +177,11 @@ func (t *budgetUsageTracker) usageOf(db *gorm.DB, apps []budgetOwner, now time.T
 			return nil, err
 		}
 		for _, id := range g.apps {
-			usage[id] = appPeriodUsage{cost: t.totals[id].settled + recent[id], start: g.start, end: g.end}
+			p := t.totals[id]
+			usage[id] = appPeriodUsage{
+				cost: p.settled + recent[id].budget, start: g.start, end: g.end,
+				other: addOther(addOther(nil, p.otherSettled), recent[id].other),
+			}
 		}
 	}
 	return usage, nil
@@ -179,10 +191,11 @@ func (t *budgetUsageTracker) usageOf(db *gorm.DB, apps []budgetOwner, now time.T
 // llm_id) within the period start..end (end is the period's last second, so
 // rows up to the next period's start count), for rows with id > afterID and, when bounded,
 // id <= uptoID; optionally only for appIDs. Ids start at 1, so afterID 0 is
-// no lower bound.
-func sumSpend(db *gorm.DB, column string, appIDs []uint, start, end time.Time, afterID, uptoID uint, bounded bool) (map[uint]float64, error) {
+// no lower bound. Spend in the budget currency and in other currencies is
+// summed apart.
+func sumSpend(db *gorm.DB, column string, appIDs []uint, start, end time.Time, afterID, uptoID uint, bounded bool) (map[uint]spendSums, error) {
 	q := db.Model(&models.LLMChatRecord{}).
-		Select(column+" AS app_id, COALESCE(SUM(cost), 0) AS total").
+		Select(column+" AS app_id, "+budget.CurrencyClassSQL+" AS currency_class, COALESCE(SUM(cost), 0) AS total").
 		Where("time_stamp >= ? AND time_stamp < ?", start, end.Add(time.Second))
 	if appIDs != nil {
 		q = q.Where(column+" IN ?", appIDs)
@@ -194,15 +207,44 @@ func sumSpend(db *gorm.DB, column string, appIDs []uint, start, end time.Time, a
 		q = q.Where("id <= ?", uptoID)
 	}
 	var rows []struct {
-		AppID uint
-		Total float64
+		AppID         uint
+		CurrencyClass string
+		Total         float64
 	}
-	if err := q.Group(column).Scan(&rows).Error; err != nil {
+	if err := q.Group(column + ", currency_class").Scan(&rows).Error; err != nil {
 		return nil, err
 	}
-	sums := make(map[uint]float64, len(rows))
+	sums := make(map[uint]spendSums, len(rows))
 	for _, r := range rows {
-		sums[r.AppID] = r.Total
+		s := sums[r.AppID]
+		if r.CurrencyClass == "" {
+			s.budget += r.Total
+		} else {
+			s.other = addOther(s.other, map[string]float64{r.CurrencyClass: r.Total})
+		}
+		sums[r.AppID] = s
 	}
 	return sums, nil
+}
+
+// spendSums is one App's (or LLM's) spend in cost units: in the budget
+// currency, and in other currencies by currency.
+type spendSums struct {
+	budget float64
+	other  map[string]float64
+}
+
+// addOther adds b's amounts to a, allocating a when needed; amounts of 0 are
+// left out.
+func addOther(a, b map[string]float64) map[string]float64 {
+	for c, v := range b {
+		if v == 0 {
+			continue
+		}
+		if a == nil {
+			a = map[string]float64{}
+		}
+		a[c] += v
+	}
+	return a
 }

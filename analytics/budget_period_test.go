@@ -50,3 +50,35 @@ func TestGetBudgetUsage_MonthlyUsageIsTheBudgetPeriod(t *testing.T) {
 	}
 	assert.Equal(t, 2, seen)
 }
+
+// Budget figures count USD only: costs are not converted. Period spend in
+// other currencies is reported apart, for the dashboard to warn about (the
+// budget refuses requests while there is any).
+func TestGetBudgetUsage_OtherCurrenciesReportedApart(t *testing.T) {
+	db := setupStatsTest(t)
+	now := time.Now()
+	limit := 100.0
+	app := models.App{Name: "mixed", MonthlyBudget: &limit}
+	require.NoError(t, db.Create(&app).Error)
+	for _, r := range []struct {
+		cost     float64
+		currency string
+	}{{187400, "USD"}, {10000, ""}, {583200, "EUR"}} {
+		require.NoError(t, db.Create(&models.LLMChatRecord{AppID: app.ID, LLMID: 1, Cost: r.cost, Currency: r.currency, TimeStamp: now.Add(-time.Minute)}).Error)
+	}
+
+	from, to := now.AddDate(0, 0, -1), now
+	usages, err := GetBudgetUsage(db, &from, &to, nil)
+	require.NoError(t, err)
+	var found bool
+	for _, u := range usages {
+		if u.EntityType == "App" && u.EntityID == app.ID {
+			found = true
+			assert.InDelta(t, 19.74, u.Spent, 1e-9)
+			assert.InDelta(t, 19.74, u.TotalCost, 1e-9)
+			assert.InDelta(t, 58.32, u.OtherCurrencySpend["EUR"], 1e-9)
+			assert.Len(t, u.OtherCurrencySpend, 1)
+		}
+	}
+	assert.True(t, found)
+}
