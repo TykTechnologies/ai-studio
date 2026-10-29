@@ -168,21 +168,53 @@ func TestPricingRegression_HubBudgetSyncFollowsRecalculation(t *testing.T) {
 	})
 }
 
-// kq3b.9 at the hub: the budget usage tracker counts USD spend (and rows with
-// no currency) only; EUR spend is not added to the dollars.
-func TestPricingRegression_HubBudgetCountsUSDOnly(t *testing.T) {
+// kq3b.9 at the hub: a budget's currency is implied by its period's spend.
+// An App whose period is all EUR (any case) is counted in EUR and not
+// blocked, rows with no currency count as USD alongside USD, and only an App
+// whose period mixes EUR and USD is blocked, with the reason sent to edges.
+func TestPricingRegression_HubBudgetImpliedCurrency(t *testing.T) {
 	forEachBudgetSyncDB(t, func(t *testing.T, db *gorm.DB) {
-		app := models.App{Name: "mixed"}
-		require.NoError(t, db.Create(&app).Error)
-		now := time.Now()
-		for _, r := range []struct {
+		bus := eventbridge.NewBus()
+		got := make(chan BudgetSyncPayload, 4)
+		bus.Subscribe(BudgetSyncTopic, func(e eventbridge.Event) {
+			var p BudgetSyncPayload
+			if json.Unmarshal(e.Payload, &p) == nil {
+				got <- p
+			}
+		})
+		svc := NewBudgetSyncService(db, bus)
+		svc.SetEdgeBudgetSource(&fakeEdgeBudget{blocks: map[uint]string{}})
+
+		limit := 100.0
+		apps := map[string]*models.App{"eur": {Name: "eur"}, "usd": {Name: "usd"}, "mixed": {Name: "mixed"}}
+		rows := map[string][]struct {
 			cost     float64
 			currency string
-		}{{30000, "USD"}, {10000, ""}, {580000, "EUR"}, {20000, "usd"}} {
-			require.NoError(t, db.Create(&models.LLMChatRecord{AppID: app.ID, LLMID: 1, Cost: r.cost, Currency: r.currency, TimeStamp: now.Add(-time.Minute)}).Error)
+		}{
+			"eur":   {{10000, "EUR"}, {10000, "eur"}},
+			"usd":   {{10000, "USD"}, {10000, ""}},
+			"mixed": {{30000, "USD"}, {580000, "EUR"}},
 		}
-		got, err := newBudgetUsageTracker().usage(db, []models.App{app}, now)
-		require.NoError(t, err)
-		assert.InDelta(t, 60000, got[app.ID].cost, 1e-9, "USD, lower-case usd and no currency; not EUR")
+		now := time.Now()
+		for name, app := range apps {
+			app.MonthlyBudget = &limit
+			require.NoError(t, db.Create(app).Error)
+			for _, r := range rows[name] {
+				require.NoError(t, db.Create(&models.LLMChatRecord{AppID: app.ID, LLMID: 1, Cost: r.cost, Currency: r.currency, TimeStamp: now.Add(-time.Minute)}).Error)
+			}
+		}
+
+		svc.aggregateAndPublish()
+		var p BudgetSyncPayload
+		select {
+		case p = <-got:
+		case <-time.After(5 * time.Second):
+			t.Fatal("no budget sync published")
+		}
+		assert.InDelta(t, 2, p.AppBudgets[uint32(apps["eur"].ID)].Usage, 1e-9, "EUR-only (EUR and eur) counts in EUR")
+		assert.NotContains(t, p.Blocks, uint32(apps["eur"].ID))
+		assert.InDelta(t, 2, p.AppBudgets[uint32(apps["usd"].ID)].Usage, 1e-9, "no currency counts as USD")
+		assert.NotContains(t, p.Blocks, uint32(apps["usd"].ID))
+		assert.Contains(t, p.Blocks[uint32(apps["mixed"].ID)], "spend in EUR, USD", "a mixed period is blocked")
 	})
 }
