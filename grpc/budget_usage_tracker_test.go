@@ -17,7 +17,7 @@ func naiveSpend(t *testing.T, db *gorm.DB, app models.App, now time.Time) float6
 	start, end := calculateBudgetPeriod(app.BudgetStartDate, now)
 	var total float64
 	require.NoError(t, db.Model(&models.LLMChatRecord{}).Select("COALESCE(SUM(cost), 0)").
-		Where("app_id = ? AND time_stamp >= ? AND time_stamp <= ?", app.ID, start, end).Scan(&total).Error)
+		Where("app_id = ? AND time_stamp >= ? AND time_stamp < ?", app.ID, start, end.Add(time.Second)).Scan(&total).Error)
 	return total
 }
 
@@ -55,6 +55,29 @@ func TestBudgetUsageTracker_MatchesFullSum(t *testing.T) {
 			assert.InDelta(t, naiveSpend(t, db, a, now), got[a.ID].cost, 1e-9, "cycle %d app %s", cycle, a.Name)
 		}
 	}
+}
+
+// An anchor on the 31st starts March's period on Feb 28 (not Mar 3, in the
+// future), and a row in the period's last second, after end itself, counts.
+func TestBudgetUsageTracker_ShortMonthAnchorAndLastSecond(t *testing.T) {
+	db := setupBudgetSyncTestDB(t)
+	anchor := time.Date(2026, 1, 31, 0, 0, 0, 0, time.UTC)
+	app := models.App{Name: "anchor31", BudgetStartDate: &anchor}
+	require.NoError(t, db.Create(&app).Error)
+
+	addSpend(t, db, app.ID, 100, time.Date(2026, 2, 27, 23, 59, 59, 0, time.UTC))     // previous period
+	addSpend(t, db, app.ID, 200, time.Date(2026, 2, 28, 0, 0, 0, 0, time.UTC))        // first instant
+	addSpend(t, db, app.ID, 400, time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC))         // the day of the check
+	addSpend(t, db, app.ID, 800, time.Date(2026, 3, 30, 23, 59, 59, 500e6, time.UTC)) // last second, after end
+	addSpend(t, db, app.ID, 1600, time.Date(2026, 3, 31, 0, 0, 0, 0, time.UTC))       // next period
+
+	now := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	got, err := newBudgetUsageTracker().usage(db, []models.App{app}, now)
+	require.NoError(t, err)
+	u := got[app.ID]
+	assert.Equal(t, time.Date(2026, 2, 28, 0, 0, 0, 0, time.UTC), u.start)
+	assert.Equal(t, time.Date(2026, 3, 30, 23, 59, 59, 0, time.UTC), u.end)
+	assert.InDelta(t, 1400, u.cost, 1e-9)
 }
 
 // After the first cycle the full period is not summed again: later cycles only

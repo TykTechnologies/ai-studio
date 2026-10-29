@@ -105,6 +105,7 @@ graph TD
     *   `GET /model-prices/by-vendor?vendor=X`: Get prices for a specific vendor.
     *   `GET /model-prices/by-name?model_name=Y`: Get or create a price by model name.
     *   `PATCH /model-prices/{id}/recalculate`: Update a price and recalculate historical costs.
+        It emits `system.model_price.updated`, as the standard update does, so edges are flagged for a config push (they price new traffic at the new price once synced) and subscribed plugins are notified. The recalculation reprices the hub's `llm_chat_records` only: an edge's own `analytics_events` and `budget_usages` copies keep the costs they were recorded with.
 
 **4. Use Cases & Behavior**
 

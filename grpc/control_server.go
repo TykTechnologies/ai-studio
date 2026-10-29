@@ -1848,7 +1848,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 				currentPeriodUsage = usage
 			} else if err := s.db.Model(&models.LLMChatRecord{}).
 				Select("COALESCE(SUM(cost), 0)").
-				Where("app_id = ? AND time_stamp >= ? AND time_stamp <= ?", app.ID, periodStart, periodEnd).
+				Where("app_id = ? AND time_stamp >= ? AND time_stamp < ?", app.ID, periodStart, periodEnd.Add(time.Second)).
 				Scan(&totalCostCents).Error; err != nil {
 				logger.Log.Warn().Err(err).Uint("app_id", app.ID).Msg("Failed to calculate current period usage for app")
 			} else {

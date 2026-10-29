@@ -174,13 +174,14 @@ func (t *budgetUsageTracker) usageOf(db *gorm.DB, apps []budgetOwner, now time.T
 }
 
 // sumSpend sums llm_chat_records cost per App (per column: app_id or
-// llm_id) within [start, end], for rows with id > afterID and, when bounded,
+// llm_id) within the period start..end (end is the period's last second, so
+// rows up to the next period's start count), for rows with id > afterID and, when bounded,
 // id <= uptoID; optionally only for appIDs. Ids start at 1, so afterID 0 is
 // no lower bound.
 func sumSpend(db *gorm.DB, column string, appIDs []uint, start, end time.Time, afterID, uptoID uint, bounded bool) (map[uint]float64, error) {
 	q := db.Model(&models.LLMChatRecord{}).
 		Select(column+" AS app_id, COALESCE(SUM(cost), 0) AS total").
-		Where("time_stamp >= ? AND time_stamp <= ?", start, end)
+		Where("time_stamp >= ? AND time_stamp < ?", start, end.Add(time.Second))
 	if appIDs != nil {
 		q = q.Where(column+" IN ?", appIDs)
 	}
