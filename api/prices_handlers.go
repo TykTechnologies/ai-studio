@@ -1,10 +1,13 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -37,13 +40,15 @@ func validatePricePlausibility(attrs struct {
 }
 
 // @Summary Create a new model price
-// @Description Create a new model price with the provided information
+// @Description Create a new model price with the provided information. Traffic auto-creates an unpriced (all zero) price for every model it sees; when the model and vendor have one, it is filled in and 200 is returned. When they already have a priced row, 409 names it.
 // @Tags model-prices
 // @Accept json
 // @Produce json
 // @Param modelPrice body ModelPriceInput true "Model Price information"
+// @Success 200 {object} ModelPriceResponse
 // @Success 201 {object} ModelPriceResponse
 // @Failure 400 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /model-prices [post]
 // @Security BearerAuth
@@ -109,7 +114,7 @@ func (a *API) createModelPrice(c *gin.Context) {
 		return
 	}
 
-	modelPrice, err := a.service.CreateModelPrice(
+	modelPrice, filled, err := a.service.CreateOrFillModelPrice(
 		input.Data.Attributes.ModelName,
 		input.Data.Attributes.Vendor,
 		input.Data.Attributes.CPT,
@@ -118,6 +123,16 @@ func (a *API) createModelPrice(c *gin.Context) {
 		input.Data.Attributes.CacheReadPT,
 		input.Data.Attributes.Currency,
 	)
+	var exists *services.ModelPriceExistsError
+	if errors.As(err, &exists) {
+		c.JSON(http.StatusConflict, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Conflict", Detail: exists.Error()}},
+		})
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -125,6 +140,15 @@ func (a *API) createModelPrice(c *gin.Context) {
 				Detail string `json:"detail"`
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
 		})
+		return
+	}
+
+	// The model's unpriced row (auto-created by traffic) was filled in.
+	if filled {
+		if a.service.SystemEvents != nil {
+			a.service.SystemEvents.EmitModelPriceUpdated(modelPrice, modelPrice.ID, 0)
+		}
+		c.JSON(http.StatusOK, gin.H{"data": serializeModelPrice(modelPrice)})
 		return
 	}
 
@@ -339,9 +363,106 @@ func (a *API) getAllModelPrices(c *gin.Context) {
 		return
 	}
 
+	unpriced, err := a.service.CountUnpricedHistory(modelPrices)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Internal Server Error", Detail: err.Error()}},
+		})
+		return
+	}
+	data := serializeModelPrices(modelPrices)
+	for i := range data {
+		data[i].Meta = &ModelPriceMeta{UnpricedRows: unpriced[modelPrices[i].ID]}
+	}
+
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, gin.H{"data": serializeModelPrices(modelPrices)})
+	c.JSON(http.StatusOK, gin.H{"data": data})
+}
+
+// @Summary Backfill a model price's unpriced history
+// @Description Price the chat records this price prices that were recorded at no cost (traffic from before the model had a price), at the current price, optionally only within a date range (inclusive dates, UTC). Records that have a cost are left alone; to reprice those, use PATCH /model-prices/{id}/recalculate.
+// @Tags model-prices
+// @Accept json
+// @Produce json
+// @Param id path int true "Model Price ID"
+// @Param range body BackfillModelPriceInput false "Optional date range"
+// @Success 200 {object} BackfillModelPriceResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /model-prices/{id}/backfill [post]
+// @Security BearerAuth
+func (a *API) backfillModelPriceHistory(c *gin.Context) {
+	fail := func(status int, title, detail string) {
+		c.JSON(status, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: title, Detail: detail}},
+		})
+	}
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		fail(http.StatusBadRequest, "Bad Request", "Invalid model price ID")
+		return
+	}
+
+	var input BackfillModelPriceInput
+	if c.Request.ContentLength != 0 {
+		if err := c.ShouldBindJSON(&input); err != nil {
+			fail(http.StatusBadRequest, "Bad Request", err.Error())
+			return
+		}
+	}
+	// The range is inclusive dates: to is the end of its day.
+	var from, to *time.Time
+	if input.From != "" {
+		d, err := time.Parse(time.DateOnly, input.From)
+		if err != nil {
+			fail(http.StatusBadRequest, "Bad Request", "from must be a date (YYYY-MM-DD)")
+			return
+		}
+		from = &d
+	}
+	if input.To != "" {
+		d, err := time.Parse(time.DateOnly, input.To)
+		if err != nil {
+			fail(http.StatusBadRequest, "Bad Request", "to must be a date (YYYY-MM-DD)")
+			return
+		}
+		d = d.AddDate(0, 0, 1)
+		to = &d
+	}
+	if from != nil && to != nil && !from.Before(*to) {
+		fail(http.StatusBadRequest, "Bad Request", "from must not be after to")
+		return
+	}
+
+	rows, err := a.service.BackfillUnpricedHistory(uint(id), from, to)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		fail(http.StatusNotFound, "Not Found", "Model price not found")
+		return
+	}
+	if err != nil {
+		fail(http.StatusInternalServerError, "Internal Server Error", err.Error())
+		return
+	}
+	modelPrice, err := a.service.GetModelPriceByID(uint(id))
+	if err != nil {
+		fail(http.StatusInternalServerError, "Internal Server Error", err.Error())
+		return
+	}
+	// kq3b.3/kq3b.8 (dev-2): budget tracker invalidation and the price event
+	// for changed history go here, as after a recalculation.
+
+	var resp BackfillModelPriceResponse
+	resp.Data.RowsPriced = rows
+	resp.Data.ModelPrice = serializeModelPrice(modelPrice)
+	c.JSON(http.StatusOK, resp)
 }
 
 // @Summary Get model prices by vendor

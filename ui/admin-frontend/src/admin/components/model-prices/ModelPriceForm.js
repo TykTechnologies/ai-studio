@@ -422,7 +422,7 @@ const ModelPriceForm = () => {
             <DialogTitle>confirm recalculation</DialogTitle>
             <DialogContent>
               <DialogContentText>
-                this will update the model price and recalculate costs for all historical chat records using this model. this action should only be used if the previous price was incorrect and you want to fix historical records. if the price has changed due to vendor updates, use the standard "update model price" button instead.
+                this will update the model price and recalculate costs for all historical chat records using this model. this action should only be used if the previous price was incorrect and you want to fix historical records. if the price has changed due to vendor updates, use the standard "update model price" button instead. to price only requests recorded before the model had a price, use "backfill unpriced history" on the model prices list.
               </DialogContentText>
             </DialogContent>
             <DialogActions>

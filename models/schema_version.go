@@ -100,7 +100,10 @@ const (
 	// 29: llm_chat_records.requested_model (nullable, additive): the model
 	//     the caller asked for, so a recalculation of its price reaches rows
 	//     the vendor reported under a versioned name (midsommar-clean-kq3b.1).
-	SchemaVersion          = 29
+	// 30: llm_chat_records.price_multiplier (nullable, additive): the
+	//     multiple of list price a row was billed at, kept by price
+	//     recalculations (midsommar-clean-kq3b.7).
+	SchemaVersion          = 30
 	MinReaderSchemaVersion = 26
 )
 

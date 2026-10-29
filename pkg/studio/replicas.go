@@ -285,9 +285,11 @@ func (s *Studio) watchRelayedChanges(bus eventbridge.Bus) {
 		}
 	})
 	removeSignal := replicas.OnSignal(replicas.SignalBudgets, rc.clearBudgets.trigger)
+	removeRecalc := replicas.OnSignal(replicas.SignalSpendRecalculated, rc.clearBudgets.trigger)
 	rc.unsubscribe = func() {
 		bus.Unsubscribe(sub)
 		removeSignal()
+		removeRecalc()
 	}
 	s.relayed = rc
 }

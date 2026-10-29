@@ -155,3 +155,42 @@ func TestUpdateModelPriceAndRecalculate_RepricesRowsRequestedByName(t *testing.T
 		assert.Zero(t, recordCost(t, s, legacy).Cost)
 	})
 }
+
+// A row's price multiplier survives a recalculation through a zero price:
+// stored on new rows, and recorded from the cost ratio on older rows the
+// first time a recalculation can see it.
+func TestUpdateModelPriceAndRecalculate_KeepsMultiplierThroughZeroPrice(t *testing.T) {
+	forEachRecalcDB(t, func(t *testing.T, s *Service, model string) {
+		vendor := string(models.ANTHROPIC)
+		p1 := models.ModelPrice{ModelName: model, Vendor: vendor, Currency: "USD", CPIT: 0.000003, CPT: 0.000015}
+		require.NoError(t, p1.Create(s.DB))
+		p2 := models.ModelPrice{CPIT: 0.000002, CPT: 0.000010}
+
+		tk := recalcTokens{prompt: 5000, response: 2000}
+		stored := func(mult float64) uint {
+			id := createRecalcRecord(t, s, model, vendor, tk, tk.listCost(vendor, p1)*mult)
+			require.NoError(t, s.DB.Model(&models.LLMChatRecord{}).Where("id = ?", id).Update("price_multiplier", mult).Error)
+			return id
+		}
+		batch := stored(0.5)
+		free := stored(0)
+		// An older row: no stored multiplier, billed at 0.6x.
+		legacy := createRecalcRecord(t, s, model, vendor, tk, tk.listCost(vendor, p1)*0.6)
+
+		reprice := func(p models.ModelPrice) {
+			_, err := s.UpdateModelPriceAndRecalculate(p1.ID, model, vendor, p.CPT, p.CPIT, 0, 0, "USD")
+			require.NoError(t, err)
+		}
+		reprice(p2)
+		reprice(models.ModelPrice{})
+		assert.Zero(t, recordCost(t, s, batch).Cost)
+		reprice(p2)
+
+		assert.InDelta(t, tk.listCost(vendor, p2)*0.5, recordCost(t, s, batch).Cost, 1e-9)
+		assert.Zero(t, recordCost(t, s, free).Cost, "a 0x multiplier stays free")
+		got := recordCost(t, s, legacy)
+		assert.InDelta(t, tk.listCost(vendor, p2)*0.6, got.Cost, 1e-9, "the older row's ratio was recorded before the zero price")
+		require.NotNil(t, got.PriceMultiplier)
+		assert.InDelta(t, 0.6, *got.PriceMultiplier, 1e-12)
+	})
+}

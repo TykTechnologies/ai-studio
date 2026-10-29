@@ -77,6 +77,14 @@ type BudgetSyncPayload struct {
 	LLMBudgets  map[uint32]AppBudgetData `json:"llm_budgets,omitempty"`
 	LLMBlocks   map[uint32]string        `json:"llm_blocks,omitempty"`
 	LLMIncluded bool                     `json:"llm_included,omitempty"`
+
+	// SpendRecalculated is set on the first sync after a price
+	// recalculation rewrote stored costs. AppBudgets then names every App
+	// (unspent ones too), and edges take its figures, and LLMBudgets', as
+	// they are, even when lower than their own: normally they only raise,
+	// and an App blocked at the old, higher price stayed blocked. Edges
+	// before this field ignore it and keep only raising.
+	SpendRecalculated bool `json:"spend_recalculated,omitempty"`
 }
 
 // EdgeBudgetSource is the Enterprise budget service as the budget sync sees
@@ -110,6 +118,10 @@ type BudgetSyncService struct {
 	lastUsage map[uint32]float64
 	// stopLeading removes the leadership handler.
 	stopLeading func()
+	// recalculated is set by a price recalculation (on any replica): the
+	// next cycle re-sums spend from scratch and tells edges they may lower.
+	recalculated atomic.Bool
+	stopRecalc   func()
 }
 
 // SetEdgeBudgetSource makes every sync carry budget blocks and analyse
@@ -159,6 +171,7 @@ func (s *BudgetSyncService) Start() {
 	// predecessor held the lease a moment longer) syncs at once instead of
 	// leaving edges on stale blocks for up to an interval.
 	becameLeader := make(chan struct{}, 1)
+	s.stopRecalc = replicas.OnSignal(replicas.SignalSpendRecalculated, func() { s.recalculated.Store(true) })
 	s.stopLeading = replicas.OnLeading(func() {
 		select {
 		case becameLeader <- struct{}{}:
@@ -219,6 +232,9 @@ func (s *BudgetSyncService) Stop() {
 	if s.stopLeading != nil {
 		s.stopLeading()
 	}
+	if s.stopRecalc != nil {
+		s.stopRecalc()
+	}
 	if s.cancel != nil {
 		s.cancel()
 		// Wait for goroutine to finish
@@ -258,6 +274,14 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 		return
 	}
 
+	// The trackers fold rows into settled totals once and never re-read
+	// them; after a recalculation rewrote costs, start them again.
+	recalculated := s.recalculated.Swap(false)
+	if recalculated {
+		s.usage = newBudgetUsageTracker()
+		s.llmUsage = newLLMBudgetUsageTracker()
+	}
+
 	// Build per-app budget data with custom periods
 	appBudgets := make(map[uint32]AppBudgetData)
 	appUsages := make(map[uint32]float64) // Legacy field for backwards compatibility
@@ -288,8 +312,9 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 		// Convert from stored format (dollars * 10000) to dollars
 		usageDollars := u.cost / 10000.0
 
-		// Only include apps with usage > 0
-		if usageDollars > 0 {
+		// Only include apps with usage > 0, except after a recalculation,
+		// when edges must hear of spend that went down to 0 too.
+		if usageDollars > 0 || recalculated {
 			appBudgets[uint32(app.ID)] = AppBudgetData{
 				Usage:       usageDollars,
 				PeriodStart: periodStart,
@@ -356,28 +381,32 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 	}
 
 	// Skip publishing if there is nothing to sync
-	if len(appBudgets) == 0 && !blocksIncluded && !llmIncluded {
+	if len(appBudgets) == 0 && !blocksIncluded && !llmIncluded && !recalculated {
 		logger.Log.Debug().Msg("No budget usage data to sync")
 		return
 	}
 
 	payload := BudgetSyncPayload{
-		Blocks:           blocks,
-		BlocksIncluded:   blocksIncluded,
-		LLMBudgets:       llmBudgets,
-		LLMBlocks:        llmBlocks,
-		LLMIncluded:      llmIncluded,
-		AppUsages:        appUsages,           // Legacy field
-		AppBudgets:       appBudgets,          // New per-app periods
-		PeriodStart:      calendarPeriodStart, // Legacy field
-		PeriodEnd:        calendarPeriodEnd,   // Legacy field
-		ControlTimestamp: now,
-		SequenceNumber:   s.nextSequence(),
+		Blocks:            blocks,
+		BlocksIncluded:    blocksIncluded,
+		LLMBudgets:        llmBudgets,
+		LLMBlocks:         llmBlocks,
+		LLMIncluded:       llmIncluded,
+		AppUsages:         appUsages,           // Legacy field
+		AppBudgets:        appBudgets,          // New per-app periods
+		PeriodStart:       calendarPeriodStart, // Legacy field
+		PeriodEnd:         calendarPeriodEnd,   // Legacy field
+		ControlTimestamp:  now,
+		SequenceNumber:    s.nextSequence(),
+		SpendRecalculated: recalculated,
 	}
 
 	// Publish via event bridge (DirDown = control to edges)
 	if err := eventbridge.PublishDown(s.eventBus, "control", BudgetSyncTopic, payload); err != nil {
 		logger.Log.Error().Err(err).Msg("Failed to publish budget sync event")
+		if recalculated {
+			s.recalculated.Store(true) // tell edges at the next cycle
+		}
 		return
 	}
 

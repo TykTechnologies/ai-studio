@@ -154,6 +154,12 @@ func InitModels(db *gorm.DB) error {
 		return err
 	}
 
+	// Migration: price deletes are permanent now; remove the rows earlier
+	// versions soft-deleted, which block re-creating those prices.
+	if err := PurgeSoftDeletedModelPrices(db); err != nil {
+		return err
+	}
+
 	// Migration: budgets of 0 meant "no limit"; now nil does (runs once).
 	if err := ClearLegacyZeroBudgets(db); err != nil {
 		return err
