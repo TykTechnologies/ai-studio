@@ -17,6 +17,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/pkg/modelmatch"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 	"github.com/gosimple/slug"
@@ -414,11 +415,14 @@ func stripLoopbackMarkers(h http.Header) {
 	stripAuthHandoffHeaders(h)
 }
 
-// stripFailoverHeaders removes the loopback markers and the client's
-// instructions to gateway plugins (X-Tyk-Compression) before a request
-// leaves for the vendor.
+// stripFailoverHeaders removes the loopback markers, the request ids the
+// loopback hop carries (or a client sent) and the client's instructions to
+// gateway plugins (X-Tyk-Compression) before a request leaves for the
+// vendor. The caller's own X-Request-ID is passed through.
 func stripFailoverHeaders(h http.Header) {
 	stripLoopbackMarkers(h)
+	h.Del(requestid.Header)
+	h.Del(hdrInternalClientRequestID)
 	stripCompressionHeaders(h)
 }
 

@@ -46,6 +46,31 @@ func TestRequestID_OneIDPerRequestAcrossTheLoopbackAndFailover(t *testing.T) {
 	// A second request gets its own id.
 	resp2, _ := h.post("/ai/primary/v1/chat/completions", failoverChatBody)
 	assert.NotEqual(t, id, resp2.Header.Get(requestid.Header))
+
+	// The ids the loopback hop carries never reach the vendor.
+	for _, c := range append(h.primaryVendor.calls(), h.fallbackVendor.calls()...) {
+		assert.Empty(t, c.Headers.Get(requestid.Header), "loopback request id sent to the vendor")
+		assert.Empty(t, c.Headers.Get(hdrInternalClientRequestID), "loopback client request id sent to the vendor")
+	}
+}
+
+// On a direct call the caller's X-Request-ID is passed through to the
+// vendor, but a forged gateway id header is not.
+func TestRequestID_DirectCallSendsOnlyTheClientIDUpstream(t *testing.T) {
+	t.Parallel()
+	h := newFailoverHarness(t, serveOpenAIText("ok"), serveOpenAIText("unused"), nil)
+
+	resp, body := h.post("/llm/rest/primary/v1/chat/completions", failoverChatBody,
+		requestid.ClientHeader, "lb-direct",
+		requestid.Header, "tyai_00000000000000000000000000000000",
+		hdrInternalClientRequestID, "forged")
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+
+	calls := h.primaryVendor.calls()
+	require.Len(t, calls, 1)
+	assert.Equal(t, "lb-direct", calls[0].Headers.Get(requestid.ClientHeader))
+	assert.Empty(t, calls[0].Headers.Get(requestid.Header))
+	assert.Empty(t, calls[0].Headers.Get(hdrInternalClientRequestID))
 }
 
 func TestRequestIDs_TrustsTheHopOnlyFromTheLoopbackHop(t *testing.T) {
