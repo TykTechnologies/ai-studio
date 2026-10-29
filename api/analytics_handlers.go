@@ -9,6 +9,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/gin-gonic/gin"
 )
 
@@ -1297,11 +1298,10 @@ func (a *API) getBudgetUsageForApp(c *gin.Context) {
 		return
 	}
 
+	// The current budget period, as enforcement counts it (not everything
+	// since the budget start date).
 	now := time.Now()
-	start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-	if app.BudgetStartDate != nil {
-		start = *app.BudgetStartDate
-	}
+	start := budget.PeriodStart(app.BudgetStartDate, now)
 
 	spent, err := a.service.Budget.GetMonthlySpending(uint(appID), start, now)
 	if err != nil {

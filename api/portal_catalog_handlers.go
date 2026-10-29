@@ -969,10 +969,12 @@ func (a *API) getPortalCatalogPluginResource(c *gin.Context) {
 // AppUsageSummary is one app's budget position and recent activity for the
 // portal overview.
 type AppUsageSummary struct {
-	AppID           string     `json:"app_id"`
-	CurrentSpend    float64    `json:"current_spend"`
-	MonthlyBudget   *float64   `json:"monthly_budget"`
-	Percentage      *float64   `json:"percentage"`
+	AppID         string   `json:"app_id"`
+	CurrentSpend  float64  `json:"current_spend"`
+	MonthlyBudget *float64 `json:"monthly_budget"`
+	Percentage    *float64 `json:"percentage"`
+	// BudgetStartDate is the start of the current budget period, which
+	// CurrentSpend covers.
 	BudgetStartDate time.Time  `json:"budget_start_date"`
 	LastAccessAt    *time.Time `json:"last_access_at"`
 	Requests30d     int64      `json:"requests_30d"`
@@ -1010,10 +1012,8 @@ func (a *API) getUserAppsUsageSummary(c *gin.Context) {
 	windows := make([]analytics.AppSpendWindow, 0, len(apps))
 	starts := make(map[uint]time.Time, len(apps))
 	for _, app := range apps {
-		start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-		if app.BudgetStartDate != nil {
-			start = *app.BudgetStartDate
-		}
+		// The current budget period, as enforcement counts it.
+		start := budget.PeriodStart(app.BudgetStartDate, now)
 		appIDs = append(appIDs, app.ID)
 		windows = append(windows, analytics.AppSpendWindow{AppID: app.ID, Start: start})
 		starts[app.ID] = start
