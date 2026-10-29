@@ -161,6 +161,7 @@ This changes what plugins and filter scripts see for Bedrock traffic. Read the [
 - **LLM credentials are encrypted at rest.** API keys and credential fields (such as Bedrock's AWS keys) are encrypted with `TYK_AI_SECRET_KEY`. They are no longer copied into events, object hooks, SQL logs or the edge database in plain text.
 - **Credentials stay out of events and hooks.** Tool auth keys, datasource connection strings, user password hashes and tokens, App gateway keys and guardrail secrets now appear as `[redacted]` in system events and object hooks.
 - **Guardrail provider credentials reach edges encrypted**, like LLM keys.
+- **Plugin source lockdown.** `AI_STUDIO_PLUGIN_ALLOWED_SOURCES` and `PLUGINS_ALLOWED_SOURCES` restrict which plugin deployment types (`oci`, `file`, `grpc`) AI Studio and each edge accept. See the [plugin security guide](docs/site/docs/plugins-security.md#hardening-restrict-plugin-sources).
 - **Chat no longer loads images from model responses by default.** A prompt injection could otherwise make the user's browser send data to any address through an image URL. Turn on **Render images in responses** for chats that should show images.
 - **One App can't use another App's OpenAI responses, conversations or batches.** Ids are tied to the App that created them.
 - **Requests that filters and the vendor could read differently are refused.** This covers duplicate JSON keys, keys differing only in case, ambiguous multipart uploads and alternative path spellings. Otherwise a filter could screen one prompt while the vendor received another.
@@ -427,7 +428,7 @@ No new setting is required to run 2.3. Defaults that changed are listed in [Upgr
 | `PLUGIN_GRPC_MAX_MSG_BYTES` | `67108864` (64 MiB) | Largest message between the host and its plugins |
 | `DB_LOG_SQL_PARAMS` | `false` | Log SQL values (local debugging only) |
 
-The Helm chart adds `config.logLevel` (AI Studio's `LOG_LEVEL`).
+The Helm chart adds `config.logLevel` (AI Studio's `LOG_LEVEL`), and `config.pluginAllowedSources` (AI Studio) and `config.pluginsAllowedSources` (Microgateway chart) for the plugin sources below.
 
 **Plugin signatures** (Enterprise; an invalid value stops startup):
 
@@ -436,6 +437,12 @@ The Helm chart adds `config.logLevel` (AI Studio's `LOG_LEVEL`).
 | `AI_STUDIO_OCI_REQUIRE_SIGNATURE` / `OCI_PLUGINS_REQUIRE_SIGNATURE` | `true` / `true` | Require a valid signature on OCI plugins (AI Studio's default was `false`) |
 | `AI_STUDIO_OCI_TLOG_POLICY` / `OCI_PLUGINS_TLOG_POLICY` | `required` | `required`, `optional` (checked when present) or `disabled` (key only) |
 | `AI_STUDIO_OCI_TRUSTED_ROOT_FILE` / `OCI_PLUGINS_TRUSTED_ROOT_FILE` | empty | A Sigstore `trusted_root.json` for a private Sigstore deployment |
+
+**Plugin sources** (an invalid value stops startup):
+
+| Variable (AI Studio / Microgateway) | Default | Purpose |
+|---|---|---|
+| `AI_STUDIO_PLUGIN_ALLOWED_SOURCES` / `PLUGINS_ALLOWED_SOURCES` | empty (all) | Plugin deployment types accepted: `oci`, `file`, `grpc` (comma-separated). An edge applies its own list to the plugins AI Studio pushes |
 
 **Agent Call Tracing** (Enterprise): `AGENT_TRACING_*` settings, all off by default. The [agent tracing guide](docs/site/docs/agent-tracing.md) lists them. The content ceiling and default mode (`AGENT_TRACING_CONTENT_CEILING`, `AGENT_TRACING_CONTENT_DEFAULT_MODE`) can only be set in the environment; the console shows them read-only. An invalid content mode is read as `off`.
 
