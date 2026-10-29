@@ -293,6 +293,7 @@ func (s *Service) UpdateModelPriceAndRecalculate(id uint, modelName, vendor stri
 	if err != nil {
 		return nil, err
 	}
+	s.spendRecalculated()
 
 	return modelPrice, nil
 }
