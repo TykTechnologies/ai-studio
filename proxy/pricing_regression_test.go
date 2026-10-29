@@ -444,3 +444,100 @@ func TestPricingRegression_RecalcVolume(t *testing.T) {
 		assertRel(t, otherRec.Cost*100, total, 1e-12, "another model is not repriced")
 	})
 }
+
+// findOrCreatePrice is the price row the admin edits for name: the one
+// traffic already created, or a new one.
+func (e *stressEnv) findOrCreatePrice(t *testing.T, name string, vendor models.Vendor) *models.ModelPrice {
+	t.Helper()
+	var p models.ModelPrice
+	err := e.db.Where("model_name = ? AND vendor = ?", name, string(vendor)).First(&p).Error
+	if err == nil {
+		return &p
+	}
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	created, err := e.svc.CreateModelPrice(name, string(vendor), 0, 0, 0, 0, "USD")
+	require.NoError(t, err)
+	return created
+}
+
+// kq3b.1: the gateway records traffic under the name the vendor reports
+// (gemini-2.0-flash-001) and prices it by the requested name
+// (gemini-2.0-flash) when the reported one is unpriced. Recalculating the
+// requested name's price reprices that history too, on every day.
+func TestPricingRegression_RecalcOnRequestedName(t *testing.T) {
+	mixAll := append(append([]stressModel{}, geminiMix...), otherVendors[0]) // three versioned names
+	cases := []struct {
+		name string
+		// pricedFrom is the price on the requested name while the history
+		// is recorded (nil: unpriced, the customer case).
+		pricedFrom func(m stressModel) *models.ModelPrice
+	}{
+		{"unpriced history, price set with recalculate", func(stressModel) *models.ModelPrice { return nil }},
+		{"priced history, price changed with recalculate", func(m stressModel) *models.ModelPrice {
+			p := m.price
+			p.CPT, p.CPIT, p.CacheReadPT = p.CPT*3, p.CPIT*3, p.CacheReadPT*3
+			return &p
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			forEachPricingDB(t, func(t *testing.T, db *gorm.DB) {
+				days, mix := pricingScale(mixAll)
+				env := newStressEnvOn(t, db, days)
+				for _, m := range mix {
+					if p := c.pricedFrom(m); p != nil {
+						_, err := env.svc.CreateModelPrice(m.requested, string(m.vendor), p.CPT, p.CPIT, p.CacheWritePT, p.CacheReadPT, p.Currency)
+						require.NoError(t, err)
+					}
+				}
+				env.recordDays(t, mix, 0, days)
+				for _, m := range mix {
+					if p := c.pricedFrom(m); p != nil {
+						assertRel(t, m.dayCostAt(*p), env.modelCostByDay(t, m.reported)[env.dayLabel(0)], 1e-9,
+							"%s recorded at the requested name's price", m.reported)
+					}
+				}
+
+				for _, m := range mix {
+					row := env.findOrCreatePrice(t, m.requested, m.vendor)
+					p := m.price
+					_, err := env.svc.UpdateModelPriceAndRecalculate(row.ID, m.requested, string(m.vendor), p.CPT, p.CPIT, p.CacheWritePT, p.CacheReadPT, p.Currency)
+					require.NoError(t, err)
+				}
+
+				for _, m := range mix {
+					got := env.modelCostByDay(t, m.reported)
+					for d := 0; d < days; d++ {
+						assertRel(t, m.dayCost(), got[env.dayLabel(d)], 1e-9, "%s on day %d after recalculating %s", m.reported, d, m.requested)
+					}
+				}
+				assertRel(t, mixDayCost(mix)*float64(days), env.costByDay(t).total, 1e-9, "history total at the new prices")
+			})
+		})
+	}
+}
+
+// kq3b.1 boundary: a reported name with a price of its own is priced by that
+// row, so recalculating the requested name leaves it alone.
+func TestPricingRegression_RecalcOnRequestedNameSkipsPricedReported(t *testing.T) {
+	forEachPricingDB(t, func(t *testing.T, db *gorm.DB) {
+		days, mix := pricingScale(otherVendors[:1]) // gpt-4o reported as gpt-4o-2024-08-06
+		m := mix[0]
+		env := newStressEnvOn(t, db, days)
+		env.createPrices(t, mix) // on the reported name
+		alias, err := env.svc.CreateModelPrice(m.requested, string(m.vendor), m.price.CPT*2, m.price.CPIT*2, 0, m.price.CacheReadPT*2, "USD")
+		require.NoError(t, err)
+		env.recordDays(t, mix, 0, days)
+
+		_, err = env.svc.UpdateModelPriceAndRecalculate(alias.ID, m.requested, string(m.vendor), m.price.CPT*5, m.price.CPIT*5, 0, m.price.CacheReadPT*5, "EUR")
+		require.NoError(t, err)
+
+		got := env.modelCostByDay(t, m.reported)
+		for d := 0; d < days; d++ {
+			assertRel(t, m.dayCost(), got[env.dayLabel(d)], 1e-9, "day %d stays at the reported name's price", d)
+		}
+		var currencies []string
+		require.NoError(t, env.db.Model(&models.LLMChatRecord{}).Distinct("currency").Where("name = ?", m.reported).Pluck("currency", &currencies).Error)
+		assert.Equal(t, []string{"USD"}, currencies)
+	})
+}
