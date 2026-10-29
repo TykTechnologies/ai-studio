@@ -28,7 +28,7 @@ AI Studio 2.3 is built for teams running AI agents. You can now **see what your 
 5. **Upgrade the shipped plugins** to their 2.3.0 versions, and rebuild your own request-path plugins on the 2.3 SDK. [Details](#plugins) and [Plugin releases](#plugin-releases).
 6. **Existing guardrails start scanning tool results** (Enterprise), and remote guardrail providers start receiving tool output. [Details](#guardrails).
 7. **Upgrade edges together with AI Studio.** Several features and credential changes need both on 2.3. [Details](#edges).
-8. **Take a database backup.** Once 2.3 has migrated a database, older AI Studio versions refuse it, so rolling back means restoring the backup. [Details](#database).
+8. **Take a database backup.** Restoring it is the only way to roll back. An older AI Studio still starts on a database 2.3 has migrated, but its LLMs with literal keys then fail. [Details](#database).
 9. **Set `TYK_AI_SECRET_KEY`** if you use SSO, and so that LLM credentials are encrypted at rest. [Details](#credentials-and-secrets).
 10. **Using the quickstart?** Replace its placeholder secrets before the first start. [Details](#other-changes-in-behaviour).
 
@@ -373,8 +373,11 @@ After the upgrade:
 
 ### Database
 
-- **Rolling back needs a backup.** A 2.3 database can't be opened by an older AI Studio, including a headless replica sharing the database. Take a backup before upgrading, and upgrade replicas together.
+- **Rolling back means restoring the backup.** Take a backup before upgrading. An older AI Studio does not refuse a database 2.3 has migrated: it starts with one warning (`The database schema is version 28 …, newer than this build's …; keeping the newer record`) and sends the encrypted form of every literal LLM key as the key itself, to vendors and to edges, so those calls fail with `401`. LLMs keyed with `$SECRET/` or `$ENV/` references keep working. Only an older headless replica refuses the database. To roll back, stop AI Studio and restore the backup; anything changed since the upgrade is lost.
+- **Upgrade replicas together.** Stop every older AI Studio replica before the first 2.3 replica starts. An older full replica sharing the database joins the cluster, can become the leader, and serves the encrypted keys. The Helm chart's default `Recreate` strategy does this; don't use `RollingUpdate` for the upgrade to 2.3.
 - **SQLite runs in WAL mode.** `-wal` and `-shm` files appear next to the database, so its directory must be writable. On network filesystems (NFS, SMB), set `_journal_mode=DELETE` in `DATABASE_URL`.
+  - To back up a running 2.3 SQLite database, use `sqlite3 midsommar.db ".backup backup.db"` (or `VACUUM INTO`). A copy of the database file alone misses the changes still in the `-wal` file. A 2.2 database has no `-wal` file, so a copy of it taken with 2.2 stopped is complete.
+  - To restore a SQLite backup, stop AI Studio, delete `midsommar.db-wal` and `midsommar.db-shm`, then copy the backup over `midsommar.db`. If 2.3 didn't shut down cleanly, a leftover `-wal` file is replayed onto the restored copy and corrupts it (`database disk image is malformed`). Keep the original backup file until the restored database has started.
 - **MCP call records** have no retention pruning yet, so that table grows with MCP traffic.
 
 ### Moving to FIPS 140-3 builds
