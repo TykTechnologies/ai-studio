@@ -28,7 +28,7 @@ fi
 export DATABASE_URL
 filter() { grep -E '^(\s*--- |ok|FAIL|PASS)|pricing_regression_test'; }
 PRICING_REGRESSION_FULL=1 go test -count=1 -v -run 'TestPricingRegression' ./proxy/ ./grpc/ ./api/ | filter
-(cd microgateway && go test -count=1 -v -tags enterprise -run 'TestPricingRegression' ./internal/services/ | filter)
+(cd microgateway && MGW_TEST_POSTGRES_DSN="$DATABASE_URL" go test -count=1 -v -tags enterprise -run 'TestPricingRegression' ./internal/services/ | filter)
 if [ -f enterprise/features/budget/pricing_regression_test.go ]; then
   (cd enterprise && go test -count=1 -v -tags enterprise -run 'TestPricingRegression' ./features/budget/ | filter)
 fi

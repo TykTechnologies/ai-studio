@@ -54,7 +54,7 @@ cluster|.||||./pkg/cluster/ ./pkg/pglisten/ ./services/pushes/ ./services/schedu
 grpc|.||TestPushCluster_|TestRelay_|_Postgres|TestPricingRegression|BUDGET_TEST_POSTGRES_DSN=own|./grpc/
 # Analytics writer, budget ledger and budget sync against Postgres (ON
 # CONFLICT, GREATEST, enforced foreign keys), and the edge schema snapshot.
-mgw|microgateway||Postgres|MGW_TEST_POSTGRES_DSN=own|./internal/services/ ./internal/database/
+mgw|microgateway||Postgres|TestPricingRegression|MGW_TEST_POSTGRES_DSN=own|./internal/services/ ./internal/database/
 # Real edges against several Studio replicas sharing DATABASE_URL (a schema
 # per test): pushes land whatever happens to the connections.
 mgw-cluster|microgateway||||./tests/cluster/
