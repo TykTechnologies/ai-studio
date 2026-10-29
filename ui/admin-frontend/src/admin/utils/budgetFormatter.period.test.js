@@ -28,4 +28,12 @@ describe("budget period text matches the enforced period (kq3b.16)", () => {
     expect(formatBudgetDisplay({ monthlyBudget: 10, currentUsage: 1, budgetStartDate: anchor, periodStart: start, periodEnd: end }))
       .toMatch(new RegExp(` for ${text}$`));
   });
+
+  // Callers without the API's period (the LLM details page passes only the
+  // budget start date) must not print a different period.
+  it.each(cases)("budget start date only, anchor $anchor at $now", ({ anchor, now, text }) => {
+    jest.useFakeTimers().setSystemTime(new Date(now));
+    expect(formatBudgetDisplay({ monthlyBudget: 10, currentUsage: 1, budgetStartDate: anchor }))
+      .toMatch(new RegExp(` for ${text}$`));
+  });
 });
