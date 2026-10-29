@@ -239,6 +239,7 @@ This changes what plugins and filter scripts see for Bedrock traffic. Read the [
 - **A partial `PATCH` wiped the fields it left out.** For example, renaming a group removed its members, and a secret could lose its name and break every reference to it. Every `PATCH` now changes only the fields you send.
 - **Deep links survive sign-in.**
 - **View in Catalog on a submission** opens the resource it created.
+- **pgvector data sources couldn't ingest documents** (`add documents failed: unsupported options`, also in 2.2.2).
 - **Secret fields in plugin config forms** were shown in clear when a field had a long description.
 - **A plugin's sidebar showed Configuration twice.**
 - **Multi-select fields** close on outside clicks, and a failed submit scrolls to the first error.
