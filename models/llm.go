@@ -199,6 +199,12 @@ func (l *LLMs) GetAll(db *gorm.DB, pageSize int, pageNumber int, all bool, scope
 			totalPages++
 		}
 	}
+	// Without a sort scope the rows come in id order: Postgres otherwise
+	// returns heap order, which an UPDATE changes, so pages would skip or
+	// repeat LLMs.
+	if _, sorted := query.Statement.Clauses["ORDER BY"]; !sorted {
+		query = query.Order("id ASC")
+	}
 	if !all && pageSize > 0 {
 		offset := (pageNumber - 1) * pageSize
 		query = query.Offset(offset).Limit(pageSize)
