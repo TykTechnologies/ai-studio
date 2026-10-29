@@ -8,7 +8,6 @@ services:
     image: tykio/tyk-ai-studio-ent:v2.3.0
     volumes:
       - ../confs/midsommar-ent.env:/opt/tyk-ai-studio/.env
-      - ./keys/plugins/plugin-live.pub:/opt/tyk-ai-studio/keys/plugins/plugin-live.pub:ro
       - ./data/midsommar:/opt/tyk-ai-studio/data
       - ./data/cache/plugins:/opt/tyk-ai-studio/data/cache/plugins
     env_file:
