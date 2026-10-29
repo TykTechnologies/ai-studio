@@ -96,6 +96,7 @@ graph LR
     *   `secrets.GetValue(reference, preserveRef)`: Central function for resolution. `preserveRef=true` returns the reference string itself, `preserveRef=false` returns the actual resolved value.
     *   API responses for secrets generally use `preserveRef=true` (showing `$SECRET/VarName`).
     *   Internal consumers (like providers) use `preserveRef=false` to get the actual secret.
+    *   A credential that did not resolve is never sent (lsj.7): `secrets.CheckCredential` refuses a value that is still a `$SECRET/` or `$ENV/` reference, still `$ENC/`, or `secrets.RefusedCredential`, with `secrets.ErrUnresolvedCredential` (names neither the reference nor the value). It runs where a credential leaves: `switches.FetchDriver` (Studio Chat, the bridges), `switches.GetEmbedder`, `switches.SetVendorAuthHeader` (the gateway, hub and edge; the REST and streaming handlers check first via `switches.CheckLLMCredential` and answer 502 "LLM credential not usable"), and the universal client's tool auth (REST tools). So an edge refuses locally the placeholder the hub sends it instead of passing it to the vendor.
 *   **API Endpoints:** Standard RESTful CRUD endpoints under `/secrets`. Supports pagination for listing. Uses standard HTTP status codes for responses and errors.
 *   **Logging:** Debug and Error logs exist in handlers and the service package.
 *   **Redaction Utility:** `secrets.FilterSensitiveFields` exists to redact sensitive fields in objects by using struct tags.

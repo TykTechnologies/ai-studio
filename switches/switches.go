@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/embeddings"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms/anthropic"
@@ -103,6 +104,9 @@ func FetchDriver(LLMConfig *models.LLM, settings *models.LLMSettings, mem schema
 	v, ok := VendorMap[LLMConfig.Vendor]
 	if !ok {
 		return nil, fmt.Errorf("unsupported vendor")
+	}
+	if err := CheckLLMCredential(LLMConfig); err != nil {
+		return nil, err
 	}
 
 	// Apply options
@@ -300,6 +304,9 @@ func GetEmbedder(spec *models.EmbedderSpec) (*embeddings.EmbedderImpl, error) {
 	if !vn.ProvidesEmbedder() {
 		return nil, fmt.Errorf("vendor does not provide an embedder")
 	}
+	if err := secrets.CheckCredential(spec.APIKey); err != nil {
+		return nil, fmt.Errorf("embedder API key: %w", err)
+	}
 
 	return vn.GetEmbedder(spec)
 }
@@ -322,10 +329,23 @@ func AnalyzeStreamingResponse(llm *models.LLM, app *models.App, statusCode int, 
 	return v().AnalyzeStreamingResponse(llm, app, statusCode, resps, r, chunks)
 }
 
+// CheckLLMCredential refuses an LLM whose API key did not resolve
+// (secrets.CheckCredential), naming the LLM: the reference text is never
+// sent to the vendor.
+func CheckLLMCredential(llm *models.LLM) error {
+	if err := secrets.CheckCredential(llm.APIKey); err != nil {
+		return fmt.Errorf("LLM %q API key: %w", llm.Name, err)
+	}
+	return nil
+}
+
 func SetVendorAuthHeader(r *http.Request, llm *models.LLM) error {
 	v, ok := VendorMap[llm.Vendor]
 	if !ok {
 		return fmt.Errorf("unsupported vendor")
+	}
+	if err := CheckLLMCredential(llm); err != nil {
+		return err
 	}
 
 	return v().ProxySetAuthHeader(r, llm)

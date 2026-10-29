@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	"errors"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -92,6 +93,23 @@ func ForEdgeCredential(resolved string) string {
 		return RefusedCredential
 	}
 	return resolved
+}
+
+// ErrUnresolvedCredential is CheckCredential's refusal. It names neither the
+// reference nor the value.
+var ErrUnresolvedCredential = errors.New("credential is an unresolved reference (a $SECRET/ that cannot be found or decrypted, or an $ENV/ name not listed in " + EnvRefAllowlistVar + ")")
+
+// CheckCredential is called with a resolved credential (an API key or token)
+// just before it is sent. It refuses one that did not resolve: still a
+// $SECRET/ or $ENV/ reference, still encrypted ($ENC/), or the
+// RefusedCredential an edge was sent for one. Such a value is never sent:
+// it would hand the destination the reference text. Empty (no credential)
+// is allowed.
+func CheckCredential(v string) error {
+	if v == RefusedCredential || ForEdgeCredential(v) == RefusedCredential {
+		return ErrUnresolvedCredential
+	}
+	return nil
 }
 
 // CredentialRefForEdge resolves a credential field for a snapshot sent to
