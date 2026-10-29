@@ -143,7 +143,7 @@ This changes what plugins and filter scripts see for Bedrock traffic. Read the [
 
 - **Request ids you can trace.** Every gateway request gets its own id, returned in `X-Tyk-AI-Request-ID`. It stays the same across failover attempts and appears in request logs, compliance events and edge analytics. Your own `X-Request-ID` is kept and recorded alongside it, and you can search request logs by either.
 - **Secrets in plugin configuration.** Plugin config fields can reference a stored secret (`$SECRET/name`). The value stays masked in the form, and edges receive it encrypted.
-- **Credential references are consistent everywhere.** `$SECRET/` and `$ENV/` references work the same way for LLMs, tools, datasources, embedders, guardrails and plugins, and edges only ever receive resolved values. See the [secrets guide](docs/site/docs/secrets.md).
+- **Credential references are consistent everywhere.** `$SECRET/` references work the same way for LLMs, tools, datasources, embedders, guardrails and plugins, and `$ENV/` references for all of them except plugins, and edges only ever receive resolved values. See the [secrets guide](docs/site/docs/secrets.md).
 - **Guardrail scripts can handle checker failures.** With `return_errors: true`, a failed `tyk.llm` call returns an error instead of stopping the script, so a script can decide to block when its checker is unavailable.
 - **Privacy warning.** The tool and datasource forms warn when the chosen privacy level is higher than every active LLM can accept.
 - **Push reminder.** After you save something that edges use, the console tells you straight away that edges need a configuration push.
@@ -280,7 +280,7 @@ This changes what plugins and filter scripts see for Bedrock traffic. Read the [
 
 ### Credentials and secrets
 
-- **`$ENV/` references resolve only for allowlisted names.** List the environment variables your configuration uses in `AI_STUDIO_ENV_REF_ALLOWLIST` (comma-separated, empty by default), or move those credentials to the secret store as `$SECRET/` references. This applies to LLMs, tools, datasources, embedders, guardrails and plugin configuration.
+- **`$ENV/` references resolve only for allowlisted names.** List the environment variables your configuration uses in `AI_STUDIO_ENV_REF_ALLOWLIST` (comma-separated, empty by default), or move those credentials to the secret store as `$SECRET/` references. This applies to LLMs, tools, datasources, embedders and guardrails. Plugin configuration resolves only `$SECRET/` references: a `$ENV/` value is passed to the plugin unresolved, and the plugin can read only the variables in its allowlist and `PLUGIN_ENV_PASSTHROUGH`.
   - Do this **before** upgrading. To list the names in use: `pg_dump --data-only "$DATABASE_URL" | grep -oE '\$ENV/[A-Za-z_][A-Za-z0-9_]*' | sort -u` (or `sqlite3 midsommar.db .dump | …`).
   - A reference that isn't allowlisted is not resolved: the provider or tool answers `401`, and a guardrail applies its fail mode. The console shows the credential as unresolved, even when the variable is set. See the [secrets guide](docs/site/docs/secrets.md) (Upgrading from 2.2).
 - **Vendor keys and endpoints are no longer read from the environment.** An LLM, embedder or datasource with an empty key or endpoint is no longer filled from `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `HF_TOKEN`, `PINECONE_API_KEY`, `CHROMA_URL` or `OLLAMA_HOST`. Set them on the object. Don't set these variables on edges: older edges still read them.
