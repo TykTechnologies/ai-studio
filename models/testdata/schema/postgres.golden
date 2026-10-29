@@ -944,6 +944,7 @@ TABLE llm_chat_records
   column decision_refusals bigint(int8) nullable=YES precision=64 scale=0
   column service_tier character varying(varchar) nullable=YES len=32
   column requested_model text(text) nullable=YES
+  column price_multiplier numeric(numeric) nullable=YES
 TABLE llm_filters
   constraint fk_llm_filters_filter FOREIGN KEY (filter_id) REFERENCES filters(id)
   constraint fk_llm_filters_llm FOREIGN KEY (llm_id) REFERENCES llms(id)

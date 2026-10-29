@@ -45,20 +45,24 @@ func (s *Service) GetModelPriceByID(id uint) (*models.ModelPrice, error) {
 // price (proxy priceForExchange). Rows recorded before the requested model
 // was stored (and edge rows) match by name only.
 //
-// Each row keeps the ratio of its recorded cost to its list cost at the old
-// price, so a batch row recorded at a price multiplier
-// (models.IPriceAdjustedResponse, e.g. 0.5x) stays at that multiplier, and a
-// row recorded at list price gets exactly the new list price. A row with no
-// old list cost (no price before, or old is the zero value) or no recorded
-// cost gets the new list price at 1x, as before.
+// Each row is repriced at its stored price multiplier
+// (models.IPriceAdjustedResponse, e.g. 0.5x for batch), so a batch row stays
+// at that multiplier, and a row recorded at list price gets exactly the new
+// list price. A row without one (older and edge rows) keeps the ratio of its
+// recorded cost to its list cost at the old price, and the ratio is stored
+// as its multiplier so that it survives a later recalculation through a zero
+// price. A row with neither (no old list cost: no price before, or old is
+// the zero value; or no recorded cost) gets the new list price at 1x.
 func (s *Service) recalculateChatRecordCosts(tx *gorm.DB, modelName, vendor string, old, updated models.ModelPrice) error {
 	oldList, oldArgs := chatRecordListCostSQL(vendor, old)
 	newList, newArgs := chatRecordListCostSQL(vendor, updated)
 
-	args := append(append(newArgs, oldArgs...), updated.Currency, vendor, modelName, modelName)
+	ratio := `NULLIF(cost, 0) / NULLIF(` + oldList + `, 0)`
+	args := append(append(append(newArgs, oldArgs...), oldArgs...), updated.Currency, vendor, modelName, modelName)
 	result := tx.Exec(`
 		UPDATE llm_chat_records
-		SET cost = `+newList+` * COALESCE(NULLIF(cost, 0) / NULLIF(`+oldList+`, 0), 1),
+		SET cost = `+newList+` * COALESCE(price_multiplier, `+ratio+`, 1),
+		price_multiplier = COALESCE(price_multiplier, `+ratio+`),
 		currency = ?
 		WHERE vendor = ? AND (name = ? OR (
 			requested_model = ? AND name <> requested_model AND NOT EXISTS (
