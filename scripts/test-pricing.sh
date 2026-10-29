@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Runs the full pricing regression matrix (proxy TestPricingRegression*, 180
-# days of traffic, 180k rows recalculated) on SQLite and on a throwaway
-# postgres:16 container. The normal test run covers the same tests at a
-# smaller scale, and CI's Go Postgres Tests job runs them on Postgres.
+# days of traffic, 180k rows recalculated) and the hub, edge and enterprise
+# budget regressions on SQLite and on a throwaway postgres:16 container. The
+# normal test run covers the same tests at a smaller scale, and CI's Go
+# Postgres Tests job runs them on Postgres.
 #
 #   make test-pricing
 #
@@ -24,5 +25,10 @@ if [ -z "${DATABASE_URL:-}" ]; then
   DATABASE_URL="postgres://postgres:pricing@127.0.0.1:$port/postgres?sslmode=disable"
 fi
 
-PRICING_REGRESSION_FULL=1 DATABASE_URL="$DATABASE_URL" \
-  go test -count=1 -v -run 'TestPricingRegression' ./proxy/ | grep -E '^(\s*--- |ok|FAIL|PASS)|pricing_regression_test'
+export DATABASE_URL
+filter() { grep -E '^(\s*--- |ok|FAIL|PASS)|pricing_regression_test'; }
+PRICING_REGRESSION_FULL=1 go test -count=1 -v -run 'TestPricingRegression' ./proxy/ ./grpc/ | filter
+(cd microgateway && go test -count=1 -v -tags enterprise -run 'TestPricingRegression' ./internal/services/ | filter)
+if [ -f enterprise/features/budget/pricing_regression_test.go ]; then
+  (cd enterprise && go test -count=1 -v -tags enterprise -run 'TestPricingRegression' ./features/budget/ | filter)
+fi

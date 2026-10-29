@@ -49,8 +49,9 @@ queue-config-startup|.||||./chat_session/ ./config/ ./startup/
 # cases side by side.
 cluster|.||||./pkg/cluster/ ./pkg/pglisten/ ./services/pushes/ ./services/scheduler/
 # Pushes and the event-bus relay across several control-server replicas on
-# one database, and the budget usage tracker's queries.
-grpc|.||TestPushCluster_|TestRelay_|_Postgres|BUDGET_TEST_POSTGRES_DSN=own|./grpc/
+# one database, the budget usage tracker's queries and the pricing
+# regression suite's hub budget periods.
+grpc|.||TestPushCluster_|TestRelay_|_Postgres|TestPricingRegression|BUDGET_TEST_POSTGRES_DSN=own|./grpc/
 # Analytics writer, budget ledger and budget sync against Postgres (ON
 # CONFLICT, GREATEST, enforced foreign keys), and the edge schema snapshot.
 mgw|microgateway||Postgres|MGW_TEST_POSTGRES_DSN=own|./internal/services/ ./internal/database/
@@ -71,6 +72,9 @@ agenttrace|.||AgentTrace|Capture|AGENT_TRACE_TEST_POSTGRES_DSN|./models/ ./analy
 ent-agenttrace|enterprise|enterprise||AGENT_TRACE_TEST_POSTGRES_DSN|./features/agenttracing/...
 ent-audit|enterprise|enterprise|||./features/audit/...
 ent-webhooks|enterprise|enterprise|_Postgres||./features/webhooks/
+# The pricing regression suite's budget side (spend read through the budget
+# service after price and period edge cases).
+ent-budget|enterprise|enterprise|TestPricingRegression||./features/budget/
 EOF
 )
 
