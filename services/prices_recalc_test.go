@@ -194,3 +194,33 @@ func TestUpdateModelPriceAndRecalculate_KeepsMultiplierThroughZeroPrice(t *testi
 		assert.InDelta(t, 0.6, *got.PriceMultiplier, 1e-12)
 	})
 }
+
+// A recalculation keeps the price each row was recorded at relative to the
+// list price, also for rows with a stored multiplier: rows recorded before a
+// standard update (no recalculation) to half the price stay at twice the
+// new list price. The ratio is stored, so it survives a zero price too.
+func TestUpdateModelPriceAndRecalculate_KeepsRecordedPriceIntervals(t *testing.T) {
+	forEachRecalcDB(t, func(t *testing.T, s *Service, model string) {
+		vendor := string(models.ANTHROPIC)
+		p := models.ModelPrice{ModelName: model, Vendor: vendor, Currency: "USD", CPIT: 0.000004, CPT: 0.000012}
+		require.NoError(t, p.Create(s.DB))
+		tk := recalcTokens{prompt: 1000, response: 100}
+		one := 1.0
+		early := createRecalcRecord(t, s, model, vendor, tk, tk.listCost(vendor, p))
+		require.NoError(t, s.DB.Model(&models.LLMChatRecord{}).Where("id = ?", early).Update("price_multiplier", one).Error)
+
+		half := models.ModelPrice{CPIT: p.CPIT / 2, CPT: p.CPT / 2}
+		_, err := s.UpdateModelPrice(p.ID, model, vendor, half.CPT, half.CPIT, 0, 0, "USD")
+		require.NoError(t, err)
+
+		reprice := func(np models.ModelPrice) {
+			_, err := s.UpdateModelPriceAndRecalculate(p.ID, model, vendor, np.CPT, np.CPIT, 0, 0, "USD")
+			require.NoError(t, err)
+		}
+		reprice(half)
+		assert.InDelta(t, tk.listCost(vendor, p), recordCost(t, s, early).Cost, 1e-9, "recorded at twice the new price, it stays there")
+		reprice(models.ModelPrice{})
+		reprice(half)
+		assert.InDelta(t, tk.listCost(vendor, p), recordCost(t, s, early).Cost, 1e-9, "the ratio survives a zero price")
+	})
+}

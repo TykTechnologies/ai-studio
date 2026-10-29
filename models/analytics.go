@@ -83,11 +83,13 @@ type LLMChatRecord struct {
 	// recalculation of the requested name's price reaches it the same way.
 	// Empty on edge rows and older rows (NULL).
 	RequestedModel string
-	// PriceMultiplier is the multiple of the list price Cost was billed at
-	// (IPriceAdjustedResponse, after the LLM's per-tier override): 0.5 for
-	// a batch row, 1 at list price. A price recalculation reprices from it,
-	// since it cannot be recovered from Cost once the list cost has been 0.
-	// NULL on older and edge rows until a recalculation records the ratio.
+	// PriceMultiplier is the multiple of the list price Cost was billed at:
+	// recorded by the gateway (IPriceAdjustedResponse, after the LLM's
+	// per-tier override; 0.5 for a batch row, 1 at list price), then set by
+	// each price recalculation to the row's cost / list cost ratio. A
+	// recalculation reprices from it when the ratio cannot be computed from
+	// Cost (the list cost or the cost is 0). NULL on older and edge rows
+	// until a recalculation records the ratio.
 	PriceMultiplier *float64
 }
 

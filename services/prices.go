@@ -96,14 +96,17 @@ func (s *Service) GetModelPriceByID(id uint) (*models.ModelPrice, error) {
 // price (proxy priceForExchange). Rows recorded before the requested model
 // was stored (and edge rows) match by name only.
 //
-// Each row is repriced at its stored price multiplier
-// (models.IPriceAdjustedResponse, e.g. 0.5x for batch), so a batch row stays
-// at that multiplier, and a row recorded at list price gets exactly the new
-// list price. A row without one (older and edge rows) keeps the ratio of its
-// recorded cost to its list cost at the old price, and the ratio is stored
-// as its multiplier so that it survives a later recalculation through a zero
-// price. A row with neither (no old list cost: no price before, or old is
-// the zero value; or no recorded cost) gets the new list price at 1x.
+// Each row keeps the ratio of its recorded cost to its list cost at the old
+// price, so a batch row recorded at a price multiplier
+// (models.IPriceAdjustedResponse, e.g. 0.5x) stays at that multiplier, a row
+// recorded before a standard price update keeps the price it was recorded
+// at relative to the new one, and a row recorded at list price gets exactly
+// the new list price. The ratio is stored as the row's price_multiplier
+// (recorded by the gateway as the billing multiplier), and is used when it
+// cannot be computed: no old list cost (the price was cleared, no price
+// before, or the row was renamed onto this model) or no recorded cost. So a
+// recalculation through a zero price keeps it. A row with neither gets the
+// new list price at 1x.
 func (s *Service) recalculateChatRecordCosts(tx *gorm.DB, modelName, vendor string, old, updated models.ModelPrice) error {
 	oldList, oldArgs := chatRecordListCostSQL(vendor, old)
 	newList, newArgs := chatRecordListCostSQL(vendor, updated)
@@ -113,8 +116,8 @@ func (s *Service) recalculateChatRecordCosts(tx *gorm.DB, modelName, vendor stri
 	args := append(append(append(append(newArgs, oldArgs...), oldArgs...), updated.Currency), pricedByArgs...)
 	result := tx.Exec(`
 		UPDATE llm_chat_records
-		SET cost = `+newList+` * COALESCE(price_multiplier, `+ratio+`, 1),
-		price_multiplier = COALESCE(price_multiplier, `+ratio+`),
+		SET cost = `+newList+` * COALESCE(`+ratio+`, price_multiplier, 1),
+		price_multiplier = COALESCE(`+ratio+`, price_multiplier),
 		currency = ?
 		WHERE `+pricedBy,
 		args...,
@@ -167,7 +170,14 @@ func (s *Service) BackfillUnpricedHistory(id uint, from, to *time.Time) (int64, 
 		args = append(args, *to)
 	}
 	result := s.DB.Exec(query, args...)
-	return result.RowsAffected, result.Error
+	if result.Error != nil {
+		return 0, result.Error
+	}
+	// Budget spend in memory was summed from the old (zero) costs.
+	if result.RowsAffected > 0 {
+		s.spendRecalculated()
+	}
+	return result.RowsAffected, nil
 }
 
 // CountUnpricedHistory returns, for each of the given model price rows, the

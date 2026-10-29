@@ -456,8 +456,8 @@ func (a *API) backfillModelPriceHistory(c *gin.Context) {
 		fail(http.StatusInternalServerError, "Internal Server Error", err.Error())
 		return
 	}
-	// kq3b.3/kq3b.8 (dev-2): budget tracker invalidation and the price event
-	// for changed history go here, as after a recalculation.
+	// The price itself is unchanged, so there is no price event; the budget
+	// spend caches were cleared by BackfillUnpricedHistory.
 
 	var resp BackfillModelPriceResponse
 	resp.Data.RowsPriced = rows
