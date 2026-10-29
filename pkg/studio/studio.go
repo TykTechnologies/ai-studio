@@ -198,6 +198,9 @@ type Authenticator = auth.Authenticator
 // the process.
 var ErrAlreadyRunning = errors.New("studio: another instance is already running in this process")
 
+// ssoAvailable reports whether this build has SSO; tests replace it.
+var ssoAvailable = sso.IsEnterpriseAvailable
+
 // ErrGatewayNotLicensed is returned by StartProxy when the licence does not
 // include the gateway.
 var ErrGatewayNotLicensed = errors.New("studio: feature_gateway is not in the licence entitlements")
@@ -598,7 +601,7 @@ func New(opts Options) (_ *Studio, err error) {
 	// SSO availability is by edition (TIB_ENABLED is deprecated), so warn
 	// whenever this build has SSO and the broker's shared secret is missing.
 	// A host that does its own authentication has no SSO login.
-	if conf.TIBAPISecret == "" && sso.IsEnterpriseAvailable() && opts.Auth == nil {
+	if conf.TIBAPISecret == "" && ssoAvailable() && opts.Auth == nil {
 		logger.Warn("TYK_AI_SECRET_KEY is not set: SSO logins are refused until it is set")
 	}
 
