@@ -97,7 +97,9 @@ export const useStudioRuntime = ({ sessionId, endpoints, clientToolNames = [], o
   const attachments = useMemo(() => {
     if (!endpoints.upload) return undefined;
     return {
-      accept: '*/*',
+      // assistant-ui only treats the exact '*' as "any file"; '*/*' would
+      // reject every file without an error.
+      accept: '*',
       async add({ file }) {
         return {
           id: generateId(),
