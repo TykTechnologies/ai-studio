@@ -140,7 +140,7 @@ On the OpenAI-compatible `/ai/{slug}/v1/chat/completions` hop, steps 2-13 run on
     *   Metadata fields: `PrivacyScore`, descriptions, `LogoURL`.
 *   **`models.LLMSettings` Structure:**
     *   `ModelName`: Specific model identifier (e.g., "gpt-4").
-    *   Generation Parameters: `MaxLength`, `MaxTokens`, `Temperature`, etc. Mapped to `langchaingo/llms.CallOption` via `GenerateOptionsFromSettings`. Used by `ChatSession`.
+    *   Generation Parameters: `MaxLength`, `MaxTokens`, `Temperature`, etc. Mapped to `langchaingo/llms.CallOption` via `GenerateOptionsFromSettings`. Used by `ChatSession`. A zero `Temperature`, `TopP` or `TopK` is not sent, so the vendor default applies; the admin form's default preset is 0 for temperature and top_p because current Anthropic models (Claude Sonnet 5 and later) reject any sampling parameter (lsj.31).
     *   `SystemPrompt`: Default system prompt.
 *   **`models.LLMVendorProvider` Interface (`models/ivendor.go`):** Defines the contract for vendor implementations:
     *   `GetTokenCounts`: Extracts token counts from a response choice.

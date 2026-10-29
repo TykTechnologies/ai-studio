@@ -360,7 +360,7 @@ const LLMSettingsForm = () => {
                 onChange={handleChange}
                 error={!!errors.temperature}
                 helperText={errors.temperature}
-                tooltip="Controls randomness: 0 is deterministic, 1 is very random. Range: 0 to 1"
+                tooltip="Controls randomness, up to 1 (very random). 0 is not sent, so the vendor's default applies; current Anthropic models (Claude Sonnet 5 and later) reject any other value."
               />
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -386,7 +386,7 @@ const LLMSettingsForm = () => {
                 inputProps={{ step: 0.1, min: 0, max: 1 }}
                 value={setting.top_p}
                 onChange={handleChange}
-                tooltip="Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered. Range: 0 to 1"
+                tooltip="Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered. 0 is not sent, so the vendor's default applies; current Anthropic models reject any other value."
               />
             </Grid>
             <Grid item xs={12} sm={6}>
