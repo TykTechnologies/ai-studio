@@ -535,16 +535,12 @@ the `read` action on `analytics`.
   and on Gateway 5.15 an upstream server's own JSON-RPC errors, arrive as
   successful calls.
 - Gateway 5.15 writes no record for a call refused by the key's MCP access
-  rights, so tools blocked by key access do not appear. Calls refused for a
-  missing or bad key are recorded, without an App.
+  rights, so tools blocked by key access do not appear. Gateway 5.16 records
+  them, as errors. Calls refused for a missing or bad key are recorded,
+  without an App.
 - REST-to-MCP proxies report no upstream latency; use the total.
 - Calls that arrive after their server was deleted are counted as unknown
   APIs and dropped.
-- Gateway 5.16.0 records no method name for calls that are not a tool,
-  resource or prompt call (`initialize`, `tools/list` and the like). The
-  per-tool breakdown and the top tools then show all of them as one row
-  with no type and no name. Per-server totals are unaffected. Gateway
-  5.15.1 records the names.
 
 ## Permissions
 
