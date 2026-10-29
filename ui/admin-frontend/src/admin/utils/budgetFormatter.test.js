@@ -27,3 +27,17 @@ describe("formatBudgetDisplay period", () => {
     expect(text).toMatch(/ for Oct 24 - Nov 23$/);
   });
 });
+
+describe("formatBudgetDisplay period without the API's", () => {
+  afterEach(() => jest.useRealTimers());
+
+  it("works out the current, clamped period from the budget start date", () => {
+    jest.useFakeTimers().setSystemTime(new Date("2026-03-01T12:00:00Z"));
+    expect(formatBudgetDisplay({ monthlyBudget: 10, currentUsage: 1, budgetStartDate: "2025-01-31T00:00:00Z" }))
+      .toMatch(/ for Feb 28 - Mar 30$/);
+    jest.setSystemTime(new Date("2026-10-29T12:00:00Z"));
+    expect(formatBudgetDisplay({ monthlyBudget: 10, currentUsage: 1, budgetStartDate: "2025-01-15T00:00:00Z" }))
+      .toMatch(/ for Oct 15 - Nov 14$/);
+    expect(formatBudgetDisplay({ monthlyBudget: 10, currentUsage: 1 })).toMatch(/ for Oct 1 - Oct 31$/);
+  });
+});
