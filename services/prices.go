@@ -207,46 +207,33 @@ func (s *Service) GetOrCreateModelPriceByName(modelName string) (*models.ModelPr
 	return modelPrice, nil
 }
 
-// GetModelPriceByModelNameAndVendor implements ServiceInterface
+// GetModelPriceByModelNameAndVendor implements ServiceInterface. A model
+// without a price row gets an unpriced (all zero) one.
 func (s *Service) GetModelPriceByModelNameAndVendor(modelName, vendor string) (*models.ModelPrice, error) {
+	if modelName == "" {
+		modelName = fmt.Sprintf("%s_%s", vendor, "default")
+	}
 	modelPrice := &models.ModelPrice{}
-
-	// Use a transaction to ensure atomicity
-	err := s.DB.Transaction(func(tx *gorm.DB) error {
-		// Try to find existing record
-		if err := modelPrice.GetByModelNameAndVendor(tx, modelName, vendor); err != nil {
-			if err != gorm.ErrRecordNotFound {
-				return err
-			}
-
-			// Not found, create new record
-			if modelName == "" {
-				modelName = fmt.Sprintf("%s_%s", vendor, "default")
-			}
-			modelPrice.ModelName = modelName
-			modelPrice.Vendor = vendor
-			modelPrice.CPT = 0.0
-			modelPrice.CPIT = 0.0
-			modelPrice.CacheWritePT = 0.0
-			modelPrice.CacheReadPT = 0.0
-			modelPrice.Currency = "USD"
-
-			// Try to create, if we get a unique constraint error, it means another
-			// process created the record in the meantime, so try to get it again
-			if err := modelPrice.Create(tx); err != nil {
-				if err.Error() == "Error 1062: Duplicate entry" {
-					return modelPrice.GetByModelNameAndVendor(tx, modelName, vendor)
-				}
-				return err
-			}
+	err := modelPrice.GetByModelNameAndVendor(s.DB, modelName, vendor)
+	if err != gorm.ErrRecordNotFound {
+		if err != nil {
+			return nil, err
 		}
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
+		return modelPrice, nil
 	}
 
+	modelPrice = &models.ModelPrice{ModelName: modelName, Vendor: vendor, Currency: "USD"}
+	if err := modelPrice.Create(s.DB); err != nil {
+		if !models.IsUniqueViolation(err) {
+			return nil, err
+		}
+		// Another request created it in the meantime. Read it outside any
+		// transaction: on Postgres a failed statement aborts the one it is in.
+		modelPrice = &models.ModelPrice{}
+		if err := modelPrice.GetByModelNameAndVendor(s.DB, modelName, vendor); err != nil {
+			return nil, err
+		}
+	}
 	return modelPrice, nil
 }
 

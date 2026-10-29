@@ -124,9 +124,18 @@ func (mp *ModelPrice) Update(db *gorm.DB) error {
 	return db.Save(mp).Error
 }
 
-// Delete a ModelPrice
+// Delete a ModelPrice. The delete is permanent: a soft-deleted row would
+// keep its (model_name, vendor) in idx_model_vendor, so the price could
+// never be created again and the gateway's auto-create would fail on it.
 func (mp *ModelPrice) Delete(db *gorm.DB) error {
-	return db.Delete(mp).Error
+	return db.Unscoped().Delete(mp).Error
+}
+
+// PurgeSoftDeletedModelPrices permanently removes the price rows earlier
+// versions soft-deleted, which block their (model_name, vendor) in
+// idx_model_vendor (see Delete).
+func PurgeSoftDeletedModelPrices(db *gorm.DB) error {
+	return db.Unscoped().Where("deleted_at IS NOT NULL").Delete(&ModelPrice{}).Error
 }
 
 // GetAll retrieves all ModelPrices
@@ -203,7 +212,7 @@ func (mps *ModelPrices) UpdateMultiple(db *gorm.DB) error {
 	return nil
 }
 
-// DeleteMultiple deletes multiple ModelPrices at once
+// DeleteMultiple deletes multiple ModelPrices at once, permanently (see Delete)
 func (mps *ModelPrices) DeleteMultiple(db *gorm.DB) error {
-	return db.Delete(mps).Error
+	return db.Unscoped().Delete(mps).Error
 }

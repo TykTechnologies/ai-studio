@@ -101,7 +101,7 @@ graph TD
     *   `GET /model-prices`: Get all prices (paginated).
     *   `GET /model-prices/{id}`: Get a specific price by ID.
     *   `PATCH /model-prices/{id}`: Update a price (no recalculation).
-    *   `DELETE /model-prices/{id}`: Delete a price.
+    *   `DELETE /model-prices/{id}`: Delete a price. The delete is permanent (not a soft delete), so the same model and vendor can be priced again; rows that older versions soft-deleted are purged at startup (`models.PurgeSoftDeletedModelPrices`). Traffic for a model without a price row auto-creates an unpriced one (`GetModelPriceByModelNameAndVendor`); concurrent first lookups that race on the insert read the winner's row (`models.IsUniqueViolation`).
     *   `GET /model-prices/by-vendor?vendor=X`: Get prices for a specific vendor.
     *   `GET /model-prices/by-name?model_name=Y`: Get or create a price by model name.
     *   `PATCH /model-prices/{id}/recalculate`: Update a price and recalculate historical costs.
