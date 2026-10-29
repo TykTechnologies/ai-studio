@@ -553,6 +553,15 @@ const Dashboard = () => {
                 </StyledTableCell>
                 <StyledTableCell align="right">
                   {formatBudgetDisplay(item)}
+                  {item.other_currency_spend && Object.keys(item.other_currency_spend).length > 0 && (
+                    <Typography variant="caption" display="block" color="error" sx={{ mt: 0.5 }}>
+                      Not counted: {Object.entries(item.other_currency_spend)
+                        .sort(([a], [b]) => a.localeCompare(b))
+                        .map(([currency, amount]) => `${currency} ${parseFloat(amount).toFixed(2)}`)
+                        .join(", ")}
+                      {item.budget ? ". Budgets are in USD, so requests are refused this period." : ". Budgets are in USD."}
+                    </Typography>
+                  )}
                 </StyledTableCell>
               </StyledTableRow>
             ))}

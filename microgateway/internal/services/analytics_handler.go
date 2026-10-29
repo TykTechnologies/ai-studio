@@ -17,6 +17,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/rs/zerolog/log"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -505,8 +506,11 @@ func applyChatRecord(event *database.AnalyticsEvent, record *models.LLMChatRecor
 }
 
 // recordBudgetUsage records a priced request against its App's budget.
+// Budgets count the budget currency only (budget.Currency): spend in another
+// currency is not added; the control plane blocks a budget whose period has
+// any, through the budget sync.
 func (h *MicrogatewaAnalyticsHandler) recordBudgetUsage(record *models.LLMChatRecord) {
-	if h.budgetService == nil || record.Cost <= 0 {
+	if h.budgetService == nil || record.Cost <= 0 || !budget.InCurrency(record.Currency) {
 		return
 	}
 	if err := h.budgetService.RecordUsage(

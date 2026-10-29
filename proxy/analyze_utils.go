@@ -330,7 +330,9 @@ func analyzeBudget(bs services.BudgetServiceInterface, llm *models.LLM, app *mod
 	if bs == nil {
 		return
 	}
-	if sr, ok := bs.(budget.SpendRecorder); ok && rec != nil && rec.Cost > 0 {
+	// Budgets count the budget currency only; spend in another currency
+	// is found by the budget's next read and refused (budget.Currency).
+	if sr, ok := bs.(budget.SpendRecorder); ok && rec != nil && rec.Cost > 0 && budget.InCurrency(rec.Currency) {
 		sr.RecordSpend(app, llm, rec.Cost/10000)
 	}
 	bs.AnalyzeBudgetUsage(app, llm)
