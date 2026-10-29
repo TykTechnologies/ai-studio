@@ -453,6 +453,9 @@ func TestChromaDataSessionVectorsRoundTrip(t *testing.T) {
 					DBSourceType: data_session.VECTOR_CHROMA,
 					DBConnString: chroma.Addr(),
 					DBName:       collectionName,
+					// The container listens on localhost, which netguard
+					// blocks by default; the admin switch exempts it.
+					AllowInternalHost: true,
 					// Never called: the vectors are supplied.
 					Embedder: &models.Embedder{Vendor: models.OPENAI, APIKey: "sk-unused", ModelName: "text-embedding-3-small"},
 				},
