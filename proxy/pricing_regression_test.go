@@ -755,3 +755,81 @@ func TestPricingRegression_BackfillRangeLeavesPricedRows(t *testing.T) {
 		assertRel(t, 10*m.dayCost(), chart["USD"].total, 1e-9, "priced rows keep theirs")
 	})
 }
+
+// tieredResponse is a response the vendor billed at a service tier's price
+// multiplier (batch 0.5x, flex 0.6x).
+type tieredResponse struct {
+	*MockTokenResponse
+	tier string
+	mult float64
+}
+
+func (r tieredResponse) ServiceTier() string      { return r.tier }
+func (r tieredResponse) PriceMultiplier() float64 { return r.mult }
+
+// kq3b.7: repricing through a zero price (p -> 0 -> p, and an output price
+// cleared on its own) keeps each row's tier multiplier: batch rows come back
+// at 0.5x and flex at 0.6x, not at list price. Covers rows recorded through
+// buildChatRecordFor (which store their multiplier) and older rows recorded
+// without one.
+func TestPricingRegression_RecalcThroughZeroKeepsMultipliers(t *testing.T) {
+	forEachPricingDB(t, func(t *testing.T, db *gorm.DB) {
+		env := newStressEnvOn(t, db, 1)
+		m := otherVendors[1] // Anthropic, with cache prices
+		p := m.price
+		mp, err := env.svc.CreateModelPrice(m.reported, string(m.vendor), p.CPT, p.CPIT, p.CacheWritePT, p.CacheReadPT, p.Currency)
+		require.NoError(t, err)
+
+		mults := map[string]float64{"": 1, "batch": 0.5, "flex": 0.6}
+		recorded := map[string]uint{} // through buildChatRecordFor
+		legacy := map[string]uint{}   // no stored multiplier
+		for tier, mult := range mults {
+			var resp models.ITokenResponse = &MockTokenResponse{model: m.reported, promptTokens: m.prompt, responseTokens: m.response, cacheReadTokens: m.cacheRead}
+			if tier != "" {
+				resp = tieredResponse{resp.(*MockTokenResponse), tier, mult}
+			}
+			rec := buildChatRecordFor(env.svc, env.llms[m.vendor], env.app, resp, m.requested, env.day0)
+			require.NoError(t, db.Create(rec).Error)
+			recorded[tier] = rec.ID
+			old := *rec
+			old.ID = 0
+			require.NoError(t, db.Create(&old).Error)
+			if db.Migrator().HasColumn(&models.LLMChatRecord{}, "price_multiplier") {
+				require.NoError(t, db.Exec("UPDATE llm_chat_records SET price_multiplier = NULL WHERE id = ?", old.ID).Error)
+			}
+			legacy[tier] = old.ID
+		}
+		list := func(pr models.ModelPrice) float64 {
+			var r models.LLMChatRecord
+			require.NoError(t, db.First(&r, recorded[""]).Error)
+			return models.ChatRecordCost(string(m.vendor), pr.CPT, pr.CPIT, pr.CacheWritePT, pr.CacheReadPT, r.PromptTokens, r.ResponseTokens, r.CacheWritePromptTokens, r.CacheReadPromptTokens)
+		}
+		reprice := func(pr models.ModelPrice) {
+			t.Helper()
+			_, err := env.svc.UpdateModelPriceAndRecalculate(mp.ID, m.reported, string(m.vendor), pr.CPT, pr.CPIT, pr.CacheWritePT, pr.CacheReadPT, pr.Currency)
+			require.NoError(t, err)
+		}
+		assertTiers := func(step string, pr models.ModelPrice) {
+			t.Helper()
+			for tier, mult := range mults {
+				for kind, ids := range map[string]map[string]uint{"recorded": recorded, "legacy": legacy} {
+					var r models.LLMChatRecord
+					require.NoError(t, db.First(&r, ids[tier]).Error)
+					assertRel(t, list(pr)*mult, r.Cost, 1e-9, "%s: %s %q row at %.1fx", step, kind, tier, mult)
+				}
+			}
+		}
+
+		zero := p
+		zero.CPT, zero.CPIT, zero.CacheWritePT, zero.CacheReadPT = 0, 0, 0, 0
+		inputOnly := p
+		inputOnly.CPT = 0
+		reprice(zero)
+		reprice(p)
+		assertTiers("p -> 0 -> p", p)
+		reprice(inputOnly)
+		assertTiers("output price cleared", inputOnly)
+		reprice(p)
+		assertTiers("output price restored", p)
+	})
+}
