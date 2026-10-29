@@ -833,3 +833,62 @@ func TestPricingRegression_RecalcThroughZeroKeepsMultipliers(t *testing.T) {
 		assertTiers("output price restored", p)
 	})
 }
+
+// kq3b.7 with intervals: after a mid-history price change, a recalculation
+// to a zero price and back keeps each interval at the price it was recorded
+// at (relative to the price being restored).
+func TestPricingRegression_RecalcThroughZeroKeepsIntervals(t *testing.T) {
+	forEachPricingDB(t, func(t *testing.T, db *gorm.DB) {
+		days, mix := pricingScale(geminiMix[1:2])
+		m := mix[0]
+		change := days / 2
+		env := newStressEnvOn(t, db, days)
+		env.createPrices(t, mix)
+		env.recordDays(t, mix, 0, change)
+		halved := m.price
+		halved.CPT, halved.CPIT, halved.CacheReadPT = halved.CPT/2, halved.CPIT/2, halved.CacheReadPT/2
+		row := priceRow(t, env.db, m.reported, m.vendor)
+		_, err := env.svc.UpdateModelPrice(row.ID, m.reported, string(m.vendor), halved.CPT, halved.CPIT, 0, halved.CacheReadPT, "USD")
+		require.NoError(t, err)
+		env.recordDays(t, mix, change, days)
+
+		_, err = env.svc.UpdateModelPriceAndRecalculate(row.ID, m.reported, string(m.vendor), 0, 0, 0, 0, "USD")
+		require.NoError(t, err)
+		for day, c := range env.modelCostByDay(t, m.reported) {
+			assert.Zero(t, c, "%s at a zero price", day)
+		}
+		_, err = env.svc.UpdateModelPriceAndRecalculate(row.ID, m.reported, string(m.vendor), halved.CPT, halved.CPIT, 0, halved.CacheReadPT, "USD")
+		require.NoError(t, err)
+
+		got := env.modelCostByDay(t, m.reported)
+		for d := 0; d < days; d++ {
+			want := m.dayCost()
+			if d >= change {
+				want = m.dayCostAt(halved)
+			}
+			assertRel(t, want, got[env.dayLabel(d)], 1e-9, "day %d back at its recorded price", d)
+		}
+	})
+}
+
+// kq3b.7: a row the vendor billed at 0x (a free tier) stays free through any
+// recalculation, zero price included.
+func TestPricingRegression_RecalcKeepsFreeTierFree(t *testing.T) {
+	forEachPricingDB(t, func(t *testing.T, db *gorm.DB) {
+		env := newStressEnvOn(t, db, 1)
+		m := otherVendors[0]
+		p := m.price
+		mp, err := env.svc.CreateModelPrice(m.reported, string(m.vendor), p.CPT, p.CPIT, p.CacheWritePT, p.CacheReadPT, p.Currency)
+		require.NoError(t, err)
+		resp := tieredResponse{&MockTokenResponse{model: m.reported, promptTokens: m.prompt, responseTokens: m.response}, "free", 0}
+		rec := buildChatRecordFor(env.svc, env.llms[m.vendor], env.app, resp, m.requested, env.day0)
+		require.NoError(t, db.Create(rec).Error)
+		for _, f := range []float64{2, 0, 1} {
+			_, err := env.svc.UpdateModelPriceAndRecalculate(mp.ID, m.reported, string(m.vendor), p.CPT*f, p.CPIT*f, 0, p.CacheReadPT*f, "USD")
+			require.NoError(t, err)
+			var got models.LLMChatRecord
+			require.NoError(t, db.First(&got, rec.ID).Error)
+			assert.Zero(t, got.Cost, "the 0x row after repricing at %vx", f)
+		}
+	})
+}
