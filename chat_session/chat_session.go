@@ -623,6 +623,11 @@ func (cs *ChatSession) sendStatus(resp string) {
 }
 
 func (cs *ChatSession) sendError(err error) {
+	if isUpstreamRefusal(strings.ToLower(err.Error())) {
+		// The gateway logs its refusals; so does the chat, so an operator
+		// sees which setting blocked the LLM.
+		slog.Warn("chat LLM upstream blocked by the outbound network policy", "error", err)
+	}
 	if cs.outputMode == OutputModeEvents {
 		code := ClassifyError(err)
 		cs.emit(EventError, ErrorData{

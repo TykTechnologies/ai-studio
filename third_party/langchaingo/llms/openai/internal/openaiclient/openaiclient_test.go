@@ -6,9 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"testing"
+
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/internal/httprr"
 	"github.com/stretchr/testify/assert"
@@ -392,6 +396,25 @@ func TestSanitizeHTTPError(t *testing.T) {
 		sanitized := sanitizeHTTPError(mockNetErr)
 		assert.Error(t, sanitized)
 		assert.Equal(t, "network error: failed to reach API server", sanitized.Error())
+	})
+
+	// Tyk: the outbound network policy's refusal keeps its reason.
+	t.Run("network policy refusal", func(t *testing.T) {
+		// A real dial refused by the guarded transport (127.0.0.1 is internal).
+		req, err := http.NewRequest(http.MethodPost, "http://127.0.0.1:11434/v1/chat/completions?key=secret", nil)
+		require.NoError(t, err)
+		_, err = (&http.Client{Transport: netguard.HTTPTransport()}).Do(req)
+		require.Error(t, err)
+		var urlErr *url.Error
+		require.ErrorAs(t, err, &urlErr)
+		var opErr *net.OpError
+		require.ErrorAs(t, err, &opErr)
+		sanitized := sanitizeHTTPError(err)
+		assert.Contains(t, sanitized.Error(), "upstream endpoint not permitted: ")
+		assert.Contains(t, sanitized.Error(), netguard.EnvBlockInternal)
+		assert.NotContains(t, sanitized.Error(), "secret")
+		_, ok := netguard.Refusal(sanitized)
+		assert.True(t, ok)
 	})
 
 	t.Run("nil error", func(t *testing.T) {

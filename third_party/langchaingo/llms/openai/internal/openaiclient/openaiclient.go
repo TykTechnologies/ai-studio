@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"strings"
+
+	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 )
 
 const (
@@ -232,6 +234,14 @@ func sanitizeHTTPError(err error) error {
 	var netErr net.Error
 	if errors.As(err, &netErr) && netErr.Timeout() {
 		return errors.New("request timeout: network operation exceeded timeout")
+	}
+
+	// Tyk: a refusal by the outbound network policy names the setting to
+	// change; pass that reason on (without the URL) instead of hiding it as
+	// a generic network error.
+	var refusal *netguard.RefusalError
+	if errors.As(err, &refusal) {
+		return fmt.Errorf("upstream endpoint not permitted: %w", refusal)
 	}
 
 	// For other network errors, provide generic message without exposing details
