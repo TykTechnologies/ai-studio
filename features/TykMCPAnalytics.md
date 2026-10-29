@@ -168,14 +168,17 @@ Ingest administration (under the Tyk connection):
 - Calls without a key (keyless APIs, and calls the Gateway refused for a
   missing or bad key) carry `api_key` `00000000` and an empty alias: they are
   stored unattributed, and their primitive name is whatever the client sent.
-- `initialize` and `tools/list` arrive with an empty primitive type and the
-  method as the primitive name; they show as rows of their own in the
-  per-tool table.
+- `initialize` and `tools/list` arrive with an empty primitive type. Gateway
+  5.15 sets the method as the primitive name; 5.16 leaves it empty. Studio
+  stores and groups such calls under their `jsonrpc_method` (ingest, and
+  `primitiveNameExpr` in `analytics/mcp_stats.go` for rows already stored
+  empty), so each method is a row of its own in the per-tool table.
 - Pump 1.16's stdout pump omits zero-valued `mcp_stats` fields; the decoder
   defaults them.
 - Gateway 5.15.1 writes no analytics record for a `tools/call` refused by the
   key's `mcp_access_rights` (HTTP 403, JSON-RPC -32002), so tools blocked by
-  Studio key access never appear (bead emn). Auth refusals (401 no key, 403
+  Studio key access never appear (bead emn). Gateway 5.16.0 records them, as
+  one error each (2.3 readiness sweep, 2026-10-29). Auth refusals (401 no key, 403
   bad key) are recorded, with `api_key` `00000000` and no App.
 - Records that arrive after their server was deleted count as `unknown_api`
   and are dropped (seen for calls in the seconds before a delete).
@@ -206,10 +209,14 @@ Ingest administration (under the Tyk connection):
   attribution by key hash; App usage lists the server; an operator proxy
   without trafficLogs records nothing; REST traffic never reaches Studio;
   the ingest status counts the records).
+- Live E2E on Gateway 5.16.0 (2026-10-30, `TYK_GW_TAG=v5.16.0`,
+  `PUMP_PROFILE=httppump`): 6b passes with `initialize` and `tools/list`
+  named from `jsonrpc_method`, and the tool refused by key access counted
+  as one error (the check flips on 5.16 and later, read from `TYK_GW_TAG`).
 
 ## 9. Follow-ups
 
-- emn: tools refused by key access rights are invisible (Gateway gap).
+- emn: tools refused by key access rights are invisible on Gateway 5.15 (fixed in Gateway 5.16).
 
 - bv0.11 retention pruning for `mcp_call_records` (and old `tyk_ingest_stats` hours).
 - bv0.12 MDCB-embedded host hook (headless control plane passes

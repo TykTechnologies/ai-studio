@@ -222,6 +222,53 @@ func runMCPStatsSuite(t *testing.T, db *gorm.DB) {
 		assert.Equal(t, "Weather", o.TopTools[0].ServerName)
 		assert.Equal(t, int64(5), o.TopTools[0].Calls)
 	})
+
+	t.Run("methods without a primitive name", func(t *testing.T) {
+		var conn models.TykConnection
+		require.NoError(t, db.First(&conn).Error)
+		srv := &models.MCPServer{ConnectionID: &conn.ID, TykAPIID: "api-methods", Name: "Methods", Slug: "methods"}
+		require.NoError(t, db.Create(srv).Error)
+		call := func(method, name string, lat int64, code int) models.MCPCallRecord {
+			return models.MCPCallRecord{Timestamp: s.day.Add(12 * time.Hour), ConnectionID: conn.ID, MCPServerID: &srv.ID,
+				JSONRPCMethod: method, PrimitiveName: name, LatencyTotalMs: lat, ResponseCode: code, Source: models.MCPCallSourceTykPump}
+		}
+		// Gateway 5.15 names the method in primitive_name; 5.16 leaves it empty.
+		rows := []models.MCPCallRecord{
+			call("initialize", "initialize", 10, 200),
+			call("initialize", "initialize", 20, 200),
+			call("initialize", "", 30, 200),
+			call("initialize", "", 40, 200),
+			call("initialize", "", 50, 401),
+			call("tools/list", "", 8, 200),
+		}
+		require.NoError(t, db.Create(&rows).Error)
+		f := s.filter()
+		f.ServerID = &srv.ID
+
+		tools, total, err := GetMCPToolStats(db, f, 1, 10, "")
+		require.NoError(t, err)
+		assert.Equal(t, int64(2), total)
+		require.Len(t, tools, 2)
+		assert.Equal(t, "", tools[0].PrimitiveType)
+		assert.Equal(t, "initialize", tools[0].PrimitiveName)
+		assert.Equal(t, int64(5), tools[0].Calls)
+		assert.Equal(t, int64(1), tools[0].Errors)
+		assert.InDelta(t, 30, tools[0].P50Ms, 1e-9)
+		assert.Equal(t, "tools/list", tools[1].PrimitiveName)
+		assert.Equal(t, int64(1), tools[1].Calls)
+		assert.InDelta(t, 8, tools[1].P95Ms, 1e-9)
+
+		_, total, err = GetMCPToolStats(db, f, 1, 10, "TOOLS/")
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), total)
+
+		o, err := GetMCPOverview(db, f)
+		require.NoError(t, err)
+		require.Len(t, o.TopTools, 2)
+		assert.Equal(t, "initialize", o.TopTools[0].PrimitiveName)
+		assert.Equal(t, int64(5), o.TopTools[0].Calls)
+		assert.Equal(t, "tools/list", o.TopTools[1].PrimitiveName)
+	})
 }
 
 func TestMCPStats_SQLite(t *testing.T) {
