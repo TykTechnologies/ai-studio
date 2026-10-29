@@ -497,7 +497,7 @@ These plugins are released to the marketplace for 2.3.0. Versions marked † nee
 | prompt-compressor (new) | 1.0.2 | New plugin, needs AI Studio 2.3.0: see [Prompt Compressor](#spend-fewer-tokens-prompt-compressor-community-plugin) |
 | llm-cache | 1.3.0 † | Works correctly with Bedrock (errors never cached, token savings counted). No longer replays other plugins' headers on a hit. Stability and logging fixes |
 | llm-load-balancer (Enterprise) | 1.2.0 † | Counts Bedrock errors as failures, and client errors (400, 413, 422) no longer count against an upstream. Fixes a selection race. Validates and redacts upstream URLs |
-| advanced-llm-cache (Enterprise) | 1.3.0 † | Works correctly with Bedrock. Cache keys include the LLM, vendor, path and model, so the cache starts empty after the upgrade. Redis TLS now applies, and the Redis password is masked. Needs the `apps.write` scope |
+| advanced-llm-cache (Enterprise) | 1.3.0 † | Works correctly with Bedrock. Cache keys include the LLM, vendor, path and model, so the cache starts empty after the upgrade. Redis TLS now applies, and the Redis password is masked. Enter the Redis password itself: a `$SECRET/` reference there isn't resolved (it is nested), so Redis refuses it and the plugin quietly falls back to an unshared in-memory cache. Needs the `apps.write` scope |
 | rate-limiter | 1.2.0 † | Token rules count Bedrock, Google and streamed usage. Concurrency slots are given back for requests answered before the vendor. Masked Redis password |
 | llm-firewall | 1.2.0 † | Model rules match Bedrock model ids, inference profiles and ARNs. Inspects all prompt text, including Bedrock text documents. Optional `fail_closed` |
 | llm-price-sync | 1.1.1 | Refuses internal fetch URLs. Reliability fixes |
