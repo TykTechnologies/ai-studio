@@ -28,6 +28,23 @@ const formatBudgetPeriod = (startDate) => {
 	return `${start.toLocaleString('default', { month: 'short' })} ${start.getDate()} - ${end.toLocaleString('default', { month: 'short' })} ${end.getDate()}`;
 };
 
+// Format the period the API computed (as enforcement does, with anchor days
+// 29-31 clamped to short months): periodStart is its first day and periodEnd
+// the next period's start, so the last day shown is the day before. The
+// calendar date is read from the timestamp as the server wrote it, so the
+// browser's time zone cannot shift it.
+const formatApiPeriod = (periodStart, periodEnd) => {
+	const day = (iso) => {
+		const [y, m, d] = String(iso).slice(0, 10).split("-").map(Number);
+		return new Date(Date.UTC(y, m - 1, d));
+	};
+	const start = day(periodStart);
+	const last = day(periodEnd);
+	last.setUTCDate(last.getUTCDate() - 1);
+	const label = (date) => `${date.toLocaleString("default", { month: "short", timeZone: "UTC" })} ${date.getUTCDate()}`;
+	return `${label(start)} - ${label(last)}`;
+};
+
 // A budget of null (or undefined) is "no limit"; 0 is a budget of zero.
 export const formatBudgetDisplay = (item) => {
 	const monthlyBudget = item.budget ?? item.monthlyBudget;
@@ -44,8 +61,13 @@ export const formatBudgetDisplay = (item) => {
 	const usagePercent = (spent / monthlyBudget) * 100 || 0;
 	const currentUsage = spent;
 
-	const periodStart = calculateBudgetPeriodStart(budgetStartDate);
-	const period = formatBudgetPeriod(periodStart);
+	// The period the API computed when the caller has it; otherwise an
+	// estimate from the budget start date.
+	const periodStart = item.periodStart ?? item.period_start;
+	const periodEnd = item.periodEnd ?? item.period_end;
+	const period = periodStart && periodEnd
+		? formatApiPeriod(periodStart, periodEnd)
+		: formatBudgetPeriod(calculateBudgetPeriodStart(budgetStartDate));
 
 	// A budget's currency is implied by its spend (item.currency); none or
 	// USD shows as dollars.

@@ -879,6 +879,8 @@ const AppDetails = () => {
                     currentUsage: budgetUsageData?.current_usage,
                     percentage: budgetUsageData?.percentage,
                     budgetStartDate: app.attributes.budget_start_date || budgetUsageData?.start_date,
+                    periodStart: budgetUsageData?.start_date,
+                    periodEnd: budgetUsageData?.period_end,
                     currency: budgetUsageData?.currency
                   })}
                   {budgetUsageData?.mixed_currency_spend && Object.keys(budgetUsageData.mixed_currency_spend).length > 0 && (

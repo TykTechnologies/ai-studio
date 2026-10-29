@@ -58,6 +58,10 @@ func TestBudgetViews_ImpliedCurrency(t *testing.T) {
 		return out
 	}
 	eurView, mixedView := forApp(eur.ID), forApp(mixed.ID)
+	// The period the view covers, for the UI to show rather than recompute.
+	start, next := budget.Period(nil, time.Now())
+	assert.Equal(t, start.Format(time.RFC3339), eurView["start_date"])
+	assert.Equal(t, next.Format(time.RFC3339), eurView["period_end"])
 
 	if !budget.IsEnterpriseAvailable() {
 		assert.Empty(t, summary.Data[idOf(eur.ID)].Currency)

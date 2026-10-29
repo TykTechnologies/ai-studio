@@ -15,6 +15,11 @@ type BudgetUsage struct {
 	TotalTokens     int64      `json:"total_tokens"` // total tokens for the specified date range
 	UserID          uint       `json:"user_id"`      // ID of the user who owns the app
 	UserEmail       *string    `json:"user_email"`   // Email of the user who owns the app (pointer to handle null case)
+	// PeriodStart and PeriodEnd are the current budget period Spent covers,
+	// as enforcement computes it (budget.Period): PeriodEnd is the start of
+	// the next period (exclusive).
+	PeriodStart *time.Time `json:"period_start,omitempty"`
+	PeriodEnd   *time.Time `json:"period_end,omitempty"`
 	// Currency is the currency of Spent: the one currency of the period's
 	// spend (a budget's currency is implied by its spend). Empty when there
 	// is no spend, or when the period mixes currencies.

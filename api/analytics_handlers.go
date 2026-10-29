@@ -1232,6 +1232,8 @@ func (a *API) getBudgetUsage(c *gin.Context) {
 			"user_email":      u.UserEmail,
 			// "spent" is in "currency"; a period that mixes currencies has
 			// its spend by currency here instead (and is refused).
+			"period_start":         u.PeriodStart,
+			"period_end":           u.PeriodEnd, // the next period's start
 			"currency":             u.Currency,
 			"mixed_currency_spend": u.MixedCurrencySpend,
 		}
@@ -1305,7 +1307,7 @@ func (a *API) getBudgetUsageForApp(c *gin.Context) {
 	// The current budget period, as enforcement counts it (not everything
 	// since the budget start date).
 	now := time.Now()
-	start := budget.PeriodStart(app.BudgetStartDate, now)
+	start, next := budget.Period(app.BudgetStartDate, now)
 
 	spent, err := a.service.Budget.GetMonthlySpending(uint(appID), start, now)
 	if err != nil {
@@ -1351,6 +1353,7 @@ func (a *API) getBudgetUsageForApp(c *gin.Context) {
 		MonthlyBudget      *float64           `json:"monthly_budget"`
 		Percentage         *float64           `json:"percentage"`
 		StartDate          time.Time          `json:"start_date"`
+		PeriodEnd          time.Time          `json:"period_end"` // the next period's start
 		Currency           string             `json:"currency,omitempty"`
 		MixedCurrencySpend map[string]float64 `json:"mixed_currency_spend,omitempty"`
 	}{
@@ -1358,6 +1361,7 @@ func (a *API) getBudgetUsageForApp(c *gin.Context) {
 		MonthlyBudget:      app.MonthlyBudget,
 		Percentage:         percentage,
 		StartDate:          start,
+		PeriodEnd:          next,
 		Currency:           currency,
 		MixedCurrencySpend: mixed,
 	}
