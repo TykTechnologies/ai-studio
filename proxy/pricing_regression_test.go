@@ -541,3 +541,58 @@ func TestPricingRegression_RecalcOnRequestedNameSkipsPricedReported(t *testing.T
 		assert.Equal(t, []string{"USD"}, currencies)
 	})
 }
+
+// kq3b.5: deleting a price and creating it again works (the delete used to
+// be a soft delete that kept the unique (model, vendor) key), and traffic
+// after the re-create is priced at the new row.
+func TestPricingRegression_DeletedPriceCanBeCreatedAgain(t *testing.T) {
+	forEachPricingDB(t, func(t *testing.T, db *gorm.DB) {
+		_, mix := pricingScale(geminiMix[:1])
+		m := mix[0]
+		env := newStressEnvOn(t, db, 3)
+		p := m.price
+		mp, err := env.svc.CreateModelPrice(m.reported, string(m.vendor), p.CPT, p.CPIT, p.CacheWritePT, p.CacheReadPT, p.Currency)
+		require.NoError(t, err)
+		env.record(t, mix, 0)
+
+		require.NoError(t, env.svc.DeleteModelPrice(mp.ID))
+		doubled := p
+		doubled.CPT, doubled.CPIT, doubled.CacheReadPT = p.CPT*2, p.CPIT*2, p.CacheReadPT*2
+		again, err := env.svc.CreateModelPrice(m.reported, string(m.vendor), doubled.CPT, doubled.CPIT, doubled.CacheWritePT, doubled.CacheReadPT, doubled.Currency)
+		require.NoError(t, err, "re-creating a deleted price")
+		env.record(t, mix, 1)
+
+		got, err := env.svc.GetModelPriceByModelNameAndVendor(m.reported, string(m.vendor))
+		require.NoError(t, err)
+		assert.Equal(t, again.ID, got.ID, "the gateway prices by the re-created row")
+		costs := env.modelCostByDay(t, m.reported)
+		assertRel(t, m.dayCost(), costs[env.dayLabel(0)], 1e-9, "day 0 at the deleted price")
+		assertRel(t, m.dayCostAt(doubled), costs[env.dayLabel(1)], 1e-9, "day 1 at the re-created price")
+	})
+}
+
+// kq3b.5: traffic for a model whose price was deleted is recorded unpriced
+// (the lookup used to fail on the soft-deleted row's unique key), and the
+// model can be priced again afterwards.
+func TestPricingRegression_TrafficAfterDeletedPrice(t *testing.T) {
+	forEachPricingDB(t, func(t *testing.T, db *gorm.DB) {
+		_, mix := pricingScale(geminiMix[:1])
+		m := mix[0]
+		env := newStressEnvOn(t, db, 3)
+		p := m.price
+		mp, err := env.svc.CreateModelPrice(m.reported, string(m.vendor), p.CPT, p.CPIT, p.CacheWritePT, p.CacheReadPT, p.Currency)
+		require.NoError(t, err)
+		require.NoError(t, env.svc.DeleteModelPrice(mp.ID))
+
+		unpriced, err := env.svc.GetModelPriceByModelNameAndVendor(m.reported, string(m.vendor))
+		require.NoError(t, err, "looking the model up after its price was deleted")
+		assert.True(t, unpriced.CPT == 0 && unpriced.CPIT == 0 && unpriced.CacheWritePT == 0 && unpriced.CacheReadPT == 0, "an unpriced row")
+		env.record(t, mix, 0)
+		assert.Zero(t, env.modelCostByDay(t, m.reported)[env.dayLabel(0)], "traffic after the delete is unpriced")
+
+		_, err = env.svc.UpdateModelPrice(unpriced.ID, m.reported, string(m.vendor), p.CPT, p.CPIT, p.CacheWritePT, p.CacheReadPT, p.Currency)
+		require.NoError(t, err)
+		env.record(t, mix, 1)
+		assertRel(t, m.dayCost(), env.modelCostByDay(t, m.reported)[env.dayLabel(1)], 1e-9, "priced again")
+	})
+}
