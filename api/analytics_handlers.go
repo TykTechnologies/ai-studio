@@ -1230,9 +1230,10 @@ func (a *API) getBudgetUsage(c *gin.Context) {
 			"total_tokens":    u.TotalTokens,
 			"user_id":         u.UserID,
 			"user_email":      u.UserEmail,
-			// Period spend in other currencies: not in "spent", and the
-			// budget refuses requests while there is any.
-			"other_currency_spend": u.OtherCurrencySpend,
+			// "spent" is in "currency"; a period that mixes currencies has
+			// its spend by currency here instead (and is refused).
+			"currency":             u.Currency,
+			"mixed_currency_spend": u.MixedCurrencySpend,
 		}
 	}
 

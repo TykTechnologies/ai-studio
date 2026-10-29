@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
-	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -75,8 +74,7 @@ func GetAppSpending(db *gorm.DB, windows []AppSpendWindow, end time.Time) (map[u
 	}
 	query := db.Model(&models.LLMChatRecord{}).
 		Select("app_id, COALESCE(SUM(cost), 0) AS spent").
-		Where("time_stamp <= ?", end).
-		Where(budget.InCurrencySQL) // as the budget service: the budget currency only
+		Where("time_stamp <= ?", end)
 	scope := db
 	for i, w := range windows {
 		if i == 0 {

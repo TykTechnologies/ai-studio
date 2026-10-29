@@ -33,7 +33,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services"
-	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
 	"github.com/google/uuid"
@@ -1850,7 +1849,6 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 			} else if err := s.db.Model(&models.LLMChatRecord{}).
 				Select("COALESCE(SUM(cost), 0)").
 				Where("app_id = ? AND time_stamp >= ? AND time_stamp < ?", app.ID, periodStart, periodEnd.Add(time.Second)).
-				Where(budget.InCurrencySQL). // budgets count the budget currency only
 				Scan(&totalCostCents).Error; err != nil {
 				logger.Log.Warn().Err(err).Uint("app_id", app.ID).Msg("Failed to calculate current period usage for app")
 			} else {

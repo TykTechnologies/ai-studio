@@ -51,34 +51,44 @@ func TestGetBudgetUsage_MonthlyUsageIsTheBudgetPeriod(t *testing.T) {
 	assert.Equal(t, 2, seen)
 }
 
-// Budget figures count USD only: costs are not converted. Period spend in
-// other currencies is reported apart, for the dashboard to warn about (the
-// budget refuses requests while there is any).
-func TestGetBudgetUsage_OtherCurrenciesReportedApart(t *testing.T) {
+// A budget's currency is implied by its spend: a single-currency period is
+// reported in that currency; a period that mixes currencies (which
+// enforcement refuses) reports the spend by currency, not a sum.
+func TestGetBudgetUsage_ImpliedCurrency(t *testing.T) {
 	db := setupStatsTest(t)
 	now := time.Now()
 	limit := 100.0
-	app := models.App{Name: "mixed", MonthlyBudget: &limit}
-	require.NoError(t, db.Create(&app).Error)
+	mixed := models.App{Name: "mixed", MonthlyBudget: &limit}
+	eur := models.App{Name: "eur", MonthlyBudget: &limit}
+	require.NoError(t, db.Create(&mixed).Error)
+	require.NoError(t, db.Create(&eur).Error)
 	for _, r := range []struct {
+		app      uint
 		cost     float64
 		currency string
-	}{{187400, "USD"}, {10000, ""}, {583200, "EUR"}} {
-		require.NoError(t, db.Create(&models.LLMChatRecord{AppID: app.ID, LLMID: 1, Cost: r.cost, Currency: r.currency, TimeStamp: now.Add(-time.Minute)}).Error)
+	}{{mixed.ID, 177400, "USD"}, {mixed.ID, 10000, ""}, {mixed.ID, 583200, "EUR"}, {eur.ID, 250000, "EUR"}, {eur.ID, 50000, "eur"}} {
+		require.NoError(t, db.Create(&models.LLMChatRecord{AppID: r.app, LLMID: 1, Cost: r.cost, Currency: r.currency, TimeStamp: now.Add(-time.Minute)}).Error)
 	}
 
 	from, to := now.AddDate(0, 0, -1), now
 	usages, err := GetBudgetUsage(db, &from, &to, nil)
 	require.NoError(t, err)
-	var found bool
+	byID := map[uint]models.BudgetUsage{}
 	for _, u := range usages {
-		if u.EntityType == "App" && u.EntityID == app.ID {
-			found = true
-			assert.InDelta(t, 19.74, u.Spent, 1e-9)
-			assert.InDelta(t, 19.74, u.TotalCost, 1e-9)
-			assert.InDelta(t, 58.32, u.OtherCurrencySpend["EUR"], 1e-9)
-			assert.Len(t, u.OtherCurrencySpend, 1)
+		if u.EntityType == "App" {
+			byID[u.EntityID] = u
 		}
 	}
-	assert.True(t, found)
+	e := byID[eur.ID]
+	assert.Equal(t, "EUR", e.Currency)
+	assert.InDelta(t, 30, e.Spent, 1e-9)
+	assert.InDelta(t, 30, e.Usage, 1e-9)
+	assert.Nil(t, e.MixedCurrencySpend)
+
+	m := byID[mixed.ID]
+	assert.Empty(t, m.Currency)
+	assert.Zero(t, m.Spent, "not added up")
+	assert.Zero(t, m.Usage)
+	assert.InDelta(t, 18.74, m.MixedCurrencySpend["USD"], 1e-9)
+	assert.InDelta(t, 58.32, m.MixedCurrencySpend["EUR"], 1e-9)
 }

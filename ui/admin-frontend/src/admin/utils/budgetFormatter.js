@@ -47,5 +47,11 @@ export const formatBudgetDisplay = (item) => {
 	const periodStart = calculateBudgetPeriodStart(budgetStartDate);
 	const period = formatBudgetPeriod(periodStart);
 
-	return `$${parseFloat(monthlyBudget).toFixed(2)} (${parseFloat(usagePercent).toFixed(1)}% used, $${parseFloat(currentUsage).toFixed(2)}) for ${period}`;
+	// A budget's currency is implied by its spend (item.currency); none or
+	// USD shows as dollars.
+	const money = (v) => {
+		const amount = parseFloat(v).toFixed(2);
+		return item.currency && item.currency !== "USD" ? `${item.currency} ${amount}` : `$${amount}`;
+	};
+	return `${money(monthlyBudget)} (${parseFloat(usagePercent).toFixed(1)}% used, ${money(currentUsage)}) for ${period}`;
 };
