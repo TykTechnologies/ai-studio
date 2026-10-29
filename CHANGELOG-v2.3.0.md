@@ -193,6 +193,7 @@ This changes what plugins and filter scripts see for Bedrock traffic. Read the [
 - **Anthropic turns with tool calls were billed two or three times**, and cached tokens were billed at the full input price. Chat sessions are now priced exactly like gateway calls.
 - **Tool auth keys stored as `$SECRET/` references were sent as the literal reference text.**
 - **A chat whose LLM is blocked by the internal-address block or `LLM_UPSTREAM_ALLOWED_HOSTS` showed a retryable network error**, with nothing logged. Chat now reports `upstream endpoint not permitted`, naming the setting, and AI Studio logs a warning.
+- **Studio Chat failed on Claude Sonnet 5 and later**, which reject `temperature` and `top_p` (`400 temperature is deprecated for this model`), and chat titles weren't generated there. New model call settings default `temperature` and `top_p` to `0`, which means not sent, so the vendor's default applies. The title call no longer sends a temperature.
 
 ### Guardrails and filters
 - **Redacting a request flattened tool-using conversations**, dropping tool calls, images and cache settings, so the vendor refused the request. Redactions are now made in place.
@@ -396,6 +397,7 @@ See the [FIPS guide](docs/site/docs/fips.md).
 
 ### Other changes in behaviour
 
+- **Model call settings saved before 2.3 keep their `temperature` and `top_p`.** For Claude Sonnet 5 and later, set both to `0` (not sent), or Studio Chat on those models fails with `400`.
 - **Chat sessions send their history.** On LLM settings without a max length, a session now sends the conversation (up to the newest 100 messages), not just the latest message. Set **Max Length** to cap input.
 - **Chat costs change.** Anthropic turns with tool calls or thinking drop to the correct amount, cached tokens are billed at the cache price, and Anthropic chat records' total tokens include cache tokens.
 - **Tool and LLM names must be unique** ignoring case, spaces and punctuation. Duplicates stored earlier stay editable.
