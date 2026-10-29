@@ -925,7 +925,7 @@ test-guardrails: ent-link ## Live guardrail provider conformance (needs VT_GUARD
 	@echo "Running guardrail filters through the data plane..."
 	cd microgateway && VENDOR_TESTS_VENDORS="$(VENDORS)" \
 		VENDOR_TESTS_GUARDRAILS="$(GUARDRAILS)" \
-		$(ENT_GOWORK) go test -tags "vendorlive enterprise" -v -count=1 \
+		go test -tags "vendorlive enterprise" -v -count=1 \
 		-timeout 15m -run 'TestGuardrail' ./tests/vendorconformance/...
 
 .PHONY: test-guardrails-preflight
