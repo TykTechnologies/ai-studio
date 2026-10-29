@@ -25,7 +25,9 @@ const appSpendIDChunk = 500
 // database was scanning continuously. The tracker sums an App's period once
 // (at start-up, or when the period changes: a new month or a budget reset)
 // and afterwards reads only the rows added since the last cycle, found by id.
-// llm_chat_records rows are only ever inserted, never updated or deleted.
+// llm_chat_records rows are only inserted, except that a price
+// recalculation rewrites their cost: BudgetSyncService then starts its
+// trackers again (replicas.SignalSpendRecalculated).
 type budgetUsageTracker struct {
 	// column is the llm_chat_records column spend is kept by: app_id, or
 	// llm_id for LLM budgets (ap6).

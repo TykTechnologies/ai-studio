@@ -70,6 +70,12 @@ type BudgetSyncPayload struct {
 	LLMBudgets  map[uint32]AppBudgetData `json:"llm_budgets,omitempty"`
 	LLMBlocks   map[uint32]string        `json:"llm_blocks,omitempty"`
 	LLMIncluded bool                     `json:"llm_included,omitempty"`
+
+	// SpendRecalculated is set on the first sync after a price
+	// recalculation on the control plane rewrote stored costs: this sync's
+	// App and LLM figures are taken as they are, even when lower than ours,
+	// instead of only raising ours.
+	SpendRecalculated bool `json:"spend_recalculated,omitempty"`
 }
 
 // BudgetSyncTopic is re-exported from eventbridge for convenience
@@ -223,13 +229,20 @@ func (h *BudgetSyncHandler) HandleBudgetSync(event eventbridge.Event) {
 				h.llmBlocksUnsaved = false
 			}
 		}
+		if payload.SpendRecalculated {
+			h.llmBudgetSpend().ResetLocal()
+		}
 		h.llmBudgetSpend().Sync(payload.LLMBudgets)
 	}
 
 	// Use new AppBudgets if available (supports per-app budget periods)
 	if len(payload.AppBudgets) > 0 {
 		for appID, budgetData := range payload.AppBudgets {
-			h.updateLocalBudget(uint(appID), budgetData.Usage, budgetData.PeriodStart, budgetData.PeriodEnd)
+			if payload.SpendRecalculated {
+				h.resetLocalBudget(uint(appID), budgetData.Usage, budgetData.PeriodStart, budgetData.PeriodEnd)
+			} else {
+				h.updateLocalBudget(uint(appID), budgetData.Usage, budgetData.PeriodStart, budgetData.PeriodEnd)
+			}
 		}
 
 		log.Debug().
@@ -282,6 +295,21 @@ func (h *BudgetSyncHandler) updateLocalBudget(appID uint, usageDollars float64, 
 
 	if ledger := h.budgetLedger(); ledger != nil {
 		ledger.Reconcile(appID, periodStart, storedCostFromControl)
+	}
+}
+
+// resetLocalBudget takes the control plane's figure for an App as it is,
+// lowering ours if need be, after a price recalculation (SpendRecalculated).
+func (h *BudgetSyncHandler) resetLocalBudget(appID uint, usageDollars float64, periodStart, periodEnd time.Time) {
+	storedCostFromControl := usageDollars * 10000
+
+	if err := setStoredUsage(h.db, appID, periodStart, periodEnd, storedCostFromControl); err != nil {
+		log.Error().Err(err).Uint("app_id", appID).Msg("Failed to reset budget usage after a price recalculation")
+		return
+	}
+
+	if ledger := h.budgetLedger(); ledger != nil {
+		ledger.Reset(appID, periodStart, storedCostFromControl)
 	}
 }
 

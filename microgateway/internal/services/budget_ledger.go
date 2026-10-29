@@ -215,6 +215,20 @@ func (l *BudgetLedger) Reconcile(appID uint, start time.Time, cost float64) {
 	}
 }
 
+// Reset sets the App's stored total for the period starting at start to
+// cost, lowering it if need be: a price recalculation on the control plane
+// rewrote the costs its figure is summed from (BudgetSyncPayload
+// SpendRecalculated). Spend recorded and not yet written still counts.
+func (l *BudgetLedger) Reset(appID uint, start time.Time, cost float64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, e := range l.entries {
+		if e.appID == appID && e.start.Equal(start) && e.loaded {
+			e.base = cost
+		}
+	}
+}
+
 // ledgerFlush is the set of amounts one Flush writes.
 type ledgerFlush struct {
 	entries []*ledgerEntry

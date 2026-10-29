@@ -854,6 +854,19 @@ func raiseStoredUsage(db *gorm.DB, appID uint, start, end time.Time, cost float6
 	return res.Error
 }
 
+// setStoredUsage sets the App's stored total cost for the period starting at
+// start to cost, lowering it if need be, after a price recalculation on the
+// control plane. A missing row is created only for a cost above 0.
+func setStoredUsage(db *gorm.DB, appID uint, start, end time.Time, cost float64) error {
+	res := db.Model(&database.BudgetUsage{}).
+		Where("app_id = ? AND period_start = ?", appID, start).
+		Updates(map[string]interface{}{"total_cost": cost, "updated_at": time.Now()})
+	if res.Error != nil || res.RowsAffected > 0 || cost <= 0 {
+		return res.Error
+	}
+	return raiseStoredUsage(db, appID, start, end, cost)
+}
+
 // syncFilters syncs Filter entities
 func (s *EdgeSyncService) syncFilters(tx *gorm.DB, filters []*pb.FilterConfig) error {
 	log.Debug().Int("count", len(filters)).Msg("Syncing Filters to local SQLite")
