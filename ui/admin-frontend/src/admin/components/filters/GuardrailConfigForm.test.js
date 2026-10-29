@@ -111,6 +111,13 @@ describe("GuardrailConfigForm", () => {
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ connection: { api_key: "$SECRET/ACS" } }));
   });
 
+  it("masks secret connection fields like an LLM's API key", async () => {
+    render(<Harness initial={{ ...emptyGuardrailConfig(), provider: "azure_content_safety" }} />);
+    const endpoint = await screen.findByTestId("guardrail-connection-endpoint");
+    expect(endpoint).toHaveAttribute("type", "text");
+    expect(screen.getByTestId("guardrail-connection-api_key")).toHaveAttribute("type", "password");
+  });
+
   it("records a threshold for a detector that has one", async () => {
     const onChange = jest.fn();
     render(

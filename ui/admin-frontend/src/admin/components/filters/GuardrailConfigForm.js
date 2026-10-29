@@ -406,6 +406,11 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
                   <TextField
                     fullWidth
                     label={f.label + (f.required ? " *" : "")}
+                    // A secret field is masked like an LLM's API key; the API
+                    // returns a stored literal as [redacted], and saving that
+                    // back keeps the stored value.
+                    type={f.secret ? "password" : "text"}
+                    autoComplete={f.secret ? "new-password" : undefined}
                     value={config.connection[f.name] || ""}
                     onChange={(e) => update({ connection: { ...config.connection, [f.name]: e.target.value } })}
                     placeholder={f.example || ""}

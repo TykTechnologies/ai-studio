@@ -59,6 +59,15 @@ func (a *API) createFilter(c *gin.Context) {
 		return
 	}
 
+	// A new filter has no stored secret for a redaction to stand for.
+	if _, err := restoreRedactedConnection(nil, input.Data.Attributes.Config); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Bad Request", err.Error()}}})
+		return
+	}
+
 	if !requireSecretReadForGuardrailReferences(c, nil, input.Data.Attributes.Config) {
 		return
 	}
@@ -289,6 +298,17 @@ func (a *API) updateFilter(c *gin.Context) {
 		return
 	}
 
+	// The form sends the redacted secret back unchanged; keep the stored one.
+	restored, err := restoreRedactedConnection(existing.Config, input.Data.Attributes.Config)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{"Bad Request", err.Error()}}})
+		return
+	}
+	input.Data.Attributes.Config = restored
+
 	allow := guardrailAllowInternalHost(input.Data.Attributes.Config)
 	if !requireSecretReadForGuardrailReferences(c, existing.Config, input.Data.Attributes.Config) {
 		return
@@ -385,9 +405,90 @@ func toFilterResponse(filter *models.Filter) FilterResponse {
 			ResponseFilter: filter.ResponseFilter,
 			Namespace:      filter.Namespace,
 			Kind:           kind,
-			Config:         filter.Config,
+			// Literal guardrail connection secrets (API keys, secret access
+			// keys) read CredentialRedacted, as an LLM's api_key does; an
+			// update that sends the redaction back keeps the stored value.
+			Config: models.RedactFilterCredentials(filter).Config,
 		},
 	}
+}
+
+// connectionMap returns cfg's guardrail connection block as a map, or nil.
+func connectionMap(cfg map[string]interface{}) map[string]interface{} {
+	switch c := cfg["connection"].(type) {
+	case map[string]interface{}:
+		return c
+	case map[string]string:
+		out := make(map[string]interface{}, len(c))
+		for k, v := range c {
+			out[k] = v
+		}
+		return out
+	}
+	return nil
+}
+
+// redactedConnectionFields lists the connection fields of cfg that read
+// CredentialRedacted, sorted.
+func redactedConnectionFields(cfg map[string]interface{}) []string {
+	var out []string
+	for k, v := range connectionMap(cfg) {
+		if s, ok := v.(string); ok && s == models.CredentialRedacted {
+			out = append(out, "connection."+k)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// sameGuardrailConnection reports whether a and b name the same provider
+// with the same connection block.
+func sameGuardrailConnection(a, b map[string]interface{}) bool {
+	ac, err := guardrails.ParseConfig(a)
+	if err != nil {
+		return false
+	}
+	bc, err := guardrails.ParseConfig(b)
+	if err != nil {
+		return false
+	}
+	return ac.Provider == bc.Provider && maps.Equal(ac.Connection, bc.Connection)
+}
+
+// restoreRedactedConnection returns updated with every connection field that
+// reads CredentialRedacted (what the API shows a stored secret as) replaced
+// by the stored value, so saving or testing an edited filter keeps its key.
+// The stored value is only put back for the same provider; a redacted field
+// with no stored value, or under a different provider, is an error rather
+// than the literal "[redacted]" being saved or sent. updated is not changed.
+func restoreRedactedConnection(stored, updated map[string]interface{}) (map[string]interface{}, error) {
+	fields := redactedConnectionFields(updated)
+	if len(fields) == 0 {
+		return updated, nil
+	}
+	storedProvider, _ := stored["provider"].(string)
+	updatedProvider, _ := updated["provider"].(string)
+	storedConn := connectionMap(stored)
+	if storedProvider != updatedProvider || storedConn == nil {
+		return nil, fmt.Errorf("%s reads %s; enter the value again", strings.Join(fields, ", "), models.CredentialRedacted)
+	}
+	conn := make(map[string]interface{}, len(connectionMap(updated)))
+	for k, v := range connectionMap(updated) {
+		if s, ok := v.(string); ok && s == models.CredentialRedacted {
+			orig, has := storedConn[k]
+			if !has {
+				return nil, fmt.Errorf("connection.%s reads %s but no value is stored; enter the value again", k, models.CredentialRedacted)
+			}
+			v = orig
+		}
+		conn[k] = v
+	}
+	out := make(map[string]interface{}, len(updated))
+	for k, v := range updated {
+		out[k] = v
+	}
+	out["connection"] = conn
+	return out, nil
 }
 
 func toFilterResponses(filters []models.Filter) []FilterResponse {
@@ -446,6 +547,28 @@ func (a *API) testFilter(c *gin.Context) {
 		if len(input.Config) == 0 {
 			c.JSON(http.StatusBadRequest, FilterTestOutput{Success: false, Error: "config is required for a guardrail filter"})
 			return
+		}
+		// Testing a saved filter from its edit page sends the redacted
+		// secret back; use the stored one, but only with exactly the saved
+		// provider and connection block, so a test cannot send the stored
+		// key to an endpoint the caller chose.
+		if len(redactedConnectionFields(input.Config)) > 0 {
+			var stored map[string]interface{}
+			if input.FilterID != 0 {
+				if saved, err := a.service.GetFilterByID(input.FilterID); err == nil && saved.IsGuardrail() {
+					stored = saved.Config
+				}
+			}
+			restored, err := restoreRedactedConnection(stored, input.Config)
+			if err == nil && !sameGuardrailConnection(stored, restored) {
+				err = errors.New("the provider or connection settings differ from the saved filter; save them first, or enter the secret again to test with them")
+			}
+			if err != nil {
+				c.JSON(http.StatusBadRequest, FilterTestOutput{Success: false, Error: err.Error()})
+				return
+			}
+			input.Config = restored
+			tempFilter.Config = restored
 		}
 		if reason := a.guardrailTestReferencesAllowed(input); reason != "" {
 			c.JSON(http.StatusBadRequest, FilterTestOutput{Success: false, Error: reason})
