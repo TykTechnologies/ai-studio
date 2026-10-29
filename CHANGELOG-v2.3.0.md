@@ -402,6 +402,7 @@ See the [FIPS guide](docs/site/docs/fips.md).
 ### Other changes in behaviour
 
 - **Model call settings saved before 2.3 keep their `temperature` and `top_p`.** For Claude Sonnet 5 and later, set both to `0` (not sent), or Studio Chat on those models fails with `400`.
+  - The call-settings form's default preset now leaves `temperature` and `top_p` unset (`0`, not sent), so the vendor's default applies. One exception: on OpenAI models other than reasoning models (`gpt-4o` and similar), AI Studio's client sends `temperature: 0` when none is set, so Studio Chat on a call setting created from the default preset runs at temperature 0. Set a temperature in the call setting for a different value; non-zero values are sent as before. This affects Studio Chat only: gateway and API traffic don't use call settings.
 - **Chat sessions send their history.** On LLM settings without a max length, a session now sends the conversation (up to the newest 100 messages), not just the latest message. Set **Max Length** to cap input.
 - **Chat costs change.** Anthropic turns with tool calls or thinking drop to the correct amount, cached tokens are billed at the cache price, and Anthropic chat records' total tokens include cache tokens.
 - **Tool and LLM names must be unique** ignoring case, spaces and punctuation. Duplicates stored earlier stay editable.
