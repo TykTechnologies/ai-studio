@@ -105,6 +105,8 @@ graph TD
     *   `GET /model-prices/by-vendor?vendor=X`: Get prices for a specific vendor.
     *   `GET /model-prices/by-name?model_name=Y`: Get or create a price by model name.
     *   `PATCH /model-prices/{id}/recalculate`: Update a price and recalculate historical costs.
+    *   `POST /model-prices/{id}/backfill`: Price the unpriced history (`BackfillUnpricedHistory`): the records this price prices (same coverage as the recalculation, including requested-name rows) that were recorded at no cost although they used tokens (`cost = 0 AND total_tokens > 0`), at the current price and each record's multiplier, taking the price's currency. Optional body `{"from": "YYYY-MM-DD", "to": "YYYY-MM-DD"}`, inclusive dates in UTC. Records with a cost are not touched. Returns `rows_priced`. Nothing backfills automatically: a first price on a model that has been used for months leaves that history at 0 until an admin backfills it.
+    *   `GET /model-prices` sets `meta.unpriced_rows` on each price: the records a backfill would price (`CountUnpricedHistory`, one grouped scan of the unpriced records per page). The prices list shows it as "Unpriced Requests", with a "Backfill unpriced history" row action that takes the optional date range.
 
 **4. Use Cases & Behavior**
 

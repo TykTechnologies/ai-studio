@@ -884,6 +884,7 @@ func (a *API) setupRoutes() error {
 	v1.GET("/model-prices/:id", authz.Read("model-prices"), a.getModelPrice)
 	v1.PATCH("/model-prices/:id", authz.Write("model-prices"), a.updateModelPrice)
 	v1.PATCH("/model-prices/:id/recalculate", authz.Write("model-prices"), a.updateModelPriceAndRecalculate)
+	v1.POST("/model-prices/:id/backfill", authz.Write("model-prices"), a.backfillModelPriceHistory)
 	v1.DELETE("/model-prices/:id", authz.Delete("model-prices"), a.deleteModelPrice)
 	v1.GET("/model-prices", authz.Read("model-prices"), a.getAllModelPrices)
 	v1.GET("/model-prices/by-vendor", authz.Read("model-prices"), a.getModelPricesByVendor)

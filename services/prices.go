@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -108,21 +109,109 @@ func (s *Service) recalculateChatRecordCosts(tx *gorm.DB, modelName, vendor stri
 	newList, newArgs := chatRecordListCostSQL(vendor, updated)
 
 	ratio := `NULLIF(cost, 0) / NULLIF(` + oldList + `, 0)`
-	args := append(append(append(newArgs, oldArgs...), oldArgs...), updated.Currency, vendor, modelName, modelName)
+	pricedBy, pricedByArgs := chatRecordsPricedBySQL(modelName, vendor)
+	args := append(append(append(append(newArgs, oldArgs...), oldArgs...), updated.Currency), pricedByArgs...)
 	result := tx.Exec(`
 		UPDATE llm_chat_records
 		SET cost = `+newList+` * COALESCE(price_multiplier, `+ratio+`, 1),
 		price_multiplier = COALESCE(price_multiplier, `+ratio+`),
 		currency = ?
-		WHERE vendor = ? AND (name = ? OR (
+		WHERE `+pricedBy,
+		args...,
+	)
+	return result.Error
+}
+
+// chatRecordsPricedBySQL selects, in a WHERE clause on llm_chat_records, the
+// rows the gateway prices with the price row of modelName and vendor: those
+// recorded under that name, and those requested by that name that the vendor
+// reported under another (a versioned name) whose own price row is unpriced
+// (proxy priceForExchange).
+func chatRecordsPricedBySQL(modelName, vendor string) (string, []any) {
+	return `vendor = ? AND (name = ? OR (
 			requested_model = ? AND name <> requested_model AND NOT EXISTS (
 				SELECT 1 FROM model_prices mp
 				WHERE mp.model_name = llm_chat_records.name AND mp.vendor = llm_chat_records.vendor
 				AND mp.deleted_at IS NULL
 				AND (mp.cpt <> 0 OR mp.cpit <> 0 OR mp.cache_write_pt <> 0 OR mp.cache_read_pt <> 0))))`,
-		args...,
-	)
-	return result.Error
+		[]any{vendor, modelName, modelName}
+}
+
+// unpricedChatRecordSQL selects the rows recorded with no cost although they
+// used tokens: traffic from before the model had a price.
+const unpricedChatRecordSQL = `cost = 0 AND total_tokens > 0`
+
+// BackfillUnpricedHistory prices the history a model price row never priced:
+// the chat records it prices (see chatRecordsPricedBySQL) that were recorded
+// at no cost, optionally only those with a time stamp in [from, to). Each is
+// priced at the row's current price and multiplier, and takes its currency.
+// Rows with a cost are left alone (PATCH /model-prices/:id/recalculate
+// reprices them). It returns the number of rows priced.
+func (s *Service) BackfillUnpricedHistory(id uint, from, to *time.Time) (int64, error) {
+	mp, err := s.GetModelPriceByID(id)
+	if err != nil {
+		return 0, err
+	}
+	list, listArgs := chatRecordListCostSQL(mp.Vendor, *mp)
+	pricedBy, pricedByArgs := chatRecordsPricedBySQL(mp.ModelName, mp.Vendor)
+	query := `UPDATE llm_chat_records
+		SET cost = ` + list + ` * COALESCE(price_multiplier, 1), currency = ?
+		WHERE ` + unpricedChatRecordSQL + ` AND ` + pricedBy
+	args := append(append(listArgs, mp.Currency), pricedByArgs...)
+	if from != nil {
+		query += ` AND time_stamp >= ?`
+		args = append(args, *from)
+	}
+	if to != nil {
+		query += ` AND time_stamp < ?`
+		args = append(args, *to)
+	}
+	result := s.DB.Exec(query, args...)
+	return result.RowsAffected, result.Error
+}
+
+// CountUnpricedHistory returns, for each of the given model price rows, the
+// number of chat records it prices that were recorded at no cost (what
+// BackfillUnpricedHistory would price). Rows with none are left out. It
+// applies chatRecordsPricedBySQL's rule to one grouped scan of the unpriced
+// records, rather than a scan per price row.
+func (s *Service) CountUnpricedHistory(prices models.ModelPrices) (map[uint]int64, error) {
+	var groups []struct {
+		Name, RequestedModel, Vendor string
+		N                            int64
+	}
+	if err := s.DB.Model(&models.LLMChatRecord{}).
+		Select("name, COALESCE(requested_model, '') AS requested_model, vendor, COUNT(*) AS n").
+		Where(unpricedChatRecordSQL).
+		Group("name, COALESCE(requested_model, ''), vendor").
+		Scan(&groups).Error; err != nil {
+		return nil, err
+	}
+	var priced []struct{ ModelName, Vendor string }
+	if err := s.DB.Model(&models.ModelPrice{}).
+		Where("cpt <> 0 OR cpit <> 0 OR cache_write_pt <> 0 OR cache_read_pt <> 0").
+		Select("model_name, vendor").Scan(&priced).Error; err != nil {
+		return nil, err
+	}
+	type key struct{ name, vendor string }
+	isPriced := map[key]bool{}
+	for _, p := range priced {
+		isPriced[key{p.ModelName, p.Vendor}] = true
+	}
+
+	counts := map[uint]int64{}
+	for _, mp := range prices {
+		for _, g := range groups {
+			if g.Vendor != mp.Vendor {
+				continue
+			}
+			if g.Name == mp.ModelName ||
+				(g.RequestedModel == mp.ModelName && g.Name != g.RequestedModel && !isPriced[key{g.Name, g.Vendor}]) {
+				counts[mp.ID] += g.N
+			}
+		}
+	}
+	return counts, nil
 }
 
 // chatRecordListCostSQL is a chat record's cost at price p in SQL, in the
