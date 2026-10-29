@@ -126,8 +126,9 @@ func TestGetBudgetUsage(t *testing.T) {
 
 	// Create test app with budget.
 	//
-	// Dates are computed in UTC to match analytics.GetBudgetUsage, which builds
-	// its month window from time.Now().UTC(). Using local time here made the
+	// Dates are computed in UTC. analytics.GetBudgetUsage used to build its
+	// month window from time.Now().UTC() (it now counts each entity's budget
+	// period, budget.PeriodStart). Using local time here made the
 	// test depend on the machine's offset: in UTC+12 the local date rolls over
 	// a day early, so on the 1st of a month the seeded records were written
 	// with a +12 offset, sorted into the *next* month against SQLite's string

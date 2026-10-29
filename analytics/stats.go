@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -1104,14 +1105,14 @@ func maxTime(times ...time.Time) time.Time {
 	return m
 }
 
-// GetBudgetUsage returns usage statistics for all LLMs and Apps that have costs, with optional date range
+// GetBudgetUsage returns usage statistics for all LLMs and Apps that have costs, with optional date range.
+// Each entity's monthly usage (Spent, Usage) is its spend in its current budget period, as budget
+// enforcement counts it (see periodUsage); TotalCost and TotalTokens cover the date range.
 func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]models.BudgetUsage, error) {
 	var result []models.BudgetUsage
 
-	// Get current month's start and end dates for budget calculation
-	now := time.Now().UTC()
-
-	// Set start of month to beginning of day (00:00:00) UTC
+	// Entities with records this calendar month are listed even outside the date range
+	now := time.Now()
 	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
 
 	// The month ends (exclusively) at the start of the next one
@@ -1140,12 +1141,11 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
 		Select(`
 			llm_chat_records.llm_id,
 			COALESCE(llms.name, NULLIF(llm_chat_records.vendor, ''), 'Unknown') AS name,
-			SUM(CASE WHEN time_stamp >= ? AND time_stamp < ? THEN COALESCE(cost, 0) ELSE 0 END) AS monthly_usage,
 			SUM(CASE WHEN time_stamp >= ? AND time_stamp < ? THEN COALESCE(cost, 0) ELSE 0 END) AS total_cost,
 			SUM(CASE WHEN time_stamp >= ? AND time_stamp < ? THEN COALESCE(total_tokens, 0) ELSE 0 END) AS total_tokens,
 			llms.monthly_budget,
 			llms.budget_start_date
-	`, startOfMonth, endOfMonth, costStartDate, costEndDate, costStartDate, costEndDate).
+	`, costStartDate, costEndDate, costStartDate, costEndDate).
 		Joins("LEFT JOIN llms ON llm_chat_records.llm_id = llms.id AND llms.deleted_at IS NULL").
 		Where("time_stamp >= ? AND time_stamp < ?", minDate, maxDate).
 		Group("llm_chat_records.llm_id, COALESCE(llms.name, NULLIF(llm_chat_records.vendor, ''), 'Unknown'), llms.monthly_budget, llms.budget_start_date")
@@ -1158,8 +1158,10 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
 		return nil, err
 	}
 
+	if err := periodUsage(db, "llm_id", &models.LLM{}, llmStats, now); err != nil {
+		return nil, err
+	}
 	for _, stat := range llmStats {
-		stat.MonthlyUsage = stat.MonthlyUsage / 10000
 		stat.TotalCost = stat.TotalCost / 10000
 		result = append(result, stat.toBudgetUsage("LLM"))
 	}
@@ -1172,14 +1174,13 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
 		Select(`
         COALESCE(llm_chat_records.app_id, 0) AS llm_id,
         COALESCE(apps.name, 'Tyk AI Studio Chat') AS name,
-        SUM(CASE WHEN time_stamp >= ? AND time_stamp < ? THEN COALESCE(cost, 0) ELSE 0 END) AS monthly_usage,
         SUM(CASE WHEN time_stamp >= ? AND time_stamp < ? THEN COALESCE(cost, 0) ELSE 0 END) AS total_cost,
         SUM(CASE WHEN time_stamp >= ? AND time_stamp < ? THEN COALESCE(total_tokens, 0) ELSE 0 END) AS total_tokens,
         apps.monthly_budget,
         apps.budget_start_date,
         COALESCE(apps.user_id, 0) AS user_id,
         COALESCE(users.email, CASE WHEN apps.id IS NOT NULL THEN 'Unknown User' ELSE NULL END) AS user_email
-    `, startOfMonth, endOfMonth, costStartDate, costEndDate, costStartDate, costEndDate).
+    `, costStartDate, costEndDate, costStartDate, costEndDate).
 		Joins("LEFT JOIN apps ON llm_chat_records.app_id = apps.id AND apps.deleted_at IS NULL").
 		Where("time_stamp >= ? AND time_stamp < ?", minDate, maxDate).
 		Joins("LEFT JOIN users ON apps.user_id = users.id AND users.deleted_at IS NULL").
@@ -1188,13 +1189,70 @@ func GetBudgetUsage(db *gorm.DB, startDate, endDate *time.Time, llmID *uint) ([]
 		return nil, err
 	}
 
+	if err := periodUsage(db, "app_id", &models.App{}, appStats, now); err != nil {
+		return nil, err
+	}
 	for _, stat := range appStats {
-		stat.MonthlyUsage = stat.MonthlyUsage / 10000
 		stat.TotalCost = stat.TotalCost / 10000
 		result = append(result, stat.toBudgetUsage("App"))
 	}
 
 	return result, nil
+}
+
+// periodUsage sets each stat's MonthlyUsage, in dollars, to the entity's
+// spend in its current budget period, as budget enforcement counts it: from
+// budget.PeriodStart of its budget_start_date (the 1st of the month when
+// unset or the entity is gone) at now, in server-local time, with no upper
+// bound. column is the llm_chat_records column the stats are grouped by;
+// owner (an App or LLM) names the table budget_start_date is read from.
+func periodUsage(db *gorm.DB, column string, owner interface{}, stats []budgetStats, now time.Time) error {
+	if len(stats) == 0 {
+		return nil
+	}
+	ids := make([]uint, 0, len(stats))
+	for _, st := range stats {
+		ids = append(ids, st.LLMID)
+	}
+	var owners []struct {
+		ID              uint
+		BudgetStartDate *time.Time
+	}
+	if err := db.Model(owner).Select("id", "budget_start_date").Where("id IN ?", ids).Scan(&owners).Error; err != nil {
+		return err
+	}
+	anchors := make(map[uint]*time.Time, len(owners))
+	for _, o := range owners {
+		anchors[o.ID] = o.BudgetStartDate
+	}
+
+	// One query per distinct period start.
+	groups := map[time.Time][]uint{}
+	for _, id := range ids {
+		start := budget.PeriodStart(anchors[id], now)
+		groups[start] = append(groups[start], id)
+	}
+	spent := make(map[uint]float64, len(ids))
+	for start, group := range groups {
+		var rows []struct {
+			ID    uint
+			Total float64
+		}
+		if err := db.Model(&models.LLMChatRecord{}).
+			Select("COALESCE("+column+", 0) AS id, COALESCE(SUM(cost), 0) AS total").
+			Where("COALESCE("+column+", 0) IN ? AND time_stamp >= ?", group, start).
+			Group("COALESCE(" + column + ", 0)").
+			Scan(&rows).Error; err != nil {
+			return err
+		}
+		for _, r := range rows {
+			spent[r.ID] = r.Total
+		}
+	}
+	for i := range stats {
+		stats[i].MonthlyUsage = spent[stats[i].LLMID] / 10000
+	}
+	return nil
 }
 
 // proxyLogSearch filters proxy logs by a search term: an exact request id
