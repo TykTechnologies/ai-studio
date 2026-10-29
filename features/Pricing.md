@@ -106,6 +106,7 @@ graph TD
     *   `GET /model-prices/by-name?model_name=Y`: Get or create a price by model name.
     *   `PATCH /model-prices/{id}/recalculate`: Update a price and recalculate historical costs.
         It emits `system.model_price.updated`, as the standard update does, so edges are flagged for a config push (they price new traffic at the new price once synced) and subscribed plugins are notified. The recalculation reprices the hub's `llm_chat_records` only: an edge's own `analytics_events` and `budget_usages` copies keep the costs they were recorded with.
+*   **Edge currency:** chat records ingested from microgateways (`grpc/control_server.go`, analytics pulse) keep the edge's `AnalyticsEvent.currency`, the currency of the model price the edge priced the request with (`edgeCurrency`: a three-letter code as given; empty, from older edges, or invalid is recorded as USD, logged on the first and every 100th invalid one). They used to be recorded as USD whatever the price's currency.
 
 **4. Use Cases & Behavior**
 
