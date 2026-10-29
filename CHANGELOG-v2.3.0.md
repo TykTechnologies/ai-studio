@@ -191,6 +191,7 @@ This changes what plugins and filter scripts see for Bedrock traffic. Read the [
 - **Long replies failed on the Postgres chat queue** with `payload string too long`.
 - **Anthropic turns with tool calls were billed two or three times**, and cached tokens were billed at the full input price. Chat sessions are now priced exactly like gateway calls.
 - **Tool auth keys stored as `$SECRET/` references were sent as the literal reference text.**
+- **A chat whose LLM is blocked by the internal-address block or `LLM_UPSTREAM_ALLOWED_HOSTS` showed a retryable network error**, with nothing logged. Chat now reports `upstream endpoint not permitted`, naming the setting, and AI Studio logs a warning.
 
 ### Guardrails and filters
 - **Redacting a request flattened tool-using conversations**, dropping tool calls, images and cache settings, so the vendor refused the request. Redactions are now made in place.
