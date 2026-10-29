@@ -273,7 +273,7 @@ This changes what plugins and filter scripts see for Bedrock traffic. Read the [
 > - have an administrator turn on **Allow internal host** on that LLM, embedder, tool, data source, guardrail, plugin or MCP server, which exempts only its own host;
 > - or set `LLM_UPSTREAM_BLOCK_INTERNAL=false` to restore the 2.2 behaviour.
 >
-> Set this on every edge too, because each process applies its own setting. A value other than `true` or `false` now stops startup.
+> Set this on every edge too, because each process applies its own setting. A value that isn't a boolean (such as `yes`) now stops startup; `1`, `0`, `t` and `f` are accepted.
 
 - **Helm.** Studio's chart sets `config.blockInternalUpstreams: "true"` and takes `config.allowedInternalHosts`. The Microgateway chart's `config.blockInternalUpstreams` now defaults to `true`.
 - **More ranges count as internal**: multicast, reserved, benchmarking (`198.18.0.0/15`), `192.0.0.0/24`, IPv6 site-local, NAT64, 6to4, and shared address space (`100.64.0.0/10`, used by Tailscale and some Kubernetes CNIs). A guardrail provider or plugin host in one of these ranges is refused unless allowed.
