@@ -308,7 +308,7 @@ func (ds *DataSession) StoreEmbedding(dsID uint, docs []schema.Document) error {
 			return err
 		}
 
-		_, err = store.AddDocuments(context.Background(), docs, vectorstores.WithNameSpace(d.DBName))
+		_, err = store.AddDocuments(context.Background(), docs, addDocumentsOptions(d)...)
 		if err != nil {
 			return fmt.Errorf("add documents failed: %v", err)
 		}
@@ -317,6 +317,17 @@ func (ds *DataSession) StoreEmbedding(dsID uint, docs []schema.Document) error {
 	}
 
 	return fmt.Errorf("no datasources found")
+}
+
+// addDocumentsOptions are the options StoreEmbedding adds a datasource's
+// documents with. pgvector takes no namespace on add (its AddDocuments
+// refuses one with ErrUnsupportedOptions); its collection is already the
+// datasource's DBName (getStore).
+func addDocumentsOptions(d *models.Datasource) []vectorstores.Option {
+	if d.DBSourceType == VECTOR_PGVECTOR {
+		return nil
+	}
+	return []vectorstores.Option{vectorstores.WithNameSpace(d.DBName)}
 }
 
 // getEmbedder builds the datasource's embedding client from its embedder,
