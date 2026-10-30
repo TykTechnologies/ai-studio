@@ -127,6 +127,25 @@ func OpenWriter(config DatabaseConfig, db *gorm.DB) (*gorm.DB, error) {
 
 // Migrate runs auto-migration for all models
 func Migrate(db *gorm.DB) error {
+	if err := autoMigrate(db); err != nil {
+		return err
+	}
+	return PurgeSoftDeletedModelPrices(db)
+}
+
+// PurgeSoftDeletedModelPrices removes model prices that older versions
+// soft-deleted. The unique index on (model_name, vendor) still covered them,
+// so the price could never be created again; deletes are hard deletes now.
+// Idempotent, so it runs on every start, as Studio's
+// models.PurgeSoftDeletedModelPrices does.
+func PurgeSoftDeletedModelPrices(db *gorm.DB) error {
+	if err := db.Unscoped().Where("deleted_at IS NOT NULL").Delete(&ModelPrice{}).Error; err != nil {
+		return fmt.Errorf("purge soft-deleted model prices: %w", err)
+	}
+	return nil
+}
+
+func autoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&APIToken{},
 		&LLM{},

@@ -297,6 +297,8 @@ func (h *MicrogatewaAnalyticsHandler) RecordExchange(ctx context.Context, proxyL
 				ServiceTier:         record.ServiceTier,
 				GatewayRequestID:    proxyLog.RequestID,
 				ClientRequestID:     proxyLog.ClientRequestID,
+				RequestedModel:      record.RequestedModel,
+				PriceMultiplier:     record.PriceMultiplier,
 			}
 			if err := h.pluginManager.ExecuteDataCollectionPlugins("analytics", analyticsData); err != nil {
 				log.Error().Err(err).Msg("Failed to execute analytics plugins for exchange")
@@ -384,6 +386,8 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(_ context.Context, record
 			DecisionQuestions:      record.DecisionQuestions,
 			DecisionRefusals:       record.DecisionRefusals,
 			ServiceTier:            record.ServiceTier,
+			RequestedModel:         record.RequestedModel,
+			PriceMultiplier:        record.PriceMultiplier,
 		}
 
 		// Execute analytics plugins

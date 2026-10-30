@@ -39,6 +39,8 @@ mkdir -p "$OUT"
 SUITES=$(cat <<'EOF'
 # Studio's Postgres-specific tests.
 studio|.||PostgreSQL|_Postgres|InTransaction|EnsureInDefaultCatalogue||./models/ ./services/ ./pkg/studio/ ./analytics/
+# The pricing regression suite: price changes against recorded history.
+pricing|.||TestPricingRegression||./proxy/ ./api/
 # The chat queue (LISTEN/NOTIFY), config and startup.
 queue-config-startup|.||||./chat_session/ ./config/ ./startup/
 # The cluster code runs on every Postgres deployment: the event log and
@@ -47,11 +49,12 @@ queue-config-startup|.||||./chat_session/ ./config/ ./startup/
 # cases side by side.
 cluster|.||||./pkg/cluster/ ./pkg/pglisten/ ./services/pushes/ ./services/scheduler/
 # Pushes and the event-bus relay across several control-server replicas on
-# one database, and the budget usage tracker's queries.
-grpc|.||TestPushCluster_|TestRelay_|_Postgres|BUDGET_TEST_POSTGRES_DSN=own|./grpc/
+# one database, the budget usage tracker's queries and the pricing
+# regression suite's hub budget periods.
+grpc|.||TestPushCluster_|TestRelay_|_Postgres|TestPricingRegression|BUDGET_TEST_POSTGRES_DSN=own|./grpc/
 # Analytics writer, budget ledger and budget sync against Postgres (ON
 # CONFLICT, GREATEST, enforced foreign keys), and the edge schema snapshot.
-mgw|microgateway||Postgres|MGW_TEST_POSTGRES_DSN=own|./internal/services/ ./internal/database/
+mgw|microgateway||Postgres|TestPricingRegression|MGW_TEST_POSTGRES_DSN=own|./internal/services/ ./internal/database/
 # Real edges against several Studio replicas sharing DATABASE_URL (a schema
 # per test): pushes land whatever happens to the connections.
 mgw-cluster|microgateway||||./tests/cluster/
@@ -69,6 +72,9 @@ agenttrace|.||AgentTrace|Capture|AGENT_TRACE_TEST_POSTGRES_DSN|./models/ ./analy
 ent-agenttrace|enterprise|enterprise||AGENT_TRACE_TEST_POSTGRES_DSN|./features/agenttracing/...
 ent-audit|enterprise|enterprise|||./features/audit/...
 ent-webhooks|enterprise|enterprise|_Postgres||./features/webhooks/
+# The pricing regression suite's budget side (spend read through the budget
+# service after price and period edge cases).
+ent-budget|enterprise|enterprise|TestPricingRegression||./features/budget/
 EOF
 )
 

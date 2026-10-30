@@ -77,6 +77,14 @@ type BudgetSyncPayload struct {
 	LLMBudgets  map[uint32]AppBudgetData `json:"llm_budgets,omitempty"`
 	LLMBlocks   map[uint32]string        `json:"llm_blocks,omitempty"`
 	LLMIncluded bool                     `json:"llm_included,omitempty"`
+
+	// SpendRecalculated is set on the first sync after a price
+	// recalculation rewrote stored costs. AppBudgets then names every App
+	// (unspent ones too), and edges take its figures, and LLMBudgets', as
+	// they are, even when lower than their own: normally they only raise,
+	// and an App blocked at the old, higher price stayed blocked. Edges
+	// before this field ignore it and keep only raising.
+	SpendRecalculated bool `json:"spend_recalculated,omitempty"`
 }
 
 // EdgeBudgetSource is the Enterprise budget service as the budget sync sees
@@ -110,6 +118,10 @@ type BudgetSyncService struct {
 	lastUsage map[uint32]float64
 	// stopLeading removes the leadership handler.
 	stopLeading func()
+	// recalculated is set by a price recalculation (on any replica): the
+	// next cycle re-sums spend from scratch and tells edges they may lower.
+	recalculated atomic.Bool
+	stopRecalc   func()
 }
 
 // SetEdgeBudgetSource makes every sync carry budget blocks and analyse
@@ -159,6 +171,7 @@ func (s *BudgetSyncService) Start() {
 	// predecessor held the lease a moment longer) syncs at once instead of
 	// leaving edges on stale blocks for up to an interval.
 	becameLeader := make(chan struct{}, 1)
+	s.stopRecalc = replicas.OnSignal(replicas.SignalSpendRecalculated, func() { s.recalculated.Store(true) })
 	s.stopLeading = replicas.OnLeading(func() {
 		select {
 		case becameLeader <- struct{}{}:
@@ -219,6 +232,9 @@ func (s *BudgetSyncService) Stop() {
 	if s.stopLeading != nil {
 		s.stopLeading()
 	}
+	if s.stopRecalc != nil {
+		s.stopRecalc()
+	}
 	if s.cancel != nil {
 		s.cancel()
 		// Wait for goroutine to finish
@@ -232,47 +248,14 @@ func (s *BudgetSyncService) Stop() {
 
 // calculateBudgetPeriod determines the budget period for an app based on its budget_start_date.
 // If no budget_start_date is set, uses calendar month (1st to last day).
+// Anchor days past the end of a short month fall on its last day; hub and
+// edges share budget.SyncPeriod so they key spend by the same period.
 // When a budget is reset on the same day, this preserves the exact reset time to ensure
 // usage from before the reset is not counted.
 // This is a package-level function so it can be shared by BudgetSyncService and ControlServer.
 // Note: Timestamps are truncated to second precision to ensure consistency across all components.
 func calculateBudgetPeriod(budgetStartDate *time.Time, now time.Time) (time.Time, time.Time) {
-	if budgetStartDate == nil {
-		// Default to calendar month
-		periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-		periodEnd := periodStart.AddDate(0, 1, 0).Add(-time.Second)
-		return periodStart, periodEnd
-	}
-
-	budgetDay := budgetStartDate.Day()
-	currentYear := now.Year()
-	currentMonth := now.Month()
-
-	// If we haven't reached the budget day in current month,
-	// the period started on the budget day of previous month
-	if now.Day() < budgetDay {
-		if currentMonth == time.January {
-			currentMonth = time.December
-			currentYear--
-		} else {
-			currentMonth--
-		}
-	}
-
-	// Calculate the normalized period start (midnight of the budget day)
-	normalizedPeriodStart := time.Date(currentYear, currentMonth, budgetDay, 0, 0, 0, 0, now.Location())
-	periodEnd := normalizedPeriodStart.AddDate(0, 1, 0).Add(-time.Second)
-
-	// Check if the actual budget_start_date falls within this period.
-	// If it does (e.g., budget was reset mid-period), use the exact timestamp
-	// to ensure usage from before the reset is not counted.
-	// Truncate to second precision to ensure consistency across control server and edges.
-	if budgetStartDate.After(normalizedPeriodStart) && budgetStartDate.Before(periodEnd) {
-		truncated := budgetStartDate.Truncate(time.Second)
-		return truncated, periodEnd
-	}
-
-	return normalizedPeriodStart, periodEnd
+	return budget.SyncPeriod(budgetStartDate, now)
 }
 
 // aggregateAndPublish queries the database for budget usage
@@ -286,9 +269,17 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 
 	// Get all apps with their budget_start_date
 	var apps []models.App
-	if err := s.db.Select("id", "budget_start_date").Find(&apps).Error; err != nil {
+	if err := s.db.Select("id", "budget_start_date", "monthly_budget").Find(&apps).Error; err != nil {
 		logger.Log.Error().Err(err).Msg("Failed to fetch apps for budget sync")
 		return
+	}
+
+	// The trackers fold rows into settled totals once and never re-read
+	// them; after a recalculation rewrote costs, start them again.
+	recalculated := s.recalculated.Swap(false)
+	if recalculated {
+		s.usage = newBudgetUsageTracker()
+		s.llmUsage = newLLMBudgetUsageTracker()
 	}
 
 	// Build per-app budget data with custom periods
@@ -321,8 +312,9 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 		// Convert from stored format (dollars * 10000) to dollars
 		usageDollars := u.cost / 10000.0
 
-		// Only include apps with usage > 0
-		if usageDollars > 0 {
+		// Only include apps with usage > 0, except after a recalculation,
+		// when edges must hear of spend that went down to 0 too.
+		if usageDollars > 0 || recalculated {
 			appBudgets[uint32(app.ID)] = AppBudgetData{
 				Usage:       usageDollars,
 				PeriodStart: periodStart,
@@ -358,6 +350,15 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 			for id, reason := range found {
 				blocks[uint32(id)] = reason
 			}
+			// An App budget whose period mixes currencies cannot be
+			// enforced; edges refuse it, as Studio does.
+			for _, app := range apps {
+				if bc := spend[app.ID].byCurrency; budget.MixedCurrency(bc) && app.MonthlyBudget != nil && *app.MonthlyBudget > 0 {
+					if _, ok := blocks[uint32(app.ID)]; !ok {
+						blocks[uint32(app.ID)] = budget.MixedCurrencyError("app monthly budget", bc).Error()
+					}
+				}
+			}
 		}
 
 		// Alerts for spend that came in from edges.
@@ -389,28 +390,32 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 	}
 
 	// Skip publishing if there is nothing to sync
-	if len(appBudgets) == 0 && !blocksIncluded && !llmIncluded {
+	if len(appBudgets) == 0 && !blocksIncluded && !llmIncluded && !recalculated {
 		logger.Log.Debug().Msg("No budget usage data to sync")
 		return
 	}
 
 	payload := BudgetSyncPayload{
-		Blocks:           blocks,
-		BlocksIncluded:   blocksIncluded,
-		LLMBudgets:       llmBudgets,
-		LLMBlocks:        llmBlocks,
-		LLMIncluded:      llmIncluded,
-		AppUsages:        appUsages,           // Legacy field
-		AppBudgets:       appBudgets,          // New per-app periods
-		PeriodStart:      calendarPeriodStart, // Legacy field
-		PeriodEnd:        calendarPeriodEnd,   // Legacy field
-		ControlTimestamp: now,
-		SequenceNumber:   s.nextSequence(),
+		Blocks:            blocks,
+		BlocksIncluded:    blocksIncluded,
+		LLMBudgets:        llmBudgets,
+		LLMBlocks:         llmBlocks,
+		LLMIncluded:       llmIncluded,
+		AppUsages:         appUsages,           // Legacy field
+		AppBudgets:        appBudgets,          // New per-app periods
+		PeriodStart:       calendarPeriodStart, // Legacy field
+		PeriodEnd:         calendarPeriodEnd,   // Legacy field
+		ControlTimestamp:  now,
+		SequenceNumber:    s.nextSequence(),
+		SpendRecalculated: recalculated,
 	}
 
 	// Publish via event bridge (DirDown = control to edges)
 	if err := eventbridge.PublishDown(s.eventBus, "control", BudgetSyncTopic, payload); err != nil {
 		logger.Log.Error().Err(err).Msg("Failed to publish budget sync event")
+		if recalculated {
+			s.recalculated.Store(true) // tell edges at the next cycle
+		}
 		return
 	}
 
@@ -442,10 +447,12 @@ func (s *BudgetSyncService) llmBudgets(now time.Time) (map[uint32]AppBudgetData,
 		// when it starts again (a new month, a budget reset).
 		limit := *llm.MonthlyBudget
 		usages[uint32(llm.ID)] = AppBudgetData{Usage: dollars, PeriodStart: u.start, PeriodEnd: u.end, Limit: &limit}
-		switch budget := *llm.MonthlyBudget; {
-		case budget <= 0:
+		switch limit := *llm.MonthlyBudget; {
+		case limit <= 0:
 			blocks[uint32(llm.ID)] = "LLM monthly budget exceeded (budget is 0)"
-		case dollars >= budget:
+		case budget.MixedCurrency(u.byCurrency):
+			blocks[uint32(llm.ID)] = budget.MixedCurrencyError("LLM monthly budget", u.byCurrency).Error()
+		case dollars >= limit:
 			blocks[uint32(llm.ID)] = "LLM monthly budget exceeded"
 		}
 	}

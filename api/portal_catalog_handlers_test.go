@@ -287,6 +287,8 @@ func TestUserAppsUsageSummary(t *testing.T) {
 	assert.Equal(t, int64(3), active.Requests30d)
 	require.NotNil(t, active.MonthlyBudget)
 	assert.Equal(t, 100.0, *active.MonthlyBudget)
+	// Spend covers the current budget period, as enforcement counts it.
+	assert.True(t, budget.PeriodStart(&budgetStart, now).Equal(active.BudgetStartDate), "period start %v", active.BudgetStartDate)
 	require.NotNil(t, active.Percentage)
 	if budget.IsEnterpriseAvailable() {
 		// Two records inside the budget window: $1.00 of $100.

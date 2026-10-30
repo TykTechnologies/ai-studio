@@ -969,13 +969,21 @@ func (a *API) getPortalCatalogPluginResource(c *gin.Context) {
 // AppUsageSummary is one app's budget position and recent activity for the
 // portal overview.
 type AppUsageSummary struct {
-	AppID           string     `json:"app_id"`
-	CurrentSpend    float64    `json:"current_spend"`
-	MonthlyBudget   *float64   `json:"monthly_budget"`
-	Percentage      *float64   `json:"percentage"`
+	AppID         string   `json:"app_id"`
+	CurrentSpend  float64  `json:"current_spend"`
+	MonthlyBudget *float64 `json:"monthly_budget"`
+	Percentage    *float64 `json:"percentage"`
+	// BudgetStartDate is the start of the current budget period, which
+	// CurrentSpend covers.
 	BudgetStartDate time.Time  `json:"budget_start_date"`
 	LastAccessAt    *time.Time `json:"last_access_at"`
 	Requests30d     int64      `json:"requests_30d"`
+	// Currency is the currency of CurrentSpend: a budget's currency is
+	// implied by its spend. When the period mixes currencies,
+	// MixedCurrencySpend has the spend by currency instead, CurrentSpend is
+	// 0, and the budget refuses requests (costs are not converted).
+	Currency           string             `json:"currency,omitempty"`
+	MixedCurrencySpend map[string]float64 `json:"mixed_currency_spend,omitempty"`
 }
 
 // AppUsageSummaryResponse is the body of GET /common/apps/usage-summary.
@@ -1010,10 +1018,8 @@ func (a *API) getUserAppsUsageSummary(c *gin.Context) {
 	windows := make([]analytics.AppSpendWindow, 0, len(apps))
 	starts := make(map[uint]time.Time, len(apps))
 	for _, app := range apps {
-		start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-		if app.BudgetStartDate != nil {
-			start = *app.BudgetStartDate
-		}
+		// The current budget period, as enforcement counts it.
+		start := budget.PeriodStart(app.BudgetStartDate, now)
 		appIDs = append(appIDs, app.ID)
 		windows = append(windows, analytics.AppSpendWindow{AppID: app.ID, Start: start})
 		starts[app.ID] = start
@@ -1030,7 +1036,7 @@ func (a *API) getUserAppsUsageSummary(c *gin.Context) {
 		return
 	}
 	spendTracked := budget.IsEnterpriseAvailable()
-	spending := map[uint]float64{}
+	spending := map[uint]map[string]float64{}
 	if spendTracked {
 		spending, err = analytics.GetAppSpending(a.service.DB, windows, now)
 		if err != nil {
@@ -1041,12 +1047,14 @@ func (a *API) getUserAppsUsageSummary(c *gin.Context) {
 
 	data := make(map[string]AppUsageSummary, len(apps))
 	for _, app := range apps {
-		spent := spending[app.ID]
+		currency, spent, mixed := budget.SplitCurrency(spending[app.ID])
 		summary := AppUsageSummary{
-			AppID:           uintID(app.ID),
-			CurrentSpend:    spent,
-			MonthlyBudget:   app.MonthlyBudget,
-			BudgetStartDate: starts[app.ID],
+			AppID:              uintID(app.ID),
+			CurrentSpend:       spent,
+			MonthlyBudget:      app.MonthlyBudget,
+			BudgetStartDate:    starts[app.ID],
+			Currency:           currency,
+			MixedCurrencySpend: mixed,
 		}
 		if app.MonthlyBudget != nil && *app.MonthlyBudget > 0 {
 			pct := (spent / *app.MonthlyBudget) * 100

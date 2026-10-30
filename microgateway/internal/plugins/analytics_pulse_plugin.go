@@ -98,6 +98,10 @@ type AnalyticsMetadata struct {
 	ResponseBody string
 	// NoUsage marks a request that produced no usage (a block, an error).
 	NoUsage bool
+	// The requested model and the price multiplier, for the hub's chat
+	// record (not stored on the edge's analytics row).
+	RequestedModel  string
+	PriceMultiplier *float64
 }
 
 // Buffer structures for batching data
@@ -399,6 +403,9 @@ func (p *AnalyticsPulsePlugin) HandleAnalytics(ctx context.Context, req *interfa
 		RequestBody:  req.RequestBody,  // From analytics interface
 		ResponseBody: req.ResponseBody, // From analytics interface
 		NoUsage:      req.NoUsage,
+
+		RequestedModel:  req.RequestedModel,
+		PriceMultiplier: req.PriceMultiplier,
 	}
 
 	p.analyticsBuffer = append(p.analyticsBuffer, event)
@@ -909,6 +916,8 @@ func (p *AnalyticsPulsePlugin) buildPulseMessage(
 			GatewayRequestId:  event.GatewayRequestID,
 			ClientRequestId:   event.ClientRequestID,
 			NoUsage:           eventMetadata.NoUsage,
+			RequestedModel:    eventMetadata.RequestedModel,
+			PriceMultiplier:   eventMetadata.PriceMultiplier,
 			UserId:                  uint32(event.UserID),
 			Endpoint:                event.Endpoint,
 			Method:                  event.Method,

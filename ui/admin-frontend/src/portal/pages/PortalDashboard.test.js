@@ -4,7 +4,7 @@ import "@testing-library/jest-dom";
 import { ThemeProvider } from "@mui/material/styles";
 import { MemoryRouter, Routes, Route, useLocation } from "react-router-dom";
 import testTheme from "../../admin/utils/testTheme";
-import PortalDashboard from "./PortalDashboard";
+import PortalDashboard, { BudgetCell } from "./PortalDashboard";
 
 jest.mock("../../admin/utils/pubClient", () => ({
   __esModule: true,
@@ -170,5 +170,24 @@ describe("PortalDashboard", () => {
     const cells = within(table).getAllByTestId("budget-cell");
     expect(cells[0]).toHaveTextContent("$100.00 / month");
     expect(within(table).queryByRole("progressbar")).not.toBeInTheDocument();
+  });
+});
+
+describe("BudgetCell currency", () => {
+  const renderCell = (summary) =>
+    render(
+      <ThemeProvider theme={testTheme}>
+        <BudgetCell summary={summary} spendTracked />
+      </ThemeProvider>
+    );
+
+  it("shows spend in the currency it implies", () => {
+    renderCell({ current_spend: 25, monthly_budget: 100, currency: "EUR" });
+    expect(screen.getByTestId("budget-cell")).toHaveTextContent("EUR 25.00 of EUR 100.00");
+  });
+
+  it("warns on a period that mixes currencies", () => {
+    renderCell({ current_spend: 0, monthly_budget: 100, mixed_currency_spend: { USD: 1, EUR: 2 } });
+    expect(screen.getByTestId("budget-cell")).toHaveTextContent("Mixed currencies this period (EUR 2.00, USD 1.00): requests are refused");
   });
 });

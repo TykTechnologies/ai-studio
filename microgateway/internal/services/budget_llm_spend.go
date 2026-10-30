@@ -83,6 +83,18 @@ func (s *LLMBudgetSpend) Limit(llmID uint) (float64, bool) {
 	return *limit, true
 }
 
+// ResetLocal drops the spend this gateway recorded, priced at the old
+// prices, after a price recalculation on the control plane: the next Sync's
+// figures, repriced and including this gateway's delivered spend, stand
+// alone, even when lower.
+func (s *LLMBudgetSpend) ResetLocal() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, e := range s.llms {
+		e.local = 0
+	}
+}
+
 // Sync takes the control plane's figures. An LLM it does not name has spent
 // nothing in its period as far as the control plane knows, and has no
 // budget. A new period (a new month, a budget reset) starts the local spend

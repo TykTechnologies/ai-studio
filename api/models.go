@@ -834,6 +834,32 @@ type ModelPriceResponse struct {
 		CacheReadPT float64 `json:"cache_read_pt"`
 		Currency    string  `json:"currency"`
 	} `json:"attributes"`
+	// Meta is set on the list response only.
+	Meta *ModelPriceMeta `json:"meta,omitempty"`
+}
+
+// ModelPriceMeta is what the price list says about each price's history.
+type ModelPriceMeta struct {
+	// UnpricedRows is the number of chat records this price prices that were
+	// recorded at no cost (before the model had a price): what
+	// POST /model-prices/{id}/backfill would price.
+	UnpricedRows int64 `json:"unpriced_rows"`
+}
+
+// BackfillModelPriceInput is the optional date range of a backfill, as
+// inclusive dates (YYYY-MM-DD, UTC). Either may be omitted.
+type BackfillModelPriceInput struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+// BackfillModelPriceResponse reports a backfill of unpriced history.
+type BackfillModelPriceResponse struct {
+	Data struct {
+		// RowsPriced is the number of chat records that were priced.
+		RowsPriced int64              `json:"rows_priced"`
+		ModelPrice ModelPriceResponse `json:"model_price"`
+	} `json:"data"`
 }
 
 // VendorListResponse represents the response for vendor list operations
