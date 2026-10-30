@@ -144,6 +144,8 @@ func InitModels(db *gorm.DB) error {
 		&TeamBudgetSettings{}, // Global team budget switch
 		// Native API extensions (pkg/nativeapi)
 		&NativeResource{}, // Vendor resources created on this node (message batches)
+		// Trusted prompt templates (features/TrustedPromptTemplates.md)
+		&AppPromptTemplate{},
 	); err != nil {
 		return err
 	}

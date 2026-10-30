@@ -23,15 +23,19 @@ A **prompt template** is an app-level resource. Trust belongs to the calling app
 
 | Field | Meaning |
 |---|---|
-| `app_id`, `name`, `version` | One app has a small number of templates (cap: 10 approved). |
-| `placement` | Role (`system`, `user`, `developer`), message (first, last, any) and anchoring (starts the message, ends it, or both). |
-| `parts` | An ordered list of `{const: "<exact text>"}` and `{slot: "<name>"}` items. Each constant is at least 32 bytes long. |
-| `status` | `proposed`, `approved` or `retired`. Records who approved it and when. |
-| `expires_after` | The template lapses after this long with no matches. Default 30 days. |
+| `app_id`, `name`, `version` | One app has a small number of templates (cap: 10 approved). A name is letters, digits, `.`, `_` and `-`; events name a template `name@version`. |
+| `placement` | `role` (`system` or `user`), `message` (`first`, `last` or `any` message of that role in the request, default `any`) and `anchor` (`start`, `end` or `both`, default `both`). A template anchored at a side starts (or ends) with a constant there; text beyond an unanchored side is an implicit slot. |
+| `parts` | An ordered list of `{const: "<exact text>"}` and `{slot: "<name>"}` items. Each constant is 32 bytes to 64 KiB of valid UTF-8 with no invisible characters (see Matching), and does not start with a combining mark. Two constants or two slots in a row are refused. |
+| `status` | `proposed`, `approved` or `retired`. Records who approved it and when. Only `approved` templates are matched. |
+| `expires_after_days` | The template lapses after this long with no matches (counted from its approval when it has never matched). Default 30. |
 
-Constant text is stored as written; it is the app's own prompt and is not secret. Storing only an HMAC and a byte length, with no readable text, is an open question for tenants that want it.
+The `developer` role of the first draft is not offered yet: the guardrail segmenter reads an OpenAI `developer` message as user text, so a developer placement could not be told apart from a user one.
 
-**API:** CRUD under `/api/v1/apps/:id/prompt-templates`, plus approve and retire actions. Only an admin can approve; an app owner can propose.
+Each row is one version. A change to the parts or placement of a proposed version edits it in place; the same change to an approved or retired version creates the next version, `proposed`, and leaves the old one as it was. Approving a version retires the other approved versions of the same name, so one version of a name is trusted at a time. The table is `app_prompt_templates` (`models.AppPromptTemplate`; `models.PromptTemplate` is the unrelated chat prompt shortcut).
+
+Constant text is stored as written; it is the app's own prompt and is not secret. Storing only an HMAC and a byte length, with no readable text, is a later option for tenants that want it.
+
+**API:** under `/api/v1/apps/:id/prompt-templates`: `GET` (list, `?status=` filters), `POST` (propose), `GET|PATCH|DELETE /:template_id`, `POST /:template_id/approve` and `POST /:template_id/retire`. Listing needs `apps:read`; proposing, editing and retiring `apps:write`; deleting `apps:delete`. Approving needs a full administrator. Approving a template that is not proposed, or an eleventh one, is a `409`.
 
 **Hint header:** callers may send `X-Tyk-Prompt-Template: <name>@<version>`. It selects which approved template to try first. A forged or stale hint gains nothing, because only approved bytes are ever exempt.
 
