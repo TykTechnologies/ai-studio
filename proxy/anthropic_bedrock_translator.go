@@ -267,8 +267,6 @@ func (p *Proxy) buildConverseInputFromAnthropic(modelID string, req *AnthropicMe
 		return nil, err
 	}
 
-	converseMsgs, systemBlocks := bedrockVendor.AnthropicMessagesToConverse(msgs, system)
-
 	var maxTokens *int
 	if req.MaxTokens > 0 {
 		mt := req.MaxTokens
@@ -280,7 +278,14 @@ func (p *Proxy) buildConverseInputFromAnthropic(modelID string, req *AnthropicMe
 	}
 	inferenceConfig := bedrockVendor.BuildInferenceConfig(maxTokens, req.Temperature, req.TopP, stop)
 
-	toolConfig := bedrockVendor.AnthropicToolsToToolConfig(anthropicToolsToVendor(req.Tools), anthropicToolChoiceToVendor(req.ToolChoice))
+	tools := anthropicToolsToVendor(req.Tools)
+	if !bedrockVendor.SupportsOneHourCacheTTL(modelID) {
+		dropCacheTTLs(modelID, msgs, system, tools)
+	}
+
+	converseMsgs, systemBlocks := bedrockVendor.AnthropicMessagesToConverse(msgs, system)
+
+	toolConfig := bedrockVendor.AnthropicToolsToToolConfig(tools, anthropicToolChoiceToVendor(req.ToolChoice))
 
 	return &bedrockruntime.ConverseInput{
 		ModelId:         aws.String(modelID),
@@ -306,6 +311,7 @@ func anthropicMessagesToVendor(req *AnthropicMessagesRequest) ([]bedrockVendor.A
 				Type:       b.Type,
 				Text:       b.Text,
 				CachePoint: b.CacheControl != nil,
+				CacheTTL:   cacheTTL(b.CacheControl),
 			}
 			switch b.Type {
 			case "tool_use":
@@ -333,6 +339,7 @@ func anthropicMessagesToVendor(req *AnthropicMessagesRequest) ([]bedrockVendor.A
 		system = append(system, bedrockVendor.AnthropicSystemBlock{
 			Text:       b.Text,
 			CachePoint: b.CacheControl != nil,
+			CacheTTL:   cacheTTL(b.CacheControl),
 		})
 	}
 
@@ -350,9 +357,51 @@ func anthropicToolsToVendor(tools []AnthropicTool) []bedrockVendor.AnthropicTool
 			Description: t.Description,
 			InputSchema: t.InputSchema,
 			CachePoint:  t.CacheControl != nil,
+			CacheTTL:    cacheTTL(t.CacheControl),
 		})
 	}
 	return out
+}
+
+// cacheTTL maps a cache_control ttl to the TTL to request from Bedrock. Only
+// "1h" is passed on: "5m" is Bedrock's default, so it (like no ttl) is sent as
+// no TTL, and an unknown value falls back to the default too.
+func cacheTTL(cc *AnthropicCacheControl) string {
+	if cc == nil {
+		return ""
+	}
+	switch cc.TTL {
+	case "1h":
+		return "1h"
+	case "", "5m":
+		return ""
+	default:
+		log.Debug().Str("ttl", cc.TTL).Msg("anthropic bridge: unknown cache_control ttl, using the 5-minute default")
+		return ""
+	}
+}
+
+// dropCacheTTLs clears the requested cache TTLs for a model that only has
+// 5-minute caching; the cache points themselves stay.
+func dropCacheTTLs(modelID string, msgs []bedrockVendor.AnthropicMsg, system []bedrockVendor.AnthropicSystemBlock, tools []bedrockVendor.AnthropicToolSpec) {
+	dropped := false
+	for i := range msgs {
+		for j := range msgs[i].Blocks {
+			dropped = dropped || msgs[i].Blocks[j].CacheTTL != ""
+			msgs[i].Blocks[j].CacheTTL = ""
+		}
+	}
+	for i := range system {
+		dropped = dropped || system[i].CacheTTL != ""
+		system[i].CacheTTL = ""
+	}
+	for i := range tools {
+		dropped = dropped || tools[i].CacheTTL != ""
+		tools[i].CacheTTL = ""
+	}
+	if dropped {
+		log.Debug().Str("model", modelID).Msg("anthropic bridge: model only supports the 5-minute cache TTL, dropping cache_control ttl")
+	}
 }
 
 func anthropicToolChoiceToVendor(tc *AnthropicToolChoice) *bedrockVendor.AnthropicToolChoiceSpec {

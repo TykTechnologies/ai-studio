@@ -54,7 +54,8 @@ type AnthropicContentBlock struct {
 
 // AnthropicCacheControl marks a block as a prompt-cache breakpoint.
 type AnthropicCacheControl struct {
-	Type string `json:"type"` // "ephemeral"
+	Type string `json:"type"`          // "ephemeral"
+	TTL  string `json:"ttl,omitempty"` // "5m" | "1h"; empty means 5m
 }
 
 // AnthropicTool is a tool definition the model may call.

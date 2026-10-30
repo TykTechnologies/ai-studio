@@ -2,11 +2,16 @@ package proxy
 
 import (
 	"encoding/json"
+	"net/http"
+	"strings"
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/models"
 	bedrockVendor "github.com/TykTechnologies/midsommar/v2/vendors/bedrock"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // --- wire -> vendor mapping ---
@@ -286,5 +291,177 @@ func TestAnthropicStream_TextThenToolUseSequence(t *testing.T) {
 	if usage["cache_creation_input_tokens"] != float64(70) || usage["cache_read_input_tokens"] != float64(80) {
 		t.Errorf("message_delta cache usage: got creation=%v read=%v, want 70/80",
 			usage["cache_creation_input_tokens"], usage["cache_read_input_tokens"])
+	}
+}
+
+// --- prompt-cache TTL ---
+
+// bedrockBridgeHarness is bedrockHarness with a chosen default model, for tests
+// whose behaviour depends on the Bedrock model ID.
+func bedrockBridgeHarness(t *testing.T, rec *bedrockRecorder, model string) *failoverHarness {
+	h := newFailoverHarness(t, rec.serve, serveOpenAIText("never"), func(primary, _ *models.LLM) {
+		primary.Vendor = models.BEDROCK
+		primary.Failover = models.LLMFailover{}
+		primary.DefaultModel = model
+		primary.Metadata = models.JSONMap{"aws_access_key_id": "AKIDTEST", "aws_secret_access_key": "secret", "aws_region": "us-east-1"}
+	})
+	bedrockVendor.InvalidateClientCache(h.primary.ID)
+	t.Cleanup(func() { bedrockVendor.InvalidateClientCache(h.primary.ID) })
+	return h
+}
+
+// A cache_control ttl on the /anthropic/ bridge reaches Bedrock on the wire;
+// a marker without one is sent exactly as before.
+func TestAnthropicBridge_CacheTTLOnTheWire(t *testing.T) {
+	const model = "anthropic.claude-sonnet-4-5-20250929-v1:0"
+	body := func(cc string) string {
+		return `{"model":"claude-sonnet-4-5","max_tokens":64,` +
+			`"system":[{"type":"text","text":"sys","cache_control":` + cc + `}],` +
+			`"tools":[{"name":"f","description":"d","input_schema":{"type":"object"},"cache_control":` + cc + `}],` +
+			`"messages":[{"role":"user","content":[{"type":"text","text":"hi","cache_control":` + cc + `}]}]}`
+	}
+
+	t.Run("one hour", func(t *testing.T) {
+		rec := &bedrockRecorder{status: http.StatusOK, reply: []byte(converseAnswer)}
+		h := bedrockBridgeHarness(t, rec, model)
+		resp, out := h.post("/anthropic/primary/v1/messages", body(`{"type":"ephemeral","ttl":"1h"}`))
+		require.Equal(t, http.StatusOK, resp.StatusCode, string(out))
+
+		rec.mu.Lock()
+		sent := string(rec.body)
+		rec.mu.Unlock()
+		assert.Equal(t, 3, strings.Count(sent, `"cachePoint":{"ttl":"1h","type":"default"}`), sent)
+	})
+
+	t.Run("no ttl", func(t *testing.T) {
+		rec := &bedrockRecorder{status: http.StatusOK, reply: []byte(converseAnswer)}
+		h := bedrockBridgeHarness(t, rec, model)
+		resp, out := h.post("/anthropic/primary/v1/messages", body(`{"type":"ephemeral"}`))
+		require.Equal(t, http.StatusOK, resp.StatusCode, string(out))
+
+		rec.mu.Lock()
+		sent := string(rec.body)
+		rec.mu.Unlock()
+		assert.Equal(t, 3, strings.Count(sent, `"cachePoint":{"type":"default"}`), sent)
+		assert.NotContains(t, sent, `"ttl"`)
+	})
+}
+
+const oneHourModel = "anthropic.claude-sonnet-4-5-20250929-v1:0"
+
+// cacheTTLRequest has a cache marker with control cc on a system block, a
+// message block and a tool.
+func cacheTTLRequest(cc *AnthropicCacheControl) *AnthropicMessagesRequest {
+	ccJSON, _ := json.Marshal(cc)
+	return &AnthropicMessagesRequest{
+		System: json.RawMessage(`[{"type":"text","text":"sys","cache_control":` + string(ccJSON) + `}]`),
+		Messages: []AnthropicMessage{
+			{Role: "user", Content: json.RawMessage(`[{"type":"text","text":"hi","cache_control":` + string(ccJSON) + `}]`)},
+		},
+		Tools: []AnthropicTool{
+			{Name: "f", Description: "d", InputSchema: map[string]any{"type": "object"}, CacheControl: cc},
+		},
+	}
+}
+
+// cachePoints returns the system, message and tool cache points of a Converse
+// input, failing the test when one is missing.
+func cachePoints(t *testing.T, modelID string, req *AnthropicMessagesRequest) (sys, msg, tool types.CachePointBlock) {
+	t.Helper()
+	input, err := (&Proxy{}).buildConverseInputFromAnthropic(modelID, req)
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	if len(input.System) != 2 {
+		t.Fatalf("expected system text + cachepoint, got %d", len(input.System))
+	}
+	s, ok := input.System[1].(*types.SystemContentBlockMemberCachePoint)
+	if !ok {
+		t.Fatalf("expected system cachepoint, got %T", input.System[1])
+	}
+	if len(input.Messages) != 1 || len(input.Messages[0].Content) != 2 {
+		t.Fatalf("expected text + cachepoint, got %+v", input.Messages)
+	}
+	m, ok := input.Messages[0].Content[1].(*types.ContentBlockMemberCachePoint)
+	if !ok {
+		t.Fatalf("expected message cachepoint, got %T", input.Messages[0].Content[1])
+	}
+	if input.ToolConfig == nil || len(input.ToolConfig.Tools) != 2 {
+		t.Fatalf("expected toolspec + cachepoint, got %+v", input.ToolConfig)
+	}
+	tp, ok := input.ToolConfig.Tools[1].(*types.ToolMemberCachePoint)
+	if !ok {
+		t.Fatalf("expected tool cachepoint, got %T", input.ToolConfig.Tools[1])
+	}
+	return s.Value, m.Value, tp.Value
+}
+
+func TestAnthropicCacheTTL_SystemOneHour(t *testing.T) {
+	sys, _, _ := cachePoints(t, oneHourModel, cacheTTLRequest(&AnthropicCacheControl{Type: "ephemeral", TTL: "1h"}))
+	if sys.Type != types.CachePointTypeDefault || sys.Ttl != types.CacheTTLOneHour {
+		t.Errorf("system cache point = %+v, want default type with 1h ttl", sys)
+	}
+}
+
+func TestAnthropicCacheTTL_MessageAndToolOneHour(t *testing.T) {
+	_, msg, tool := cachePoints(t, oneHourModel, cacheTTLRequest(&AnthropicCacheControl{Type: "ephemeral", TTL: "1h"}))
+	if msg.Ttl != types.CacheTTLOneHour {
+		t.Errorf("message cache point ttl = %q, want 1h", msg.Ttl)
+	}
+	if tool.Ttl != types.CacheTTLOneHour {
+		t.Errorf("tool cache point ttl = %q, want 1h", tool.Ttl)
+	}
+}
+
+func TestAnthropicCacheTTL_DefaultCases(t *testing.T) {
+	for _, ttl := range []string{"", "5m", "2h"} {
+		t.Run("ttl="+ttl, func(t *testing.T) {
+			sys, msg, tool := cachePoints(t, oneHourModel, cacheTTLRequest(&AnthropicCacheControl{Type: "ephemeral", TTL: ttl}))
+			for name, cp := range map[string]types.CachePointBlock{"system": sys, "message": msg, "tool": tool} {
+				if cp.Type != types.CachePointTypeDefault || cp.Ttl != "" {
+					t.Errorf("%s cache point = %+v, want default type and no ttl", name, cp)
+				}
+			}
+		})
+	}
+}
+
+// The ttl is decoded from the wire body.
+func TestAnthropicCacheTTL_FromWireJSON(t *testing.T) {
+	body := `{"model":"claude-sonnet-4-5","max_tokens":64,
+		"system":[{"type":"text","text":"sys","cache_control":{"type":"ephemeral","ttl":"1h"}}],
+		"tools":[{"name":"f","description":"d","input_schema":{"type":"object"},"cache_control":{"type":"ephemeral","ttl":"1h"}}],
+		"messages":[{"role":"user","content":[{"type":"text","text":"hi","cache_control":{"type":"ephemeral","ttl":"1h"}}]}]}`
+	var req AnthropicMessagesRequest
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	sys, msg, tool := cachePoints(t, oneHourModel, &req)
+	for name, cp := range map[string]types.CachePointBlock{"system": sys, "message": msg, "tool": tool} {
+		if cp.Ttl != types.CacheTTLOneHour {
+			t.Errorf("%s cache point ttl = %q, want 1h", name, cp.Ttl)
+		}
+	}
+}
+
+// Claude 3 models only have 5-minute caching, and Bedrock rejects an extended
+// ttl on non-Anthropic models: the cache points stay, the ttl goes.
+func TestAnthropicCacheTTL_UnsupportedModelsDropTTL(t *testing.T) {
+	for _, model := range []string{
+		"anthropic.claude-3-7-sonnet-20250219-v1:0",
+		"us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+		"us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+		"amazon.nova-lite-v1:0",
+		"apac.amazon.nova-pro-v1:0",
+		"global.amazon.nova-2-lite-v1:0",
+	} {
+		t.Run(model, func(t *testing.T) {
+			sys, msg, tool := cachePoints(t, model, cacheTTLRequest(&AnthropicCacheControl{Type: "ephemeral", TTL: "1h"}))
+			for name, cp := range map[string]types.CachePointBlock{"system": sys, "message": msg, "tool": tool} {
+				if cp.Type != types.CachePointTypeDefault || cp.Ttl != "" {
+					t.Errorf("%s cache point = %+v, want default type and no ttl", name, cp)
+				}
+			}
+		})
 	}
 }
