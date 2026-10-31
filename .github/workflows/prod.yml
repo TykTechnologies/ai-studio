@@ -15,17 +15,9 @@ env:
   GOPRIVATE: github.com/TykTechnologies/ai-studio-enterprise
 
 jobs:
-  # Runners: each job takes its runner from a repository variable
-  # (REPO_DEFAULT_RUNNER_2X_X64), set to the WarpBuild label it used before
-  # (warp-ubuntu-latest-x64-2x).
-  # If WarpBuild stops working (e.g. out of credits), change the variable value
-  # to a GitHub-hosted runner and re-run the workflow, e.g.:
-  #   ubuntu-latest  (x64; 2 vCPU/8 GB private repos, 4 vCPU/16 GB public)
-  # https://docs.github.com/en/actions/reference/runners/github-hosted-runners
-  # Restore the WarpBuild label once it is available again.
   # Build frontend once and share across all editions
   build-frontend:
-    runs-on: ${{ vars.REPO_DEFAULT_RUNNER_2X_X64 }}
+    runs-on: warp-ubuntu-latest-x64-2x
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -62,7 +54,7 @@ jobs:
   # Build Community Edition binaries
   build-ce-binaries:
     needs: build-frontend
-    runs-on: ${{ vars.REPO_DEFAULT_RUNNER_2X_X64 }}
+    runs-on: warp-ubuntu-latest-x64-2x
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -119,7 +111,7 @@ jobs:
   # Build Community Edition Docker image
   build-ce-image:
     needs: [build-frontend, build-ce-binaries]
-    runs-on: ${{ vars.REPO_DEFAULT_RUNNER_2X_X64 }}
+    runs-on: warp-ubuntu-latest-x64-2x
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -166,7 +158,7 @@ jobs:
   # Build Enterprise Edition binaries
   build-ent-binaries:
     needs: build-frontend
-    runs-on: ${{ vars.REPO_DEFAULT_RUNNER_2X_X64 }}
+    runs-on: warp-ubuntu-latest-x64-2x
     steps:
       - name: Generate GitHub App token
         id: app-token
@@ -246,7 +238,7 @@ jobs:
   # Build Enterprise Edition Docker image
   build-ent-image:
     needs: [build-frontend, build-ent-binaries]
-    runs-on: ${{ vars.REPO_DEFAULT_RUNNER_2X_X64 }}
+    runs-on: warp-ubuntu-latest-x64-2x
     steps:
       - name: Generate GitHub App token
         id: app-token
@@ -304,7 +296,7 @@ jobs:
   # Deploy CE image to production server
   deploy-ce:
     needs: build-ce-image
-    runs-on: ${{ vars.REPO_DEFAULT_RUNNER_2X_X64 }}
+    runs-on: warp-ubuntu-latest-x64-2x
     steps:
       - name: Deploy to Remote Server
         env:
