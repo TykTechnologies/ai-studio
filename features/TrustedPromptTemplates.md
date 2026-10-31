@@ -53,12 +53,20 @@ The matcher is `guardrails/templates.MatchMessage`, a pure function. For each me
 
 ## Scan plan
 
+Where it runs: `scripting/guardrail_templates.go`, called from the guardrail runner's `evaluate` for request filters. Studio registers the template source (`scripting.SetPromptTemplateSource`, backed by `services.PromptTemplateSource`, cached per app for 15 s). Nothing else registers one, so edge gateways take none of this path until templates are synced (bead .8).
+
+Which messages are tried: the request's own `system` and `user` text that the filter scans (its scope applies first), one block per message. Tool results, tool calls, tool definitions, documents, detection-only views and a message whose text the vendor carries in several blocks are never tried; neither are responses, Studio chat tool results or tool calls. `first` and `last` count every message of the role in the request, in scope or not. The app is the request's `app_id`; a request with no app (Studio chat) is never matched.
+
 When a template matches, each guardrail on the request receives the message as a **scan plan**: the original text with the exempt ranges marked.
 
-- **Residual:** the slots in their original order, with each exempt constant replaced by a fixed placeholder (`[app template]`). This is what's scored. Every provider, including the built-in library, Lakera and Bedrock, scores the residual unchanged.
-- **Exemption cap:** at most 60% of a message's characters can be exempt, and at most 16k characters. Anything beyond the cap is scored.
-- **Full-text backstop:** the unmodified message is scored as well. Its action is `log` by default; the operator can set it to the filter's action once its false-positive rate is known.
-- **Redaction:** offsets map from the residual back to the original. A span that falls on template text cannot be redacted, which is impossible by construction since that text is never scored.
+- **Residual:** the slots in their original order, with each exempt constant replaced by a fixed placeholder (`[app template]`). This is what's scored. Every provider, including the built-in library, Lakera and Bedrock, scores the residual unchanged. The budgets, `max_scan_chars`, the unscanned rules and the fail mode apply to the residual as to any text.
+- **Exemption cap:** at most 60% of a message's characters can be exempt, and at most 16k characters. Constants are taken in order; one that would pass either limit is scored.
+- **Full-text backstop** (`template_backstop`, per filter: `off`, `log` or `enforce`, default `log`): the unmodified message is scored as well.
+  - A provider that reads templates (`Capabilities.Templates`) and is sent the segment whole gets `full_text` in the same call and marks what it finds there `"backstop": true`. The runner honours the mark only on segments it sent with a template, so a provider cannot turn an ordinary finding into a logged one.
+  - Every other provider, and a template-aware one whose segment was split into pieces, gets a second classification of the full text (no rewrite).
+  - `log`: backstop findings are recorded as compliance events with action `log` and `template_backstop: log`, and change nothing. A backstop that fails is ignored.
+  - `enforce`: a backstop finding the residual also made (same detector) is already acted on; any other is the filter's own finding. Under `redact` it blocks, since a redaction of the residual does not reach it. A backstop that fails, or text it could not scan, follows the fail mode and unscanned rules like the main scan.
+- **Redaction:** a provider's rewrite of the residual is mapped back onto the message: the text between placeholders is the rewritten slots, and each placeholder becomes the constant it stood for. A rewrite that does not keep exactly one placeholder per exempt constant cannot be placed, and the segment's redaction falls to a block. Finding spans map from residual to original offsets.
 
 **HTTP classifier contract (additive):** a segment from a template match carries:
 
@@ -70,7 +78,9 @@ When a template matches, each guardrail on the request receives the message as a
 
 A service that ignores `template` scores the residual. A template-aware service, such as the Wolf Defender sidecar, can do its own windowing and backstop over `full_text`. The backstop then costs no second call.
 
-**Verdict cache:** the cache key covers the residual plus the template id and version, so a template change re-scores the text.
+**Verdict cache:** the key of a matched message covers the residual plus the template id, version, the backstop mode and the full text, so a template change re-scores the text and a cached residual is never answered for an unmatched message. Keys of every other segment are unchanged.
+
+**No templates, no change:** with no source registered, no app, or no approved template whose placement fits a message, the request is screened exactly as before (`TestTemplates_NoneRegisteredIsByteIdentical`).
 
 ## Learned suggestions (later phase)
 

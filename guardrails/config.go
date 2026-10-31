@@ -274,6 +274,12 @@ type Config struct {
 	// evaluation (counted, and recorded as guardrail.unscanned) rather than
 	// delay anything. For a log-only rollout of a slow provider.
 	Shadow bool `json:"shadow,omitempty"`
+	// TemplateBackstop is what the filter does about a message that matched
+	// one of the app's trusted prompt templates, beyond scoring its
+	// residual: score the full text too and record (log) or act on
+	// (enforce) what only the full text shows, or not (off). Empty means
+	// log. Requests only.
+	TemplateBackstop string `json:"template_backstop,omitempty"`
 	// Cache, when false, keeps the filter's verdicts out of the verdict
 	// cache: for a provider whose verdict depends on more than the text (an
 	// HTTP classifier that reads the request metadata). Nil means true.
@@ -567,7 +573,27 @@ func Normalize(cfg Config, responseFilter bool) (Config, error) {
 	if n := cfg.Evidence.ExcerptChars; n < 0 || n > MaxExcerptChars {
 		return cfg, fmt.Errorf("%w: evidence.excerpt_chars must be between 0 and %d", ErrInvalidConfig, MaxExcerptChars)
 	}
+	switch cfg.TemplateBackstop {
+	case "", BackstopOff, BackstopLog, BackstopEnforce:
+	default:
+		return cfg, fmt.Errorf("%w: template_backstop %q is not one of off, log, enforce", ErrInvalidConfig, cfg.TemplateBackstop)
+	}
 	return cfg, nil
+}
+
+// Template backstop modes (Config.TemplateBackstop).
+const (
+	BackstopOff     = "off"
+	BackstopLog     = "log"
+	BackstopEnforce = "enforce"
+)
+
+// Backstop is the filter's template backstop mode, log when unset.
+func (c Config) Backstop() string {
+	if c.TemplateBackstop == "" {
+		return BackstopLog
+	}
+	return c.TemplateBackstop
 }
 
 // shadowAllowed reports why the filter cannot run in shadow: some action it

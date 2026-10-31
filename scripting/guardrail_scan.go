@@ -244,10 +244,7 @@ func (j *scanJob) scan() scanResult {
 	}
 
 	callChars := j.callChars()
-	pieceMax := j.caps.MaxChars
-	if callChars > 0 && (pieceMax <= 0 || callChars < pieceMax) {
-		pieceMax = callChars
-	}
+	pieceMax := j.pieceMax()
 	// A run that only detects scans the seams across cuts with the pieces.
 	// A redacting run scans them afterwards, on the redacted text
 	// (scanSeams), since overlapping rewrites cannot be merged.
@@ -394,6 +391,18 @@ func (j *scanJob) callChars() int {
 		return 0
 	}
 	return guardrails.DefaultCallChars
+}
+
+// pieceMax is the most text, in characters, one piece of a segment holds:
+// the provider's MaxChars, or the call size when that is smaller; 0 for
+// unbounded. A segment within it is sent whole.
+func (j *scanJob) pieceMax() int {
+	callChars := j.callChars()
+	pieceMax := j.caps.MaxChars
+	if callChars > 0 && (pieceMax <= 0 || callChars < pieceMax) {
+		pieceMax = callChars
+	}
+	return pieceMax
 }
 
 // budgetContext bounds the run's provider calls by the filter's time
