@@ -102,8 +102,8 @@ The approval screen shows:
 
 ## Operations
 
-- **Compliance events:** carry `template_id@version`, or `template.miss` / `template.mimicry`.
-- **Metrics:** exempt share of characters per app; template hit and miss rate; backstop-only detections.
+- **Compliance events:** each flagged segment of a message tried against templates carries `template`: `{"id": "<name>@<version>", "exempt_share": 0.41}` for a match (plus `"signal": "template.mimicry"` when a slot holds template text), or `{"signal": "template.miss"}` / `{"signal": "template.mimicry"}` with no match. Mimicry also records one `guardrail.template_mimicry` event (action `log`) per request, whether or not anything was flagged. Backstop findings under `log` are ordinary detector events with action `log` and `template_backstop: "log"`.
+- **Metrics:** `aistudio_guardrail_templates_total{provider,result}` (`hit`, `miss`, `mimicry`, `backstop_only`) and `aistudio_guardrail_template_exempt_share{provider}` (histogram). They carry no app or template label, to keep cardinality bounded; per-app and per-template detail is in the compliance events.
 - **Edge gateways:** approved templates go in the configuration snapshot and its checksum. Matching runs where the guardrail runs.
 - **Expiry and changes:** a template that hasn't matched for `expires_after` drops to `proposed`. Changing a constant creates a new version that needs approval again.
 

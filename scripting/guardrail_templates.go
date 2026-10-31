@@ -10,6 +10,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/guardrails/templates"
+	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 )
 
@@ -173,9 +174,12 @@ func planTemplates(input *ScriptInput, sel *selection, cfg guardrails.Config, ca
 		m := out.Match
 		if m == nil {
 			plan.missed[si] = true
+			metrics.RecordGuardrailTemplate(ctx, cfg.Provider, templateMiss)
 			continue
 		}
 		src.Matched(m.Template)
+		metrics.RecordGuardrailTemplate(ctx, cfg.Provider, templateHit)
+		metrics.RecordGuardrailTemplateExempt(ctx, cfg.Provider, m.ExemptShare())
 		ts := &templatedSegment{match: m, residual: templates.NewResidual(seg.Text, m.Exempt)}
 		plan.matched[si] = ts
 		if len(m.Exempt) == 0 {
@@ -191,6 +195,9 @@ func planTemplates(input *ScriptInput, sel *selection, cfg guardrails.Config, ca
 	}
 	if !fits {
 		return nil
+	}
+	for range plan.mimicry {
+		metrics.RecordGuardrailTemplate(ctx, cfg.Provider, templateMimicry)
 	}
 	return plan
 }
@@ -422,10 +429,13 @@ func backstopOnly(res scanResult, backstop []guardrails.Finding) []guardrails.Fi
 // action log, and change nothing.
 func (g *guardrailRunner) finishTemplates(plan *templatePlan, job *scanJob, sel *selection, res *scanResult, p *preparedGuardrail, input *ScriptInput) []ComplianceEventOutput {
 	backstop := plan.restore(sel, res)
+	cfg := job.cfg
+	ec := evidenceContext{requestID: requestIDOf(input), clientRequestID: clientRequestIDOf(input), excerptChars: job.excerptChars, excerptStatus: excerptStatus(cfg, input), templates: plan}
+	events := plan.mimicryEvents(g.filter.Name, cfg, sel.segments, ec)
 	if res.err != nil || plan.backstop == guardrails.BackstopOff {
 		// A run that failed is decided by the fail mode; the backstop adds
 		// nothing to it.
-		return nil
+		return events
 	}
 	enforce := plan.backstop == guardrails.BackstopEnforce
 	if segs := plan.needsSecondBackstop(sel); len(segs) > 0 {
@@ -444,22 +454,72 @@ func (g *guardrailRunner) finishTemplates(plan *templatePlan, job *scanJob, sel 
 		}
 	}
 	if len(backstop) == 0 {
-		return nil
+		return events
+	}
+	for range backstopOnly(*res, backstop) {
+		metrics.RecordGuardrailTemplate(job.ctx, cfg.Provider, "backstop_only")
 	}
 	if enforce {
 		applyBackstop(sel, res, backstop)
-		return nil
+		return events
 	}
-	cfg := job.cfg
 	o := outcome{actions: map[int]string{}, overall: guardrails.ActionLog}
 	for _, f := range backstop {
 		o.actions[f.SegmentIndex] = guardrails.ActionLog
 	}
-	ec := evidenceContext{requestID: requestIDOf(input), clientRequestID: clientRequestIDOf(input), excerptChars: job.excerptChars, excerptStatus: excerptStatus(cfg, input)}
-	events := complianceEvents(g.filter.Name, cfg, backstop, sel.segments, o, guardrails.Verdict{}, ec)
-	for i := range events {
-		events[i].Metadata["template_backstop"] = guardrails.BackstopLog
-		events[i].Description += " (template backstop on the full message; logged only)"
+	logged := complianceEvents(g.filter.Name, cfg, backstop, sel.segments, o, guardrails.Verdict{}, ec)
+	for i := range logged {
+		logged[i].Metadata["template_backstop"] = guardrails.BackstopLog
+		logged[i].Description += " (template backstop on the full message; logged only)"
 	}
-	return events
+	return append(events, logged...)
+}
+
+// mimicryEvents records template text where it does not belong (inside a
+// slot, the placeholder in a message, a constant copied many times): one
+// event, action log, whatever the guardrail found. The text was scored as
+// always; the event is for the operator, since it is how an attacker who
+// knows the template would try to pass as it.
+func (p *templatePlan) mimicryEvents(filterName string, cfg guardrails.Config, segs []guardrails.Segment, ec evidenceContext) []ComplianceEventOutput {
+	var idx []int
+	for si := range p.mimicry {
+		idx = append(idx, si)
+	}
+	if len(idx) == 0 {
+		return nil
+	}
+	slices.Sort(idx)
+	roles := map[string]bool{}
+	var refs []map[string]any
+	for _, si := range idx {
+		seg := segs[si]
+		roles[seg.Role] = true
+		if len(refs) < maxEvidenceSegments {
+			ref := map[string]any{"index": si, "role": seg.Role, "kind": segmentKind(seg), "sha256": guardrails.TextSHA256(seg.Text)}
+			if t := p.templateRef(si); t != nil {
+				ref["template"] = t
+			}
+			refs = append(refs, ref)
+		}
+	}
+	metadata := map[string]interface{}{
+		"provider": cfg.Provider,
+		"signal":   "template.mimicry",
+		"action":   guardrails.ActionLog,
+		"count":    len(idx),
+		"roles":    sortedKeys(roles),
+		"segments": refs,
+	}
+	if ec.requestID != "" {
+		metadata["request_id"] = ec.requestID
+	}
+	if ec.clientRequestID != "" {
+		metadata["client_request_id"] = ec.clientRequestID
+	}
+	return []ComplianceEventOutput{{
+		EventType:   "guardrail.template_mimicry",
+		Severity:    "warning",
+		Description: fmt.Sprintf("guardrail %q (%s): app template text found where the template does not put it (%d message(s)); the text was scored", filterName, cfg.Provider, len(idx)),
+		Metadata:    metadata,
+	}}
 }

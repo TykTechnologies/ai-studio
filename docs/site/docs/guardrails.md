@@ -193,6 +193,8 @@ On each request of the App, every request guardrail tries the approved templates
 
 An [HTTP classifier](#http) that reads templates receives the full message in the same call (`template.full_text`) and does the backstop itself; every other provider is called a second time with the full message. Start with `log`, and move to `enforce` once the backstop's false positives are known.
 
+**Events.** A flagged segment of a message tried against the App's templates names the outcome in its `template`: `{"id": "pr-review@3", "exempt_share": 0.41}` for a match (with `"signal": "template.mimicry"` when a slot holds template text), or `{"signal": "template.miss"}` when a template's placement fits the message but none matched. Template text where the template does not put it (inside a slot, the `[app template]` text in a message, a constant repeated many times) records one `guardrail.template_mimicry` event, action `log`, whatever else the guardrail found; it is how someone who knows the template would try to pass as it. See the metrics under [Compliance events and metrics](#compliance-events-and-metrics).
+
 Templates apply on AI Studio. Edge gateways do not receive them yet and score every message whole.
 
 ### Shadow (don't wait)
@@ -306,6 +308,8 @@ Blocks count towards `aistudio_policy_blocks_total` like any filter block. These
 | `aistudio_guardrail_cache_total` | `provider`, `outcome` (`hit`, `miss`) | Verdict cache lookups |
 | `aistudio_guardrail_shadow_dropped_total` | `provider`, `reason` (`queue_full`, `tenant_share`, `shutdown`) | Shadow evaluations dropped instead of queued; see [Shadow](#shadow-dont-wait) |
 | `aistudio_guardrail_calls_abandoned_total` | `provider` | Provider calls given up on because they did not return after their timeout; their work continues in the background, so a steady rate means a provider that ignores its timeout |
+| `aistudio_guardrail_templates_total` | `provider`, `result` (`hit`, `miss`, `mimicry`, `backstop_only`) | Messages tried against the App's [trusted prompt templates](#trusted-prompt-templates): matched, missed (a template's placement fits but none matched), template text out of place, and backstop findings the residual did not show |
+| `aistudio_guardrail_template_exempt_share` | `provider` | Share of a matched message's characters left unscored (at most 0.6) |
 
 ### Seeded defaults
 

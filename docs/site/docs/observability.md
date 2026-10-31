@@ -111,6 +111,8 @@ conventions, and keep their own names:
 | `aistudio_guardrail_segments_total` | `provider`, `segment_kind`, `result` | Request segments a guardrail screened: `scanned`, `cached` or `unscanned` |
 | `aistudio_guardrail_cache_total` | `provider`, `outcome` | Guardrail verdict cache lookups (`hit`, `miss`) |
 | `aistudio_guardrail_calls_abandoned_total` | `provider` | Guardrail provider calls given up on after their timeout because the provider did not return |
+| `aistudio_guardrail_templates_total` | `provider`, `result` | Messages tried against an App's trusted prompt templates: `hit`, `miss`, `mimicry`, `backstop_only` |
+| `aistudio_guardrail_template_exempt_share` | `provider` | Histogram of the share of a matched message left unscored by its template |
 
 ### Migrating existing dashboards
 

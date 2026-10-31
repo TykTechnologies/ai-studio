@@ -450,7 +450,7 @@ func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail) (*S
 		}
 	}
 
-	out.ComplianceEvents = append(out.ComplianceEvents, complianceEvents(g.filter.Name, cfg, res.findings, sel.segments, o, verdict, evidenceContext{requestID: requestIDOf(input), clientRequestID: clientRequestIDOf(input), excerptChars: job.excerptChars, excerptStatus: excerptStatus(cfg, input)})...)
+	out.ComplianceEvents = append(out.ComplianceEvents, complianceEvents(g.filter.Name, cfg, res.findings, sel.segments, o, verdict, evidenceContext{requestID: requestIDOf(input), clientRequestID: clientRequestIDOf(input), excerptChars: job.excerptChars, excerptStatus: excerptStatus(cfg, input), templates: plan})...)
 	out.ComplianceEvents = append(out.ComplianceEvents, unscannedEvents(g.filter.Name, cfg, sel.segments, res, o.overall)...)
 	if len(o.unredactable) > 0 {
 		out.ComplianceEvents = append(out.ComplianceEvents, unredactableEvent(g.filter.Name, cfg, sel.segments, o.unredactable, o.overall))
@@ -1416,6 +1416,10 @@ type evidenceContext struct {
 	excerptChars    int
 	// excerptStatus is why there is no excerpt when excerptChars is 0.
 	excerptStatus string
+	// templates is how the request matched the app's trusted prompt
+	// templates, nil when it was not tried: segments say which template
+	// they matched (template_id@version, exempt share) or that they missed.
+	templates *templatePlan
 }
 
 // maxEvidenceSegments bounds the segments one compliance event lists; count
@@ -1546,6 +1550,9 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 			g.kinds[segmentKind(seg)] = true
 			if len(g.refs) < maxEvidenceSegments {
 				ref := segmentEvidence(seg, f.SegmentIndex, f, ec)
+				if t := ec.templates.templateRef(f.SegmentIndex); t != nil {
+					ref["template"] = t
+				}
 				if key := fmt.Sprintf("%d/%v", f.SegmentIndex, ref["sha256"]); !g.seen[key] {
 					g.seen[key] = true
 					g.refs = append(g.refs, ref)
