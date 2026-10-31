@@ -36,6 +36,7 @@ The table displays the following columns:
    - The price charged for tokens written to the LLM's prompt cache.
    - Used for models that support prompt caching (e.g., Anthropic Claude with prompt caching).
    - If not set, cache write costs default to the input token price.
+   - There is one cache-write price per model. Anthropic and Bedrock charge more for one-hour cache writes than for five-minute ones, and one-hour writes are recorded at this single price. If most of a model's traffic uses one-hour caching (for example Claude Code with `promptCacheTtl` set to `"1h"`), set this to the one-hour rate.
 
 6. **Cost per Cache Read Token** *(Optional)*:
    - The price charged for tokens read from the LLM's prompt cache (cache hits).

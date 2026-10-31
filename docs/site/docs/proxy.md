@@ -261,6 +261,14 @@ The operations are counted in the `aistudio_native_*` metrics (see [Observabilit
     *   **Application inference profiles are not shown.** If the default model is an application inference profile ARN (`arn:aws:bedrock:...:application-inference-profile/...`), the id contains neither word and Claude Code drops it. Requests still work; only the picker entry is missing. System inference profile ARNs contain "anthropic" and are shown.
     *   **Don't redirect this path.** Claude Code treats any redirect as a failed discovery, including an ingress redirect from `http://` to `https://`. Point `ANTHROPIC_BASE_URL` at the final URL.
 
+*   **Prompt caching:** each `cache_control` marker becomes a Bedrock cache point after the same block (system, message or tool). The cache lifetime comes from the marker's `ttl`, which the client chooses per request (Claude Code sends `"1h"` when `promptCacheTtl` is `"1h"`). There is no admin setting.
+    *   `"ttl": "1h"` is sent to Bedrock as a one-hour cache point.
+    *   No `ttl`, `"5m"`, or any other value gives Bedrock's default 5-minute cache. An unknown value is logged at debug level.
+    *   Claude 3 models (for example Claude 3.7 Sonnet and Claude 3.5 Sonnet v2) only have 5-minute caching, and Bedrock rejects a `ttl` on non-Anthropic models such as Amazon Nova. For both, the `ttl` is dropped and the cache points stay.
+    *   The model is recognised from the configured model id. An application inference profile ARN names no model, so a `"1h"` ttl is passed through; Bedrock can reject the request if the profile points at a non-Anthropic model (such as Amazon Nova), Claude 3.7 Sonnet or Claude 3.5 Sonnet v2.
+    *   As with Anthropic, one-hour markers must come before five-minute ones in the request. The gateway keeps the order the client sent.
+    *   Cost reporting records one-hour cache writes at the LLM's single cache-write price; see [Model Prices](./model-prices.md).
+
 ### How the translating endpoints reach the vendor
 
 The OpenAI-compatible endpoints (`/ai/{llmSlug}`, the Main Ingress `/v1`, routers) and the Anthropic Messages endpoint translate the request and send it through the gateway's own vendor-native endpoint, `/llm/call/{llmSlug}/`, before it goes to the vendor. Plugins, model checks, budgets, request and response filters, signing with the LLM's credentials and analytics all run there, once per attempt, on the vendor's own request and response.

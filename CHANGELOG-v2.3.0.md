@@ -151,6 +151,7 @@ This changes what plugins and filter scripts see for Bedrock traffic. Read the [
 - **Helm:** `config.logLevel` sets AI Studio's log level.
 - **Startup warning** when filter scripts are given access to the operating system (`FILTER_SCRIPT_ALLOW_OS`).
 - **New Prometheus metrics** for decision models (`aistudio_decision_questions_total`), native API operations (`aistudio_native_*`) and guardrails (`aistudio_guardrail_segments_total`, `aistudio_guardrail_cache_total`, `aistudio_guardrail_calls_abandoned_total`, `aistudio_guardrail_shadow_dropped_total`).
+- **One-hour prompt caching for Claude on Bedrock.** Claude Code and other Anthropic clients that ask for a one-hour prompt cache (`cache_control.ttl: "1h"`, or Claude Code's `promptCacheTtl: "1h"`) now get it when they use a Bedrock LLM through `/anthropic/`. Before, Bedrock always cached for 5 minutes, so after a longer pause the whole prompt was written to the cache again. Claude 3 models and non-Anthropic models (such as Amazon Nova) only support 5-minute caching and keep it. For now, one-hour cache writes are billed at the LLM's single cache-write price.
 
 ---
 
