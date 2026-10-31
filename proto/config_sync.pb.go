@@ -1987,9 +1987,18 @@ type AnalyticsEvent struct {
 	NoUsage bool `protobuf:"varint,48,opt,name=no_usage,json=noUsage,proto3" json:"no_usage,omitempty"`
 	// Agent tracing gateway span id (16 hex) of the logical call; empty while
 	// tracing is off. Lands in proxy_logs.trace_span_id.
-	TraceSpanId   string `protobuf:"bytes,49,opt,name=trace_span_id,json=traceSpanId,proto3" json:"trace_span_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	TraceSpanId string `protobuf:"bytes,49,opt,name=trace_span_id,json=traceSpanId,proto3" json:"trace_span_id,omitempty"`
+	// The model the caller asked for; model_name is the one the vendor
+	// reported, which can be a versioned name. A price recalculation on the
+	// requested name reaches the row through it (llm_chat_records
+	// requested_model). Empty from older edges.
+	RequestedModel string `protobuf:"bytes,50,opt,name=requested_model,json=requestedModel,proto3" json:"requested_model,omitempty"`
+	// The multiple of the list price cost was billed at (1 at list price,
+	// 0.5 for batch...); unset from older edges. Kept so a price
+	// recalculation can reprice the row (llm_chat_records price_multiplier).
+	PriceMultiplier *float64 `protobuf:"fixed64,51,opt,name=price_multiplier,json=priceMultiplier,proto3,oneof" json:"price_multiplier,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *AnalyticsEvent) Reset() {
@@ -2363,6 +2372,20 @@ func (x *AnalyticsEvent) GetTraceSpanId() string {
 		return x.TraceSpanId
 	}
 	return ""
+}
+
+func (x *AnalyticsEvent) GetRequestedModel() string {
+	if x != nil {
+		return x.RequestedModel
+	}
+	return ""
+}
+
+func (x *AnalyticsEvent) GetPriceMultiplier() float64 {
+	if x != nil && x.PriceMultiplier != nil {
+		return *x.PriceMultiplier
+	}
+	return 0
 }
 
 // Budget usage event for pulse batching
@@ -4557,7 +4580,7 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x0fmax_buffer_size\x18\x05 \x01(\rR\rmaxBufferSize\x126\n" +
 	"\x17include_proxy_summaries\x18\x06 \x01(\bR\x15includeProxySummaries\x120\n" +
 	"\x14edge_retention_hours\x18\a \x01(\rR\x12edgeRetentionHours\x12)\n" +
-	"\x10excluded_vendors\x18\b \x03(\tR\x0fexcludedVendors\"\xfb\r\n" +
+	"\x10excluded_vendors\x18\b \x03(\tR\x0fexcludedVendors\"\xe9\x0e\n" +
 	"\x0eAnalyticsEvent\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x15\n" +
@@ -4618,7 +4641,10 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x12gateway_request_id\x18. \x01(\tR\x10gatewayRequestId\x12*\n" +
 	"\x11client_request_id\x18/ \x01(\tR\x0fclientRequestId\x12\x19\n" +
 	"\bno_usage\x180 \x01(\bR\anoUsage\x12\"\n" +
-	"\rtrace_span_id\x181 \x01(\tR\vtraceSpanId\"\xa2\x03\n" +
+	"\rtrace_span_id\x181 \x01(\tR\vtraceSpanId\x12'\n" +
+	"\x0frequested_model\x182 \x01(\tR\x0erequestedModel\x12.\n" +
+	"\x10price_multiplier\x183 \x01(\x01H\x00R\x0fpriceMultiplier\x88\x01\x01B\x13\n" +
+	"\x11_price_multiplier\"\xa2\x03\n" +
 	"\x10BudgetUsageEvent\x12\x15\n" +
 	"\x06app_id\x18\x01 \x01(\rR\x05appId\x12\x15\n" +
 	"\x06llm_id\x18\x02 \x01(\rR\x05llmId\x12\x1f\n" +
@@ -5047,6 +5073,7 @@ func file_proto_config_sync_proto_init() {
 		(*ControlMessage_ReloadRequest)(nil),
 		(*ControlMessage_Event)(nil),
 	}
+	file_proto_config_sync_proto_msgTypes[20].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

@@ -9,6 +9,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/gin-gonic/gin"
 )
 
@@ -1229,6 +1230,12 @@ func (a *API) getBudgetUsage(c *gin.Context) {
 			"total_tokens":    u.TotalTokens,
 			"user_id":         u.UserID,
 			"user_email":      u.UserEmail,
+			// "spent" is in "currency"; a period that mixes currencies has
+			// its spend by currency here instead (and is refused).
+			"period_start":         u.PeriodStart,
+			"period_end":           u.PeriodEnd, // the next period's start
+			"currency":             u.Currency,
+			"mixed_currency_spend": u.MixedCurrencySpend,
 		}
 	}
 
@@ -1297,11 +1304,10 @@ func (a *API) getBudgetUsageForApp(c *gin.Context) {
 		return
 	}
 
+	// The current budget period, as enforcement counts it (not everything
+	// since the budget start date).
 	now := time.Now()
-	start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-	if app.BudgetStartDate != nil {
-		start = *app.BudgetStartDate
-	}
+	start, next := budget.Period(app.BudgetStartDate, now)
 
 	spent, err := a.service.Budget.GetMonthlySpending(uint(appID), start, now)
 	if err != nil {
@@ -1314,6 +1320,28 @@ func (a *API) getBudgetUsageForApp(c *gin.Context) {
 		return
 	}
 
+	// A budget's currency is implied by its spend: the one currency of
+	// current_usage, or, when the period mixes currencies (which the budget
+	// refuses), the spend by currency and a current_usage of 0. Spend is
+	// tracked in Enterprise only.
+	var currency string
+	var mixed map[string]float64
+	if budget.IsEnterpriseAvailable() {
+		byCurrency, err := analytics.GetAppSpending(a.service.DB, []analytics.AppSpendWindow{{AppID: uint(appID), Start: start}}, now)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Internal Server Error", Detail: "Failed to get monthly spending"}},
+			})
+			return
+		}
+		if currency, _, mixed = budget.SplitCurrency(byCurrency[uint(appID)]); mixed != nil {
+			spent = 0
+		}
+	}
+
 	var percentage *float64
 	if app.MonthlyBudget != nil && *app.MonthlyBudget > 0 {
 		p := (spent / *app.MonthlyBudget) * 100
@@ -1321,15 +1349,21 @@ func (a *API) getBudgetUsageForApp(c *gin.Context) {
 	}
 
 	response := struct {
-		CurrentUsage  float64   `json:"current_usage"`
-		MonthlyBudget *float64  `json:"monthly_budget"`
-		Percentage    *float64  `json:"percentage"`
-		StartDate     time.Time `json:"start_date"`
+		CurrentUsage       float64            `json:"current_usage"`
+		MonthlyBudget      *float64           `json:"monthly_budget"`
+		Percentage         *float64           `json:"percentage"`
+		StartDate          time.Time          `json:"start_date"`
+		PeriodEnd          time.Time          `json:"period_end"` // the next period's start
+		Currency           string             `json:"currency,omitempty"`
+		MixedCurrencySpend map[string]float64 `json:"mixed_currency_spend,omitempty"`
 	}{
-		CurrentUsage:  spent,
-		MonthlyBudget: app.MonthlyBudget,
-		Percentage:    percentage,
-		StartDate:     start,
+		CurrentUsage:       spent,
+		MonthlyBudget:      app.MonthlyBudget,
+		Percentage:         percentage,
+		StartDate:          start,
+		PeriodEnd:          next,
+		Currency:           currency,
+		MixedCurrencySpend: mixed,
 	}
 
 	c.JSON(http.StatusOK, response)

@@ -46,6 +46,10 @@ const ModelPriceList = () => {
   const [updatedInputPrice, setUpdatedInputPrice] = useState(0);
   const [updatedCacheWritePrice, setUpdatedCacheWritePrice] = useState(0);
   const [updatedCacheReadPrice, setUpdatedCacheReadPrice] = useState(0);
+  const [backfillPrice, setBackfillPrice] = useState(null);
+  const [backfillFrom, setBackfillFrom] = useState("");
+  const [backfillTo, setBackfillTo] = useState("");
+  const [backfilling, setBackfilling] = useState(false);
 
   const { queryParams, updatePaginationData, searchTerm, tableProps } = useListQuery();
 
@@ -138,6 +142,33 @@ const ModelPriceList = () => {
     }
   };
 
+  const handleOpenBackfill = useCallback((price) => {
+    setBackfillPrice(price);
+    setBackfillFrom("");
+    setBackfillTo("");
+  }, []);
+
+  // Prices the requests recorded at no cost before the model had a price.
+  const handleBackfill = async () => {
+    setBackfilling(true);
+    try {
+      const body = {};
+      if (backfillFrom) body.from = backfillFrom;
+      if (backfillTo) body.to = backfillTo;
+      const response = await apiClient.post(`/model-prices/${backfillPrice.id}/backfill`, body);
+      const rows = response.data.data.rows_priced;
+      notify(`Priced ${rows.toLocaleString()} unpriced ${rows === 1 ? "request" : "requests"}`);
+      setBackfillPrice(null);
+      fetchModelPrices();
+    } catch (error) {
+      console.error("Error backfilling unpriced history", error);
+      const detail = error.response?.data?.errors?.[0]?.detail;
+      notify(detail || "Failed to backfill unpriced history", "error");
+    } finally {
+      setBackfilling(false);
+    }
+  };
+
   const columns = useMemo(() => [
     { field: "name", headerName: "Model Name", sortable: true, renderCell: (price) => price.attributes.model_name },
     {
@@ -160,13 +191,19 @@ const ModelPriceList = () => {
     { field: "cache_write_pt", headerName: "Cost per Million Cache Write Tokens", renderCell: (price) => perMillion(price, "cache_write_pt") },
     { field: "cache_read_pt", headerName: "Cost per Million Cache Read Tokens", renderCell: (price) => perMillion(price, "cache_read_pt") },
     { field: "currency", headerName: "Currency", renderCell: (price) => price.attributes.currency },
+    {
+      field: "unpriced_rows",
+      headerName: "Unpriced Requests",
+      renderCell: (price) => (price.meta?.unpriced_rows || 0).toLocaleString(),
+    },
   ], []);
 
   const rowActions = useMemo(() => [
     { key: "update", label: "Update model price", onClick: handleOpenUpdatePriceModal },
     { key: "edit", label: "Edit model price", onClick: (price) => navigate(`/admin/model-prices/edit/${price.id}`) },
+    { key: "backfill", label: "Backfill unpriced history", onClick: handleOpenBackfill },
     { key: "delete", label: "Delete model price", onClick: (price) => handleDelete(price.id) },
-  ], [handleOpenUpdatePriceModal, navigate, handleDelete]);
+  ], [handleOpenUpdatePriceModal, navigate, handleOpenBackfill, handleDelete]);
 
   const bulkActions = useMemo(
     () => standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete }),
@@ -277,6 +314,44 @@ const ModelPriceList = () => {
           </Button>
           <PrimaryButton onClick={handleUpdatePrice} color="primary">
             Update
+          </PrimaryButton>
+        </DialogActions>
+      </StyledDialog>
+
+      <StyledDialog open={!!backfillPrice} onClose={() => setBackfillPrice(null)}>
+        <StyledDialogTitle>Backfill unpriced history</StyledDialogTitle>
+        <StyledDialogContent>
+          <Typography variant="bodyLargeDefault" component="p" sx={{ mb: 2 }}>
+            {`${(backfillPrice?.meta?.unpriced_rows || 0).toLocaleString()} requests for ${priceName(backfillPrice)} were recorded at no cost, before the model had a price. Backfilling prices them at the current price. Requests that already have a cost are not changed; to reprice those, edit the price and recalculate.`}
+          </Typography>
+          <Typography variant="bodyMediumDefault" color="text.defaultSubdued" component="p">
+            Leave the dates empty to backfill all of the unpriced history.
+          </Typography>
+          <TextField
+            fullWidth
+            label="From"
+            type="date"
+            InputLabelProps={{ shrink: true }}
+            value={backfillFrom}
+            onChange={(e) => setBackfillFrom(e.target.value)}
+            margin="normal"
+          />
+          <TextField
+            fullWidth
+            label="To"
+            type="date"
+            InputLabelProps={{ shrink: true }}
+            value={backfillTo}
+            onChange={(e) => setBackfillTo(e.target.value)}
+            margin="normal"
+          />
+        </StyledDialogContent>
+        <DialogActions>
+          <Button onClick={() => setBackfillPrice(null)}>
+            Cancel
+          </Button>
+          <PrimaryButton onClick={handleBackfill} color="primary" disabled={backfilling}>
+            Backfill
           </PrimaryButton>
         </DialogActions>
       </StyledDialog>

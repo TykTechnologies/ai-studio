@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { formatCurrencySpend } from "../utils/currency";
 import AppMCPConnect from "./AppMCPConnect";
 import AppToolAccess from "./AppToolAccess";
 import AppGuardrailBlocks from "./AppGuardrailBlocks";
@@ -722,9 +723,13 @@ const AppDetailView = () => {
                   An administrator can change it.
                 </Typography>
               )}
-              {budgetUsageData?.current_usage != null && budgetUsageData?.start_date && (
+              {budgetUsageData?.mixed_currency_spend && Object.keys(budgetUsageData.mixed_currency_spend).length > 0 ? (
+                <Typography variant="body2" color="error" sx={{ mt: 1 }}>
+                  Mixed currencies this period ({formatCurrencySpend(budgetUsageData.mixed_currency_spend)}). Costs are not converted, so the budget refuses requests until the period ends.
+                </Typography>
+              ) : budgetUsageData?.current_usage != null && budgetUsageData?.start_date && (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  Current usage: ${budgetUsageData.current_usage.toFixed(2)} ({budgetUsageData.percentage?.toFixed(1) || 0}%) since {new Date(budgetUsageData.start_date).toLocaleDateString() || 'N/A'}
+                  Current usage: {budgetUsageData.currency && budgetUsageData.currency !== "USD" ? `${budgetUsageData.currency} ` : "$"}{budgetUsageData.current_usage.toFixed(2)} ({budgetUsageData.percentage?.toFixed(1) || 0}%) since {new Date(budgetUsageData.start_date).toLocaleDateString() || 'N/A'}
                 </Typography>
               )}
             </Box>

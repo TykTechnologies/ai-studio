@@ -9,7 +9,8 @@ package proxy
 // buildChatRecordFor path, then price events at different points in time,
 // then what the per-day cost chart shows. The scenarios log what they find
 // rather than assert it; the logs are the report. See features/Pricing.md
-// and the enterprise counterpart in enterprise/features/budget.
+// and the enterprise counterpart in enterprise/features/budget. The fixtures
+// are shared with the asserted suite in pricing_regression_test.go.
 //
 //   go test -tags pricing_stress ./proxy -run TestPricingStress -v -count=1 | grep pricing_stress_diag
 
@@ -24,116 +25,12 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
-	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/stretchr/testify/require"
 )
 
-type stressModel struct {
-	vendor    models.Vendor
-	requested string // what the caller (agent) asks for
-	reported  string // what the vendor reports back (Gemini modelVersion, OpenAI snapshot)
-	perDay    int
-	prompt    int
-	response  int
-	cacheRead int
-	price     models.ModelPrice // the real price the admin eventually enters
-}
-
-// Gemini mix as an agent would use it: one model reported under the name
-// asked for, two reported under a versioned name.
-var geminiMix = []stressModel{
-	{vendor: models.GOOGLEAI, requested: "gemini-2.5-pro", reported: "gemini-2.5-pro", perDay: 20, prompt: 12000, response: 1500, cacheRead: 4000,
-		price: models.ModelPrice{CPIT: 1.25e-6, CPT: 10e-6, CacheReadPT: 0.31e-6, Currency: "USD"}},
-	{vendor: models.GOOGLEAI, requested: "gemini-2.5-flash", reported: "gemini-2.5-flash-preview-05-20", perDay: 80, prompt: 8000, response: 900, cacheRead: 2000,
-		price: models.ModelPrice{CPIT: 0.3e-6, CPT: 2.5e-6, CacheReadPT: 0.075e-6, Currency: "USD"}},
-	{vendor: models.GOOGLEAI, requested: "gemini-2.0-flash", reported: "gemini-2.0-flash-001", perDay: 120, prompt: 3000, response: 400,
-		price: models.ModelPrice{CPIT: 0.1e-6, CPT: 0.4e-6, Currency: "USD"}},
-}
-
-var otherVendors = []stressModel{
-	{vendor: models.OPENAI, requested: "gpt-4o", reported: "gpt-4o-2024-08-06", perDay: 40, prompt: 5000, response: 700, cacheRead: 1000,
-		price: models.ModelPrice{CPIT: 2.5e-6, CPT: 10e-6, CacheReadPT: 1.25e-6, Currency: "USD"}},
-	{vendor: models.ANTHROPIC, requested: "claude-sonnet-4-5", reported: "claude-sonnet-4-5-20250929", perDay: 30, prompt: 9000, response: 1200, cacheRead: 6000,
-		price: models.ModelPrice{CPIT: 3e-6, CPT: 15e-6, CacheWritePT: 3.75e-6, CacheReadPT: 0.3e-6, Currency: "EUR"}},
-}
-
-type stressEnv struct {
-	db   *gorm.DB
-	svc  *services.Service
-	llms map[models.Vendor]*models.LLM
-	app  *models.App
-	day0 time.Time // midnight UTC of the first day
-	days int
-}
-
+// newStressEnv is a stress environment on an in-memory SQLite database.
 func newStressEnv(t *testing.T, days int) *stressEnv {
-	db := setupTestDB(t)
-	env := &stressEnv{db: db, svc: &services.Service{DB: db}, llms: map[models.Vendor]*models.LLM{}, days: days}
-	for _, v := range []models.Vendor{models.GOOGLEAI, models.OPENAI, models.ANTHROPIC} {
-		llm := &models.LLM{Name: fmt.Sprintf("llm-%s", v), Vendor: v}
-		require.NoError(t, db.Create(llm).Error)
-		env.llms[v] = llm
-	}
-	env.app = &models.App{Name: "agent"}
-	require.NoError(t, db.Create(env.app).Error)
-	today := time.Now().UTC().Truncate(24 * time.Hour)
-	env.day0 = today.AddDate(0, 0, -(days - 1))
-	return env
-}
-
-// record sends one day's traffic for the mix through buildChatRecordFor,
-// spread over the day.
-func (e *stressEnv) record(t *testing.T, mix []stressModel, day int) {
-	t.Helper()
-	var recs []*models.LLMChatRecord
-	for _, m := range mix {
-		for i := 0; i < m.perDay; i++ {
-			ts := e.day0.AddDate(0, 0, day).Add(time.Duration(i) * (23 * time.Hour) / time.Duration(m.perDay))
-			resp := &MockTokenResponse{model: m.reported, promptTokens: m.prompt + m.cacheRead, responseTokens: m.response, cacheReadTokens: m.cacheRead}
-			recs = append(recs, buildChatRecordFor(e.svc, e.llms[m.vendor], e.app, resp, m.requested, ts))
-		}
-	}
-	require.NoError(t, e.db.CreateInBatches(recs, 500).Error)
-}
-
-func (e *stressEnv) recordDays(t *testing.T, mix []stressModel, from, to int) {
-	for d := from; d < to; d++ {
-		e.record(t, mix, d)
-	}
-}
-
-// dayCost is what one day of m costs at its real price, in dollars.
-func (m stressModel) dayCost() float64 {
-	pt := models.PromptTokensExcludingCache(string(m.vendor), m.prompt+m.cacheRead, 0, m.cacheRead)
-	c := models.ChatRecordCost(string(m.vendor), m.price.CPT, m.price.CPIT, m.price.CacheWritePT, m.price.CacheReadPT, pt, m.response, 0, m.cacheRead)
-	return c * float64(m.perDay) / 10000
-}
-
-func priceRow(t *testing.T, db *gorm.DB, name string, vendor models.Vendor) *models.ModelPrice {
-	t.Helper()
-	var p models.ModelPrice
-	require.NoError(t, db.Where("model_name = ? AND vendor = ?", name, string(vendor)).First(&p).Error)
-	return &p
-}
-
-type dailyCost struct {
-	byDay map[string]float64
-	total float64
-}
-
-// costByDay is GetCostAnalysis (the dashboard's cost chart) folded over currencies.
-func (e *stressEnv) costByDay(t *testing.T) dailyCost {
-	t.Helper()
-	chart, err := analytics.GetCostAnalysis(e.db, e.day0, e.day0.AddDate(0, 0, e.days+1), nil)
-	require.NoError(t, err)
-	out := dailyCost{byDay: map[string]float64{}}
-	for _, c := range chart {
-		for i, l := range c.Labels {
-			out.byDay[l] += c.Data[i]
-			out.total += c.Data[i]
-		}
-	}
-	return out
+	return newStressEnvOn(t, setupTestDB(t), days)
 }
 
 func (d dailyCost) summary(lastDay string) string {
@@ -149,16 +46,6 @@ func (d dailyCost) summary(lastDay string) string {
 		share = last / d.total * 100
 	}
 	return fmt.Sprintf("total=$%.2f, days with cost=%d, last day=$%.2f (%.1f%% of total)", d.total, nonZero, last, share)
-}
-
-func (e *stressEnv) lastDay() string { return e.day0.AddDate(0, 0, e.days-1).Format("2006-01-02") }
-
-func mixDayCost(mix []stressModel) float64 {
-	s := 0.0
-	for _, m := range mix {
-		s += m.dayCost()
-	}
-	return s
 }
 
 // TestPricingStress_UnpricedThenPricedToday reproduces the reported case: an

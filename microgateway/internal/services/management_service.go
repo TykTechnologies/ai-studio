@@ -651,7 +651,10 @@ func (s *ManagementService) UpdateModelPrice(id uint, req *UpdateModelPriceReque
 
 // DeleteModelPrice deletes a model price entry
 func (s *ManagementService) DeleteModelPrice(id uint) error {
-	result := s.db.Delete(&database.ModelPrice{}, id)
+	// A hard delete: the unique index on (model_name, vendor) covers
+	// soft-deleted rows, so a soft-deleted price could never be created
+	// again.
+	result := s.db.Unscoped().Delete(&database.ModelPrice{}, id)
 	if result.Error != nil {
 		return fmt.Errorf("failed to delete model price: %w", result.Error)
 	}

@@ -36,6 +36,12 @@ const (
 	// SignalGovernedMetadata: metadata schemas or vocabularies changed;
 	// every replica drops its resolved-schema cache (Enterprise).
 	SignalGovernedMetadata = "governed_metadata"
+	// SignalSpendRecalculated: a price recalculation rewrote the cost of
+	// stored chat records; every replica clears its budget caches and its
+	// budget sync re-sums spend (and lets edges lower theirs). The replica
+	// that recalculated also delivers it to itself (Deliver), since its
+	// budget sync is not the code that changed the data.
+	SignalSpendRecalculated = "spend_recalculated"
 )
 
 // Backend is the cluster behind the package (pkg/studio provides it).
@@ -105,7 +111,8 @@ func OnSignal(name string, fn func()) (remove func()) {
 }
 
 // Deliver runs the handlers for a signal received from another replica
-// (called by the backend).
+// (called by the backend). Code that changes data other parts of its own
+// replica derive state from may also call it, after Signal.
 func Deliver(name string) {
 	mu.Lock()
 	fns := make([]func(), 0, len(handlers[name]))

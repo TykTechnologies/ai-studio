@@ -501,6 +501,10 @@ func TestBuildChatRecord_PriceAdjustedResponse(t *testing.T) {
 	// completion 200×0.000015 + prompt 1000×0.000003 = 0.006, ×10000.
 	assert.InDelta(t, 60, full.Cost, 1e-9, "a plain response is billed at list price")
 	assert.InDelta(t, 30, half.Cost, 1e-9, "a 0.5 multiplier halves the cost")
+	require.NotNil(t, full.PriceMultiplier)
+	require.NotNil(t, half.PriceMultiplier)
+	assert.Equal(t, 1.0, *full.PriceMultiplier, "the multiplier is stored for recalculation")
+	assert.Equal(t, 0.5, *half.PriceMultiplier)
 	assert.Equal(t, full.PromptTokens, half.PromptTokens)
 	assert.Equal(t, full.ResponseTokens, half.ResponseTokens)
 	assert.Equal(t, full.TotalTokens, half.TotalTokens)
@@ -519,6 +523,7 @@ func TestBuildChatRecordFor_RequestedModelFallback(t *testing.T) {
 		&MockTokenResponse{promptTokens: 10, responseTokens: 10}, model, time.Now())
 
 	assert.Equal(t, model, rec.Name)
+	assert.Equal(t, model, rec.RequestedModel)
 	assert.Equal(t, "EUR", rec.Currency)
 	assert.InDelta(t, 2, rec.Cost, 1e-9)
 	assert.Equal(t, uint(3), rec.LLMID)

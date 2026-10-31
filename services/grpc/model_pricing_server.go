@@ -126,6 +126,10 @@ func (s *ModelPricingServer) CreateModelPrice(ctx context.Context, req *pb.Creat
 		req.GetCacheReadPt(),
 		req.GetCurrency(),
 	)
+	var exists *services.ModelPriceExistsError
+	if errors.As(err, &exists) {
+		return nil, status.Error(codes.AlreadyExists, exists.Error())
+	}
 	if err != nil {
 		log.Error().Err(err).
 			Str("model_name", req.GetModelName()).

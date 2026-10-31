@@ -1212,7 +1212,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 				CacheWritePromptTokens: int(event.CacheWritePromptTokens),
 				CacheReadPromptTokens:  int(event.CacheReadPromptTokens),
 				Cost:                   event.Cost, // Already in AI Studio format (dollars * 10000)
-				Currency:               "USD",
+				Currency:               edgeCurrency(event.Currency),
 				TotalTimeMS:            int(event.LatencyMs),
 				TimeStamp:              event.Timestamp.AsTime(),
 				InteractionType:        models.ProxyInteraction, // Mark as proxy interaction
@@ -1223,6 +1223,11 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 				OnBehalfOf:             event.OnBehalfOf,
 				ActingAgent:            event.ActingAgent,
 			}
+			// The requested model and price multiplier let a price
+			// recalculation reach and reprice the row (kq3b.1/.7); edge
+			// values are untrusted, so both are bounded.
+			chatRecords[i].RequestedModel = edgeRequestedModel(event.RequestedModel)
+			chatRecords[i].PriceMultiplier = edgePriceMultiplier(event.PriceMultiplier)
 			// Model class. A decision call's choices are its answered
 			// questions, so the edge's count is kept instead of the default.
 			kind := models.RequestKind(event.RequestKind)
@@ -1848,7 +1853,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 				currentPeriodUsage = usage
 			} else if err := s.db.Model(&models.LLMChatRecord{}).
 				Select("COALESCE(SUM(cost), 0)").
-				Where("app_id = ? AND time_stamp >= ? AND time_stamp <= ?", app.ID, periodStart, periodEnd).
+				Where("app_id = ? AND time_stamp >= ? AND time_stamp < ?", app.ID, periodStart, periodEnd.Add(time.Second)).
 				Scan(&totalCostCents).Error; err != nil {
 				logger.Log.Warn().Err(err).Uint("app_id", app.ID).Msg("Failed to calculate current period usage for app")
 			} else {

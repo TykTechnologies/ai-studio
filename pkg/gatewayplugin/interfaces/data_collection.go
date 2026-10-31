@@ -105,6 +105,13 @@ type AnalyticsData struct {
 	// NoUsage marks a request that produced no usage: a policy block, a
 	// vendor or gateway error. Its token and cost fields are zero.
 	NoUsage bool `json:"no_usage,omitempty"`
+
+	// RequestedModel is the model the caller asked for (ModelName is the one
+	// the vendor reported). PriceMultiplier is the multiple of the list
+	// price Cost was billed at (1 at list price, 0.5 for batch); nil when
+	// unknown. Both let a hub price recalculation reach and reprice the row.
+	RequestedModel  string   `json:"requested_model,omitempty"`
+	PriceMultiplier *float64 `json:"price_multiplier,omitempty"`
 }
 
 // BudgetUsageData contains budget tracking information

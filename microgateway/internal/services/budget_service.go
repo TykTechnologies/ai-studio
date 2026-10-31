@@ -17,6 +17,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/plugins"
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/rs/zerolog/log"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -182,46 +183,13 @@ func (s *DatabaseBudgetService) budgetApp(appID uint) (budgetApp, error) {
 
 // calculateBudgetPeriod determines the budget period for an app based on its budget_start_date.
 // If no budget_start_date is set, uses calendar month (1st to last day).
+// Anchor days past the end of a short month fall on its last day; hub and
+// edges share budget.SyncPeriod so they key spend by the same period.
 // When a budget is reset on the same day, this preserves the exact reset time to ensure
 // usage from before the reset is not counted.
 // Note: Timestamps are truncated to second precision to ensure consistency across all components.
 func (s *DatabaseBudgetService) calculateBudgetPeriod(budgetStartDate *time.Time, now time.Time) (time.Time, time.Time) {
-	if budgetStartDate == nil {
-		// Default to calendar month
-		periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
-		periodEnd := periodStart.AddDate(0, 1, 0).Add(-time.Second)
-		return periodStart, periodEnd
-	}
-
-	budgetDay := budgetStartDate.Day()
-	currentYear := now.Year()
-	currentMonth := now.Month()
-
-	// If we haven't reached the budget day in current month,
-	// the period started on the budget day of previous month
-	if now.Day() < budgetDay {
-		if currentMonth == time.January {
-			currentMonth = time.December
-			currentYear--
-		} else {
-			currentMonth--
-		}
-	}
-
-	// Calculate the normalized period start (midnight of the budget day)
-	normalizedPeriodStart := time.Date(currentYear, currentMonth, budgetDay, 0, 0, 0, 0, now.Location())
-	periodEnd := normalizedPeriodStart.AddDate(0, 1, 0).Add(-time.Second)
-
-	// Check if the actual budget_start_date falls within this period.
-	// If it does (e.g., budget was reset mid-period), use the exact timestamp
-	// to ensure usage from before the reset is not counted.
-	// Truncate to second precision to ensure consistency across control server and edges.
-	if budgetStartDate.After(normalizedPeriodStart) && budgetStartDate.Before(periodEnd) {
-		truncated := budgetStartDate.Truncate(time.Second)
-		return truncated, periodEnd
-	}
-
-	return normalizedPeriodStart, periodEnd
+	return budget.SyncPeriod(budgetStartDate, now)
 }
 
 

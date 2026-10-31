@@ -585,6 +585,10 @@ plugin-help: bin/plugin-scaffold
 schema-golden: ## Regenerate the schema snapshot goldens (SQLite + postgres:16 in Docker) after a model change
 	@scripts/schema-golden.sh
 
+.PHONY: test-pricing
+test-pricing: ## Run the full pricing regression matrix (SQLite + postgres:16 in Docker; DATABASE_URL to reuse one)
+	@scripts/test-pricing.sh
+
 # ============================================================================
 # API docs
 # ============================================================================
