@@ -41,13 +41,15 @@ Constant text is stored as written; it is the app's own prompt and is not secret
 
 ## Matching
 
-For each message whose role and position fit a template's placement:
+The matcher is `guardrails/templates.MatchMessage`, a pure function. For each message whose role and position fit a template's placement:
 
-- Every `const` part must appear **byte for byte, in the declared order**, at the anchored position. There is no Unicode normalisation, no case folding and no whitespace folding.
-- Slot boundaries come only from the constants matched around them, never from a delimiter such as `</instructions>` on its own. If a message can be parsed more than one way, the parse that scores more text wins.
-- A constant that contains, or sits next to, zero-width, bidi, Unicode tag or variation-selector characters is not exempt.
-- Each constant is exempt **once**, at its anchored position. Template text that appears again inside a slot is a **mimicry signal**: it is scored and reported (`template.mimicry`), never exempt.
-- If no template matches, the message is scored whole and a `template.miss` counter is recorded per app and template.
+- Every `const` part must appear **byte for byte, in the declared order**, at the anchored position. There is no Unicode normalisation, no case folding and no whitespace folding. A message that is not valid UTF-8 never matches.
+- Slot boundaries come only from the constants matched around them, never from a delimiter such as `</instructions>` on its own. Slots may be empty.
+- If a message can be parsed more than one way, the parse that scores more text wins. Every parse of one template exempts the same constants, so parses differ in what they score only when a copy of a constant cannot be exempt (below); among parses that score the same, the leftmost wins. Across templates, the match that exempts the fewest characters wins; ties go to the earlier template.
+- A constant that contains zero-width, bidi, Unicode tag, variation-selector or other format characters is refused when it is stored, and never matched. A constant matched next to one, or followed by a combining mark that would join its last character, is matched but **not exempt**: it is scored.
+- Each constant is exempt **once**, at the position the parse gives it. Template text that appears inside a slot (any 32-byte run of a constant) is a **mimicry signal**: it is scored and reported (`template.mimicry`), never exempt.
+- A slot holding the placeholder text (`[app template]`), or a constant that occurs more than 64 times, makes the message not match (it is scored whole) and is reported as mimicry.
+- If no template matches a message that some template's placement fits, the message is scored whole and a `template.miss` is recorded.
 
 ## Scan plan
 

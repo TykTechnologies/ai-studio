@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"unicode"
 	"unicode/utf8"
 )
@@ -187,6 +188,9 @@ func validConst(c string) error {
 			return fmt.Errorf("a constant must not contain invisible characters (U+%04X at byte %d)", r, i)
 		}
 	}
+	if strings.Contains(c, Placeholder) {
+		return fmt.Errorf("a constant must not contain the placeholder %q", Placeholder)
+	}
 	if r, _ := utf8.DecodeRuneInString(c); combining(r) {
 		return errors.New("a constant must not start with a combining mark")
 	}
@@ -235,6 +239,10 @@ type Template struct {
 	Version int
 	Placement
 	Parts []Part
+
+	// The matcher's preparation of the template, made on first use.
+	once sync.Once
+	c    *compiledTemplate
 }
 
 // Ref is the template's name@version.

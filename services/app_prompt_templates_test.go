@@ -67,7 +67,7 @@ func TestAppPromptTemplates_CreateValidates(t *testing.T) {
 		}()},
 		{"zero width in const", func() PromptTemplateSpec {
 			s := prReviewSpec("x")
-			s.Parts[0].Const = "You are reviewing​ a pull request; follow the rules."
+			s.Parts[0].Const = "You are reviewing\u200b a pull request; follow the rules."
 			return s
 		}()},
 		{"expiry out of range", func() PromptTemplateSpec { s := prReviewSpec("x"); s.ExpiresAfterDays = new(0); return s }()},
