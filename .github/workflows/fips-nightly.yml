@@ -25,9 +25,18 @@ env:
   GOPRIVATE: github.com/TykTechnologies/ai-studio-enterprise
 
 jobs:
+  # Runners: each job takes its runner from a repository variable
+  # (REPO_DEFAULT_RUNNER_4X_ARM64), set to the WarpBuild label it used before
+  # (warp-ubuntu-latest-arm64-4x).
+  # If WarpBuild stops working (e.g. out of credits), change the variable value
+  # to a GitHub-hosted runner and re-run the workflow, e.g.:
+  #   ubuntu-24.04-arm  (arm64; 2 vCPU/8 GB private repos, 4 vCPU/16 GB public)
+  #   ubuntu-latest     (x64; same resources)
+  # https://docs.github.com/en/actions/reference/runners/github-hosted-runners
+  # Restore the WarpBuild label once it is available again.
   test-fips:
     name: FIPS Strict-Mode Tests (${{ matrix.edition }})
-    runs-on: warp-ubuntu-latest-arm64-4x
+    runs-on: ${{ vars.REPO_DEFAULT_RUNNER_4X_ARM64 }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
