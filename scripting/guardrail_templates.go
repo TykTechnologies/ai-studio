@@ -67,6 +67,7 @@ const (
 	templateHit     = "hit"
 	templateMiss    = "miss"
 	templateMimicry = "mimicry"
+	templateOverCap = "over_cap"
 )
 
 // templatePlan is how a request's segments were matched against the app's
@@ -87,6 +88,11 @@ type templatedSegment struct {
 	// inCall: the provider reads templates and was sent the segment
 	// whole, so the backstop ran in its call.
 	inCall bool
+	// backstop is the backstop mode for this message: the filter's, or
+	// enforce for a match over the exemption cap, whatever the filter
+	// says (off included). Under a filter whose action is log, enforcing
+	// still only logs.
+	backstop string
 }
 
 // templateRef is what a compliance event says of a segment's template.
@@ -96,16 +102,24 @@ func (p *templatePlan) templateRef(si int) map[string]any {
 	}
 	if ts, ok := p.matched[si]; ok {
 		ref := map[string]any{"id": ts.match.Template.Ref(), "exempt_share": roundShare(ts.match.ExemptShare())}
+		var signals []string
 		if ts.match.Mimicry {
-			ref["signal"] = "template.mimicry"
+			signals = append(signals, "template.mimicry")
+		}
+		if ts.match.OverCap {
+			signals = append(signals, "template.over_cap")
+			ref["backstop"] = "enforced"
+		}
+		if signals != nil {
+			ref["signals"] = signals
 		}
 		return ref
 	}
 	switch {
 	case p.mimicry[si]:
-		return map[string]any{"signal": "template.mimicry"}
+		return map[string]any{"signals": []string{"template.mimicry"}}
 	case p.missed[si]:
-		return map[string]any{"signal": "template.miss"}
+		return map[string]any{"signals": []string{"template.miss"}}
 	}
 	return nil
 }
@@ -180,7 +194,11 @@ func planTemplates(input *ScriptInput, sel *selection, cfg guardrails.Config, ca
 		src.Matched(m.Template)
 		metrics.RecordGuardrailTemplate(ctx, cfg.Provider, templateHit)
 		metrics.RecordGuardrailTemplateExempt(ctx, cfg.Provider, m.ExemptShare())
-		matched := &templatedSegment{match: m, residual: templates.NewResidual(seg.Text, m.Exempt)}
+		matched := &templatedSegment{match: m, residual: templates.NewResidual(seg.Text, m.Exempt), backstop: plan.backstop}
+		if m.OverCap {
+			matched.backstop = guardrails.BackstopEnforce
+			metrics.RecordGuardrailTemplate(ctx, cfg.Provider, templateOverCap)
+		}
 		plan.matched[si] = matched
 		if len(m.Exempt) == 0 {
 			continue // every constant refused or capped: scored whole, as sent
@@ -190,7 +208,7 @@ func planTemplates(input *ScriptInput, sel *selection, cfg guardrails.Config, ca
 			exempt[i] = guardrails.Span{Start: e.Start, End: e.End}
 		}
 		seg.Text = matched.residual.Text
-		seg.Template = &guardrails.SegmentTemplate{ID: m.Template.Name, Version: m.Template.Version, FullText: matched.residual.Original, Exempt: exempt, Backstop: plan.backstop}
+		seg.Template = &guardrails.SegmentTemplate{ID: m.Template.Name, Version: m.Template.Version, FullText: matched.residual.Original, Exempt: exempt, Backstop: matched.backstop}
 		matched.inCall = caps.Templates && (pieceMax <= 0 || utf8.RuneCountInString(seg.Text) <= pieceMax)
 	}
 	if !fits {
@@ -332,12 +350,9 @@ func (p *templatePlan) restore(sel *selection, res *scanResult) []guardrails.Fin
 // needsSecondBackstop lists the matched segments whose backstop did not run
 // in the provider's call.
 func (p *templatePlan) needsSecondBackstop(sel *selection) []int {
-	if p.backstop == guardrails.BackstopOff {
-		return nil
-	}
 	var out []int
 	for si, ts := range p.matched {
-		if len(ts.match.Exempt) > 0 && !ts.inCall {
+		if len(ts.match.Exempt) > 0 && !ts.inCall && ts.backstop != guardrails.BackstopOff {
 			out = append(out, si)
 		}
 	}
@@ -432,42 +447,59 @@ func (g *guardrailRunner) finishTemplates(plan *templatePlan, job *scanJob, sel 
 	cfg := job.cfg
 	ec := evidenceContext{requestID: requestIDOf(input), clientRequestID: clientRequestIDOf(input), excerptChars: job.excerptChars, excerptStatus: excerptStatus(cfg, input), templates: plan}
 	events := plan.mimicryEvents(g.filter.Name, cfg, sel.segments, ec)
-	if res.err != nil || plan.backstop == guardrails.BackstopOff {
+	if res.err != nil {
 		// A run that failed is decided by the fail mode; the backstop adds
 		// nothing to it.
 		return events
 	}
-	enforce := plan.backstop == guardrails.BackstopEnforce
+	enforced := func(si int) bool {
+		ts, ok := plan.matched[si]
+		return ok && ts.backstop == guardrails.BackstopEnforce
+	}
 	if segs := plan.needsSecondBackstop(sel); len(segs) > 0 {
 		br := g.runBackstop(job, sel, segs, p, input)
 		res.latency += br.latency
 		backstop = append(backstop, br.findings...)
-		if enforce {
-			for si, why := range br.unscanned {
-				if _, ok := res.unscanned[si]; !ok {
-					res.unscanned[si] = why
-				}
-			}
-			if br.err != nil {
-				res.err = br.err
+		// Under enforce, what the backstop could not scan, and its failure,
+		// count as for the main scan.
+		anyEnforced := false
+		for _, si := range segs {
+			anyEnforced = anyEnforced || enforced(si)
+		}
+		for si, why := range br.unscanned {
+			if _, ok := res.unscanned[si]; !ok && enforced(si) {
+				res.unscanned[si] = why
 			}
 		}
+		if br.err != nil && anyEnforced {
+			res.err = br.err
+		}
 	}
-	if len(backstop) == 0 {
-		return events
+	var enforce, log []guardrails.Finding
+	for _, f := range backstop {
+		switch ts, ok := plan.matched[f.SegmentIndex]; {
+		case !ok || ts.backstop == guardrails.BackstopOff:
+			// A provider that reads templates was told off: nothing to do.
+		case ts.backstop == guardrails.BackstopEnforce:
+			enforce = append(enforce, f)
+		default:
+			log = append(log, f)
+		}
 	}
-	for range backstopOnly(*res, backstop) {
+	for range backstopOnly(*res, append(slices.Clip(enforce), log...)) {
 		metrics.RecordGuardrailTemplate(job.ctx, cfg.Provider, "backstop_only")
 	}
-	if enforce {
-		applyBackstop(sel, res, backstop)
+	if len(enforce) > 0 {
+		applyBackstop(sel, res, enforce)
+	}
+	if len(log) == 0 {
 		return events
 	}
 	o := outcome{actions: map[int]string{}, overall: guardrails.ActionLog}
-	for _, f := range backstop {
+	for _, f := range log {
 		o.actions[f.SegmentIndex] = guardrails.ActionLog
 	}
-	logged := complianceEvents(g.filter.Name, cfg, backstop, sel.segments, o, guardrails.Verdict{}, ec)
+	logged := complianceEvents(g.filter.Name, cfg, log, sel.segments, o, guardrails.Verdict{}, ec)
 	for i := range logged {
 		logged[i].Metadata["template_backstop"] = guardrails.BackstopLog
 		logged[i].Description += " (template backstop on the full message; logged only)"

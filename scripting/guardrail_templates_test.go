@@ -626,7 +626,7 @@ func TestTemplates_EventsNameTheTemplate(t *testing.T) {
 	out = runInput(t, f, openAIRequest(t, 1, chatMsg{Role: "user", Content: strings.ReplaceAll(reviewPrompt(tplDiff), "\n", "\r\n")}))
 	refs = segmentTemplates(eventOf(t, out, "guardrail.prompt_attack"))
 	require.Len(t, refs, 1)
-	assert.Equal(t, map[string]any{"signal": "template.miss"}, refs[0])
+	assert.Equal(t, map[string]any{"signals": []string{"template.miss"}}, refs[0])
 
 	// Backstop events carry the template too.
 	f = injFilter(t, &injFake{}, nil)
@@ -652,7 +652,7 @@ func TestTemplates_MimicryEvent(t *testing.T) {
 	assert.Equal(t, 1, ev.Metadata["count"])
 	refs := segmentTemplates(ev)
 	require.Len(t, refs, 1)
-	assert.Equal(t, "template.mimicry", refs[0]["signal"])
+	assert.Equal(t, []string{"template.mimicry"}, refs[0]["signals"])
 	assert.Equal(t, "pr-review@1", refs[0]["id"])
 
 	// The placeholder in a message: not matched, scored whole, recorded.
@@ -660,7 +660,7 @@ func TestTemplates_MimicryEvent(t *testing.T) {
 	assert.True(t, out.Block, "scored whole: the intro's own wording is flagged again")
 	refs = segmentTemplates(eventOf(t, out, "guardrail.template_mimicry"))
 	require.Len(t, refs, 1)
-	assert.Equal(t, map[string]any{"signal": "template.mimicry"}, refs[0])
+	assert.Equal(t, map[string]any{"signals": []string{"template.mimicry"}}, refs[0])
 
 	out = runInput(t, f, openAIRequest(t, 1, chatMsg{Role: "user", Content: reviewPrompt(tplDiff)}))
 	for _, e := range out.ComplianceEvents {
@@ -700,4 +700,61 @@ func TestTemplates_Metrics(t *testing.T) {
 	}
 	assert.Equal(t, map[string]int64{"hit": 2, "miss": 1, "mimicry": 1, "backstop_only": 2}, results)
 	assert.EqualValues(t, 2, shares)
+}
+
+// A message that is mostly template (over the exemption cap) keeps every
+// constant exempt, but its full-text backstop is enforced whatever the
+// filter's template_backstop says; a filter whose action is log still only
+// logs.
+func TestTemplates_OverCapEnforcesBackstop(t *testing.T) {
+	withTemplates(t, &fakeTemplates{byApp: map[uint][]*templates.Template{1: {prReviewTemplate(1)}}})
+	short := func() *ScriptInput {
+		return openAIRequest(t, 1, chatMsg{Role: "user", Content: reviewPrompt("-a\n+b\n")})
+	}
+
+	for _, mode := range []string{guardrails.BackstopOff, guardrails.BackstopLog, guardrails.BackstopEnforce} {
+		p := &injFake{}
+		f := injFilter(t, p, map[string]any{"template_backstop": mode})
+		out := runInput(t, f, short())
+		assert.True(t, out.Block, "%s: the full text decides", mode)
+		sent := p.sent()
+		require.Len(t, sent, 2, mode)
+		assert.Equal(t, templates.Placeholder+"-a\n+b\n"+templates.Placeholder, sent[0], "%s: every constant is still exempt in the residual", mode)
+		assert.Equal(t, reviewPrompt("-a\n+b\n"), sent[1], mode)
+		refs := segmentTemplates(eventOf(t, out, "guardrail.prompt_attack"))
+		require.Len(t, refs, 1, mode)
+		assert.Equal(t, []string{"template.over_cap"}, refs[0]["signals"], mode)
+		assert.Equal(t, "enforced", refs[0]["backstop"], mode)
+		assert.Empty(t, backstopEvents(out), "%s: enforced, not logged", mode)
+	}
+
+	// A log filter stays log.
+	p := &injFake{}
+	f := injFilter(t, p, map[string]any{"template_backstop": guardrails.BackstopOff, "on_detect": guardrails.ActionLog})
+	out := runInput(t, f, short())
+	assert.False(t, out.Block)
+	ev := eventOf(t, out, "guardrail.prompt_attack")
+	assert.Equal(t, guardrails.ActionLog, ev.Metadata["action"])
+
+	// A provider that reads templates is told to enforce, in one call.
+	p = &injFake{caps: guardrails.Capabilities{Templates: true}}
+	f = injFilter(t, p, map[string]any{"template_backstop": guardrails.BackstopOff})
+	assert.True(t, runInput(t, f, short()).Block)
+	calls := p.inputs()
+	require.Len(t, calls, 1)
+	require.NotNil(t, calls[0].Segments[0].Template)
+	assert.Equal(t, guardrails.BackstopEnforce, calls[0].Segments[0].Template.Backstop)
+
+	// Over the cap is not a block in itself: a clean full text passes.
+	benign := &templates.Template{
+		Name: "summary", Version: 1,
+		Placement: templates.Placement{Role: templates.RoleUser, Message: templates.MessageAny, Anchor: templates.AnchorStart},
+		Parts:     []templates.Part{{Const: "Summarise the support ticket below in two sentences for the on-call engineer.\n"}, {Slot: "ticket"}},
+	}
+	withTemplates(t, &fakeTemplates{byApp: map[uint][]*templates.Template{1: {benign}}})
+	p = &injFake{}
+	f = injFilter(t, p, map[string]any{"template_backstop": guardrails.BackstopOff})
+	out = runInput(t, f, openAIRequest(t, 1, chatMsg{Role: "user", Content: benign.Parts[0].Const + "Login fails."}))
+	assert.False(t, out.Block)
+	assert.Len(t, p.inputs(), 2, "the backstop still ran")
 }

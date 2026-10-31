@@ -128,8 +128,8 @@ conventions, so they keep their own names:
 | `aistudio_guardrail_segments_total` | counter | `provider`, `segment_kind`, `result` (`scanned`, `cached`, `unscanned`) |
 | `aistudio_guardrail_cache_total` | counter | `provider`, `outcome` (`hit`, `miss`) |
 | `aistudio_guardrail_calls_abandoned_total` | counter | `provider`; a provider call given up on after `timeout_ms` + 100ms (its goroutine still running) |
-| `aistudio_guardrail_templates_total` | counter | `provider`, `result` (`hit`, `miss`, `mimicry`, `backstop_only`); trusted prompt templates ([TrustedPromptTemplates.md](TrustedPromptTemplates.md)) |
-| `aistudio_guardrail_template_exempt_share` | histogram | `provider`; share of a matched message's characters left unscored (0 to 0.6) |
+| `aistudio_guardrail_templates_total` | counter | `provider`, `result` (`hit`, `miss`, `mimicry`, `over_cap`, `backstop_only`); trusted prompt templates ([TrustedPromptTemplates.md](TrustedPromptTemplates.md)) |
+| `aistudio_guardrail_template_exempt_share` | histogram | `provider`; share of a matched message's characters left unscored |
 
 The `aistudio_native_*` series cover the native API extensions
 ([NativeAPIExtensions.md](NativeAPIExtensions.md)): `operation` is the

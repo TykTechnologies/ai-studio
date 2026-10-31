@@ -1,6 +1,6 @@
 # Trusted prompt templates (design draft)
 
-Status: draft for review, 2026-10-30. Not implemented.
+Status: first milestone implemented (model, API, matcher, scan plan, HTTP contract, observability), 2026-10-31. Needs Enterprise guardrail providers to take effect.
 
 ## Problem
 
@@ -60,10 +60,11 @@ Which messages are tried: the request's own `system` and `user` text that the fi
 When a template matches, each guardrail on the request receives the message as a **scan plan**: the original text with the exempt ranges marked.
 
 - **Residual:** the slots in their original order, with each exempt constant replaced by a fixed placeholder (`[app template]`). This is what's scored. Every provider, including the built-in library, Lakera and Bedrock, scores the residual unchanged. The budgets, `max_scan_chars`, the unscanned rules and the fail mode apply to the residual as to any text.
-- **Exemption cap:** at most 60% of a message's characters can be exempt, and at most 16k characters. Constants are taken in order; one that would pass either limit is scored.
+- **Exemption cap (over-cap rule):** a match that exempts more than 60% of a message's characters, or more than 16k characters, is **over the cap**. Every matched constant is still exempt (scoring part of the template again would bring back the false positive templates exist to remove), but the message's full-text backstop is then **enforced**, whatever the filter's `template_backstop` says, `off` included. A filter whose action is `log` still only logs. The enforced backstop uses the provider's normal thresholds: there is no mechanism yet for a stricter threshold on one call (bead midsommar-clean-x5f5.12). The message's events record `"signals": ["template.over_cap"]` and `"backstop": "enforced"`, and `aistudio_guardrail_templates_total{result="over_cap"}` counts it.
 - **Full-text backstop** (`template_backstop`, per filter: `off`, `log` or `enforce`, default `log`): the unmodified message is scored as well.
   - A provider that reads templates (`Capabilities.Templates`) and is sent the segment whole gets `full_text` in the same call and marks what it finds there `"backstop": true`. The runner honours the mark only on segments it sent with a template, so a provider cannot turn an ordinary finding into a logged one.
   - Every other provider, and a template-aware one whose segment was split into pieces, gets a second classification of the full text (no rewrite).
+  - An over-cap match is always `enforce`, as above; the mode sent in-segment (`template.backstop`) is then `enforce`.
   - `log`: backstop findings are recorded as compliance events with action `log` and `template_backstop: log`, and change nothing. A backstop that fails is ignored.
   - `enforce`: a backstop finding the residual also made (same detector) is already acted on; any other is the filter's own finding. Under `redact` it blocks, since a redaction of the residual does not reach it. A backstop that fails, or text it could not scan, follows the fail mode and unscanned rules like the main scan.
 - **Redaction:** a provider's rewrite of the residual is mapped back onto the message: the text between placeholders is the rewritten slots, and each placeholder becomes the constant it stood for. A rewrite that does not keep exactly one placeholder per exempt constant cannot be placed, and the segment's redaction falls to a block. Finding spans map from residual to original offsets.
@@ -102,8 +103,8 @@ The approval screen shows:
 
 ## Operations
 
-- **Compliance events:** each flagged segment of a message tried against templates carries `template`: `{"id": "<name>@<version>", "exempt_share": 0.41}` for a match (plus `"signal": "template.mimicry"` when a slot holds template text), or `{"signal": "template.miss"}` / `{"signal": "template.mimicry"}` with no match. Mimicry also records one `guardrail.template_mimicry` event (action `log`) per request, whether or not anything was flagged. Backstop findings under `log` are ordinary detector events with action `log` and `template_backstop: "log"`.
-- **Metrics:** `aistudio_guardrail_templates_total{provider,result}` (`hit`, `miss`, `mimicry`, `backstop_only`) and `aistudio_guardrail_template_exempt_share{provider}` (histogram). They carry no app or template label, to keep cardinality bounded; per-app and per-template detail is in the compliance events.
+- **Compliance events:** each flagged segment of a message tried against templates carries `template`: `{"id": "<name>@<version>", "exempt_share": 0.41}` for a match, with `"signals"` listing `template.mimicry` (a slot holds template text) and `template.over_cap` (plus `"backstop": "enforced"`) when they apply, or `{"signals": ["template.miss"]}` / `{"signals": ["template.mimicry"]}` with no match. Mimicry also records one `guardrail.template_mimicry` event (action `log`) per request, whether or not anything was flagged. Backstop findings under `log` are ordinary detector events with action `log` and `template_backstop: "log"`.
+- **Metrics:** `aistudio_guardrail_templates_total{provider,result}` (`hit`, `miss`, `mimicry`, `over_cap`, `backstop_only`) and `aistudio_guardrail_template_exempt_share{provider}` (histogram). They carry no app or template label, to keep cardinality bounded; per-app and per-template detail is in the compliance events.
 - **Edge gateways:** approved templates go in the configuration snapshot and its checksum. Matching runs where the guardrail runs.
 - **Expiry and changes:** a template that hasn't matched for `expires_after` drops to `proposed`. Changing a constant creates a new version that needs approval again.
 
@@ -120,12 +121,13 @@ The approval screen shows:
 - Per-request inline trust markers (Bedrock-style tags). They may come later, and only to mark *untrusted* spans.
 - Exempting `system` messages by role alone.
 
-## Decisions (proposed, pending Martin's confirmation)
+## Decisions
 
-These settle the open questions of the first draft. They are proposals until confirmed on midsommar-clean-x5f5.1.
+Decided by Martin (recorded on midsommar-clean-x5f5.1):
 
-1. **Edition: Community (core).** The model, API, matcher and scan plan are core; nothing lives in the enterprise module. Guardrail providers themselves remain Enterprise, so in the Community Edition templates can be stored and approved but have no effect until a provider runs.
+1. **Edition: core code, Enterprise providers.** The model, API, matcher and scan plan are core; the enterprise module only wires the HTTP provider to the contract. Templates need an Enterprise guardrail provider to have any effect: in the Community Edition guardrail filters are pass-through, so templates can be stored and approved but change nothing.
 2. **Storage: readable constant text.** The approval screen and edges need the bytes. Storing only an HMAC and a byte length is a later, opt-in option for tenants that want it.
 3. **Backstop: per filter, `template_backstop: off | log | enforce`, default `log`.**
-   - A provider that reads templates in-segment (the HTTP classifier, see the contract below) receives the full text as `template.full_text` and does its own backstop in the same call: no second call. Its backstop findings come back marked `"backstop": true`.
+   - A provider that reads templates (the HTTP classifier) receives the full text as `template.full_text` and does its own backstop in the same call: no second call. Its backstop findings come back marked `"backstop": true`.
    - Every other provider gets a second classification of the full text. Its findings are logged (`log`) or treated as the filter's own findings (`enforce`).
+4. **Over the cap forces enforce.** A match over the exemption cap keeps every constant exempt and enforces the backstop on that message whatever `template_backstop` says (a `log` filter still only logs). A stricter threshold for that backstop is open (midsommar-clean-x5f5.12).

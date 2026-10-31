@@ -111,7 +111,7 @@ func TestMatch_Exact(t *testing.T) {
 	assert.Equal(t, "pr-review@3", m.Template.Ref())
 	assert.Equal(t, []string{cIntro, cMiddle, cOutro}, exemptText(text, m))
 	assert.Zero(t, m.Refused)
-	assert.Zero(t, m.Capped)
+	assert.False(t, m.OverCap)
 	assert.Equal(t, utf8.RuneCountInString(text), m.TotalChars)
 
 	r := NewResidual(text, m.Exempt)
@@ -119,14 +119,14 @@ func TestMatch_Exact(t *testing.T) {
 }
 
 func TestMatch_EmptySlots(t *testing.T) {
-	// Empty slots are allowed, but the exemption cap then keeps most of the
-	// constants scored: the message is nearly all template.
+	// Empty slots are allowed. The message is then all template: every
+	// constant is exempt, and the match is over the cap.
 	text := prMessage("", "")
 	out := matchOne(t, prReview(), text)
 	require.NotNil(t, out.Match)
 	m := out.Match
-	assert.LessOrEqual(t, m.ExemptChars*100, m.TotalChars*MaxExemptPercent)
-	assert.Positive(t, m.Capped)
+	assert.Len(t, m.Exempt, 3)
+	assert.True(t, m.OverCap)
 }
 
 // Anything short of the exact bytes, in order and in place, is no match:
@@ -201,8 +201,8 @@ func TestMatch_Anchors(t *testing.T) {
 	assert.Nil(t, matchOne(t, both, sys+tail).Match)
 	m = matchOne(t, both, sys).Match
 	require.NotNil(t, m)
-	assert.Empty(t, m.Exempt, "a message that is all template is capped to nothing exempt")
-	assert.Equal(t, 1, m.Capped)
+	assert.Len(t, m.Exempt, 1, "a message that is all template is exempt")
+	assert.True(t, m.OverCap, "and over the cap")
 }
 
 // Slot boundaries come only from the constants: a delimiter alone is not a
@@ -330,16 +330,21 @@ func TestMatch_TooManyCopies(t *testing.T) {
 	assert.True(t, out.Mimicry)
 }
 
+// Past the cap every matched constant is still exempt; the match is marked
+// over the cap, which makes the guardrail enforce the full-text backstop.
 func TestMatch_ExemptionCap(t *testing.T) {
-	// The share: a short message keeps constants scored past 60%.
+	// The share: a short message is over 60% template.
 	text := prMessage("x", "y")
 	m := matchOne(t, prReview(), text).Match
 	require.NotNil(t, m)
-	assert.LessOrEqual(t, m.ExemptChars*100, m.TotalChars*MaxExemptPercent)
-	assert.Equal(t, 3, len(m.Exempt)+m.Capped)
-	assert.Positive(t, m.Capped)
+	assert.Len(t, m.Exempt, 3)
+	assert.Greater(t, m.ExemptChars*100, m.TotalChars*MaxExemptPercent)
+	assert.True(t, m.OverCap)
 
-	// The absolute cap: a 20k-character constant is scored, however long
+	// A message with ordinary slots is within it.
+	assert.False(t, matchOne(t, prReview(), prMessage(benignDif, benignCom)).Match.OverCap)
+
+	// The absolute cap: a 20k-character constant is over it, however long
 	// the message.
 	huge := strings.Repeat("Rule: report only defects you can point at. ", 470) // ~20k
 	require.Greater(t, utf8.RuneCountInString(huge), MaxExemptChars)
@@ -347,9 +352,9 @@ func TestMatch_ExemptionCap(t *testing.T) {
 	text = huge + strings.Repeat("question ", 10000)
 	m = matchOne(t, big, text).Match
 	require.NotNil(t, m)
-	assert.Empty(t, m.Exempt)
-	assert.Equal(t, 1, m.Capped)
-	assert.LessOrEqual(t, m.ExemptChars, MaxExemptChars)
+	assert.Len(t, m.Exempt, 1)
+	assert.Less(t, m.ExemptChars*100, m.TotalChars*MaxExemptPercent, "well under the share")
+	assert.True(t, m.OverCap, "but over 16k characters")
 }
 
 // Of several templates that match, the one that leaves more scored wins.
@@ -427,8 +432,8 @@ func TestMatch_ManyNearCopiesIsBounded(t *testing.T) {
 }
 
 // Whatever the slots hold, a match only ever exempts the template's own
-// constants, untouched and within the cap, and the residual restores to the
-// message.
+// constants, untouched, says rightly whether it is over the cap, and the
+// residual restores to the message.
 func FuzzMatch(f *testing.F) {
 	f.Add(benignDif, benignCom)
 	f.Add(cMiddle, cOutro)
@@ -449,8 +454,8 @@ func FuzzMatch(f *testing.F) {
 			}
 			prev = e.End
 		}
-		if m.ExemptChars > MaxExemptChars || m.ExemptChars*100 > m.TotalChars*MaxExemptPercent {
-			t.Fatalf("over the cap: %d of %d", m.ExemptChars, m.TotalChars)
+		if over := m.ExemptChars > MaxExemptChars || m.ExemptChars*100 > m.TotalChars*MaxExemptPercent; over != m.OverCap {
+			t.Fatalf("OverCap %v for %d of %d", m.OverCap, m.ExemptChars, m.TotalChars)
 		}
 		r := NewResidual(text, m.Exempt)
 		if got, ok := r.Restore(r.Text); !ok || got != text {

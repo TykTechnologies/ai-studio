@@ -6,9 +6,12 @@ import (
 	"unicode/utf8"
 )
 
-// The exemption cap: at most MaxExemptShare of a message's characters, and
-// at most MaxExemptChars, are left unscored. A constant that would take the
-// message past either is scored.
+// The exemption cap: a match that leaves more than MaxExemptPercent of a
+// message's characters, or more than MaxExemptChars, unscored is over the
+// cap (Match.OverCap). Its constants are still exempt, but the guardrail
+// then enforces the full-text backstop on the message, whatever the
+// filter's template_backstop: a message that is mostly template is where
+// the residual says least.
 const (
 	MaxExemptPercent = 60
 	MaxExemptChars   = 16 << 10
@@ -45,11 +48,14 @@ type Match struct {
 	// order.
 	Consts []Span
 	// Exempt are the constants left unscored, in order: those not refused
-	// for an invisible neighbour and within the exemption cap.
+	// for an invisible neighbour.
 	Exempt []Span
 	// Refused counts constants scored because an invisible character or a
-	// combining mark touches them; Capped those the exemption cap kept.
-	Refused, Capped int
+	// combining mark touches them.
+	Refused int
+	// OverCap reports a match whose exempt characters pass the exemption
+	// cap: the full-text backstop is then enforced on the message.
+	OverCap bool
 	// Mimicry reports template text inside a slot. The slot is scored
 	// as always; the signal is for the operator.
 	Mimicry bool
@@ -283,21 +289,15 @@ func (c *compiledTemplate) match(text string, total int) (*Match, bool) {
 	}
 	m.Mimicry = m.Mimicry || mimicry
 
-	// The exemption cap, constant by constant in order.
-	limit := min(total*MaxExemptPercent/100, MaxExemptChars)
 	for _, o := range chosen {
 		if o.cost == 0 {
 			m.Refused++
 			continue
 		}
-		chars := utf8.RuneCountInString(text[o.start:o.end])
-		if m.ExemptChars+chars > limit {
-			m.Capped++
-			continue
-		}
-		m.ExemptChars += chars
+		m.ExemptChars += utf8.RuneCountInString(text[o.start:o.end])
 		m.Exempt = append(m.Exempt, Span{o.start, o.end})
 	}
+	m.OverCap = m.ExemptChars*100 > total*MaxExemptPercent || m.ExemptChars > MaxExemptChars
 	return m, m.Mimicry
 }
 

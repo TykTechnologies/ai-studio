@@ -159,6 +159,8 @@ An app that wraps third-party text in its own instructions sends both in one mes
 
 This is a false-positive control, not a security boundary: it never exempts anything but bytes an administrator approved, and anything short of an exact match is scored as before.
 
+Templates are part of AI Studio in every edition, but they act through guardrail providers, which are Enterprise: in the Community Edition templates can be created and approved and change nothing.
+
 A template belongs to an App and is an ordered list of parts, each either constant text (`const`, at least 32 bytes, no invisible characters) or a named slot (`slot`), with a placement: the role (`system` or `user`), which message of that role (`first`, `last` or `any`) and whether the template starts the message, ends it, or both (`anchor`). Anyone who may edit the App proposes one; only a full administrator approves it, and an App has at most 10 approved. Changing an approved template's text or placement creates a new version that needs approving again, and a template that matches nothing for `expires_after_days` (30 by default) drops back to proposed.
 
 ```bash
@@ -178,7 +180,8 @@ On each request of the App, every request guardrail tries the approved templates
 
 - Every constant must appear byte for byte, in order, at the anchored position. There is no normalisation of case, whitespace or Unicode, and a message the vendor receives in several text blocks is never matched.
 - A matched message is scored as its **residual**: the slots in their original order, with `[app template]` where each constant was. The budgets, the unscanned rules and the fail mode apply to the residual as to any text.
-- At most 60% of a message's characters, and at most 16k characters, are exempt; constants beyond that are scored. A constant next to an invisible character (zero-width, bidi, tag, variation selector) is scored.
+- A constant next to an invisible character (zero-width, bidi, tag, variation selector) is scored.
+- A message that is mostly template, more than 60% of its characters or more than 16k characters exempt, is **over the cap**. Its constants stay exempt, but its backstop (below) is enforced whatever `template_backstop` says, `off` included; a filter whose action is `log` still only logs. The backstop then uses the provider's usual thresholds.
 - Tool results, tool calls, tool definitions and documents are never matched, however often their text recurs.
 - Template text inside a slot is scored and recorded as **mimicry**; a slot holding the text `[app template]` makes the message unmatched.
 - A redaction of the residual is written back into the message around the constants.
@@ -189,11 +192,11 @@ On each request of the App, every request guardrail tries the approved templates
 |---|---|
 | `log` (default) | What only the full message shows is recorded as compliance events with action `log` and `template_backstop: "log"`; the request is not changed. |
 | `enforce` | What only the full message shows is a finding of the filter like any other; under `redact` it blocks, since no redaction of the residual reaches it. |
-| `off` | Only the residual is scored. |
+| `off` | Only the residual is scored (except for a message over the cap, whose backstop is always enforced). |
 
 An [HTTP classifier](#http) that reads templates receives the full message in the same call (`template.full_text`) and does the backstop itself; every other provider is called a second time with the full message. Start with `log`, and move to `enforce` once the backstop's false positives are known.
 
-**Events.** A flagged segment of a message tried against the App's templates names the outcome in its `template`: `{"id": "pr-review@3", "exempt_share": 0.41}` for a match (with `"signal": "template.mimicry"` when a slot holds template text), or `{"signal": "template.miss"}` when a template's placement fits the message but none matched. Template text where the template does not put it (inside a slot, the `[app template]` text in a message, a constant repeated many times) records one `guardrail.template_mimicry` event, action `log`, whatever else the guardrail found; it is how someone who knows the template would try to pass as it. See the metrics under [Compliance events and metrics](#compliance-events-and-metrics).
+**Events.** A flagged segment of a message tried against the App's templates names the outcome in its `template`: `{"id": "pr-review@3", "exempt_share": 0.41}` for a match, with `"signals"` listing `template.mimicry` when a slot holds template text and `template.over_cap` (and `"backstop": "enforced"`) for a message over the cap; or `{"signals": ["template.miss"]}` when a template's placement fits the message but none matched. Template text where the template does not put it (inside a slot, the `[app template]` text in a message, a constant repeated many times) records one `guardrail.template_mimicry` event, action `log`, whatever else the guardrail found; it is how someone who knows the template would try to pass as it. See the metrics under [Compliance events and metrics](#compliance-events-and-metrics).
 
 Templates apply on AI Studio. Edge gateways do not receive them yet and score every message whole.
 
@@ -308,8 +311,8 @@ Blocks count towards `aistudio_policy_blocks_total` like any filter block. These
 | `aistudio_guardrail_cache_total` | `provider`, `outcome` (`hit`, `miss`) | Verdict cache lookups |
 | `aistudio_guardrail_shadow_dropped_total` | `provider`, `reason` (`queue_full`, `tenant_share`, `shutdown`) | Shadow evaluations dropped instead of queued; see [Shadow](#shadow-dont-wait) |
 | `aistudio_guardrail_calls_abandoned_total` | `provider` | Provider calls given up on because they did not return after their timeout; their work continues in the background, so a steady rate means a provider that ignores its timeout |
-| `aistudio_guardrail_templates_total` | `provider`, `result` (`hit`, `miss`, `mimicry`, `backstop_only`) | Messages tried against the App's [trusted prompt templates](#trusted-prompt-templates): matched, missed (a template's placement fits but none matched), template text out of place, and backstop findings the residual did not show |
-| `aistudio_guardrail_template_exempt_share` | `provider` | Share of a matched message's characters left unscored (at most 0.6) |
+| `aistudio_guardrail_templates_total` | `provider`, `result` (`hit`, `miss`, `mimicry`, `over_cap`, `backstop_only`) | Messages tried against the App's [trusted prompt templates](#trusted-prompt-templates): matched, missed (a template's placement fits but none matched), template text out of place, matched over the exemption cap, and backstop findings the residual did not show |
+| `aistudio_guardrail_template_exempt_share` | `provider` | Share of a matched message's characters left unscored |
 
 ### Seeded defaults
 
@@ -423,7 +426,7 @@ A message that matched one of the App's [trusted prompt templates](#trusted-prom
 {"detector": "prompt_attack", "category": "injection", "score": 0.91, "segment_index": 0, "backstop": true}
 ```
 
-The gateway applies the filter's `template_backstop` to those findings (log them, or act on them) and makes no second call. It honours `backstop` only on segments it sent with a `template`; anywhere else the finding counts as an ordinary one. A segment too long to send whole is split into pieces without `template`, and its backstop is a second call with the full text. Tool results and other text never carry a `context`, and a filter that does not scan tool calls sends neither, so an existing service sees no change. A tool result is text the model did not get from the user: a classifier that tells direct from indirect injection should treat it as the indirect kind, for example:
+`backstop` is `enforce` for a message over the exemption cap, whatever the filter says. The gateway applies that mode to those findings (log them, or act on them) and makes no second call. It honours `backstop` only on segments it sent with a `template`; anywhere else the finding counts as an ordinary one. A segment too long to send whole is split into pieces without `template`, and its backstop is a second call with the full text. Tool results and other text never carry a `context`, and a filter that does not scan tool calls sends neither, so an existing service sees no change. A tool result is text the model did not get from the user: a classifier that tells direct from indirect injection should treat it as the indirect kind, for example:
 
 ```python
 @app.post("/classify")
