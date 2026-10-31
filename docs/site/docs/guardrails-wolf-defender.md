@@ -354,7 +354,9 @@ Things you will likely see in shadow:
   tier (both questions at 0.95 or more) and quarantine at block.
 - **Ordinary issues or comments flagged as user messages.** The app's runner
   wraps them in its own instruction: set `user_messages: untrusted` for that
-  app.
+  app. If the runner's instruction is itself flagged, approve it as a
+  [trusted prompt template](./guardrails.md#trusted-prompt-templates) for the
+  App, so only the issue or comment it wraps is scored.
 - **Decisions one turn late.** That is deferred mode: the content was passed
   and scored in the background. Use `inline` where latency allows (on a GPU,
   everywhere).
