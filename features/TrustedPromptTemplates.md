@@ -73,10 +73,13 @@ When a template matches, each guardrail on the request receives the message as a
 ```json
 {"index": 0, "role": "user", "text": "<residual>",
  "template": {"id": "pr-review", "version": 3, "full_text": "<original>",
-              "exempt": [{"start": 0, "end": 812}, {"start": 1904, "end": 2310}]}}
+              "exempt": [{"start": 0, "end": 812}, {"start": 1904, "end": 2310}],
+              "backstop": "log"}}
 ```
 
-A service that ignores `template` scores the residual. A template-aware service, such as the Wolf Defender sidecar, can do its own windowing and backstop over `full_text`. The backstop then costs no second call.
+`exempt` are byte offsets into the UTF-8 `full_text`, like finding spans. `backstop` is the filter's `template_backstop`. A service that ignores `template` scores the residual. A template-aware service, such as the Wolf Defender sidecar, can do its own windowing and, unless `backstop` is `off`, score `full_text` too, returning those findings with `"backstop": true`. The backstop then costs no second call. The gateway honours `backstop: true` only on segments it sent with a `template`. `template` is sent only with a segment sent whole; a segment split into pieces gets the second-call backstop. In code: `guardrails.Segment.Template` (`SegmentTemplate`), `guardrails.Finding.Backstop`, and `guardrails.Capabilities.Templates`, which a provider declares to be sent templates.
+
+The Enterprise HTTP provider maps segments through its own wire type, so it sends `template` only once it copies `Segment.Template` onto the wire and declares `Capabilities.Templates` (a change in the enterprise module, not part of this milestone). Until then it is treated like any other provider: it scores the residual and gets the backstop as a second call.
 
 **Verdict cache:** the key of a matched message covers the residual plus the template id, version, the backstop mode and the full text, so a template change re-scores the text and a cached residual is never answered for an unmatched message. Keys of every other segment are unchanged.
 
