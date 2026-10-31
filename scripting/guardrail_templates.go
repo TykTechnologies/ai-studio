@@ -180,8 +180,8 @@ func planTemplates(input *ScriptInput, sel *selection, cfg guardrails.Config, ca
 		src.Matched(m.Template)
 		metrics.RecordGuardrailTemplate(ctx, cfg.Provider, templateHit)
 		metrics.RecordGuardrailTemplateExempt(ctx, cfg.Provider, m.ExemptShare())
-		ts := &templatedSegment{match: m, residual: templates.NewResidual(seg.Text, m.Exempt)}
-		plan.matched[si] = ts
+		matched := &templatedSegment{match: m, residual: templates.NewResidual(seg.Text, m.Exempt)}
+		plan.matched[si] = matched
 		if len(m.Exempt) == 0 {
 			continue // every constant refused or capped: scored whole, as sent
 		}
@@ -189,9 +189,9 @@ func planTemplates(input *ScriptInput, sel *selection, cfg guardrails.Config, ca
 		for i, e := range m.Exempt {
 			exempt[i] = guardrails.Span{Start: e.Start, End: e.End}
 		}
-		seg.Text = ts.residual.Text
-		seg.Template = &guardrails.SegmentTemplate{ID: m.Template.Name, Version: m.Template.Version, FullText: ts.residual.Original, Exempt: exempt, Backstop: plan.backstop}
-		ts.inCall = caps.Templates && (pieceMax <= 0 || utf8.RuneCountInString(seg.Text) <= pieceMax)
+		seg.Text = matched.residual.Text
+		seg.Template = &guardrails.SegmentTemplate{ID: m.Template.Name, Version: m.Template.Version, FullText: matched.residual.Original, Exempt: exempt, Backstop: plan.backstop}
+		matched.inCall = caps.Templates && (pieceMax <= 0 || utf8.RuneCountInString(seg.Text) <= pieceMax)
 	}
 	if !fits {
 		return nil
