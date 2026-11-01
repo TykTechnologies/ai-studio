@@ -300,6 +300,25 @@ TABLE app_plugin_resources
   index CREATE INDEX `idx_app_plugin_resources_deleted_at` ON `app_plugin_resources`(`deleted_at`)
   index CREATE INDEX `idx_apr_app` ON `app_plugin_resources`(`app_id`)
   index CREATE UNIQUE INDEX `idx_apr_unique` ON `app_plugin_resources`(`app_id`,`plugin_resource_type_id`,`instance_id`)
+TABLE app_prompt_templates
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `created_at` datetime
+  column `updated_at` datetime
+  column `app_id` integer NOT NULL
+  column `name` text NOT NULL
+  column `version` integer NOT NULL
+  column `placement_role` text NOT NULL
+  column `placement_message` text NOT NULL
+  column `placement_anchor` text NOT NULL
+  column `parts` text
+  column `status` text NOT NULL DEFAULT "proposed"
+  column `created_by` integer
+  column `approved_by` integer
+  column `approved_at` datetime
+  column `expires_after_days` integer NOT NULL DEFAULT 30
+  column `last_matched_at` datetime
+  index CREATE INDEX `idx_app_prompt_template_status` ON `app_prompt_templates`(`app_id`,`status`)
+  index CREATE UNIQUE INDEX `idx_app_prompt_template_version` ON `app_prompt_templates`(`app_id`,`name`,`version`)
 TABLE app_semantic_routers
   column `app_id` integer
   column `semantic_router_id` integer

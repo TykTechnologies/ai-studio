@@ -35,6 +35,7 @@ var (
 	guardrailCacheTotal    otelmetric.Int64Counter
 	guardrailAbandonedTotal otelmetric.Int64Counter
 	guardrailShadowDropped  otelmetric.Int64Counter
+	guardrailTemplatesTotal otelmetric.Int64Counter
 	goroutinePanicsTotal  otelmetric.Int64Counter
 	decisionQuestionsTotal otelmetric.Int64Counter
 
@@ -42,6 +43,7 @@ var (
 	requestDuration  otelmetric.Float64Histogram
 	toolExecDuration otelmetric.Float64Histogram
 	guardrailLatency otelmetric.Float64Histogram
+	guardrailTemplateExempt otelmetric.Float64Histogram
 
 	// Gauges (UpDownCounter)
 	inflightRequests otelmetric.Int64UpDownCounter
@@ -180,6 +182,21 @@ func registerInstruments(meter otelmetric.Meter) {
 	)
 	if err != nil {
 		panic("failed to create guardrailShadowDropped counter: " + err.Error())
+	}
+
+	guardrailTemplatesTotal, err = meter.Int64Counter("aistudio_guardrail_templates_total",
+		otelmetric.WithDescription("Request messages a guardrail tried against the app's trusted prompt templates, by provider and result (hit, miss, mimicry, over_cap, backstop_only)"),
+	)
+	if err != nil {
+		panic("failed to create guardrailTemplatesTotal counter: " + err.Error())
+	}
+
+	guardrailTemplateExempt, err = meter.Float64Histogram("aistudio_guardrail_template_exempt_share",
+		otelmetric.WithDescription("Share of a matched message's characters a trusted prompt template left unscored"),
+		otelmetric.WithExplicitBucketBoundaries(0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8),
+	)
+	if err != nil {
+		panic("failed to create guardrailTemplateExempt histogram: " + err.Error())
 	}
 
 	goroutinePanicsTotal, err = meter.Int64Counter("aistudio_goroutine_panics_total",
@@ -443,6 +460,31 @@ func RecordGuardrailShadowDropped(ctx context.Context, provider, reason string) 
 	guardrailShadowDropped.Add(ctx, 1,
 		otelmetric.WithAttributes(attribute.String("provider", provider), attribute.String("reason", reason)),
 	)
+}
+
+// RecordGuardrailTemplate counts a request message a guardrail tried against
+// the app's trusted prompt templates. result is "hit" (a template matched),
+// "miss" (a template's placement fits but none matched), "mimicry" (template
+// text where it does not belong), "over_cap" (a match over the exemption
+// cap, whose backstop is enforced) or "backstop_only" (the full-text backstop
+// found what the residual did not). Per-app detail is in the compliance
+// events; the labels stay low in cardinality.
+func RecordGuardrailTemplate(ctx context.Context, provider, result string) {
+	if !initialized.Load() {
+		return
+	}
+	guardrailTemplatesTotal.Add(ctx, 1,
+		otelmetric.WithAttributes(attribute.String("provider", provider), attribute.String("result", result)),
+	)
+}
+
+// RecordGuardrailTemplateExempt records the share of a matched message's
+// characters its template left unscored.
+func RecordGuardrailTemplateExempt(ctx context.Context, provider string, share float64) {
+	if !initialized.Load() {
+		return
+	}
+	guardrailTemplateExempt.Record(ctx, share, otelmetric.WithAttributes(attribute.String("provider", provider)))
 }
 
 // RecordGuardrailError counts a guardrail provider failure and the fail mode

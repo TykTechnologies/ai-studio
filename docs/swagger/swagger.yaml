@@ -516,6 +516,54 @@ definitions:
       slug:
         type: string
     type: object
+  api.AppPromptTemplateInput:
+    properties:
+      expires_after_days:
+        type: integer
+      name:
+        type: string
+      parts:
+        items:
+          $ref: '#/definitions/templates.Part'
+        type: array
+      placement:
+        $ref: '#/definitions/templates.Placement'
+    type: object
+  api.AppPromptTemplateResponse:
+    properties:
+      app_id:
+        type: integer
+      approved_at:
+        type: string
+      approved_by:
+        type: integer
+      created_at:
+        type: string
+      created_by:
+        type: integer
+      expires_after_days:
+        type: integer
+      id:
+        type: integer
+      last_matched_at:
+        type: string
+      name:
+        type: string
+      parts:
+        items:
+          $ref: '#/definitions/templates.Part'
+        type: array
+      placement:
+        $ref: '#/definitions/templates.Placement'
+      ref:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+      version:
+        type: integer
+    type: object
   api.AppResponse:
     description: App response model
     properties:
@@ -1429,6 +1477,12 @@ definitions:
             properties:
               active:
                 type: boolean
+              allow_internal_host:
+                description: |-
+                  AllowInternalHost lets the datasource's own hosts be internal addresses
+                  (the internal-address block stays on for everything else).
+                  Administrators only; omitted keeps the stored value (w4e).
+                type: boolean
               db_conn_api_key:
                 type: string
               db_conn_string:
@@ -1493,6 +1547,11 @@ definitions:
       attributes:
         properties:
           active:
+            type: boolean
+          allow_internal_host:
+            description: |-
+              AllowInternalHost: the datasource's own host may be an internal
+              address (an administrator's switch).
             type: boolean
           db_conn_api_key:
             type: string
@@ -1604,6 +1663,8 @@ definitions:
             type: string
           edge_id:
             type: string
+          fips:
+            $ref: '#/definitions/fipsinfo.Status'
           last_heartbeat:
             type: string
           last_sync_ack:
@@ -1673,6 +1734,12 @@ definitions:
     type: object
   api.EmbedderAttributes:
     properties:
+      allow_internal_host:
+        description: |-
+          AllowInternalHost is the admin-only "Allow internal host" switch of a
+          standalone embedder (a linked one uses its LLM's). Absent keeps the
+          stored value; a change by a non-admin is refused (403).
+        type: boolean
       api_key:
         description: 'APIKey: "[redacted]" on update keeps the stored key.'
         type: string
@@ -2064,6 +2131,12 @@ definitions:
             properties:
               active:
                 type: boolean
+              allow_internal_host:
+                description: |-
+                  AllowInternalHost is the admin-only "Allow internal host"
+                  switch (its endpoint may be an internal address). Absent keeps
+                  the stored value; a change by a non-admin is refused (403).
+                type: boolean
               allowed_models:
                 items:
                   type: string
@@ -2147,6 +2220,8 @@ definitions:
       attributes:
         properties:
           active:
+            type: boolean
+          allow_internal_host:
             type: boolean
           allowed_models:
             items:
@@ -2853,6 +2928,8 @@ definitions:
     properties:
       attributes:
         properties:
+          allow_internal_host:
+            type: boolean
           checksum:
             type: string
           command:
@@ -3841,6 +3918,12 @@ definitions:
                   create (unless the caller lacks tools:publish, in which case the
                   tool is created inactive). Setting it needs tools:publish.
                 type: boolean
+              allow_internal_host:
+                description: |-
+                  AllowInternalHost lets the tool's own API hosts be internal addresses
+                  (the internal-address block stays on for everything else).
+                  Administrators only; omitted keeps the stored value (w4e).
+                type: boolean
               auth_key:
                 type: string
               auth_schema_name:
@@ -3906,6 +3989,11 @@ definitions:
   api.ToolResponseAttributes:
     properties:
       active:
+        type: boolean
+      allow_internal_host:
+        description: |-
+          AllowInternalHost: the tool's own API hosts may be internal addresses
+          (an administrator's switch).
         type: boolean
       app_grantable:
         type: boolean
@@ -4844,8 +4932,28 @@ definitions:
         description: filter_block, model_access, budget_exceeded, auth_failure
         type: string
     type: object
+  fipsinfo.Status:
+    properties:
+      enabled:
+        description: 'Enabled: FIPS 140-3 mode is on (crypto/fips140.Enabled).'
+        type: boolean
+      enforced:
+        description: 'Enforced: non-approved algorithms are refused (GODEBUG=fips140=only).'
+        type: boolean
+      version:
+        description: |-
+          Version is the Go Cryptographic Module version in use, such as
+          "v1.0.0-c2097c7c" for a GOFIPS140=v1.0.0 build (crypto/fips140.Version).
+        type: string
+    type: object
   github_com_TykTechnologies_midsommar_v2_services.CreatePluginRequest:
     properties:
+      allow_internal_host:
+        description: |-
+          AllowInternalHost is the admin-only "Allow internal host" switch: the
+          plugin's own hosts (OCI registry, grpc:// host) may be internal. The
+          API refuses it from a non-admin.
+        type: boolean
       checksum:
         description: Optional
         type: string
@@ -4883,6 +4991,9 @@ definitions:
     type: object
   github_com_TykTechnologies_midsommar_v2_services.UpdatePluginRequest:
     properties:
+      allow_internal_host:
+        description: 'AllowInternalHost: absent keeps the stored switch (admin-only).'
+        type: boolean
       checksum:
         type: string
       command:
@@ -5506,6 +5617,11 @@ definitions:
     type: object
   models.MCPServerResponse:
     properties:
+      allow_internal_host:
+        description: |-
+          AllowInternalHost is the server's admin-only "Allow internal host"
+          switch (w4e); this is the administrator API shape.
+        type: boolean
       auth_details:
         $ref: '#/definitions/models.MCPAuthDetails'
       auth_mode:
@@ -6360,6 +6476,12 @@ definitions:
     - ModeShadow
   semanticrouting.ModelRef:
     properties:
+      allow_internal_host:
+        description: |-
+          AllowInternalHost is a standalone embedder's "Allow internal host"
+          switch: its endpoint may be internal (netguard.ExemptionFor). A
+          reference to an LLM uses the LLM's own switch.
+        type: boolean
       api_key_encrypted:
         type: string
       embedder_id:
@@ -6459,6 +6581,9 @@ definitions:
     type: object
   services.CreateOCIPluginRequest:
     properties:
+      allow_internal_host:
+        description: 'AllowInternalHost: the admin-only "Allow internal host" switch.'
+        type: boolean
       config:
         additionalProperties: true
         type: object
@@ -6831,6 +6956,22 @@ definitions:
         - $ref: '#/definitions/models.TeamCostRow'
         description: Unattributed is spend no team could be resolved for.
     type: object
+  templates.Part:
+    properties:
+      const:
+        type: string
+      slot:
+        type: string
+    type: object
+  templates.Placement:
+    properties:
+      anchor:
+        type: string
+      message:
+        type: string
+      role:
+        type: string
+    type: object
   tykmcp.AccessReportRow:
     properties:
       app_id:
@@ -7059,6 +7200,12 @@ definitions:
     type: object
   tykmcp.DiscoverToolsInput:
     properties:
+      allow_internal_host:
+        description: |-
+          AllowInternalHost lets this call reach the upstream on an internal
+          address (its host only), as the server's "Allow internal host"
+          switch does. Administrators only (w4e).
+        type: boolean
       upstream_auth_header_name:
         type: string
       upstream_auth_token:
@@ -7277,6 +7424,13 @@ definitions:
     type: object
   tykmcp.RegisterInput:
     properties:
+      allow_internal_host:
+        description: |-
+          AllowInternalHost is the wizard's "Allow internal host" switch,
+          stored on the server (AI Studio's tool discovery may then reach the
+          upstream's host on an internal address). Administrators only
+          (checked by the API); never taken from a submission (w4e).
+        type: boolean
       allowed_tools:
         items:
           type: string
@@ -7402,6 +7556,11 @@ definitions:
     type: object
   tykmcp.ServerPatch:
     properties:
+      allow_internal_host:
+        description: |-
+          AllowInternalHost sets the server's "Allow internal host" switch;
+          nil keeps it. Administrators only (checked by the API, w4e).
+        type: boolean
       clear_privacy_score:
         type: boolean
       description:
@@ -14195,6 +14354,203 @@ paths:
       security:
       - BearerAuth: []
       summary: Get app dependents
+      tags:
+      - apps
+  /apps/{id}/prompt-templates:
+    get:
+      description: Lists the trusted prompt template versions of an app, optionally
+        by status (proposed, approved, retired).
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Status filter
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.AppPromptTemplateResponse'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: List an app's prompt templates
+      tags:
+      - apps
+    post:
+      consumes:
+      - application/json
+      description: 'Proposes a trusted prompt template for an app: version 1 of a
+        new name, or the next version of an existing one. It has no effect until an
+        administrator approves it.'
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Template
+        in: body
+        name: template
+        required: true
+        schema:
+          $ref: '#/definitions/api.AppPromptTemplateInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.AppPromptTemplateResponse'
+      security:
+      - BearerAuth: []
+      summary: Propose a prompt template
+      tags:
+      - apps
+  /apps/{id}/prompt-templates/{template_id}:
+    delete:
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Template ID
+        in: path
+        name: template_id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+      security:
+      - BearerAuth: []
+      summary: Delete a prompt template version
+      tags:
+      - apps
+    get:
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Template ID
+        in: path
+        name: template_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AppPromptTemplateResponse'
+      security:
+      - BearerAuth: []
+      summary: Get an app's prompt template
+      tags:
+      - apps
+    patch:
+      consumes:
+      - application/json
+      description: Changes a template. A change to the parts or placement of an approved
+        or retired version creates the next version, proposed, which needs approving
+        again; the response is that version.
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Template ID
+        in: path
+        name: template_id
+        required: true
+        type: integer
+      - description: Changes
+        in: body
+        name: template
+        required: true
+        schema:
+          $ref: '#/definitions/api.AppPromptTemplateInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AppPromptTemplateResponse'
+      security:
+      - BearerAuth: []
+      summary: Change a prompt template
+      tags:
+      - apps
+  /apps/{id}/prompt-templates/{template_id}/approve:
+    post:
+      description: Approves a proposed version (administrators only). Request guardrails
+        then leave its constants unscored. Other approved versions of the same name
+        are retired; an app has at most 10 approved templates.
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Template ID
+        in: path
+        name: template_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AppPromptTemplateResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Approve a prompt template
+      tags:
+      - apps
+  /apps/{id}/prompt-templates/{template_id}/retire:
+    post:
+      description: 'Retires a version: it is kept for the record and never matched
+        again.'
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Template ID
+        in: path
+        name: template_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AppPromptTemplateResponse'
+      security:
+      - BearerAuth: []
+      summary: Retire a prompt template
       tags:
       - apps
   /apps/{id}/reset-budget:

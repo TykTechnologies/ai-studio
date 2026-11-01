@@ -97,6 +97,11 @@ type Service struct {
 	// actions. Guarded because the API is built after plugins have started.
 	auditMu      sync.RWMutex
 	auditService audit.Service
+
+	// promptTemplates serves approved prompt templates to the request
+	// guardrails; built on first use (PromptTemplateSource).
+	promptTemplatesOnce sync.Once
+	promptTemplates     *PromptTemplateSource
 }
 
 // SetAuditService attaches the audit trail. Called by api.SetAuditService.

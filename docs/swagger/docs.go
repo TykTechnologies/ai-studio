@@ -9980,6 +9980,304 @@ const docTemplate = `{
                 }
             }
         },
+        "/apps/{id}/prompt-templates": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists the trusted prompt template versions of an app, optionally by status (proposed, approved, retired).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "apps"
+                ],
+                "summary": "List an app's prompt templates",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Status filter",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.AppPromptTemplateResponse"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Proposes a trusted prompt template for an app: version 1 of a new name, or the next version of an existing one. It has no effect until an administrator approves it.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "apps"
+                ],
+                "summary": "Propose a prompt template",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Template",
+                        "name": "template",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.AppPromptTemplateInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/api.AppPromptTemplateResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/apps/{id}/prompt-templates/{template_id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "apps"
+                ],
+                "summary": "Get an app's prompt template",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Template ID",
+                        "name": "template_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.AppPromptTemplateResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "apps"
+                ],
+                "summary": "Delete a prompt template version",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Template ID",
+                        "name": "template_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Changes a template. A change to the parts or placement of an approved or retired version creates the next version, proposed, which needs approving again; the response is that version.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "apps"
+                ],
+                "summary": "Change a prompt template",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Template ID",
+                        "name": "template_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Changes",
+                        "name": "template",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.AppPromptTemplateInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.AppPromptTemplateResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/apps/{id}/prompt-templates/{template_id}/approve": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Approves a proposed version (administrators only). Request guardrails then leave its constants unscored. Other approved versions of the same name are retired; an app has at most 10 approved templates.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "apps"
+                ],
+                "summary": "Approve a prompt template",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Template ID",
+                        "name": "template_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.AppPromptTemplateResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/apps/{id}/prompt-templates/{template_id}/retire": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retires a version: it is kept for the record and never matched again.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "apps"
+                ],
+                "summary": "Retire a prompt template",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Template ID",
+                        "name": "template_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.AppPromptTemplateResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/apps/{id}/reset-budget": {
             "post": {
                 "security": [
@@ -29463,6 +29761,79 @@ const docTemplate = `{
                 }
             }
         },
+        "api.AppPromptTemplateInput": {
+            "type": "object",
+            "properties": {
+                "expires_after_days": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "parts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/templates.Part"
+                    }
+                },
+                "placement": {
+                    "$ref": "#/definitions/templates.Placement"
+                }
+            }
+        },
+        "api.AppPromptTemplateResponse": {
+            "type": "object",
+            "properties": {
+                "app_id": {
+                    "type": "integer"
+                },
+                "approved_at": {
+                    "type": "string"
+                },
+                "approved_by": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "created_by": {
+                    "type": "integer"
+                },
+                "expires_after_days": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "last_matched_at": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "parts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/templates.Part"
+                    }
+                },
+                "placement": {
+                    "$ref": "#/definitions/templates.Placement"
+                },
+                "ref": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.AppResponse": {
             "description": "App response model",
             "type": "object",
@@ -30787,6 +31158,10 @@ const docTemplate = `{
                                 "active": {
                                     "type": "boolean"
                                 },
+                                "allow_internal_host": {
+                                    "description": "AllowInternalHost lets the datasource's own hosts be internal addresses\n(the internal-address block stays on for everything else).\nAdministrators only; omitted keeps the stored value (w4e).",
+                                    "type": "boolean"
+                                },
                                 "db_conn_api_key": {
                                     "type": "string"
                                 },
@@ -30871,6 +31246,10 @@ const docTemplate = `{
                     "type": "object",
                     "properties": {
                         "active": {
+                            "type": "boolean"
+                        },
+                        "allow_internal_host": {
+                            "description": "AllowInternalHost: the datasource's own host may be an internal\naddress (an administrator's switch).",
                             "type": "boolean"
                         },
                         "db_conn_api_key": {
@@ -31040,6 +31419,9 @@ const docTemplate = `{
                         "edge_id": {
                             "type": "string"
                         },
+                        "fips": {
+                            "$ref": "#/definitions/fipsinfo.Status"
+                        },
                         "last_heartbeat": {
                             "type": "string"
                         },
@@ -31139,6 +31521,10 @@ const docTemplate = `{
         "api.EmbedderAttributes": {
             "type": "object",
             "properties": {
+                "allow_internal_host": {
+                    "description": "AllowInternalHost is the admin-only \"Allow internal host\" switch of a\nstandalone embedder (a linked one uses its LLM's). Absent keeps the\nstored value; a change by a non-admin is refused (403).",
+                    "type": "boolean"
+                },
                 "api_key": {
                     "description": "APIKey: \"[redacted]\" on update keeps the stored key.",
                     "type": "string"
@@ -31721,6 +32107,10 @@ const docTemplate = `{
                                 "active": {
                                     "type": "boolean"
                                 },
+                                "allow_internal_host": {
+                                    "description": "AllowInternalHost is the admin-only \"Allow internal host\"\nswitch (its endpoint may be an internal address). Absent keeps\nthe stored value; a change by a non-admin is refused (403).",
+                                    "type": "boolean"
+                                },
                                 "allowed_models": {
                                     "type": "array",
                                     "items": {
@@ -31826,6 +32216,9 @@ const docTemplate = `{
                     "type": "object",
                     "properties": {
                         "active": {
+                            "type": "boolean"
+                        },
+                        "allow_internal_host": {
                             "type": "boolean"
                         },
                         "allowed_models": {
@@ -32874,6 +33267,9 @@ const docTemplate = `{
                 "attributes": {
                     "type": "object",
                     "properties": {
+                        "allow_internal_host": {
+                            "type": "boolean"
+                        },
                         "checksum": {
                             "type": "string"
                         },
@@ -34311,6 +34707,10 @@ const docTemplate = `{
                                     "description": "Active is the live switch. Omitted = unchanged on update, live on\ncreate (unless the caller lacks tools:publish, in which case the\ntool is created inactive). Setting it needs tools:publish.",
                                     "type": "boolean"
                                 },
+                                "allow_internal_host": {
+                                    "description": "AllowInternalHost lets the tool's own API hosts be internal addresses\n(the internal-address block stays on for everything else).\nAdministrators only; omitted keeps the stored value (w4e).",
+                                    "type": "boolean"
+                                },
                                 "auth_key": {
                                     "type": "string"
                                 },
@@ -34392,6 +34792,10 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "active": {
+                    "type": "boolean"
+                },
+                "allow_internal_host": {
+                    "description": "AllowInternalHost: the tool's own API hosts may be internal addresses\n(an administrator's switch).",
                     "type": "boolean"
                 },
                 "app_grantable": {
@@ -35731,6 +36135,23 @@ const docTemplate = `{
                 }
             }
         },
+        "fipsinfo.Status": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "description": "Enabled: FIPS 140-3 mode is on (crypto/fips140.Enabled).",
+                    "type": "boolean"
+                },
+                "enforced": {
+                    "description": "Enforced: non-approved algorithms are refused (GODEBUG=fips140=only).",
+                    "type": "boolean"
+                },
+                "version": {
+                    "description": "Version is the Go Cryptographic Module version in use, such as\n\"v1.0.0-c2097c7c\" for a GOFIPS140=v1.0.0 build (crypto/fips140.Version).",
+                    "type": "string"
+                }
+            }
+        },
         "github_com_TykTechnologies_midsommar_v2_services.CreatePluginRequest": {
             "type": "object",
             "required": [
@@ -35738,6 +36159,10 @@ const docTemplate = `{
                 "name"
             ],
             "properties": {
+                "allow_internal_host": {
+                    "description": "AllowInternalHost is the admin-only \"Allow internal host\" switch: the\nplugin's own hosts (OCI registry, grpc:// host) may be internal. The\nAPI refuses it from a non-admin.",
+                    "type": "boolean"
+                },
                 "checksum": {
                     "description": "Optional",
                     "type": "string"
@@ -35787,6 +36212,10 @@ const docTemplate = `{
         "github_com_TykTechnologies_midsommar_v2_services.UpdatePluginRequest": {
             "type": "object",
             "properties": {
+                "allow_internal_host": {
+                    "description": "AllowInternalHost: absent keeps the stored switch (admin-only).",
+                    "type": "boolean"
+                },
                 "checksum": {
                     "type": "string"
                 },
@@ -36659,6 +37088,10 @@ const docTemplate = `{
         "models.MCPServerResponse": {
             "type": "object",
             "properties": {
+                "allow_internal_host": {
+                    "description": "AllowInternalHost is the server's admin-only \"Allow internal host\"\nswitch (w4e); this is the administrator API shape.",
+                    "type": "boolean"
+                },
                 "auth_details": {
                     "$ref": "#/definitions/models.MCPAuthDetails"
                 },
@@ -37928,6 +38361,10 @@ const docTemplate = `{
         "semanticrouting.ModelRef": {
             "type": "object",
             "properties": {
+                "allow_internal_host": {
+                    "description": "AllowInternalHost is a standalone embedder's \"Allow internal host\"\nswitch: its endpoint may be internal (netguard.ExemptionFor). A\nreference to an LLM uses the LLM's own switch.",
+                    "type": "boolean"
+                },
                 "api_key_encrypted": {
                     "type": "string"
                 },
@@ -38068,6 +38505,10 @@ const docTemplate = `{
                 "oci_reference"
             ],
             "properties": {
+                "allow_internal_host": {
+                    "description": "AllowInternalHost: the admin-only \"Allow internal host\" switch.",
+                    "type": "boolean"
+                },
                 "config": {
                     "type": "object",
                     "additionalProperties": true
@@ -38593,6 +39034,31 @@ const docTemplate = `{
                 }
             }
         },
+        "templates.Part": {
+            "type": "object",
+            "properties": {
+                "const": {
+                    "type": "string"
+                },
+                "slot": {
+                    "type": "string"
+                }
+            }
+        },
+        "templates.Placement": {
+            "type": "object",
+            "properties": {
+                "anchor": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "role": {
+                    "type": "string"
+                }
+            }
+        },
         "tykmcp.AccessReportRow": {
             "type": "object",
             "properties": {
@@ -38934,6 +39400,10 @@ const docTemplate = `{
         "tykmcp.DiscoverToolsInput": {
             "type": "object",
             "properties": {
+                "allow_internal_host": {
+                    "description": "AllowInternalHost lets this call reach the upstream on an internal\naddress (its host only), as the server's \"Allow internal host\"\nswitch does. Administrators only (w4e).",
+                    "type": "boolean"
+                },
                 "upstream_auth_header_name": {
                     "type": "string"
                 },
@@ -39250,6 +39720,10 @@ const docTemplate = `{
         "tykmcp.RegisterInput": {
             "type": "object",
             "properties": {
+                "allow_internal_host": {
+                    "description": "AllowInternalHost is the wizard's \"Allow internal host\" switch,\nstored on the server (AI Studio's tool discovery may then reach the\nupstream's host on an internal address). Administrators only\n(checked by the API); never taken from a submission (w4e).",
+                    "type": "boolean"
+                },
                 "allowed_tools": {
                     "type": "array",
                     "items": {
@@ -39431,6 +39905,10 @@ const docTemplate = `{
         "tykmcp.ServerPatch": {
             "type": "object",
             "properties": {
+                "allow_internal_host": {
+                    "description": "AllowInternalHost sets the server's \"Allow internal host\" switch;\nnil keeps it. Administrators only (checked by the API, w4e).",
+                    "type": "boolean"
+                },
                 "clear_privacy_score": {
                     "type": "boolean"
                 },

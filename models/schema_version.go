@@ -103,7 +103,9 @@ const (
 	// 30: llm_chat_records.price_multiplier (nullable, additive): the
 	//     multiple of list price a row was billed at, kept by price
 	//     recalculations (midsommar-clean-kq3b.7).
-	SchemaVersion          = 30
+	// 31: app_prompt_templates (new table, additive): trusted prompt
+	//     templates guardrails do not score (midsommar-clean-x5f5.2).
+	SchemaVersion          = 31
 	MinReaderSchemaVersion = 26
 )
 

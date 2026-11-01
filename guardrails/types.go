@@ -82,6 +82,29 @@ type Segment struct {
 	// stay free of the user's text), and sent only to providers that ask
 	// for it (Capabilities.WantsGoal).
 	Context *SegmentContext `json:"context,omitempty"`
+	// Template is set on a message that matched one of the app's approved
+	// prompt templates (features/TrustedPromptTemplates.md): Text is then
+	// the residual, the slots with a placeholder for each exempt constant.
+	// It is sent only to providers that read it (Capabilities.Templates),
+	// and only with the segment whole.
+	Template *SegmentTemplate `json:"template,omitempty"`
+}
+
+// SegmentTemplate is the trusted prompt template a segment matched.
+type SegmentTemplate struct {
+	// ID and Version name the template (its name and version).
+	ID      string `json:"id"`
+	Version int    `json:"version"`
+	// FullText is the message as sent; the segment's Text is its residual.
+	FullText string `json:"full_text"`
+	// Exempt are the byte ranges of FullText left unscored (the approved
+	// constants), in order.
+	Exempt []Span `json:"exempt"`
+	// Backstop is the filter's template_backstop: what to do with findings
+	// in FullText that the residual does not show (off, log, enforce). A
+	// provider that reads templates scores FullText itself unless it is
+	// off, and marks those findings Finding.Backstop.
+	Backstop string `json:"backstop,omitempty"`
 }
 
 // SegmentContext is the goal behind a tool call: the latest user text before
@@ -150,7 +173,12 @@ func (s Segment) ForProvider(index int, text string, caps Capabilities) Segment 
 		}
 		return out
 	case !s.IsToolResult():
-		return Segment{Index: index, Role: s.Role, Text: text}
+		out := Segment{Index: index, Role: s.Role, Text: text}
+		if caps.Templates && s.Template != nil && text == s.Text {
+			t := *s.Template
+			out.Template = &t
+		}
+		return out
 	case !caps.ToolSegments:
 		return Segment{Index: index, Role: RoleUser, Text: text}
 	}
@@ -219,6 +247,10 @@ type Finding struct {
 	SegmentIndex int `json:"segment_index"`
 	// Span locates the finding inside the segment when the provider knows it.
 	Span *Span `json:"span,omitempty"`
+	// Backstop marks a finding a template-aware provider made in a
+	// segment's Template.FullText rather than in its Text (the residual).
+	// The runner honours it only on segments it sent with a template.
+	Backstop bool `json:"backstop,omitempty"`
 	// Evidence is set by the filter runner from the text the provider was
 	// sent, never by a provider: it is not part of the wire format.
 	Evidence *FindingEvidence `json:"-"`
@@ -293,6 +325,12 @@ type Capabilities struct {
 	// it). Only meaningful with ToolSegments. Other providers never receive
 	// the user's text alongside a tool call.
 	WantsGoal bool
+	// Templates reports a provider that reads Segment.Template: it scores
+	// the residual in Text and, unless the backstop is off, the full text
+	// in the same call, marking findings there Finding.Backstop. Every other
+	// provider scores the residual only, and the runner runs the backstop
+	// as a second classification of the full text.
+	Templates bool
 }
 
 // DefaultCallChars is the call size the runner uses for a remote provider

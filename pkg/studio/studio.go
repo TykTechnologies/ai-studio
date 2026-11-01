@@ -49,6 +49,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace/declared"
 	"github.com/TykTechnologies/midsommar/v2/pkg/tracing"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
+	"github.com/TykTechnologies/midsommar/v2/scripting"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/edition"
@@ -405,6 +406,9 @@ func New(opts Options) (_ *Studio, err error) {
 	service := services.NewServiceWithOCI(s.db, ociConfig)
 	s.service = service
 	service.SetLicensingService(s.licensing)
+	// Request guardrails leave the approved constants of an app's trusted
+	// prompt templates unscored (features/TrustedPromptTemplates.md).
+	scripting.SetPromptTemplateSource(service.PromptTemplateSource())
 	if opts.HostTykConnection != nil {
 		if tykmcp.IsEnterpriseAvailable() {
 			service.SetTykMCPHost(opts.HostTykConnection)

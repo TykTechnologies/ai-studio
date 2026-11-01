@@ -91,6 +91,10 @@ type selection struct {
 	// undecodable are the segments of units holding a text document whose
 	// bytes could not be decoded: they count as not scanned.
 	undecodable []int
+	// roleSpan is, per role, the first and last message position of the
+	// body's own text units, in or out of scope (modeBody only), for
+	// template placements (roleBounds).
+	roleSpan map[string][2]int
 }
 
 // unscannedUndecodable is the unscanned reason of a text document whose bytes
@@ -377,6 +381,10 @@ func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail) (*S
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	// Messages that match one of the app's approved prompt templates are
+	// scored as their residual (guardrail_templates.go); nil, and sel
+	// untouched, for an app with none.
+	plan := planTemplates(input, &sel, cfg, caps, (&scanJob{caps: caps}).pieceMax())
 	job := &scanJob{
 		ctx: ctx, cfg: cfg, provider: provider, caps: caps,
 		segments: sel.segments, direction: direction, redact: redact, meta: meta(input),
@@ -387,6 +395,10 @@ func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail) (*S
 	}
 	res := job.scan()
 	sel.foldViews(&res)
+	var templateEvents []ComplianceEventOutput
+	if plan != nil {
+		templateEvents = g.finishTemplates(plan, job, &sel, &res, p, input)
+	}
 	for _, si := range sel.undecodable {
 		if res.unscanned == nil {
 			res.unscanned = map[int]string{}
@@ -402,14 +414,16 @@ func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail) (*S
 		return nil, res.err
 	}
 	out := passThrough(input)
+	out.ComplianceEvents = templateEvents
 	if res.err != nil {
 		failed := g.failed(input, cfg, res.err)
 		if failed.Block || len(res.unscanned) == 0 {
+			failed.ComplianceEvents = append(failed.ComplianceEvents, templateEvents...)
 			return failed, nil
 		}
 		// Fail open lets the text the provider failed on through, but not
 		// text a cap kept from it: that keeps its action.
-		out.ComplianceEvents = failed.ComplianceEvents
+		out.ComplianceEvents = append(failed.ComplianceEvents, templateEvents...)
 		res.findings, res.rewritten = nil, nil
 	}
 	if len(res.findings) == 0 && len(res.unscanned) == 0 && len(res.failedTools) == 0 {
@@ -436,7 +450,7 @@ func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail) (*S
 		}
 	}
 
-	out.ComplianceEvents = append(out.ComplianceEvents, complianceEvents(g.filter.Name, cfg, res.findings, sel.segments, o, verdict, evidenceContext{requestID: requestIDOf(input), clientRequestID: clientRequestIDOf(input), excerptChars: job.excerptChars, excerptStatus: excerptStatus(cfg, input)})...)
+	out.ComplianceEvents = append(out.ComplianceEvents, complianceEvents(g.filter.Name, cfg, res.findings, sel.segments, o, verdict, evidenceContext{requestID: requestIDOf(input), clientRequestID: clientRequestIDOf(input), excerptChars: job.excerptChars, excerptStatus: excerptStatus(cfg, input), templates: plan})...)
 	out.ComplianceEvents = append(out.ComplianceEvents, unscannedEvents(g.filter.Name, cfg, sel.segments, res, o.overall)...)
 	if len(o.unredactable) > 0 {
 		out.ComplianceEvents = append(out.ComplianceEvents, unredactableEvent(g.filter.Name, cfg, sel.segments, o.unredactable, o.overall))
@@ -1040,7 +1054,17 @@ func bodySelection(units []segments.Unit, cfg guardrails.Config) selection {
 		cands[i] = candidate{role: u.Role, kind: u.Kind, message: u.Message, turn: u.Turn}
 	}
 	in := selectInScope(cands, cfg)
-	sel := selection{mode: modeBody}
+	sel := selection{mode: modeBody, roleSpan: map[string][2]int{}}
+	for _, u := range units {
+		if u.Untrusted() || segmentKind(u.Segment) != guardrails.KindText {
+			continue
+		}
+		b, ok := sel.roleSpan[u.Role]
+		if !ok {
+			b = [2]int{u.Message, u.Message}
+		}
+		sel.roleSpan[u.Role] = [2]int{min(b[0], u.Message), max(b[1], u.Message)}
+	}
 	for i, u := range units {
 		if in[i] {
 			// The unit's tool metadata stays here for compliance events and
@@ -1392,6 +1416,10 @@ type evidenceContext struct {
 	excerptChars    int
 	// excerptStatus is why there is no excerpt when excerptChars is 0.
 	excerptStatus string
+	// templates is how the request matched the app's trusted prompt
+	// templates, nil when it was not tried: segments say which template
+	// they matched (template_id@version, exempt share) or that they missed.
+	templates *templatePlan
 }
 
 // maxEvidenceSegments bounds the segments one compliance event lists; count
@@ -1522,6 +1550,9 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 			g.kinds[segmentKind(seg)] = true
 			if len(g.refs) < maxEvidenceSegments {
 				ref := segmentEvidence(seg, f.SegmentIndex, f, ec)
+				if t := ec.templates.templateRef(f.SegmentIndex); t != nil {
+					ref["template"] = t
+				}
 				if key := fmt.Sprintf("%d/%v", f.SegmentIndex, ref["sha256"]); !g.seen[key] {
 					g.seen[key] = true
 					g.refs = append(g.refs, ref)

@@ -799,6 +799,16 @@ func (a *API) setupRoutes() error {
 	v1.DELETE("/apps/:id/tools/:tool_id", authz.Delete("apps"), a.removeToolFromApp)
 	v1.GET("/apps/:id/tools", authz.Read("apps"), a.getAppTools)
 
+	// Trusted prompt templates (features/TrustedPromptTemplates.md). Only a
+	// full administrator approves: approving exempts the bytes from scoring.
+	v1.GET("/apps/:id/prompt-templates", authz.Read("apps"), a.listAppPromptTemplates)
+	v1.POST("/apps/:id/prompt-templates", authz.Write("apps"), a.createAppPromptTemplate)
+	v1.GET("/apps/:id/prompt-templates/:template_id", authz.Read("apps"), a.getAppPromptTemplate)
+	v1.PATCH("/apps/:id/prompt-templates/:template_id", authz.Write("apps"), a.updateAppPromptTemplate)
+	v1.DELETE("/apps/:id/prompt-templates/:template_id", authz.Delete("apps"), a.deleteAppPromptTemplate)
+	v1.POST("/apps/:id/prompt-templates/:template_id/approve", authz.FullAdmin, a.approveAppPromptTemplate)
+	v1.POST("/apps/:id/prompt-templates/:template_id/retire", authz.Write("apps"), a.retireAppPromptTemplate)
+
 	// Plugin Resource Type routes
 	v1.GET("/plugin-resource-types", authz.Read("plugins"), a.listPluginResourceTypes)
 	v1.GET("/plugin-resource-types/:plugin_id/:slug/instances", authz.Read("plugins"), a.listPluginResourceInstances)

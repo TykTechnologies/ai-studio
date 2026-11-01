@@ -196,6 +196,14 @@ func (k *verdictKeyer) key(s guardrails.Segment) string {
 			writeField(mac, field)
 		}
 	}
+	if t := s.Template; t != nil {
+		// A residual is scored under its template: another template or
+		// version, or another backstop, is another question. Only matched
+		// messages carry one, so other keys are as they were.
+		for _, field := range []string{"template", t.ID, strconv.Itoa(t.Version), t.Backstop, t.FullText} {
+			writeField(mac, field)
+		}
+	}
 	return string(mac.Sum(nil))
 }
 
