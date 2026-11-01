@@ -203,6 +203,11 @@ func (k *verdictKeyer) key(s guardrails.Segment) string {
 		for _, field := range []string{"template", t.ID, strconv.Itoa(t.Version), t.Backstop, t.FullText} {
 			writeField(mac, field)
 		}
+		if t.BackstopMinScore > 0 {
+			// A provider may drop backstop findings below it.
+			writeField(mac, "backstop_min_score")
+			writeField(mac, strconv.FormatFloat(t.BackstopMinScore, 'g', -1, 64))
+		}
 	}
 	return string(mac.Sum(nil))
 }

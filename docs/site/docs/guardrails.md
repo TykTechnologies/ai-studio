@@ -181,7 +181,7 @@ On each request of the App, every request guardrail tries the approved templates
 - Every constant must appear byte for byte, in order, at the anchored position. There is no normalisation of case, whitespace or Unicode, and a message the vendor receives in several text blocks is never matched.
 - A matched message is scored as its **residual**: the slots in their original order, with `[app template]` where each constant was. The budgets, the unscanned rules and the fail mode apply to the residual as to any text.
 - A constant next to an invisible character (zero-width, bidi, tag, variation selector) is scored.
-- A message that is mostly template, more than 60% of its characters or more than 16k characters exempt, is **over the cap**. Its constants stay exempt, but its backstop (below) is enforced whatever `template_backstop` says, `off` included; a filter whose action is `log` still only logs. The backstop then uses the provider's usual thresholds.
+- A message that is mostly template, more than 60% of its characters or more than 16k characters exempt, is **over the cap**. Its constants stay exempt, but its backstop (below) is enforced whatever `template_backstop` says, `off` included; a filter whose action is `log` still only logs. On a filter whose `template_backstop` is `off` or `log`, that forced backstop acts only on findings scoring at least `template_backstop_min_score` (below).
 - Tool results, tool calls, tool definitions and documents are never matched, however often their text recurs.
 - Template text inside a slot is scored and recorded as **mimicry**; a slot holding the text `[app template]` makes the message unmatched.
 - A redaction of the residual is written back into the message around the constants.
@@ -194,9 +194,16 @@ On each request of the App, every request guardrail tries the approved templates
 | `enforce` | What only the full message shows is a finding of the filter like any other; under `redact` it blocks, since no redaction of the residual reaches it. |
 | `off` | Only the residual is scored (except for a message over the cap, whose backstop is always enforced). |
 
+| Setting | Default | Effect |
+|---|---|---|
+| `template_backstop` | `log` | The backstop mode above. |
+| `template_backstop_min_score` | `0.9` | 0 to 1. When the gateway enforces the backstop of a message over the cap on a filter set to `off` or `log`, a backstop finding acts only when its `score` is at least this value; below it, it is logged (`log`) or dropped (`off`) as the filter's own mode says. Findings without a score, and rule or pattern hits (reported with score 1), always act. `0` lets every finding act. A filter set to `enforce` keeps its provider's thresholds. |
+
+The full text of a message over the cap is mostly the App's approved template, so a borderline finding there is most likely the template text itself; the minimum keeps the forced backstop to confident findings. It is applied by the gateway to every provider alike, after the provider's own thresholds.
+
 An [HTTP classifier](#http) that reads templates receives the full message in the same call (`template.full_text`) and does the backstop itself; every other provider is called a second time with the full message. Start with `log`, and move to `enforce` once the backstop's false positives are known.
 
-**Events.** A flagged segment of a message tried against the App's templates names the outcome in its `template`: `{"id": "pr-review@3", "exempt_share": 0.41}` for a match, with `"signals"` listing `template.mimicry` when a slot holds template text and `template.over_cap` (and `"backstop": "enforced"`) for a message over the cap; or `{"signals": ["template.miss"]}` when a template's placement fits the message but none matched. Template text where the template does not put it (inside a slot, the `[app template]` text in a message, a constant repeated many times) records one `guardrail.template_mimicry` event, action `log`, whatever else the guardrail found; it is how someone who knows the template would try to pass as it. See the metrics under [Compliance events and metrics](#compliance-events-and-metrics).
+**Events.** A flagged segment of a message tried against the App's templates names the outcome in its `template`: `{"id": "pr-review@3", "exempt_share": 0.41}` for a match, with `"signals"` listing `template.mimicry` when a slot holds template text and `template.over_cap` (and `"backstop": "enforced"`, with `"backstop_min_score"` when the minimum applied) for a message over the cap; or `{"signals": ["template.miss"]}` when a template's placement fits the message but none matched. Template text where the template does not put it (inside a slot, the `[app template]` text in a message, a constant repeated many times) records one `guardrail.template_mimicry` event, action `log`, whatever else the guardrail found; it is how someone who knows the template would try to pass as it. See the metrics under [Compliance events and metrics](#compliance-events-and-metrics).
 
 Templates apply on AI Studio. Edge gateways do not receive them yet and score every message whole.
 
@@ -426,7 +433,7 @@ A message that matched one of the App's [trusted prompt templates](#trusted-prom
 {"detector": "prompt_attack", "category": "injection", "score": 0.91, "segment_index": 0, "backstop": true}
 ```
 
-`backstop` is `enforce` for a message over the exemption cap, whatever the filter says. The gateway applies that mode to those findings (log them, or act on them) and makes no second call. It honours `backstop` only on segments it sent with a `template`; anywhere else the finding counts as an ordinary one. A segment too long to send whole is split into pieces without `template`, and its backstop is a second call with the full text. Tool results and other text never carry a `context`, and a filter that does not scan tool calls sends neither, so an existing service sees no change. A tool result is text the model did not get from the user: a classifier that tells direct from indirect injection should treat it as the indirect kind, for example:
+`backstop` is `enforce` for a message over the exemption cap, whatever the filter says. When the filter itself is not set to `enforce`, the template then also carries `"backstop_min_score": 0.9` (the filter's `template_backstop_min_score`): the service may leave out backstop findings scoring below it, and the gateway applies it to what comes back either way. The gateway applies that mode to those findings (log them, or act on them) and makes no second call. It honours `backstop` only on segments it sent with a `template`; anywhere else the finding counts as an ordinary one. A segment too long to send whole is split into pieces without `template`, and its backstop is a second call with the full text. Tool results and other text never carry a `context`, and a filter that does not scan tool calls sends neither, so an existing service sees no change. A tool result is text the model did not get from the user: a classifier that tells direct from indirect injection should treat it as the indirect kind, for example:
 
 ```python
 @app.post("/classify")

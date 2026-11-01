@@ -280,6 +280,15 @@ type Config struct {
 	// (enforce) what only the full text shows, or not (off). Empty means
 	// log. Requests only.
 	TemplateBackstop string `json:"template_backstop,omitempty"`
+	// TemplateBackstopMinScore is the lowest score a backstop finding needs
+	// to act when the gateway, not the filter, enforces the backstop: on a
+	// match over the exemption cap of a filter whose template_backstop is
+	// off or log. Findings below it follow the filter's own mode (logged
+	// under log, dropped under off); findings without a score (0: rule and
+	// pattern hits) always act. Nil means DefaultBackstopMinScore; 0 lets
+	// every finding act. A filter set to enforce uses its provider's
+	// thresholds as they are. Requests only.
+	TemplateBackstopMinScore *float64 `json:"template_backstop_min_score,omitempty"`
 	// Cache, when false, keeps the filter's verdicts out of the verdict
 	// cache: for a provider whose verdict depends on more than the text (an
 	// HTTP classifier that reads the request metadata). Nil means true.
@@ -578,6 +587,9 @@ func Normalize(cfg Config, responseFilter bool) (Config, error) {
 	default:
 		return cfg, fmt.Errorf("%w: template_backstop %q is not one of off, log, enforce", ErrInvalidConfig, cfg.TemplateBackstop)
 	}
+	if m := cfg.TemplateBackstopMinScore; m != nil && !(*m >= 0 && *m <= 1) {
+		return cfg, fmt.Errorf("%w: template_backstop_min_score must be between 0 and 1", ErrInvalidConfig)
+	}
 	return cfg, nil
 }
 
@@ -587,6 +599,19 @@ const (
 	BackstopLog     = "log"
 	BackstopEnforce = "enforce"
 )
+
+// DefaultBackstopMinScore is the template_backstop_min_score of a filter
+// that does not set one.
+const DefaultBackstopMinScore = 0.9
+
+// BackstopMinScore is the lowest score a finding of a backstop the gateway
+// enforces on its own (a match over the exemption cap) needs to act.
+func (c Config) BackstopMinScore() float64 {
+	if c.TemplateBackstopMinScore == nil {
+		return DefaultBackstopMinScore
+	}
+	return *c.TemplateBackstopMinScore
+}
 
 // Backstop is the filter's template backstop mode, log when unset.
 func (c Config) Backstop() string {

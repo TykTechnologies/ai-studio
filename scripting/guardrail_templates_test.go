@@ -77,6 +77,9 @@ type injFake struct {
 	// rewrite, when set, replaces the default redaction.
 	rewrite func(string) string
 	fail    error
+	// score, when set, is the score of every finding (else 1; below 0,
+	// none).
+	score float64
 
 	mu    sync.Mutex
 	calls []guardrails.Input
@@ -103,13 +106,20 @@ func (f *injFake) Classify(_ context.Context, in guardrails.Input) (guardrails.V
 		return guardrails.Verdict{}, f.fail
 	}
 	v := guardrails.Verdict{}
+	score := 1.0
+	switch {
+	case f.score < 0:
+		score = 0 // no score, as a rule hit may come back
+	case f.score > 0:
+		score = f.score
+	}
 	for _, s := range in.Segments {
 		for _, d := range flagsIn(s.Text) {
-			v.Findings = append(v.Findings, guardrails.Finding{Detector: d, Category: "injection", Score: 1, Severity: "warning", SegmentIndex: s.Index})
+			v.Findings = append(v.Findings, guardrails.Finding{Detector: d, Category: "injection", Score: score, Severity: "warning", SegmentIndex: s.Index})
 		}
 		if t := s.Template; t != nil && t.Backstop != guardrails.BackstopOff {
 			for _, d := range flagsIn(t.FullText) {
-				v.Findings = append(v.Findings, guardrails.Finding{Detector: d, Category: "injection", Score: 1, Severity: "warning", SegmentIndex: s.Index, Backstop: true})
+				v.Findings = append(v.Findings, guardrails.Finding{Detector: d, Category: "injection", Score: score, Severity: "warning", SegmentIndex: s.Index, Backstop: true})
 			}
 		}
 		if in.Redact != nil && strings.Contains(s.Text, "SECRET") {
@@ -757,4 +767,81 @@ func TestTemplates_OverCapEnforcesBackstop(t *testing.T) {
 	out = runInput(t, f, openAIRequest(t, 1, chatMsg{Role: "user", Content: benign.Parts[0].Const + "Login fails."}))
 	assert.False(t, out.Block)
 	assert.Len(t, p.inputs(), 2, "the backstop still ran")
+}
+
+// The backstop the gateway forces on a match over the cap acts only on
+// findings scoring at least template_backstop_min_score (0.9 by default);
+// below it a finding follows the filter's own mode. Findings without a
+// score always act, and a filter set to enforce keeps its provider's
+// thresholds.
+func TestTemplates_OverCapBackstopMinScore(t *testing.T) {
+	withTemplates(t, &fakeTemplates{byApp: map[uint][]*templates.Template{1: {prReviewTemplate(1)}}})
+	short := func() *ScriptInput {
+		return openAIRequest(t, 1, chatMsg{Role: "user", Content: reviewPrompt("-a\n+b\n")})
+	}
+	minScore := func(v float64) *float64 { return &v }
+
+	cases := []struct {
+		name    string
+		mode    string
+		min     *float64
+		score   float64
+		block   bool
+		logged  int
+		minSent float64
+	}{
+		{"log, below the default minimum: logged", guardrails.BackstopLog, nil, 0.7, false, 1, 0.9},
+		{"log, at the minimum: enforced", guardrails.BackstopLog, nil, 0.9, true, 0, 0.9},
+		{"off, below the minimum: dropped", guardrails.BackstopOff, nil, 0.7, false, 0, 0.9},
+		{"off, above the minimum: enforced", guardrails.BackstopOff, nil, 0.95, true, 0, 0.9},
+		{"no score always acts", guardrails.BackstopLog, nil, -1, true, 0, 0.9},
+		{"a lower minimum of the filter", guardrails.BackstopLog, minScore(0.5), 0.7, true, 0, 0.5},
+		{"minimum 0: every finding acts", guardrails.BackstopOff, minScore(0), 0.1, true, 0, 0},
+		{"enforce keeps the provider's thresholds", guardrails.BackstopEnforce, nil, 0.3, true, 0, 0},
+	}
+	for _, c := range cases {
+		cfg := map[string]any{"template_backstop": c.mode}
+		if c.min != nil {
+			cfg["template_backstop_min_score"] = *c.min
+		}
+
+		// A second classification of the full text.
+		p := &injFake{score: c.score}
+		out := runInput(t, injFilter(t, p, cfg), short())
+		assert.Equal(t, c.block, out.Block, c.name)
+		assert.Len(t, backstopEvents(out), c.logged, c.name)
+		require.Len(t, p.inputs(), 2, c.name)
+
+		// In the provider's call: the minimum travels with the template.
+		p = &injFake{score: c.score, caps: guardrails.Capabilities{Templates: true}}
+		out = runInput(t, injFilter(t, p, cfg), short())
+		assert.Equal(t, c.block, out.Block, "%s (in call)", c.name)
+		assert.Len(t, backstopEvents(out), c.logged, "%s (in call)", c.name)
+		calls := p.inputs()
+		require.Len(t, calls, 1, c.name)
+		tpl := calls[0].Segments[0].Template
+		require.NotNil(t, tpl, c.name)
+		assert.Equal(t, guardrails.BackstopEnforce, tpl.Backstop, c.name)
+		assert.Equal(t, c.minSent, tpl.BackstopMinScore, c.name)
+		if c.block {
+			refs := segmentTemplates(eventOf(t, out, "guardrail.prompt_attack"))
+			require.Len(t, refs, 1, c.name)
+			if c.minSent > 0 {
+				assert.Equal(t, c.minSent, refs[0]["backstop_min_score"], c.name)
+			} else {
+				assert.NotContains(t, refs[0], "backstop_min_score", c.name)
+			}
+		}
+	}
+
+	// Under the cap, an explicit enforce is untouched by the minimum.
+	p := &injFake{score: 0.3}
+	f := injFilter(t, p, map[string]any{"template_backstop": guardrails.BackstopEnforce})
+	assert.True(t, runInput(t, f, openAIRequest(t, 1, chatMsg{Role: "user", Content: reviewPrompt(tplDiff)})).Block)
+	// And so is log: below the cap nothing is forced.
+	p = &injFake{score: 0.95}
+	f = injFilter(t, p, map[string]any{"template_backstop": guardrails.BackstopLog})
+	out := runInput(t, f, openAIRequest(t, 1, chatMsg{Role: "user", Content: reviewPrompt(tplDiff)}))
+	assert.False(t, out.Block)
+	assert.Len(t, backstopEvents(out), 1)
 }

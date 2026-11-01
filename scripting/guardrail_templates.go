@@ -93,6 +93,30 @@ type templatedSegment struct {
 	// says (off included). Under a filter whose action is log, enforcing
 	// still only logs.
 	backstop string
+	// minScore, when set, is the lowest score a backstop finding needs to
+	// be enforced: the gateway forced enforce on a filter set to off or log
+	// (over the cap). Findings below it follow the filter's own mode.
+	minScore float64
+}
+
+// forceBackstop enforces the backstop of a match over the exemption cap.
+// On a filter that does not enforce it itself, only findings scoring at
+// least the filter's template_backstop_min_score are enforced (modeFor).
+func (ts *templatedSegment) forceBackstop(cfg guardrails.Config) {
+	if ts.backstop != guardrails.BackstopEnforce {
+		ts.minScore = cfg.BackstopMinScore()
+	}
+	ts.backstop = guardrails.BackstopEnforce
+}
+
+// modeFor is the backstop mode for finding f of this message: under a
+// forced enforce, a finding scoring below minScore follows the filter's
+// own mode (filterMode). A finding without a score (0) always acts.
+func (ts *templatedSegment) modeFor(f guardrails.Finding, filterMode string) string {
+	if ts.minScore > 0 && f.Score > 0 && f.Score < ts.minScore {
+		return filterMode
+	}
+	return ts.backstop
 }
 
 // templateRef is what a compliance event says of a segment's template.
@@ -109,6 +133,9 @@ func (p *templatePlan) templateRef(si int) map[string]any {
 		if ts.match.OverCap {
 			signals = append(signals, "template.over_cap")
 			ref["backstop"] = "enforced"
+			if ts.minScore > 0 {
+				ref["backstop_min_score"] = ts.minScore
+			}
 		}
 		if signals != nil {
 			ref["signals"] = signals
@@ -196,7 +223,7 @@ func planTemplates(input *ScriptInput, sel *selection, cfg guardrails.Config, ca
 		metrics.RecordGuardrailTemplateExempt(ctx, cfg.Provider, m.ExemptShare())
 		matched := &templatedSegment{match: m, residual: templates.NewResidual(seg.Text, m.Exempt), backstop: plan.backstop}
 		if m.OverCap {
-			matched.backstop = guardrails.BackstopEnforce
+			matched.forceBackstop(cfg)
 			metrics.RecordGuardrailTemplate(ctx, cfg.Provider, templateOverCap)
 		}
 		plan.matched[si] = matched
@@ -208,7 +235,7 @@ func planTemplates(input *ScriptInput, sel *selection, cfg guardrails.Config, ca
 			exempt[i] = guardrails.Span{Start: e.Start, End: e.End}
 		}
 		seg.Text = matched.residual.Text
-		seg.Template = &guardrails.SegmentTemplate{ID: m.Template.Name, Version: m.Template.Version, FullText: matched.residual.Original, Exempt: exempt, Backstop: matched.backstop}
+		seg.Template = &guardrails.SegmentTemplate{ID: m.Template.Name, Version: m.Template.Version, FullText: matched.residual.Original, Exempt: exempt, Backstop: matched.backstop, BackstopMinScore: matched.minScore}
 		matched.inCall = caps.Templates && (pieceMax <= 0 || utf8.RuneCountInString(seg.Text) <= pieceMax)
 	}
 	if !fits {
@@ -477,10 +504,15 @@ func (g *guardrailRunner) finishTemplates(plan *templatePlan, job *scanJob, sel 
 	}
 	var enforce, log []guardrails.Finding
 	for _, f := range backstop {
-		switch ts, ok := plan.matched[f.SegmentIndex]; {
-		case !ok || ts.backstop == guardrails.BackstopOff:
-			// A provider that reads templates was told off: nothing to do.
-		case ts.backstop == guardrails.BackstopEnforce:
+		ts, ok := plan.matched[f.SegmentIndex]
+		if !ok {
+			continue
+		}
+		switch ts.modeFor(f, plan.backstop) {
+		case guardrails.BackstopOff:
+			// A provider that reads templates was told off, or the finding
+			// is below a forced backstop's minimum on a filter set to off.
+		case guardrails.BackstopEnforce:
 			enforce = append(enforce, f)
 		default:
 			log = append(log, f)

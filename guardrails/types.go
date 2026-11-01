@@ -105,6 +105,12 @@ type SegmentTemplate struct {
 	// provider that reads templates scores FullText itself unless it is
 	// off, and marks those findings Finding.Backstop.
 	Backstop string `json:"backstop,omitempty"`
+	// BackstopMinScore, when set, is the lowest score a backstop finding
+	// needs to act: Backstop is then enforce because the match is over the
+	// exemption cap, not because the filter says so. A provider may drop
+	// backstop findings below it; the gateway applies it either way, and
+	// a finding without a score always acts.
+	BackstopMinScore float64 `json:"backstop_min_score,omitempty"`
 }
 
 // SegmentContext is the goal behind a tool call: the latest user text before
