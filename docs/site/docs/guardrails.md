@@ -198,10 +198,11 @@ On each request of the App, every request guardrail tries the approved templates
 |---|---|---|
 | `template_backstop` | `log` | The backstop mode above. |
 | `template_backstop_min_score` | `0.9` | 0 to 1. When the gateway enforces the backstop of a message over the cap on a filter set to `off` or `log`, a backstop finding acts only when its `score` is at least this value; below it, it is logged (`log`) or dropped (`off`) as the filter's own mode says. Findings without a score, and rule or pattern hits (reported with score 1), always act. `0` lets every finding act. A filter set to `enforce` keeps its provider's thresholds. |
+| `connection.templates` ([HTTP classifier](#http) only) | `false` | `true` when the service reads `template` and acknowledges it in `templates_handled`: the backstop then runs in the same call. Otherwise, and for any segment the service does not acknowledge, it is a second call. |
 
 The full text of a message over the cap is mostly the App's approved template, so a borderline finding there is most likely the template text itself; the minimum keeps the forced backstop to confident findings. It is applied by the gateway to every provider alike, after the provider's own thresholds.
 
-An [HTTP classifier](#http) that reads templates receives the full message in the same call (`template.full_text`) and does the backstop itself; every other provider is called a second time with the full message. Start with `log`, and move to `enforce` once the backstop's false positives are known.
+An [HTTP classifier](#http) whose connection sets `templates: "true"` receives the full message in the same call (`template.full_text`) and does the backstop itself, acknowledging it in `templates_handled`; every other provider, and any segment the classifier does not acknowledge, is called a second time with the full message. Start with `log`, and move to `enforce` once the backstop's false positives are known.
 
 **Events.** A flagged segment of a message tried against the App's templates names the outcome in its `template`: `{"id": "pr-review@3", "exempt_share": 0.41}` for a match, with `"signals"` listing `template.mimicry` when a slot holds template text and `template.over_cap` (and `"backstop": "enforced"`, with `"backstop_min_score"` when the minimum applied) for a message over the cap; or `{"signals": ["template.miss"]}` when a template's placement fits the message but none matched. Template text where the template does not put it (inside a slot, the `[app template]` text in a message, a constant repeated many times) records one `guardrail.template_mimicry` event, action `log`, whatever else the guardrail found; it is how someone who knows the template would try to pass as it. See the metrics under [Compliance events and metrics](#compliance-events-and-metrics).
 
@@ -318,7 +319,7 @@ Blocks count towards `aistudio_policy_blocks_total` like any filter block. These
 | `aistudio_guardrail_cache_total` | `provider`, `outcome` (`hit`, `miss`) | Verdict cache lookups |
 | `aistudio_guardrail_shadow_dropped_total` | `provider`, `reason` (`queue_full`, `tenant_share`, `shutdown`) | Shadow evaluations dropped instead of queued; see [Shadow](#shadow-dont-wait) |
 | `aistudio_guardrail_calls_abandoned_total` | `provider` | Provider calls given up on because they did not return after their timeout; their work continues in the background, so a steady rate means a provider that ignores its timeout |
-| `aistudio_guardrail_templates_total` | `provider`, `result` (`hit`, `miss`, `mimicry`, `over_cap`, `backstop_only`) | Messages tried against the App's [trusted prompt templates](#trusted-prompt-templates): matched, missed (a template's placement fits but none matched), template text out of place, matched over the exemption cap, and backstop findings the residual did not show |
+| `aistudio_guardrail_templates_total` | `provider`, `result` (`hit`, `miss`, `mimicry`, `over_cap`, `backstop_only`, `backstop_unhandled`) | Messages tried against the App's [trusted prompt templates](#trusted-prompt-templates): matched, missed (a template's placement fits but none matched), template text out of place, matched over the exemption cap, backstop findings the residual did not show, and templated segments a classifier did not acknowledge (their backstop ran as a second call) |
 | `aistudio_guardrail_template_exempt_share` | `provider` | Share of a matched message's characters left unscored |
 
 ### Seeded defaults
@@ -388,7 +389,7 @@ Scripts on LLM requests can also read the request the way guardrails do: `input.
 
 Any classifier or NER service behind a documented JSON contract, for wrapping self-hosted models such as Llama Prompt Guard 2 or LLM Guard, or an in-house model. For a ready-made prompt-injection classifier that scores tool results, tool calls, user messages and tool definitions, see [Wolf Defender guardrail](./guardrails-wolf-defender.md).
 
-Connection: `endpoint` (required), `api_key` (sent as `Authorization: Bearer`, optional), `auth_header` (an alternative header name for the key).
+Connection: `endpoint` (required), `api_key` (sent as `Authorization: Bearer`, optional), `auth_header` (an alternative header name for the key), `templates` (`true` only when the service reads [trusted prompt templates](#trusted-prompt-templates) and acknowledges them in `templates_handled`, below; default `false`).
 
 The gateway POSTs:
 
@@ -417,7 +418,7 @@ On a filter that scans [tool calls](#tool-calls), a tool call arrives as role `a
 
 `system` is present only when the filter sets `tool_calls.include_system`.
 
-A message that matched one of the App's [trusted prompt templates](#trusted-prompt-templates) arrives with `text` set to its residual and a `template` with what was left out:
+A message that matched one of the App's [trusted prompt templates](#trusted-prompt-templates) arrives with `text` set to its residual. Only when the connection sets `templates: "true"` does it also carry a `template` with what was left out; without the setting the service gets the residual alone and the gateway scores the full message in a second call, so a classifier that knows nothing of templates never loses the backstop:
 
 ```json
 {"index": 0, "role": "user", "text": "[app template]--- a/server.go\n+++ b/server.go\n...[app template]",
@@ -427,11 +428,15 @@ A message that matched one of the App's [trusted prompt templates](#trusted-prom
               "backstop": "log"}}
 ```
 
-`exempt` are the approved constants' byte ranges in the UTF-8 `full_text`, in order (byte offsets, like finding spans; convert them before indexing a string by characters). A service that ignores `template` scores `text`, as it always has. A template-aware service can do its own windowing over `full_text`, and, unless `backstop` is `off`, scores `full_text` as well and returns what it finds there with `"backstop": true`:
+`exempt` are the approved constants' byte ranges in the UTF-8 `full_text`, in order (byte offsets, like finding spans; convert them before indexing a string by characters). A service that ignores `template` scores `text`, as it always has. A template-aware service can do its own windowing over `full_text`, and, unless `backstop` is `off`, scores `full_text` as well and returns what it finds there with `"backstop": true`, and lists the `index` of every segment whose template it handled in `templates_handled` (also when `backstop` is `off` or it found nothing):
 
 ```json
-{"detector": "prompt_attack", "category": "injection", "score": 0.91, "segment_index": 0, "backstop": true}
+{"flagged": true,
+ "findings": [{"detector": "prompt_attack", "category": "injection", "score": 0.91, "segment_index": 0, "backstop": true}],
+ "templates_handled": [0]}
 ```
+
+A templated segment missing from `templates_handled` (a service that ignores `template`, or `templates` set by mistake) gets the second call with the full text, as if the setting were off; its `"backstop": true` marks are then ignored and those findings count as ordinary ones. The gateway counts each such segment as `aistudio_guardrail_templates_total{result="backstop_unhandled"}` and logs a warning (at most once a minute per filter), so a wrongly set flag costs a second call but never the backstop.
 
 `backstop` is `enforce` for a message over the exemption cap, whatever the filter says. When the filter itself is not set to `enforce`, the template then also carries `"backstop_min_score": 0.9` (the filter's `template_backstop_min_score`): the service may leave out backstop findings scoring below it, and the gateway applies it to what comes back either way. The gateway applies that mode to those findings (log them, or act on them) and makes no second call. It honours `backstop` only on segments it sent with a `template`; anywhere else the finding counts as an ordinary one. A segment too long to send whole is split into pieces without `template`, and its backstop is a second call with the full text. Tool results and other text never carry a `context`, and a filter that does not scan tool calls sends neither, so an existing service sees no change. A tool result is text the model did not get from the user: a classifier that tells direct from indirect injection should treat it as the indirect kind, for example:
 

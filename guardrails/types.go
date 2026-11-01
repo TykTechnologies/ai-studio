@@ -280,6 +280,13 @@ type Verdict struct {
 	// changed are present. Nil when the provider cannot rewrite or was not
 	// asked to.
 	Rewritten map[int]string `json:"rewritten,omitempty"`
+	// TemplatesHandled lists the segments sent with a Template whose
+	// backstop the provider ran in this call (it scored Template.FullText
+	// unless the backstop was off, marking those findings Backstop). A
+	// provider that declares Capabilities.Templates must list each one it
+	// handled: for any templated segment not listed, the runner discards
+	// the Backstop marks and runs the backstop as a second classification.
+	TemplatesHandled []int `json:"templates_handled,omitempty"`
 	// Latency is the provider call's wall time, for metrics.
 	Latency time.Duration `json:"-"`
 }
@@ -335,7 +342,11 @@ type Capabilities struct {
 	// the residual in Text and, unless the backstop is off, the full text
 	// in the same call, marking findings there Finding.Backstop. Every other
 	// provider scores the residual only, and the runner runs the backstop
-	// as a second classification of the full text.
+	// as a second classification of the full text. It must acknowledge
+	// each templated segment whose backstop it ran
+	// (Verdict.TemplatesHandled); for any it does not, the runner falls
+	// back to the second classification, so a provider that claims
+	// templates but ignores them still gets its backstop.
 	Templates bool
 }
 

@@ -149,6 +149,10 @@ type scanResult struct {
 	// notSmall* values, "" for a small run).
 	runChars int
 	notSmall string
+	// templatesHandled are the segments sent with a template whose
+	// backstop the provider acknowledged running in its call
+	// (Verdict.TemplatesHandled); nil when none.
+	templatesHandled map[int]bool
 }
 
 // Why a run was not small (scanResult.notSmall): the fail mode did not
@@ -331,6 +335,12 @@ func (j *scanJob) fromCache() []int {
 		}
 		if v.rewritten {
 			j.res.rewritten[i] = v.rewrite
+		}
+		if v.templateHandled {
+			if j.res.templatesHandled == nil {
+				j.res.templatesHandled = map[int]bool{}
+			}
+			j.res.templatesHandled[i] = true
 		}
 	}
 	return todo
@@ -826,6 +836,16 @@ func (j *scanJob) addVerdict(c call, v guardrails.Verdict) {
 			continue
 		}
 		j.res.findings = append(j.res.findings, f)
+	}
+	for _, k := range v.TemplatesHandled {
+		// Only a segment sent whole carries its template.
+		if k < 0 || k >= len(c) || c[k].ordinal < 0 || j.segments[c[k].parent].Template == nil {
+			continue
+		}
+		if j.res.templatesHandled == nil {
+			j.res.templatesHandled = map[int]bool{}
+		}
+		j.res.templatesHandled[c[k].parent] = true
 	}
 	for k, text := range v.Rewritten {
 		if k < 0 || k >= len(c) || c[k].ordinal < 0 {

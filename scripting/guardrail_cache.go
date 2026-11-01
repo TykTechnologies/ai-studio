@@ -61,7 +61,10 @@ type cachedVerdict struct {
 	findings  []guardrails.Finding
 	rewrite   string
 	rewritten bool
-	at        time.Time
+	// templateHandled: the provider acknowledged running the segment's
+	// template backstop in its call (Verdict.TemplatesHandled).
+	templateHandled bool
+	at              time.Time
 }
 
 // weight approximates the memory an entry holds.
@@ -254,6 +257,7 @@ func (k *verdictKeyer) store(s guardrails.Segment, i int, res scanResult) {
 		}
 	}
 	v.rewrite, v.rewritten = res.rewritten[i]
+	v.templateHandled = res.templatesHandled[i]
 	key, ok := k.keys[i]
 	if !ok {
 		key = k.key(s)

@@ -3,9 +3,12 @@ package scripting
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strconv"
+	"sync"
 	"sync/atomic"
+	"time"
 	"unicode/utf8"
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
@@ -68,6 +71,10 @@ const (
 	templateMiss    = "miss"
 	templateMimicry = "mimicry"
 	templateOverCap = "over_cap"
+	// templateUnhandled: a provider that reads templates was sent one and
+	// did not acknowledge running its backstop; the backstop then ran as a
+	// second call.
+	templateUnhandled = "backstop_unhandled"
 )
 
 // templatePlan is how a request's segments were matched against the app's
@@ -374,6 +381,44 @@ func (p *templatePlan) restore(sel *selection, res *scanResult) []guardrails.Fin
 	return backstop
 }
 
+// acknowledge keeps the in-call backstop only for the segments the provider
+// said it ran it on (Verdict.TemplatesHandled). Any other segment sent with
+// a template gets the second classification instead, and its Backstop marks
+// count as ordinary findings: a classifier that does not read templates
+// scores the residual only, and its backstop must not vanish unnoticed.
+func (p *templatePlan) acknowledge(job *scanJob, filterName string, res *scanResult) {
+	unhandled := 0
+	for si, ts := range p.matched {
+		if !ts.inCall || res.templatesHandled[si] {
+			continue
+		}
+		if _, skipped := res.unscanned[si]; skipped {
+			continue // never scanned: nothing to acknowledge
+		}
+		ts.inCall = false
+		unhandled++
+		metrics.RecordGuardrailTemplate(job.ctx, job.cfg.Provider, templateUnhandled)
+	}
+	if unhandled > 0 && unhandledLogDue(filterName) {
+		slog.Warn("guardrail provider did not acknowledge the trusted prompt template it was sent; running the template backstop as a second call",
+			"filter", filterName, "provider", job.cfg.Provider, "segments", unhandled)
+	}
+}
+
+// unhandledLogged is when each filter last logged an unacknowledged
+// template, so a misconfigured classifier logs once a minute, not per
+// request (the metric counts every one).
+var unhandledLogged sync.Map // filter name -> time.Time
+
+func unhandledLogDue(filterName string) bool {
+	now := time.Now()
+	if last, ok := unhandledLogged.Load(filterName); ok && now.Sub(last.(time.Time)) < time.Minute {
+		return false
+	}
+	unhandledLogged.Store(filterName, now)
+	return true
+}
+
 // needsSecondBackstop lists the matched segments whose backstop did not run
 // in the provider's call.
 func (p *templatePlan) needsSecondBackstop(sel *selection) []int {
@@ -470,6 +515,9 @@ func backstopOnly(res scanResult, backstop []guardrails.Finding) []guardrails.Fi
 // unscanned text join the run's; under log they are returned as events,
 // action log, and change nothing.
 func (g *guardrailRunner) finishTemplates(plan *templatePlan, job *scanJob, sel *selection, res *scanResult, p *preparedGuardrail, input *ScriptInput) []ComplianceEventOutput {
+	if res.err == nil {
+		plan.acknowledge(job, g.filter.Name, res)
+	}
 	backstop := plan.restore(sel, res)
 	cfg := job.cfg
 	ec := evidenceContext{requestID: requestIDOf(input), clientRequestID: clientRequestIDOf(input), excerptChars: job.excerptChars, excerptStatus: excerptStatus(cfg, input), templates: plan}

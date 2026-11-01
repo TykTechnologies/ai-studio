@@ -80,6 +80,10 @@ type injFake struct {
 	// score, when set, is the score of every finding (else 1; below 0,
 	// none).
 	score float64
+	// noAck leaves the templates it is sent unacknowledged
+	// (Verdict.TemplatesHandled); ignoreTemplates also skips their
+	// backstop, as a classifier that does not read templates does.
+	noAck, ignoreTemplates bool
 
 	mu    sync.Mutex
 	calls []guardrails.Input
@@ -117,7 +121,10 @@ func (f *injFake) Classify(_ context.Context, in guardrails.Input) (guardrails.V
 		for _, d := range flagsIn(s.Text) {
 			v.Findings = append(v.Findings, guardrails.Finding{Detector: d, Category: "injection", Score: score, Severity: "warning", SegmentIndex: s.Index})
 		}
-		if t := s.Template; t != nil && t.Backstop != guardrails.BackstopOff {
+		if s.Template != nil && !f.noAck {
+			v.TemplatesHandled = append(v.TemplatesHandled, s.Index)
+		}
+		if t := s.Template; t != nil && t.Backstop != guardrails.BackstopOff && !f.ignoreTemplates {
 			for _, d := range flagsIn(t.FullText) {
 				v.Findings = append(v.Findings, guardrails.Finding{Detector: d, Category: "injection", Score: score, Severity: "warning", SegmentIndex: s.Index, Backstop: true})
 			}
@@ -844,4 +851,72 @@ func TestTemplates_OverCapBackstopMinScore(t *testing.T) {
 	out := runInput(t, f, openAIRequest(t, 1, chatMsg{Role: "user", Content: reviewPrompt(tplDiff)}))
 	assert.False(t, out.Block)
 	assert.Len(t, backstopEvents(out), 1)
+}
+
+// A provider that declares templates must acknowledge each templated segment
+// whose backstop it ran. One that does not (a classifier that ignores
+// template and scores the residual only) still gets the backstop, as a
+// second call, and the miss is counted; over the cap that backstop is still
+// enforced.
+func TestTemplates_UnacknowledgedTemplateFallsBack(t *testing.T) {
+	reader := sdkmetric.NewManualReader()
+	metrics.InitWithProvider(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
+	t.Cleanup(func() { metrics.Init() })
+	withTemplates(t, &fakeTemplates{byApp: map[uint][]*templates.Template{1: {prReviewTemplate(1)}}})
+	full := reviewPrompt(tplDiff)
+	in := func(text string) *ScriptInput { return openAIRequest(t, 1, chatMsg{Role: "user", Content: text}) }
+	caps := guardrails.Capabilities{Templates: true}
+
+	// Acknowledged: one call.
+	p := &injFake{caps: caps}
+	out := runInput(t, injFilter(t, p, nil), in(full))
+	assert.Len(t, p.inputs(), 1)
+	assert.Len(t, backstopEvents(out), 1)
+
+	// Not acknowledged: the residual call, then the full text.
+	p = &injFake{caps: caps, noAck: true, ignoreTemplates: true}
+	out = runInput(t, injFilter(t, p, nil), in(full))
+	require.Len(t, p.inputs(), 2)
+	assert.NotNil(t, p.inputs()[0].Segments[0].Template)
+	assert.Nil(t, p.inputs()[1].Segments[0].Template)
+	assert.Equal(t, full, p.sent()[1])
+	assert.False(t, out.Block)
+	assert.Len(t, backstopEvents(out), 1, "the backstop ran and was logged")
+
+	p = &injFake{caps: caps, noAck: true, ignoreTemplates: true}
+	assert.True(t, runInput(t, injFilter(t, p, map[string]any{"template_backstop": guardrails.BackstopEnforce}), in(full)).Block)
+
+	// Over the cap, with the filter's backstop off: still enforced.
+	p = &injFake{caps: caps, noAck: true, ignoreTemplates: true}
+	assert.True(t, runInput(t, injFilter(t, p, map[string]any{"template_backstop": guardrails.BackstopOff}), in(reviewPrompt("-a\n+b\n"))).Block)
+	assert.Len(t, p.inputs(), 2)
+
+	// Backstop marks without an acknowledgement are ordinary findings.
+	p = &injFake{caps: caps, noAck: true}
+	assert.True(t, runInput(t, injFilter(t, p, nil), in(full)).Block)
+
+	var rm metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(context.Background(), &rm))
+	var unhandled int64
+	for _, sm := range rm.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			if m.Name != "aistudio_guardrail_templates_total" {
+				continue
+			}
+			for _, dp := range m.Data.(metricdata.Sum[int64]).DataPoints {
+				if r, _ := dp.Attributes.Value("result"); r.AsString() == "backstop_unhandled" {
+					unhandled += dp.Value
+				}
+			}
+		}
+	}
+	assert.EqualValues(t, 4, unhandled)
+
+	// A cached verdict keeps its acknowledgement: no second call.
+	freshVerdictCache(t, time.Minute)
+	p = &injFake{caps: caps}
+	f := injFilter(t, p, map[string]any{"template_backstop": guardrails.BackstopEnforce})
+	assert.True(t, runInput(t, f, in(full)).Block)
+	assert.True(t, runInput(t, f, in(full)).Block)
+	assert.Len(t, p.inputs(), 1)
 }
