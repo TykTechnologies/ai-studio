@@ -1,6 +1,6 @@
 # Trusted prompt templates (design draft)
 
-Status: first milestone implemented (model, API, matcher, scan plan, HTTP contract, observability), 2026-10-31; edge gateways, the forced backstop's minimum score, multi-block and developer messages, and the HTTP template acknowledgement, 2026-11-01. Needs Enterprise guardrail providers to take effect.
+Status: first milestone implemented (model, API, matcher, scan plan, HTTP contract, observability), 2026-10-31; edge gateways, the forced backstop's minimum score, multi-block and developer messages, the HTTP template acknowledgement, the admin UI and the hint header, 2026-11-01. Needs Enterprise guardrail providers to take effect.
 
 ## Problem
 
@@ -37,7 +37,15 @@ Constant text is stored as written; it is the app's own prompt and is not secret
 
 **API:** under `/api/v1/apps/:id/prompt-templates`: `GET` (list, `?status=` filters), `POST` (propose), `GET|PATCH|DELETE /:template_id`, `POST /:template_id/approve` and `POST /:template_id/retire`. Listing needs `apps:read`; proposing, editing and retiring `apps:write`; deleting `apps:delete`. Approving needs a full administrator. Approving a template that is not proposed, or an eleventh one, is a `409`.
 
-**Hint header:** callers may send `X-Tyk-Prompt-Template: <name>@<version>`. It selects which approved template to try first. A forged or stale hint gains nothing, because only approved bytes are ever exempt.
+**Hint header:** callers may send `X-Tyk-Prompt-Template: <name>@<version>`, or `<name>` for the approved version of that name. It selects which approved template to try first, and nothing else: `templates.PreferHinted` moves the named template to the front of the app's approved list (a copy; the source's cached list is never reordered), and `MatchMessage` still tries every template and keeps the match that exempts the fewest characters, so the order only breaks a tie between equal matches. A hint that does not parse, or names a template that is unknown, not approved, retired or another version, is ignored. A forged or stale hint gains nothing, because only approved bytes are ever exempt, and the hint can never make a template match or exempt more than matching without it. The proxy puts the header's value in the request context (`templates.WithHint`, read by `planTemplates`), carries it across the `/ai/` -> `/llm/call/` loopback with `X-Tyk-Compression` (`withClientLoopbackHeaders`), and strips it before the request leaves for the vendor (`stripFailoverHeaders`). Tests: `guardrails/templates/hint_test.go`, `scripting/guardrail_template_hint_test.go`, `proxy/prompt_template_header_test.go`.
+
+**Admin UI:** the App detail page has a **Prompt templates** section (`ui/admin-frontend/src/admin/components/apps/promptTemplates/`):
+
+- The list shows each version's name, version, status, placement, approver and approval time, last match and expiry; retired versions are hidden behind a switch. Proposing, editing and retiring need `apps:write`, deleting `apps:delete`.
+- The editor (`PromptTemplateEditor`) builds the ordered parts (constants and named slots) and the placement, and checks what the API checks before sending (`promptTemplateText.validateTemplate`: constants of 32 bytes to 64 KiB measured in UTF-8 bytes, no invisible characters as `templates.Invisible` defines them, no placeholder, no leading combining mark, no two constants or slots in a row, a constant at each anchored end, the name pattern and 1-3650 expiry days). The API's own error is shown for anything else. Editing an approved or retired version says it will create the next version.
+- The approval view (`PromptTemplateReview`) shows each constant's exact bytes in a monospace block. Characters a reviewer could miss are never rendered; each becomes a labelled marker with its code point: zero-width, bidi control, Unicode tag, variation selector, no-break space, unusual space, control character, other non-printing, and any other non-ASCII character (shown next to its code point, as a lookalike). Line ends and trailing spaces are marked. It also shows where the template sits in a message (`PlacementDiagram`), when it was proposed, approved and last matched and when it expires (the API has no first-seen time), and a code-point diff (Myers, slots as single units) against the previously approved version of the same name: the highest lower version with an approval time, approved or retired. A change under 10% of the new version's constant bytes, or a single inserted run, shows "A small edit is where an injection fits. Check every changed character." A placement change is called out separately.
+- **Approve** appears only for a full administrator (`usePermissions().isFullAdmin`, matching the route's `authz.FullAdmin`) on a proposed version, and needs a confirmation with a checkbox ("I have checked every constant, character by character").
+- A browser text area turns `\r\n` into `\n`, so a constant with carriage returns can only be entered through the API; the approval view marks a CR it finds.
 
 ## Matching
 
@@ -102,11 +110,11 @@ An optional miner proposes templates from traffic. It never approves them. A pro
 - it appears in many requests with **distinct** slot content, spread over days rather than one burst;
 - it never appears inside a slot or a tool result.
 
-The approval screen shows:
+The approval screen shows (the first, second and fourth are built for manual proposals; see Admin UI above):
 
 - the exact bytes, with invisible characters made visible;
-- where the text appears, and when it was first and last seen;
-- how many distinct requests contained it;
+- where the text appears, and when it was first and last seen (last matched only, for now: the API records no first-seen time);
+- how many distinct requests contained it (needs the miner);
 - a diff against the previous version, with a warning when a change is small (a small edit is where an injection fits).
 
 ## Operations

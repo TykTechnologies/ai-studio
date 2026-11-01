@@ -210,6 +210,9 @@ func planTemplates(input *ScriptInput, sel *selection, cfg guardrails.Config, ca
 	if len(ts) == 0 {
 		return nil
 	}
+	// The caller's X-Tyk-Prompt-Template hint only orders the search; it
+	// cannot make a template match or exempt more (templates.PreferHinted).
+	ts = templates.PreferHinted(ts, templates.HintFrom(ctx))
 	first, last := sel.roleBounds(input)
 	plan := &templatePlan{matched: map[int]*templatedSegment{}, missed: map[int]bool{}, mimicry: map[int]bool{}, backstop: cfg.Backstop()}
 	fits := false

@@ -16,6 +16,7 @@ import RequestIdCaption from "../common/RequestIdCaption";
 import ConfirmationDialog from "../common/ConfirmationDialog";
 import AppTeamBudgetRow from "./AppTeamBudgetRow";
 import AppGovernanceFlags from "./AppGovernanceFlags";
+import AppPromptTemplates from "./promptTemplates/AppPromptTemplates";
 import {
   Alert,
   Typography,
@@ -910,6 +911,8 @@ const AppDetails = () => {
         </Section>
 
         <UsedBySection resourcePath="apps" id={id} objectLabel="app" />
+
+        <AppPromptTemplates appId={id} />
 
         {credential && (
           <>

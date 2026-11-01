@@ -163,6 +163,18 @@ Templates are part of AI Studio in every edition, but they act through guardrail
 
 A template belongs to an App and is an ordered list of parts, each either constant text (`const`, at least 32 bytes, no invisible characters) or a named slot (`slot`), with a placement: the role (`system` or `user`), which message of that role (`first`, `last` or `any`) and whether the template starts the message, ends it, or both (`anchor`). Anyone who may edit the App proposes one; only a full administrator approves it, and an App has at most 10 approved. Changing an approved template's text or placement creates a new version that needs approving again, and a template that matches nothing for `expires_after_days` (30 by default) drops back to proposed.
 
+**Managing templates.** Open the App (**Apps**, then the App's name) and find **Prompt templates**:
+
+1. **Propose template** opens the editor. Give the template a name (letters, digits, `.`, `_` and `-`, such as `pr-review`), choose the placement (role, message and anchor), and build the parts: **Add constant** for the App's own text, pasted exactly as the App sends it, and **Add slot** for each part that varies. The editor checks what the API checks (each constant at least 32 bytes, no invisible characters, no two constants or two slots in a row, a constant at each anchored end) and shows the API's own message for anything else.
+2. **Review** opens the approval view, which shows:
+   - each constant's exact bytes in a monospace block. Zero-width characters, bidi controls, Unicode tags, variation selectors, no-break spaces, other non-printing characters and every other character outside ASCII (a Cyrillic letter that looks Latin, say) appear as labelled markers with their code point, and spaces at the end of a line are shown;
+   - where the template sits in a message, when it was proposed and approved, when it last matched and when it expires;
+   - a character diff against the previously approved version of the same name. When the change is small (under 10% of the constant bytes, or a single inserted run) it warns: "A small edit is where an injection fits. Check every changed character."
+3. A full administrator approves from the review, after confirming that every constant has been checked. Approving retires the version of the same name that was approved before it. Others see the review without **Approve**.
+4. **Edit** on an approved or retired version proposes the next version and leaves the old one as it was; **Retire** keeps a version for the record and stops matching it; **Delete** removes it.
+
+The same operations are in the API, under `/api/v1/apps/{id}/prompt-templates`:
+
 ```bash
 curl -X POST "$STUDIO/api/v1/apps/42/prompt-templates" -H "Authorization: Bearer $TOKEN" -d '{
   "name": "pr-review",
@@ -175,6 +187,8 @@ curl -X POST "$STUDIO/api/v1/apps/42/prompt-templates" -H "Authorization: Bearer
 }'
 curl -X POST "$STUDIO/api/v1/apps/42/prompt-templates/7/approve" -H "Authorization: Bearer $TOKEN"
 ```
+
+**Naming the template in a request.** A caller may send `X-Tyk-Prompt-Template: pr-review@3` (or just `pr-review` for the approved version of that name). The header only orders the search: the named template is tried first, so it is the one reported when two approved templates match a message equally. It never grants anything. Every approved template is still tried, the match that leaves the most text scored still wins, and a header naming a template that is unknown, not approved, retired or an older version is ignored. The gateway removes the header before the request reaches the vendor.
 
 On each request of the App, every request guardrail tries the approved templates on the request's own system and user messages that it scans:
 
