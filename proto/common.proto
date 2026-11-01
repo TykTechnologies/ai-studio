@@ -394,6 +394,32 @@ message ConfigurationSnapshot {
   // apply before capture leaves them, present only while tracing runs on
   // the hub. Without it an edge captures no content.
   AgentTracingContentPolicy agent_tracing_content_policy = 18;
+
+  // Trusted prompt templates (features/TrustedPromptTemplates.md): the
+  // approved templates of the Apps in this snapshot, by app, name and
+  // version. Unlike Apps they count in the checksum, so approving,
+  // retiring or deleting one marks edges pending.
+  repeated PromptTemplateConfig prompt_templates = 19;
+}
+
+// PromptTemplateConfig is an approved trusted prompt template of an App.
+// Constants are the approved bytes; edges match them exactly as the hub does.
+message PromptTemplateConfig {
+  uint32 id = 1;      // the hub's row, reported back when it matches
+  uint32 app_id = 2;
+  string name = 3;
+  int32 version = 4;
+  string placement_role = 5;
+  string placement_message = 6;
+  string placement_anchor = 7;
+  repeated PromptTemplatePart parts = 8;
+}
+
+// PromptTemplatePart is one part of a template: exactly one of constant
+// (exact text) and slot (the name of a part that varies).
+message PromptTemplatePart {
+  string constant = 1;
+  string slot = 2;
 }
 
 // AgentTracingContentPolicy is the hub's global content capture settings

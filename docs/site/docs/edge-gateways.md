@@ -84,8 +84,18 @@ The configuration checksum includes objects that need to be synchronized to edge
 - **Model Prices** - Cost tracking configurations
 - **Model Routers** - Request routing rules (Enterprise)
 - **OAuth Clients & Access Tokens** - MCP authentication state for tool access via OAuth
+- **Trusted prompt templates** - the approved [prompt templates](./guardrails.md#trusted-prompt-templates) of the Apps in the snapshot (see below)
 
 Any create, update, or delete operation on these objects triggers a checksum recalculation.
+
+### Trusted prompt templates
+
+The approved prompt templates of the Apps an edge serves (the snapshot's Apps: active, global or in the edge's namespace) travel in its snapshot, and, unlike the Apps themselves, they count in the checksum. Approving, retiring, editing or deleting a template marks the namespace's edges **Pending**. The edge registers them with its request guardrails, so a message is matched exactly as on AI Studio: the same matcher, the same residual, backstop and exemption cap.
+
+- **Until the next push an edge keeps its old templates.** A template retired or deleted on AI Studio still exempts its constants on an edge that has not applied the new snapshot; one approved since is not yet used there (its messages are scored whole). Push after approving or retiring a template that matters.
+- **Lapsing.** A template that has gone `expires_after_days` without a match is left out of the next snapshot. Edges report the templates that matched in their heartbeats (every 30 seconds), and AI Studio records those matches, so a template used only through edges does not lapse.
+- **Apps learnt by pull-on-miss** (created after the edge's snapshot) have no templates on that edge until the next push: their messages are scored whole.
+- Templates are held in memory on the edge; an edge always starts from a snapshot, so they are never stale across a restart. With no templates the edge screens requests exactly as before.
 
 Two properties keep the checksum meaningful:
 

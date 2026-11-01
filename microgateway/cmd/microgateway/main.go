@@ -264,6 +264,9 @@ func main() {
 				// snapshot that failed, or was applied without entries the
 				// edge could not store, shows on the hub as not in sync.
 				edgeClient.SetAppliedConfigSource(services.NewEdgeSyncService(db, cfg.HubSpoke.EdgeNamespace).ReportedConfig)
+				// Heartbeats report the trusted prompt templates that matched,
+				// so the hub's expiry counts edge traffic.
+				edgeClient.SetTemplateMatchSource(services.PromptTemplateMatches)
 
 				// If edge client already has configuration, sync it to SQLite
 				if initialConfig := edgeClient.GetCurrentConfiguration(); initialConfig != nil {

@@ -51,6 +51,10 @@ type SimpleEdgeClient struct {
 	// its database (services.EdgeSyncService.ReportedConfig); heartbeats
 	// report that instead of the last snapshot received.
 	appliedSource func() (checksum, version string, ok bool)
+	// templateMatches, when set, holds the trusted prompt templates that
+	// matched since the last heartbeat (services.PromptTemplateMatches);
+	// guarded by configMu.
+	templateMatches TemplateMatchSource
 
 	// Build information
 	version   string
@@ -268,6 +272,24 @@ func (c *SimpleEdgeClient) SetAppliedConfigSource(source func() (checksum, versi
 	c.configMu.Lock()
 	defer c.configMu.Unlock()
 	c.appliedSource = source
+}
+
+// TemplateMatchSource holds the IDs of the trusted prompt templates that
+// matched requests on this edge, for heartbeats to report.
+type TemplateMatchSource interface {
+	// DrainMatched returns the IDs matched since the last call.
+	DrainMatched() []uint32
+	// Requeue puts back IDs a heartbeat failed to deliver.
+	Requeue(ids []uint32)
+}
+
+// SetTemplateMatchSource makes heartbeats report the trusted prompt
+// templates that matched since the last one, so the hub's expiry counts
+// edge traffic.
+func (c *SimpleEdgeClient) SetTemplateMatchSource(source TemplateMatchSource) {
+	c.configMu.Lock()
+	defer c.configMu.Unlock()
+	c.templateMatches = source
 }
 
 // loadedConfig returns the checksum and version of the loaded snapshot.
@@ -995,8 +1017,19 @@ func (c *SimpleEdgeClient) sendHeartbeatMessage() {
 			},
 		},
 	}
+	c.configMu.RLock()
+	matches := c.templateMatches
+	c.configMu.RUnlock()
+	var matched []uint32
+	if matches != nil {
+		matched = matches.DrainMatched()
+		heartbeat.GetHeartbeat().MatchedPromptTemplateIds = matched
+	}
 
 	if err := c.send(heartbeat); err != nil {
+		if len(matched) > 0 {
+			matches.Requeue(matched)
+		}
 		log.Error().Err(err).Msg("Failed to send heartbeat")
 	} else {
 		log.Debug().

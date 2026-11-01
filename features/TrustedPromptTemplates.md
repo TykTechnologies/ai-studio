@@ -1,6 +1,6 @@
 # Trusted prompt templates (design draft)
 
-Status: first milestone implemented (model, API, matcher, scan plan, HTTP contract, observability), 2026-10-31. Needs Enterprise guardrail providers to take effect.
+Status: first milestone implemented (model, API, matcher, scan plan, HTTP contract, observability), 2026-10-31; edge gateways, the forced backstop's minimum score, multi-block and developer messages, and the HTTP template acknowledgement, 2026-11-01. Needs Enterprise guardrail providers to take effect.
 
 ## Problem
 
@@ -53,7 +53,7 @@ The matcher is `guardrails/templates.MatchMessage`, a pure function. For each me
 
 ## Scan plan
 
-Where it runs: `scripting/guardrail_templates.go`, called from the guardrail runner's `evaluate` for request filters. Studio registers the template source (`scripting.SetPromptTemplateSource`, backed by `services.PromptTemplateSource`, cached per app for 15 s). Nothing else registers one, so edge gateways take none of this path until templates are synced (bead .8).
+Where it runs: `scripting/guardrail_templates.go`, called from the guardrail runner's `evaluate` for request filters. Studio registers the template source (`scripting.SetPromptTemplateSource`, backed by `services.PromptTemplateSource`, cached per app for 15 s). An edge gateway registers one from the snapshot it applied (`microgateway/internal/services/prompt_templates.go`), so matching runs there with the same matcher and scan plan; see Edge gateways under Operations.
 
 Which messages are tried: the request's own `system` and `user` text that the filter scans (its scope applies first), one message at a time. Tool results, tool calls, tool definitions, documents and detection-only views are never tried; neither are responses, Studio chat tool results or tool calls. `first` and `last` count every message of the role in the request, in scope or not.
 
@@ -113,7 +113,11 @@ The approval screen shows:
 
 - **Compliance events:** each flagged segment of a message tried against templates carries `template`: `{"id": "<name>@<version>", "exempt_share": 0.41}` for a match, with `"signals"` listing `template.mimicry` (a slot holds template text) and `template.over_cap` (plus `"backstop": "enforced"`) when they apply, or `{"signals": ["template.miss"]}` / `{"signals": ["template.mimicry"]}` with no match. Mimicry also records one `guardrail.template_mimicry` event (action `log`) per request, whether or not anything was flagged. Backstop findings under `log` are ordinary detector events with action `log` and `template_backstop: "log"`.
 - **Metrics:** `aistudio_guardrail_templates_total{provider,result}` (`hit`, `miss`, `mimicry`, `over_cap`, `backstop_only`, `backstop_unhandled`) and `aistudio_guardrail_template_exempt_share{provider}` (histogram). They carry no app or template label, to keep cardinality bounded; per-app and per-template detail is in the compliance events.
-- **Edge gateways:** approved templates go in the configuration snapshot and its checksum. Matching runs where the guardrail runs.
+- **Edge gateways** (bead .8):
+  - The snapshot carries the approved, unlapsed templates of the Apps it carries (`ConfigurationSnapshot.prompt_templates`, `PromptTemplateConfig`), in app, name and version order. Apps are scoped per edge namespace already, so each edge gets only the templates of Apps it serves. Unlike Apps, templates count in the checksum: every template change emits `system.app.prompt_templates.changed`, the control server recomputes the namespaces' checksums, and an approve, retire, edit or delete marks edges Pending. With no templates the field is empty and the checksum is what it was before templates existed.
+  - The edge holds the applied snapshot's templates in memory (an edge never starts without a snapshot), validates them again, and registers them as the guardrails' template source; a snapshot with none removes the source, so the edge takes none of the template path (`TestEdgeSync_NoTemplatesIsByteIdentical`). No edge database or Studio schema change.
+  - Retire and delete reach an edge on the next push: until then it keeps matching its old set. A template approved since is not used there yet (scored whole). An App the edge learnt of by pull-on-miss after its snapshot has no templates there until the next push.
+  - Expiry counts edge matches: the edge collects the IDs of the templates that matched and sends them in its next heartbeat (`HeartbeatRequest.matched_prompt_template_ids`; put back when a heartbeat fails), and the hub touches `last_matched_at` of those still approved, at most once per 10 minutes per template per replica. A lapsed template is left out of the next snapshot.
 - **Expiry and changes:** a template that hasn't matched for `expires_after` drops to `proposed`. Changing a constant creates a new version that needs approval again.
 
 ## Evaluation (acceptance gates)

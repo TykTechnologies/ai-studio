@@ -207,7 +207,7 @@ An [HTTP classifier](#http) whose connection sets `templates: "true"` receives t
 
 **Events.** A flagged segment of a message tried against the App's templates names the outcome in its `template`: `{"id": "pr-review@3", "exempt_share": 0.41}` for a match, with `"signals"` listing `template.mimicry` when a slot holds template text and `template.over_cap` (and `"backstop": "enforced"`, with `"backstop_min_score"` when the minimum applied) for a message over the cap; or `{"signals": ["template.miss"]}` when a template's placement fits the message but none matched. Template text where the template does not put it (inside a slot, the `[app template]` text in a message, a constant repeated many times) records one `guardrail.template_mimicry` event, action `log`, whatever else the guardrail found; it is how someone who knows the template would try to pass as it. See the metrics under [Compliance events and metrics](#compliance-events-and-metrics).
 
-Templates apply on AI Studio. Edge gateways do not receive them yet and score every message whole.
+Templates apply on AI Studio and on [edge gateways](./edge-gateways.md#trusted-prompt-templates), which receive the approved templates of their Apps in their configuration snapshot: a template change marks edges Pending, and an edge keeps its old templates until the next push.
 
 ### Shadow (don't wait)
 

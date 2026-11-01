@@ -249,9 +249,14 @@ func (s *Service) ApprovedAppPromptTemplates(appID uint) ([]*templates.Template,
 }
 
 // promptTemplatesChanged drops the source's cached templates of the app on
-// this replica; other replicas see the change within promptTemplateTTL.
+// this replica (other replicas see the change within promptTemplateTTL) and
+// announces the change: approved templates are in the edge snapshot, so
+// edges become pending until the next push.
 func (s *Service) promptTemplatesChanged(appID uint) {
 	s.PromptTemplateSource().forget(appID)
+	if s.SystemEvents != nil {
+		s.SystemEvents.EmitAppPromptTemplatesChanged(appID)
+	}
 }
 
 // promptTemplateTTL is how long the guardrails use an app's approved
