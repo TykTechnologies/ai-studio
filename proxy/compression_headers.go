@@ -3,6 +3,8 @@ package proxy
 import (
 	"net/http"
 	"strings"
+
+	"github.com/TykTechnologies/midsommar/v2/guardrails/templates"
 )
 
 // hdrCompression is the request header a client sends to a gateway plugin
@@ -31,17 +33,21 @@ func stripCompressionHeaders(h http.Header) {
 
 // withClientLoopbackHeaders adds to extra (the loopback markers) the client's
 // X-Tyk-Compression header, so the plugin on the inner /llm/call/ hop sees
-// what the client asked for. The SDK driver builds the loopback request
-// itself and copies no client header otherwise. Only that one header is
-// carried, as the client sent it; the plugin decides whether to honour it.
+// what the client asked for, and its X-Tyk-Prompt-Template hint, so the
+// request guardrails there see it. The SDK driver builds the loopback
+// request itself and copies no client header otherwise. Only those headers
+// are carried, as the client sent them; the plugin decides whether to honour
+// the one, and the other only orders the guardrails' template search.
 func withClientLoopbackHeaders(r *http.Request, extra http.Header) http.Header {
-	vs := r.Header.Values(hdrCompression)
-	if len(vs) == 0 {
-		return extra
+	for _, name := range []string{hdrCompression, templates.HintHeader} {
+		vs := r.Header.Values(name)
+		if len(vs) == 0 {
+			continue
+		}
+		if extra == nil {
+			extra = http.Header{}
+		}
+		extra[http.CanonicalHeaderKey(name)] = append([]string(nil), vs...)
 	}
-	if extra == nil {
-		extra = http.Header{}
-	}
-	extra[hdrCompression] = append([]string(nil), vs...)
 	return extra
 }
