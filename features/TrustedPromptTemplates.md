@@ -29,7 +29,7 @@ A **prompt template** is an app-level resource. Trust belongs to the calling app
 | `status` | `proposed`, `approved` or `retired`. Records who approved it and when. Only `approved` templates are matched. |
 | `expires_after_days` | The template lapses after this long with no matches (counted from its approval when it has never matched). Default 30. |
 
-The `developer` role of the first draft is not offered yet: the guardrail segmenter reads an OpenAI `developer` message as user text, so a developer placement could not be told apart from a user one.
+There is no `developer` placement. An OpenAI `developer` message (chat or Responses request bodies) is the app's instructions in the role newer models use instead of `system`, so templates treat it as a `system` message: a `system` template matches it, `first` and `last` of the `system` role count it, and a `user` template does not match it. Guardrail scopes still read it as user text (the segmenter marks it `segments.Unit.Developer` and keeps its role `user`), so it stays under the default scopes. In messages mode (the Responses extractor, chat payloads) the role is not known and a developer message is placed as the extractor reads it.
 
 Each row is one version. A change to the parts or placement of a proposed version edits it in place; the same change to an approved or retired version creates the next version, `proposed`, and leaves the old one as it was. Approving a version retires the other approved versions of the same name, so one version of a name is trusted at a time. The table is `app_prompt_templates` (`models.AppPromptTemplate`; `models.PromptTemplate` is the unrelated chat prompt shortcut).
 
@@ -55,7 +55,14 @@ The matcher is `guardrails/templates.MatchMessage`, a pure function. For each me
 
 Where it runs: `scripting/guardrail_templates.go`, called from the guardrail runner's `evaluate` for request filters. Studio registers the template source (`scripting.SetPromptTemplateSource`, backed by `services.PromptTemplateSource`, cached per app for 15 s). Nothing else registers one, so edge gateways take none of this path until templates are synced (bead .8).
 
-Which messages are tried: the request's own `system` and `user` text that the filter scans (its scope applies first), one block per message. Tool results, tool calls, tool definitions, documents, detection-only views and a message whose text the vendor carries in several blocks are never tried; neither are responses, Studio chat tool results or tool calls. `first` and `last` count every message of the role in the request, in scope or not. The app is the request's `app_id`; a request with no app (Studio chat) is never matched.
+Which messages are tried: the request's own `system` and `user` text that the filter scans (its scope applies first), one message at a time. Tool results, tool calls, tool definitions, documents and detection-only views are never tried; neither are responses, Studio chat tool results or tool calls. `first` and `last` count every message of the role in the request, in scope or not.
+
+A message the vendor carries in several text blocks (an Anthropic system prompt with `cache_control` on one block, OpenAI text parts) is matched on its blocks joined with nothing between them, which is the text as the app wrote it; in request bodies only (messages mode matches single-part messages only), and only when the message's text is its blocks alone. Its segment text joins the blocks with the segmenter's separator, and the runner also scores the joined blocks as a detection-only view. So:
+
+- Exempt ranges are mapped onto the segment text and cut at every block boundary: no exemption covers a separator, a constant split over two blocks leaves a placeholder in each, and the residual keeps each block's slot text in place.
+- The joined view is scored as the residual of the joined text, so the constants are not scored there either, while text split over a block boundary inside a slot is still seen whole.
+- A rewrite of the residual is restored onto the segment text and split back into its blocks, so a redaction lands in the block it belongs to and leaves other blocks, and their `cache_control`, byte for byte. A rewrite that removes a separator cannot be split back, and falls to a block.
+- The backstop (`template.full_text` and the second call) scores the joined blocks, with `exempt` in their offsets. The app is the request's `app_id`; a request with no app (Studio chat) is never matched.
 
 When a template matches, each guardrail on the request receives the message as a **scan plan**: the original text with the exempt ranges marked.
 

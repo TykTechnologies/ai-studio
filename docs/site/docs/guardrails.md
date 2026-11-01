@@ -178,7 +178,8 @@ curl -X POST "$STUDIO/api/v1/apps/42/prompt-templates/7/approve" -H "Authorizati
 
 On each request of the App, every request guardrail tries the approved templates on the request's own system and user messages that it scans:
 
-- Every constant must appear byte for byte, in order, at the anchored position. There is no normalisation of case, whitespace or Unicode, and a message the vendor receives in several text blocks is never matched.
+- Every constant must appear byte for byte, in order, at the anchored position. There is no normalisation of case, whitespace or Unicode. A message sent in several text blocks (an Anthropic system prompt with `cache_control` on one block) matches when its blocks, joined with nothing between them, match; no exemption crosses a block boundary, and a redaction goes back into the block it came from.
+- An OpenAI `developer` message is placed as a `system` message: a `system` template matches it, and `first`/`last` count it with the system messages. Guardrail scopes still treat it as user text.
 - A matched message is scored as its **residual**: the slots in their original order, with `[app template]` where each constant was. The budgets, the unscanned rules and the fail mode apply to the residual as to any text.
 - A constant next to an invisible character (zero-width, bidi, tag, variation selector) is scored.
 - A message that is mostly template, more than 60% of its characters or more than 16k characters exempt, is **over the cap**. Its constants stay exempt, but its backstop (below) is enforced whatever `template_backstop` says, `off` included; a filter whose action is `log` still only logs. On a filter whose `template_backstop` is `off` or `log`, that forced backstop acts only on findings scoring at least `template_backstop_min_score` (below).

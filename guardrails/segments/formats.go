@@ -72,6 +72,7 @@ func extractOpenAI(x *extraction, root *node) error {
 		}
 		u := x.open(pointer(path, "content"), wholeString, meta)
 		u.adjacent = true
+		u.Developer = x.str(m.get("role")) == "developer"
 		if err := x.openAIContent(u, m.get("content"), pointer(path, "content")); err != nil {
 			return err
 		}

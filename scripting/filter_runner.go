@@ -1059,11 +1059,12 @@ func bodySelection(units []segments.Unit, cfg guardrails.Config) selection {
 		if u.Untrusted() || segmentKind(u.Segment) != guardrails.KindText {
 			continue
 		}
-		b, ok := sel.roleSpan[u.Role]
+		role := templateRole(u)
+		b, ok := sel.roleSpan[role]
 		if !ok {
 			b = [2]int{u.Message, u.Message}
 		}
-		sel.roleSpan[u.Role] = [2]int{min(b[0], u.Message), max(b[1], u.Message)}
+		sel.roleSpan[role] = [2]int{min(b[0], u.Message), max(b[1], u.Message)}
 	}
 	for i, u := range units {
 		if in[i] {
