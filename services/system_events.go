@@ -21,6 +21,11 @@ const (
 	TopicAppDeleted  = "system.app.deleted"
 	TopicAppApproved                = "system.app.approved"
 	TopicAppPluginResourcesChanged  = "system.app.plugin_resources.changed"
+	// TopicAppPromptTemplatesChanged: an App's trusted prompt templates
+	// changed (proposed, edited, approved, retired, deleted). The approved
+	// ones travel in the edge snapshot, so edges become pending. Payload
+	// object: nil; object_id is the App.
+	TopicAppPromptTemplatesChanged = "system.app.prompt_templates.changed"
 
 	// Datasource events
 	TopicDatasourceCreated = "system.datasource.created"
@@ -178,6 +183,12 @@ func (e *SystemEventEmitter) EmitAppDeleted(objectID uint, userID uint) {
 // EmitAppApproved emits an event when an App is approved (credential activated)
 func (e *SystemEventEmitter) EmitAppApproved(app interface{}, objectID uint, userID uint) {
 	e.EmitObjectEvent(TopicAppApproved, "app", "approved", objectID, userID, redactForEvent(app))
+}
+
+// EmitAppPromptTemplatesChanged emits an event when an App's trusted prompt
+// templates change.
+func (e *SystemEventEmitter) EmitAppPromptTemplatesChanged(appID uint) {
+	e.EmitObjectEvent(TopicAppPromptTemplatesChanged, "app", "prompt_templates_changed", appID, 0, nil)
 }
 
 // EmitAppPluginResourcesChanged emits an event when plugin resources on an App change.

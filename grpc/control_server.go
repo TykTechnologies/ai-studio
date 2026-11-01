@@ -763,6 +763,8 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 					edgeConnection.heartbeatSeen = true
 					edgeConnection.mu.Unlock()
 
+					s.recordEdgeTemplateMatches(edgeID, m.Heartbeat.MatchedPromptTemplateIds)
+
 					// Get loaded config info from heartbeat
 					loadedChecksum := m.Heartbeat.LoadedConfigChecksum
 					fipsStatus := edgeFIPSStatus(m.Heartbeat.GetHealth())
@@ -983,6 +985,7 @@ func (s *ControlServer) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequ
 	if err := edgeInstance.UpdateHeartbeat(s.db.WithContext(ctx)); err != nil {
 		return nil, status.Error(codes.Unavailable, "failed to record heartbeat")
 	}
+	s.recordEdgeTemplateMatches(req.EdgeId, req.MatchedPromptTemplateIds)
 
 	// This replica holds the edge's stream: keep its view current too.
 	s.edgeMutex.RLock()
@@ -1935,6 +1938,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 
 		snapshot.Apps = append(snapshot.Apps, pbApp)
 	}
+	snapshot.PromptTemplates = snapshotPromptTemplates(s.db, apps, takenAt)
 
 	// Get Filters for namespace
 	var filters []models.Filter
@@ -3091,6 +3095,10 @@ const (
 	topicSecretCreated = "system.secret.created"
 	topicSecretUpdated = "system.secret.updated"
 	topicSecretDeleted = "system.secret.deleted"
+
+	// Trusted prompt templates: an App's approved templates are in the
+	// snapshot and its checksum.
+	topicPromptTemplatesChanged = "system.app.prompt_templates.changed"
 )
 
 // subscribeToConfigChanges sets up event subscriptions for configuration changes.
@@ -3113,6 +3121,7 @@ func (s *ControlServer) subscribeToConfigChanges() {
 		topicEmbedderCreated, topicEmbedderUpdated, topicEmbedderDeleted,
 		topicGovernedMetadataUpdated, topicGovernedMetadataDeleted,
 		topicSecretCreated, topicSecretUpdated, topicSecretDeleted,
+		topicPromptTemplatesChanged,
 	}
 
 	for _, topic := range configTopics {

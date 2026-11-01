@@ -128,6 +128,10 @@ type Unit struct {
 	// mcp_list_tools, codeExecutionResult), so a rewriter can tell the
 	// kinds a vendor is known to accept edited apart from the rest.
 	ServerToolType string
+	// Developer marks an OpenAI developer message (chat or Responses). Its
+	// Role is user, as for every role this package does not recognise;
+	// trusted prompt templates place it with system messages.
+	Developer bool
 
 	pieces   []piece
 	sep      string
@@ -219,6 +223,38 @@ func (u Unit) ownsLeaves() bool {
 		}
 	}
 	return true
+}
+
+// LeafOffsets returns where each leaf starts in the unit's Text, for a unit
+// whose Text is made of its leaves alone, in order: one leaf, or several
+// joined by the unit's separator. ok is false when the Text holds anything
+// else (a Google functionResponse's keys) or the unit has no leaves.
+func (u Unit) LeafOffsets() (offsets []int, ok bool) {
+	if len(u.Leaves) == 0 || len(u.pieces) != len(u.Leaves) {
+		return nil, false
+	}
+	offsets = make([]int, len(u.pieces))
+	at := 0
+	for i, p := range u.pieces {
+		if p.leaf != i || p.text != u.Leaves[i].Text {
+			return nil, false
+		}
+		if i > 0 {
+			if !strings.HasPrefix(u.Text[at:], u.sep) {
+				return nil, false
+			}
+			at += len(u.sep)
+		}
+		if !strings.HasPrefix(u.Text[at:], p.text) {
+			return nil, false
+		}
+		offsets[i] = at
+		at += len(p.text)
+	}
+	if at != len(u.Text) {
+		return nil, false
+	}
+	return offsets, true
 }
 
 // MapRewrite maps a rewrite of the unit's Text (a redaction) onto edits of

@@ -284,6 +284,7 @@ func (x *extraction) responsesMessage(item *node, path string) error {
 	contentPath := pointer(path, "content")
 	u := x.open(contentPath, wholeString, guardrails.Segment{Role: role})
 	u.adjacent = true
+	u.Developer = x.str(item.get("role")) == "developer"
 	content := item.get("content")
 	switch {
 	case x.isNull(content):

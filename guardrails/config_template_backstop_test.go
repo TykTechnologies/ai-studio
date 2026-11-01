@@ -3,6 +3,7 @@ package guardrails
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"testing"
 )
 
@@ -35,6 +36,46 @@ func TestNormalizeTemplateBackstop(t *testing.T) {
 	}
 	if _, ok := m["template_backstop"]; ok {
 		t.Errorf("an unset template_backstop is written: %v", m)
+	}
+}
+
+// template_backstop_min_score is 0 to 1, 0.9 when unset, and stays unset in
+// the stored config when not given.
+func TestNormalizeTemplateBackstopMinScore(t *testing.T) {
+	base := Config{Provider: ProviderBuiltin, Detectors: []DetectorConfig{{Name: CategoryInjection}}, OnDetect: ActionBlock}
+	if got := base.BackstopMinScore(); got != 0.9 {
+		t.Errorf("unset min score = %v, want 0.9", got)
+	}
+	for _, v := range []float64{0, 0.5, 1} {
+		c := base
+		c.TemplateBackstopMinScore = &v
+		got, err := Normalize(c, false)
+		if err != nil {
+			t.Fatalf("%v: %v", v, err)
+		}
+		if got.BackstopMinScore() != v {
+			t.Errorf("%v is read as %v", v, got.BackstopMinScore())
+		}
+	}
+	for _, v := range []float64{-0.1, 1.01, math.NaN()} {
+		c := base
+		c.TemplateBackstopMinScore = &v
+		if _, err := Normalize(c, false); !errors.Is(err, ErrInvalidConfig) {
+			t.Errorf("%v: err %v, want ErrInvalidConfig", v, err)
+		}
+	}
+	m, err := base.ToMap()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := m["template_backstop_min_score"]; ok {
+		t.Errorf("an unset template_backstop_min_score is written: %v", m)
+	}
+
+	// On the wire it is absent unless the backstop was forced.
+	b, _ := json.Marshal(SegmentTemplate{ID: "t", Version: 1, FullText: "f", Backstop: BackstopEnforce, BackstopMinScore: 0.9})
+	if want := `{"id":"t","version":1,"full_text":"f","exempt":null,"backstop":"enforce","backstop_min_score":0.9}`; string(b) != want {
+		t.Errorf("forced template = %s\nwant %s", b, want)
 	}
 }
 

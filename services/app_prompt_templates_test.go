@@ -10,6 +10,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails/templates"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -242,4 +243,34 @@ func TestAppPromptTemplates_ErrorsAreDistinct(t *testing.T) {
 	_, err := svc.CreateAppPromptTemplate(appID, 1, PromptTemplateSpec{Name: strings.Repeat("a", 200), Placement: &templates.Placement{Role: "user"}})
 	assert.True(t, errors.Is(err, ErrInvalidPromptTemplate))
 	assert.False(t, errors.Is(err, ErrPromptTemplateConflict))
+}
+
+// Every template change announces itself: the approved templates travel in
+// the edge snapshot, and the control server recomputes the edges' checksum
+// on this topic.
+func TestAppPromptTemplates_EmitChangeEvents(t *testing.T) {
+	svc, appID := setupPromptTemplateService(t)
+	bus := eventbridge.NewBus()
+	svc.SystemEvents = NewSystemEventEmitter(bus, "test")
+	assert.Equal(t, "system.app.prompt_templates.changed", TopicAppPromptTemplatesChanged)
+
+	collector := NewTestEventCollector()
+	collector.Expect(4)
+	sub := bus.Subscribe(TopicAppPromptTemplatesChanged, collector.Handler())
+	defer bus.Unsubscribe(sub)
+
+	tpl, err := svc.CreateAppPromptTemplate(appID, 1, prReviewSpec("pr-review"))
+	require.NoError(t, err)
+	_, err = svc.ApproveAppPromptTemplate(appID, tpl.ID, 1)
+	require.NoError(t, err)
+	_, err = svc.RetireAppPromptTemplate(appID, tpl.ID)
+	require.NoError(t, err)
+	require.NoError(t, svc.DeleteAppPromptTemplate(appID, tpl.ID))
+
+	require.True(t, collector.WaitWithTimeout(2*time.Second))
+	for _, ev := range collector.GetEvents() {
+		payload := parseEventPayload(t, ev)
+		assert.Equal(t, "app", payload.ObjectType)
+		assert.Equal(t, appID, payload.ObjectID)
+	}
 }

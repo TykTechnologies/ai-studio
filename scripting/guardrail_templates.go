@@ -3,12 +3,16 @@ package scripting
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strconv"
+	"sync"
 	"sync/atomic"
+	"time"
 	"unicode/utf8"
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
+	"github.com/TykTechnologies/midsommar/v2/guardrails/segments"
 	"github.com/TykTechnologies/midsommar/v2/guardrails/templates"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
@@ -68,6 +72,10 @@ const (
 	templateMiss    = "miss"
 	templateMimicry = "mimicry"
 	templateOverCap = "over_cap"
+	// templateUnhandled: a provider that reads templates was sent one and
+	// did not acknowledge running its backstop; the backstop then ran as a
+	// second call.
+	templateUnhandled = "backstop_unhandled"
 )
 
 // templatePlan is how a request's segments were matched against the app's
@@ -93,6 +101,40 @@ type templatedSegment struct {
 	// says (off included). Under a filter whose action is log, enforcing
 	// still only logs.
 	backstop string
+	// minScore, when set, is the lowest score a backstop finding needs to
+	// be enforced: the gateway forced enforce on a filter set to off or log
+	// (over the cap). Findings below it follow the filter's own mode.
+	minScore float64
+	// fullText is the text the template matched and the backstop scores:
+	// the message, or for a message in several text blocks the blocks
+	// joined with nothing between them (the segment's text joins them with
+	// a separator).
+	fullText string
+	// view is the detection-only view of the blocks joined (selection
+	// viewOf) scored as its own residual while the scan runs, and
+	// viewText its text; view is -1 for a message in one block.
+	view     int
+	viewText string
+}
+
+// forceBackstop enforces the backstop of a match over the exemption cap.
+// On a filter that does not enforce it itself, only findings scoring at
+// least the filter's template_backstop_min_score are enforced (modeFor).
+func (ts *templatedSegment) forceBackstop(cfg guardrails.Config) {
+	if ts.backstop != guardrails.BackstopEnforce {
+		ts.minScore = cfg.BackstopMinScore()
+	}
+	ts.backstop = guardrails.BackstopEnforce
+}
+
+// modeFor is the backstop mode for finding f of this message: under a
+// forced enforce, a finding scoring below minScore follows the filter's
+// own mode (filterMode). A finding without a score (0) always acts.
+func (ts *templatedSegment) modeFor(f guardrails.Finding, filterMode string) string {
+	if ts.minScore > 0 && f.Score > 0 && f.Score < ts.minScore {
+		return filterMode
+	}
+	return ts.backstop
 }
 
 // templateRef is what a compliance event says of a segment's template.
@@ -109,6 +151,9 @@ func (p *templatePlan) templateRef(si int) map[string]any {
 		if ts.match.OverCap {
 			signals = append(signals, "template.over_cap")
 			ref["backstop"] = "enforced"
+			if ts.minScore > 0 {
+				ref["backstop_min_score"] = ts.minScore
+			}
 		}
 		if signals != nil {
 			ref["signals"] = signals
@@ -165,18 +210,21 @@ func planTemplates(input *ScriptInput, sel *selection, cfg guardrails.Config, ca
 	if len(ts) == 0 {
 		return nil
 	}
+	// The caller's X-Tyk-Prompt-Template hint only orders the search; it
+	// cannot make a template match or exempt more (templates.PreferHinted).
+	ts = templates.PreferHinted(ts, templates.HintFrom(ctx))
 	first, last := sel.roleBounds(input)
 	plan := &templatePlan{matched: map[int]*templatedSegment{}, missed: map[int]bool{}, mimicry: map[int]bool{}, backstop: cfg.Backstop()}
 	fits := false
 	for si := range sel.segments {
-		msgIndex, ok := sel.templateCandidate(input, si)
+		cand, ok := sel.templateCandidate(input, si)
 		if !ok {
 			continue
 		}
 		seg := &sel.segments[si]
 		out := templates.MatchMessage(ts, templates.Message{
-			Role: seg.Role, Text: seg.Text,
-			First: msgIndex == first[seg.Role], Last: msgIndex == last[seg.Role],
+			Role: cand.role, Text: cand.text,
+			First: cand.message == first[cand.role], Last: cand.message == last[cand.role],
 		})
 		if !out.Fits {
 			continue
@@ -194,9 +242,9 @@ func planTemplates(input *ScriptInput, sel *selection, cfg guardrails.Config, ca
 		src.Matched(m.Template)
 		metrics.RecordGuardrailTemplate(ctx, cfg.Provider, templateHit)
 		metrics.RecordGuardrailTemplateExempt(ctx, cfg.Provider, m.ExemptShare())
-		matched := &templatedSegment{match: m, residual: templates.NewResidual(seg.Text, m.Exempt), backstop: plan.backstop}
+		matched := &templatedSegment{match: m, residual: templates.NewResidual(seg.Text, cand.inSegment(m.Exempt)), backstop: plan.backstop, fullText: cand.text, view: -1}
 		if m.OverCap {
-			matched.backstop = guardrails.BackstopEnforce
+			matched.forceBackstop(cfg)
 			metrics.RecordGuardrailTemplate(ctx, cfg.Provider, templateOverCap)
 		}
 		plan.matched[si] = matched
@@ -208,7 +256,8 @@ func planTemplates(input *ScriptInput, sel *selection, cfg guardrails.Config, ca
 			exempt[i] = guardrails.Span{Start: e.Start, End: e.End}
 		}
 		seg.Text = matched.residual.Text
-		seg.Template = &guardrails.SegmentTemplate{ID: m.Template.Name, Version: m.Template.Version, FullText: matched.residual.Original, Exempt: exempt, Backstop: matched.backstop}
+		sel.residualView(cand, matched)
+		seg.Template = &guardrails.SegmentTemplate{ID: m.Template.Name, Version: m.Template.Version, FullText: cand.text, Exempt: exempt, Backstop: matched.backstop, BackstopMinScore: matched.minScore}
 		matched.inCall = caps.Templates && (pieceMax <= 0 || utf8.RuneCountInString(seg.Text) <= pieceMax)
 	}
 	if !fits {
@@ -251,38 +300,125 @@ func (sel *selection) roleBounds(input *ScriptInput) (first, last map[string]int
 	return first, last
 }
 
-// templateCandidate reports whether the segment at si is a message a
-// template may match, and its message position. Only the client's own
-// system and user text held in one block: never a tool result, tool call,
-// tool definition or document, never a detection-only view, and never a
-// message whose text the vendor joins from several blocks (the joined text
-// is not what the app sent byte for byte).
-func (sel *selection) templateCandidate(input *ScriptInput, si int) (int, bool) {
-	seg := sel.segments[si]
-	if _, view := sel.viewOf[si]; view || seg.Untrusted() || segmentKind(seg) != guardrails.KindText {
-		return 0, false
+// templateRole is the role a unit has for template placements: an OpenAI
+// developer message (read as user text by the segmenter) is the app's
+// instructions, placed with system messages.
+func templateRole(u segments.Unit) string {
+	if u.Developer {
+		return templates.RoleSystem
 	}
-	if seg.Role != templates.RoleSystem && seg.Role != templates.RoleUser {
-		return 0, false
+	return u.Role
+}
+
+// tplCandidate is a message a template may match.
+type tplCandidate struct {
+	// message is its position, role its role for placements.
+	message int
+	role    string
+	// text is what templates match: the segment's text, or for a message
+	// in several text blocks the blocks joined with nothing between them,
+	// as the app wrote them.
+	text string
+	// For a message in several blocks: where each block starts in text
+	// (joined) and in the segment's text (seg), and the detection-only
+	// view holding text; view is -1 otherwise.
+	joined, seg []int
+	view        int
+}
+
+// inSegment maps exempt ranges of c.text onto the segment's text. For a
+// message in several blocks a range is cut at each block boundary, so no
+// exemption covers the separator between two blocks and a rewrite of the
+// residual still splits back into the blocks.
+func (c tplCandidate) inSegment(exempt []templates.Span) []templates.Span {
+	if c.joined == nil {
+		return exempt
+	}
+	var out []templates.Span
+	for _, e := range exempt {
+		for i, js := range c.joined {
+			je := len(c.text)
+			if i+1 < len(c.joined) {
+				je = c.joined[i+1]
+			}
+			lo, hi := max(e.Start, js), min(e.End, je)
+			if lo < hi {
+				out = append(out, templates.Span{Start: c.seg[i] + lo - js, End: c.seg[i] + hi - js})
+			}
+		}
+	}
+	return out
+}
+
+// residualView scores the joined-blocks view of a matched message in
+// several blocks as its own residual, so the approved constants are not
+// scored there either; restore puts its text back.
+func (sel *selection) residualView(c tplCandidate, ts *templatedSegment) {
+	if c.view < 0 {
+		return
+	}
+	ts.view, ts.viewText = c.view, sel.segments[c.view].Text
+	sel.segments[c.view].Text = templates.NewResidual(c.text, ts.match.Exempt).Text
+}
+
+// templateCandidate reports whether the segment at si is a message a
+// template may match, and what is matched. Only the client's own system and
+// user text (an OpenAI developer message counts as system): never a tool
+// result, tool call, tool definition or document, never a detection-only
+// view. A message the vendor carries in several text blocks (an Anthropic
+// system prompt with cache_control on one block) is matched on its blocks
+// joined with nothing between them; only in request bodies, where the
+// blocks' boundaries are known.
+func (sel *selection) templateCandidate(input *ScriptInput, si int) (tplCandidate, bool) {
+	seg := sel.segments[si]
+	c := tplCandidate{role: seg.Role, text: seg.Text, view: -1}
+	if _, view := sel.viewOf[si]; view || seg.Untrusted() || segmentKind(seg) != guardrails.KindText {
+		return c, false
 	}
 	switch sel.mode {
 	case modeBody:
 		if si >= len(sel.units) {
-			return 0, false
+			return c, false
 		}
 		u := sel.units[si]
-		if u.Undecodable || u.Joined != "" || len(u.Leaves) != 1 || u.Leaves[0].Text != seg.Text {
-			return 0, false
+		c.message, c.role = u.Message, templateRole(u)
+		offsets, ok := u.LeafOffsets()
+		if u.Undecodable || !ok || u.Text != seg.Text {
+			return c, false
 		}
-		return u.Message, true
+		if len(offsets) > 1 {
+			// Blocks the vendor sets side by side; a unit whose leaves are
+			// separate fields has no joined text and is never matched.
+			if u.Joined == "" {
+				return c, false
+			}
+			c.text, c.seg = u.Joined, offsets
+			at := 0
+			for _, l := range u.Leaves {
+				c.joined = append(c.joined, at)
+				at += len(l.Text)
+			}
+			for v, parent := range sel.viewOf {
+				if parent == si && sel.segments[v].Text == u.Joined {
+					c.view = v
+				}
+			}
+		}
 	case modeMessages:
 		i := seg.Index
 		if i < 0 || i >= len(input.Messages) || textParts(input.Messages[i]) != 1 {
-			return 0, false
+			return c, false
 		}
-		return i, true
+		c.message = i
+	default:
+		if si != 0 {
+			return c, false
+		}
 	}
-	return 0, si == 0
+	if c.role != templates.RoleSystem && c.role != templates.RoleUser {
+		return c, false
+	}
+	return c, true
 }
 
 // textParts counts a message's text parts.
@@ -332,6 +468,9 @@ func (p *templatePlan) restore(sel *selection, res *scanResult) []guardrails.Fin
 			continue
 		}
 		seg.Text, seg.Template = ts.residual.Original, nil
+		if ts.view >= 0 {
+			sel.segments[ts.view].Text = ts.viewText
+		}
 		if r, ok := res.rewritten[si]; ok {
 			if orig, ok := ts.residual.Restore(r); ok {
 				res.rewritten[si] = orig
@@ -345,6 +484,44 @@ func (p *templatePlan) restore(sel *selection, res *scanResult) []guardrails.Fin
 		}
 	}
 	return backstop
+}
+
+// acknowledge keeps the in-call backstop only for the segments the provider
+// said it ran it on (Verdict.TemplatesHandled). Any other segment sent with
+// a template gets the second classification instead, and its Backstop marks
+// count as ordinary findings: a classifier that does not read templates
+// scores the residual only, and its backstop must not vanish unnoticed.
+func (p *templatePlan) acknowledge(job *scanJob, filterName string, res *scanResult) {
+	unhandled := 0
+	for si, ts := range p.matched {
+		if !ts.inCall || res.templatesHandled[si] {
+			continue
+		}
+		if _, skipped := res.unscanned[si]; skipped {
+			continue // never scanned: nothing to acknowledge
+		}
+		ts.inCall = false
+		unhandled++
+		metrics.RecordGuardrailTemplate(job.ctx, job.cfg.Provider, templateUnhandled)
+	}
+	if unhandled > 0 && unhandledLogDue(filterName) {
+		slog.Warn("guardrail provider did not acknowledge the trusted prompt template it was sent; running the template backstop as a second call",
+			"filter", filterName, "provider", job.cfg.Provider, "segments", unhandled)
+	}
+}
+
+// unhandledLogged is when each filter last logged an unacknowledged
+// template, so a misconfigured classifier logs once a minute, not per
+// request (the metric counts every one).
+var unhandledLogged sync.Map // filter name -> time.Time
+
+func unhandledLogDue(filterName string) bool {
+	now := time.Now()
+	if last, ok := unhandledLogged.Load(filterName); ok && now.Sub(last.(time.Time)) < time.Minute {
+		return false
+	}
+	unhandledLogged.Store(filterName, now)
+	return true
 }
 
 // needsSecondBackstop lists the matched segments whose backstop did not run
@@ -363,11 +540,12 @@ func (p *templatePlan) needsSecondBackstop(sel *selection) []int {
 // runBackstop classifies the full text of the matched segments that need
 // it, as a run of its own (no rewrite), and returns its findings on sel's
 // positions, with what it could not scan.
-func (g *guardrailRunner) runBackstop(job *scanJob, sel *selection, segs []int, p *preparedGuardrail, input *ScriptInput) scanResult {
+func (g *guardrailRunner) runBackstop(job *scanJob, sel *selection, plan *templatePlan, segs []int, p *preparedGuardrail, input *ScriptInput) scanResult {
 	texts := make([]guardrails.Segment, len(segs))
 	for k, si := range segs {
 		s := sel.segments[si]
 		s.Template = nil
+		s.Text = plan.matched[si].fullText
 		texts[k] = s
 	}
 	bj := &scanJob{
@@ -443,6 +621,9 @@ func backstopOnly(res scanResult, backstop []guardrails.Finding) []guardrails.Fi
 // unscanned text join the run's; under log they are returned as events,
 // action log, and change nothing.
 func (g *guardrailRunner) finishTemplates(plan *templatePlan, job *scanJob, sel *selection, res *scanResult, p *preparedGuardrail, input *ScriptInput) []ComplianceEventOutput {
+	if res.err == nil {
+		plan.acknowledge(job, g.filter.Name, res)
+	}
 	backstop := plan.restore(sel, res)
 	cfg := job.cfg
 	ec := evidenceContext{requestID: requestIDOf(input), clientRequestID: clientRequestIDOf(input), excerptChars: job.excerptChars, excerptStatus: excerptStatus(cfg, input), templates: plan}
@@ -457,7 +638,7 @@ func (g *guardrailRunner) finishTemplates(plan *templatePlan, job *scanJob, sel 
 		return ok && ts.backstop == guardrails.BackstopEnforce
 	}
 	if segs := plan.needsSecondBackstop(sel); len(segs) > 0 {
-		br := g.runBackstop(job, sel, segs, p, input)
+		br := g.runBackstop(job, sel, plan, segs, p, input)
 		res.latency += br.latency
 		backstop = append(backstop, br.findings...)
 		// Under enforce, what the backstop could not scan, and its failure,
@@ -477,10 +658,15 @@ func (g *guardrailRunner) finishTemplates(plan *templatePlan, job *scanJob, sel 
 	}
 	var enforce, log []guardrails.Finding
 	for _, f := range backstop {
-		switch ts, ok := plan.matched[f.SegmentIndex]; {
-		case !ok || ts.backstop == guardrails.BackstopOff:
-			// A provider that reads templates was told off: nothing to do.
-		case ts.backstop == guardrails.BackstopEnforce:
+		ts, ok := plan.matched[f.SegmentIndex]
+		if !ok {
+			continue
+		}
+		switch ts.modeFor(f, plan.backstop) {
+		case guardrails.BackstopOff:
+			// A provider that reads templates was told off, or the finding
+			// is below a forced backstop's minimum on a filter set to off.
+		case guardrails.BackstopEnforce:
 			enforce = append(enforce, f)
 		default:
 			log = append(log, f)

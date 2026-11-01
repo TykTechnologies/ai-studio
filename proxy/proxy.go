@@ -24,6 +24,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/guardrails/segments"
+	"github.com/TykTechnologies/midsommar/v2/guardrails/templates"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace/declared"
 	"github.com/TykTechnologies/midsommar/v2/pkg/decisions"
 	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
@@ -2709,7 +2710,9 @@ func (p *Proxy) runRequestFiltersWith(runners []requestFilterRunner, llm *models
 		Context:    scriptCtx,
 		IsChat:     false,
 		Format:     format,
-		Ctx:        r.Context(),
+		// The caller's X-Tyk-Prompt-Template hint, for the guardrails'
+		// template matching; it only orders the search.
+		Ctx: templates.WithHint(r.Context(), r.Header.Get(templates.HintHeader)),
 		// Shadow guardrails record their events later through this.
 		RecordEvents: scripting.EventRecorder("proxy_request", appID, 0, llm.ID, string(llm.Vendor), modelName),
 	}

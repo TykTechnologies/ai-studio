@@ -43,9 +43,8 @@ const (
 // scores, so the classifier still sees that something stood there.
 const Placeholder = "[app template]"
 
-// Roles a template may be placed on. Only system and user for now: the
-// guardrail segmenter reads an OpenAI developer message as user text, so a
-// developer placement could not be told apart from a user one.
+// Roles a template may be placed on. There is no developer placement: the
+// guardrail pipeline places an OpenAI developer message as system.
 const (
 	RoleSystem = "system"
 	RoleUser   = "user"

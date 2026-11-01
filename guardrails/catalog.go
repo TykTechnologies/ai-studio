@@ -43,6 +43,7 @@ func init() {
 			{Name: "path", Label: "Request path", Description: "For a unix:// endpoint: the HTTP path and query requested over the socket. Default /.", Example: "/v1/classify"},
 			{Name: "api_key", Label: "API key", Description: "Sent as Authorization: Bearer. Use a $SECRET/ reference.", Secret: true, Example: "$SECRET/CLASSIFIER_KEY"},
 			{Name: "auth_header", Label: "Auth header", Description: "Header name to carry the key in when it is not Authorization: Bearer.", Example: "X-API-Key"},
+			{Name: "templates", Label: "Reads trusted prompt templates", Description: "true only when the service reads segment.template and acknowledges it in templates_handled: it then runs the template backstop in the same call. Unset or false, the gateway sends the residual alone and runs the backstop as a second call.", Example: "true"},
 		},
 		DocsURL: "/docs/guardrails#http",
 	})

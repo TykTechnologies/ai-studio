@@ -115,6 +115,27 @@ func ListAppPromptTemplates(db *gorm.DB, appID uint, status string) ([]AppPrompt
 	return out, err
 }
 
+// ListApprovedPromptTemplatesForApps lists the approved template versions of
+// the apps, by app, name and version (the edge configuration snapshot).
+func ListApprovedPromptTemplatesForApps(db *gorm.DB, appIDs []uint) ([]AppPromptTemplate, error) {
+	var out []AppPromptTemplate
+	if len(appIDs) == 0 {
+		return out, nil
+	}
+	err := db.Where("app_id IN ? AND status = ?", appIDs, templates.StatusApproved).Order("app_id, name, version").Find(&out).Error
+	return out, err
+}
+
+// TouchApprovedAppPromptTemplates records a match of each approved template
+// among ids (edge gateways report theirs in heartbeats). Templates that are
+// no longer approved are left alone.
+func TouchApprovedAppPromptTemplates(db *gorm.DB, ids []uint, at time.Time) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	return db.Model(&AppPromptTemplate{}).Where("id IN ? AND status = ?", ids, templates.StatusApproved).UpdateColumn("last_matched_at", at).Error
+}
+
 // CountApprovedAppPromptTemplates counts an app's approved templates.
 func CountApprovedAppPromptTemplates(db *gorm.DB, appID uint) (int64, error) {
 	var n int64

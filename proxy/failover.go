@@ -417,13 +417,15 @@ func stripLoopbackMarkers(h http.Header) {
 
 // stripFailoverHeaders removes the loopback markers, the request ids the
 // loopback hop carries (or a client sent) and the client's instructions to
-// gateway plugins (X-Tyk-Compression) before a request leaves for the
-// vendor. The caller's own X-Request-ID is passed through.
+// gateway plugins (X-Tyk-Compression) and guardrails (X-Tyk-Prompt-Template)
+// before a request leaves for the vendor. The caller's own X-Request-ID is
+// passed through.
 func stripFailoverHeaders(h http.Header) {
 	stripLoopbackMarkers(h)
 	h.Del(requestid.Header)
 	h.Del(hdrInternalClientRequestID)
 	stripCompressionHeaders(h)
+	stripPromptTemplateHint(h)
 }
 
 // applyFailoverMarker stamps a ProxyLog with the markers from ctx, if any:

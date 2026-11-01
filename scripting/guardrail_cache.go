@@ -61,7 +61,10 @@ type cachedVerdict struct {
 	findings  []guardrails.Finding
 	rewrite   string
 	rewritten bool
-	at        time.Time
+	// templateHandled: the provider acknowledged running the segment's
+	// template backstop in its call (Verdict.TemplatesHandled).
+	templateHandled bool
+	at              time.Time
 }
 
 // weight approximates the memory an entry holds.
@@ -203,6 +206,11 @@ func (k *verdictKeyer) key(s guardrails.Segment) string {
 		for _, field := range []string{"template", t.ID, strconv.Itoa(t.Version), t.Backstop, t.FullText} {
 			writeField(mac, field)
 		}
+		if t.BackstopMinScore > 0 {
+			// A provider may drop backstop findings below it.
+			writeField(mac, "backstop_min_score")
+			writeField(mac, strconv.FormatFloat(t.BackstopMinScore, 'g', -1, 64))
+		}
 	}
 	return string(mac.Sum(nil))
 }
@@ -249,6 +257,7 @@ func (k *verdictKeyer) store(s guardrails.Segment, i int, res scanResult) {
 		}
 	}
 	v.rewrite, v.rewritten = res.rewritten[i]
+	v.templateHandled = res.templatesHandled[i]
 	key, ok := k.keys[i]
 	if !ok {
 		key = k.key(s)
