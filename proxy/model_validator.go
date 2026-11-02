@@ -122,6 +122,10 @@ func (p *Proxy) modelValidationMiddleware(next http.Handler) http.Handler {
 		r.Body.Close()
 		r.Body = io.NopCloser(strings.NewReader(string(body)))
 
+		// The extractors keep the body fields they decode, for the exchange
+		// metadata (withExchangeMetadata), so it does not parse the body again.
+		r, _ = withRequestFields(r)
+
 		extractor, ok := validator.extractors[strings.ToLower(string(llm.Vendor))]
 		if !ok {
 			respondWithError(w, http.StatusBadRequest, "no model extractor for this vendor", nil, false)
@@ -157,6 +161,7 @@ func OpenAIModelExtractor(r *http.Request, body []byte) (string, error) {
 	if err := json.Unmarshal(body, &req); err != nil {
 		return "", &BadRequestError{"invalid JSON body"}
 	}
+	keepRequestFields(r, body, req)
 
 	modelInterface, ok := req["model"]
 	if !ok {
@@ -176,6 +181,15 @@ func OpenAIModelExtractor(r *http.Request, body []byte) (string, error) {
 	return model, nil
 }
 
+// keepRequestFields keeps the "model" and "stream" fields of the body an
+// extractor decoded into req on r's requestFields (modelValidationMiddleware
+// puts one there), for the exchange metadata.
+func keepRequestFields(r *http.Request, body []byte, req map[string]any) {
+	if r != nil {
+		requestFieldsOf(r.Context()).keepObject(body, req)
+	}
+}
+
 func AzureModelExtractor(r *http.Request, body []byte) (string, error) {
 	// Extract from URL path
 	parts := strings.Split(r.URL.Path, "/")
@@ -190,6 +204,7 @@ func AnthropicModelExtractor(r *http.Request, body []byte) (string, error) {
 	if err := json.Unmarshal(body, &req); err != nil {
 		return "", &BadRequestError{"invalid JSON body"}
 	}
+	keepRequestFields(r, body, req)
 
 	modelInterface, ok := req["model"]
 	if !ok {
@@ -219,6 +234,7 @@ func GoogleAIModelExtractor(r *http.Request, body []byte) (string, error) {
 	if err := json.Unmarshal(body, &req); err != nil {
 		return "", &BadRequestError{"invalid JSON body"}
 	}
+	keepRequestFields(r, body, req)
 
 	// Extract from request body
 	if modelInterface, ok := req["model"]; ok {
@@ -254,6 +270,7 @@ func VertexModelExtractor(r *http.Request, body []byte) (string, error) {
 	if err := json.Unmarshal(body, &req); err != nil {
 		return "", &BadRequestError{"invalid JSON body"}
 	}
+	keepRequestFields(r, body, req)
 
 	if modelInterface, ok := req["model"]; ok {
 		if model, ok := modelInterface.(string); ok {
@@ -278,6 +295,7 @@ func HuggingFaceModelExtractor(r *http.Request, body []byte) (string, error) {
 	if err := json.Unmarshal(body, &req); err != nil {
 		return "", &BadRequestError{"invalid JSON body"}
 	}
+	keepRequestFields(r, body, req)
 
 	// Try "model" field
 	if modelInterface, ok := req["model"]; ok {
