@@ -4,6 +4,7 @@ import "@testing-library/jest-dom";
 import { ThemeProvider } from "@mui/material/styles";
 import testTheme from "../../utils/testTheme";
 import GuardrailConfigForm, {
+  backstopMinScoreError,
   budgetErrors,
   effectiveToolAction,
   effectiveToolCallAction,
@@ -47,6 +48,19 @@ const providers = [
     connection_fields: [
       { name: "endpoint", label: "Endpoint", required: true, example: "https://x" },
       { name: "api_key", label: "Subscription key", required: true, secret: true },
+    ],
+  },
+  {
+    name: "http",
+    display_name: "HTTP classifier",
+    description: "Your own service.",
+    redacts: true,
+    available: true,
+    open_detectors: true,
+    detectors: [],
+    connection_fields: [
+      { name: "endpoint", label: "Endpoint URL", required: true, example: "https://x" },
+      { name: "templates", label: "Reads trusted prompt templates", description: "Runs the backstop itself.", boolean: true },
     ],
   },
 ];
@@ -497,5 +511,87 @@ describe("guardrail config helpers", () => {
     expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ evidence: { share_with_app_owners: true } }));
     fireEvent.click(screen.getByTestId("guardrail-share-with-owners"));
     expect(onChange.mock.calls[onChange.mock.calls.length - 1][0].evidence).toBeUndefined();
+  });
+});
+
+describe("GuardrailConfigForm template backstop (53e.31)", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    apiClient.get.mockResolvedValue({ data: providers });
+  });
+
+  const rendered = async (initial, props = {}) => {
+    const onChange = jest.fn();
+    render(<Harness initial={{ ...emptyGuardrailConfig(), ...initial }} onChange={onChange} {...props} />);
+    await screen.findByTestId("guardrail-tool-calls-scan");
+    return onChange;
+  };
+
+  it.each(["builtin", "azure_content_safety", "http"])("is offered on a %s request filter, defaulting to log", async (provider) => {
+    await rendered({ provider });
+    expect(screen.getByLabelText(/template backstop/i)).toHaveTextContent("Log (default)");
+    expect(screen.getByTestId("guardrail-template-backstop-min-score")).toHaveAttribute("placeholder", "0.9");
+  });
+
+  it("is not offered on response filters", async () => {
+    await rendered({ provider: "builtin" }, { responseFilter: true });
+    expect(screen.queryByTestId("guardrail-template-backstop")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("guardrail-template-backstop-min-score")).not.toBeInTheDocument();
+  });
+
+  it("stores the mode and the minimum score, and clears them back to the defaults", async () => {
+    const onChange = await rendered({ provider: "builtin" });
+    fireEvent.mouseDown(screen.getByLabelText(/template backstop/i));
+    fireEvent.click(await screen.findByRole("option", { name: /^Off/ }));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ template_backstop: "off" }));
+    await waitFor(() => expect(screen.queryByRole("listbox")).not.toBeInTheDocument());
+
+    const minScore = screen.getByTestId("guardrail-template-backstop-min-score");
+    fireEvent.change(minScore, { target: { value: "0.7" } });
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ template_backstop: "off", template_backstop_min_score: 0.7 }));
+    fireEvent.change(minScore, { target: { value: "" } });
+    expect(onChange.mock.calls.at(-1)[0].template_backstop_min_score).toBeUndefined();
+
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: /template backstop/i }));
+    fireEvent.click(await screen.findByRole("option", { name: /Log \(default\)/ }));
+    expect(onChange.mock.calls.at(-1)[0].template_backstop).toBeUndefined();
+  });
+
+  it("keeps stored values on edit, and disables the minimum under enforce", async () => {
+    const onChange = await rendered({ provider: "builtin", template_backstop: "enforce", template_backstop_min_score: 0.7 });
+    expect(screen.getByLabelText(/template backstop/i)).toHaveTextContent(/^Enforce/);
+    const minScore = screen.getByTestId("guardrail-template-backstop-min-score");
+    expect(minScore).toHaveValue(0.7);
+    expect(minScore).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/timeout/i), { target: { value: "3000" } });
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ template_backstop: "enforce", template_backstop_min_score: 0.7, timeout_ms: 3000 })
+    );
+  });
+
+  it("flags a minimum score outside 0..1", async () => {
+    await rendered({ provider: "builtin", template_backstop_min_score: 1.5 });
+    expect(screen.getByText("Between 0 and 1")).toBeInTheDocument();
+    expect(backstopMinScoreError({ template_backstop_min_score: 1.5 })).toBe("Between 0 and 1");
+    expect(backstopMinScoreError({ template_backstop_min_score: 0 })).toBe("");
+    expect(backstopMinScoreError({})).toBe("");
+  });
+
+  it("shows the HTTP classifier's template setting as a checkbox storing \"true\"", async () => {
+    const onChange = await rendered({ provider: "http", connection: { endpoint: "https://c" } });
+    const box = screen.getByTestId("guardrail-connection-templates");
+    expect(box).toHaveAttribute("type", "checkbox");
+    expect(box).not.toBeChecked();
+    fireEvent.click(box);
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ connection: { endpoint: "https://c", templates: "true" } })
+    );
+    fireEvent.click(box);
+    expect(onChange.mock.calls.at(-1)[0].connection).toEqual({ endpoint: "https://c" });
+  });
+
+  it("shows a stored ParseBool-true value as checked", async () => {
+    await rendered({ provider: "http", connection: { endpoint: "https://c", templates: "1" } });
+    expect(screen.getByTestId("guardrail-connection-templates")).toBeChecked();
   });
 });

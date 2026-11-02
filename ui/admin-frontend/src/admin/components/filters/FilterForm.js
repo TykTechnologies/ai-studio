@@ -33,7 +33,7 @@ import "prismjs/themes/prism-tomorrow.css";
 import highlightScript from "./highlightScript";
 import ScriptTemplateSelector from "./ScriptTemplateSelector";
 import ScriptTestPanel from "./ScriptTestPanel";
-import GuardrailConfigForm, { emptyGuardrailConfig, budgetErrors } from "./GuardrailConfigForm";
+import GuardrailConfigForm, { emptyGuardrailConfig, budgetErrors, backstopMinScoreError } from "./GuardrailConfigForm";
 
 export const FILTER_KIND_SCRIPT = "script";
 export const FILTER_KIND_GUARDRAIL = "guardrail";
@@ -180,6 +180,9 @@ const FilterForm = () => {
       if (!config.detectors || config.detectors.length === 0) newErrors.detectors = "Enable at least one detector";
       if (!filter.response_filter && Object.keys(budgetErrors(config)).length > 0) {
         newErrors.budget = "Fix the budget values under Advanced";
+      }
+      if (!filter.response_filter && backstopMinScoreError(config)) {
+        newErrors.template_backstop_min_score = backstopMinScoreError(config);
       }
     } else if (!filter.script.trim()) {
       newErrors.script = "Script is required";

@@ -110,3 +110,21 @@ func TestTemplateWireFieldsAreAdditive(t *testing.T) {
 		t.Errorf("a template-aware provider gets a copy of the template: %+v", got.Template)
 	}
 }
+
+// The HTTP classifier's "templates" connection setting is an on/off flag:
+// the catalogue marks it boolean so the admin UI shows a checkbox (53e.31).
+func TestHTTPTemplatesConnectionFieldIsBoolean(t *testing.T) {
+	spec, ok := ProviderSpec(ProviderHTTP)
+	if !ok {
+		t.Fatal("http provider spec not registered")
+	}
+	for _, f := range spec.ConnectionFields {
+		if f.Name == "templates" {
+			if !f.Boolean {
+				t.Error("templates connection field is not marked boolean")
+			}
+			return
+		}
+	}
+	t.Error("http provider has no templates connection field")
+}

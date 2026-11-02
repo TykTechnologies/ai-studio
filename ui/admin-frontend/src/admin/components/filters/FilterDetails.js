@@ -28,7 +28,10 @@ import {
   effectiveToolCallAction,
   scansToolDefinitions,
   effectiveToolDefinitionAction,
+  DEFAULT_BACKSTOP_MIN_SCORE,
 } from "./GuardrailConfigForm";
+
+const BACKSTOP_DISPLAY = { off: "Off", log: "Log", enforce: "Enforce" };
 
 const ACTION_LABELS = { block: "Block", redact: "Redact", quarantine: "Quarantine", log: "Log only" };
 
@@ -162,6 +165,21 @@ const FilterDetails = () => {
               {!attrs.response_filter &&
                 (config.on_detect === "quarantine" || (scansToolResults(config) && effectiveToolAction(config) === "quarantine")) &&
                 row("Quarantine placeholder", config.quarantine?.placeholder || DEFAULT_QUARANTINE_PLACEHOLDER)}
+              {!attrs.response_filter &&
+                row(
+                  "Template backstop",
+                  config.template_backstop
+                    ? BACKSTOP_DISPLAY[config.template_backstop] || config.template_backstop
+                    : `${BACKSTOP_DISPLAY.log} (default)`
+                )}
+              {!attrs.response_filter &&
+                config.template_backstop !== "enforce" &&
+                row(
+                  "Backstop minimum score",
+                  config.template_backstop_min_score !== undefined && config.template_backstop_min_score !== null
+                    ? String(config.template_backstop_min_score)
+                    : `${DEFAULT_BACKSTOP_MIN_SCORE} (default)`
+                )}
               {!attrs.response_filter && config.cache === false && row("Verdict cache", "Off")}
               {config.evidence?.share_with_app_owners &&
                 row("Shown to app owners", "Blocks and changes appear on the app's portal page (reason and request ID, no text)")}
