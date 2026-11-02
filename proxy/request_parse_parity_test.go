@@ -173,3 +173,41 @@ func TestExchangeMetadataFor_ExtractorReusesTheHooksDecode(t *testing.T) {
 	_, err = OpenAIModelExtractor(r, []byte("not json"))
 	assert.Error(t, err)
 }
+
+// On the edge, the post_auth hook decodes a Bedrock OpenAI-compatible body
+// (its path names no model) into a map; BedrockModelExtractor reads
+// "modelId" from that map rather than decode the body again (53e.50), and
+// reads it as its own struct decode does.
+func TestBedrockModelExtractor_ReusesTheHooksDecode(t *testing.T) {
+	const path = "/llm/rest/llm/openai/v1/chat/completions"
+	for _, fields := range []map[string]any{
+		{"modelId": "amazon.nova-pro-v1:0"},
+		{"ModelID": "amazon.nova-pro-v1:0"},
+		{"modelId": 42},
+		{"modelId": nil},
+		{"modelId": ""},
+		{"model": "openai.gpt-oss-20b-1:0"},
+	} {
+		body := parityBody(t, fields)
+		plain := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body))
+		wantID, wantErr := BedrockModelExtractor(plain, body)
+
+		r, _ := ExchangeMetadataFor(httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body)), string(models.BEDROCK), body)
+		mwBody := append([]byte(nil), body...)
+		id, err := BedrockModelExtractor(r, mwBody)
+		assert.Equal(t, wantID, id, "%v", fields)
+		assert.Equal(t, wantErr == nil, err == nil, "%v: %v vs %v", fields, err, wantErr)
+
+		oneParse := testing.AllocsPerRun(20, func() { requestformat.Model("openai", "/v1/chat/completions", mwBody) })
+		got := testing.AllocsPerRun(20, func() { _, _ = BedrockModelExtractor(r, mwBody) })
+		assert.Less(t, got, oneParse, "%v: extractor allocs = %v after the hook decoded the body; one body parse is %v", fields, got, oneParse)
+	}
+
+	// Two keys that match "modelId" but for case: the struct keeps the later
+	// one in the body, which the map cannot tell, so the body is decoded.
+	body := []byte(`{"modelId":"first","MODELID":"second"}`)
+	r, _ := ExchangeMetadataFor(httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body)), string(models.BEDROCK), body)
+	id, err := BedrockModelExtractor(r, body)
+	require.NoError(t, err)
+	assert.Equal(t, "second", id)
+}

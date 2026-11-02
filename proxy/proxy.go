@@ -1118,7 +1118,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	// A native chain hook (OpenAI POST /v1/responses) verifies the resource
 	// IDs the request names and wraps the ones the response hands out.
 	chain := p.nativeChainFor(r, llm, app)
-	if chain != nil && !chain.prepare(w, r) {
+	if chain != nil && !chain.prepare(w, r, reqBody) {
 		respStatus = chain.c.status
 		status, body := chain.c.status, chain.c.respBody
 		p.goAnalyzeFor(r, func() { p.analyzeResponse(llm, app, status, body, reqBody, r) })
@@ -2018,7 +2018,7 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	}
 	// See the non-streaming handler.
 	chain := p.nativeChainFor(r, llm, app)
-	if chain != nil && !chain.prepare(w, r) {
+	if chain != nil && !chain.prepare(w, r, reqBody) {
 		respStatus = chain.c.status
 		status, body := chain.c.status, chain.c.respBody
 		p.goAnalyzeFor(r, func() {

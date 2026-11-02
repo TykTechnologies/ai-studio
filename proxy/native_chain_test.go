@@ -648,6 +648,13 @@ func TestAnthropicMessagesChain_RefusesDuplicateKeys(t *testing.T) {
 		"nested exact duplicate text": `{"model":"claude-luna","max_tokens":5,"messages":[{"role":"user",` +
 			`"content":[{"type":"text","text":"ok","text":"evil"}]}]}`,
 		"duplicate in a streamed call": `{"model":"claude-luna","max_tokens":5,"stream":true,"messages":[{"role":"user","content":"a","content":"b"}]}`,
+		// The key check is a byte scanner since 53e.50: escapes, Unicode
+		// folding and an agent-sized body keep it exact.
+		"escaped duplicate model":            `{"model":"claude-luna","\u006dodel":"claude-other","max_tokens":5,"messages":[{"role":"user","content":"hi"}]}`,
+		"long-s variant messages":            `{"model":"claude-luna","max_tokens":5,"messages":[{"role":"user","content":"ok"}],"meſſages":[{"role":"user","content":"evil"}]}`,
+		"kelvin-sign variant in tool_choice": `{"model":"claude-luna","max_tokens":5,"messages":[{"role":"user","content":"hi"}],"tool_choice":{"type":"auto","\u212aind":"x","kind":"y"}}`,
+		"duplicate after 256 KB of content": `{"model":"claude-luna","max_tokens":5,"messages":[{"role":"user","content":"` +
+			strings.Repeat("lorem ipsum \\u00e9 ", 256*1024/18) + `"}],"model":"claude-other"}`,
 	}
 	for name, body := range refused {
 		t.Run(name, func(t *testing.T) {
