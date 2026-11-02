@@ -1,112 +1,26 @@
 package nativeapi
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"strings"
 	"testing"
 )
 
-// checkJSONKeysDecoder is CheckJSONKeys as it was before 53e.50, on
-// json.Decoder.Token: the reference the byte scanner is held to.
-func checkJSONKeysDecoder(b []byte, foldAt ...string) error {
-	fold := make(map[string]bool, len(foldAt))
-	for _, p := range foldAt {
-		fold[p] = true
-	}
-	dec := json.NewDecoder(bytes.NewReader(b))
-	dec.UseNumber()
-	// One frame per open object or array.
-	type frame struct {
-		path    string
-		isArray bool
-		exact   map[string]bool
-		folded  map[string]bool // nil: case variants are not checked here
-		key     string          // the key whose value comes next
-	}
-	var stack []*frame
-	childPath := func() string {
-		if len(stack) == 0 {
-			return ""
-		}
-		f := stack[len(stack)-1]
-		if f.isArray {
-			return f.path + "[]"
-		}
-		if f.path == "" {
-			return f.key
-		}
-		return f.path + "." + f.key
-	}
-	started := false
-	for {
-		if started && len(stack) == 0 {
-			if _, err := dec.Token(); err != io.EOF {
-				return errors.New("trailing data after JSON value")
-			}
-			return nil
-		}
-		// In an object, a key comes before every value.
-		if len(stack) > 0 && !stack[len(stack)-1].isArray && dec.More() {
-			tok, err := dec.Token()
-			if err != nil {
-				return err
-			}
-			key, ok := tok.(string)
-			if !ok {
-				return errors.New("expected an object key")
-			}
-			f := stack[len(stack)-1]
-			if f.exact[key] {
-				return fmt.Errorf("%w %q", ErrDuplicateKey, key)
-			}
-			f.exact[key] = true
-			if f.folded != nil {
-				folded := FoldKey(key)
-				if f.folded[folded] {
-					return fmt.Errorf("%w %q", ErrDuplicateKey, key)
-				}
-				f.folded[folded] = true
-			}
-			f.key = key
-		}
-		tok, err := dec.Token()
-		if err != nil {
-			if err == io.EOF && !started {
-				return errors.New("empty JSON body")
-			}
-			return err
-		}
-		started = true
-		if d, ok := tok.(json.Delim); ok {
-			switch d {
-			case '{':
-				p := childPath()
-				f := &frame{path: p, exact: map[string]bool{}}
-				if fold[p] {
-					f.folded = map[string]bool{}
-				}
-				stack = append(stack, f)
-			case '[':
-				stack = append(stack, &frame{path: childPath(), isArray: true})
-			case '}', ']':
-				stack = stack[:len(stack)-1]
-			}
-		}
-	}
-}
-
 // sameVerdict reports whether the scanner and the decoder agree on b: both
-// accept it, or both refuse it, and a duplicate key is refused as one by both.
+// accept it, or both refuse it with the same error.
 func sameVerdict(b []byte, foldAt ...string) (bool, error, error) {
 	got, want := CheckJSONKeys(b, foldAt...), checkJSONKeysDecoder(b, foldAt...)
 	if (got == nil) != (want == nil) {
 		return false, got, want
 	}
-	return errors.Is(got, ErrDuplicateKey) == errors.Is(want, ErrDuplicateKey), got, want
+	if got == nil {
+		return true, got, want
+	}
+	// The same text too: a malformed body's 400 keeps encoding/json's
+	// wording (53e.56), a duplicate names the same key.
+	return errors.Is(got, ErrDuplicateKey) == errors.Is(want, ErrDuplicateKey) && got.Error() == want.Error(), got, want
 }
 
 var keyCheckCorpus = []string{
@@ -147,10 +61,20 @@ var (
 // TestCheckJSONKeys_MatchesDecoder: the byte scanner accepts and refuses
 // what the json.Decoder version did, duplicates as duplicates.
 func TestCheckJSONKeys_MatchesDecoder(t *testing.T) {
-	for _, b := range keyCheckCorpus {
+	corpus := keyCheckCorpus
+	// The json.Decoder version had no nesting limit (53e.55): neither has
+	// CheckJSONKeys.
+	for _, depth := range []int{10000, 10001, 20000} {
+		corpus = append(corpus,
+			strings.Repeat("[", depth)+"1"+strings.Repeat("]", depth),
+			strings.Repeat("[", depth-1)+`{"a":1,"a":2}`+strings.Repeat("]", depth-1))
+	}
+	// Malformed bodies keep encoding/json's wording (53e.56).
+	corpus = append(corpus, `{"a":"\x"}`, `{"a":01}`, `{"a":tru}`, `{`, `{"a":"unterminated`, "\x00", `{"a":1]`, `[1}`)
+	for _, b := range corpus {
 		for _, foldAt := range append(keyCheckFoldSets, []string{"a", "a[]", "a[].b.c[]"}) {
 			if ok, got, want := sameVerdict([]byte(b), foldAt...); !ok {
-				t.Errorf("%q foldAt %q: scanner %v, decoder %v", b, foldAt, got, want)
+				t.Errorf("%.80q foldAt %q: scanner %v, decoder %v", b, foldAt, got, want)
 			}
 		}
 	}

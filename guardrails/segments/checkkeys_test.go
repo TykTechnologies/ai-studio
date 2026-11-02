@@ -51,6 +51,15 @@ func TestCheckKeys_MatchesParseTree(t *testing.T) {
 		fmt.Sprintf(`{"model":"m","messages":[{"role":"user","content":"%s"}],"model":"evil"}`, long),
 		fmt.Sprintf(`{"model":"m","messages":[{"role":"user","content":"%s"}],"model":"evil"`, long),
 	}, checkKeysCorpus...)
+	// encoding/json's nesting limit is 10000: deeper is not JSON to
+	// parseTree, a repeated key in it included (53e.55).
+	for _, depth := range []int{9999, 10000, 10001} {
+		corpus = append(corpus,
+			strings.Repeat("[", depth)+"1"+strings.Repeat("]", depth),
+			strings.Repeat("[", depth-1)+`{"a":1,"a":2}`+strings.Repeat("]", depth-1),
+			strings.Repeat(`{"a":`, depth)+"1"+strings.Repeat("}", depth),
+		)
+	}
 	for _, b := range corpus {
 		got, want := CheckKeys([]byte(b)), checkKeysTree([]byte(b))
 		if !sameCheckKeysVerdict(got, want) {

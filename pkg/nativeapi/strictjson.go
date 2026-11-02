@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"unicode"
 )
@@ -50,14 +51,22 @@ func CheckJSONKeys(b []byte, foldAt ...string) error {
 	if s.i == len(b) {
 		return errors.New("empty JSON body")
 	}
-	if err := s.value(); err != nil {
-		return err
+	err := s.value()
+	if err == nil {
+		s.skipSpace()
+		if s.i != len(b) {
+			err = errors.New("trailing data after JSON value")
+		}
 	}
-	s.skipSpace()
-	if s.i != len(b) {
-		return errors.New("trailing data after JSON value")
+	if err != nil && !errors.Is(err, ErrDuplicateKey) {
+		// Malformed: report it in encoding/json's words, as before (53e.56).
+		// Only a body the client must fix pays for the second read; should
+		// the decoder ever accept it, the scanner's refusal stands.
+		if derr := checkJSONKeysDecoder(b, foldAt...); derr != nil {
+			return derr
+		}
 	}
-	return nil
+	return err
 }
 
 // DuplicateKey is the first exact duplicate key FindDuplicateKey found: Key
@@ -76,11 +85,12 @@ type PathElem struct {
 }
 
 // FindDuplicateKey reads all of b, as CheckJSONKeys does with no foldAt.
-// It returns a syntax error when b is not one JSON value, even after a
+// It returns a syntax error when b is not one JSON value json.Valid would
+// accept (nesting deeper than encoding/json's 10000 included), even after a
 // duplicate (a caller that ignores bodies it cannot read keeps ignoring
 // them); otherwise the first exact duplicate key in document order, or nil.
 func FindDuplicateKey(b []byte) (*DuplicateKey, error) {
-	s := keyScanner{b: b, all: true}
+	s := keyScanner{b: b, all: true, maxDepth: maxNestingDepth}
 	s.skipSpace()
 	if s.i == len(b) {
 		return nil, errors.New("empty JSON body")
@@ -127,6 +137,22 @@ type keyScanner struct {
 	// a body that is not valid JSON is reported as such (FindDuplicateKey).
 	all bool
 	dup *DuplicateKey
+	// maxDepth, when not 0, is the deepest nesting accepted: json.Valid's
+	// limit for FindDuplicateKey, whose callers decided validity with it
+	// (53e.55). CheckJSONKeys, like the json.Decoder version, has none.
+	maxDepth int
+}
+
+// maxNestingDepth is encoding/json's: json.Valid refuses deeper input.
+const maxNestingDepth = 10000
+
+// push opens an object or array.
+func (s *keyScanner) push(f *keyFrame) error {
+	s.stack = append(s.stack, f)
+	if s.maxDepth > 0 && len(s.stack) > s.maxDepth {
+		return s.syntaxError("exceeded max depth")
+	}
+	return nil
 }
 
 func (s *keyScanner) syntaxError(what string) error {
@@ -175,7 +201,9 @@ func (s *keyScanner) value() error {
 			if s.fold[p] {
 				f.folded = map[string]bool{}
 			}
-			s.stack = append(s.stack, f)
+			if err := s.push(f); err != nil {
+				return err
+			}
 			s.skipSpace()
 			if s.i < len(s.b) && s.b[s.i] == '}' {
 				s.i++
@@ -188,7 +216,9 @@ func (s *keyScanner) value() error {
 			continue // the member's value
 		case c == '[':
 			s.i++
-			s.stack = append(s.stack, &keyFrame{path: s.childPath(), isArray: true})
+			if err := s.push(&keyFrame{path: s.childPath(), isArray: true}); err != nil {
+				return err
+			}
 			s.skipSpace()
 			if s.i < len(s.b) && s.b[s.i] == ']' {
 				s.i++
@@ -422,6 +452,97 @@ func (s *keyScanner) literal(lit string) error {
 	}
 	s.i += len(lit)
 	return nil
+}
+
+// checkJSONKeysDecoder is CheckJSONKeys as it was before 53e.50, on
+// json.Decoder.Token. CheckJSONKeys runs it on a body the scanner found
+// malformed, so the client's 400 keeps encoding/json's wording (53e.56);
+// the tests hold the scanner's verdicts to it.
+func checkJSONKeysDecoder(b []byte, foldAt ...string) error {
+	fold := make(map[string]bool, len(foldAt))
+	for _, p := range foldAt {
+		fold[p] = true
+	}
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.UseNumber()
+	// One frame per open object or array.
+	type frame struct {
+		path    string
+		isArray bool
+		exact   map[string]bool
+		folded  map[string]bool // nil: case variants are not checked here
+		key     string          // the key whose value comes next
+	}
+	var stack []*frame
+	childPath := func() string {
+		if len(stack) == 0 {
+			return ""
+		}
+		f := stack[len(stack)-1]
+		if f.isArray {
+			return f.path + "[]"
+		}
+		if f.path == "" {
+			return f.key
+		}
+		return f.path + "." + f.key
+	}
+	started := false
+	for {
+		if started && len(stack) == 0 {
+			if _, err := dec.Token(); err != io.EOF {
+				return errors.New("trailing data after JSON value")
+			}
+			return nil
+		}
+		// In an object, a key comes before every value.
+		if len(stack) > 0 && !stack[len(stack)-1].isArray && dec.More() {
+			tok, err := dec.Token()
+			if err != nil {
+				return err
+			}
+			key, ok := tok.(string)
+			if !ok {
+				return errors.New("expected an object key")
+			}
+			f := stack[len(stack)-1]
+			if f.exact[key] {
+				return fmt.Errorf("%w %q", ErrDuplicateKey, key)
+			}
+			f.exact[key] = true
+			if f.folded != nil {
+				folded := FoldKey(key)
+				if f.folded[folded] {
+					return fmt.Errorf("%w %q", ErrDuplicateKey, key)
+				}
+				f.folded[folded] = true
+			}
+			f.key = key
+		}
+		tok, err := dec.Token()
+		if err != nil {
+			if err == io.EOF && !started {
+				return errors.New("empty JSON body")
+			}
+			return err
+		}
+		started = true
+		if d, ok := tok.(json.Delim); ok {
+			switch d {
+			case '{':
+				p := childPath()
+				f := &frame{path: p, exact: map[string]bool{}}
+				if fold[p] {
+					f.folded = map[string]bool{}
+				}
+				stack = append(stack, f)
+			case '[':
+				stack = append(stack, &frame{path: childPath(), isArray: true})
+			case '}', ']':
+				stack = stack[:len(stack)-1]
+			}
+		}
+	}
 }
 
 // FoldKey maps key to a canonical form under Unicode simple case folding, so
