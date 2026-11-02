@@ -55,8 +55,14 @@ func TestPluginSDKConfigWritesMarkEdgesPending(t *testing.T) {
 	require.NoError(t, err)
 	require.Eventually(t, func() bool { return syncOf() == models.EdgeSyncStatusPending }, 3*time.Second, 50*time.Millisecond)
 
-	// Attaching the plugin to another LLM through the SDK.
+	// No-op plugin chain write (the LLM's existing plugin set): stays in sync.
 	require.NoError(t, db.Model(&models.EdgeInstance{}).Where("edge_id = ?", "edge-1").Update("sync_status", models.EdgeSyncStatusInSync).Error)
+	_, err = mgmt.UpdateLLMPlugins(context.Background(), &pb.UpdateLLMPluginsRequest{LlmId: uint32(llms[0].ID), PluginIds: []uint32{uint32(plugin.ID)}})
+	require.NoError(t, err)
+	time.Sleep(500 * time.Millisecond)
+	require.Equal(t, models.EdgeSyncStatusInSync, syncOf(), "no-op plugin chain write should not churn")
+
+	// Attaching the plugin to another LLM through the SDK.
 	_, err = mgmt.UpdateLLMPlugins(context.Background(), &pb.UpdateLLMPluginsRequest{LlmId: uint32(llms[1].ID), PluginIds: []uint32{uint32(plugin.ID)}})
 	require.NoError(t, err)
 	require.Eventually(t, func() bool { return syncOf() == models.EdgeSyncStatusPending }, 3*time.Second, 50*time.Millisecond)
