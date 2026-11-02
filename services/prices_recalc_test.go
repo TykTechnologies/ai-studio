@@ -195,19 +195,22 @@ func TestUpdateModelPriceAndRecalculate_KeepsMultiplierThroughZeroPrice(t *testi
 	})
 }
 
-// A recalculation keeps the price each row was recorded at relative to the
-// list price, also for rows with a stored multiplier: rows recorded before a
-// standard update (no recalculation) to half the price stay at twice the
-// new list price. The ratio is stored, so it survives a zero price too.
+// Rows without a recorded multiplier (written before schema 30, older edges)
+// keep the price they were recorded at relative to the list price: rows
+// recorded before a standard update (no recalculation) to half the price
+// stay at twice the new list price. The ratio is stored, so it survives a
+// zero price too. Rows with a recorded multiplier follow it instead
+// (midsommar-clean-53e.6).
 func TestUpdateModelPriceAndRecalculate_KeepsRecordedPriceIntervals(t *testing.T) {
 	forEachRecalcDB(t, func(t *testing.T, s *Service, model string) {
 		vendor := string(models.ANTHROPIC)
 		p := models.ModelPrice{ModelName: model, Vendor: vendor, Currency: "USD", CPIT: 0.000004, CPT: 0.000012}
 		require.NoError(t, p.Create(s.DB))
 		tk := recalcTokens{prompt: 1000, response: 100}
+		legacy := createRecalcRecord(t, s, model, vendor, tk, tk.listCost(vendor, p))
+		stamped := createRecalcRecord(t, s, model, vendor, tk, tk.listCost(vendor, p))
 		one := 1.0
-		early := createRecalcRecord(t, s, model, vendor, tk, tk.listCost(vendor, p))
-		require.NoError(t, s.DB.Model(&models.LLMChatRecord{}).Where("id = ?", early).Update("price_multiplier", one).Error)
+		require.NoError(t, s.DB.Model(&models.LLMChatRecord{}).Where("id = ?", stamped).Update("price_multiplier", one).Error)
 
 		half := models.ModelPrice{CPIT: p.CPIT / 2, CPT: p.CPT / 2}
 		_, err := s.UpdateModelPrice(p.ID, model, vendor, half.CPT, half.CPIT, 0, 0, "USD")
@@ -218,9 +221,76 @@ func TestUpdateModelPriceAndRecalculate_KeepsRecordedPriceIntervals(t *testing.T
 			require.NoError(t, err)
 		}
 		reprice(half)
-		assert.InDelta(t, tk.listCost(vendor, p), recordCost(t, s, early).Cost, 1e-9, "recorded at twice the new price, it stays there")
+		assert.InDelta(t, tk.listCost(vendor, p), recordCost(t, s, legacy).Cost, 1e-9, "recorded at twice the new price, it stays there")
+		assert.InDelta(t, tk.listCost(vendor, half), recordCost(t, s, stamped).Cost, 1e-9, "a 1x row gets the new list price")
 		reprice(models.ModelPrice{})
 		reprice(half)
-		assert.InDelta(t, tk.listCost(vendor, p), recordCost(t, s, early).Cost, 1e-9, "the ratio survives a zero price")
+		assert.InDelta(t, tk.listCost(vendor, p), recordCost(t, s, legacy).Cost, 1e-9, "the ratio survives a zero price")
+		assert.InDelta(t, tk.listCost(vendor, half), recordCost(t, s, stamped).Cost, 1e-9)
+	})
+}
+
+// midsommar-clean-53e.6: an edge that is Pending after a recalculation keeps
+// pricing at its stale price and reports multiplier 1. The next
+// recalculation bills that row at the new list price (as every list-price
+// row), not at its ratio to the hub's old price frozen as a fake multiplier.
+// Batch (0.5x), flex (0.6x) and free-tier (0x) rows keep their multiplier; a row without
+// one keeps the ratio rule.
+func TestUpdateModelPriceAndRecalculate_StaleEdgeRowFollowsRecordedMultiplier(t *testing.T) {
+	forEachRecalcDB(t, func(t *testing.T, s *Service, model string) {
+		vendor := string(models.OPENAI)
+		p := models.ModelPrice{ModelName: model, Vendor: vendor, Currency: "USD", CPIT: 0.001, CPT: 0.002}
+		require.NoError(t, p.Create(s.DB))
+		scaled := func(f float64) models.ModelPrice {
+			return models.ModelPrice{CPIT: p.CPIT * f, CPT: p.CPT * f}
+		}
+		// 10 input tokens at CPIT 0.001 plus 5 output tokens at CPT 0.002 is
+		// $0.01 + $0.01 = $0.02 per request, stored as cost 200 (x10000).
+		tk := recalcTokens{prompt: 10, response: 5}
+		withMultiplier := func(cost, mult float64) uint {
+			id := createRecalcRecord(t, s, model, vendor, tk, cost)
+			require.NoError(t, s.DB.Model(&models.LLMChatRecord{}).Where("id = ?", id).Update("price_multiplier", mult).Error)
+			return id
+		}
+		reprice := func(np models.ModelPrice) {
+			_, err := s.UpdateModelPriceAndRecalculate(p.ID, model, vendor, np.CPT, np.CPIT, 0, 0, "USD")
+			require.NoError(t, err)
+		}
+
+		first := withMultiplier(tk.listCost(vendor, p), 1)
+		batch := withMultiplier(tk.listCost(vendor, p)*0.5, 0.5)
+		flex := withMultiplier(tk.listCost(vendor, p)*0.6, 0.6)
+		free := withMultiplier(0, 0)
+		legacyBatch := createRecalcRecord(t, s, model, vendor, tk, tk.listCost(vendor, p)*0.5)
+
+		reprice(scaled(10))
+		// The edge has not been pushed the new price: it records at the old one.
+		stale := withMultiplier(tk.listCost(vendor, p), 1)
+		staleBatch := withMultiplier(tk.listCost(vendor, p)*0.5, 0.5)
+
+		assertAt := func(step string, np models.ModelPrice) {
+			t.Helper()
+			for _, c := range []struct {
+				name string
+				id   uint
+				mult float64
+			}{{"first", first, 1}, {"stale", stale, 1}, {"batch", batch, 0.5}, {"flex", flex, 0.6}, {"stale batch", staleBatch, 0.5}, {"free", free, 0}, {"legacy batch", legacyBatch, 0.5}} {
+				got := recordCost(t, s, c.id)
+				assert.InDelta(t, tk.listCost(vendor, np)*c.mult, got.Cost, 1e-9, "%s: %s row", step, c.name)
+				if assert.NotNil(t, got.PriceMultiplier, "%s: %s row", step, c.name) {
+					assert.InDelta(t, c.mult, *got.PriceMultiplier, 1e-12, "%s: %s row keeps its multiplier", step, c.name)
+				}
+			}
+		}
+		require.InDelta(t, 200, tk.listCost(vendor, p), 1e-9, "the bead's $0.02 request")
+		reprice(scaled(0.1))
+		assertAt("lowered", scaled(0.1)) // every 1x row 20
+		assert.InDelta(t, 20, recordCost(t, s, stale).Cost, 1e-9)
+		reprice(p)
+		assertAt("raised back", p) // every 1x row 200
+		assert.InDelta(t, 200, recordCost(t, s, stale).Cost, 1e-9)
+		reprice(models.ModelPrice{})
+		reprice(scaled(10))
+		assertAt("through zero", scaled(10))
 	})
 }
