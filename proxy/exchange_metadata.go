@@ -21,9 +21,11 @@ const (
 // ExchangeMetadata is the model and stream metadata of a request to vendor:
 // path is the request path (escaped, so a Bedrock ARN model ID comes back
 // whole), body its body. The model is left out when the request names none.
+// The body is parsed once (requestformat.ModelAndStreaming).
 func ExchangeMetadata(vendor, path string, body []byte) map[string]string {
-	md := map[string]string{MetadataStream: strconv.FormatBool(requestformat.IsStreaming(vendor, path, body))}
-	if model := requestformat.Model(vendor, path, body); model != "" {
+	model, stream := requestformat.ModelAndStreaming(vendor, path, body)
+	md := map[string]string{MetadataStream: strconv.FormatBool(stream)}
+	if model != "" {
 		md[MetadataModel] = model
 	}
 	return md

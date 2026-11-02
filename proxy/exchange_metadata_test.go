@@ -2,7 +2,9 @@ package proxy
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -11,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestformat"
 )
 
 // metadataHook records the plugin context metadata of every response hook
@@ -120,4 +123,33 @@ func TestExchangeMetadata(t *testing.T) {
 		ExchangeMetadata("bedrock", "/llm/call/x/model/"+sdkEscapedARN+"/converse-stream", []byte(`{}`)))
 	assert.Equal(t, map[string]string{"stream": "false"},
 		ExchangeMetadata("openai", "/llm/rest/x/v1/embeddings", []byte(`not json`)), "no model, no key")
+}
+
+// TestExchangeMetadata_ParsesBodyOnce: ExchangeMetadata runs on every
+// proxied request, so it parses the body once, not once for the model and
+// again for the stream flag (53e.32). One parse costs what
+// requestformat.Model costs; the map and its values add a few allocations.
+func TestExchangeMetadata_ParsesBodyOnce(t *testing.T) {
+	body := []byte(`{"model":"gpt-4o","stream":true,"messages":[{"role":"user","content":"hi"}]}`)
+	const path = "/llm/call/gpt/v1/chat/completions"
+	parse := testing.AllocsPerRun(50, func() { requestformat.Model("openai", path, body) })
+	got := testing.AllocsPerRun(50, func() { ExchangeMetadata("openai", path, body) })
+	require.Positive(t, parse)
+	assert.Less(t, got, 2*parse, "ExchangeMetadata allocs = %v; one body parse is %v", got, parse)
+}
+
+// BenchmarkExchangeMetadata is the per-request cost on an agent-sized body.
+func BenchmarkExchangeMetadata(b *testing.B) {
+	content := strings.Repeat("lorem ipsum dolor sit amet ", 256*1024/27)
+	body, err := json.Marshal(map[string]any{
+		"model":    "gpt-4o",
+		"stream":   true,
+		"messages": []map[string]string{{"role": "user", "content": content}},
+	})
+	require.NoError(b, err)
+	b.SetBytes(int64(len(body)))
+	b.ReportAllocs()
+	for b.Loop() {
+		ExchangeMetadata("openai", "/llm/call/gpt/v1/chat/completions", body)
+	}
 }

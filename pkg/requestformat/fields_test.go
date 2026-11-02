@@ -41,6 +41,9 @@ func TestModel(t *testing.T) {
 			if got := Model(tc.vendor, tc.path, []byte(tc.body)); got != tc.want {
 				t.Errorf("Model(%q, %q) = %q, want %q", tc.vendor, tc.path, got, tc.want)
 			}
+			if got, _ := ModelAndStreaming(tc.vendor, tc.path, []byte(tc.body)); got != tc.want {
+				t.Errorf("ModelAndStreaming(%q, %q) model = %q, want %q", tc.vendor, tc.path, got, tc.want)
+			}
 		})
 	}
 }
@@ -72,7 +75,27 @@ func TestIsStreaming(t *testing.T) {
 			if got := IsStreaming(tc.vendor, tc.path, []byte(tc.body)); got != tc.want {
 				t.Errorf("IsStreaming(%q, %q, %s) = %v, want %v", tc.vendor, tc.path, tc.body, got, tc.want)
 			}
+			if _, got := ModelAndStreaming(tc.vendor, tc.path, []byte(tc.body)); got != tc.want {
+				t.Errorf("ModelAndStreaming(%q, %q, %s) stream = %v, want %v", tc.vendor, tc.path, tc.body, got, tc.want)
+			}
 		})
+	}
+}
+
+// TestModelAndStreaming_ParsesBodyOnce: reading both costs one body parse,
+// what Model alone costs (53e.32), and none when the path names both.
+func TestModelAndStreaming_ParsesBodyOnce(t *testing.T) {
+	body := []byte(`{"model":"gpt-4o","stream":true,"messages":[{"role":"user","content":"hi"}]}`)
+	const path = "/llm/call/gpt/v1/chat/completions"
+	one := testing.AllocsPerRun(50, func() { Model("openai", path, body) })
+	both := testing.AllocsPerRun(50, func() { ModelAndStreaming("openai", path, body) })
+	if one == 0 || both > one {
+		t.Errorf("ModelAndStreaming allocs = %v, want at most Model's %v (one body parse)", both, one)
+	}
+	if n := testing.AllocsPerRun(50, func() {
+		ModelAndStreaming("bedrock", "/model/amazon.nova-pro-v1:0/converse-stream", body)
+	}); n != 0 {
+		t.Errorf("ModelAndStreaming with model and stream in the path allocs = %v, want 0 (no body parse)", n)
 	}
 }
 
