@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
@@ -18,7 +18,11 @@ import PlacementDiagram from "./PlacementDiagram";
 import PromptTemplateStatus from "./PromptTemplateStatus";
 import { constBytes, expiresAt, isConst, placementLabel, previousApproved } from "./promptTemplateText";
 import { diffParts, isSmallEdit, samePlacement } from "./templateDiff";
-import { approvePromptTemplate, apiErrorMessage } from "../../../services/promptTemplateService";
+import {
+  approvePromptTemplate,
+  apiErrorMessage,
+  isPromptTemplateChanged,
+} from "../../../services/promptTemplateService";
 
 // The approval view. Approving exempts the template's constants from
 // request guardrail scoring for every request of the app, so the reviewer
@@ -108,11 +112,18 @@ const Changes = ({ template, previous }) => {
   );
 };
 
-const PromptTemplateReview = ({ open, appId, template, all, canApprove, userName, onClose, onApproved }) => {
+const PromptTemplateReview = ({ open, appId, template, all, canApprove, userName, onClose, onApproved, onReload }) => {
   const [confirming, setConfirming] = useState(false);
   const [checked, setChecked] = useState(false);
   const [error, setError] = useState(null);
+  const [stale, setStale] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // Another version (or this one as it is now) is a new review.
+  useEffect(() => {
+    setStale(false);
+    setError(null);
+  }, [template?.id, template?.content_hash]);
 
   if (!template) return null;
   const previous = previousApproved(template, all);
@@ -124,19 +135,42 @@ const PromptTemplateReview = ({ open, appId, template, all, canApprove, userName
     setConfirming(false);
     setChecked(false);
     setError(null);
+    setStale(false);
     onClose();
+  };
+
+  // reload shows the version as it is now; it must be reviewed again.
+  const reload = async () => {
+    setBusy(true);
+    try {
+      await onReload?.();
+      setStale(false);
+      setError(null);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const approve = async () => {
     setBusy(true);
     setError(null);
     try {
-      const approved = await approvePromptTemplate(appId, template.id);
+      // Bound to what this view rendered: the API refuses it if the
+      // version changed since.
+      const approved = await approvePromptTemplate(appId, template.id, template.content_hash);
       setConfirming(false);
       setChecked(false);
       onApproved?.(approved);
     } catch (e) {
-      setError(apiErrorMessage(e, "Could not approve the template"));
+      if (isPromptTemplateChanged(e)) {
+        setStale(true);
+        setError(
+          `${template.name}@${template.version} changed since you opened this review, so it was not approved. Reload it and review the current text before approving.`
+        );
+      } else {
+        setError(apiErrorMessage(e, "Could not approve the template"));
+      }
+      setChecked(false);
       setConfirming(false);
     } finally {
       setBusy(false);
@@ -164,7 +198,18 @@ const PromptTemplateReview = ({ open, appId, template, all, canApprove, userName
         </DialogTitle>
         <DialogContent dividers>
           {error && (
-            <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+            <Alert
+              severity="error"
+              sx={{ mb: 2 }}
+              onClose={stale ? undefined : () => setError(null)}
+              action={
+                stale && onReload ? (
+                  <Button color="inherit" size="small" onClick={reload} disabled={busy}>
+                    Reload
+                  </Button>
+                ) : undefined
+              }
+            >
               {error}
             </Alert>
           )}
@@ -214,7 +259,7 @@ const PromptTemplateReview = ({ open, appId, template, all, canApprove, userName
         <DialogActions>
           <SecondaryOutlineButton onClick={close}>Close</SecondaryOutlineButton>
           {canApprove && template.status === "proposed" && (
-            <PrimaryButton variant="contained" onClick={() => setConfirming(true)} disabled={busy}>
+            <PrimaryButton variant="contained" onClick={() => setConfirming(true)} disabled={busy || stale}>
               Approve
             </PrimaryButton>
           )}

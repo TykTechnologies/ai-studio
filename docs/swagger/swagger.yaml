@@ -516,6 +516,14 @@ definitions:
       slug:
         type: string
     type: object
+  api.AppPromptTemplateApproveInput:
+    properties:
+      content_hash:
+        description: |-
+          ContentHash is the content_hash of the version the administrator
+          reviewed, as the API returned it with the parts shown. Required.
+        type: string
+    type: object
   api.AppPromptTemplateInput:
     properties:
       expires_after_days:
@@ -537,6 +545,11 @@ definitions:
         type: string
       approved_by:
         type: integer
+      content_hash:
+        description: |-
+          ContentHash identifies this version's reviewed content (name,
+          version, placement, parts, expiry). Approving takes it back.
+        type: string
       created_at:
         type: string
       created_by:
@@ -14496,9 +14509,11 @@ paths:
       - apps
   /apps/{id}/prompt-templates/{template_id}/approve:
     post:
-      description: Approves a proposed version (administrators only). Request guardrails
-        then leave its constants unscored. Other approved versions of the same name
-        are retired; an app has at most 10 approved templates.
+      consumes:
+      - application/json
+      description: |-
+        Approves a proposed version (administrators only). Request guardrails then leave its constants unscored. Other approved versions of the same name are retired; an app has at most 10 approved templates.
+        The body must carry the content_hash of the version reviewed, as GET returned it: a proposed version can change in place, and the approval is refused with 409 (title "Prompt Template Changed") when it no longer matches. A request without it is a 400.
       parameters:
       - description: App ID
         in: path
@@ -14517,6 +14532,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/api.AppPromptTemplateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
         "409":
           description: Conflict
           schema:
@@ -14541,6 +14560,12 @@ paths:
         name: template_id
         required: true
         type: integer
+      - description: The reviewed version's content_hash
+        in: body
+        name: approval
+        required: true
+        schema:
+          $ref: '#/definitions/api.AppPromptTemplateApproveInput'
       produces:
       - application/json
       responses:

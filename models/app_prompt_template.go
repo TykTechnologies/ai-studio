@@ -1,6 +1,9 @@
 package models
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails/templates"
@@ -77,6 +80,26 @@ func (t *AppPromptTemplate) Lapsed(now time.Time) bool {
 // Matcher is the template as the guardrail matcher uses it.
 func (t *AppPromptTemplate) Matcher() *templates.Template {
 	return &templates.Template{RecordID: t.ID, Name: t.Name, Version: t.Version, Placement: t.Placement(), Parts: t.Parts}
+}
+
+// ContentHash binds an approval to the version a reviewer saw: the hex
+// SHA-256 of the name, version, placement, parts and expiry, every field
+// the review shows that a writer can change on a proposed version in place.
+// Approving takes it back and refuses a version whose hash has changed.
+func (t *AppPromptTemplate) ContentHash() string {
+	b, err := json.Marshal(struct {
+		Name             string              `json:"name"`
+		Version          int                 `json:"version"`
+		Placement        templates.Placement `json:"placement"`
+		Parts            []templates.Part    `json:"parts"`
+		ExpiresAfterDays int                 `json:"expires_after_days"`
+	}{t.Name, t.Version, t.Placement(), t.Parts, t.ExpiresAfterDays})
+	if err != nil {
+		// Strings, ints and a slice of string structs always marshal.
+		panic(err)
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
 }
 
 // Create stores a new template version.

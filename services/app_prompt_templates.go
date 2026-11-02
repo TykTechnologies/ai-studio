@@ -26,6 +26,10 @@ var (
 	// ErrPromptTemplateConflict is an action the template's state does not
 	// allow: approving one that is not proposed, or past the app's cap.
 	ErrPromptTemplateConflict = errors.New("prompt template conflict")
+	// ErrPromptTemplateChanged is an approval of a version that changed
+	// since the administrator reviewed it (its content hash differs). It is
+	// also an ErrPromptTemplateConflict.
+	ErrPromptTemplateChanged = fmt.Errorf("%w: the template changed since it was reviewed", ErrPromptTemplateConflict)
 )
 
 // promptTemplateName keeps names usable as name@version in events.
@@ -141,10 +145,18 @@ func (s *Service) DeleteAppPromptTemplate(appID, id uint) error {
 	return nil
 }
 
-// ApproveAppPromptTemplate approves a proposed version. The other approved
-// versions of the same name are retired: one version of a name is trusted
-// at a time. An app has at most templates.MaxApprovedPerApp approved.
-func (s *Service) ApproveAppPromptTemplate(appID, id, adminID uint) (*models.AppPromptTemplate, error) {
+// ApproveAppPromptTemplate approves a proposed version. contentHash is the
+// models.AppPromptTemplate.ContentHash of the version the administrator
+// reviewed: a proposed version changes in place, so an approval of anything
+// else is refused (ErrPromptTemplateChanged), and one without it is invalid.
+// The row saved is the one whose hash was checked, so the approved bytes are
+// the reviewed bytes. The other approved versions of the same name are
+// retired: one version of a name is trusted at a time. An app has at most
+// templates.MaxApprovedPerApp approved.
+func (s *Service) ApproveAppPromptTemplate(appID, id, adminID uint, contentHash string) (*models.AppPromptTemplate, error) {
+	if contentHash == "" {
+		return nil, invalidPromptTemplate(errors.New("content_hash of the reviewed version is required"))
+	}
 	var out *models.AppPromptTemplate
 	err := s.DB.Transaction(func(tx *gorm.DB) error {
 		t, err := models.GetAppPromptTemplate(tx, appID, id)
@@ -153,6 +165,9 @@ func (s *Service) ApproveAppPromptTemplate(appID, id, adminID uint) (*models.App
 		}
 		if t.Status != templates.StatusProposed {
 			return fmt.Errorf("%w: only a proposed template can be approved (this one is %s)", ErrPromptTemplateConflict, t.Status)
+		}
+		if t.ContentHash() != contentHash {
+			return fmt.Errorf("%w; reload it and review it again", ErrPromptTemplateChanged)
 		}
 		if err := validatePromptTemplate(t); err != nil {
 			return err
