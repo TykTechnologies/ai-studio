@@ -671,24 +671,23 @@ var pluginSelfServiceFields = map[string]bool{"config": true, "name": true, "des
 // a connection the switch no longer allows: the load validates the command
 // with the new exemption and refuses an internal host (w4e.5).
 func (a *API) reloadForInternalHostChange(plugin *models.Plugin) {
-	if err := a.reloadLoadedPlugin(plugin, "Allow internal host switch changed"); err != nil {
+	if err := a.reloadLoadedPlugin(plugin); err != nil {
 		log.Printf("Plugin %s not reloaded after its Allow internal host switch changed: %v", plugin.Name, err)
 	}
 }
 
 // reloadLoadedPlugin stops a plugin Studio has loaded and, when it is active,
 // loads it again, so the load reads its stored command, exemption and
-// configuration. reason completes "after its ..." in the unload warning. It
-// returns the load error; nil also when the plugin was not loaded, the
-// unload failed (logged here) or the plugin is inactive.
-func (a *API) reloadLoadedPlugin(plugin *models.Plugin, reason string) error {
+// configuration. It returns the unload error (wrapped "unload: ...", and the
+// plugin is then not loaded again) or the load error, for the caller to
+// log; nil when the plugin was not loaded, is inactive, or reloaded.
+func (a *API) reloadLoadedPlugin(plugin *models.Plugin) error {
 	mgr := a.service.AIStudioPluginManager
 	if mgr == nil || !mgr.IsPluginLoaded(plugin.ID) {
 		return nil
 	}
 	if err := mgr.UnloadPlugin(plugin.ID); err != nil {
-		log.Printf("Warning: Failed to unload plugin %s after its %s: %v", plugin.Name, reason, err)
-		return nil
+		return fmt.Errorf("unload: %w", err)
 	}
 	if !plugin.IsActive {
 		return nil
@@ -714,7 +713,7 @@ func (a *API) reloadForConfigChange(plugin *models.Plugin) {
 		return
 	}
 	log.Printf("Reloading plugin %s (ID: %d) to apply its updated configuration", plugin.Name, plugin.ID)
-	if err := a.reloadLoadedPlugin(plugin, "configuration changed"); err != nil {
+	if err := a.reloadLoadedPlugin(plugin); err != nil {
 		log.Printf("Warning: Failed to reload plugin %s after its configuration changed: %v", plugin.Name, err)
 	}
 }
