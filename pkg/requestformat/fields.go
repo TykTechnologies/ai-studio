@@ -26,15 +26,8 @@ const (
 // profile arrives as arn%3Aaws%3Abedrock%3A...%2F..., and an unescaped ARN
 // contains a "/". Both come back unescaped and whole.
 func Model(vendor, path string, body []byte) string {
-	switch vendor {
-	case vendorBedrock:
-		if m := bedrockPathModel(path); m != "" {
-			return m
-		}
-	case vendorGoogleAI, vendorVertex:
-		if m := googlePathModel(path); m != "" {
-			return m
-		}
+	if m := pathModel(vendor, path); m != "" {
+		return m
 	}
 	m, _ := bodyFields(body)
 	return m
@@ -45,6 +38,45 @@ func Model(vendor, path string, body []byte) string {
 // :streamGenerateContent method (or alt=sse), and otherwise "stream": true
 // in the body.
 func IsStreaming(vendor, path string, body []byte) bool {
+	if pathStreaming(vendor, path) {
+		return true
+	}
+	_, stream := bodyFields(body)
+	return stream
+}
+
+// ModelAndStreaming is Model and IsStreaming together, reading the body at
+// most once: a caller that needs both on every request pays for one JSON
+// parse of a body that may be megabytes, not two.
+func ModelAndStreaming(vendor, path string, body []byte) (model string, stream bool) {
+	model, stream = pathModel(vendor, path), pathStreaming(vendor, path)
+	if model != "" && stream {
+		return model, stream
+	}
+	bodyModel, bodyStream := bodyFields(body)
+	if model == "" {
+		model = bodyModel
+	}
+	return model, stream || bodyStream
+}
+
+// pathModel is the model a request's path names for vendor: Bedrock's
+// {modelId}, Google AI's and Vertex's {model}. "" for other vendors and
+// paths that name none.
+func pathModel(vendor, path string) string {
+	switch vendor {
+	case vendorBedrock:
+		return bedrockPathModel(path)
+	case vendorGoogleAI, vendorVertex:
+		return googlePathModel(path)
+	}
+	return ""
+}
+
+// pathStreaming reports whether a request's path asks for a stream for
+// vendor (Bedrock's streaming operations, Google's streaming method or
+// alt=sse).
+func pathStreaming(vendor, path string) bool {
 	p, query, _ := strings.Cut(path, "?")
 	switch vendor {
 	case vendorBedrock:
@@ -60,8 +92,7 @@ func IsStreaming(vendor, path string, body []byte) bool {
 			return true
 		}
 	}
-	_, stream := bodyFields(body)
-	return stream
+	return false
 }
 
 func bodyFields(body []byte) (model string, stream bool) {
