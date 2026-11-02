@@ -244,6 +244,8 @@ func TestUpdateModelPriceAndRecalculate_StaleEdgeRowFollowsRecordedMultiplier(t 
 		scaled := func(f float64) models.ModelPrice {
 			return models.ModelPrice{CPIT: p.CPIT * f, CPT: p.CPT * f}
 		}
+		// 10 input tokens at CPIT 0.001 plus 5 output tokens at CPT 0.002 is
+		// $0.01 + $0.01 = $0.02 per request, stored as cost 200 (x10000).
 		tk := recalcTokens{prompt: 10, response: 5}
 		withMultiplier := func(cost, mult float64) uint {
 			id := createRecalcRecord(t, s, model, vendor, tk, cost)
