@@ -234,7 +234,7 @@ func TestUpdateModelPriceAndRecalculate_KeepsRecordedPriceIntervals(t *testing.T
 // pricing at its stale price and reports multiplier 1. The next
 // recalculation bills that row at the new list price (as every list-price
 // row), not at its ratio to the hub's old price frozen as a fake multiplier.
-// Batch (0.5x) and free-tier (0x) rows keep their multiplier; a row without
+// Batch (0.5x), flex (0.6x) and free-tier (0x) rows keep their multiplier; a row without
 // one keeps the ratio rule.
 func TestUpdateModelPriceAndRecalculate_StaleEdgeRowFollowsRecordedMultiplier(t *testing.T) {
 	forEachRecalcDB(t, func(t *testing.T, s *Service, model string) {
@@ -257,6 +257,7 @@ func TestUpdateModelPriceAndRecalculate_StaleEdgeRowFollowsRecordedMultiplier(t 
 
 		first := withMultiplier(tk.listCost(vendor, p), 1)
 		batch := withMultiplier(tk.listCost(vendor, p)*0.5, 0.5)
+		flex := withMultiplier(tk.listCost(vendor, p)*0.6, 0.6)
 		free := withMultiplier(0, 0)
 		legacyBatch := createRecalcRecord(t, s, model, vendor, tk, tk.listCost(vendor, p)*0.5)
 
@@ -271,7 +272,7 @@ func TestUpdateModelPriceAndRecalculate_StaleEdgeRowFollowsRecordedMultiplier(t 
 				name string
 				id   uint
 				mult float64
-			}{{"first", first, 1}, {"stale", stale, 1}, {"batch", batch, 0.5}, {"stale batch", staleBatch, 0.5}, {"free", free, 0}, {"legacy batch", legacyBatch, 0.5}} {
+			}{{"first", first, 1}, {"stale", stale, 1}, {"batch", batch, 0.5}, {"flex", flex, 0.6}, {"stale batch", staleBatch, 0.5}, {"free", free, 0}, {"legacy batch", legacyBatch, 0.5}} {
 				got := recordCost(t, s, c.id)
 				assert.InDelta(t, tk.listCost(vendor, np)*c.mult, got.Cost, 1e-9, "%s: %s row", step, c.name)
 				if assert.NotNil(t, got.PriceMultiplier, "%s: %s row", step, c.name) {
@@ -279,10 +280,13 @@ func TestUpdateModelPriceAndRecalculate_StaleEdgeRowFollowsRecordedMultiplier(t 
 				}
 			}
 		}
+		require.InDelta(t, 200, tk.listCost(vendor, p), 1e-9, "the bead's $0.02 request")
 		reprice(scaled(0.1))
-		assertAt("lowered", scaled(0.1))
+		assertAt("lowered", scaled(0.1)) // every 1x row 20
+		assert.InDelta(t, 20, recordCost(t, s, stale).Cost, 1e-9)
 		reprice(p)
-		assertAt("raised back", p)
+		assertAt("raised back", p) // every 1x row 200
+		assert.InDelta(t, 200, recordCost(t, s, stale).Cost, 1e-9)
 		reprice(models.ModelPrice{})
 		reprice(scaled(10))
 		assertAt("through zero", scaled(10))
