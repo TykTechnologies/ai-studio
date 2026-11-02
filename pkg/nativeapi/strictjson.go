@@ -60,6 +60,54 @@ func CheckJSONKeys(b []byte, foldAt ...string) error {
 	return nil
 }
 
+// DuplicateKey is the first exact duplicate key FindDuplicateKey found: Key
+// as encoding/json decodes it, in the object at Path.
+type DuplicateKey struct {
+	Key  string
+	Path []PathElem
+}
+
+// PathElem is one step from the root to a value: an object key, or (when
+// IsIndex) an array index.
+type PathElem struct {
+	Key     string
+	Index   int
+	IsIndex bool
+}
+
+// FindDuplicateKey reads all of b, as CheckJSONKeys does with no foldAt.
+// It returns a syntax error when b is not one JSON value, even after a
+// duplicate (a caller that ignores bodies it cannot read keeps ignoring
+// them); otherwise the first exact duplicate key in document order, or nil.
+func FindDuplicateKey(b []byte) (*DuplicateKey, error) {
+	s := keyScanner{b: b, all: true}
+	s.skipSpace()
+	if s.i == len(b) {
+		return nil, errors.New("empty JSON body")
+	}
+	if err := s.value(); err != nil {
+		return nil, err
+	}
+	s.skipSpace()
+	if s.i != len(b) {
+		return nil, errors.New("trailing data after JSON value")
+	}
+	return s.dup, nil
+}
+
+// path is the path to the innermost open object.
+func (s *keyScanner) path() []PathElem {
+	var p []PathElem
+	for _, f := range s.stack[:len(s.stack)-1] {
+		if f.isArray {
+			p = append(p, PathElem{Index: f.index, IsIndex: true})
+		} else {
+			p = append(p, PathElem{Key: f.key})
+		}
+	}
+	return p
+}
+
 // keyFrame is one open object or array.
 type keyFrame struct {
 	path    string
@@ -67,6 +115,7 @@ type keyFrame struct {
 	exact   map[string]bool
 	folded  map[string]bool // nil: case variants are not checked here
 	key     string          // the key whose value comes next
+	index   int             // the element being read, in an array
 }
 
 type keyScanner struct {
@@ -74,6 +123,10 @@ type keyScanner struct {
 	i     int
 	fold  map[string]bool
 	stack []*keyFrame
+	// all keeps scanning past the first duplicate, which dup records, so
+	// a body that is not valid JSON is reported as such (FindDuplicateKey).
+	all bool
+	dup *DuplicateKey
 }
 
 func (s *keyScanner) syntaxError(what string) error {
@@ -187,6 +240,7 @@ func (s *keyScanner) value() error {
 					return s.syntaxError("expected ',' or ']' after an array element")
 				}
 				s.i++
+				f.index++
 				break // the next element
 			}
 			if c == '}' {
@@ -218,7 +272,12 @@ func (s *keyScanner) member(f *keyFrame) error {
 		return err
 	}
 	if f.exact[key] {
-		return fmt.Errorf("%w %q", ErrDuplicateKey, key)
+		if !s.all {
+			return fmt.Errorf("%w %q", ErrDuplicateKey, key)
+		}
+		if s.dup == nil {
+			s.dup = &DuplicateKey{Key: key, Path: s.path()}
+		}
 	}
 	f.exact[key] = true
 	if f.folded != nil {
