@@ -76,6 +76,9 @@ func TestIsStreaming(t *testing.T) {
 		{"google rest", "google_ai", "/v1beta/models/gemini-2.5-flash:generateContent", `{}`, false},
 		// Where the vendor's path decides, the body is not read (53e.45):
 		// Bedrock and Gemini have no body "stream".
+		// An empty model ID still streams by its operation (53e.49).
+		{"bedrock empty model id stream", "bedrock", "/llm/rest/br/model//converse-stream", `{}`, true},
+		{"bedrock empty model id body stream", "bedrock", "/model//converse", `{"stream":true}`, true},
 		{"bedrock path ignores body stream", "bedrock", "/model/amazon.nova-pro-v1:0/converse", `{"stream":true}`, false},
 		{"bedrock invoke ignores body stream", "bedrock", "/model/anthropic.claude-v2/invoke", `{"stream":true}`, false},
 		{"google native ignores body stream", "google_ai", "/v1beta/models/gemini-2.5-flash:generateContent", `{"stream":true}`, false},

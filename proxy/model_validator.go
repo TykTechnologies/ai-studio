@@ -157,11 +157,10 @@ func (p *Proxy) modelValidationMiddleware(next http.Handler) http.Handler {
 }
 
 func OpenAIModelExtractor(r *http.Request, body []byte) (string, error) {
-	var req map[string]interface{}
-	if err := json.Unmarshal(body, &req); err != nil {
+	req, err := decodeRequestBody(r, body)
+	if err != nil {
 		return "", &BadRequestError{"invalid JSON body"}
 	}
-	keepRequestFields(r, body, req)
 
 	modelInterface, ok := req["model"]
 	if !ok {
@@ -181,13 +180,18 @@ func OpenAIModelExtractor(r *http.Request, body []byte) (string, error) {
 	return model, nil
 }
 
-// keepRequestFields keeps the "model" and "stream" fields of the body an
-// extractor decoded into req on r's requestFields (modelValidationMiddleware
-// puts one there), for the exchange metadata.
-func keepRequestFields(r *http.Request, body []byte, req map[string]any) {
+// decodeRequestBody decodes an extractor's body into a map, as
+// json.Unmarshal does, reusing the map an earlier step (the edge's post_auth
+// hook) decoded from the same bytes, and keeping it and its "model" and
+// "stream" fields on r's requestFields (modelValidationMiddleware puts one
+// there) for the exchange metadata. The map is shared: read it, never
+// change it.
+func decodeRequestBody(r *http.Request, body []byte) (map[string]any, error) {
+	var f *requestFields
 	if r != nil {
-		requestFieldsOf(r.Context()).keepObject(body, req)
+		f = requestFieldsOf(r.Context())
 	}
+	return f.decodeObject(body)
 }
 
 func AzureModelExtractor(r *http.Request, body []byte) (string, error) {
@@ -200,11 +204,10 @@ func AzureModelExtractor(r *http.Request, body []byte) (string, error) {
 }
 
 func AnthropicModelExtractor(r *http.Request, body []byte) (string, error) {
-	var req map[string]interface{}
-	if err := json.Unmarshal(body, &req); err != nil {
+	req, err := decodeRequestBody(r, body)
+	if err != nil {
 		return "", &BadRequestError{"invalid JSON body"}
 	}
-	keepRequestFields(r, body, req)
 
 	modelInterface, ok := req["model"]
 	if !ok {
@@ -230,11 +233,10 @@ func GoogleAIModelExtractor(r *http.Request, body []byte) (string, error) {
 		}
 	}
 
-	var req map[string]any
-	if err := json.Unmarshal(body, &req); err != nil {
+	req, err := decodeRequestBody(r, body)
+	if err != nil {
 		return "", &BadRequestError{"invalid JSON body"}
 	}
-	keepRequestFields(r, body, req)
 
 	// Extract from request body
 	if modelInterface, ok := req["model"]; ok {
@@ -266,11 +268,10 @@ func VertexModelExtractor(r *http.Request, body []byte) (string, error) {
 	}
 
 	// Fallback to body check
-	var req map[string]interface{}
-	if err := json.Unmarshal(body, &req); err != nil {
+	req, err := decodeRequestBody(r, body)
+	if err != nil {
 		return "", &BadRequestError{"invalid JSON body"}
 	}
-	keepRequestFields(r, body, req)
 
 	if modelInterface, ok := req["model"]; ok {
 		if model, ok := modelInterface.(string); ok {
@@ -291,11 +292,10 @@ func HuggingFaceModelExtractor(r *http.Request, body []byte) (string, error) {
 	}
 
 	// Check request body
-	var req map[string]interface{}
-	if err := json.Unmarshal(body, &req); err != nil {
+	req, err := decodeRequestBody(r, body)
+	if err != nil {
 		return "", &BadRequestError{"invalid JSON body"}
 	}
-	keepRequestFields(r, body, req)
 
 	// Try "model" field
 	if modelInterface, ok := req["model"]; ok {

@@ -3,6 +3,7 @@ package proxy
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -28,13 +29,15 @@ func ExchangeMetadata(vendor, path string, body []byte) map[string]string {
 	return exchangeMetadata(vendor, path, func() (string, bool) { return requestformat.BodyFields(body) })
 }
 
-// ExchangeMetadataFor is ExchangeMetadata of r, reusing the body fields an
-// earlier step of r read from the same bytes, and keeping what it reads on
-// the returned request for the later steps (the edge's post_auth hook runs
-// before the proxy handler, which needs them again).
+// ExchangeMetadataFor is ExchangeMetadata of r, reusing what an earlier step
+// of r read from the same bytes, and keeping what it reads on the returned
+// request for the later steps. The edge's post_auth hook runs before the
+// model validation middleware, so when it has to read the body it decodes
+// it as the model extractors do, into a map they then reuse: the body is
+// still parsed only once (53e.48).
 func ExchangeMetadataFor(r *http.Request, vendor string, body []byte) (*http.Request, map[string]string) {
 	r, fields := withRequestFields(r)
-	return r, exchangeMetadata(vendor, r.URL.EscapedPath(), fields.reader(body))
+	return r, exchangeMetadata(vendor, r.URL.EscapedPath(), fields.objectReader(body))
 }
 
 func exchangeMetadata(vendor, path string, bodyFields func() (string, bool)) map[string]string {
@@ -56,17 +59,22 @@ func withExchangeMetadata(r *http.Request, vendor string, body []byte) *http.Req
 }
 
 // requestFields is the "model" and "stream" body fields of a request as one
-// step read them (requestformat.BodyFields semantics), kept on the request's
-// context so a later step need not parse the body again: the model
-// extractors decode the whole body to validate the model, and v2.2.2 parsed
-// a request no more often than that (53e.45). They are keyed by the bytes
-// they were read from, so a filter or plugin that rewrote the body in
-// between makes them miss, and the body is parsed again.
+// step read them (requestformat.BodyFields semantics), and the body decoded
+// into a map when a step decoded it so, kept on the request's context so a
+// later step need not parse the body again: the model extractors decode the
+// whole body to validate the model, and v2.2.2 parsed a request no more
+// often than that (53e.45). They are keyed by the bytes they were read from,
+// so a filter or plugin that rewrote the body in between makes them miss,
+// and the body is parsed again.
 type requestFields struct {
 	body   []byte
 	model  string
 	stream bool
 	set    bool
+	// obj is body decoded into a map (as the model extractors decode it),
+	// when hasObj. It is shared, so it is read, never changed.
+	obj    map[string]any
+	hasObj bool
 }
 
 type requestFieldsKey struct{}
@@ -88,14 +96,44 @@ func requestFieldsOf(ctx context.Context) *requestFields {
 	return f
 }
 
-// keepObject keeps the fields of body, which a model extractor decoded into
-// obj, unless obj cannot say what BodyFields would (requestformat.ObjectFields).
+// keepObject keeps body decoded into obj, and its fields unless obj cannot
+// say what BodyFields would (requestformat.ObjectFields).
 func (f *requestFields) keepObject(body []byte, obj map[string]any) {
 	if f == nil {
 		return
 	}
-	if model, stream, ok := requestformat.ObjectFields(obj); ok {
-		f.body, f.model, f.stream, f.set = body, model, stream, true
+	f.body, f.obj, f.hasObj = body, obj, true
+	f.model, f.stream, f.set = requestformat.ObjectFields(obj)
+}
+
+// decodeObject decodes body into a map, as json.Unmarshal into
+// map[string]any does: the kept map when it was decoded from the same
+// bytes, else a new one, which it keeps.
+func (f *requestFields) decodeObject(body []byte) (map[string]any, error) {
+	if f != nil && f.hasObj && bytes.Equal(f.body, body) {
+		return f.obj, nil
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(body, &obj); err != nil {
+		return nil, err
+	}
+	f.keepObject(body, obj)
+	return obj, nil
+}
+
+// objectReader is reader for a step that comes before the model extractors:
+// when it must read the body, it decodes it into the map they reuse.
+func (f *requestFields) objectReader(body []byte) func() (string, bool) {
+	read := f.reader(body)
+	return func() (string, bool) {
+		if f == nil || (f.set && bytes.Equal(f.body, body)) {
+			return read()
+		}
+		if _, err := f.decodeObject(body); err != nil {
+			// Not a JSON object (or not JSON): BodyFields reads nothing either.
+			return "", false
+		}
+		return read()
 	}
 }
 
@@ -110,6 +148,9 @@ func (f *requestFields) reader(body []byte) func() (string, bool) {
 			return f.model, f.stream
 		}
 		model, stream := requestformat.BodyFields(body)
+		if !bytes.Equal(f.body, body) {
+			f.obj, f.hasObj = nil, false // decoded from other bytes
+		}
 		f.body, f.model, f.stream, f.set = body, model, stream, true
 		return model, stream
 	}

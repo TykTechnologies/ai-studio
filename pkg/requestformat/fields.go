@@ -70,13 +70,18 @@ func ModelAndStreamingFunc(vendor, path string, bodyFields func() (model string,
 	p, query, _ := strings.Cut(path, "?")
 	switch vendor {
 	case vendorBedrock:
-		if id, op := splitBedrockPath(p); id != "" {
-			switch strings.ToLower(op) {
-			case "converse-stream", "invoke-with-response-stream":
-				stream = true
-			}
+		id, op := splitBedrockPath(p)
+		switch strings.ToLower(op) {
+		case "converse-stream", "invoke-with-response-stream":
+			stream = true
+		}
+		if id != "" {
 			return unescape(id), stream
 		}
+		// No model ID in the path (.../model//converse-stream, or not a
+		// /model/ path at all): the body names the model, and may ask to stream.
+		bodyModel, bodyStream := bodyFields()
+		return bodyModel, stream || bodyStream
 	case vendorGoogleAI, vendorVertex:
 		model, method := googlePathModel(p)
 		if strings.Contains(strings.ToLower(p), ":streamgeneratecontent") {

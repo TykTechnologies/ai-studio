@@ -127,3 +127,49 @@ func addedExchangeMetadata(r *http.Request) map[string]string {
 	addExchangeMetadata(r.Context(), md)
 	return md
 }
+
+// The edge's post_auth hook runs before the model validation middleware.
+// When it reads the body it decodes it into the map the model extractor
+// then reuses, so a request with post_auth plugins is parsed no more often
+// than v2.2.2 parsed it (53e.48): once by the hook, where v2.2.2 parsed it
+// once in the extractor.
+func TestExchangeMetadataFor_ExtractorReusesTheHooksDecode(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		vendor    models.Vendor
+		extractor ModelNameExtractor
+		path      string
+	}{
+		{"openai", models.OPENAI, OpenAIModelExtractor, "/llm/rest/llm/v1/chat/completions"},
+		{"openai stream", models.OPENAI, OpenAIModelExtractor, "/llm/stream/llm/v1/chat/completions"},
+		{"anthropic", models.ANTHROPIC, AnthropicModelExtractor, "/llm/rest/llm/v1/messages"},
+		{"google openai-compatible", models.GOOGLEAI, GoogleAIModelExtractor, "/llm/rest/llm/v1beta/openai/chat/completions"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := parityBody(t, map[string]any{"model": "m-1", "stream": true})
+			req := httptest.NewRequest(http.MethodPost, tc.path, bytes.NewReader(body))
+			r, md := ExchangeMetadataFor(req, string(tc.vendor), body)
+			assert.Equal(t, map[string]string{"model": "m-1", "stream": "true"}, md)
+
+			// The middleware reads its own copy of the body.
+			mwBody := append([]byte(nil), body...)
+			model, err := tc.extractor(r, mwBody)
+			require.NoError(t, err)
+			assert.Equal(t, "m-1", model)
+
+			oneParse := testing.AllocsPerRun(20, func() { requestformat.Model("openai", "/v1/chat/completions", mwBody) })
+			got := testing.AllocsPerRun(20, func() { _, _ = tc.extractor(r, mwBody) })
+			assert.Less(t, got, oneParse, "extractor allocs = %v after the hook decoded the body; one body parse is %v", got, oneParse)
+		})
+	}
+
+	// A post_auth plugin that rewrote the body: the extractor decodes what it got.
+	body := parityBody(t, map[string]any{"model": "m-1"})
+	req := httptest.NewRequest(http.MethodPost, "/llm/rest/llm/v1/chat/completions", bytes.NewReader(body))
+	r, _ := ExchangeMetadataFor(req, string(models.OPENAI), body)
+	model, err := OpenAIModelExtractor(r, parityBody(t, map[string]any{"model": "m-2"}))
+	require.NoError(t, err)
+	assert.Equal(t, "m-2", model)
+	_, err = OpenAIModelExtractor(r, []byte("not json"))
+	assert.Error(t, err)
+}
