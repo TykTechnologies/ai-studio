@@ -287,9 +287,21 @@ func TestPricingRegression_PricedHistoryChart(t *testing.T) {
 	})
 }
 
+// asLegacyHistory clears the recorded price multiplier of a model's rows,
+// as on rows written before schema 30 or by an older edge. Only those keep
+// the ratio of their recorded cost to the list price (the price interval
+// they were recorded in) through a recalculation; rows with a recorded
+// multiplier are repriced at the new list price times it
+// (midsommar-clean-53e.6).
+func asLegacyHistory(t *testing.T, db *gorm.DB, model string) {
+	t.Helper()
+	require.NoError(t, db.Exec("UPDATE llm_chat_records SET price_multiplier = NULL WHERE name = ?", model).Error)
+}
+
 // A mid-history vendor price change (standard update), then a recalculation
-// that only nudges a cache price: each interval keeps the price it was
-// recorded at, moved by no more than the nudge.
+// that only nudges a cache price: each interval of a history without
+// recorded multipliers keeps the price it was recorded at, moved by no more
+// than the nudge.
 func TestPricingRegression_RecalcKeepsIntervals(t *testing.T) {
 	forEachPricingDB(t, func(t *testing.T, db *gorm.DB) {
 		days, mix := pricingScale(append(append([]stressModel{}, geminiMix...), otherVendors...))
@@ -305,6 +317,7 @@ func TestPricingRegression_RecalcKeepsIntervals(t *testing.T) {
 		_, err := env.svc.UpdateModelPrice(row.ID, flash.reported, string(flash.vendor), halved.CPT, halved.CPIT, 0, halved.CacheReadPT, "USD")
 		require.NoError(t, err)
 		env.recordDays(t, mix, change, days)
+		asLegacyHistory(t, env.db, flash.reported)
 
 		before := env.modelCostByDay(t, flash.reported)
 		for d := 0; d < days; d++ {
@@ -835,8 +848,9 @@ func TestPricingRegression_RecalcThroughZeroKeepsMultipliers(t *testing.T) {
 }
 
 // kq3b.7 with intervals: after a mid-history price change, a recalculation
-// to a zero price and back keeps each interval at the price it was recorded
-// at (relative to the price being restored).
+// to a zero price and back keeps each interval of a history without recorded
+// multipliers at the price it was recorded at (relative to the price being
+// restored).
 func TestPricingRegression_RecalcThroughZeroKeepsIntervals(t *testing.T) {
 	forEachPricingDB(t, func(t *testing.T, db *gorm.DB) {
 		days, mix := pricingScale(geminiMix[1:2])
@@ -851,6 +865,7 @@ func TestPricingRegression_RecalcThroughZeroKeepsIntervals(t *testing.T) {
 		_, err := env.svc.UpdateModelPrice(row.ID, m.reported, string(m.vendor), halved.CPT, halved.CPIT, 0, halved.CacheReadPT, "USD")
 		require.NoError(t, err)
 		env.recordDays(t, mix, change, days)
+		asLegacyHistory(t, env.db, m.reported)
 
 		_, err = env.svc.UpdateModelPriceAndRecalculate(row.ID, m.reported, string(m.vendor), 0, 0, 0, 0, "USD")
 		require.NoError(t, err)

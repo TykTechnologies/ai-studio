@@ -38,7 +38,7 @@ mkdir -p "$OUT"
 # edge schema has its own apps/llms tables).
 SUITES=$(cat <<'EOF'
 # Studio's Postgres-specific tests.
-studio|.||PostgreSQL|_Postgres|InTransaction|EnsureInDefaultCatalogue||./models/ ./services/ ./pkg/studio/ ./analytics/
+studio|.||PostgreSQL|_Postgres|InTransaction|EnsureInDefaultCatalogue|TestUpdateModelPriceAndRecalculate|TestBackfillUnpricedHistory||./models/ ./services/ ./pkg/studio/ ./analytics/
 # The pricing regression suite: price changes against recorded history.
 pricing|.||TestPricingRegression||./proxy/ ./api/
 # The chat queue (LISTEN/NOTIFY), config and startup.
