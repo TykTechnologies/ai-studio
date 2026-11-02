@@ -27,6 +27,13 @@ type AppPromptTemplateInput struct {
 	ExpiresAfterDays *int                 `json:"expires_after_days"`
 }
 
+// AppPromptTemplateLimits are the constant lengths this Studio accepts,
+// returned with the list so the editor checks what the API checks.
+type AppPromptTemplateLimits struct {
+	MinConstBytes         int `json:"min_const_bytes"`
+	MinAnchoredConstBytes int `json:"min_anchored_const_bytes"`
+}
+
 // AppPromptTemplateResponse is one template version.
 type AppPromptTemplateResponse struct {
 	ID               uint                `json:"id"`
@@ -106,7 +113,7 @@ func promptTemplateError(c *gin.Context, err error) {
 }
 
 // @Summary List an app's prompt templates
-// @Description Lists the trusted prompt template versions of an app, optionally by status (proposed, approved, retired).
+// @Description Lists the trusted prompt template versions of an app, optionally by status (proposed, approved, retired). The response's meta holds the constant lengths this Studio accepts (AppPromptTemplateLimits).
 // @Tags apps
 // @Produce json
 // @Param id path int true "App ID"
@@ -128,7 +135,11 @@ func (a *API) listAppPromptTemplates(c *gin.Context) {
 	for i := range list {
 		out[i] = serializeAppPromptTemplate(&list[i])
 	}
-	c.JSON(http.StatusOK, gin.H{"data": out})
+	l := services.PromptTemplateLimits()
+	c.JSON(http.StatusOK, gin.H{"data": out, "meta": AppPromptTemplateLimits{
+		MinConstBytes:         templates.MinConstBytes,
+		MinAnchoredConstBytes: l.AnchoredConstMin(),
+	}})
 }
 
 // @Summary Get an app's prompt template

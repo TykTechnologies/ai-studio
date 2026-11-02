@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/guardrails/templates"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -230,10 +231,21 @@ func validatePromptTemplate(t *models.AppPromptTemplate) error {
 	if t.ExpiresAfterDays < 1 || t.ExpiresAfterDays > 3650 {
 		return invalidPromptTemplate(errors.New("expires_after_days must be 1-3650"))
 	}
-	if err := templates.Validate(t.Placement(), t.Parts); err != nil {
+	if err := templates.ValidateWith(t.Placement(), t.Parts, PromptTemplateLimits()); err != nil {
 		return invalidPromptTemplate(err)
 	}
 	return nil
+}
+
+// PromptTemplateLimits are the template length rules of this Studio:
+// PROMPT_TEMPLATE_MIN_ANCHORED_CONST_BYTES (AppConf.PromptTemplateMinAnchoredConstBytes)
+// sets the shortest constant at an anchored edge.
+func PromptTemplateLimits() templates.Limits {
+	var l templates.Limits
+	if conf := config.Installed(); conf != nil {
+		l.MinAnchoredConstBytes = conf.PromptTemplateMinAnchoredConstBytes
+	}
+	return l
 }
 
 // ApprovedAppPromptTemplates returns the templates the guardrails of an app's

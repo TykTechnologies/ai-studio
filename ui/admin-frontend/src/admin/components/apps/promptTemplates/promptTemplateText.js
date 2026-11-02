@@ -6,6 +6,10 @@
 // does: a constant's 32-byte minimum is bytes, not characters.
 
 export const MIN_CONST_BYTES = 32;
+// A constant at an anchored edge may be shorter: the Studio's
+// PROMPT_TEMPLATE_MIN_ANCHORED_CONST_BYTES, sent as meta.min_anchored_const_bytes
+// with the list; this is its default.
+export const DEFAULT_MIN_ANCHORED_CONST_BYTES = 16;
 export const MAX_CONST_BYTES = 64 * 1024;
 export const MAX_PARTS = 64;
 export const MAX_SLOT_NAME_LEN = 64;
@@ -174,13 +178,28 @@ export const markerCounts = (text) => {
 };
 
 /**
- * constError is the API's refusal of one constant, or null when it would
- * accept it (templates.validConst).
+ * constMinBytes is the shortest the constant at index i may be: the
+ * anchored-edge minimum for the first part of a template anchored at the
+ * start and the last of one anchored at the end, MIN_CONST_BYTES otherwise
+ * (templates.ValidateWith). limits is the list's meta, when the API sent one.
  */
-export const constError = (text) => {
+export const constMinBytes = (i, parts, anchor = "both", limits = null) => {
+  const atStart = i === 0 && (anchor === "start" || anchor === "both");
+  const atEnd = i === (parts?.length || 0) - 1 && (anchor === "end" || anchor === "both");
+  if (!atStart && !atEnd) return limits?.min_const_bytes || MIN_CONST_BYTES;
+  return limits?.min_anchored_const_bytes || DEFAULT_MIN_ANCHORED_CONST_BYTES;
+};
+
+/**
+ * constError is the API's refusal of one constant, or null when it would
+ * accept it (templates.validConst). minBytes is constMinBytes for its place.
+ */
+export const constError = (text, minBytes = MIN_CONST_BYTES) => {
   const bytes = utf8Length(text);
-  if (bytes < MIN_CONST_BYTES) {
-    return `A constant must be at least ${MIN_CONST_BYTES} bytes (this one is ${bytes}).`;
+  if (bytes < minBytes) {
+    return minBytes < MIN_CONST_BYTES
+      ? `A constant at an anchored edge must be at least ${minBytes} bytes (this one is ${bytes}).`
+      : `A constant must be at least ${minBytes} bytes (this one is ${bytes}).`;
   }
   if (bytes > MAX_CONST_BYTES) {
     return `A constant must be at most ${MAX_CONST_BYTES} bytes (this one is ${bytes}).`;
@@ -207,11 +226,14 @@ export const constError = (text) => {
 export const isConst = (part) => typeof part?.const === "string" && part.const !== "";
 
 /**
- * validateTemplate checks a template as the API does (templates.Validate
- * plus the service's name and expiry rules). It returns {form, parts}:
- * form-level errors, and an error per part index.
+ * validateTemplate checks a template as the API does (templates.ValidateWith
+ * plus the service's name and expiry rules). limits is the list's meta. It
+ * returns {form, parts}: form-level errors, and an error per part index.
  */
-export const validateTemplate = ({ name, placement, parts, expiresAfterDays }, { checkName = true } = {}) => {
+export const validateTemplate = (
+  { name, placement, parts, expiresAfterDays },
+  { checkName = true, limits = null } = {}
+) => {
   const form = [];
   const partErrors = {};
   if (checkName && !NAME_PATTERN.test(name || "")) {
@@ -243,7 +265,7 @@ export const validateTemplate = ({ name, placement, parts, expiresAfterDays }, {
       partErrors[i] = "Two constants in a row must be one constant.";
       return;
     }
-    const err = constError(p.const || "");
+    const err = constError(p.const || "", constMinBytes(i, parts, placement?.anchor || "both", limits));
     if (err) partErrors[i] = err;
   });
   if (consts === 0) form.push("A template needs at least one constant.");

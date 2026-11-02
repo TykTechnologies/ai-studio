@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/guardrails/templates"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
@@ -84,6 +85,28 @@ func TestAppPromptTemplates_CreateValidates(t *testing.T) {
 	again, err := svc.CreateAppPromptTemplate(appID, 1, prReviewSpec("pr-review"))
 	require.NoError(t, err)
 	assert.Equal(t, 2, again.Version, "a second proposal under a name is its next version")
+}
+
+func TestAppPromptTemplates_AnchoredConstMinimum(t *testing.T) {
+	svc, appID := setupPromptTemplateService(t)
+	// A prompt that opens with a 25-byte header before variable text.
+	spec := func(name string) PromptTemplateSpec {
+		return PromptTemplateSpec{
+			Name:      name,
+			Placement: &templates.Placement{Role: templates.RoleUser, Anchor: templates.AnchorStart},
+			Parts:     []templates.Part{{Const: "<instructions>\nPR Title: "}, {Slot: "title"}, {Const: ptOutro}, {Slot: "rest"}},
+		}
+	}
+
+	_, err := svc.CreateAppPromptTemplate(appID, 1, spec("default-minimum"))
+	require.NoError(t, err, "16 bytes by default")
+
+	saved := config.Installed()
+	t.Cleanup(func() { config.Set(saved) })
+	config.Set(&config.AppConf{PromptTemplateMinAnchoredConstBytes: 32})
+	_, err = svc.CreateAppPromptTemplate(appID, 1, spec("raised-minimum"))
+	assert.ErrorIs(t, err, ErrInvalidPromptTemplate, "PROMPT_TEMPLATE_MIN_ANCHORED_CONST_BYTES=32 refuses it")
+	assert.Equal(t, 32, PromptTemplateLimits().AnchoredConstMin())
 }
 
 func TestAppPromptTemplates_ApproveAndVersioning(t *testing.T) {

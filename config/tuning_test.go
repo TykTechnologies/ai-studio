@@ -45,6 +45,16 @@ func TestLoadFrom_TuningSettings(t *testing.T) {
 	assert.Equal(t, 30*time.Second, bad.BudgetSyncInterval)
 }
 
+// PROMPT_TEMPLATE_MIN_ANCHORED_CONST_BYTES: 8-32, 16 when unset or invalid.
+func TestLoadFrom_PromptTemplateMinAnchoredConstBytes(t *testing.T) {
+	for v, want := range map[string]int{"": 16, "8": 8, "24": 24, "32": 32, "7": 16, "33": 16, "sixteen": 16} {
+		c := LoadFrom(func(k string) string {
+			return map[string]string{"PROMPT_TEMPLATE_MIN_ANCHORED_CONST_BYTES": v}[k]
+		})
+		assert.Equal(t, want, c.PromptTemplateMinAnchoredConstBytes, "value %q", v)
+	}
+}
+
 func TestInstalledNeverLoads(t *testing.T) {
 	ResetGlobalConfig()
 	t.Cleanup(ResetGlobalConfig)

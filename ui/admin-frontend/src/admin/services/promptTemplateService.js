@@ -6,10 +6,15 @@ import apiClient from "../utils/apiClient";
 
 const base = (appId) => `/apps/${appId}/prompt-templates`;
 
-export const listPromptTemplates = async (appId) => {
+// listPromptTemplatesWithLimits also returns the constant lengths the API
+// accepts (meta: min_const_bytes, min_anchored_const_bytes), or null from an
+// API that does not send them.
+export const listPromptTemplatesWithLimits = async (appId) => {
   const response = await apiClient.get(base(appId));
-  return response.data?.data || [];
+  return { templates: response.data?.data || [], limits: response.data?.meta || null };
 };
+
+export const listPromptTemplates = async (appId) => (await listPromptTemplatesWithLimits(appId)).templates;
 
 export const createPromptTemplate = async (appId, template) => {
   const response = await apiClient.post(base(appId), template);

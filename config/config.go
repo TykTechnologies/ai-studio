@@ -15,6 +15,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
 
+	"github.com/TykTechnologies/midsommar/v2/guardrails/templates"
 	"github.com/TykTechnologies/midsommar/v2/pkg/netguard"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
@@ -84,6 +85,11 @@ type AppConf struct {
 	NativeMaxFilteredItems     int   // NATIVE_API_MAX_FILTERED_ITEMS (10000)
 	NativeMaxGuardrailCalls    int   // NATIVE_API_MAX_GUARDRAIL_CALLS (10000)
 	NativeMaxInProgressPerApp  int   // NATIVE_API_MAX_IN_PROGRESS_PER_APP (0: no cap)
+	// PromptTemplateMinAnchoredConstBytes is the shortest constant a trusted
+	// prompt template may hold at an anchored edge (its first part anchored
+	// at the start, its last anchored at the end); every other constant needs
+	// 32 bytes. PROMPT_TEMPLATE_MIN_ANCHORED_CONST_BYTES, 8-32 (16).
+	PromptTemplateMinAnchoredConstBytes int
 	// Native resource reconciler timings (batches nobody downloads); zero
 	// keeps the gateway's default. Durations are Go durations ("45s").
 	NativeReconcileInterval time.Duration // NATIVE_API_RECONCILE_INTERVAL (30s)
@@ -988,6 +994,16 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 			conf.ChatSessionIdleTTL = d
 		} else {
 			cfgLog.Warn().Msgf("Warning: Invalid CHAT_SESSION_IDLE_TTL value: %s, using default 10m", v)
+		}
+	}
+
+	conf.PromptTemplateMinAnchoredConstBytes = templates.DefaultMinAnchoredConstBytes
+	if v := getenv("PROMPT_TEMPLATE_MIN_ANCHORED_CONST_BYTES"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= templates.MinAnchoredConstFloor && n <= templates.MinConstBytes {
+			conf.PromptTemplateMinAnchoredConstBytes = n
+		} else {
+			cfgLog.Warn().Msgf("Invalid PROMPT_TEMPLATE_MIN_ANCHORED_CONST_BYTES value %q (%d-%d); using %d", v,
+				templates.MinAnchoredConstFloor, templates.MinConstBytes, conf.PromptTemplateMinAnchoredConstBytes)
 		}
 	}
 

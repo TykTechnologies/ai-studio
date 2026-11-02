@@ -1,6 +1,7 @@
 import {
   classifyCodePoint,
   constError,
+  constMinBytes,
   expiresAt,
   isInvisible,
   previousApproved,
@@ -108,7 +109,37 @@ describe("validateTemplate", () => {
       ])
     );
     expect(v.parts[1]).toMatch(/Two slots in a row/);
-    expect(v.parts[2]).toMatch(/at least 32 bytes/);
+    expect(v.parts[2]).toMatch(/anchored edge must be at least 16 bytes/);
+  });
+
+  it("lets a constant at an anchored edge be shorter, as the API's limits say", () => {
+    const head = "<instructions>\nPR Title: "; // 25 bytes
+    const parts = [
+      { kind: "const", const: head },
+      { kind: "slot", slot: "title" },
+      { kind: "const", const: good.parts[2].const },
+      { kind: "slot", slot: "rest" },
+    ];
+    const start = { ...good.placement, anchor: "start" };
+    expect(validateTemplate({ ...good, placement: start, parts }).parts).toEqual({});
+    expect(validateTemplate({ ...good, placement: { ...good.placement, anchor: "end" }, parts }).parts[0]).toMatch(
+      /at least 32 bytes \(this one is 25\)/
+    );
+    const raised = validateTemplate(
+      { ...good, placement: start, parts },
+      { limits: { min_const_bytes: 32, min_anchored_const_bytes: 32 } }
+    );
+    expect(raised.parts[0]).toMatch(/at least 32 bytes/);
+  });
+
+  it("constMinBytes picks the minimum for each place", () => {
+    const parts = [{}, {}, {}];
+    expect(constMinBytes(0, parts, "start")).toBe(16);
+    expect(constMinBytes(2, parts, "start")).toBe(32);
+    expect(constMinBytes(2, parts, "end")).toBe(16);
+    expect(constMinBytes(0, parts, "both")).toBe(16);
+    expect(constMinBytes(1, parts, "both")).toBe(32);
+    expect(constMinBytes(0, parts, "start", { min_const_bytes: 32, min_anchored_const_bytes: 10 })).toBe(10);
   });
 
   it("refuses two constants in a row", () => {

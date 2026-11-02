@@ -61,7 +61,9 @@ func TestValidate(t *testing.T) {
 	}{
 		{"valid", ok, []Part{{Const: long}, {Slot: "s"}, {Const: long}}, ""},
 		{"exactly 32 bytes", ok, []Part{{Const: long}}, ""},
-		{"31 bytes", ok, []Part{{Const: long[1:]}}, "at least 32 bytes"},
+		{"31 bytes inside the template", ok, []Part{{Const: long}, {Slot: "a"}, {Const: long[1:]}, {Slot: "b"}, {Const: long}}, "at least 32 bytes"},
+		{"31 bytes at an anchored edge is fine", ok, []Part{{Const: long[1:]}}, ""},
+		{"15 bytes at an anchored edge", ok, []Part{{Const: long[:15]}}, "anchored edge must be at least 16 bytes"},
 		{"32 bytes but fewer characters is fine", ok, []Part{{Const: strings.Repeat("\u00e9", 16)}}, ""},
 		{"no parts", ok, nil, "must not be empty"},
 		{"slots only", Placement{Role: RoleUser, Message: MessageAny, Anchor: AnchorStart}, []Part{{Slot: "a"}}, "at least one constant"},
@@ -99,6 +101,71 @@ func TestValidate(t *testing.T) {
 			assert.Contains(t, err.Error(), tc.err)
 		})
 	}
+}
+
+func TestValidateWith_AnchoredEdge(t *testing.T) {
+	long := strings.Repeat("x", MinConstBytes)
+	short := "<instructions>\nPR Title: " // 25 bytes: a fixed header before variable text
+	start := Placement{Role: RoleUser, Message: MessageAny, Anchor: AnchorStart}
+	end := Placement{Role: RoleUser, Message: MessageAny, Anchor: AnchorEnd}
+	both := Placement{Role: RoleUser, Message: MessageAny, Anchor: AnchorBoth}
+	cases := []struct {
+		name  string
+		pl    Placement
+		parts []Part
+		l     Limits
+		err   string
+	}{
+		{"short first part anchored at the start", start, []Part{{Const: short}, {Slot: "title"}, {Const: long}, {Slot: "rest"}}, Limits{}, ""},
+		{"short last part anchored at the end", end, []Part{{Slot: "a"}, {Const: long}, {Slot: "b"}, {Const: short}}, Limits{}, ""},
+		{"short last part, anchored at the start only", start, []Part{{Const: long}, {Slot: "a"}, {Const: short}}, Limits{}, "at least 32 bytes"},
+		{"short first part, anchored at the end only", end, []Part{{Const: short}, {Slot: "a"}, {Const: long}}, Limits{}, "at least 32 bytes"},
+		{"short at both edges", both, []Part{{Const: short}, {Slot: "a"}, {Const: short}}, Limits{}, ""},
+		{"short in the middle", both, []Part{{Const: long}, {Slot: "a"}, {Const: short}, {Slot: "b"}, {Const: long}}, Limits{}, "at least 32 bytes"},
+		{"raised to 32", start, []Part{{Const: short}, {Slot: "title"}}, Limits{MinAnchoredConstBytes: 32}, "at least 32 bytes"},
+		{"above 32 is 32", start, []Part{{Const: long}, {Slot: "title"}}, Limits{MinAnchoredConstBytes: 64}, ""},
+		{"lowered to the floor", start, []Part{{Const: long[:MinAnchoredConstFloor]}, {Slot: "a"}}, Limits{MinAnchoredConstBytes: MinAnchoredConstFloor}, ""},
+		{"below the floor is the floor", start, []Part{{Const: long[:MinAnchoredConstFloor-1]}, {Slot: "a"}}, Limits{MinAnchoredConstBytes: 1}, "at least 8 bytes"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateWith(tc.pl, tc.parts, tc.l)
+			if tc.err == "" {
+				assert.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, ErrInvalid))
+			assert.Contains(t, err.Error(), tc.err)
+		})
+	}
+	assert.Equal(t, DefaultMinAnchoredConstBytes, Limits{}.AnchoredConstMin())
+}
+
+func TestMatch_ShortAnchoredConst(t *testing.T) {
+	// A prompt that opens with a short fixed header, then variable text, then
+	// the app's instructions: the header is exempt at offset 0 only.
+	head := "<instructions>\nPR Title: "
+	body := "\n\nYou are generating a PR overview. Describe every change and point reviewers at the risky parts.\n"
+	tpl := &Template{Name: "overview", Version: 1,
+		Placement: Placement{Role: RoleUser, Message: MessageAny, Anchor: AnchorStart},
+		Parts:     []Part{{Const: head}, {Slot: "title"}, {Const: body}, {Slot: "context"}}}
+	require.NoError(t, Validate(tpl.Placement, tpl.Parts))
+
+	text := head + "fix: raise the upstream timeout" + body + "<context>" + benignDif + "</context>"
+	out := matchOne(t, tpl, text)
+	require.NotNil(t, out.Match)
+	assert.Equal(t, []string{head, body}, exemptText(text, out.Match))
+
+	// The header elsewhere than the start is not the template.
+	assert.Nil(t, matchOne(t, tpl, "x"+text).Match)
+	// Repeated inside a slot it is scored, not exempt; too short to be
+	// reported as mimicry.
+	text = head + head + "title" + body + "rest"
+	out = matchOne(t, tpl, text)
+	require.NotNil(t, out.Match)
+	assert.Equal(t, []string{head, body}, exemptText(text, out.Match))
+	assert.Equal(t, Placeholder+head+"title"+Placeholder+"rest", NewResidual(text, out.Match.Exempt).Text)
 }
 
 func TestMatch_Exact(t *testing.T) {
