@@ -26,76 +26,97 @@ const (
 // profile arrives as arn%3Aaws%3Abedrock%3A...%2F..., and an unescaped ARN
 // contains a "/". Both come back unescaped and whole.
 func Model(vendor, path string, body []byte) string {
-	if m := pathModel(vendor, path); m != "" {
-		return m
+	switch vendor {
+	case vendorBedrock:
+		if m := bedrockPathModel(path); m != "" {
+			return m
+		}
+	case vendorGoogleAI, vendorVertex:
+		if m, _ := googlePathModel(path); m != "" {
+			return m
+		}
 	}
-	m, _ := bodyFields(body)
+	m, _ := BodyFields(body)
 	return m
 }
 
-// IsStreaming reports whether a request asks for a streamed answer: Bedrock's
-// converse-stream and invoke-with-response-stream operations, Google's
-// :streamGenerateContent method (or alt=sse), and otherwise "stream": true
-// in the body.
+// IsStreaming reports whether a request asks for a streamed answer. Where
+// the vendor's own API decides it in the path, the path alone does, and the
+// body is not read: Bedrock's /model/{modelId}/{operation} (converse-stream
+// and invoke-with-response-stream stream), and Google AI's and Vertex's
+// .../models/{model}:{method} (:streamGenerateContent, or alt=sse). Bedrock's
+// API has no body "stream" field, nor has Gemini's. Everywhere else, which
+// includes those vendors' OpenAI-compatible paths and Vertex's
+// :rawPredict / :streamRawPredict (partner models such as Anthropic's, whose
+// bodies say "stream"), it is "stream": true in the body (or alt=sse).
 func IsStreaming(vendor, path string, body []byte) bool {
-	if pathStreaming(vendor, path) {
-		return true
-	}
-	_, stream := bodyFields(body)
-	return stream
+	_, s := ModelAndStreamingFunc(vendor, path, func() (string, bool) { return BodyFields(body) })
+	return s
 }
 
 // ModelAndStreaming is Model and IsStreaming together, reading the body at
 // most once: a caller that needs both on every request pays for one JSON
-// parse of a body that may be megabytes, not two.
+// parse of a body that may be megabytes, not two, and none on a path that
+// decides both.
 func ModelAndStreaming(vendor, path string, body []byte) (model string, stream bool) {
-	model, stream = pathModel(vendor, path), pathStreaming(vendor, path)
-	if model != "" && stream {
-		return model, stream
-	}
-	bodyModel, bodyStream := bodyFields(body)
-	if model == "" {
-		model = bodyModel
-	}
-	return model, stream || bodyStream
+	return ModelAndStreamingFunc(vendor, path, func() (string, bool) { return BodyFields(body) })
 }
 
-// pathModel is the model a request's path names for vendor: Bedrock's
-// {modelId}, Google AI's and Vertex's {model}. "" for other vendors and
-// paths that name none.
-func pathModel(vendor, path string) string {
-	switch vendor {
-	case vendorBedrock:
-		return bedrockPathModel(path)
-	case vendorGoogleAI, vendorVertex:
-		return googlePathModel(path)
-	}
-	return ""
-}
-
-// pathStreaming reports whether a request's path asks for a stream for
-// vendor (Bedrock's streaming operations, Google's streaming method or
-// alt=sse).
-func pathStreaming(vendor, path string) bool {
+// ModelAndStreamingFunc is ModelAndStreaming with the body's fields from
+// bodyFields, called at most once and only when the path does not decide
+// both: a caller that has already decoded the body passes what it read
+// (ObjectFields) rather than parse it again.
+func ModelAndStreamingFunc(vendor, path string, bodyFields func() (model string, stream bool)) (model string, stream bool) {
 	p, query, _ := strings.Cut(path, "?")
 	switch vendor {
 	case vendorBedrock:
-		switch _, op := splitBedrockPath(p); strings.ToLower(op) {
+		id, op := splitBedrockPath(p)
+		switch strings.ToLower(op) {
 		case "converse-stream", "invoke-with-response-stream":
-			return true
+			stream = true
 		}
+		if id != "" {
+			return unescape(id), stream
+		}
+		// No model ID in the path (.../model//converse-stream, or not a
+		// /model/ path at all): the body names the model, and may ask to stream.
+		bodyModel, bodyStream := bodyFields()
+		return bodyModel, stream || bodyStream
 	case vendorGoogleAI, vendorVertex:
+		model, method := googlePathModel(p)
 		if strings.Contains(strings.ToLower(p), ":streamgeneratecontent") {
-			return true
+			stream = true
+		} else if q, err := url.ParseQuery(query); err == nil && q.Get("alt") == "sse" {
+			stream = true
 		}
-		if q, err := url.ParseQuery(query); err == nil && q.Get("alt") == "sse" {
-			return true
+		if model != "" && !googleBodyStreams(method) {
+			return model, stream
 		}
+		bodyModel, bodyStream := bodyFields()
+		if model == "" {
+			model = bodyModel
+		}
+		return model, stream || bodyStream
+	}
+	return bodyFields()
+}
+
+// googleBodyStreams reports a Vertex method whose body says whether it
+// streams: rawPredict and streamRawPredict carry a partner model's own
+// request (Anthropic's, Mistral's), which has "stream".
+func googleBodyStreams(method string) bool {
+	switch strings.ToLower(method) {
+	case "rawpredict", "streamrawpredict":
+		return true
 	}
 	return false
 }
 
-func bodyFields(body []byte) (model string, stream bool) {
+// BodyFields reads the "model" (a string) and "stream" (a bool) fields of a
+// JSON request body; a field of another type, or a body that is not JSON,
+// reads as absent. Keys match as encoding/json matches struct fields: an
+// exact match, or else one that differs only in case.
+func BodyFields(body []byte) (model string, stream bool) {
 	var fields struct {
 		Model  json.RawMessage `json:"model"`
 		Stream json.RawMessage `json:"stream"`
@@ -108,6 +129,37 @@ func bodyFields(body []byte) (model string, stream bool) {
 	return model, stream
 }
 
+// ObjectFields is BodyFields of a body already decoded into obj (as
+// encoding/json decodes a JSON object into map[string]any), so a caller that
+// has decoded it need not parse it again. ok is false when obj cannot say:
+// when it has two keys that match "model" (or "stream") but for case,
+// encoding/json keeps the later one in the body, an order a map has lost.
+// Call BodyFields then.
+func ObjectFields(obj map[string]any) (model string, stream bool, ok bool) {
+	var modelKeys, streamKeys int
+	for k, v := range obj {
+		switch {
+		case strings.EqualFold(k, "model"):
+			modelKeys++
+			model, _ = v.(string)
+		case strings.EqualFold(k, "stream"):
+			streamKeys++
+			stream, _ = v.(bool)
+		}
+	}
+	if modelKeys > 1 || streamKeys > 1 {
+		return "", false, false
+	}
+	return model, stream, true
+}
+
+func unescape(s string) string {
+	if u, err := url.PathUnescape(s); err == nil {
+		return u
+	}
+	return s
+}
+
 // bedrockPathModel is the unescaped model ID of a Bedrock runtime path.
 func bedrockPathModel(p string) string {
 	p, _, _ = strings.Cut(p, "?")
@@ -115,10 +167,7 @@ func bedrockPathModel(p string) string {
 	if id == "" {
 		return ""
 	}
-	if u, err := url.PathUnescape(id); err == nil {
-		return u
-	}
-	return id
+	return unescape(id)
 }
 
 // splitBedrockPath splits .../model/{modelId}/{operation} into the (still
@@ -140,21 +189,22 @@ func splitBedrockPath(p string) (id, op string) {
 	return after[:i], after[i+1:]
 }
 
-// googlePathModel is the {model} of .../models/{model}:{method}.
-func googlePathModel(p string) string {
+// googlePathModel is the {model} and {method} of .../models/{model}:{method}
+// (method "" when there is none).
+func googlePathModel(p string) (model, method string) {
 	p, _, _ = strings.Cut(p, "?")
 	i := strings.LastIndex(p, "/models/")
 	if i < 0 {
-		return ""
+		return "", ""
 	}
 	m := p[i+len("/models/"):]
 	if j := strings.IndexAny(m, ":/"); j >= 0 {
+		if m[j] == ':' {
+			method, _, _ = strings.Cut(m[j+1:], "/")
+		}
 		m = m[:j]
 	}
-	if u, err := url.PathUnescape(m); err == nil {
-		return u
-	}
-	return m
+	return unescape(m), method
 }
 
 // Usage is the token usage a response reports.

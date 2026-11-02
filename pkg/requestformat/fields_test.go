@@ -2,7 +2,11 @@ package requestformat
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -70,6 +74,22 @@ func TestIsStreaming(t *testing.T) {
 		{"google stream", "google_ai", "/v1beta/models/gemini-2.5-flash:streamGenerateContent", `{}`, true},
 		{"google alt=sse", "vertex", "/v1/projects/p/locations/l/publishers/google/models/g:generateContent?alt=sse", `{}`, true},
 		{"google rest", "google_ai", "/v1beta/models/gemini-2.5-flash:generateContent", `{}`, false},
+		// Where the vendor's path decides, the body is not read (53e.45):
+		// Bedrock and Gemini have no body "stream".
+		// An empty model ID still streams by its operation (53e.49).
+		{"bedrock empty model id stream", "bedrock", "/llm/rest/br/model//converse-stream", `{}`, true},
+		{"bedrock empty model id body stream", "bedrock", "/model//converse", `{"stream":true}`, true},
+		{"bedrock path ignores body stream", "bedrock", "/model/amazon.nova-pro-v1:0/converse", `{"stream":true}`, false},
+		{"bedrock invoke ignores body stream", "bedrock", "/model/anthropic.claude-v2/invoke", `{"stream":true}`, false},
+		{"google native ignores body stream", "google_ai", "/v1beta/models/gemini-2.5-flash:generateContent", `{"stream":true}`, false},
+		{"vertex native ignores body stream", "vertex", "/v1/projects/p/locations/l/publishers/google/models/g:generateContent", `{"stream":true}`, false},
+		// Where the protocol carries it in the body, it still counts.
+		{"google openai-compatible", "google_ai", "/v1beta/openai/chat/completions", `{"model":"gemini-2.5-flash","stream":true}`, true},
+		{"vertex openapi", "vertex", "/v1/projects/p/locations/l/endpoints/openapi/chat/completions", `{"model":"google/gemini-2.0-flash","stream":true}`, true},
+		{"vertex anthropic streamRawPredict", "vertex", "/v1/projects/p/locations/l/publishers/anthropic/models/claude-sonnet-4-5:streamRawPredict", `{"anthropic_version":"vertex-2023-10-16","stream":true}`, true},
+		{"vertex anthropic rawPredict", "vertex", "/v1/projects/p/locations/l/publishers/anthropic/models/claude-sonnet-4-5:rawPredict", `{"anthropic_version":"vertex-2023-10-16"}`, false},
+		{"vertex anthropic rawPredict stream", "vertex", "/v1/projects/p/locations/l/publishers/anthropic/models/claude-sonnet-4-5:rawPredict", `{"stream":true}`, true},
+		{"google tuned model stream", "google_ai", "/v1beta/tunedModels/my-model:streamGenerateContent", `{}`, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := IsStreaming(tc.vendor, tc.path, []byte(tc.body)); got != tc.want {
@@ -80,6 +100,63 @@ func TestIsStreaming(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestModelAndStreaming_PathDecidesWithoutTheBody: on the vendors' native
+// paths the body is never read (53e.45, v2.2.2 parity); elsewhere it is, once.
+func TestModelAndStreaming_PathDecidesWithoutTheBody(t *testing.T) {
+	for _, tc := range []struct {
+		vendor, path string
+		readsBody    bool
+	}{
+		{"bedrock", "/llm/rest/br/model/amazon.nova-pro-v1:0/converse", false},
+		{"bedrock", "/llm/rest/br/model/" + profileARNEscaped + "/converse-stream", false},
+		{"bedrock", "/model/anthropic.claude-v2/invoke", false},
+		{"bedrock", "/llm/rest/br/openai/v1/chat/completions", true},
+		{"google_ai", "/llm/rest/gem/v1beta/models/gemini-2.5-flash:generateContent", false},
+		{"google_ai", "/v1beta/models/gemini-2.5-pro:streamGenerateContent?alt=sse", false},
+		{"vertex", "/v1/projects/p/locations/l/publishers/google/models/g:countTokens", false},
+		{"vertex", "/v1/projects/p/locations/l/publishers/anthropic/models/claude:streamRawPredict", true},
+		{"vertex", "/v1/projects/p/locations/l/endpoints/openapi/chat/completions", true},
+		{"google_ai", "/v1beta/openai/chat/completions", true},
+		{"openai", "/v1/chat/completions", true},
+		{"anthropic", "/v1/messages", true},
+	} {
+		calls := 0
+		ModelAndStreamingFunc(tc.vendor, tc.path, func() (string, bool) { calls++; return "", false })
+		want := 0
+		if tc.readsBody {
+			want = 1
+		}
+		assert.Equal(t, want, calls, "%s %s", tc.vendor, tc.path)
+	}
+}
+
+// ObjectFields reads a decoded body as BodyFields reads its bytes, or says
+// it cannot.
+func TestObjectFields(t *testing.T) {
+	for _, body := range []string{
+		`{"model":"gpt-4o","stream":true}`,
+		`{"model":"gpt-4o","stream":false,"messages":[]}`,
+		`{"messages":[]}`,
+		`{"model":42,"stream":"yes"}`,
+		`{"model":null,"stream":null}`,
+		`{"Model":"gpt-4o","STREAM":true}`,
+		`{"model":"a","model":"b","stream":true,"stream":false}`,
+		`{"model":{"name":"x"},"stream":1}`,
+	} {
+		var obj map[string]any
+		require.NoError(t, json.Unmarshal([]byte(body), &obj), body)
+		model, stream, ok := ObjectFields(obj)
+		require.True(t, ok, body)
+		wantModel, wantStream := BodyFields([]byte(body))
+		assert.Equal(t, wantModel, model, body)
+		assert.Equal(t, wantStream, stream, body)
+	}
+	var obj map[string]any
+	require.NoError(t, json.Unmarshal([]byte(`{"model":"a","Model":"b"}`), &obj))
+	_, _, ok := ObjectFields(obj)
+	assert.False(t, ok, "two keys match model but for case: the body's order decides, which the map has lost")
 }
 
 // TestModelAndStreaming_ParsesBodyOnce: reading both costs one body parse,

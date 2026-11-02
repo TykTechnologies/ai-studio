@@ -122,6 +122,10 @@ func (p *Proxy) modelValidationMiddleware(next http.Handler) http.Handler {
 		r.Body.Close()
 		r.Body = io.NopCloser(strings.NewReader(string(body)))
 
+		// The extractors keep the body fields they decode, for the exchange
+		// metadata (withExchangeMetadata), so it does not parse the body again.
+		r, _ = withRequestFields(r)
+
 		extractor, ok := validator.extractors[strings.ToLower(string(llm.Vendor))]
 		if !ok {
 			respondWithError(w, http.StatusBadRequest, "no model extractor for this vendor", nil, false)
@@ -153,8 +157,8 @@ func (p *Proxy) modelValidationMiddleware(next http.Handler) http.Handler {
 }
 
 func OpenAIModelExtractor(r *http.Request, body []byte) (string, error) {
-	var req map[string]interface{}
-	if err := json.Unmarshal(body, &req); err != nil {
+	req, err := decodeRequestBody(r, body)
+	if err != nil {
 		return "", &BadRequestError{"invalid JSON body"}
 	}
 
@@ -176,6 +180,20 @@ func OpenAIModelExtractor(r *http.Request, body []byte) (string, error) {
 	return model, nil
 }
 
+// decodeRequestBody decodes an extractor's body into a map, as
+// json.Unmarshal does, reusing the map an earlier step (the edge's post_auth
+// hook) decoded from the same bytes, and keeping it and its "model" and
+// "stream" fields on r's requestFields (modelValidationMiddleware puts one
+// there) for the exchange metadata. The map is shared: read it, never
+// change it.
+func decodeRequestBody(r *http.Request, body []byte) (map[string]any, error) {
+	var f *requestFields
+	if r != nil {
+		f = requestFieldsOf(r.Context())
+	}
+	return f.decodeObject(body)
+}
+
 func AzureModelExtractor(r *http.Request, body []byte) (string, error) {
 	// Extract from URL path
 	parts := strings.Split(r.URL.Path, "/")
@@ -186,8 +204,8 @@ func AzureModelExtractor(r *http.Request, body []byte) (string, error) {
 }
 
 func AnthropicModelExtractor(r *http.Request, body []byte) (string, error) {
-	var req map[string]interface{}
-	if err := json.Unmarshal(body, &req); err != nil {
+	req, err := decodeRequestBody(r, body)
+	if err != nil {
 		return "", &BadRequestError{"invalid JSON body"}
 	}
 
@@ -215,8 +233,8 @@ func GoogleAIModelExtractor(r *http.Request, body []byte) (string, error) {
 		}
 	}
 
-	var req map[string]any
-	if err := json.Unmarshal(body, &req); err != nil {
+	req, err := decodeRequestBody(r, body)
+	if err != nil {
 		return "", &BadRequestError{"invalid JSON body"}
 	}
 
@@ -250,8 +268,8 @@ func VertexModelExtractor(r *http.Request, body []byte) (string, error) {
 	}
 
 	// Fallback to body check
-	var req map[string]interface{}
-	if err := json.Unmarshal(body, &req); err != nil {
+	req, err := decodeRequestBody(r, body)
+	if err != nil {
 		return "", &BadRequestError{"invalid JSON body"}
 	}
 
@@ -274,8 +292,8 @@ func HuggingFaceModelExtractor(r *http.Request, body []byte) (string, error) {
 	}
 
 	// Check request body
-	var req map[string]interface{}
-	if err := json.Unmarshal(body, &req); err != nil {
+	req, err := decodeRequestBody(r, body)
+	if err != nil {
 		return "", &BadRequestError{"invalid JSON body"}
 	}
 

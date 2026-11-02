@@ -410,7 +410,12 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 		}
 		// The model the request names and whether it streams, for every
 		// vendor (proxy.ExchangeMetadata); hosts before 2.3 do not set them.
-		for k, v := range proxy.ExchangeMetadata(vendor, r.URL.EscapedPath(), bodyBytes) {
+		// Kept on the request, so the proxy handler reuses them for the
+		// response hooks rather than parse the body again (unless a plugin
+		// rewrites it).
+		withFields, exchange := proxy.ExchangeMetadataFor(r, vendor, bodyBytes)
+		*r = *withFields
+		for k, v := range exchange {
 			postAuthMetadata[k] = v
 		}
 

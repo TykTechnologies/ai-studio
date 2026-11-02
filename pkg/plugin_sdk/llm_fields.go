@@ -23,7 +23,11 @@ func RequestModel(vendor, path string, body []byte) string {
 
 // IsStreamingRequest reports whether a request asks for a streamed answer:
 // Bedrock converse-stream / invoke-with-response-stream, Google
-// :streamGenerateContent (or alt=sse), or "stream": true in the body.
+// :streamGenerateContent (or alt=sse), or "stream": true in the body. On
+// Bedrock's /model/{modelId}/ and Gemini's models/{model}: paths the path
+// alone decides (their APIs have no body "stream"), and the body is not read;
+// their OpenAI-compatible paths and Vertex :rawPredict / :streamRawPredict
+// read the body.
 func IsStreamingRequest(vendor, path string, body []byte) bool {
 	return requestformat.IsStreaming(vendor, path, body)
 }
