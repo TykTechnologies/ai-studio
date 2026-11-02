@@ -671,20 +671,30 @@ var pluginSelfServiceFields = map[string]bool{"config": true, "name": true, "des
 // a connection the switch no longer allows: the load validates the command
 // with the new exemption and refuses an internal host (w4e.5).
 func (a *API) reloadForInternalHostChange(plugin *models.Plugin) {
-	mgr := a.service.AIStudioPluginManager
-	if mgr == nil || !mgr.IsPluginLoaded(plugin.ID) {
-		return
-	}
-	if err := mgr.UnloadPlugin(plugin.ID); err != nil {
-		log.Printf("Warning: Failed to unload plugin %s after its Allow internal host switch changed: %v", plugin.Name, err)
-		return
-	}
-	if !plugin.IsActive {
-		return
-	}
-	if _, err := mgr.LoadPlugin(plugin.ID); err != nil {
+	if err := a.reloadLoadedPlugin(plugin, "Allow internal host switch changed"); err != nil {
 		log.Printf("Plugin %s not reloaded after its Allow internal host switch changed: %v", plugin.Name, err)
 	}
+}
+
+// reloadLoadedPlugin stops a plugin Studio has loaded and, when it is active,
+// loads it again, so the load reads its stored command, exemption and
+// configuration. reason completes "after its ..." in the unload warning. It
+// returns the load error; nil also when the plugin was not loaded, the
+// unload failed (logged here) or the plugin is inactive.
+func (a *API) reloadLoadedPlugin(plugin *models.Plugin, reason string) error {
+	mgr := a.service.AIStudioPluginManager
+	if mgr == nil || !mgr.IsPluginLoaded(plugin.ID) {
+		return nil
+	}
+	if err := mgr.UnloadPlugin(plugin.ID); err != nil {
+		log.Printf("Warning: Failed to unload plugin %s after its %s: %v", plugin.Name, reason, err)
+		return nil
+	}
+	if !plugin.IsActive {
+		return nil
+	}
+	_, err := mgr.LoadPlugin(plugin.ID)
+	return err
 }
 
 // pluginConfigChanged reports whether an update changed a plugin's stored
@@ -704,11 +714,7 @@ func (a *API) reloadForConfigChange(plugin *models.Plugin) {
 		return
 	}
 	log.Printf("Reloading plugin %s (ID: %d) to apply its updated configuration", plugin.Name, plugin.ID)
-	if err := mgr.UnloadPlugin(plugin.ID); err != nil {
-		log.Printf("Warning: Failed to unload plugin %s after its configuration changed: %v", plugin.Name, err)
-		return
-	}
-	if _, err := mgr.LoadPlugin(plugin.ID); err != nil {
+	if err := a.reloadLoadedPlugin(plugin, "configuration changed"); err != nil {
 		log.Printf("Warning: Failed to reload plugin %s after its configuration changed: %v", plugin.Name, err)
 	}
 }
