@@ -109,10 +109,13 @@ func TestAppPromptTemplateHandlers(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	var list struct {
 		Data []AppPromptTemplateResponse `json:"data"`
+		Meta AppPromptTemplateLimits     `json:"meta"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &list))
 	require.Len(t, list.Data, 1)
 	assert.Equal(t, 1, list.Data[0].Version)
+	assert.Equal(t, AppPromptTemplateLimits{MinConstBytes: 32, MinAnchoredConstBytes: 16}, list.Meta,
+		"the editor checks the lengths this Studio accepts")
 
 	w = performRequest(api.router, http.MethodPost, item+"/retire", nil)
 	require.Equal(t, http.StatusOK, w.Code)

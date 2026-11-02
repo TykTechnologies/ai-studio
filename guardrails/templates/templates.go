@@ -29,6 +29,18 @@ const (
 	// constant would exempt text an attacker can easily reproduce, and
 	// recurs too often to locate a slot.
 	MinConstBytes = 32
+	// DefaultMinAnchoredConstBytes is the shortest constant a template may
+	// hold at an anchored edge (its first part when anchored at the start,
+	// its last when anchored at the end) unless Limits says otherwise. The
+	// anchor fixes where such a constant is (offset 0, or the end of the
+	// message), so it is never searched for, and it cannot exempt anything but
+	// its own approved bytes there. A prompt that opens with a short fixed
+	// header before variable text ("PR Title: <title>") needs it.
+	DefaultMinAnchoredConstBytes = 16
+	// MinAnchoredConstFloor is the least Limits.MinAnchoredConstBytes may be
+	// set to, and what an edge gateway checks, so it accepts whatever its
+	// hub approved.
+	MinAnchoredConstFloor = 8
 	// MaxApprovedPerApp bounds the approved templates of one app.
 	MaxApprovedPerApp = 10
 	// MaxParts bounds a template's parts.
@@ -110,9 +122,38 @@ func (p Placement) Normalize() Placement {
 	return p
 }
 
-// Validate checks a template's placement and parts. The placement must be
-// normalised first.
+// Limits are the length rules Validate applies that a deployment may tune.
+type Limits struct {
+	// MinAnchoredConstBytes is the shortest constant at an anchored edge,
+	// clamped to MinAnchoredConstFloor..MinConstBytes; 0 is
+	// DefaultMinAnchoredConstBytes. Every other constant needs MinConstBytes.
+	MinAnchoredConstBytes int
+}
+
+// AnchoredConstMin is the effective minimum for a constant at an anchored
+// edge.
+func (l Limits) AnchoredConstMin() int {
+	switch n := l.MinAnchoredConstBytes; {
+	case n == 0:
+		return DefaultMinAnchoredConstBytes
+	case n < MinAnchoredConstFloor:
+		return MinAnchoredConstFloor
+	case n > MinConstBytes:
+		return MinConstBytes
+	default:
+		return n
+	}
+}
+
+// Validate checks a template's placement and parts with the default Limits.
+// The placement must be normalised first.
 func Validate(pl Placement, parts []Part) error {
+	return ValidateWith(pl, parts, Limits{})
+}
+
+// ValidateWith checks a template's placement and parts with the given
+// Limits. The placement must be normalised first.
+func ValidateWith(pl Placement, parts []Part, l Limits) error {
 	switch pl.Role {
 	case RoleSystem, RoleUser:
 	default:
@@ -154,7 +195,12 @@ func Validate(pl Placement, parts []Part) error {
 		if i > 0 && parts[i-1].Const != "" {
 			return invalid("part %d: two constants in a row must be one constant", i)
 		}
-		if err := validConst(p.Const); err != nil {
+		minBytes := MinConstBytes
+		if (i == 0 && (pl.Anchor == AnchorStart || pl.Anchor == AnchorBoth)) ||
+			(i == len(parts)-1 && (pl.Anchor == AnchorEnd || pl.Anchor == AnchorBoth)) {
+			minBytes = l.AnchoredConstMin()
+		}
+		if err := validConst(p.Const, minBytes); err != nil {
 			return invalid("part %d: %v", i, err)
 		}
 	}
@@ -170,11 +216,15 @@ func Validate(pl Placement, parts []Part) error {
 	return nil
 }
 
-// validConst checks one constant: long enough, valid UTF-8, and free of
-// invisible characters, which could hide text in what an operator approves.
-func validConst(c string) error {
-	if len(c) < MinConstBytes {
-		return fmt.Errorf("a constant must be at least %d bytes", MinConstBytes)
+// validConst checks one constant: at least minBytes long, valid UTF-8, and
+// free of invisible characters, which could hide text in what an operator
+// approves.
+func validConst(c string, minBytes int) error {
+	if len(c) < minBytes {
+		if minBytes < MinConstBytes {
+			return fmt.Errorf("a constant at an anchored edge must be at least %d bytes", minBytes)
+		}
+		return fmt.Errorf("a constant must be at least %d bytes", minBytes)
 	}
 	if len(c) > MaxConstBytes {
 		return fmt.Errorf("a constant must be at most %d bytes", MaxConstBytes)

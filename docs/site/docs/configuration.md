@@ -162,6 +162,9 @@ Batches nobody downloads are accounted by a background reconciler on the gateway
 
 A batch's `results_url` uses `PROXY_URL` (Microgateway: `GATEWAY_PUBLIC_URL`) as its base when set, and is a relative path otherwise. See [Proxy & API Gateway](./proxy.md#message-batches-and-other-native-api-operations).
 
+### Trusted prompt templates
+*   Shortest constant at an anchored edge of a [trusted prompt template](./guardrails.md#trusted-prompt-templates) (`PROMPT_TEMPLATE_MIN_ANCHORED_CONST_BYTES`): default `16`, from `8` to `32`. This is the first part of a template anchored at the start, or the last of one anchored at the end; every other constant needs 32 bytes. Raise it to `32` for one rule everywhere. Edge gateways accept whatever their AI Studio approved, so the setting is only needed on AI Studio.
+
 ### Audit Trail (Enterprise)
 Every action on the management API is recorded for incident reconstruction. On by default in Enterprise Edition.
 

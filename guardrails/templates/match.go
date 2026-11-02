@@ -153,7 +153,10 @@ func (t *Template) compiled() *compiledTemplate {
 }
 
 func compile(t *Template) *compiledTemplate {
-	if Validate(t.Placement, t.Parts) != nil {
+	// The configured minimum for anchored constants was applied when the
+	// template was stored (on the hub); here only the floor every setting
+	// keeps, so a template approved under a lower setting still matches.
+	if ValidateWith(t.Placement, t.Parts, Limits{MinAnchoredConstBytes: MinAnchoredConstFloor}) != nil {
 		return nil
 	}
 	c := &compiledTemplate{shingles: map[uint64]string{}}

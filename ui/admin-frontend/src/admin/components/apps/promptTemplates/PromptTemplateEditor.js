@@ -26,9 +26,11 @@ import { MarkerSummary } from "./VisibleText";
 import {
   ANCHORS,
   DEFAULT_EXPIRES_AFTER_DAYS,
+  DEFAULT_MIN_ANCHORED_CONST_BYTES,
   MESSAGES,
   MIN_CONST_BYTES,
   ROLES,
+  constMinBytes,
   describePlacement,
   fromEditorParts,
   toEditorParts,
@@ -63,7 +65,7 @@ const formFrom = (t) => ({
 });
 
 /** PartsEditor edits an ordered list of constants and slots. */
-export const PartsEditor = ({ parts, errors, onChange, showErrors }) => {
+export const PartsEditor = ({ parts, errors, onChange, showErrors, anchor = "both", limits = null }) => {
   const set = (i, next) => onChange(parts.map((p, j) => (j === i ? next : p)));
   const move = (i, d) => {
     const next = [...parts];
@@ -120,7 +122,10 @@ export const PartsEditor = ({ parts, errors, onChange, showErrors }) => {
                   onChange={(e) => set(i, { ...p, const: e.target.value })}
                   inputProps={{ "aria-label": label, style: { fontFamily: "monospace", fontSize: "0.85rem" } }}
                   error={Boolean(err)}
-                  helperText={err || `${utf8Length(p.const)} bytes (at least ${MIN_CONST_BYTES}). Exact text: no trimming or normalisation.`}
+                  helperText={
+                    err ||
+                    `${utf8Length(p.const)} bytes (at least ${constMinBytes(i, parts, anchor, limits)}). Exact text: no trimming or normalisation.`
+                  }
                 />
                 {p.const && <MarkerSummary text={p.const} />}
               </>
@@ -151,7 +156,7 @@ export const PartsEditor = ({ parts, errors, onChange, showErrors }) => {
   );
 };
 
-const PromptTemplateEditor = ({ open, appId, template, onClose, onSaved }) => {
+const PromptTemplateEditor = ({ open, appId, template, limits = null, onClose, onSaved }) => {
   const [form, setForm] = useState(emptyForm);
   const [showErrors, setShowErrors] = useState(false);
   const [apiError, setApiError] = useState(null);
@@ -166,7 +171,7 @@ const PromptTemplateEditor = ({ open, appId, template, onClose, onSaved }) => {
     }
   }, [open, template]);
 
-  const validation = validateTemplate(form, { checkName: !editing });
+  const validation = validateTemplate(form, { checkName: !editing, limits });
   const invalid = validation.form.length > 0 || Object.keys(validation.parts).length > 0;
   const setPlacement = (k, v) => setForm({ ...form, placement: { ...form.placement, [k]: v } });
 
@@ -292,12 +297,16 @@ const PromptTemplateEditor = ({ open, appId, template, onClose, onSaved }) => {
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
           The app's own text as constants, byte for byte, and the parts that vary as named slots, in order. Each
-          constant is at least {MIN_CONST_BYTES} bytes, with no invisible characters.
+          constant is at least {limits?.min_const_bytes || MIN_CONST_BYTES} bytes, or{" "}
+          {limits?.min_anchored_const_bytes || DEFAULT_MIN_ANCHORED_CONST_BYTES} at an anchored edge (the first part
+          when anchored at the start, the last when anchored at the end), with no invisible characters.
         </Typography>
         <PartsEditor
           parts={form.parts}
           errors={validation.parts}
           showErrors={showErrors}
+          anchor={form.placement?.anchor || "both"}
+          limits={limits}
           onChange={(parts) => setForm({ ...form, parts })}
         />
       </DialogContent>

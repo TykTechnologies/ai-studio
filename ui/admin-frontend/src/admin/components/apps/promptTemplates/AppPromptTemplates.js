@@ -29,7 +29,7 @@ import { expiresAt, placementLabel } from "./promptTemplateText";
 import {
   apiErrorMessage,
   deletePromptTemplate,
-  listPromptTemplates,
+  listPromptTemplatesWithLimits,
   retirePromptTemplate,
 } from "../../../services/promptTemplateService";
 
@@ -74,13 +74,15 @@ const AppPromptTemplates = ({ appId }) => {
   const [editor, setEditor] = useState({ open: false, template: null });
   const [reviewing, setReviewing] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [limits, setLimits] = useState(null);
 
   const userName = useUserNames(templates.flatMap((t) => [String(t.approved_by || ""), String(t.created_by || "")]));
 
   const load = useCallback(async () => {
     try {
-      const list = await listPromptTemplates(appId);
+      const { templates: list, limits: got } = await listPromptTemplatesWithLimits(appId);
       setTemplates(list);
+      setLimits(got);
       setError(null);
       return list;
     } catch (e) {
@@ -242,6 +244,7 @@ const AppPromptTemplates = ({ appId }) => {
         open={editor.open}
         appId={appId}
         template={editor.template}
+        limits={limits}
         onClose={() => setEditor({ open: false, template: null })}
         onSaved={(saved) => {
           setEditor({ open: false, template: null });

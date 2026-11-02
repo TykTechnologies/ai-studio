@@ -160,12 +160,33 @@ func TestEdgeSync_NoTemplatesIsByteIdentical(t *testing.T) {
 func TestEdgeSync_InvalidTemplateIgnored(t *testing.T) {
 	t.Cleanup(func() { scripting.SetPromptTemplateSource(nil) })
 	bad := prReviewConfig(8)
-	bad.Parts = []*pb.PromptTemplatePart{{Constant: "too short"}}
+	bad.Parts = []*pb.PromptTemplatePart{{Constant: "short"}} // below the 8-byte floor for an anchored constant
 	installPromptTemplates([]*pb.PromptTemplateConfig{bad})
 	p := &edgeFake{}
 	out, err := scripting.NewFilterRunner(edgeGuardrail(t, p)).RunScript(edgeRequest(t, 10, edgeTplIntro+edgeTplDiff+edgeTplOutro), nil)
 	require.NoError(t, err)
 	assert.True(t, out.Block)
+}
+
+// The hub sets the shortest anchored constant it approves
+// (PROMPT_TEMPLATE_MIN_ANCHORED_CONST_BYTES, down to 8 bytes); the edge checks
+// only that floor, so it uses a template its hub approved with a lower
+// setting than the default.
+func TestEdgeSync_ShortAnchoredConstFromHub(t *testing.T) {
+	t.Cleanup(func() { scripting.SetPromptTemplateSource(nil) })
+	PromptTemplateMatches.DrainMatched()
+	head := "Review:\n" // 8 bytes
+	tpl := prReviewConfig(9)
+	tpl.PlacementAnchor = "start"
+	tpl.Parts = []*pb.PromptTemplatePart{{Constant: head}, {Slot: "title"}, {Constant: edgeTplIntro}, {Slot: "diff"}}
+	installPromptTemplates([]*pb.PromptTemplateConfig{tpl})
+
+	p := &edgeFake{}
+	out, err := scripting.NewFilterRunner(edgeGuardrail(t, p)).RunScript(edgeRequest(t, 10, head+"fix: timeout"+edgeTplIntro+edgeTplDiff), nil)
+	require.NoError(t, err)
+	assert.False(t, out.Block, "the App's own instructions are not scored")
+	assert.Equal(t, []string{"[app template]fix: timeout[app template]" + edgeTplDiff}, p.texts())
+	assert.Equal(t, []uint32{9}, PromptTemplateMatches.DrainMatched())
 }
 
 // Matches a heartbeat could not deliver are kept for the next one.

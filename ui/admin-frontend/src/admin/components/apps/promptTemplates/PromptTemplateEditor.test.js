@@ -56,8 +56,20 @@ describe("PromptTemplateEditor", () => {
     fill("Slot 1 name", "diff");
     fill("Constant 2", outro.replace("real", "re\u200bal"));
     fireEvent.click(screen.getByRole("button", { name: "Propose" }));
-    expect(await screen.findByText(/at least 32 bytes \(this one is 10\)/)).toBeInTheDocument();
+    expect(await screen.findByText(/anchored edge must be at least 16 bytes \(this one is 10\)/)).toBeInTheDocument();
     expect(screen.getByText(/invisible characters \(ZWSP U\+200B/)).toBeInTheDocument();
+    expect(apiClient.post).not.toHaveBeenCalled();
+  });
+
+  it("applies the Studio's minimum for a constant at an anchored edge", async () => {
+    renderEditor({ limits: { min_const_bytes: 32, min_anchored_const_bytes: 12 } });
+    fill("Name", "pr-review");
+    fill("Constant 1", "Too short.");
+    fill("Slot 1 name", "diff");
+    fill("Constant 2", outro);
+    fireEvent.click(screen.getByRole("button", { name: "Propose" }));
+    expect(await screen.findByText(/anchored edge must be at least 12 bytes \(this one is 10\)/)).toBeInTheDocument();
+    expect(screen.getByText(/or 12 at an anchored edge/)).toBeInTheDocument();
     expect(apiClient.post).not.toHaveBeenCalled();
   });
 

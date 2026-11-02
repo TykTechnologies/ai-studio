@@ -58,7 +58,10 @@ func installPromptTemplates(cfgs []*pb.PromptTemplateConfig) {
 		for _, p := range c.Parts {
 			t.Parts = append(t.Parts, templates.Part{Const: p.GetConstant(), Slot: p.GetSlot()})
 		}
-		if err := templates.Validate(t.Placement, t.Parts); err != nil {
+		// The hub applied its own minimum for anchored constants
+		// (PROMPT_TEMPLATE_MIN_ANCHORED_CONST_BYTES); the edge checks only the
+		// floor, so it never drops a template its hub approved.
+		if err := templates.ValidateWith(t.Placement, t.Parts, templates.Limits{MinAnchoredConstBytes: templates.MinAnchoredConstFloor}); err != nil {
 			log.Error().Err(err).Uint32("app_id", c.AppId).Str("template", t.Ref()).Msg("Prompt template from the hub is invalid; not used")
 			continue
 		}
