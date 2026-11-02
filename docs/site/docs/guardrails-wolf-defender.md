@@ -2,7 +2,7 @@
 
 The Wolf Defender guardrail is a prompt-injection classifier that plugs into
 AI Studio's [HTTP classifier](./guardrails.md#http) provider (Enterprise,
-2.3 and later). It runs [Patronus AI's Wolf Defender Jev](https://huggingface.co/patronus-studio/wolf-defender-jev)
+2.3 and later). It runs [Wolf Defender Jev](https://huggingface.co/patronus-studio/wolf-defender-jev) by [Patronus Protect](https://patronus.studio/) (Casdo Labs GmbH)
 and scores what agent traffic carries:
 
 | Stage | What is scored | Typical action |
