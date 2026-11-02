@@ -36402,6 +36402,10 @@ const docTemplate = `{
         "guardrails.ConnectionField": {
             "type": "object",
             "properties": {
+                "boolean": {
+                    "description": "Boolean marks an on/off setting: the UI shows a checkbox and stores\n\"true\" when it is on (the key is left out when it is off).",
+                    "type": "boolean"
+                },
                 "description": {
                     "type": "string"
                 },

@@ -124,3 +124,44 @@ describe("FilterDetails: tool results (4uc.8)", () => {
     expect(screen.queryByText("Budgets:")).not.toBeInTheDocument();
   });
 });
+
+describe("FilterDetails: template backstop (53e.31)", () => {
+  const withConfig = (config, responseFilter = false) => ({
+    id: "7",
+    attributes: { name: "Injection", kind: "guardrail", response_filter: responseFilter, config },
+  });
+  const base = { provider: "builtin", detectors: [{ name: "injection" }], on_detect: "block" };
+
+  it("shows the defaults when neither setting is stored", async () => {
+    apiClient.get.mockResolvedValue({ data: withConfig(base) });
+    renderDetails();
+    expect(await screen.findByText("Template backstop:")).toBeInTheDocument();
+    expect(screen.getByText("Log (default)")).toBeInTheDocument();
+    expect(screen.getByText("0.9 (default)")).toBeInTheDocument();
+  });
+
+  it("shows the stored mode and minimum score", async () => {
+    apiClient.get.mockResolvedValue({
+      data: withConfig({ ...base, template_backstop: "off", template_backstop_min_score: 0.7 }),
+    });
+    renderDetails();
+    expect(await screen.findByText("Off")).toBeInTheDocument();
+    expect(screen.getByText("0.7")).toBeInTheDocument();
+  });
+
+  it("drops the minimum score under enforce, which does not use it", async () => {
+    apiClient.get.mockResolvedValue({
+      data: withConfig({ ...base, template_backstop: "enforce", template_backstop_min_score: 0.7 }),
+    });
+    renderDetails();
+    expect(await screen.findByText("Enforce")).toBeInTheDocument();
+    expect(screen.queryByText("Backstop minimum score:")).not.toBeInTheDocument();
+  });
+
+  it("is not shown on a response filter", async () => {
+    apiClient.get.mockResolvedValue({ data: withConfig({ ...base, template_backstop: "enforce" }, true) });
+    renderDetails();
+    expect(await screen.findByText("Response Filter")).toBeInTheDocument();
+    expect(screen.queryByText("Template backstop:")).not.toBeInTheDocument();
+  });
+});

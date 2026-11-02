@@ -5125,6 +5125,11 @@ definitions:
     type: object
   guardrails.ConnectionField:
     properties:
+      boolean:
+        description: |-
+          Boolean marks an on/off setting: the UI shows a checkbox and stores
+          "true" when it is on (the key is left out when it is off).
+        type: boolean
       description:
         type: string
       example:

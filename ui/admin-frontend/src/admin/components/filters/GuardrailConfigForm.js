@@ -174,6 +174,27 @@ export const budgetErrors = (config) => {
   return errs;
 };
 
+// Trusted prompt template backstop (guardrails/config.go): what the filter
+// does with the full text of a message that matched one of the App's
+// templates. Unset means log. Requests only.
+export const DEFAULT_BACKSTOP_MIN_SCORE = 0.9;
+export const BACKSTOP_LABELS = {
+  off: "Off: score only the residual",
+  log: "Log: record what only the full message shows",
+  enforce: "Enforce: act on what only the full message shows",
+};
+
+// backstopMinScoreError mirrors the server check (between 0 and 1); empty
+// when the value is valid or unset.
+export const backstopMinScoreError = (config) => {
+  const m = config && config.template_backstop_min_score;
+  if (m === undefined || m === null || m === "") return "";
+  return typeof m === "number" && m >= 0 && m <= 1 ? "" : "Between 0 and 1";
+};
+
+// A boolean connection setting is read with Go's strconv.ParseBool.
+const connectionFlagOn = (v) => ["1", "t", "T", "true", "TRUE", "True"].includes(v);
+
 // withoutEmpty drops keys whose value is undefined, so a setting the admin
 // cleared is absent from the saved config and the server default applies.
 const withoutEmpty = (obj) => {
@@ -403,6 +424,27 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
             <Grid container spacing={2}>
               {spec.connection_fields.map((f) => (
                 <Grid item xs={12} md={6} key={f.name}>
+                  {f.boolean ? (
+                    <>
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            checked={connectionFlagOn(config.connection[f.name])}
+                            onChange={(e) => {
+                              const rest = { ...config.connection };
+                              delete rest[f.name];
+                              update({ connection: e.target.checked ? { ...rest, [f.name]: "true" } : rest });
+                            }}
+                            inputProps={{ "data-testid": `guardrail-connection-${f.name}` }}
+                          />
+                        }
+                        label={f.label}
+                      />
+                      <FormHelperText error={!!(errors.connection && errors.connection[f.name])}>
+                        {(errors.connection && errors.connection[f.name]) || f.description}
+                      </FormHelperText>
+                    </>
+                  ) : (
                   <TextField
                     fullWidth
                     label={f.label + (f.required ? " *" : "")}
@@ -418,6 +460,7 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
                     helperText={(errors.connection && errors.connection[f.name]) || connectionFieldHelp(f)}
                     inputProps={{ "data-testid": `guardrail-connection-${f.name}` }}
                   />
+                  )}
                 </Grid>
               ))}
               <Grid item xs={12}>
@@ -819,6 +862,70 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
               helperText="Replaces a quarantined message or tool result. {{detector}} and {{category}} are what flagged it, {{source}} where it came from (tool result from read_file, user message), {{tool_name}} the tool. Leave empty for the default."
               inputProps={{ maxLength: 1000, "data-testid": "guardrail-quarantine-placeholder" }}
             />
+          </Grid>
+        )}
+
+        {!responseFilter && (
+          <Grid item xs={12}>
+            <Typography variant="subtitle2" gutterBottom>
+              Trusted prompt templates
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              A message that matched one of the App's approved prompt templates is scored without the template's
+              constant text. The backstop also scores the full message, to catch what only the full text shows.
+            </Typography>
+            <Grid container spacing={2} alignItems="flex-start">
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+                  <InputLabel id="guardrail-template-backstop-label" shrink>
+                    Template backstop
+                  </InputLabel>
+                  <Select
+                    labelId="guardrail-template-backstop-label"
+                    label="Template backstop"
+                    displayEmpty
+                    notched
+                    value={config.template_backstop || ""}
+                    onChange={(e) => update({ template_backstop: e.target.value || undefined })}
+                    inputProps={{ "data-testid": "guardrail-template-backstop" }}
+                  >
+                    <MenuItem value="">Log (default)</MenuItem>
+                    {Object.entries(BACKSTOP_LABELS).map(([v, label]) => (
+                      <MenuItem key={v} value={v}>
+                        {label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  <FormHelperText>
+                    Start with Log and move to Enforce once its false positives are known. For Apps whose template
+                    slots hold text from untrusted authors, use Enforce: only an enforced backstop stops an injection
+                    placed late in a long slot.
+                  </FormHelperText>
+                </FormControl>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="Backstop minimum score"
+                  value={config.template_backstop_min_score ?? ""}
+                  onChange={(e) =>
+                    update({ template_backstop_min_score: e.target.value === "" ? undefined : Number(e.target.value) })
+                  }
+                  placeholder={String(DEFAULT_BACKSTOP_MIN_SCORE)}
+                  InputLabelProps={{ shrink: true }}
+                  disabled={config.template_backstop === "enforce"}
+                  error={!!backstopMinScoreError(config)}
+                  helperText={
+                    backstopMinScoreError(config) ||
+                    (config.template_backstop === "enforce"
+                      ? "Not used: a filter set to Enforce keeps its provider's thresholds."
+                      : `0 to 1. A message that is mostly template has its backstop enforced anyway; a finding then acts only when it scores at least this (empty: ${DEFAULT_BACKSTOP_MIN_SCORE}). Rule and pattern hits always act.`)
+                  }
+                  inputProps={{ min: 0, max: 1, step: 0.05, "data-testid": "guardrail-template-backstop-min-score" }}
+                />
+              </Grid>
+            </Grid>
           </Grid>
         )}
 

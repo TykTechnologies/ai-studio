@@ -34,6 +34,9 @@ type ConnectionField struct {
 	// Secret marks a field that holds a credential. The UI offers the secret
 	// picker and the value is expected to be a $SECRET/ or $ENV/ reference.
 	Secret bool `json:"secret"`
+	// Boolean marks an on/off setting: the UI shows a checkbox and stores
+	// "true" when it is on (the key is left out when it is off).
+	Boolean bool `json:"boolean,omitempty"`
 	// Example is placeholder text for the UI.
 	Example string `json:"example,omitempty"`
 }
