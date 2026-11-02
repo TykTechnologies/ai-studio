@@ -34,7 +34,8 @@ func ExchangeMetadata(vendor, path string, body []byte) map[string]string {
 // request for the later steps. The edge's post_auth hook runs before the
 // model validation middleware, so when it has to read the body it decodes
 // it as the model extractors do, into a map they then reuse: the body is
-// still parsed only once (53e.48).
+// still parsed only once (53e.48). body is kept, not copied: it must not be
+// modified after the call (a changed body replaces it instead).
 func ExchangeMetadataFor(r *http.Request, vendor string, body []byte) (*http.Request, map[string]string) {
 	r, fields := withRequestFields(r)
 	return r, exchangeMetadata(vendor, r.URL.EscapedPath(), fields.objectReader(body))
