@@ -86,7 +86,7 @@ The configuration checksum includes objects that need to be synchronized to edge
 - **OAuth Clients & Access Tokens** - MCP authentication state for tool access via OAuth
 - **Trusted prompt templates** - the approved [prompt templates](./guardrails.md#trusted-prompt-templates) of the Apps in the snapshot (see below)
 
-Any create, update, or delete operation on these objects triggers a checksum recalculation.
+Any create, update, or delete operation on these objects triggers a checksum recalculation. This includes changes a plugin saves through the Plugin SDK, such as its own configuration (for example a load balancer's upstream pools edited on the plugin's page) or the plugin chain of an LLM.
 
 ### Trusted prompt templates
 

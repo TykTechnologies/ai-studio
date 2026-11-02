@@ -116,9 +116,11 @@ func (s *AIStudioManagementServer) validatePluginScope(ctx context.Context, requ
 func NewAIStudioManagementServer(service *services.Service) *AIStudioManagementServer {
 	// Create plugin KV service
 	pluginKVService := services.NewPluginKVService(service.GetDB())
+	pluginServer := NewPluginManagementServer(service.PluginService)
+	pluginServer.systemEvents = func() *services.SystemEventEmitter { return service.SystemEvents }
 
 	return &AIStudioManagementServer{
-		pluginServer:           NewPluginManagementServer(service.PluginService),
+		pluginServer:           pluginServer,
 		llmServer:              NewLLMManagementServer(service),
 		toolsServer:            NewToolsServer(service),
 		datasourcesServer:      NewDatasourcesServer(service),

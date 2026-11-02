@@ -20,6 +20,10 @@ import (
 type PluginManagementServer struct {
 	pb.UnimplementedAIStudioManagementServiceServer
 	pluginService *services.PluginService
+	// systemEvents resolves the system event emitter at call time (it is
+	// installed by SetEventBus after the server is built); nil or a nil
+	// result means no event bus.
+	systemEvents func() *services.SystemEventEmitter
 }
 
 // NewPluginManagementServer creates a new plugin management gRPC server
@@ -171,7 +175,7 @@ func (s *PluginManagementServer) UpdatePluginConfig(ctx context.Context, req *pb
 		Config: configMap,
 	}
 
-	_, err = s.pluginService.UpdatePlugin(uint(pluginID), updateReq)
+	updated, err := s.pluginService.UpdatePlugin(uint(pluginID), updateReq)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, status.Errorf(codes.NotFound, "plugin not found: %d", pluginID)
@@ -184,6 +188,14 @@ func (s *PluginManagementServer) UpdatePluginConfig(ctx context.Context, req *pb
 		Uint32("plugin_id", pluginID).
 		Int("config_keys", len(configMap)).
 		Msg("Updated plugin configuration via gRPC")
+
+	// Same event as the REST plugin update: the control server recomputes
+	// the edge config checksums on it, so edges show as pending a push.
+	if s.systemEvents != nil {
+		if events := s.systemEvents(); events != nil {
+			events.EmitPluginUpdated(updated, updated.ID, 0)
+		}
+	}
 
 	return &pb.UpdatePluginConfigResponse{
 		Success: true,
