@@ -44,6 +44,16 @@ type AppPromptTemplateResponse struct {
 	LastMatchedAt    *time.Time          `json:"last_matched_at"`
 	CreatedAt        time.Time           `json:"created_at"`
 	UpdatedAt        time.Time           `json:"updated_at"`
+	// ContentHash identifies this version's reviewed content (name,
+	// version, placement, parts, expiry). Approving takes it back.
+	ContentHash string `json:"content_hash"`
+}
+
+// AppPromptTemplateApproveInput binds an approval to the version reviewed.
+type AppPromptTemplateApproveInput struct {
+	// ContentHash is the content_hash of the version the administrator
+	// reviewed, as the API returned it with the parts shown. Required.
+	ContentHash string `json:"content_hash"`
 }
 
 func serializeAppPromptTemplate(t *models.AppPromptTemplate) AppPromptTemplateResponse {
@@ -52,7 +62,7 @@ func serializeAppPromptTemplate(t *models.AppPromptTemplate) AppPromptTemplateRe
 		Placement: t.Placement(), Parts: t.Parts, Status: t.Status,
 		CreatedBy: t.CreatedBy, ApprovedBy: t.ApprovedBy, ApprovedAt: t.ApprovedAt,
 		ExpiresAfterDays: t.ExpiresAfterDays, LastMatchedAt: t.LastMatchedAt,
-		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
+		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, ContentHash: t.ContentHash(),
 	}
 }
 
@@ -74,11 +84,18 @@ func promptTemplateIDs(c *gin.Context, withTemplate bool) (appID, templateID uin
 	return uint(a), uint(t), true
 }
 
+// promptTemplateChangedTitle is the error title of an approval refused
+// because the version changed since it was reviewed, so a client can tell
+// it from the other conflicts and offer a reload.
+const promptTemplateChangedTitle = "Prompt Template Changed"
+
 // promptTemplateError answers a service error.
 func promptTemplateError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, gorm.ErrRecordNotFound):
 		c.JSON(http.StatusNotFound, errorResponse("Not Found", "App or prompt template not found"))
+	case errors.Is(err, services.ErrPromptTemplateChanged):
+		c.JSON(http.StatusConflict, errorResponse(promptTemplateChangedTitle, err.Error()))
 	case errors.Is(err, services.ErrInvalidPromptTemplate):
 		c.JSON(http.StatusBadRequest, errorResponse("Bad Request", err.Error()))
 	case errors.Is(err, services.ErrPromptTemplateConflict):
@@ -213,11 +230,15 @@ func (a *API) deleteAppPromptTemplate(c *gin.Context) {
 
 // @Summary Approve a prompt template
 // @Description Approves a proposed version (administrators only). Request guardrails then leave its constants unscored. Other approved versions of the same name are retired; an app has at most 10 approved templates.
+// @Description The body must carry the content_hash of the version reviewed, as GET returned it: a proposed version can change in place, and the approval is refused with 409 (title "Prompt Template Changed") when it no longer matches. A request without it is a 400.
 // @Tags apps
+// @Accept json
 // @Produce json
 // @Param id path int true "App ID"
 // @Param template_id path int true "Template ID"
+// @Param approval body AppPromptTemplateApproveInput true "The reviewed version's content_hash"
 // @Success 200 {object} AppPromptTemplateResponse
+// @Failure 400 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
 // @Router /apps/{id}/prompt-templates/{template_id}/approve [post]
 // @Security BearerAuth
@@ -226,7 +247,13 @@ func (a *API) approveAppPromptTemplate(c *gin.Context) {
 	if !ok {
 		return
 	}
-	t, err := a.service.ApproveAppPromptTemplate(appID, id, currentUserID(c))
+	var in AppPromptTemplateApproveInput
+	if err := c.ShouldBindJSON(&in); err != nil || in.ContentHash == "" {
+		c.JSON(http.StatusBadRequest, errorResponse("Bad Request",
+			"content_hash is required: send the content_hash of the version you reviewed, as GET returned it"))
+		return
+	}
+	t, err := a.service.ApproveAppPromptTemplate(appID, id, currentUserID(c), in.ContentHash)
 	if err != nil {
 		promptTemplateError(c, err)
 		return

@@ -79,8 +79,10 @@ const AppPromptTemplates = ({ appId }) => {
 
   const load = useCallback(async () => {
     try {
-      setTemplates(await listPromptTemplates(appId));
+      const list = await listPromptTemplates(appId);
+      setTemplates(list);
       setError(null);
+      return list;
     } catch (e) {
       setError(apiErrorMessage(e, "Could not load the prompt templates"));
     } finally {
@@ -260,6 +262,13 @@ const AppPromptTemplates = ({ appId }) => {
         canApprove={isFullAdmin}
         userName={userName}
         onClose={() => setReviewing(null)}
+        onReload={async () => {
+          // The version under review changed: show it as it is now (or
+          // close the review if it is gone).
+          const list = await load();
+          const id = reviewing?.id;
+          setReviewing((list || []).find((t) => t.id === id) || null);
+        }}
         onApproved={(approved) => {
           setReviewing(null);
           setNotice(`${approved?.ref || "The template"} is approved.`);

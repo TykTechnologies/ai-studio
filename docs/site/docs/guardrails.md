@@ -185,8 +185,13 @@ curl -X POST "$STUDIO/api/v1/apps/42/prompt-templates" -H "Authorization: Bearer
     {"const": "\n</diff>\nReport only real defects, one per line.\n"}
   ]
 }'
-curl -X POST "$STUDIO/api/v1/apps/42/prompt-templates/7/approve" -H "Authorization: Bearer $TOKEN"
+# Review the version (GET returns its parts and content_hash), then approve that version:
+curl "$STUDIO/api/v1/apps/42/prompt-templates/7" -H "Authorization: Bearer $TOKEN"
+curl -X POST "$STUDIO/api/v1/apps/42/prompt-templates/7/approve" -H "Authorization: Bearer $TOKEN" \
+  -d '{"content_hash": "<content_hash from the GET>"}'
 ```
+
+An approval names the version reviewed by its `content_hash`, since a proposed version can be edited in place. If the template changed after the GET, the approval is refused with `409 Conflict` (title `Prompt Template Changed`) and nothing is approved: fetch it again and review the current text. An approval without `content_hash` is a `400`. The admin UI does the same: when the version changed while the review was open, it says so and offers **Reload**.
 
 **Naming the template in a request.** A caller may send `X-Tyk-Prompt-Template: pr-review@3` (or just `pr-review` for the approved version of that name). The header only orders the search: the named template is tried first, so it is the one reported when two approved templates match a message equally. It never grants anything. Every approved template is still tried, the match that leaves the most text scored still wins, and a header naming a template that is unknown, not approved, retired or an older version is ignored. The gateway removes the header before the request reaches the vendor.
 

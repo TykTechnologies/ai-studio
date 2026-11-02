@@ -10197,7 +10197,10 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Approves a proposed version (administrators only). Request guardrails then leave its constants unscored. Other approved versions of the same name are retired; an app has at most 10 approved templates.",
+                "description": "Approves a proposed version (administrators only). Request guardrails then leave its constants unscored. Other approved versions of the same name are retired; an app has at most 10 approved templates.\nThe body must carry the content_hash of the version reviewed, as GET returned it: a proposed version can change in place, and the approval is refused with 409 (title \"Prompt Template Changed\") when it no longer matches. A request without it is a 400.",
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -10219,6 +10222,15 @@ const docTemplate = `{
                         "name": "template_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "The reviewed version's content_hash",
+                        "name": "approval",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.AppPromptTemplateApproveInput"
+                        }
                     }
                 ],
                 "responses": {
@@ -10226,6 +10238,12 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/api.AppPromptTemplateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "409": {
@@ -29761,6 +29779,15 @@ const docTemplate = `{
                 }
             }
         },
+        "api.AppPromptTemplateApproveInput": {
+            "type": "object",
+            "properties": {
+                "content_hash": {
+                    "description": "ContentHash is the content_hash of the version the administrator\nreviewed, as the API returned it with the parts shown. Required.",
+                    "type": "string"
+                }
+            }
+        },
         "api.AppPromptTemplateInput": {
             "type": "object",
             "properties": {
@@ -29792,6 +29819,10 @@ const docTemplate = `{
                 },
                 "approved_by": {
                     "type": "integer"
+                },
+                "content_hash": {
+                    "description": "ContentHash identifies this version's reviewed content (name,\nversion, placement, parts, expiry). Approving takes it back.",
+                    "type": "string"
                 },
                 "created_at": {
                     "type": "string"

@@ -25,10 +25,19 @@ export const deletePromptTemplate = async (appId, id) => {
   await apiClient.delete(`${base(appId)}/${id}`);
 };
 
-export const approvePromptTemplate = async (appId, id) => {
-  const response = await apiClient.post(`${base(appId)}/${id}/approve`);
+// approvePromptTemplate approves the version the administrator reviewed:
+// contentHash is the content_hash the API returned with the parts shown.
+// The API refuses an approval without it (400), or of a version that has
+// changed since (409, isPromptTemplateChanged).
+export const approvePromptTemplate = async (appId, id, contentHash) => {
+  if (!contentHash) throw new Error("The reviewed version's content hash is missing; reload the template");
+  const response = await apiClient.post(`${base(appId)}/${id}/approve`, { content_hash: contentHash });
   return response.data?.data;
 };
+
+/** isPromptTemplateChanged: an approval refused because the version changed since it was reviewed. */
+export const isPromptTemplateChanged = (error) =>
+  error?.response?.status === 409 && error?.response?.data?.errors?.[0]?.title === "Prompt Template Changed";
 
 export const retirePromptTemplate = async (appId, id) => {
   const response = await apiClient.post(`${base(appId)}/${id}/retire`);
