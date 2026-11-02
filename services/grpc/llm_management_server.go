@@ -371,6 +371,17 @@ func (s *LLMManagementServer) UpdateLLMPlugins(ctx context.Context, req *pb.Upda
 		return nil, status.Errorf(codes.Internal, "failed to update LLM plugins: %v", err)
 	}
 
+	// The LLM's plugin chain is part of the edge config: emit the LLM update
+	// so the control server recomputes the checksums and edges show as
+	// pending a push.
+	if s.service.SystemEvents != nil {
+		if llm, getErr := s.service.GetLLMByID(uint(llmID)); getErr == nil {
+			s.service.SystemEvents.EmitLLMUpdated(llm, llm.ID, 0)
+		} else {
+			log.Warn().Err(getErr).Uint32("llm_id", llmID).Msg("LLM plugins updated but the LLM could not be loaded for the update event")
+		}
+	}
+
 	// Convert final plugin IDs back to uint32
 	resultPluginIDs := make([]uint32, len(finalPluginIDs))
 	for i, id := range finalPluginIDs {
