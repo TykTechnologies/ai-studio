@@ -362,6 +362,8 @@ curl -X POST http://localhost:3000/api/v1/plugins \
   }'
 ```
 
+A plugin receives its configuration when it is loaded (`Initialize`). When an administrator saves a changed configuration for a plugin AI Studio is running (**Plugins > Edit**, or `PATCH /api/v1/plugins/{id}` with a new `config`), AI Studio reloads the plugin so the running process uses the new settings. A plugin that saves its own configuration through the SDK (`updateConfig`) is not reloaded: it already has the values it wrote.
+
 ## Manifest Structure
 
 ### Top-Level Fields

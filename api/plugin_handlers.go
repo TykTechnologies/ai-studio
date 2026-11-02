@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -593,13 +594,21 @@ func (a *API) updatePlugin(c *gin.Context) {
 	}
 
 	// Handle plugin activation state changes for AI Studio plugins
-	a.applyPluginActivation(plugin, originalPlugin.IsActive, req.LoadImmediately != nil && *req.LoadImmediately)
+	loadImmediately := req.LoadImmediately != nil && *req.LoadImmediately
+	a.applyPluginActivation(plugin, originalPlugin.IsActive, loadImmediately)
 	if plugin.AllowInternalHost != originalPlugin.AllowInternalHost {
 		a.reloadForInternalHostChange(plugin)
+	} else if !(loadImmediately && plugin.SupportsHookType(models.HookTypeStudioUI)) &&
+		originalPlugin.IsActive && plugin.IsActive && pluginConfigChanged(originalPlugin.Config, plugin.Config) {
+		// The edit form does not ask for load_immediately; a plugin Studio
+		// runs (UI, agent, object hooks) is reloaded so it picks up the new
+		// configuration (53e.30). The internal host switch above and
+		// load_immediately below reload it already.
+		a.reloadForConfigChange(plugin)
 	}
 
 	// Auto-load AI Studio plugins if requested on update
-	if req.LoadImmediately != nil && *req.LoadImmediately && plugin.SupportsHookType(models.HookTypeStudioUI) && a.service.AIStudioPluginManager != nil {
+	if loadImmediately && plugin.SupportsHookType(models.HookTypeStudioUI) && a.service.AIStudioPluginManager != nil {
 		log.Printf("Auto-loading AI Studio plugin after update: %s (ID: %d)", plugin.Name, plugin.ID)
 
 		// Unload if currently loaded to ensure fresh reload
@@ -675,6 +684,32 @@ func (a *API) reloadForInternalHostChange(plugin *models.Plugin) {
 	}
 	if _, err := mgr.LoadPlugin(plugin.ID); err != nil {
 		log.Printf("Plugin %s not reloaded after its Allow internal host switch changed: %v", plugin.Name, err)
+	}
+}
+
+// pluginConfigChanged reports whether an update changed a plugin's stored
+// configuration (compared as JSON, so map order does not count).
+func pluginConfigChanged(before, after map[string]interface{}) bool {
+	b, errB := json.Marshal(before)
+	c, errC := json.Marshal(after)
+	return errB != nil || errC != nil || !bytes.Equal(b, c)
+}
+
+// reloadForConfigChange reloads a plugin Studio has loaded after its
+// configuration changed: the configuration reaches a plugin only when it is
+// loaded (Initialize), so the running process would keep the old settings.
+func (a *API) reloadForConfigChange(plugin *models.Plugin) {
+	mgr := a.service.AIStudioPluginManager
+	if mgr == nil || !mgr.IsPluginLoaded(plugin.ID) {
+		return
+	}
+	log.Printf("Reloading plugin %s (ID: %d) to apply its updated configuration", plugin.Name, plugin.ID)
+	if err := mgr.UnloadPlugin(plugin.ID); err != nil {
+		log.Printf("Warning: Failed to unload plugin %s after its configuration changed: %v", plugin.Name, err)
+		return
+	}
+	if _, err := mgr.LoadPlugin(plugin.ID); err != nil {
+		log.Printf("Warning: Failed to reload plugin %s after its configuration changed: %v", plugin.Name, err)
 	}
 }
 
