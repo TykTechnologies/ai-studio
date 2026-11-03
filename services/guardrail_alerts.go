@@ -190,7 +190,7 @@ func (s *Service) alertPayload(ev *models.ComplianceEvent, meta alertEventMetada
 		return p, false
 	}
 	var e models.GuardrailException
-	if err := s.DB.Select("id").Where("id IN ? AND app_id = ? AND filter_id = ? AND alert_event = ?", meta.Exceptions, ev.AppID, filter.ID, name).
+	if err := s.DB.Select("id").Where("id IN ? AND app_id = ? AND filter_id = ? AND alert_event = ? AND status = ?", meta.Exceptions, ev.AppID, filter.ID, name, models.GuardrailExceptionApproved).
 		First(&e).Error; err != nil {
 		return p, false
 	}

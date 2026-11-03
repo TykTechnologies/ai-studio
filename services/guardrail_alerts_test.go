@@ -184,3 +184,19 @@ func TestPublishGuardrailAlerts_FromAnException(t *testing.T) {
 	got = waitAlerts(t, sink, 3)
 	assert.Len(t, got, 3)
 }
+
+// An exception that is no longer approved raises no alert (security .55).
+func TestPublishGuardrailAlerts_RetiredExceptionRaisesNone(t *testing.T) {
+	f, sink := alertFixture(t, false, "guardrail.alert.visor-softened")
+	s := f.spec("text_user", guardrails.ActionAlert)
+	s.AlertEvent = ptr("visor-softened")
+	e, err := f.svc.CreateGuardrailException(f.app.ID, f.asAdmin, s)
+	require.NoError(t, err)
+	_, err = f.svc.RetireGuardrailException(f.app.ID, e.ID)
+	require.NoError(t, err)
+
+	ev := storedEvent(t, f, f.filter.Name, "guardrail.prompt_injection", detectorMeta(f, map[string]any{"alert": "visor-softened", "exceptions": []uint{e.ID}}))
+	f.svc.PublishGuardrailAlerts([]*models.ComplianceEvent{ev})
+	time.Sleep(50 * time.Millisecond)
+	assert.Empty(t, sink.all())
+}

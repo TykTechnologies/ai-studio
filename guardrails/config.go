@@ -67,7 +67,8 @@ func ValidAlertEvent(name string) bool {
 	return alertEventPattern.MatchString(name)
 }
 
-// AlertTopicPrefix prefixes the bus topic an alert is raised on.
+// AlertTopicPrefix prefixes the bus topic an alert is raised on (the same
+// as eventbridge.GuardrailAlertTopicPrefix, reserved there).
 const AlertTopicPrefix = "guardrail.alert."
 
 // LogIfAlert is the action the traffic sees: alert is log.

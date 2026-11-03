@@ -362,3 +362,26 @@ func TestPluginEventServer_DirectionMapping(t *testing.T) {
 		})
 	}
 }
+
+// Guardrail alerts are raised by AI Studio only: a gateway plugin cannot
+// publish guardrail.alert.* (midsommar-clean-9u1j.55).
+func TestPluginEventServer_Publish_GuardrailAlertRefused(t *testing.T) {
+	bus := eventbridge.NewBus()
+	got := make(chan eventbridge.Event, 1)
+	sub := bus.SubscribeAll(func(ev eventbridge.Event) { got <- ev })
+	defer bus.Unsubscribe(sub)
+	server := NewPluginEventServer(bus, "edge-node")
+
+	resp, err := server.Publish(context.Background(), &pb.PublishRequest{Topic: "guardrail.alert.visor-pr-flag", Payload: []byte(`{}`), Direction: int32(eventbridge.DirUp), PluginId: "7"})
+	if err != nil {
+		t.Fatalf("Publish returned error: %v", err)
+	}
+	if resp.Success || resp.ErrorMessage == "" {
+		t.Fatalf("expected a refusal, got %+v", resp)
+	}
+	select {
+	case ev := <-got:
+		t.Fatalf("a refused topic reached the bus: %s", ev.Topic)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
