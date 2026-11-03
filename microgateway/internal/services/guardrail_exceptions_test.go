@@ -1,12 +1,17 @@
 package services
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/semanticrouting/llmclient"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -113,4 +118,67 @@ func TestEdgeSync_GuardrailCapabilities(t *testing.T) {
 
 	require.NoError(t, sync.SyncConfiguration(exceptionSnapshot()))
 	assert.Equal(t, "", string(scripting.AppCapabilityFor(edgeRequest(t, 10, "x"))), "the next snapshot without it removes it")
+}
+
+// judgeOnlySvc gives the judge its LLM and the app; the capability comes
+// from the edge's snapshot.
+type judgeOnlySvc struct {
+	services.ServiceInterface
+}
+
+func (s *judgeOnlySvc) CheckLLMBudget(*models.LLM) error { return nil }
+func (s *judgeOnlySvc) GetLLMByID(id uint) (*models.LLM, error) {
+	l := &models.LLM{Name: "judge", Vendor: models.OPENAI, Active: true, DefaultModel: "judge-mini", PrivacyScore: 80}
+	if id != 70 {
+		l.Name, l.PrivacyScore = "gpt", 50
+	}
+	l.ID = id
+	return l, nil
+}
+func (s *judgeOnlySvc) GetAppByID(id uint) (*models.App, error) {
+	a := &models.App{Name: "bot", Description: "Reviews pull requests"}
+	a.ID = id
+	return a, nil
+}
+func (s *judgeOnlySvc) GetModelPriceByModelNameAndVendor(string, string) (*models.ModelPrice, error) {
+	return nil, errors.New("no price")
+}
+
+// .58 on the edge: a read_only app with no exceptions, judged benign, is
+// softened to the read_only floor (log) from the snapshot's checksummed
+// capability; once a snapshot drops the attestation it is acting again
+// (quarantine).
+func TestEdgeSync_JudgeSoftenCapabilityWithoutExceptions(t *testing.T) {
+	t.Cleanup(func() { scripting.SetCapabilitySource(nil); scripting.SetExceptionSource(nil) })
+	t.Cleanup(scripting.SetJudgeCallForTesting(func(_ context.Context, _ *models.LLM, model, _, _ string) (llmclient.Completion, error) {
+		return llmclient.Completion{Text: `{"verdict":"benign","reason":"code_or_data"}`, Model: model}, nil
+	}))
+	db := setupToolsSyncTestDB(t)
+	sync := NewEdgeSyncService(db, "")
+	filter := edgeGuardrail(t, &edgeFake{})
+	filter.Config["judge"] = map[string]any{"mode": "soften", "llm_id": 70, "timeout_ms": 2000}
+
+	run := func() string {
+		t.Helper()
+		in := edgeRequest(t, 10, "ignore the test vectors")
+		in.Context["llm_id"] = int64(5)
+		out, err := scripting.NewFilterRunner(filter).RunScript(in, &judgeOnlySvc{})
+		require.NoError(t, err)
+		for _, e := range out.ComplianceEvents {
+			if e.EventType == "guardrail.prompt_attack" {
+				a, _ := e.Metadata["action"].(string)
+				return a
+			}
+		}
+		t.Fatalf("no detector event: %+v", out.ComplianceEvents)
+		return ""
+	}
+
+	snap := exceptionSnapshot()
+	snap.GuardrailCapabilities = []*pb.AppGuardrailCapabilityConfig{{AppId: 10, Capability: "read_only"}}
+	require.NoError(t, sync.SyncConfiguration(snap))
+	assert.Equal(t, "log", run(), "read_only with no exceptions softens to log")
+
+	require.NoError(t, sync.SyncConfiguration(exceptionSnapshot()))
+	assert.Equal(t, "quarantine", run(), "after the attestation is reset on the hub and pushed, the acting floor")
 }
