@@ -771,3 +771,30 @@ func TestNativePathVariantsRefused_VersionedEndpoint(t *testing.T) {
 	}
 	assert.Len(t, h.api.recorded(), before, "nothing reached the vendor")
 }
+
+// A body nested deeper than encoding/json's limit is refused by every
+// native endpoint that checks keys, with the status it had before the key
+// check was bounded (53e.58): the check now refuses it itself, where the
+// decoders after it refused it before. It never reaches the vendor.
+func TestNativeKeyCheck_DeepBodiesRefused(t *testing.T) {
+	t.Parallel()
+	h := newNativeHarness(t, nativeHarnessOpts{})
+	deep := strings.Repeat("[", 10001) + "1" + strings.Repeat("]", 10001)
+	params := `{"model":"claude-luna","max_tokens":5,"messages":[{"role":"user","content":"hi"}],"metadata":{"x":` + deep + `}}`
+	for _, tc := range []struct{ path, body, msg string }{
+		{"/llm/rest/claude/v1/messages", params, ""},
+		{"/llm/call/claude/v1/messages", params, ""},
+		{countTokensPath, params, "invalid count_tokens body"},
+		{"/llm/call/claude/v1/messages/batches", `{"requests":[{"custom_id":"a","params":` + params + `}]}`, "invalid message batch body"},
+	} {
+		resp, out := h.do(h.keyA, http.MethodPost, tc.path, tc.body)
+		require.Equal(t, http.StatusBadRequest, resp.StatusCode, "%s: %.200s", tc.path, out)
+		if tc.msg != "" {
+			_, msg := nativeErr(t, out)
+			assert.Contains(t, msg, tc.msg, tc.path)
+		}
+	}
+	for _, p := range []string{"/v1/messages", "/v1/messages/count_tokens", "/v1/messages/batches"} {
+		assert.Empty(t, h.vendor.callsTo(http.MethodPost, p), p)
+	}
+}

@@ -40,13 +40,7 @@ func CheckJSONKeys(b []byte, foldAt ...string) error {
 	// encoding/json accepts and compares keys as encoding/json decodes them;
 	// TestCheckJSONKeys_MatchesDecoder and FuzzCheckJSONKeys hold it to the
 	// json.Decoder version it replaced.
-	s := keyScanner{b: b}
-	for _, p := range foldAt {
-		if s.fold == nil {
-			s.fold = make(map[string]bool, len(foldAt))
-		}
-		s.fold[p] = true
-	}
+	s := keyScanner{b: b, fold: newFoldPaths(foldAt)}
 	s.skipSpace()
 	if s.i == len(b) {
 		return errors.New("empty JSON body")
@@ -90,7 +84,7 @@ type PathElem struct {
 // duplicate (a caller that ignores bodies it cannot read keeps ignoring
 // them); otherwise the first exact duplicate key in document order, or nil.
 func FindDuplicateKey(b []byte) (*DuplicateKey, error) {
-	s := keyScanner{b: b, all: true, maxDepth: maxNestingDepth}
+	s := keyScanner{b: b, all: true}
 	s.skipSpace()
 	if s.i == len(b) {
 		return nil, errors.New("empty JSON body")
@@ -120,7 +114,8 @@ func (s *keyScanner) path() []PathElem {
 
 // keyFrame is one open object or array.
 type keyFrame struct {
-	path    string
+	path    string // foldPaths.child; "" when not live
+	live    bool
 	isArray bool
 	exact   map[string]bool
 	folded  map[string]bool // nil: case variants are not checked here
@@ -131,28 +126,72 @@ type keyFrame struct {
 type keyScanner struct {
 	b     []byte
 	i     int
-	fold  map[string]bool
+	fold  foldPaths
 	stack []*keyFrame
 	// all keeps scanning past the first duplicate, which dup records, so
 	// a body that is not valid JSON is reported as such (FindDuplicateKey).
 	all bool
 	dup *DuplicateKey
-	// maxDepth, when not 0, is the deepest nesting accepted: json.Valid's
-	// limit for FindDuplicateKey, whose callers decided validity with it
-	// (53e.55). CheckJSONKeys, like the json.Decoder version, has none.
-	maxDepth int
 }
 
-// maxNestingDepth is encoding/json's: json.Valid refuses deeper input.
+// maxNestingDepth is encoding/json's: json.Valid refuses deeper input, and
+// every caller decodes the body with encoding/json after the key check, so
+// refusing it here changes no verdict (53e.55, 53e.58).
 const maxNestingDepth = 10000
 
 // push opens an object or array.
 func (s *keyScanner) push(f *keyFrame) error {
-	s.stack = append(s.stack, f)
-	if s.maxDepth > 0 && len(s.stack) > s.maxDepth {
+	if len(s.stack) == maxNestingDepth {
 		return s.syntaxError("exceeded max depth")
 	}
+	s.stack = append(s.stack, f)
 	return nil
+}
+
+// foldPaths decides which objects are checked for case variants: those at
+// a foldAt path. A value's path is kept only while it can still lead to a
+// foldAt path; below that it is not built at all, so the paths' memory is
+// bounded by the longest foldAt path however deep the body nests (53e.58).
+type foldPaths struct {
+	fold   map[string]bool // the foldAt paths
+	prefix map[string]bool // every path that is or leads to one, "" included
+}
+
+func newFoldPaths(foldAt []string) foldPaths {
+	fp := foldPaths{fold: make(map[string]bool, len(foldAt)), prefix: map[string]bool{"": true}}
+	for _, p := range foldAt {
+		fp.fold[p] = true
+		fp.prefix[p] = true
+		for i := 1; i < len(p); i++ {
+			if p[i] == '.' || p[i] == '[' {
+				fp.prefix[p[:i]] = true
+			}
+		}
+	}
+	return fp
+}
+
+// child is the path of a value read in the container at path: the
+// container's key for it (object) or "[]" (array) appended. live is false
+// when the path cannot lead to a foldAt path, and then path is not built.
+// A value with no container (the body) is at "".
+func (fp foldPaths) child(hasParent, parentLive, parentArray bool, parentPath, key string) (path string, live bool) {
+	switch {
+	case !hasParent:
+		return "", true
+	case !parentLive:
+		return "", false
+	case parentArray:
+		path = parentPath + "[]"
+	case parentPath == "":
+		path = key
+	default:
+		path = parentPath + "." + key
+	}
+	if !fp.prefix[path] {
+		return "", false
+	}
+	return path, true
 }
 
 func (s *keyScanner) syntaxError(what string) error {
@@ -170,19 +209,13 @@ func (s *keyScanner) skipSpace() {
 	}
 }
 
-// childPath is the foldAt path of the value about to be read.
-func (s *keyScanner) childPath() string {
+// childPath is the path of the value about to be read (foldPaths.child).
+func (s *keyScanner) childPath() (string, bool) {
 	if len(s.stack) == 0 {
-		return ""
+		return s.fold.child(false, false, false, "", "")
 	}
 	f := s.stack[len(s.stack)-1]
-	if f.isArray {
-		return f.path + "[]"
-	}
-	if f.path == "" {
-		return f.key
-	}
-	return f.path + "." + f.key
+	return s.fold.child(true, f.live, f.isArray, f.path, f.key)
 }
 
 // value reads one JSON value and everything nested in it. Nesting is kept on
@@ -196,9 +229,9 @@ func (s *keyScanner) value() error {
 		switch c := s.b[s.i]; {
 		case c == '{':
 			s.i++
-			p := s.childPath()
-			f := &keyFrame{path: p, exact: map[string]bool{}}
-			if s.fold[p] {
+			p, live := s.childPath()
+			f := &keyFrame{path: p, live: live, exact: map[string]bool{}}
+			if live && s.fold.fold[p] {
 				f.folded = map[string]bool{}
 			}
 			if err := s.push(f); err != nil {
@@ -216,7 +249,8 @@ func (s *keyScanner) value() error {
 			continue // the member's value
 		case c == '[':
 			s.i++
-			if err := s.push(&keyFrame{path: s.childPath(), isArray: true}); err != nil {
+			p, live := s.childPath()
+			if err := s.push(&keyFrame{path: p, live: live, isArray: true}); err != nil {
 				return err
 			}
 			s.skipSpace()
@@ -459,33 +493,32 @@ func (s *keyScanner) literal(lit string) error {
 // malformed, so the client's 400 keeps encoding/json's wording (53e.56);
 // the tests hold the scanner's verdicts to it.
 func checkJSONKeysDecoder(b []byte, foldAt ...string) error {
-	fold := make(map[string]bool, len(foldAt))
-	for _, p := range foldAt {
-		fold[p] = true
-	}
+	fp := newFoldPaths(foldAt)
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.UseNumber()
 	// One frame per open object or array.
 	type frame struct {
 		path    string
+		live    bool
 		isArray bool
 		exact   map[string]bool
 		folded  map[string]bool // nil: case variants are not checked here
 		key     string          // the key whose value comes next
 	}
 	var stack []*frame
-	childPath := func() string {
+	childPath := func() (string, bool) {
 		if len(stack) == 0 {
-			return ""
+			return fp.child(false, false, false, "", "")
 		}
 		f := stack[len(stack)-1]
-		if f.isArray {
-			return f.path + "[]"
+		return fp.child(true, f.live, f.isArray, f.path, f.key)
+	}
+	push := func(f *frame) error {
+		if len(stack) == maxNestingDepth {
+			return errors.New("exceeded max depth")
 		}
-		if f.path == "" {
-			return f.key
-		}
-		return f.path + "." + f.key
+		stack = append(stack, f)
+		return nil
 	}
 	started := false
 	for {
@@ -530,14 +563,19 @@ func checkJSONKeysDecoder(b []byte, foldAt ...string) error {
 		if d, ok := tok.(json.Delim); ok {
 			switch d {
 			case '{':
-				p := childPath()
-				f := &frame{path: p, exact: map[string]bool{}}
-				if fold[p] {
+				p, live := childPath()
+				f := &frame{path: p, live: live, exact: map[string]bool{}}
+				if live && fp.fold[p] {
 					f.folded = map[string]bool{}
 				}
-				stack = append(stack, f)
+				if err := push(f); err != nil {
+					return err
+				}
 			case '[':
-				stack = append(stack, &frame{path: childPath(), isArray: true})
+				p, live := childPath()
+				if err := push(&frame{path: p, live: live, isArray: true}); err != nil {
+					return err
+				}
 			case '}', ']':
 				stack = stack[:len(stack)-1]
 			}
