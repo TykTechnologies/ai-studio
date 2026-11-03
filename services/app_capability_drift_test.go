@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"strconv"
 	"testing"
 
@@ -230,4 +231,39 @@ func TestSuggestAppCapability_PluginResourcesAreActing(t *testing.T) {
 	assert.Equal(t, "acting", string(sug.Suggestion))
 	require.Len(t, sug.Reasons, 1)
 	assert.Contains(t, sug.Reasons[0], `"Knowledge base" of plugin 7`)
+}
+
+// .48: when the reset cannot be written the call fails, rather than leave
+// the attestation over the changed resources and answer as if all went well.
+func TestCapabilityDrift_ResetFailureFailsClosed(t *testing.T) {
+	f := newDriftFixture(t, true)
+	attempts := 0
+	require.NoError(t, f.db.Callback().Update().Before("gorm:update").Register("test:fail_capability_reset", func(tx *gorm.DB) {
+		if m, ok := tx.Statement.Dest.(map[string]any); ok {
+			if v, ok := m["guardrail_capability"]; ok && v == "" {
+				attempts++
+				tx.AddError(errors.New("injected reset failure"))
+			}
+		}
+	}))
+	_, err := f.svc.AddToolToApp(f.app.ID, f.tool2.ID, WithCapabilityActor(f.writer.ID, false))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrGuardrailCapabilityReset)
+	assert.Equal(t, 2, attempts, "retried once")
+
+	require.NoError(t, f.db.Callback().Update().Remove("test:fail_capability_reset"))
+	// A failure on the first try only is retried and succeeds.
+	failOnce := true
+	require.NoError(t, f.db.Callback().Update().Before("gorm:update").Register("test:fail_once", func(tx *gorm.DB) {
+		if m, ok := tx.Statement.Dest.(map[string]any); ok {
+			if v, ok := m["guardrail_capability"]; ok && v == "" && failOnce {
+				failOnce = false
+				tx.AddError(errors.New("injected reset failure"))
+			}
+		}
+	}))
+	app, err := f.svc.RemoveToolFromAppReportingReset(f.app.ID, f.tool.ID, WithCapabilityActor(f.writer.ID, false))
+	require.NoError(t, err)
+	assert.True(t, app)
+	assert.Equal(t, "", f.stored(t).GuardrailCapability)
 }

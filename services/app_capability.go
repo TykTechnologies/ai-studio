@@ -275,10 +275,22 @@ func (s *Service) guardCapabilityDrift(appID uint, o appOptions, change func() e
 	}
 	visible, err := s.resetGuardrailCapability(appID, by)
 	if err != nil {
-		slog.Error("could not clear an app's guardrail capability after a change to its resources", "app_id", appID, "error", err)
+		// Fail closed: the resources changed, so the attestation must not
+		// survive. Try once more, then report the failure so the caller
+		// does not answer as if all went well.
+		slog.Warn("could not clear an app's guardrail capability after a change to its resources; retrying", "app_id", appID, "error", err)
+		if visible, err = s.resetGuardrailCapability(appID, by); err != nil {
+			slog.Error("could not clear an app's guardrail capability after a change to its resources", "app_id", appID, "error", err)
+			return false, errors.Join(cerr, fmt.Errorf("%w: %v", ErrGuardrailCapabilityReset, err))
+		}
 	}
 	return visible, cerr
 }
+
+// ErrGuardrailCapabilityReset: an App's resources changed but its attested
+// guardrail capability could not be cleared. The change itself may have
+// been saved; the caller reports a failure.
+var ErrGuardrailCapabilityReset = errors.New("the app's resources changed but its guardrail capability could not be cleared")
 
 // GuardrailsApplyToApp reports whether a guardrail filter is attached to
 // at least one of the App's LLMs (in any mode).

@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -123,4 +125,25 @@ func TestAppGuardrailCapability_ResetReported(t *testing.T) {
 	assert.NotContains(t, w.Body.String(), "guardrail_capability_reset")
 	w = performRequest(api.router, http.MethodDelete, toolPath, nil)
 	assert.Equal(t, http.StatusNoContent, w.Code)
+}
+
+// .48: a reset that cannot be written makes the API report a failure.
+func TestAppGuardrailCapability_ResetFailureIsAnError(t *testing.T) {
+	api, db := setupTestAPI(t)
+	tool := &models.Tool{Name: "Repo", ToolType: models.ToolTypeREST}
+	require.NoError(t, db.Create(tool).Error)
+	app := &models.App{Name: "Visor", UserID: 1}
+	require.NoError(t, app.Create(db))
+	w := performRequest(api.router, http.MethodPut, fmt.Sprintf("/api/v1/apps/%d/guardrail-capability", app.ID), map[string]string{"value": "read_only"})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	require.NoError(t, db.Callback().Update().Before("gorm:update").Register("test:fail_capability_reset", func(tx *gorm.DB) {
+		if m, ok := tx.Statement.Dest.(map[string]any); ok {
+			if v, ok := m["guardrail_capability"]; ok && v == "" {
+				tx.AddError(errors.New("injected reset failure"))
+			}
+		}
+	}))
+	w = performRequest(api.router, http.MethodPost, fmt.Sprintf("/api/v1/apps/%d/tools/%d", app.ID, tool.ID), nil)
+	assert.Equal(t, http.StatusInternalServerError, w.Code, w.Body.String())
 }
