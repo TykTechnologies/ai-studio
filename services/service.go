@@ -107,6 +107,11 @@ type Service struct {
 	// first use (GuardrailExceptionHits).
 	guardrailExceptionHitsOnce sync.Once
 	guardrailExceptionHits     *GuardrailExceptionHits
+
+	// guardrailExceptionSource serves approved guardrail exceptions to the
+	// request guardrails; built on first use (GuardrailExceptionSource).
+	guardrailExceptionSourceOnce sync.Once
+	guardrailExceptionSource     *GuardrailExceptionSource
 }
 
 // SetAuditService attaches the audit trail. Called by api.SetAuditService.

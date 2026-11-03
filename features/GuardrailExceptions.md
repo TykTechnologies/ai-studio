@@ -1,6 +1,6 @@
 # Guardrail exceptions and app capability
 
-Status: app guardrail capability implemented (model, suggestion, API, App page), 2026-11-03 (midsommar-clean-9u1j.2); exceptions model, floors, service and API, 2026-11-03 (.3). Exceptions at runtime and on edges, their UI, the alert action and the LLM second opinion follow; the epic midsommar-clean-9u1j holds the full design.
+Status: app guardrail capability implemented (model, suggestion, API, App page), 2026-11-03 (midsommar-clean-9u1j.2); exceptions model, floors, service and API, 2026-11-03 (.3); exceptions at runtime on the hub, 2026-11-03 (.4). Exceptions on edges, their UI, the alert action and the LLM second opinion follow; the epic midsommar-clean-9u1j holds the full design.
 
 ## Problem
 
@@ -72,9 +72,20 @@ Rules (`services/guardrail_exceptions.go`):
 - Approving takes the `content_hash` of the exception as reviewed (filter, detector, channel, tool, action, justification, expiry); an exception changed since is refused with 409 "Guardrail Exception Changed". The floor is checked again at approval.
 - One proposed or approved exception per scope (app, filter, detector, channel, tool): a second is a conflict. At most 20 approved per app.
 - A change to an approved exception returns it to proposed, unless a full administrator makes it. The filter and source event cannot change; a retired exception cannot change.
-- An approved exception that goes `expires_after_days` without a hit (counted from approval when it never hit) lapses back to proposed when the runtime next reads the app's exceptions (`ApprovedGuardrailExceptions`). One outside the floor for the app's current capability is skipped but stays approved, so attesting the capability back restores it.
-- Hits are counted in memory and written in batches (`GuardrailExceptionHits`: an exception's pending count at most once a minute, or on `Flush`).
+- An approved exception that goes `expires_after_days` without a hit (counted from approval when it never hit) lapses back to proposed when the runtime next reads the app's exceptions (`ApprovedGuardrailExceptions`). One outside the floor for the app's current capability is served to the runtime, which ignores it (see Runtime); it stays approved, so attesting the capability back restores it.
+- Hits are counted in memory and written in batches (`GuardrailExceptionHits`: an exception's first hit at once, later ones at most once a minute by a timer, or on `Flush`); `hit_count` and `last_hit_at` show on the API.
 - Every change emits `system.app.guardrail_exceptions.changed`, which recomputes the edge snapshot checksums (edges become pending once exceptions are in the snapshot).
+
+### Runtime
+
+`scripting/guardrail_exceptions.go`. Studio installs `services.GuardrailExceptionSource` with `scripting.SetExceptionSource` (`pkg/studio`): an app's approved exceptions and its capability (`guardrails.AppExceptions`), cached per app for 15 seconds and dropped on this replica when the app's exceptions or capability change.
+
+- After the provider has scored a request, `decide()` takes each flagged segment's action per finding: the filter's action for the segment's kind, softened by the app's exception for the filter, the finding's detector and the segment's channel (and tool), within the floor (`guardrails.SoftenedAction`). The segment takes the strongest of its findings' actions, so a second detector without an exception still acts. The most specific exception applies (a named detector over any, a named tool over any).
+- Channels: tool results, tool calls and tool definitions by kind; otherwise `text_system` for the system prompt and `text_user` for the client's user and assistant text. A response's text is the model's own and takes no exception (its tool calls do).
+- Detection is unchanged: the provider scores everything, the verdict cache is keyed as before, and findings that only record unscanned text (caps, provider failures) are never softened.
+- Every finding still produces its compliance event. A detector event softened by an exception carries `exceptions: [id]`, "softened by exception #id" in its description, and on each segment `exception: {id, from, to}`. Each exception that applied records a hit, once per request.
+- An exception that matches but is outside the floor for the app's capability now changes nothing and records `guardrail.exception_ignored` (`exception_id`, `channel`, `action`, `capability`, `floor`, `detector`, `filter_id`).
+- Requests with no app (Studio chat, app id 0) take no exceptions; neither does a build with no source.
 
 ### API
 

@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"sync"
@@ -31,6 +32,11 @@ func newExceptionFixture(t *testing.T, capability string) *exceptionFixture {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
+	// One connection: each new connection to :memory: is a new, empty
+	// database, and hits are written from other goroutines.
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
 	require.NoError(t, studiodb.Migrate(db))
 	require.NoError(t, db.AutoMigrate(&models.ComplianceEvent{}))
 	svc := NewService(db)
@@ -273,8 +279,9 @@ func TestApprovedGuardrailExceptions_LapseAndFloor(t *testing.T) {
 	require.NoError(t, f.db.Model(&models.GuardrailException{}).Where("id = ?", fresh.ID).
 		Updates(map[string]any{"approved_at": old, "last_hit_at": yesterday}).Error)
 
-	got, err := f.svc.ApprovedGuardrailExceptions(f.app.ID)
+	got, capability, err := f.svc.ApprovedGuardrailExceptions(f.app.ID)
 	require.NoError(t, err)
+	assert.Equal(t, "read_only", string(capability))
 	ids := []uint{}
 	for _, e := range got {
 		ids = append(ids, e.ID)
@@ -286,14 +293,15 @@ func TestApprovedGuardrailExceptions_LapseAndFloor(t *testing.T) {
 	assert.Equal(t, models.GuardrailExceptionProposed, lapsed.Status, "a lapsed exception returns to proposed")
 	assert.Nil(t, lapsed.ApprovedBy)
 
-	// The capability tightens: the tool-result exception no longer applies,
-	// but stays approved so attesting back restores it.
+	// The capability tightens: the tool-result exception is still returned
+	// (the runtime ignores it and says so) and stays approved, so attesting
+	// back restores it.
 	_, err = f.svc.SetAppGuardrailCapability(f.app.ID, "read_tools", f.admin.ID)
 	require.NoError(t, err)
-	got, err = f.svc.ApprovedGuardrailExceptions(f.app.ID)
+	got, capability, err = f.svc.ApprovedGuardrailExceptions(f.app.ID)
 	require.NoError(t, err)
-	require.Len(t, got, 1)
-	assert.Equal(t, fresh.ID, got[0].ID)
+	assert.Equal(t, "read_tools", string(capability))
+	assert.Len(t, got, 2)
 	still, err := f.svc.GetGuardrailException(f.app.ID, toolRes.ID)
 	require.NoError(t, err)
 	assert.Equal(t, models.GuardrailExceptionApproved, still.Status)
@@ -333,4 +341,47 @@ func TestGuardrailExceptionHits(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int64(6), got.HitCount)
 	assert.NotNil(t, got.LastHitAt)
+}
+
+func TestGuardrailExceptionSource(t *testing.T) {
+	f := newExceptionFixture(t, "read_tools")
+	e, err := f.svc.CreateGuardrailException(f.app.ID, f.asAdmin, f.spec("tool_result", "quarantine"))
+	require.NoError(t, err)
+
+	src := f.svc.GuardrailExceptionSource()
+	got := src.AppExceptions(context.Background(), f.app.ID)
+	require.NotNil(t, got)
+	assert.Equal(t, "read_tools", string(got.Capability))
+	require.Len(t, got.Exceptions, 1)
+	assert.Equal(t, e.ID, got.Exceptions[0].ID)
+	assert.Equal(t, f.filter.ID, got.Exceptions[0].FilterID)
+	assert.Equal(t, "prompt_injection", got.Exceptions[0].Detector)
+	assert.Nil(t, src.AppExceptions(context.Background(), 0), "Studio chat has no app")
+
+	// A capability change is seen at once on this replica (the cache is
+	// dropped), and so is a retirement.
+	_, err = f.svc.SetAppGuardrailCapability(f.app.ID, "read_only", f.admin.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "read_only", string(src.AppExceptions(context.Background(), f.app.ID).Capability))
+	_, err = f.svc.RetireGuardrailException(f.app.ID, e.ID)
+	require.NoError(t, err)
+	assert.Nil(t, src.AppExceptions(context.Background(), f.app.ID))
+}
+
+func TestGuardrailExceptionHits_TrailingFlush(t *testing.T) {
+	prev := guardrailExceptionHitFlushEvery
+	guardrailExceptionHitFlushEvery = 50 * time.Millisecond
+	t.Cleanup(func() { guardrailExceptionHitFlushEvery = prev })
+
+	f := newExceptionFixture(t, "read_only")
+	e, err := f.svc.CreateGuardrailException(f.app.ID, f.asAdmin, f.spec("text_user", "log"))
+	require.NoError(t, err)
+	h := NewGuardrailExceptionHits(f.db)
+	h.Hit(e.ID, 1)
+	h.Hit(e.ID, 1)
+	h.Hit(e.ID, 1)
+	assert.Eventually(t, func() bool {
+		got, err := f.svc.GetGuardrailException(f.app.ID, e.ID)
+		return err == nil && got.HitCount == 3 && got.LastHitAt != nil
+	}, 2*time.Second, 10*time.Millisecond, "held hits are written by the timer")
 }

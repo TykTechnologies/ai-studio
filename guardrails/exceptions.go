@@ -175,3 +175,24 @@ func SoftenedAction(configured, target string, c Capability, ch Channel) (action
 	}
 	return Softer(configured, target), true
 }
+
+// Exception is an approved guardrail exception as the runtime applies it
+// (scripting.ExceptionSource).
+type Exception struct {
+	ID       uint
+	FilterID uint
+	// Detector is the finding detector it covers; "" is any.
+	Detector string
+	Channel  Channel
+	// ToolName narrows a tool channel to one tool; "" is any.
+	ToolName string
+	// Action is what it softens to.
+	Action string
+}
+
+// AppExceptions are an app's approved exceptions and its guardrail
+// capability, which bounds them.
+type AppExceptions struct {
+	Capability Capability
+	Exceptions []Exception
+}

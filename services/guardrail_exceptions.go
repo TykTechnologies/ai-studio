@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -280,21 +281,22 @@ func (s *Service) DeleteGuardrailException(appID, id uint) error {
 	return nil
 }
 
-// ApprovedGuardrailExceptions returns the exceptions that apply to an app's
-// requests now. An approved exception that has gone its expires_after_days
-// without a hit drops back to proposed here and is left out; one outside the
-// floor for the app's current capability is left out (and stays approved,
-// so attesting the capability back restores it).
-func (s *Service) ApprovedGuardrailExceptions(appID uint) ([]models.GuardrailException, error) {
+// ApprovedGuardrailExceptions returns the app's approved exceptions and its
+// guardrail capability, for the runtime. An approved exception that has gone
+// its expires_after_days without a hit drops back to proposed here and is
+// left out. One outside the floor for the app's current capability is
+// returned: the runtime ignores it and records that it did
+// (guardrail.exception_ignored); it stays approved, so attesting the
+// capability back restores it.
+func (s *Service) ApprovedGuardrailExceptions(appID uint) ([]models.GuardrailException, guardrails.Capability, error) {
 	app := &models.App{}
 	if err := s.DB.Select("id", "guardrail_capability").First(app, appID).Error; err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	rows, err := models.ListGuardrailExceptions(s.DB, appID, models.GuardrailExceptionApproved)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	capability := guardrails.Capability(app.GuardrailCapability)
 	now := time.Now()
 	out := make([]models.GuardrailException, 0, len(rows))
 	lapsed := false
@@ -308,15 +310,12 @@ func (s *Service) ApprovedGuardrailExceptions(appID uint) ([]models.GuardrailExc
 			lapsed = lapsed || changed
 			continue
 		}
-		if !guardrails.Allowed(capability, guardrails.Channel(e.Channel), e.Action) {
-			continue
-		}
 		out = append(out, *e)
 	}
 	if lapsed && s.SystemEvents != nil {
 		s.SystemEvents.EmitAppGuardrailExceptionsChanged(appID)
 	}
-	return out, nil
+	return out, guardrails.Capability(app.GuardrailCapability), nil
 }
 
 // applyGuardrailExceptionSpec writes the spec's set fields into e,
@@ -502,6 +501,7 @@ func (s *Service) notifyGuardrailExceptionProposed(app *models.App, e *models.Gu
 // guardrailExceptionsChanged announces a change to an app's exceptions:
 // approved ones travel in the edge snapshot, so edges become pending.
 func (s *Service) guardrailExceptionsChanged(appID uint) {
+	s.GuardrailExceptionSource().forget(appID)
 	if s.SystemEvents != nil {
 		s.SystemEvents.EmitAppGuardrailExceptionsChanged(appID)
 	}
@@ -510,19 +510,20 @@ func (s *Service) guardrailExceptionsChanged(appID uint) {
 // guardrailExceptionHitFlushEvery bounds how often an exception's hit count
 // and last hit are written: often enough for expiry, which counts in days,
 // and for the hit count shown on the app page.
-const guardrailExceptionHitFlushEvery = time.Minute
+var guardrailExceptionHitFlushEvery = time.Minute
 
 // GuardrailExceptionHits counts the hits of exceptions and writes them in
 // batches, off the request path: a hit is counted in memory and an
 // exception's pending count is written at most once per
-// guardrailExceptionHitFlushEvery (with the next hit after that, or by
-// Flush).
+// guardrailExceptionHitFlushEvery: the first hit at once, the ones after it
+// when the interval has passed (by a timer, or Flush).
 type GuardrailExceptionHits struct {
 	db *gorm.DB
 
-	mu      sync.Mutex
-	pending map[uint]int64
-	flushed map[uint]time.Time
+	mu        sync.Mutex
+	pending   map[uint]int64
+	flushed   map[uint]time.Time
+	scheduled map[uint]bool
 	// write is the database write; tests replace it.
 	write func(id uint, n int64, at time.Time)
 }
@@ -537,7 +538,7 @@ func (s *Service) GuardrailExceptionHits() *GuardrailExceptionHits {
 
 // NewGuardrailExceptionHits builds a recorder writing to db.
 func NewGuardrailExceptionHits(db *gorm.DB) *GuardrailExceptionHits {
-	h := &GuardrailExceptionHits{db: db, pending: map[uint]int64{}, flushed: map[uint]time.Time{}}
+	h := &GuardrailExceptionHits{db: db, pending: map[uint]int64{}, flushed: map[uint]time.Time{}, scheduled: map[uint]bool{}}
 	h.write = func(id uint, n int64, at time.Time) {
 		if err := models.AddGuardrailExceptionHits(h.db, id, n, at); err != nil {
 			slog.Debug("could not record guardrail exception hits", "exception_id", id, "error", err)
@@ -555,6 +556,12 @@ func (h *GuardrailExceptionHits) Hit(id uint, n int64) {
 	h.mu.Lock()
 	h.pending[id] += n
 	if last, ok := h.flushed[id]; ok && now.Sub(last) < guardrailExceptionHitFlushEvery {
+		// Held: written with the next hit after the interval, or by the
+		// timer this schedules, so trailing hits are not lost.
+		if !h.scheduled[id] {
+			h.scheduled[id] = true
+			time.AfterFunc(guardrailExceptionHitFlushEvery-now.Sub(last), func() { h.flushOne(id) })
+		}
 		h.mu.Unlock()
 		return
 	}
@@ -563,6 +570,22 @@ func (h *GuardrailExceptionHits) Hit(id uint, n int64) {
 	h.flushed[id] = now
 	h.mu.Unlock()
 	go h.write(id, count, now)
+}
+
+// flushOne writes the pending count of one exception, if any.
+func (h *GuardrailExceptionHits) flushOne(id uint) {
+	now := time.Now()
+	h.mu.Lock()
+	delete(h.scheduled, id)
+	count := h.pending[id]
+	delete(h.pending, id)
+	if count > 0 {
+		h.flushed[id] = now
+	}
+	h.mu.Unlock()
+	if count > 0 {
+		h.write(id, count, now)
+	}
 }
 
 // Flush writes every pending count now (at shutdown, or from a periodic
@@ -579,4 +602,80 @@ func (h *GuardrailExceptionHits) Flush() {
 	for id, n := range pending {
 		h.write(id, n, now)
 	}
+}
+
+// guardrailExceptionTTL is how long the guardrails use an app's exceptions
+// before reading them again.
+const guardrailExceptionTTL = 15 * time.Second
+
+// GuardrailExceptionSource serves an app's approved exceptions and its
+// capability to the request guardrails (scripting.SetExceptionSource),
+// cached per app, and records their hits.
+type GuardrailExceptionSource struct {
+	svc *Service
+
+	mu    sync.Mutex
+	cache map[uint]guardrailExceptionEntry
+}
+
+type guardrailExceptionEntry struct {
+	at  time.Time
+	app *guardrails.AppExceptions
+}
+
+// GuardrailExceptionSource returns the service's exception source.
+func (s *Service) GuardrailExceptionSource() *GuardrailExceptionSource {
+	s.guardrailExceptionSourceOnce.Do(func() {
+		s.guardrailExceptionSource = &GuardrailExceptionSource{svc: s, cache: map[uint]guardrailExceptionEntry{}}
+	})
+	return s.guardrailExceptionSource
+}
+
+// AppExceptions returns the app's approved exceptions, nil when it has none
+// or they cannot be read (the guardrails then apply the filters' actions).
+func (p *GuardrailExceptionSource) AppExceptions(_ context.Context, appID uint) *guardrails.AppExceptions {
+	if appID == 0 {
+		return nil
+	}
+	p.mu.Lock()
+	e, ok := p.cache[appID]
+	p.mu.Unlock()
+	if ok && time.Since(e.at) < guardrailExceptionTTL {
+		return e.app
+	}
+	rows, capability, err := p.svc.ApprovedGuardrailExceptions(appID)
+	if err != nil {
+		slog.Warn("could not read the app's guardrail exceptions; applying the filters' actions", "app_id", appID, "error", err)
+		return nil
+	}
+	var out *guardrails.AppExceptions
+	if len(rows) > 0 {
+		out = &guardrails.AppExceptions{Capability: capability, Exceptions: make([]guardrails.Exception, len(rows))}
+		for i, r := range rows {
+			out.Exceptions[i] = RuntimeGuardrailException(r)
+		}
+	}
+	p.mu.Lock()
+	p.cache[appID] = guardrailExceptionEntry{at: time.Now(), app: out}
+	p.mu.Unlock()
+	return out
+}
+
+// RuntimeGuardrailException is the runtime view of a stored exception.
+func RuntimeGuardrailException(r models.GuardrailException) guardrails.Exception {
+	return guardrails.Exception{
+		ID: r.ID, FilterID: r.FilterID, Detector: r.Detector,
+		Channel: guardrails.Channel(r.Channel), ToolName: r.ToolName, Action: r.Action,
+	}
+}
+
+// Hit records that an exception applied to a request.
+func (p *GuardrailExceptionSource) Hit(id uint) {
+	p.svc.GuardrailExceptionHits().Hit(id, 1)
+}
+
+func (p *GuardrailExceptionSource) forget(appID uint) {
+	p.mu.Lock()
+	delete(p.cache, appID)
+	p.mu.Unlock()
 }

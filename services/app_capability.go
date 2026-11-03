@@ -189,6 +189,8 @@ func (s *Service) SetAppGuardrailCapability(appID uint, value string, userID uin
 		return nil, err
 	}
 	app.GuardrailCapabilityResetBy, app.GuardrailCapabilityResetAt = nil, nil
+	// The runtime reads the capability with the exceptions it bounds.
+	s.GuardrailExceptionSource().forget(appID)
 	app.GuardrailCapability = string(c)
 	if s.SystemEvents != nil {
 		s.SystemEvents.EmitAppUpdated(app, app.ID, userID)
@@ -329,6 +331,7 @@ func (s *Service) resetGuardrailCapability(appID uint, by *uint) (bool, error) {
 	if res.Error != nil || res.RowsAffected == 0 {
 		return false, res.Error
 	}
+	s.GuardrailExceptionSource().forget(appID)
 	if s.SystemEvents != nil {
 		s.SystemEvents.EmitAppUpdated(nil, appID, derefUint(by))
 	}
