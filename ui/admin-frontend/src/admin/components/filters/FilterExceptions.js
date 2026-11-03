@@ -8,7 +8,7 @@ import PromptTemplateStatus from "../apps/promptTemplates/PromptTemplateStatus";
 import {
   apiErrorMessage,
   channelLabel,
-  exceptionActionLabel,
+  exceptionActionText,
   listFilterGuardrailExceptions,
 } from "../../services/guardrailExceptionService";
 
@@ -96,7 +96,7 @@ const FilterExceptions = ({ filterId }) => {
                     {channelLabel(e.channel)}
                     {e.tool_name ? ` (${e.tool_name})` : ""}
                   </StyledTableCell>
-                  <StyledTableCell>{exceptionActionLabel(e.action)}</StyledTableCell>
+                  <StyledTableCell>{exceptionActionText(e)}</StyledTableCell>
                   <StyledTableCell>
                     <PromptTemplateStatus status={e.status} />
                   </StyledTableCell>

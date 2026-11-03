@@ -188,4 +188,43 @@ describe("AppGuardrailExceptions (midsommar-clean-9u1j.6)", () => {
       exceptionExpiresAt({ ...approved, approved_at: "2026-11-05T10:00:00Z" }).toISOString()
     ).toBe("2026-12-05T10:00:00.000Z");
   });
+
+  // midsommar-clean-9u1j.54: an alert exception's event name is part of what
+  // is approved (its content hash), so the table and the review show it, and
+  // the editor asks for it.
+  it("shows and asks for the event an alert exception raises", async () => {
+    mockAccess = { isFullAdmin: true, granted: () => true };
+    const alertMeta = { ...meta, actions: { ...meta.actions, text_user: ["log", "alert", "quarantine"] } };
+    const alerting = exception(5, "proposed", { action: "alert", alert_event: "visor-pr-flag" });
+    apiClient.get.mockImplementation((url) => {
+      if (url === "/apps/7/guardrail-exceptions") return Promise.resolve({ data: { data: [alerting], meta: alertMeta } });
+      if (url === "/filters") return Promise.resolve({ data: [{ id: "13", attributes: { name: "Wolf Defender", kind: "guardrail" } }] });
+      return Promise.reject(new Error("not found"));
+    });
+    renderTable();
+    const row = await screen.findByTestId("guardrail-exception-5");
+    expect(row).toHaveTextContent("Log and raise event (visor-pr-flag)");
+    fireEvent.click(within(row).getByText("Review and approve"));
+    expect(await screen.findByTestId("gx-review")).toHaveTextContent("guardrail.alert.visor-pr-flag");
+    fireEvent.click(screen.getByText("Close"));
+
+    apiClient.post.mockResolvedValue({ data: { data: { id: 6, status: "approved" } } });
+    await waitFor(() => expect(screen.getByText("Add exception")).toBeEnabled());
+    fireEvent.click(screen.getByText("Add exception"));
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Instead of blocking" }));
+    fireEvent.click(within(await screen.findByRole("listbox")).getByText("Log and raise event"));
+    fireEvent.change(screen.getByTestId("gx-justification"), { target: { value: "PR fixtures" } });
+    expect(screen.getByTestId("gx-save")).toBeDisabled();
+    fireEvent.change(screen.getByTestId("gx-alert-event"), { target: { value: "Bad Name" } });
+    expect(screen.getByTestId("gx-save")).toBeDisabled();
+    fireEvent.change(screen.getByTestId("gx-alert-event"), { target: { value: "visor-pr-flag-2" } });
+    fireEvent.click(screen.getByTestId("gx-save"));
+    await waitFor(() =>
+      expect(apiClient.post).toHaveBeenCalledWith(
+        "/apps/7/guardrail-exceptions",
+        expect.objectContaining({ action: "alert", alert_event: "visor-pr-flag-2" })
+      )
+    );
+  });
 });
+

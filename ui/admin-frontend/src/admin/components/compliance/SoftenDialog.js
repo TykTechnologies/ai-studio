@@ -29,6 +29,7 @@ import {
   setGuardrailCapability,
 } from "../../services/guardrailCapabilityService";
 import {
+  ALERT_EVENT_PATTERN,
   allowedActions,
   apiErrorMessage,
   channelLabel,
@@ -53,6 +54,7 @@ const SoftenDialog = ({ open, target, onClose, onDone }) => {
   const [attest, setAttest] = useState("");
   const [action, setAction] = useState("");
   const [days, setDays] = useState(DEFAULT_EXPIRY_DAYS);
+  const [alertEvent, setAlertEvent] = useState("");
   const [justification, setJustification] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -67,6 +69,7 @@ const SoftenDialog = ({ open, target, onClose, onDone }) => {
     setError(null);
     setResult(null);
     setJustification("");
+    setAlertEvent("");
     setDays(DEFAULT_EXPIRY_DAYS);
     Promise.all([getGuardrailCapability(target.appId), listGuardrailExceptions(target.appId)])
       .then(([cap, list]) => {
@@ -110,6 +113,7 @@ const SoftenDialog = ({ open, target, onClose, onDone }) => {
         channel: target.channel,
         tool_name: target.toolName || "",
         action,
+        ...(action === "alert" ? { alert_event: alertEvent.trim() } : {}),
         justification: justification.trim(),
         expires_after_days: Number(days),
         source_event: target.eventId,
@@ -124,7 +128,8 @@ const SoftenDialog = ({ open, target, onClose, onDone }) => {
   };
 
   const loading = !capability && !loadError;
-  const valid = action && justification.trim() && Number(days) >= 1;
+  const alertInvalid = action === "alert" && !ALERT_EVENT_PATTERN.test(alertEvent.trim());
+  const valid = action && !alertInvalid && justification.trim() && Number(days) >= 1;
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -222,6 +227,20 @@ const SoftenDialog = ({ open, target, onClose, onDone }) => {
                       </FormHelperText>
                     </FormControl>
                   </Grid>
+                  {action === "alert" && (
+                    <Grid item xs={12}>
+                      <TextField
+                        fullWidth
+                        required
+                        label="Event name"
+                        value={alertEvent}
+                        onChange={(e) => setAlertEvent(e.target.value)}
+                        error={!!alertEvent && alertInvalid}
+                        helperText="Webhooks subscribe to guardrail.alert.<name> to hear whenever this exception lets something through."
+                        inputProps={{ "data-testid": "soften-alert-event" }}
+                      />
+                    </Grid>
+                  )}
                   <Grid item xs={12} md={5}>
                     <TextField
                       fullWidth

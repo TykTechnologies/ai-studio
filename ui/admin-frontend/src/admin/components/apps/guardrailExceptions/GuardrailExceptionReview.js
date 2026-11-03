@@ -84,6 +84,7 @@ const GuardrailExceptionReview = ({ open, appId, exception, filterName, canAppro
           {row("Where", channelLabel(exception.channel))}
           {exception.tool_name && row("Tool", exception.tool_name)}
           {row("Instead of blocking", exceptionActionLabel(exception.action))}
+          {exception.action === "alert" && row("Raises event", `guardrail.alert.${exception.alert_event || ""}`)}
           {row("Justification", exception.justification)}
           {row("Proposed by", userName(exception.proposed_by))}
           {exception.approved_at && row("Approved", `${userName(exception.approved_by)}, ${formatTime(exception.approved_at)}`)}

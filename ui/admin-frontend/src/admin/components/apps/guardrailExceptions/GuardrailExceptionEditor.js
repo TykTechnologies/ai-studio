@@ -16,6 +16,7 @@ import {
 } from "@mui/material";
 import { PrimaryButton, SecondaryOutlineButton } from "../../../styles/sharedStyles";
 import {
+  ALERT_EVENT_PATTERN,
   allowedActions,
   apiErrorMessage,
   channelLabel,
@@ -33,6 +34,7 @@ const blank = (filters) => ({
   channel: "text_user",
   tool_name: "",
   action: "",
+  alert_event: "",
   justification: "",
   expires_after_days: DEFAULT_EXPIRY_DAYS,
 });
@@ -56,6 +58,7 @@ const GuardrailExceptionEditor = ({ open, appId, exception, filters, meta, capab
             channel: exception.channel,
             tool_name: exception.tool_name || "",
             action: exception.action,
+            alert_event: exception.alert_event || "",
             justification: exception.justification || "",
             expires_after_days: exception.expires_after_days || DEFAULT_EXPIRY_DAYS,
           }
@@ -72,8 +75,14 @@ const GuardrailExceptionEditor = ({ open, appId, exception, filters, meta, capab
   }, [open, actions, form.action]);
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
+  const alertInvalid = form.action === "alert" && !ALERT_EVENT_PATTERN.test(form.alert_event.trim());
   const valid =
-    form.filter_id && form.channel && form.action && form.justification.trim() && Number(form.expires_after_days) >= 1;
+    form.filter_id &&
+    form.channel &&
+    form.action &&
+    !alertInvalid &&
+    form.justification.trim() &&
+    Number(form.expires_after_days) >= 1;
 
   const save = async () => {
     setSaving(true);
@@ -84,6 +93,7 @@ const GuardrailExceptionEditor = ({ open, appId, exception, filters, meta, capab
       channel: form.channel,
       tool_name: isToolChannel(form.channel) ? form.tool_name.trim() : "",
       action: form.action,
+      ...(form.action === "alert" ? { alert_event: form.alert_event.trim() } : {}),
       justification: form.justification.trim(),
       expires_after_days: Number(form.expires_after_days),
     };
@@ -199,6 +209,20 @@ const GuardrailExceptionEditor = ({ open, appId, exception, filters, meta, capab
               </FormHelperText>
             </FormControl>
           </Grid>
+          {form.action === "alert" && (
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                required
+                label="Event name"
+                value={form.alert_event}
+                onChange={(e) => set({ alert_event: e.target.value })}
+                error={!!form.alert_event && alertInvalid}
+                helperText="Webhooks subscribe to guardrail.alert.<name>. Lowercase letters, digits, - and _; unique across filters and exceptions."
+                inputProps={{ "data-testid": "gx-alert-event" }}
+              />
+            </Grid>
+          )}
           <Grid item xs={12} md={6}>
             <TextField
               fullWidth

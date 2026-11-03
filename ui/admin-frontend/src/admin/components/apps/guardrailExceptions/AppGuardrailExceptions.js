@@ -31,7 +31,7 @@ import {
   apiErrorMessage,
   channelLabel,
   deleteGuardrailException,
-  exceptionActionLabel,
+  exceptionActionText,
   exceptionExpiresAt,
   listGuardrailExceptions,
   retireGuardrailException,
@@ -191,7 +191,7 @@ const AppGuardrailExceptions = ({ appId, capability }) => {
                         {channelLabel(e.channel)}
                         {e.tool_name ? ` (${e.tool_name})` : ""}
                       </StyledTableCell>
-                      <StyledTableCell>{exceptionActionLabel(e.action)}</StyledTableCell>
+                      <StyledTableCell>{exceptionActionText(e)}</StyledTableCell>
                       <StyledTableCell>
                         <PromptTemplateStatus status={e.status} />
                       </StyledTableCell>

@@ -75,6 +75,15 @@ export const ACTION_LABELS = {
 
 export const exceptionActionLabel = (action) => ACTION_LABELS[action] || action;
 
+// ALERT_EVENT_PATTERN is guardrails.ValidAlertEvent: webhooks subscribe to
+// guardrail.alert.<name>, and a name is unique across filters and exceptions.
+export const ALERT_EVENT_PATTERN = /^[a-z0-9][a-z0-9_-]{1,63}$/;
+
+// exceptionActionText is the action as the tables show it, with the event an
+// alert raises.
+export const exceptionActionText = (e) =>
+  e?.action === "alert" && e.alert_event ? `${exceptionActionLabel("alert")} (${e.alert_event})` : exceptionActionLabel(e?.action);
+
 const RANK = { log: 1, alert: 1, redact: 2, quarantine: 3, remove: 3, block: 4 };
 
 // allowedActions are the actions an exception on channel may soften to for
