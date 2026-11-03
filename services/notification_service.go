@@ -201,9 +201,13 @@ var (
 // notifications never carry legitimate markup, and a user-chosen object
 // name has no business contributing any. Links keep their label only.
 func stripMarkup(text string) string {
-	if !strings.ContainsAny(text, "<*_`[") {
+	if !strings.ContainsAny(text, "<*_`[\\") {
 		return text
 	}
+	// A backslash-escaped character (EscapeMarkdown) is literal text: it is
+	// set aside while the markup is stripped and put back without its
+	// backslash, so the plain-text record reads as written.
+	text = hideMarkdownEscapes(text)
 	out := htmlTag.ReplaceAllString(text, "")
 	out = mdLink.ReplaceAllString(out, "$1")
 	out = mdBold.ReplaceAllString(out, "$1")
@@ -211,7 +215,65 @@ func stripMarkup(text string) string {
 	out = mdCode.ReplaceAllString(out, "$1")
 	out = mdItalic.ReplaceAllString(out, "$1")
 	out = mdItalicUnder.ReplaceAllString(out, "$1$2$3")
-	return strings.TrimSpace(out)
+	return strings.TrimSpace(restoreMarkdownEscapes(out))
+}
+
+// markdownMeta are the characters EscapeMarkdown escapes.
+const markdownMeta = "\\`*_[]()<>!#"
+
+// markdownEscapeBase is where the private-use runes standing in for
+// escaped characters start while markup is stripped.
+const markdownEscapeBase = 0xE000
+
+// EscapeMarkdown backslash-escapes the markdown metacharacters of a value
+// written into notification markdown (a user's justification, an app's
+// name), so it reads as the text it is: no link, image, emphasis or HTML.
+// The stored value is unchanged; stripMarkup removes the backslashes again
+// from the in-app record.
+func EscapeMarkdown(s string) string {
+	if !strings.ContainsAny(s, markdownMeta) {
+		return s
+	}
+	var b strings.Builder
+	for _, r := range s {
+		if strings.ContainsRune(markdownMeta, r) {
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// hideMarkdownEscapes replaces each backslash-escaped metacharacter with a
+// private-use rune, so no markup pattern matches it.
+func hideMarkdownEscapes(s string) string {
+	if !strings.Contains(s, "\\") {
+		return s
+	}
+	var b strings.Builder
+	rs := []rune(s)
+	for i := 0; i < len(rs); i++ {
+		if rs[i] == '\\' && i+1 < len(rs) {
+			if k := strings.IndexRune(markdownMeta, rs[i+1]); k >= 0 {
+				b.WriteRune(rune(markdownEscapeBase + k))
+				i++
+				continue
+			}
+		}
+		b.WriteRune(rs[i])
+	}
+	return b.String()
+}
+
+// restoreMarkdownEscapes turns the private-use runes back into the literal
+// characters they stand for.
+func restoreMarkdownEscapes(s string) string {
+	return strings.Map(func(r rune) rune {
+		if k := int(r) - markdownEscapeBase; k >= 0 && k < len(markdownMeta) {
+			return rune(markdownMeta[k])
+		}
+		return r
+	}, s)
 }
 
 // stripEmailFraming turns an email body into in-app content: the subject

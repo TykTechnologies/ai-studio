@@ -361,7 +361,7 @@ func (s *Service) notifyGuardrailCapabilityReset(appID uint, by *uint) {
 	link := fmt.Sprintf("/admin/apps/%d", appID)
 	content := fmt.Sprintf("The tools, datasources, MCP servers or plugin resources of the app **%s** changed, so its attested guardrail capability was cleared. "+
 		"Until a full administrator attests it again it is treated as acting (the strictest), and guardrail exceptions for it may block again.\n\n[Re-attest it on the app page](%s)",
-		app.Name, link)
+		EscapeMarkdown(app.Name), link)
 	if err := s.NotificationService.NotifyWithOptions(
 		fmt.Sprintf("guardrail_capability_reset_%d_%d", appID, time.Now().UnixNano()),
 		fmt.Sprintf("Re-attest the guardrail capability of %s", app.Name),

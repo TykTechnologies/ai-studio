@@ -507,7 +507,7 @@ func (s *Service) notifyGuardrailExceptionProposed(app *models.App, e *models.Gu
 	}
 	content := fmt.Sprintf("A guardrail exception for the app **%s** is waiting for approval.\n\n"+
 		"- **Filter:** %d\n- **Detector:** %s\n- **Channel:** %s\n- **Soften to:** %s\n- **Justification:** %s\n\n[Review it on the app page](%s)",
-		app.Name, e.FilterID, detector, e.Channel, e.Action, e.Justification, link)
+		EscapeMarkdown(app.Name), e.FilterID, EscapeMarkdown(detector), e.Channel, e.Action, EscapeMarkdown(e.Justification), link)
 	if err := s.NotificationService.NotifyWithOptions(
 		fmt.Sprintf("guardrail_exception_proposed_%d_%d", e.ID, time.Now().Unix()),
 		title, content, models.NotifyAdmins,
