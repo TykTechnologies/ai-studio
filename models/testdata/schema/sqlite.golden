@@ -828,6 +828,27 @@ TABLE groups
   column `deleted_at` datetime
   column `name` text
   index CREATE INDEX `idx_groups_deleted_at` ON `groups`(`deleted_at`)
+TABLE guardrail_exceptions
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `created_at` datetime
+  column `updated_at` datetime
+  column `app_id` integer NOT NULL
+  column `filter_id` integer NOT NULL
+  column `detector` text NOT NULL DEFAULT ""
+  column `channel` text NOT NULL
+  column `tool_name` text NOT NULL DEFAULT ""
+  column `action` text NOT NULL
+  column `status` text NOT NULL DEFAULT "proposed"
+  column `justification` text NOT NULL
+  column `proposed_by` integer
+  column `approved_by` integer
+  column `approved_at` datetime
+  column `expires_after_days` integer NOT NULL DEFAULT 30
+  column `last_hit_at` datetime
+  column `hit_count` integer NOT NULL DEFAULT 0
+  column `source_event` integer
+  index CREATE INDEX `idx_guardrail_exception_app_status` ON `guardrail_exceptions`(`app_id`,`status`)
+  index CREATE INDEX `idx_guardrail_exceptions_filter_id` ON `guardrail_exceptions`(`filter_id`)
 TABLE installed_plugin_versions
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime

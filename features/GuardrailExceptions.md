@@ -1,6 +1,6 @@
 # Guardrail exceptions and app capability
 
-Status: app guardrail capability implemented (model, suggestion, API, App page), 2026-11-03 (midsommar-clean-9u1j.2). Exceptions, the alert action and the LLM second opinion follow; the epic midsommar-clean-9u1j holds the full design.
+Status: app guardrail capability implemented (model, suggestion, API, App page), 2026-11-03 (midsommar-clean-9u1j.2); exceptions model, floors, service and API, 2026-11-03 (.3). Exceptions at runtime and on edges, their UI, the alert action and the LLM second opinion follow; the epic midsommar-clean-9u1j holds the full design.
 
 ## Problem
 
@@ -49,3 +49,44 @@ The capability columns (`AppGuardedColumns`) are written only by the capability 
 ### UI
 
 The App page's App Information shows a capability chip ("Not attested (treated as acting)" until set) with the suggestion. A full administrator accepts the suggestion in one click, or opens **Change**, which shows the suggestion pre-selected with its reasons. After a visible reset it says when (and by whom) the attestation was cleared.
+
+## Floors
+
+A fixed table (`guardrails/exceptions.go`, not configurable): the softest action an exception may reach, by the app's effective capability and the channel of the flagged text. The hub checks it when an exception is saved or approved, and the runtime (hub and edge) again when it applies one, since the capability can change after approval.
+
+| Capability | Own/system text (`text_user`, `text_system`) | Tool results (`tool_result`) | Tool calls / definitions (`tool_call`, `tool_definition`) |
+|---|---|---|---|
+| `read_only` | down to `log` | down to `log` | down to `log` |
+| `read_tools` | down to `log` | down to `quarantine` | down to `log` |
+| `acting` / unattested | down to `quarantine` | no downgrade | no downgrade |
+
+What an exception may soften to also depends on what the runtime can do on the channel (`guardrails.ExceptionActions`): text and tool results `log` or `quarantine` (the flagged segment replaced), a tool call `log` only, a tool definition `log` or `remove`. `guardrails.CheckException` explains a refusal ("an app whose capability is not attested (treated as acting) cannot soften verdicts on tool_result; ..."). `guardrails.SoftenedAction` is what the runtime applies: the softer of the configured action and the exception's, or no change when the exception is outside the floor now.
+
+## Exceptions
+
+`guardrail_exceptions` (`models.GuardrailException`): `app_id`, `filter_id` (a guardrail filter), `detector` (`""` = any), `channel` (`text_user`, `text_system`, `tool_result`, `tool_call`, `tool_definition`), `tool_name` (tool channels only, `""` = any tool), `action` (the softened action), `status` (`proposed`, `approved`, `retired`), `justification` (required, one line, at most 500 bytes), `proposed_by`, `approved_by`, `approved_at`, `expires_after_days` (default 30), `last_hit_at`, `hit_count`, `source_event` (the compliance event it was created from; must be the app's). Never keyed on content, path or phrase.
+
+Rules (`services/guardrail_exceptions.go`):
+
+- Anyone with apps write proposes; the administrators are notified (in-app and email, link to the app page). A full administrator's own exception is approved as it is created (proposer = approver).
+- Approving takes the `content_hash` of the exception as reviewed (filter, detector, channel, tool, action, justification, expiry); an exception changed since is refused with 409 "Guardrail Exception Changed". The floor is checked again at approval.
+- One proposed or approved exception per scope (app, filter, detector, channel, tool): a second is a conflict. At most 20 approved per app.
+- A change to an approved exception returns it to proposed, unless a full administrator makes it. The filter and source event cannot change; a retired exception cannot change.
+- An approved exception that goes `expires_after_days` without a hit (counted from approval when it never hit) lapses back to proposed when the runtime next reads the app's exceptions (`ApprovedGuardrailExceptions`). One outside the floor for the app's current capability is skipped but stays approved, so attesting the capability back restores it.
+- Hits are counted in memory and written in batches (`GuardrailExceptionHits`: an exception's pending count at most once a minute, or on `Flush`).
+- Every change emits `system.app.guardrail_exceptions.changed`, which recomputes the edge snapshot checksums (edges become pending once exceptions are in the snapshot).
+
+### API
+
+| Route | Permission |
+|---|---|
+| `GET /api/v1/apps/{id}/guardrail-exceptions[?status=]` (meta: `max_approved`, actions per channel, floors) | apps read |
+| `POST /api/v1/apps/{id}/guardrail-exceptions` | apps write |
+| `GET /api/v1/apps/{id}/guardrail-exceptions/{eid}` | apps read |
+| `PATCH /api/v1/apps/{id}/guardrail-exceptions/{eid}` | apps write |
+| `DELETE /api/v1/apps/{id}/guardrail-exceptions/{eid}` | apps delete |
+| `POST /api/v1/apps/{id}/guardrail-exceptions/{eid}/approve` (`{"content_hash": ...}`) | full administrator |
+| `POST /api/v1/apps/{id}/guardrail-exceptions/{eid}/retire` | apps write |
+| `GET /api/v1/filters/{id}/exceptions[?status=]` | filters read |
+
+These routes are the only way to manage exceptions: no plugin SDK service, gRPC management call (`TestGuardrailExceptions_NotOnManagementSurfaces`) or agent scope reaches them.
