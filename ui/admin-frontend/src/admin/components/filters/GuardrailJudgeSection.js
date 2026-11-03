@@ -18,6 +18,7 @@ import apiClient from "../../utils/apiClient";
 import { listAll } from "../../utils/listAll";
 import { chatCapableLLMs } from "../../utils/vendorLogos";
 import RowSelect from "../common/RowSelect";
+import { JUDGE_EVENT_TYPE, hasOpinion, judgeOf } from "../compliance/judgeOpinions";
 
 // The guardrail's second opinion (guardrails.Judge): a gateway LLM asked
 // whether what the filter blocks or quarantines is in fact benign for the app.
@@ -44,14 +45,37 @@ export const judgeErrors = (judge) => {
   return errors;
 };
 
-// SOFTEN_AVAILABLE turns on "Soften blocks" once the gateway applies it
-// (midsommar-clean-9u1j.14); until then a soften judge would only record.
-export const SOFTEN_AVAILABLE = false;
+// MIN_JUDGE_OPINIONS is how many opinions a filter's judge must have
+// recorded (Record only, last OPINION_DAYS days) before Soften blocks can be
+// picked: the evidence to review first. An advisory gate in the UI only; the
+// server's guarantees are the floor, full coverage and benign-only.
+export const MIN_JUDGE_OPINIONS = 20;
+export const OPINION_DAYS = 30;
 
-const GuardrailJudgeSection = ({ value, onChange, shadow = false, error = "" }) => {
+// countOpinions is the filter's recorded judge opinions (with a verdict) and
+// how many said benign, among guardrail.judge events.
+export const countOpinions = (events, filterName) => {
+  let judged = 0;
+  let benign = 0;
+  (events || []).forEach((e) => {
+    if (e?.event_type !== JUDGE_EVENT_TYPE || e.filter_name !== filterName) return;
+    const j = judgeOf(e.metadata);
+    if (!hasOpinion(j)) return;
+    judged += 1;
+    if (j.verdict === "benign") benign += 1;
+  });
+  return { judged, benign };
+};
+
+const day = (d) => d.toISOString().slice(0, 10);
+
+const GuardrailJudgeSection = ({ value, onChange, shadow = false, error = "", filterName = "" }) => {
   const judge = value || {};
   const mode = judge.mode || "off";
   const [llms, setLLMs] = useState([]);
+  // The filter's recorded opinions, null until known (or unknowable: a new
+  // filter, no compliance access, Community Edition).
+  const [opinions, setOpinions] = useState(null);
   const [loadError, setLoadError] = useState("");
   const [expanded, setExpanded] = useState(mode !== "off" || !!error);
 
@@ -73,6 +97,26 @@ const GuardrailJudgeSection = ({ value, onChange, shadow = false, error = "" }) 
   useEffect(() => {
     if (error) setExpanded(true);
   }, [error]);
+
+  useEffect(() => {
+    if (!expanded || !filterName) return undefined;
+    let cancelled = false;
+    const now = new Date();
+    const from = new Date(now.getTime() - OPINION_DAYS * 24 * 3600 * 1000);
+    apiClient
+      .get("/compliance/events", {
+        params: { start_date: day(from), end_date: day(now), event_type: JUDGE_EVENT_TYPE, limit: 500, offset: 0 },
+      })
+      .then((response) => {
+        if (!cancelled) setOpinions(countOpinions(response?.data?.events, filterName));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [expanded, filterName]);
+
+  const softenAllowed = !shadow && (mode === "soften" || (opinions && opinions.judged >= MIN_JUDGE_OPINIONS));
 
   const set = (patch) => {
     const next = { ...judge, ...patch };
@@ -135,15 +179,17 @@ const GuardrailJudgeSection = ({ value, onChange, shadow = false, error = "" }) 
                 inputProps={{ "data-testid": "guardrail-judge-mode" }}
               >
                 {JUDGE_MODES.map((m) => (
-                  <MenuItem key={m.value} value={m.value} disabled={m.value === "soften" && (!SOFTEN_AVAILABLE || shadow)}>
+                  <MenuItem key={m.value} value={m.value} disabled={m.value === "soften" && !softenAllowed}>
                     {m.label}
                   </MenuItem>
                 ))}
               </Select>
-              <FormHelperText>
+              <FormHelperText data-testid="guardrail-judge-mode-help">
                 {shadow
                   ? "A shadow filter changes no traffic, so its judge can only record, and has nothing to judge until the filter blocks or quarantines."
-                  : "Soften blocks becomes available in a later release."}
+                  : opinions
+                  ? `${opinions.judged} opinions recorded in the last ${OPINION_DAYS} days (benign on ${opinions.benign}). Soften blocks needs at least ${MIN_JUDGE_OPINIONS}.`
+                  : `Soften blocks needs at least ${MIN_JUDGE_OPINIONS} opinions recorded with Record only first.`}
               </FormHelperText>
             </FormControl>
           </Grid>
@@ -176,6 +222,16 @@ const GuardrailJudgeSection = ({ value, onChange, shadow = false, error = "" }) 
                   inputProps={{ "data-testid": "guardrail-judge-model" }}
                 />
               </Grid>
+              {mode === "soften" && (
+                <Grid item xs={12}>
+                  <Alert severity="warning" data-testid="guardrail-judge-soften-warning">
+                    Soften blocks lets the judge turn a block into the softest action the app's attested capability
+                    allows, when it finds the flagged text harmless and was shown all of it. The judge reads text an
+                    attacker may have written, and the agreement figures you reviewed are only as trustworthy as the
+                    gateways (including edges) that reported them. Requests wait for the judge, up to its timeout.
+                  </Alert>
+                </Grid>
+              )}
               <Grid item xs={12}>
                 <Alert severity="info">
                   The judge reads the flagged text, which may be written by an attacker. It is told to treat it as data,

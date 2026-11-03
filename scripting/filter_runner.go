@@ -477,6 +477,9 @@ func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail, svc
 		o.quarantine(res.failedTools)
 		out.ComplianceEvents = append(out.ComplianceEvents, failedToolsEvent(g.filter.Name, cfg, sel.segments, res.failedTools, res.toolErr))
 	}
+	// Soften mode asks the judge before the verdict is applied; any other
+	// mode judges in the background once the verdict stands.
+	judgeEvents, judged := g.judgeSoften(input, cfg, sel, &o, svc)
 	if o.overall != guardrails.ActionBlock {
 		if err := o.apply(out, input, sel, cfg, rewritten); err != nil {
 			g.rewriteFailed()
@@ -507,8 +510,11 @@ func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail, svc
 	case guardrails.ActionRedact:
 		out.Message = "guardrail redacted content"
 	}
-	if w := judgeWorkFor(input, cfg, sel, o, svc); w != nil {
-		g.dispatchJudge(input, w)
+	out.ComplianceEvents = append(out.ComplianceEvents, judgeEvents...)
+	if !judged {
+		if w := judgeWorkFor(input, cfg, sel, o, svc); w != nil {
+			g.dispatchJudge(input, w)
+		}
 	}
 	return out, nil
 }
@@ -539,6 +545,9 @@ type outcome struct {
 	softened map[int]map[string]exceptionApplied
 	ignored  []exceptionIgnored
 	hits     map[uint]bool
+	// judged records the segments the LLM judge softened in soften mode
+	// (guardrail_judge_soften.go).
+	judged map[int]judgeSoftening
 }
 
 // actionRank orders actions by strength.
@@ -1587,6 +1596,9 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 		// exceptions are the guardrail exceptions that softened this
 		// detector's findings.
 		exceptions map[uint]bool
+		// judgedFrom is the strongest action the LLM judge softened among
+		// this detector's segments, judgedVerdict its opinion.
+		judgedFrom, judgedVerdict string
 	}
 	groups := map[string]*group{}
 	order := []string{}
@@ -1609,6 +1621,9 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 		a := o.overall
 		if f.SegmentIndex >= 0 && f.SegmentIndex < len(segments) {
 			seg := segments[f.SegmentIndex]
+			if j, ok := o.judged[f.SegmentIndex]; ok && actionRank[j.from] > actionRank[g.judgedFrom] {
+				g.judgedFrom, g.judgedVerdict = j.from, j.verdict
+			}
 			if e, ok := o.softened[f.SegmentIndex][f.Detector]; ok {
 				if g.exceptions == nil {
 					g.exceptions = map[uint]bool{}
@@ -1624,6 +1639,9 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 				}
 				if e := o.exceptionRef(f.SegmentIndex, f.Detector); e != nil {
 					ref["exception"] = e
+				}
+				if j, ok := o.judged[f.SegmentIndex]; ok {
+					ref["judge"] = map[string]any{"verdict": j.verdict, "reason": j.reason, "softened_from": j.from, "to": j.to}
 				}
 				if key := fmt.Sprintf("%d/%v", f.SegmentIndex, ref["sha256"]); !g.seen[key] {
 					g.seen[key] = true
@@ -1696,6 +1714,10 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 				parts[i] = fmt.Sprintf("#%d", id)
 			}
 			description += "; softened by exception " + strings.Join(parts, ", ")
+		}
+		if g.judgedFrom != "" {
+			metadata["judge"] = map[string]any{"verdict": g.judgedVerdict, "softened_from": g.judgedFrom}
+			description += "; softened by the LLM judge (" + g.judgedVerdict + ")"
 		}
 		if action == guardrails.ActionBlock {
 			metadata["reason_code"] = ReasonDetected

@@ -110,6 +110,9 @@ type judgeTarget struct {
 	spans []*guardrails.Span
 	// over is set for a segment beyond judgeMaxSegments: recorded, not asked.
 	over bool
+	// unscanned: part of the segment was not scanned, so no opinion on the
+	// text the judge is shown may soften it.
+	unscanned bool
 }
 
 // judgeWork is one request's judging, detached from the request.
@@ -156,8 +159,10 @@ func judgeWorkFor(input *ScriptInput, cfg guardrails.Config, sel selection, o ou
 		}
 		var top *guardrails.Finding
 		var detectors []string
+		unscanned := false
 		for i, f := range o.findings[si] {
 			if f.Detector == unscannedDetector {
+				unscanned = true
 				continue
 			}
 			detectors = append(detectors, safeLabel(f.Detector))
@@ -201,6 +206,7 @@ func judgeWorkFor(input *ScriptInput, cfg guardrails.Config, sel selection, o ou
 		}
 		t := judgeTarget{
 			index: si, action: o.actions[si], sha256: sum, detectors: compactStrings(sortedCopy(detectors)), spans: spans,
+			unscanned: unscanned,
 			req: judgeRequest{
 				Text: text, Span: top.Span, Detector: top.Detector, Category: top.Category,
 				Kind: kind, Role: seg.Role, ToolName: seg.ToolName,
@@ -236,6 +242,12 @@ func (w *judgeWork) bytes() int64 {
 // events. ctx should be detached from the request; each call is bounded by
 // the judge's timeout.
 func (w *judgeWork) run(ctx context.Context) []ComplianceEventOutput {
+	return w.events(w.results(ctx))
+}
+
+// results asks the judge about every target, at once (each call bounded by
+// the judge's timeout), and returns its result per target, in order.
+func (w *judgeWork) results(ctx context.Context) []judgeResult {
 	llm, unavailable := w.judgeLLM()
 	if unavailable == "" {
 		w.describeApp()
@@ -244,24 +256,33 @@ func (w *judgeWork) run(ctx context.Context) []ComplianceEventOutput {
 			w.targets[i].req.DeclaredTools = tools
 		}
 	}
-	events := make([]ComplianceEventOutput, len(w.targets))
+	results := make([]judgeResult, len(w.targets))
 	var wg sync.WaitGroup
 	for i := range w.targets {
 		t := &w.targets[i]
 		switch {
 		case t.over:
-			events[i] = w.event(t, judgeResult{errClass: judgeErrSkipped})
+			results[i] = judgeResult{errClass: judgeErrSkipped}
 		case unavailable != "":
-			events[i] = w.event(t, judgeResult{errClass: unavailable})
+			results[i] = judgeResult{errClass: unavailable}
 		default:
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				events[i] = w.event(t, w.ask(ctx, llm, t))
+				results[i] = w.ask(ctx, llm, t)
 			}()
 		}
 	}
 	wg.Wait()
+	return results
+}
+
+// events is the guardrail.judge event of each target's result.
+func (w *judgeWork) events(results []judgeResult) []ComplianceEventOutput {
+	events := make([]ComplianceEventOutput, len(w.targets))
+	for i := range w.targets {
+		events[i] = w.event(&w.targets[i], results[i])
+	}
 	return events
 }
 
@@ -366,11 +387,14 @@ type judgeResult struct {
 	ok      bool
 	// covered: the judge was shown every finding of the segment
 	// (judgeCovers). Without it a benign opinion cannot soften anything.
-	covered  bool
-	cached   bool
-	errClass string
-	model    string
-	latency  time.Duration
+	covered bool
+	// softenedTo is the action soften mode turned the segment's into, ""
+	// when the opinion changed nothing.
+	softenedTo string
+	cached     bool
+	errClass   string
+	model      string
+	latency    time.Duration
 }
 
 // softens reports whether the opinion may soften the filter's verdict: a
@@ -489,6 +513,10 @@ func (w *judgeWork) event(t *judgeTarget, r judgeResult) ComplianceEventOutput {
 	}
 	if r.model != "" {
 		judge["model"] = r.model
+	}
+	if r.softenedTo != "" {
+		judge["softened_from"] = t.action
+		judge["softened_to"] = r.softenedTo
 	}
 	description := "guardrail judge gave no opinion (" + r.errClass + ") on a " + t.action + " verdict"
 	if r.ok {

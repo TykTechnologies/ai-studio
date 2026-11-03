@@ -233,7 +233,7 @@ const connectionFieldHelp = (f) => {
   return f.description;
 };
 
-const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors = {} }) => {
+const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors = {}, filterName = "" }) => {
   const [providers, setProviders] = useState([]);
   const [loadError, setLoadError] = useState("");
   const [newDetector, setNewDetector] = useState("");
@@ -1043,6 +1043,7 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
             onChange={(judge) => update({ judge })}
             shadow={!!config.shadow}
             error={errors.judge}
+            filterName={filterName}
           />
         </Grid>
 
