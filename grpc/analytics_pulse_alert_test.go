@@ -40,8 +40,9 @@ func TestSendAnalyticsPulse_GuardrailAlertRaisedOnce(t *testing.T) {
 	var got []services.GuardrailAlertPayload
 	for _, topic := range []string{"guardrail.alert.edge-flag", "guardrail.alert.forged"} {
 		sub := bus.Subscribe(topic, func(ev eventbridge.Event) {
-			var p services.GuardrailAlertPayload
-			_ = json.Unmarshal(ev.Payload, &p)
+			var e services.GuardrailAlertEvent
+			_ = json.Unmarshal(ev.Payload, &e)
+			p := e.Object
 			mu.Lock()
 			got = append(got, p)
 			mu.Unlock()
