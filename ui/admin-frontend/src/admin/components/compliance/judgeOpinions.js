@@ -18,6 +18,7 @@ const ERRORS = {
   over_budget: "judge LLM over budget",
   dropped: "queue full",
   over_segment_cap: "too many flagged segments",
+  category: "secret or personal data, never judged",
 };
 
 // judgeOf is the event's opinion, or null.

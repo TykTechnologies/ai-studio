@@ -264,6 +264,7 @@ In the filter form this is the collapsed **Second opinion (LLM judge)** section:
 - The call goes straight to the judge LLM's vendor, never through the gateway, and is charged to the judge LLM: one analytics record with interaction type `guardrail_judge` and no app, so it counts toward the judge LLM's budget and never toward the budget of the app whose request was judged. A judge LLM over its budget is not called.
 - The judge LLM must be active, serve chat, have a privacy score at least that of every LLM the filter is attached to (it reads their traffic), and reach every edge the filter runs on (global, or in the namespace of those edges). Saving a filter that breaks one of these is refused with HTTP 400. At run time a judge scored below the request's LLM is not sent the text, and Studio chat, whose requests name no LLM to compare with, is not judged.
 - When the judge gives no opinion (timeout, failed call, unreadable answer, judge LLM unavailable, over budget, privacy, queue full), the verdict stands and the event says why (`verdict: none`, `error`).
+- Segments with a secrets, personal data or leak finding are never sent to the judge (recorded as `error: category`): the judge weighs intent, and a credential is not an attack, so it would wrongly soften data-loss blocks.
 - A shadow filter only logs, so its judge has nothing to judge until the filter blocks or quarantines.
 
 ### Budgets and the verdict cache

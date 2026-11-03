@@ -2,6 +2,7 @@ package scripting
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -29,7 +30,7 @@ func withCapability(t *testing.T, c guardrails.Capability) {
 func secretsEvent(t *testing.T, out *ScriptOutput) ComplianceEventOutput {
 	t.Helper()
 	for _, e := range out.ComplianceEvents {
-		if strings.HasPrefix(e.EventType, "guardrail.secrets") {
+		if e.EventType == "guardrail.prompt_attack" {
 			return e
 		}
 	}
@@ -186,7 +187,7 @@ func TestJudgeSoften_NotWhenPartUnscanned(t *testing.T) {
 	o := outcome{
 		actions: map[int]string{0: guardrails.ActionBlock},
 		findings: map[int][]guardrails.Finding{0: {
-			{Detector: "secrets.test_key", Score: 1, SegmentIndex: 0},
+			{Detector: "prompt_attack", Category: guardrails.CategoryOther, Score: 1, SegmentIndex: 0},
 			unscannedFinding(0, "Not scanned in full (max_scan_chars)"),
 		}},
 		overall: guardrails.ActionBlock,
@@ -195,5 +196,58 @@ func TestJudgeSoften_NotWhenPartUnscanned(t *testing.T) {
 	events, handled := g.judgeSoften(judgeInput(newEventSink(), judgeBody), cfg, sel, &o, newJudgeSvc())
 	if handled || events != nil || o.actions[0] != guardrails.ActionBlock || stub.calls.Load() != 0 {
 		t.Errorf("handled %v events %v action %v calls %d", handled, events, o.actions[0], stub.calls.Load())
+	}
+}
+
+// A secret, personal data or a leak is data, not an intent: the judge, asked
+// whether the text is an attack, would rightly call it benign, so a segment
+// with such a finding is never judged, in soften or record mode, and the
+// verdict stands (midsommar-clean-9u1j.57).
+func TestJudge_NeverJudgesDataFindings(t *testing.T) {
+	withCapability(t, guardrails.CapabilityReadOnly)
+	for _, f := range []guardrails.Finding{
+		{Detector: "secrets.test_key", Category: guardrails.CategorySecrets},
+		{Detector: "pii.email", Category: guardrails.CategoryPII},
+		{Detector: "leak.system_prompt", Category: guardrails.CategoryLeak},
+		{Detector: "secrets.aws_key"}, // category left out: the detector says it
+	} {
+		finding := f
+		mixed := func(in guardrails.Input) guardrails.Verdict {
+			v := guardrails.Verdict{}
+			for _, s := range in.Segments {
+				if strings.Contains(s.Text, "SECRET") {
+					v.Flagged = true
+					d := finding
+					d.Score, d.Severity, d.SegmentIndex = 1, "critical", s.Index
+					// An injection finding beside it does not make it judgeable.
+					v.Findings = append(v.Findings, d, guardrails.Finding{Detector: "prompt_attack", Category: guardrails.CategoryOther, Score: 1, Severity: "critical", SegmentIndex: s.Index})
+				}
+			}
+			return v
+		}
+		for _, mode := range []string{guardrails.JudgeSoften, guardrails.JudgeRecord} {
+			stub := installStubJudge(t, answering(`{"verdict":"benign","reason":"code_or_data"}`))
+			freshShadowPool(t, 2, 1<<20)
+			cfg := installFake(t, fmt.Sprintf("fake_judge_data_%d", judgeFakeSeq.Add(1)), &fakeProvider{verdict: mixed}, guardrails.ActionBlock)
+			cfg["judge"] = map[string]any{"mode": mode, "llm_id": 70, "timeout_ms": 1000}
+			flt := guardrailFilter("wolf", false, cfg)
+			flt.ID = 13
+			sink := newEventSink()
+			out, _ := NewFilterRunner(flt).RunScript(judgeInput(sink, judgeBody), newJudgeSvc())
+			if !out.Block {
+				t.Fatalf("%s/%s: a data finding was softened", f.Detector, mode)
+			}
+			if len(judgeEvents(out.ComplianceEvents)) != 0 {
+				t.Errorf("%s/%s: judged inline", f.Detector, mode)
+			}
+			// Nothing to soften: recorded in the background, as skipped.
+			events := judgeEvents(sink.wait(t, 1, 5*time.Second))
+			if len(events) != 1 || judgeMeta(t, events[0])["error"] != judgeErrCategory || judgeMeta(t, events[0])["verdict"] != "none" {
+				t.Errorf("%s/%s: judge events %+v", f.Detector, mode, events)
+			}
+			if stub.calls.Load() != 0 {
+				t.Errorf("%s/%s: the judge was asked about a data finding", f.Detector, mode)
+			}
+		}
 	}
 }

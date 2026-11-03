@@ -103,11 +103,26 @@ func answering(text string) func(context.Context) (string, error) {
 
 var judgeFakeSeq atomic.Int32
 
+// injectionFake flags SECRET as a prompt attack in category "other", as an
+// HTTP classifier such as Wolf Defender reports it (a judgeable finding).
+func injectionFake() *fakeProvider {
+	return &fakeProvider{verdict: func(in guardrails.Input) guardrails.Verdict {
+		v := guardrails.Verdict{}
+		for _, s := range in.Segments {
+			if strings.Contains(s.Text, "SECRET") {
+				v.Flagged = true
+				v.Findings = append(v.Findings, guardrails.Finding{Detector: "prompt_attack", Category: guardrails.CategoryOther, Score: 1, Severity: "critical", SegmentIndex: s.Index})
+			}
+		}
+		return v
+	}}
+}
+
 // judgeFilter is a guardrail that flags SECRET with on_detect, judged by the
 // svc's judge LLM in record mode.
 func judgeFilter(t *testing.T, onDetect string, extra map[string]any) *models.Filter {
 	t.Helper()
-	cfg := installFake(t, fmt.Sprintf("fake_judge_%d", judgeFakeSeq.Add(1)), &fakeProvider{}, onDetect)
+	cfg := installFake(t, fmt.Sprintf("fake_judge_%d", judgeFakeSeq.Add(1)), injectionFake(), onDetect)
 	cfg["judge"] = map[string]any{"mode": "record", "llm_id": 70, "timeout_ms": 1000}
 	for k, v := range extra {
 		cfg[k] = v

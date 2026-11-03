@@ -79,7 +79,7 @@ func (g *guardrailRunner) judgeSoften(input *ScriptInput, cfg guardrails.Config,
 	possible := false
 	for i := range w.targets {
 		t := &w.targets[i]
-		if t.over || t.unscanned {
+		if t.over || t.unscanned || t.data {
 			continue
 		}
 		to := softestAllowed(capability, channelOf(sel.segments[t.index], input.IsResponse))

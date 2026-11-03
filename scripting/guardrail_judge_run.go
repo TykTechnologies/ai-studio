@@ -24,6 +24,7 @@ import (
 	"log/slog"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -57,6 +58,10 @@ const (
 	judgeErrParse       = "unparseable"
 	judgeErrDropped     = "dropped" // the shadow pool had no room
 	judgeErrSkipped     = "over_segment_cap"
+	// judgeErrCategory: the segment has a finding that marks the presence of
+	// data (a secret, personal data, a leak), not an intent the judge can
+	// weigh: "benign" means nothing there, so it is never asked.
+	judgeErrCategory = "category"
 	// judgeErrPrivacy: the judge LLM's privacy score is below that of the
 	// LLM whose traffic it would read, or that LLM is unknown (Studio chat
 	// records none), so the text is not sent to it.
@@ -113,6 +118,8 @@ type judgeTarget struct {
 	// unscanned: part of the segment was not scanned, so no opinion on the
 	// text the judge is shown may soften it.
 	unscanned bool
+	// data: the segment has a secrets, PII or leak finding; never judged.
+	data bool
 }
 
 // judgeWork is one request's judging, detached from the request.
@@ -128,6 +135,29 @@ type judgeWork struct {
 	// format and body are the request, read for the tool names it declares.
 	format, body string
 	targets      []judgeTarget
+}
+
+// dataCategories are the finding categories that mark data in the text
+// rather than an intent: the judge (asked whether text is an attack) would
+// rightly call a credential or an email address benign, so a segment with
+// any such finding is never judged, in record or soften mode. A denylist,
+// not an injection-only allowlist: HTTP classifiers (Wolf Defender) report
+// their findings as "other".
+var dataCategories = map[string]bool{guardrails.CategorySecrets: true, guardrails.CategoryPII: true, guardrails.CategoryLeak: true}
+
+// isDataFinding reports a finding in a data category, by its category or,
+// when a provider leaves that out, its detector's name.
+func isDataFinding(f guardrails.Finding) bool {
+	if dataCategories[strings.ToLower(strings.TrimSpace(f.Category))] {
+		return true
+	}
+	det := strings.ToLower(f.Detector)
+	for c := range dataCategories {
+		if strings.HasPrefix(det, c+".") || strings.HasPrefix(det, c+"/") || det == c {
+			return true
+		}
+	}
+	return false
 }
 
 // judgeWorkFor is the judging a run's outcome calls for: every segment the
@@ -159,11 +189,14 @@ func judgeWorkFor(input *ScriptInput, cfg guardrails.Config, sel selection, o ou
 		}
 		var top *guardrails.Finding
 		var detectors []string
-		unscanned := false
+		unscanned, data := false, false
 		for i, f := range o.findings[si] {
 			if f.Detector == unscannedDetector {
 				unscanned = true
 				continue
+			}
+			if isDataFinding(f) {
+				data = true
 			}
 			detectors = append(detectors, safeLabel(f.Detector))
 			if top == nil || f.Score > top.Score {
@@ -206,13 +239,21 @@ func judgeWorkFor(input *ScriptInput, cfg guardrails.Config, sel selection, o ou
 		}
 		t := judgeTarget{
 			index: si, action: o.actions[si], sha256: sum, detectors: compactStrings(sortedCopy(detectors)), spans: spans,
-			unscanned: unscanned,
+			unscanned: unscanned, data: data,
 			req: judgeRequest{
 				Text: text, Span: top.Span, Detector: top.Detector, Category: top.Category,
 				Kind: kind, Role: seg.Role, ToolName: seg.ToolName,
 			},
 		}
-		t.over = len(w.targets) >= judgeMaxSegments
+		if !t.data {
+			asked := 0
+			for _, prev := range w.targets {
+				if !prev.data {
+					asked++
+				}
+			}
+			t.over = asked >= judgeMaxSegments
+		}
 		w.targets = append(w.targets, t)
 	}
 	if len(w.targets) == 0 {
@@ -248,7 +289,15 @@ func (w *judgeWork) run(ctx context.Context) []ComplianceEventOutput {
 // results asks the judge about every target, at once (each call bounded by
 // the judge's timeout), and returns its result per target, in order.
 func (w *judgeWork) results(ctx context.Context) []judgeResult {
-	llm, unavailable := w.judgeLLM()
+	askable := false
+	for _, t := range w.targets {
+		askable = askable || (!t.data && !t.over)
+	}
+	var llm *models.LLM
+	unavailable := judgeErrSkipped
+	if askable {
+		llm, unavailable = w.judgeLLM()
+	}
 	if unavailable == "" {
 		w.describeApp()
 		tools := declaredToolNames(w.format, w.body)
@@ -261,6 +310,8 @@ func (w *judgeWork) results(ctx context.Context) []judgeResult {
 	for i := range w.targets {
 		t := &w.targets[i]
 		switch {
+		case t.data:
+			results[i] = judgeResult{errClass: judgeErrCategory}
 		case t.over:
 			results[i] = judgeResult{errClass: judgeErrSkipped}
 		case unavailable != "":
