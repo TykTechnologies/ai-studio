@@ -103,6 +103,14 @@ func (s *DatabaseBudgetService) llmMonthlyBudget(llmID uint) (float64, error) {
 // spent, as Studio does (ap6): the control plane's verdict (a budget of 0,
 // or spend at the budget across Studio and every edge) first, then the
 // LLM's spend as this gateway knows it. It returns the spend and the limit.
+// CheckLLMBudget reports whether an LLM's own budget allows another call,
+// for calls the gateway makes on its own account rather than an App's (a
+// guardrail's judge).
+func (s *DatabaseBudgetService) CheckLLMBudget(llmID uint) error {
+	_, _, err := s.checkLLMBudget(&llmID, 0)
+	return err
+}
+
 func (s *DatabaseBudgetService) checkLLMBudget(llmID *uint, estimatedCost float64) (float64, float64, error) {
 	if llmID == nil {
 		return 0, 0, nil

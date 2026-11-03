@@ -61,7 +61,19 @@ const (
 	// LLM whose traffic it would read, or that LLM is unknown (Studio chat
 	// records none), so the text is not sent to it.
 	judgeErrPrivacy = "privacy"
+	// judgeErrBudget: the judge LLM's own budget is spent (or cannot be
+	// checked), so no call is made.
+	judgeErrBudget = "over_budget"
 )
+
+// LLMBudgetChecker is implemented by a runner service that can check an
+// LLM's own budget (services.Service on the hub, the gateway adapter on an
+// edge). The judge is called only when the judge LLM's budget allows it: a
+// service that cannot say gets no judge calls, so judge spend is never
+// unmetered.
+type LLMBudgetChecker interface {
+	CheckLLMBudget(llm *models.LLM) error
+}
 
 // judgeClients makes the judge calls; drivers are cached per LLM version.
 var judgeClients = llmclient.New(nil)
@@ -279,6 +291,16 @@ func (w *judgeWork) judgeLLM() (*models.LLM, string) {
 	src, err := w.svc.GetLLMByID(w.sourceLLMID)
 	if err != nil || src == nil || llm.PrivacyScore < src.PrivacyScore {
 		return nil, judgeErrPrivacy
+	}
+	// Flagged traffic is free to send (it is blocked) but each judge call
+	// is paid: the judge LLM's own budget bounds what it costs.
+	bc, ok := w.svc.(LLMBudgetChecker)
+	if !ok {
+		return nil, judgeErrBudget
+	}
+	if err := bc.CheckLLMBudget(llm); err != nil {
+		slog.Warn("guardrail judge skipped: judge LLM budget", "provider", w.provider, "judge_llm_id", llm.ID)
+		return nil, judgeErrBudget
 	}
 	return llm, ""
 }

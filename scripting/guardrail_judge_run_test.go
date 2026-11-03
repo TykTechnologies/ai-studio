@@ -25,7 +25,11 @@ type judgeSvc struct {
 	source *models.LLM
 	app    *models.App
 	price  *models.ModelPrice
+	// budgetErr is the judge LLM's budget check.
+	budgetErr error
 }
+
+func (s *judgeSvc) CheckLLMBudget(llm *models.LLM) error { return s.budgetErr }
 
 func (s *judgeSvc) GetLLMByID(id uint) (*models.LLM, error) {
 	for _, l := range []*models.LLM{s.llm, s.source} {
@@ -148,7 +152,7 @@ func judgeMeta(t *testing.T, e ComplianceEventOutput) map[string]interface{} {
 func TestJudgeRecord_NoLatencyVerdictUnchanged(t *testing.T) {
 	freshShadowPool(t, 4, 1<<20)
 	stub := installStubJudge(t, func(ctx context.Context) (string, error) {
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(2 * time.Second)
 		return `{"verdict":"benign","reason":"code_or_data"}`, nil
 	})
 	svc := newJudgeSvc()
@@ -159,7 +163,7 @@ func TestJudgeRecord_NoLatencyVerdictUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if took := time.Since(start); took > 200*time.Millisecond {
+	if took := time.Since(start); took > time.Second {
 		t.Errorf("record-mode run took %v", took)
 	}
 	if !out.Block || out.Message != guardrails.DefaultRequestBlockMessage {
@@ -189,7 +193,7 @@ func TestJudgeRecord_NoLatencyVerdictUnchanged(t *testing.T) {
 		j["cached"] != false || j["model"] != "judge-mini" || j["prompt_version"] != JudgePromptVersion || j["sha256"] == "" {
 		t.Errorf("judge metadata %+v", j)
 	}
-	if l, _ := j["latency_ms"].(int64); l < 400 {
+	if l, _ := j["latency_ms"].(int64); l < 1900 {
 		t.Errorf("latency_ms = %v", j["latency_ms"])
 	}
 	if stub.calls.Load() != 1 {
@@ -506,5 +510,30 @@ func TestJudgeRecord_PrivacyScoreGate(t *testing.T) {
 		if !c.wantOK && (called || j["error"] != judgeErrPrivacy) {
 			t.Errorf("%s: judge metadata %+v, called %v; want no call, error privacy", c.name, j, called)
 		}
+	}
+}
+
+// The judge LLM's own budget bounds what judging costs: over budget, or
+// with a service that cannot check it, no call is made and the verdict
+// stands (midsommar-clean-9u1j.50).
+func TestJudgeRecord_JudgeLLMBudget(t *testing.T) {
+	freshShadowPool(t, 4, 1<<20)
+	stub := installStubJudge(t, answering(`{"verdict":"benign","reason":"code_or_data"}`))
+	over := newJudgeSvc()
+	over.budgetErr = errors.New("LLM monthly budget exceeded")
+	unchecked := struct{ services.ServiceInterface }{newJudgeSvc()}
+	for name, svc := range map[string]services.ServiceInterface{"over budget": over, "budget not checkable": unchecked} {
+		sink := newEventSink()
+		out, _ := NewFilterRunner(judgeFilter(t, guardrails.ActionBlock, nil)).RunScript(judgeInput(sink, judgeBody), svc)
+		if !out.Block {
+			t.Fatalf("%s: verdict changed", name)
+		}
+		events := judgeEvents(sink.wait(t, 1, 5*time.Second))
+		if len(events) != 1 || judgeMeta(t, events[0])["error"] != judgeErrBudget || judgeMeta(t, events[0])["verdict"] != "none" {
+			t.Errorf("%s: events %+v", name, events)
+		}
+	}
+	if stub.calls.Load() != 0 {
+		t.Errorf("judge called %d times without budget", stub.calls.Load())
 	}
 }

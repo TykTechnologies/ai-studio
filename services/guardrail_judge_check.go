@@ -95,3 +95,15 @@ func edgeNamespacesFor(llmNS, filterNS string) (edges string, runs bool) {
 	}
 	return "", false
 }
+
+// CheckLLMBudget reports whether llm's own monthly budget allows another
+// call, for calls the gateway makes on its own account rather than an App's
+// (a guardrail's judge): the LLM half of the proxy's budget check. No budget
+// service (Community Edition) enforces nothing.
+func (s *Service) CheckLLMBudget(llm *models.LLM) error {
+	if s.Budget == nil || llm == nil {
+		return nil
+	}
+	_, _, err := s.Budget.CheckBudget(nil, llm)
+	return err
+}

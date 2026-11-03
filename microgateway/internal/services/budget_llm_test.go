@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -266,4 +267,31 @@ func TestCheckBudgetStatus_LLMLimitFollowsSync(t *testing.T) {
 
 	llmBudgetSync(t, h, 4, BudgetSyncPayload{})
 	assert.NoError(t, check(), "removed: a budgeted LLM is always in the sync, so one it leaves out has none")
+}
+
+// A guardrail's judge calls are bounded by the judge LLM's own budget on an
+// edge too (midsommar-clean-9u1j.50): CheckLLMBudget is the LLM half of the
+// check, with no App, and the gateway adapter hands it to the judge.
+func TestCheckLLMBudget_ForTheGuardrailJudge(t *testing.T) {
+	svc, h, _ := newLLMBudgetTestService(t)
+	over := &database.LLM{Name: "judge-over", Slug: "judge-over", Vendor: "openai", MonthlyBudget: 0.0005, IsActive: true}
+	under := &database.LLM{Name: "judge-under", Slug: "judge-under", Vendor: "openai", MonthlyBudget: 1, IsActive: true}
+	for _, l := range []*database.LLM{over, under} {
+		require.NoError(t, svc.db.Create(l).Error)
+	}
+	now := time.Now()
+	start := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	period := func(usage float64) AppBudgetData {
+		return AppBudgetData{Usage: usage, PeriodStart: start, PeriodEnd: start.AddDate(0, 1, 0).Add(-time.Second)}
+	}
+	llmBudgetSync(t, h, 1, BudgetSyncPayload{LLMBudgets: map[uint32]AppBudgetData{uint32(over.ID): period(0.01), uint32(under.ID): period(0.0001)}})
+
+	assert.ErrorContains(t, svc.CheckLLMBudget(over.ID), "LLM monthly budget exceeded")
+	assert.NoError(t, svc.CheckLLMBudget(under.ID))
+
+	adapter := &GatewayServiceAdapter{}
+	assert.NoError(t, adapter.CheckLLMBudget(&models.LLM{ID: over.ID}), "no checker: the edge enforces no budgets")
+	adapter.SetLLMBudgetChecker(svc)
+	assert.Error(t, adapter.CheckLLMBudget(&models.LLM{ID: over.ID}))
+	assert.NoError(t, adapter.CheckLLMBudget(&models.LLM{ID: under.ID}))
 }

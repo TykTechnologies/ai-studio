@@ -48,6 +48,9 @@ type GatewayServiceAdapter struct {
 	// nativeStore is the edge's native API resource ledger (message
 	// batches), set by server.New; nil leaves native operations off (501).
 	nativeStore services.NativeResourceStore
+
+	// llmBudget checks an LLM's own budget for a guardrail judge call.
+	llmBudget LLMBudgetChecker
 }
 
 // SetNativeResourceStore sets the edge's native API resource ledger. Call it
@@ -131,6 +134,28 @@ func (a *GatewayServiceAdapter) GetActiveLLMs() ([]models.LLM, error) {
 
 	log.Debug().Int("llm_count", len(llms)).Msg("Successfully retrieved active LLMs for AI Gateway")
 	return llms, nil
+}
+
+// LLMBudgetChecker is a budget service that can check an LLM's own budget
+// (DatabaseBudgetService). The edge's other budget services enforce no
+// budgets at all.
+type LLMBudgetChecker interface {
+	CheckLLMBudget(llmID uint) error
+}
+
+// SetLLMBudgetChecker sets how CheckLLMBudget checks an LLM's budget; nil, or
+// a budget service that cannot, enforces none (as for every other call).
+func (a *GatewayServiceAdapter) SetLLMBudgetChecker(c LLMBudgetChecker) {
+	a.llmBudget = c
+}
+
+// CheckLLMBudget reports whether llm's own budget allows another call made on
+// the gateway's own account (a guardrail's judge; scripting.LLMBudgetChecker).
+func (a *GatewayServiceAdapter) CheckLLMBudget(llm *models.LLM) error {
+	if a.llmBudget == nil || llm == nil {
+		return nil
+	}
+	return a.llmBudget.CheckLLMBudget(llm.ID)
 }
 
 // GetLLMByID returns an LLM by its ID
