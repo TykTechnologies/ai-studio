@@ -215,7 +215,13 @@ func stripMarkup(text string) string {
 	out = mdCode.ReplaceAllString(out, "$1")
 	out = mdItalic.ReplaceAllString(out, "$1")
 	out = mdItalicUnder.ReplaceAllString(out, "$1$2$3")
-	return strings.TrimSpace(restoreMarkdownEscapes(out))
+	// The in-app record is plain text by contract: escaped link and HTML
+	// syntax is stripped as well once restored (a link keeps its label, a
+	// tag goes), while escaped emphasis and heading characters stay.
+	out = restoreMarkdownEscapes(out)
+	out = htmlTag.ReplaceAllString(out, "")
+	out = mdLink.ReplaceAllString(out, "$1")
+	return strings.TrimSpace(out)
 }
 
 // markdownMeta are the characters EscapeMarkdown escapes.
@@ -247,12 +253,15 @@ func EscapeMarkdown(s string) string {
 // hideMarkdownEscapes replaces each backslash-escaped metacharacter with a
 // private-use rune, so no markup pattern matches it.
 func hideMarkdownEscapes(s string) string {
-	if !strings.Contains(s, "\\") {
-		return s
-	}
 	var b strings.Builder
 	rs := []rune(s)
 	for i := 0; i < len(rs); i++ {
+		// A rune already in the placeholder range (allowed in a
+		// justification) must not turn into a markdown character.
+		if k := int(rs[i]) - markdownEscapeBase; k >= 0 && k < len(markdownMeta) {
+			b.WriteRune('?')
+			continue
+		}
 		if rs[i] == '\\' && i+1 < len(rs) {
 			if k := strings.IndexRune(markdownMeta, rs[i+1]); k >= 0 {
 				b.WriteRune(rune(markdownEscapeBase + k))

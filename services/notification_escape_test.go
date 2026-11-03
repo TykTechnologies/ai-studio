@@ -28,9 +28,30 @@ func TestEscapeMarkdown(t *testing.T) {
 func TestStripMarkup_RemovesEscapes(t *testing.T) {
 	in := "Justification: " + EscapeMarkdown(hostileText) + " in **bold** and [a link](/x)"
 	got := stripMarkup(in)
-	assert.Equal(t, "Justification: "+hostileText+" in bold and a link", got)
+	assert.Equal(t, "Justification: !x y  in bold and a link", got, "escaped links and tags are stripped too, labels kept")
 	assert.NotContains(t, got, `\`)
-	assert.Equal(t, "a_b *c*", stripMarkup(EscapeMarkdown("a_b *c*")))
+	// Escaped emphasis and heading characters keep their fidelity.
+	assert.Equal(t, "a_b *c* #d", stripMarkup(EscapeMarkdown("a_b *c* #d")))
+	// Placeholder-range runes in the input never become markdown.
+	assert.Equal(t, "x ? y", stripMarkup("x \ue002 *y*"))
+	assert.Equal(t, "x \ue002 y", stripMarkup("x \ue002 y"), "without markup the text is returned as is")
+}
+
+// Security's probe on aa8a3f3e: the stored in-app content of a proposal
+// carries no link, image or HTML from the justification.
+func TestNotifyGuardrailExceptionProposed_StoredContentIsPlainText(t *testing.T) {
+	f := newExceptionFixture(t, "read_only")
+	s := f.spec("text_user", guardrails.ActionLog)
+	s.Justification = ptr("![x](https://evil/p.png) [y](javascript:alert(1)) <img src=x>")
+	_, err := f.svc.CreateGuardrailException(f.app.ID, f.asWriter, s)
+	require.NoError(t, err)
+	var n models.Notification
+	require.NoError(t, f.db.Where("notification_id LIKE ?", "guardrail_exception_proposed_%").First(&n).Error)
+	assert.NotContains(t, n.Content, "](")
+	assert.NotContains(t, n.Content, "javascript:")
+	assert.NotRegexp(t, `<[a-zA-Z/][^>]*>`, n.Content)
+	assert.Contains(t, n.Content, "Justification: !x y")
+	assert.NotContains(t, n.Content, `\`)
 }
 
 // captureMailer keeps the bodies of the emails sent.
@@ -77,8 +98,8 @@ func TestNotifyGuardrailExceptionProposed_EscapesUserText(t *testing.T) {
 
 	var n models.Notification
 	require.NoError(t, f.db.Where("notification_id LIKE ?", "guardrail_exception_proposed_%").First(&n).Error)
-	assert.Contains(t, n.Content, "Justification: "+hostileText, "the bell reads the text as written")
-	assert.Contains(t, n.Content, "Bot *[evil](javascript:x)*")
+	assert.Contains(t, n.Content, "Justification: !x y", "the bell reads plain text: link labels kept, tags gone")
+	assert.Contains(t, n.Content, "Bot *evil*")
 	assert.Contains(t, n.Content, "prompt_[injection]")
 	assert.NotContains(t, n.Content, `\`, "no escaping backslashes in the in-app record")
 
@@ -106,7 +127,8 @@ func TestNotifyGuardrailCapabilityReset_EscapesAppName(t *testing.T) {
 
 	n := f.resetNotifications(t)
 	require.Len(t, n, 1)
-	assert.Contains(t, n[0].Content, hostileText)
+	assert.Contains(t, n[0].Content, "!x y")
+	assert.NotContains(t, n[0].Content, "](")
 	assert.NotContains(t, n[0].Content, `\`)
 	mailer.mu.Lock()
 	defer mailer.mu.Unlock()
