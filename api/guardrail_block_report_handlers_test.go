@@ -70,14 +70,19 @@ func TestGuardrailBlocks_ReportFalsePositive(t *testing.T) {
 	}
 	assert.Equal(t, map[uint]bool{userText.ID: true, unscanned.ID: false, response.ID: false}, reportable)
 
-	report := func(appID, eventID uint, key, why string) (int, GuardrailExceptionResponse, string) {
+	report := func(appID, eventID uint, key, why string) (int, GuardrailBlockReportResponse, string) {
 		w := apitest.PerformAuthRequest(a.router, http.MethodPost,
 			fmt.Sprintf("/common/apps/%d/guardrail-blocks/%d/report", appID, eventID), map[string]string{"justification": why}, key)
 		var resp struct {
-			Data GuardrailExceptionResponse `json:"data"`
+			Data GuardrailBlockReportResponse `json:"data"`
 		}
 		if w.Code == http.StatusCreated {
 			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		}
+		// The owner learns nothing of the detection beyond the blocks list
+		// (midsommar-clean-9u1j.56), whatever the outcome.
+		for _, leak := range []string{"prompt_attack", "filter_id", "detector", "text_user", "content_hash", fmt.Sprintf(`"%d"`, filter.ID), fmt.Sprintf("filter %d", filter.ID)} {
+			assert.NotContains(t, w.Body.String(), leak, "report response shows %q", leak)
 		}
 		return w.Code, resp.Data, w.Body.String()
 	}
@@ -87,9 +92,11 @@ func TestGuardrailBlocks_ReportFalsePositive(t *testing.T) {
 	code, _, _ = report(app.ID, userText.ID, owner.APIKey, "  ")
 	assert.Equal(t, http.StatusBadRequest, code, "a reason is required")
 
-	code, e, body := report(app.ID, userText.ID, owner.APIKey, "These are test vectors in a PR")
+	code, created, body := report(app.ID, userText.ID, owner.APIKey, "These are test vectors in a PR")
 	require.Equal(t, http.StatusCreated, code, body)
-	assert.Equal(t, "proposed", e.Status)
+	assert.Equal(t, "proposed", created.Status)
+	var e models.GuardrailException
+	require.NoError(t, db.First(&e, created.ID).Error)
 	assert.Equal(t, filter.ID, e.FilterID)
 	assert.Equal(t, "prompt_attack", e.Detector)
 	assert.Equal(t, "text_user", e.Channel)
@@ -105,7 +112,7 @@ func TestGuardrailBlocks_ReportFalsePositive(t *testing.T) {
 	// The owner cannot approve it: approval is the admin API's, for full
 	// administrators only.
 	w := apitest.PerformAuthRequest(a.router, http.MethodPost,
-		fmt.Sprintf("/api/v1/apps/%d/guardrail-exceptions/%d/approve", app.ID, e.ID), map[string]string{"content_hash": e.ContentHash}, owner.APIKey)
+		fmt.Sprintf("/api/v1/apps/%d/guardrail-exceptions/%d/approve", app.ID, e.ID), map[string]string{"content_hash": e.ContentHash()}, owner.APIKey)
 	assert.Contains(t, []int{http.StatusUnauthorized, http.StatusForbidden}, w.Code, w.Body.String())
 	var stored models.GuardrailException
 	require.NoError(t, db.First(&stored, e.ID).Error)

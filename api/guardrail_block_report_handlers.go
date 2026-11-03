@@ -115,7 +115,7 @@ func eventToolName(m map[string]any) string {
 // @Param id path int true "App ID"
 // @Param event_id path int true "Compliance event ID"
 // @Param report body GuardrailBlockReportInput true "Why it is a false positive"
-// @Success 201 {object} GuardrailExceptionResponse
+// @Success 201 {object} GuardrailBlockReportResponse
 // @Router /common/apps/{id}/guardrail-blocks/{event_id}/report [post]
 // @Security BearerAuth
 func (a *API) reportGuardrailBlock(c *gin.Context) {
@@ -197,8 +197,24 @@ func (a *API) reportGuardrailBlock(c *gin.Context) {
 		Action: &action, Justification: &justification, SourceEvent: &source,
 	})
 	if err != nil {
-		guardrailExceptionError(c, err)
+		// The owner learns no more than the blocks list shows: no filter id,
+		// detector or channel, not even in an error.
+		switch {
+		case errors.Is(err, services.ErrGuardrailExceptionConflict):
+			c.JSON(http.StatusConflict, errorResponse("Conflict", "This block has already been reported, or an exception for it exists"))
+		case errors.Is(err, services.ErrInvalidGuardrailException):
+			c.JSON(http.StatusBadRequest, errorResponse("Bad Request", "This block cannot be reported as a false positive"))
+		default:
+			c.JSON(http.StatusInternalServerError, errorResponse("Internal Server Error", "Could not send the report"))
+		}
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"data": serializeGuardrailException(e)})
+	// Only what the portal needs: the report's id and that it is proposed.
+	c.JSON(http.StatusCreated, gin.H{"data": GuardrailBlockReportResponse{ID: e.ID, Status: e.Status}})
+}
+
+// GuardrailBlockReportResponse is what the owner learns of their report.
+type GuardrailBlockReportResponse struct {
+	ID     uint   `json:"id"`
+	Status string `json:"status"`
 }
