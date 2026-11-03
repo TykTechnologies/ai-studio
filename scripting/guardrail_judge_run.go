@@ -88,6 +88,10 @@ type judgeTarget struct {
 	sha256    string
 	detectors []string
 	req       judgeRequest
+	// spans locates every finding the segment was flagged for, in req.Text
+	// (nil for a finding without a span, or one in other coordinates), so
+	// the event can say whether the judge saw them all.
+	spans []*guardrails.Span
 	// over is set for a segment beyond judgeMaxSegments: recorded, not asked.
 	over bool
 }
@@ -149,6 +153,20 @@ func judgeWorkFor(input *ScriptInput, cfg guardrails.Config, sel selection, o ou
 		if top.Backstop && seg.Template != nil {
 			text = seg.Template.FullText
 		}
+		// Spans are in the text the finding was made in: a backstop finding's
+		// in the template's full text, any other's in the segment's text.
+		var spans []*guardrails.Span
+		for _, f := range o.findings[si] {
+			if f.Detector == unscannedDetector {
+				continue
+			}
+			if f.Span == nil || f.Backstop != top.Backstop {
+				spans = append(spans, nil)
+				continue
+			}
+			sp := *f.Span
+			spans = append(spans, &sp)
+		}
 		sum := ""
 		if top.Evidence != nil {
 			sum = top.Evidence.SHA256
@@ -162,7 +180,7 @@ func judgeWorkFor(input *ScriptInput, cfg guardrails.Config, sel selection, o ou
 			kind = guardrails.KindToolResult
 		}
 		t := judgeTarget{
-			index: si, action: o.actions[si], sha256: sum, detectors: compactStrings(sortedCopy(detectors)),
+			index: si, action: o.actions[si], sha256: sum, detectors: compactStrings(sortedCopy(detectors)), spans: spans,
 			req: judgeRequest{
 				Text: text, Span: top.Span, Detector: top.Detector, Category: top.Category,
 				Kind: kind, Role: seg.Role, ToolName: seg.ToolName,
@@ -282,12 +300,21 @@ func declaredToolNames(format, body string) []string {
 
 // judgeResult is one target's outcome.
 type judgeResult struct {
-	opinion  JudgeOpinion
-	ok       bool
+	opinion JudgeOpinion
+	ok      bool
+	// covered: the judge was shown every finding of the segment
+	// (judgeCovers). Without it a benign opinion cannot soften anything.
+	covered  bool
 	cached   bool
 	errClass string
 	model    string
 	latency  time.Duration
+}
+
+// softens reports whether the opinion may soften the filter's verdict: a
+// benign opinion on text that covers everything that was flagged.
+func (r judgeResult) softens() bool {
+	return r.ok && r.covered && r.opinion.Benign()
 }
 
 // ask returns the judge's opinion on t, from the cache when it has one.
@@ -296,10 +323,11 @@ func (w *judgeWork) ask(ctx context.Context, llm *models.LLM, t *judgeTarget) ju
 	if model == "" {
 		model = llm.DefaultModel
 	}
+	covered := judgeCovers(t.req.Text, t.req.Span, t.spans)
 	key := judgeCacheKey(w.appID, llm, model, t.req)
 	if c, ok := judgeCache.Get(key); ok {
 		if time.Since(c.at) < judgeCacheTTL {
-			return judgeResult{opinion: c.opinion, ok: true, cached: true, model: model}
+			return judgeResult{opinion: c.opinion, ok: true, cached: true, model: model, covered: covered}
 		}
 		judgeCache.Remove(key)
 	}
@@ -309,7 +337,7 @@ func (w *judgeWork) ask(ctx context.Context, llm *models.LLM, t *judgeTarget) ju
 	defer cancel()
 	start := time.Now()
 	out, err := judgeCall(callCtx, llm, model, system, user)
-	res := judgeResult{model: model, latency: time.Since(start)}
+	res := judgeResult{model: model, latency: time.Since(start), covered: covered}
 	if err != nil {
 		res.errClass = judgeErrCall
 		if errors.Is(err, context.DeadlineExceeded) || callCtx.Err() != nil {
@@ -406,6 +434,10 @@ func (w *judgeWork) event(t *judgeTarget, r judgeResult) ComplianceEventOutput {
 		judge["reason"] = r.opinion.Reason
 		// The judge agrees with the filter unless it found the text benign.
 		judge["agreed"] = !r.opinion.Benign()
+		// partial: the judge was not shown everything that was flagged (a
+		// finding without a span in text longer than its window, or a
+		// finding outside it), so its opinion can never soften the verdict.
+		judge["coverage"] = map[bool]string{true: "full", false: "partial"}[r.covered]
 		description = "guardrail judge: " + r.opinion.Verdict + " (" + r.opinion.Reason + ") on a " + t.action + " verdict"
 	} else {
 		judge["verdict"] = "none"

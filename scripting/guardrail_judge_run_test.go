@@ -418,3 +418,44 @@ func TestJudgeRecord_DroppedWhenThePoolIsFull(t *testing.T) {
 		t.Errorf("events %+v calls %d", events, stub.calls.Load())
 	}
 }
+
+// A benign opinion on text the judge did not see in full is recorded as
+// partial and cannot soften (midsommar-clean-9u1j.45).
+func TestJudgeRecord_PartialCoverageCannotSoften(t *testing.T) {
+	freshShadowPool(t, 4, 1<<20)
+	installStubJudge(t, answering(`{"verdict":"benign","reason":"code_or_data"}`))
+	svc := newJudgeSvc()
+	pad := strings.Repeat("func add(a, b int) int { return a + b } // test fixture ", 100)
+	for _, c := range []struct {
+		name, content, want string
+	}{
+		{"payload past the window", pad + "SECRET", "partial"},
+		{"short text shown whole", "review this: SECRET", "full"},
+	} {
+		sink := newEventSink()
+		body := `{"messages":[{"role":"user","content":"` + c.content + `"}]}`
+		out, _ := NewFilterRunner(judgeFilter(t, guardrails.ActionBlock, nil)).RunScript(judgeInput(sink, body), svc)
+		if !out.Block {
+			t.Fatalf("%s: verdict changed", c.name)
+		}
+		events := judgeEvents(sink.wait(t, 1, 5*time.Second))
+		if len(events) != 1 {
+			t.Fatalf("%s: events %+v", c.name, events)
+		}
+		j := judgeMeta(t, events[0])
+		if j["coverage"] != c.want || j["verdict"] != JudgeBenign {
+			t.Errorf("%s: judge metadata %+v, want coverage %s", c.name, j, c.want)
+		}
+	}
+
+	// The predicate soften mode will use.
+	if (judgeResult{ok: true, opinion: JudgeOpinion{Verdict: JudgeBenign, Reason: "code_or_data"}, covered: false}).softens() {
+		t.Error("a partial benign opinion softens")
+	}
+	if !(judgeResult{ok: true, opinion: JudgeOpinion{Verdict: JudgeBenign, Reason: "code_or_data"}, covered: true}).softens() {
+		t.Error("a full benign opinion does not soften")
+	}
+	if (judgeResult{ok: true, opinion: JudgeOpinion{Verdict: JudgeSuspicious, Reason: "unclear"}, covered: true}).softens() {
+		t.Error("a suspicious opinion softens")
+	}
+}

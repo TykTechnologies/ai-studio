@@ -270,6 +270,26 @@ func judgeWindow(text string, span *guardrails.Span) (window string, cutBefore, 
 	return text[start:end], start > 0, end < len(text), start
 }
 
+// judgeCovers reports whether the judge, shown text's window around span,
+// saw everything that was flagged in it: the whole text, or every finding's
+// span. A finding without a span (a segment-level classifier) could be
+// anywhere, so then only the whole text will do. The judge may only vouch for
+// text it saw: an opinion that does not cover the findings may be recorded
+// but never soften a verdict.
+func judgeCovers(text string, span *guardrails.Span, findings []*guardrails.Span) bool {
+	window, cutBefore, cutAfter, start := judgeWindow(text, span)
+	if !cutBefore && !cutAfter {
+		return true
+	}
+	end := start + len(window)
+	for _, f := range findings {
+		if f == nil || f.Start < start || f.End > end || f.End < f.Start {
+			return false
+		}
+	}
+	return len(findings) > 0
+}
+
 // datamark replaces every run of whitespace with judgeMark. The marker
 // itself, and any occurrence of the boundary, is taken out of the text
 // first, so the text cannot fake either.
