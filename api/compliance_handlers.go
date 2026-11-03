@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -692,4 +693,43 @@ func (a *API) getComplianceEvents(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, data)
+}
+
+// getComplianceEvent godoc
+// @Summary Get one compliance event
+// @Description Get a script-reported compliance event by id, as the events list returns it (Enterprise). Guardrail alerts and outcome events link to it.
+// @Tags Compliance
+// @Produce json
+// @Param id path int true "Compliance event ID"
+// @Success 200 {object} compliance.ComplianceEventRecord
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 403 {object} models.ErrorResponse
+// @Failure 404 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
+// @Router /compliance/events/{id} [get]
+func (a *API) getComplianceEvent(c *gin.Context) {
+	fail := func(code int, title, detail string) {
+		c.JSON(code, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: title, Detail: detail}},
+		})
+	}
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil || id == 0 {
+		fail(http.StatusBadRequest, "Bad Request", "id must be a positive integer")
+		return
+	}
+	rec, err := compliance.EventRecord(a.service.DB, uint(id))
+	switch {
+	case errors.Is(err, compliance.ErrEnterpriseFeature):
+		fail(http.StatusForbidden, "Enterprise Feature", err.Error())
+	case errors.Is(err, compliance.ErrEventNotFound):
+		fail(http.StatusNotFound, "Not Found", "Compliance event not found")
+	case err != nil:
+		fail(http.StatusInternalServerError, "Internal Server Error", "Failed to get the compliance event")
+	default:
+		c.JSON(http.StatusOK, rec)
+	}
 }

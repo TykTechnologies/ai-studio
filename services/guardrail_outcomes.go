@@ -74,6 +74,8 @@ type GuardrailOutcomePayload struct {
 	ComplianceEventID uint     `json:"compliance_event_id"`
 	Timestamp         string   `json:"timestamp"`
 	Link              string   `json:"link"`
+	// URL is Link made absolute with SITE_URL (see GuardrailAlertPayload).
+	URL string `json:"url,omitempty"`
 	// Judge is the judge's opinion, on judge_softened only.
 	Judge *GuardrailOutcomeJudge `json:"judge,omitempty"`
 }
@@ -217,7 +219,7 @@ func outcomePayload(ev *models.ComplianceEvent, meta outcomeEventMetadata, outco
 		MaxScore: meta.MaxScore, Action: meta.Action, ReasonCode: meta.ReasonCode,
 		ExceptionIDs: meta.Exceptions, RequestID: meta.RequestID,
 		ComplianceEventID: ev.ID, Timestamp: ev.TimeStamp.UTC().Format(time.RFC3339),
-		Link: fmt.Sprintf("/admin/compliance?event=%d", ev.ID),
+		Link: complianceEventLink(ev.ID), URL: complianceEventURL(ev.ID),
 	}
 	if p.Action == "" && meta.Blocked {
 		p.Action = guardrails.ActionBlock
