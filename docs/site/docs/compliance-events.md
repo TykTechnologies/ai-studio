@@ -219,6 +219,23 @@ The summary is split into three counters:
 
 The timeline chart merges both streams. The per-app violation list unions events into the aggregation, so apps that only ever flag (and never block) appear in the drill-down.
 
+### Guardrail event metadata
+
+Guardrail filters (not scripts) record these keys, among others. Script filters cannot set them: they are removed from a script filter's events, so a script cannot pass its event off as a guardrail's.
+
+| Key | Meaning |
+|---|---|
+| `filter_id` | The ID of the guardrail filter that recorded the event. |
+| `segments` | The flagged segments: index, role, kind, tool, SHA-256 of the text, the masked excerpt when the filter's `evidence.excerpt` is on, `template` when a trusted prompt template matched, and `exception: {id, from, to}` when a [guardrail exception](./guardrails.md#exceptions-softening-a-verdict-for-one-app) softened the finding. |
+| `exceptions` | The IDs of the exceptions that softened this detector's findings. |
+| `alert`, `alerts` | The [alert](./guardrails.md#alerts-log-and-raise-event) the findings raised (`alerts` lists them when there are several). The action is recorded as `log`. |
+
+Event types specific to exceptions:
+
+| Event type | Meaning |
+|---|---|
+| `guardrail.exception_ignored` | An exception matched a finding but its App's current guardrail capability no longer allows it (the capability changed after it was approved). The filter's own action applied. Metadata: `exception_id`, `channel`, `action`, `capability`, `floor`, `detector`, `filter_id`. |
+
 ### Filter Events tab (new)
 
 A dedicated tab for compliance events with:

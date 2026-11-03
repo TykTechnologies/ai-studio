@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/rs/zerolog/log"
@@ -337,7 +338,7 @@ func (p *AnalyticsPulsePlugin) HandleAnalytics(ctx context.Context, req *interfa
 		UserID:                 req.UserID,
 		Name:                   req.ModelName,
 		Vendor:                 req.Vendor,
-		InteractionType:        "proxy",
+		InteractionType:        pulseInteractionType(req.InteractionType),
 		Choices:                int(req.Choices),
 		ToolCalls:              int(req.ToolCalls),
 		ChatID:                 "",
@@ -1106,4 +1107,14 @@ func (p *AnalyticsPulsePlugin) GetStats() map[string]interface{} {
 	}
 
 	return stats
+}
+
+// pulseInteractionType is the interaction type an analytics event carries to
+// the hub: a guardrail's judge call keeps its own type (charged to the judge
+// LLM, not an App); everything else on an edge is proxy traffic.
+func pulseInteractionType(t string) string {
+	if t == string(models.GuardrailJudgeInteraction) {
+		return t
+	}
+	return "proxy"
 }

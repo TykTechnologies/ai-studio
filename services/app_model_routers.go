@@ -34,6 +34,9 @@ type appOptions struct {
 	teamID *uint
 	// tracing replaces the App's agent tracing overrides when set.
 	tracing *models.AppTracingSettings
+	// capabilityActor is who changes the App's resources, for the guardrail
+	// capability reset (see WithCapabilityActor); nil is an unknown caller.
+	capabilityActor *capabilityActor
 }
 
 func resolveAppOptions(opts []AppOption) appOptions {

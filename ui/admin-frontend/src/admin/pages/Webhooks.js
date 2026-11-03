@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Alert,
   Autocomplete,
@@ -74,7 +74,7 @@ const headersToMap = (rows) =>
 
 // TargetForm creates or edits a target. Header values are never loaded
 // back from the server; editing headers means re-entering them.
-const TargetForm = ({ open, target, presets, topics, onClose, onSaved }) => {
+const TargetForm = ({ open, target, presets, topics, onClose, onSaved, initialTopic = "" }) => {
   const editing = Boolean(target);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -99,10 +99,13 @@ const TargetForm = ({ open, target, presets, topics, onClose, onSaved }) => {
         max_concurrency: target.max_concurrency || 0,
         signing_secret: "",
       });
+    } else if (initialTopic) {
+      // Opened from a guardrail's alert ("Create a webhook for this event").
+      setForm({ ...emptyForm, name: initialTopic, topic_filters: [initialTopic] });
     } else {
       setForm(emptyForm);
     }
-  }, [open, target]);
+  }, [open, target, initialTopic]);
 
   const set = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
@@ -478,6 +481,10 @@ const TargetDetails = ({ target, detail, history }) => (
 
 const Webhooks = () => {
   const navigate = useNavigate();
+  // ?topic= opens a new target subscribed to it (a guardrail alert's
+  // "Create a webhook for this event").
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [initialTopic, setInitialTopic] = useState("");
   const [status, setStatus] = useState(null);
   const [statusError, setStatusError] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -524,6 +531,17 @@ const Webhooks = () => {
   }, []);
 
   const usable = status?.available && status?.enabled;
+
+  useEffect(() => {
+    const topic = searchParams.get("topic");
+    if (!usable || !topic) return;
+    setInitialTopic(topic);
+    setEditing(null);
+    setFormOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete("topic");
+    setSearchParams(next, { replace: true });
+  }, [usable, searchParams, setSearchParams]);
 
   const fetchTargets = useCallback(async () => {
     if (!usable) return;
@@ -943,9 +961,11 @@ const Webhooks = () => {
         target={editing}
         presets={presets}
         topics={topics}
+        initialTopic={initialTopic}
         onClose={() => {
           setFormOpen(false);
           setEditing(null);
+          setInitialTopic("");
         }}
         onSaved={onSaved}
       />

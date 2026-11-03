@@ -15,6 +15,7 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import Section from "../../common/Section";
+import SubSection from "../../common/SubSection";
 import ConfirmationDialog from "../../common/ConfirmationDialog";
 import Can from "../../rbac/Can";
 import { P } from "../../../rbac/permissions";
@@ -40,7 +41,7 @@ import {
 const formatTime = (s) => (s ? new Date(s).toLocaleString() : "-");
 
 /** useUserNames resolves user ids to names, once each; "User #id" otherwise. */
-const useUserNames = (ids) => {
+export const useUserNames = (ids) => {
   const [names, setNames] = useState({});
   const asked = useRef(new Set());
   const key = ids.filter(Boolean).sort().join(",");
@@ -63,7 +64,9 @@ const useUserNames = (ids) => {
   return useCallback((id) => (id ? names[String(id)] || `User #${id}` : "-"), [names]);
 };
 
-const AppPromptTemplates = ({ appId }) => {
+// embedded renders the table as part of another Section (the App page's
+// Guardrails) instead of a Section of its own.
+const AppPromptTemplates = ({ appId, embedded = false }) => {
   const { isFullAdmin } = usePermissions();
   const { isEnterprise } = useEdition();
   const [templates, setTemplates] = useState([]);
@@ -110,8 +113,9 @@ const AppPromptTemplates = ({ appId }) => {
   const shown = templates.filter((t) => showRetired || t.status !== "retired");
   const retiredCount = templates.length - templates.filter((t) => t.status !== "retired").length;
 
+  const Wrapper = embedded ? SubSection : Section;
   return (
-    <Section
+    <Wrapper
       title="Prompt templates"
       description="The app's own prompt text, approved once, so request guardrails score only the parts that vary. A control for false positives, not a security boundary."
       actions={
@@ -128,7 +132,7 @@ const AppPromptTemplates = ({ appId }) => {
       }
       data-testid="app-prompt-templates"
     >
-      {!isEnterprise && (
+      {!isEnterprise && !embedded && (
         <Alert severity="info" sx={{ mb: 2 }}>
           Templates act through Enterprise guardrail providers. In the Community Edition they can be proposed and
           approved, and change nothing.
@@ -301,7 +305,7 @@ const AppPromptTemplates = ({ appId }) => {
         borderColor="border.criticalDefault"
         primaryButtonComponent="danger"
       />
-    </Section>
+    </Wrapper>
   );
 };
 

@@ -1,0 +1,136 @@
+# Guardrail exceptions and app capability
+
+Status: app guardrail capability implemented (model, suggestion, API, App page), 2026-11-03 (midsommar-clean-9u1j.2); exceptions model, floors, service and API, 2026-11-03 (.3); exceptions at runtime on the hub, 2026-11-03 (.4); exceptions and capability on edges, 2026-11-03 (.5); the alert action, 2026-11-03 (.8); alerts to webhooks and docs, 2026-11-03 (.9, .10). Their UI, the alert action and the LLM second opinion follow; the epic midsommar-clean-9u1j holds the full design.
+
+## Problem
+
+A guardrail filter that scores legitimate traffic as an attack (a code-review bot whose pull requests contain injection-like test vectors) can today only be turned to log or shadow as a whole, which drops protection for every app on that LLM. Exceptions let an operator change the **consequence** of a verdict for one app, filter, detector and channel, never the detection. How far an exception may soften a verdict is bounded by what the app can do: its **guardrail capability**.
+
+## App guardrail capability
+
+`apps.guardrail_capability` (`guardrails.Capability`):
+
+| Value | Meaning |
+|---|---|
+| `""` | Not attested. Treated as `acting`, the strictest (`Capability.Effective`). Every existing app starts here. |
+| `read_only` | The app only reads model output: no tools act for it. |
+| `read_tools` | The app's tools only read (GET requests, read-only MCP tools, datasources). |
+| `acting` | The app's tools can change things. |
+
+The value is **attested** by a full administrator, not derived: the gateway cannot see everything an app can do (a CI job's own GitHub token, say).
+
+### Suggestion
+
+`services.SuggestAppCapability(app)` suggests a value with its reasons (not stored):
+
+- `read_only` when the app has no tools, MCP servers or datasources ("No tools, datasources or MCP servers attached").
+- `read_tools` when every tool operation the app can call is read-only, every MCP tool primitive is marked read-only, and datasources (retrieval) are present. Tool operations use the same MCP annotations as the tool MCP endpoint (`pkg/mcpannotations`): GET/HEAD/OPTIONS are read-only, other methods are not, and `x-mcp-read-only` on the operation overrides the method. MCP primitives are read-only when a tool primitive carries `readOnlyHint: true` (the MCP default is false); resources and prompts only read.
+- `acting` otherwise, including what Studio cannot tell: a spec it cannot parse, an operation missing from the spec, an MCP server whose primitives are not known. The reasons name each deciding tool operation or MCP primitive.
+
+Only the operations on a tool's whitelist count. A chat-only tool (REST and MCP access off, or a client tool) gives the app nothing and is skipped. Plugin resources bound to the app (ResourceProvider plugins) are something Studio cannot classify: any binding makes the suggestion `acting`, naming the resource and its type (`Service.SuggestAppCapabilityFor` reads them).
+
+### Capability drift
+
+The attestation describes the app's bindings. When anyone other than a full administrator changes an attested app's tools, datasources, MCP servers or plugin resources, `apps.guardrail_capability` is cleared (unattested, so acting) until a full administrator attests again. A full administrator's own changes keep it. It is enforced in the service (`guardCapabilityDrift`, around `UpdateApp`, `UpdateAppWithResources`, `AddToolToApp`, `RemoveToolFromApp`, `AddDatasourceToApp`, `RemoveDatasourceFromApp`, `SetAppMCPServers`, `SetAppPluginResources`), so every caller is covered: the admin API names its caller with `WithCapabilityActor`, and a caller that names none (the management gRPC `UpdateApp` plugins use) counts as not a full administrator. A change that leaves the bindings as they were (a rename) keeps it.
+
+- **Visible** when a guardrail filter is attached to one of the app's LLMs (any mode): `guardrail_capability_reset_by` (null when no user is known, such as a plugin) and `guardrail_capability_reset_at` are recorded, the full administrators are notified to re-attest (link to the app), and the response to the change reports it: `guardrail_capability_reset: true` in the app attributes of `PATCH /apps/{id}` and `POST /apps/{id}/tools/{tool_id}`, and `DELETE /apps/{id}/tools/{tool_id}` answers 200 with `{"data": {"guardrail_capability_reset": true}}` instead of 204.
+- **Quiet** otherwise: the attestation is cleared with nothing recorded, notified or reported. It has no effect without guardrails, and an app that gains a guardrail later starts at the strictest tier and shows the suggestion.
+
+The reset fails closed: if clearing the attestation cannot be written (after one retry), the call returns an error (`ErrGuardrailCapabilityReset`, a 500 on the API) even though the resource change itself may have been saved. Attesting again (`PUT .../guardrail-capability`) clears the reset record. Known limitation (out of scope): an attested `read_tools` app can still gain acting ability through an edit to a bound tool's OpenAPI spec or an MCP server's primitives, which do not change the app's bindings.
+
+The capability columns (`AppGuardedColumns`) are written only by the capability service and the reset, never by a save of the whole app, which could write back a value loaded before an administrator changed it.
+
+### API
+
+- `GET /api/v1/apps/{id}/guardrail-capability` (apps read) returns `{value, effective, suggestion, reasons, guardrails_apply, reset_by, reset_at}`; `guardrails_apply` says whether a resource change would reset visibly (the app editor warns before saving only then).
+- `PUT /api/v1/apps/{id}/guardrail-capability` with `{"value": "read_only"}` (full administrators only; `""` clears it). Recorded by the audit trail as "Update App Guardrail Capability" and emitted as `system.app.updated`.
+- The app response carries `guardrail_capability` read-only; the app create and update APIs never set it.
+
+### UI
+
+The App page's **Guardrails** section (`apps/AppGuardrails.js`, below "Used by"; see Exceptions UI) shows the capability first: a chip ("Not attested (treated as acting)" until set) with the suggestion. A full administrator accepts the suggestion in one click, or opens **Change**, which shows the suggestion pre-selected with its reasons. After a visible reset it says when (and by whom) the attestation was cleared.
+
+The app editor (`AppForm.js`) warns before saving when someone who is not a full administrator changes the tools, datasources or plugin resources of an app that has an attested capability and `guardrails_apply` (a confirmation, "Save anyway"); after a save whose response carries `guardrail_capability_reset: true` the app list shows a warning instead of the success message. Neither appears when no guardrail applies (the reset is then quiet).
+
+## Floors
+
+A fixed table (`guardrails/exceptions.go`, not configurable): the softest action an exception may reach, by the app's effective capability and the channel of the flagged text. The hub checks it when an exception is saved or approved, and the runtime (hub and edge) again when it applies one, since the capability can change after approval.
+
+| Capability | Own/system text (`text_user`, `text_system`) | Tool results (`tool_result`) | Tool calls / definitions (`tool_call`, `tool_definition`) |
+|---|---|---|---|
+| `read_only` | down to `log` | down to `log` | down to `log` |
+| `read_tools` | down to `log` | down to `quarantine` | down to `log` |
+| `acting` / unattested | down to `quarantine` | no downgrade | no downgrade |
+
+What an exception may soften to also depends on what the runtime can do on the channel (`guardrails.ExceptionActions`): text and tool results `log` or `quarantine` (the flagged segment replaced), a tool call `log` only, a tool definition `log` or `remove`. `alert` ("Log and raise event", see features/Filters.md) is allowed wherever `log` is and ranks as log. `guardrails.CheckException` explains a refusal ("an app whose capability is not attested (treated as acting) cannot soften verdicts on tool_result; ..."). `guardrails.SoftenedAction` is what the runtime applies: the softer of the configured action and the exception's, or no change when the exception is outside the floor now.
+
+## Exceptions
+
+`guardrail_exceptions` (`models.GuardrailException`): `app_id`, `filter_id` (a guardrail filter), `detector` (`""` = any), `channel` (`text_user`, `text_system`, `tool_result`, `tool_call`, `tool_definition`), `tool_name` (tool channels only, `""` = any tool), `action` (the softened action), `alert_event` (with the `alert` action: the event it raises, a slug unique across filters and exceptions, part of the reviewed content hash), `status` (`proposed`, `approved`, `retired`), `justification` (required, one line, at most 500 bytes), `proposed_by`, `approved_by`, `approved_at`, `expires_after_days` (default 30), `last_hit_at`, `hit_count`, `source_event` (the compliance event it was created from: it must be a `guardrail.*` event of the app recorded by the exception's filter, by `metadata.filter_id` and `filter_name`). Never keyed on content, path or phrase.
+
+Rules (`services/guardrail_exceptions.go`):
+
+- Anyone with apps write proposes; the administrators are notified (in-app and email, link to the app page). A full administrator's own exception is approved as it is created (proposer = approver).
+- Approving takes the `content_hash` of the exception as reviewed (filter, detector, channel, tool, action, justification, expiry); an exception changed since is refused with 409 "Guardrail Exception Changed". The floor is checked again at approval.
+- One proposed or approved exception per scope (app, filter, detector, channel, tool): a second is a conflict. At most 20 approved per app.
+- A change to an approved exception returns it to proposed, unless a full administrator makes it. The filter and source event cannot change; a retired exception cannot change.
+- An approved exception that goes `expires_after_days` without a hit (counted from approval when it never hit) lapses back to proposed when the runtime next reads the app's exceptions (`ApprovedGuardrailExceptions`), and in any case within the hour: the leader replica sweeps every approved exception past its expiry (`SweepLapsedGuardrailExceptions`, first a minute after start, then hourly; idempotent) and announces each app's change, so edges serving an app the hub never sees become pending and drop it at the next push. Edges do not evaluate expiry themselves. One outside the floor for the app's current capability is served to the runtime, which ignores it (see Runtime); it stays approved, so attesting the capability back restores it.
+- Hits are counted in memory and written in batches (`GuardrailExceptionHits`: an exception's first hit at once, later ones at most once a minute by a timer, or on `Flush`); `hit_count` and `last_hit_at` show on the API.
+- Every change emits `system.app.guardrail_exceptions.changed`, which recomputes the edge snapshot checksums (edges become pending once exceptions are in the snapshot).
+
+### Runtime
+
+`scripting/guardrail_exceptions.go`. Studio installs `services.GuardrailExceptionSource` with `scripting.SetExceptionSource` (`pkg/studio`): an app's approved exceptions and its capability (`guardrails.AppExceptions`), cached per app for 15 seconds and dropped on this replica when the app's exceptions or capability change.
+
+- After the provider has scored a request, `decide()` takes each flagged segment's action per finding: the filter's action for the segment's kind, softened by the app's exception for the filter, the finding's detector and the segment's channel (and tool), within the floor (`guardrails.SoftenedAction`). The segment takes the strongest of its findings' actions, so a second detector without an exception still acts. The most specific exception applies (a named detector over any, a named tool over any).
+- Channels: tool results, tool calls and tool definitions by kind; otherwise `text_system` for the system prompt and `text_user` for the client's user and assistant text. A response's text is the model's own and takes no exception (its tool calls do).
+- Detection is unchanged: the provider scores everything, the verdict cache is keyed as before, and findings that only record unscanned text (caps, provider failures) are never softened.
+- Every finding still produces its compliance event. A detector event softened by an exception carries `exceptions: [id]`, "softened by exception #id" in its description, and on each segment `exception: {id, from, to}`. Each exception that applied records a hit, once per request.
+- An exception that matches but is outside the floor for the app's capability now changes nothing and records `guardrail.exception_ignored` (`exception_id`, `channel`, `action`, `capability`, `floor`, `detector`, `filter_id`).
+- Requests with no app (Studio chat, app id 0) take no exceptions; neither does a build with no source.
+
+### Edge gateways
+
+- The configuration snapshot carries `guardrail_exceptions` (`GuardrailExceptionConfig`): the approved, unlapsed exceptions of the snapshot's Apps that are within the floor for their App's capability, each with `app_capability` (`grpc/snapshot_guardrail_exceptions.go`). Apps are outside the snapshot checksum, so the capability travels with each exception: approving, retiring or changing an exception, or attesting its App's capability (`system.app.guardrail_exceptions.changed`, `system.app.updated`), changes the checksum and marks the namespace's edges pending; a hit does not. `AppConfig.guardrail_capability` carries the capability too, for information.
+- The edge (`microgateway/internal/services/guardrail_exceptions.go`) installs them as the exception source when it applies a snapshot, checks the floor again and drops an exception outside it (an unknown capability is acting), and removes the source when a snapshot has none. The runtime is the same `decide()` as on the hub.
+- Heartbeats report `hit_guardrail_exception_ids`, the exceptions that applied since the last one (requeued when a heartbeat fails). The hub counts only exceptions the edge's own snapshot carries: approved, unlapsed, within the floor, of an active App and a filter in the edge's namespace; anything else an edge reports is dropped and logged. Each reported exception counts as one hit per heartbeat, written at most once a minute per hub replica, so `hit_count` counts edge heartbeats with hits rather than edge requests; `last_hit_at` keeps the exception from lapsing.
+- The snapshot also carries `guardrail_capabilities` (`AppGuardrailCapabilityConfig`, field 21): the attested capability of each App that has one, in the checksum, so attesting, lowering or resetting a capability marks edges pending even for an App with no exceptions. The edge serves it through `scripting.SetCapabilitySource` / `AppCapabilityFor`, as the hub does from the database (`GuardrailExceptionSource.AppCapability`, same 15-second cache, dropped with the app's exceptions); the LLM second opinion's soften mode reads the floor there (`appCapabilityOf` → `AppCapabilityFor`), independently of exceptions (midsommar-clean-9u1j.58). `AppConfig.guardrail_capability` stays informational.
+- Compatibility: both are new proto3 fields (snapshot 20, heartbeat 9, `AppConfig` 26). An older edge ignores the exceptions (it applies the filters' actions) and an older hub sends none.
+
+### API
+
+| Route | Permission |
+|---|---|
+| `GET /api/v1/apps/{id}/guardrail-exceptions[?status=]` (meta: `max_approved`, actions per channel, floors) | apps read |
+| `POST /api/v1/apps/{id}/guardrail-exceptions` | apps write |
+| `GET /api/v1/apps/{id}/guardrail-exceptions/{eid}` | apps read |
+| `PATCH /api/v1/apps/{id}/guardrail-exceptions/{eid}` | apps write |
+| `DELETE /api/v1/apps/{id}/guardrail-exceptions/{eid}` | apps delete |
+| `POST /api/v1/apps/{id}/guardrail-exceptions/{eid}/approve` (`{"content_hash": ...}`) | full administrator |
+| `POST /api/v1/apps/{id}/guardrail-exceptions/{eid}/retire` | apps write |
+| `GET /api/v1/filters/{id}/exceptions[?status=]` | filters read |
+
+### UI
+
+The App page's **Guardrails** section groups the capability, the exceptions and the app's prompt templates (`AppPromptTemplates` with `embedded`), with one Community Edition notice. The exceptions table (`apps/guardrailExceptions/AppGuardrailExceptions.js`) lists filter (linked), detector ("Any"), where (channel, and tool), the action ("Log only", "Log and raise event (<alert_event>)", "Remove the flagged part", "Remove the tool definition"), status, approver and time, hits, last hit and expiry (`exceptionExpiresAt`: `expires_after_days` after the later of approval and last hit, as `Lapsed`), with retired rows behind a switch, and "N of at most 20 approved". **Review** opens the exception; a full administrator approves a proposed one there after ticking a confirmation, sending its `content_hash` (a 409 reloads it). **Edit**, **Retire** (apps write) and **Delete** (apps delete) are gated with `Can`. **Add exception** (a full administrator, approved at once) / **Propose exception** opens the editor (`GuardrailExceptionEditor.js`): guardrail filter, detector, channel, tool name on tool channels, the action limited to `allowedActions(meta, capability, channel)` (the API's `meta` floors for the app's effective capability, softest first, none when the channel cannot be softened), expiry days and a required one-line justification; "Log and raise event" asks for the event name (`ALERT_EVENT_PATTERN`, sent as `alert_event` only for that action). The review shows the event an alert exception raises (`guardrail.alert.<alert_event>`), since the content hash an administrator approves covers it (midsommar-clean-9u1j.54); the Soften dialog asks for it the same way. The filter's page (`filters/FilterExceptions.js` on `FilterDetails`) lists, read-only, the non-retired exceptions of that filter with links to their apps.
+
+### Soften from an event
+
+**Compliance → Filter Events**: an expanded guardrail detector event of an app whose metadata names its filter (`filter_id`) offers **Not a threat? Soften for this app** to users with apps write (`compliance/softenTarget.js`: not `guardrail.error`, `.unscanned`, `.unreadable_request`, `.unredactable`, `.template_mimicry`, `.judge`, `.exception_ignored`, nor a response filter's event; the channel from the first flagged segment's kind and role, as the runtime's `channelOf`; the tool from it on tool channels). `compliance/SoftenDialog.js` is pre-filled from the event (filter, detector, channel, tool, app), loads the app's capability and the exceptions `meta`, and asks **What can this app do?** only when the capability is not attested: a full administrator picks it (Studio's suggestion pre-selected, with its reasons) and it is attested (`PUT .../guardrail-capability`) before the exception is created; anyone else is told the app counts as acting. **Instead of blocking** offers `allowedActions` for that capability and channel, the softest first and by default; expiry defaults to 30 days, the one-line justification is required. The exception is posted with `source_event` (checked against the filter on the server, `checkExceptionSourceEvent`): a full administrator's applies at once, anyone else's is proposed. The event's flagged segment shows **Softened by exception #N (from to to)** from `segments[].exception` (`FlaggedText`).
+
+### Portal: report a false positive
+
+An App's owner sees the blocks shared with them (`GET /common/apps/{id}/guardrail-blocks`), now with each event's `id` and `reportable` (`reportableBlock`: an app's detector verdict on its request from a filter the event names, same exclusions as above). **Report false positive** (portal `AppGuardrailBlocks.js`) asks why and posts `POST /common/apps/{id}/guardrail-blocks/{event_id}/report` (`{"justification"}`; the App's owner only, an event of that app shared with owners): the server scopes a **proposed** exception from the event (filter, detector, channel, tool), softened to the softest action the App's capability allows there (refused when it allows none), with `source_event` and the justification prefixed "Reported by the app owner:". It is proposed whoever reports it; approving stays a full administrator's on the admin API (`TestGuardrailBlocks_ReportFalsePositive`). The answer is only `{id, status}`, and its errors are generic: an owner learns nothing of the detection (filter id, detector, channel) beyond the blocks list (midsommar-clean-9u1j.56). The hub-side journey (block, event, exception from it, approve, next request logged and tagged) is `TestGuardrailException_SoftenFromEventJourney`.
+
+These routes are the only way to manage exceptions: no plugin SDK service, gRPC management call (`TestGuardrailExceptions_NotOnManagementSurfaces`) or agent scope reaches them.
+
+## Decisions
+
+- **A full administrator's own exception applies at once**, recorded as proposer and approver (decided with Martin); anyone else proposes.
+- **Never keyed on content, path or phrase.** Exceptions are scoped by app, filter, detector, channel and tool only, so they cannot be used to allow a payload.
+- **Studio chat is out of scope**: chat requests carry no app (app id 0) and take no exceptions.
+- **A response's own text takes no exception**; tool calls in a response do (the design's channels have no model-output text channel).
+- **Timing on edges**: approving, retiring or changing an exception, attesting or resetting a capability, and a lapse reach an edge only at the next config push (edges show Pending); a lapsed exception stops applying on an edge after the hourly sweep plus the push. Edge `hit_count` counts heartbeats with hits, not requests, and hits are attributed by the edge's declared namespace (see jyx.86 on edge identity).
+- **Known limitation** (midsommar-clean-7657, deferred): an attested app keeps its tier when a bound tool's OpenAPI spec or an MCP server's annotations widen what it can do without changing its bindings; admins re-attest after such edits.
+
+User docs: docs/site/docs/guardrails.md (Exceptions, Alerts, API), edge-gateways.md (Guardrail exceptions), compliance-events.md (Guardrail event metadata), webhooks.md (guardrail.alert.*), guardrails-wolf-defender.md; CHANGELOG-v2.3.0.md.

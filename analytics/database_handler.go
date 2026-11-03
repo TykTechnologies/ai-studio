@@ -309,6 +309,8 @@ func (h *DatabaseHandler) startWorker() {
 			})
 			if err != nil {
 				logger.Warnf("Error creating compliance events: %s", sanitizeError(err))
+			} else {
+				complianceEventsStored(events)
 			}
 		case b := <-h.captureBatchChan:
 			h.writeCaptureBatch(b)

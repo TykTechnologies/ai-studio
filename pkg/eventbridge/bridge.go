@@ -291,6 +291,21 @@ func (b *Bridge) remoteToLocal(ctx context.Context) {
 				}
 				continue
 			}
+			// Guardrail alerts are raised by Studio only, after checking the
+			// compliance event against its own configuration
+			// (services.PublishGuardrailAlerts); an edge's alerts reach
+			// Studio as compliance events on the analytics pulse.
+			if b.isControl && IsGuardrailAlertTopic(ev.Topic) {
+				if n := b.droppedSystem.Add(1); n == 1 || n%100 == 0 {
+					log.Warn().
+						Str("node_id", b.nodeID).
+						Str("topic", ev.Topic).
+						Str("origin", ev.Origin).
+						Uint64("dropped", n).
+						Msg("Dropped a guardrail alert (guardrail.alert.*) sent by an edge; only Studio raises those")
+				}
+				continue
+			}
 
 			log.Debug().
 				Str("node_id", b.nodeID).

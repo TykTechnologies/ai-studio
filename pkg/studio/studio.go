@@ -409,6 +409,23 @@ func New(opts Options) (_ *Studio, err error) {
 	// Request guardrails leave the approved constants of an app's trusted
 	// prompt templates unscored (features/TrustedPromptTemplates.md).
 	scripting.SetPromptTemplateSource(service.PromptTemplateSource())
+	// Approved guardrail exceptions soften a filter's action for one app,
+	// detector and channel (features/GuardrailExceptions.md).
+	scripting.SetExceptionSource(service.GuardrailExceptionSource())
+	// ... and the app's capability, which the LLM second opinion's soften
+	// mode needs whether or not the app has exceptions.
+	scripting.SetCapabilitySource(service.GuardrailExceptionSource())
+	// Stored compliance events that name a guardrail alert raise it on the
+	// bus (guardrail.alert.<name>), for webhooks.
+	analytics.SetComplianceEventsStored(service.PublishGuardrailAlerts)
+	// Exceptions lapse after expires_after_days without a hit; the sweep
+	// lapses those of apps the hub never serves (edge traffic only), so
+	// edges become pending and drop them.
+	s.background.Add(1)
+	go func() {
+		defer s.background.Done()
+		service.RunGuardrailExceptionSweeper(backgroundCtx)
+	}()
 	if opts.HostTykConnection != nil {
 		if tykmcp.IsEnterpriseAvailable() {
 			service.SetTykMCPHost(opts.HostTykConnection)

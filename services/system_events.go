@@ -26,6 +26,11 @@ const (
 	// ones travel in the edge snapshot, so edges become pending. Payload
 	// object: nil; object_id is the App.
 	TopicAppPromptTemplatesChanged = "system.app.prompt_templates.changed"
+	// TopicAppGuardrailExceptionsChanged: an App's guardrail exceptions
+	// changed (proposed, edited, approved, retired, deleted, lapsed). The
+	// approved ones travel in the edge snapshot, so edges become pending.
+	// Payload object: nil; object_id is the App.
+	TopicAppGuardrailExceptionsChanged = "system.app.guardrail_exceptions.changed"
 
 	// Datasource events
 	TopicDatasourceCreated = "system.datasource.created"
@@ -139,6 +144,15 @@ func (e *SystemEventEmitter) EmitObjectEvent(topic string, objectType string, ac
 	}
 }
 
+// PublishLocal publishes payload on topic on this node's bus (DirLocal),
+// for events that are not object CRUD (guardrail alerts).
+func (e *SystemEventEmitter) PublishLocal(topic string, payload interface{}) error {
+	if e == nil || e.bus == nil {
+		return nil
+	}
+	return eventbridge.PublishLocal(e.bus, e.nodeID, topic, payload)
+}
+
 // Convenience methods for each object type
 
 // EmitLLMCreated emits an event when an LLM is created
@@ -189,6 +203,12 @@ func (e *SystemEventEmitter) EmitAppApproved(app interface{}, objectID uint, use
 // templates change.
 func (e *SystemEventEmitter) EmitAppPromptTemplatesChanged(appID uint) {
 	e.EmitObjectEvent(TopicAppPromptTemplatesChanged, "app", "prompt_templates_changed", appID, 0, nil)
+}
+
+// EmitAppGuardrailExceptionsChanged emits an event when an App's guardrail
+// exceptions change.
+func (e *SystemEventEmitter) EmitAppGuardrailExceptionsChanged(appID uint) {
+	e.EmitObjectEvent(TopicAppGuardrailExceptionsChanged, "app", "guardrail_exceptions_changed", appID, 0, nil)
 }
 
 // EmitAppPluginResourcesChanged emits an event when plugin resources on an App change.

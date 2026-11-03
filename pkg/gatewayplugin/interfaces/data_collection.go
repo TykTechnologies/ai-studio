@@ -86,6 +86,10 @@ type AnalyticsData struct {
 	OnBehalfOf             string    `json:"on_behalf_of,omitempty"` // who the call was for, when an auth plugin said (audit only)
 	ActingAgent            string    `json:"acting_agent,omitempty"` // the agent that made it, when an auth plugin said (audit only)
 	TraceSpanID            string    `json:"trace_span_id,omitempty"` // agent tracing gateway span id (16 hex); empty while tracing is off
+	// InteractionType is where the usage came from: "" or "proxy" for App
+	// traffic, "guardrail_judge" for a guardrail's call to its judge LLM
+	// (recorded with no App).
+	InteractionType string `json:"interaction_type,omitempty"`
 
 	// Model class ("" generative, "decision") and, for a decision call, the
 	// questions asked and the ones the model declined (answered = Choices).

@@ -598,6 +598,7 @@ func (a *API) setupRoutes() error {
 	authed.GET("/apps/:id/analytics/mcp", a.getUserAppMCPUsage)
 	authed.GET("/apps/:id/analytics/interactions", a.getUserAppInteractions)
 	authed.GET("/apps/:id/guardrail-blocks", a.getUserAppGuardrailBlocks)
+	authed.POST("/apps/:id/guardrail-blocks/:event_id/report", a.reportGuardrailBlock)
 
 	// Notification routes
 	notificationHandlers := NewNotificationHandlers(a.service.NotificationService)
@@ -808,6 +809,15 @@ func (a *API) setupRoutes() error {
 	v1.DELETE("/apps/:id/prompt-templates/:template_id", authz.Delete("apps"), a.deleteAppPromptTemplate)
 	v1.POST("/apps/:id/prompt-templates/:template_id/approve", authz.FullAdmin, a.approveAppPromptTemplate)
 	v1.POST("/apps/:id/prompt-templates/:template_id/retire", authz.Write("apps"), a.retireAppPromptTemplate)
+	v1.GET("/apps/:id/guardrail-capability", authz.Read("apps"), a.getAppGuardrailCapability)
+	v1.PUT("/apps/:id/guardrail-capability", authz.FullAdmin, a.setAppGuardrailCapability)
+	v1.GET("/apps/:id/guardrail-exceptions", authz.Read("apps"), a.listGuardrailExceptions)
+	v1.POST("/apps/:id/guardrail-exceptions", authz.Write("apps"), a.createGuardrailException)
+	v1.GET("/apps/:id/guardrail-exceptions/:eid", authz.Read("apps"), a.getGuardrailException)
+	v1.PATCH("/apps/:id/guardrail-exceptions/:eid", authz.Write("apps"), a.updateGuardrailException)
+	v1.DELETE("/apps/:id/guardrail-exceptions/:eid", authz.Delete("apps"), a.deleteGuardrailException)
+	v1.POST("/apps/:id/guardrail-exceptions/:eid/approve", authz.FullAdmin, a.approveGuardrailException)
+	v1.POST("/apps/:id/guardrail-exceptions/:eid/retire", authz.Write("apps"), a.retireGuardrailException)
 
 	// Plugin Resource Type routes
 	v1.GET("/plugin-resource-types", authz.Read("plugins"), a.listPluginResourceTypes)
@@ -914,6 +924,7 @@ func (a *API) setupRoutes() error {
 	v1.POST("/filters/test", authz.Execute("filters"), a.testFilter)
 	v1.GET("/filters/guardrail-providers", authz.Read("filters"), a.listGuardrailProviders)
 	v1.GET("/filters/:id/dependents", authz.Read("filters"), a.getFilterDependents)
+	v1.GET("/filters/:id/exceptions", authz.Read("filters"), a.listFilterGuardrailExceptions)
 	v1.HandleFn("POST", "/filters/bulk", bulkActionPermission("filters"), a.bulkFilters)
 
 	// Plugin routes

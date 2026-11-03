@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import AppGuardrailBlocks from "./AppGuardrailBlocks";
 
@@ -39,5 +39,35 @@ describe("AppGuardrailBlocks", () => {
     rerender(<AppGuardrailBlocks client={failing} appId="2" />);
     await waitFor(() => expect(failing.get).toHaveBeenCalled());
     expect(container).toBeEmptyDOMElement();
+  });
+
+  // midsommar-clean-9u1j.7: an owner reports a reportable block as a false
+  // positive; the server makes it a proposed exception.
+  it("reports a block as a false positive", async () => {
+    const c = {
+      get: jest.fn(() =>
+        Promise.resolve({
+          data: {
+            data: [
+              { id: 41, reportable: true, timestamp: "2026-11-03T10:05:47Z", filter: "Wolf", action: "block", reason: "likely injection" },
+              { id: 42, reportable: false, timestamp: "2026-11-03T10:06:00Z", filter: "Wolf", action: "block", reason: "too large" },
+            ],
+          },
+        })
+      ),
+      post: jest.fn(() => Promise.resolve({ data: { data: { id: 7, status: "proposed" } } })),
+    };
+    render(<AppGuardrailBlocks client={c} appId="342" />);
+    const buttons = await screen.findAllByTestId("report-false-positive");
+    expect(buttons).toHaveLength(1);
+    fireEvent.click(buttons[0]);
+    expect(screen.getByTestId("report-send")).toBeDisabled();
+    fireEvent.change(screen.getByTestId("report-justification"), { target: { value: "Test vectors in a PR" } });
+    fireEvent.click(screen.getByTestId("report-send"));
+    await waitFor(() =>
+      expect(c.post).toHaveBeenCalledWith("/common/apps/342/guardrail-blocks/41/report", { justification: "Test vectors in a PR" })
+    );
+    expect(await screen.findByTestId("report-sent")).toHaveTextContent("Reported");
+    expect(screen.queryByTestId("report-false-positive")).not.toBeInTheDocument();
   });
 });

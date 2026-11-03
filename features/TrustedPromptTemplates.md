@@ -8,7 +8,7 @@ Request guardrails classify a whole message. An app that wraps third-party conte
 
 The feature lets an operator approve an app's own template once. Guardrails then score only the parts that vary, the **slots**.
 
-This is a false-positive control, not a security boundary. It must never make the gateway miss an attack it catches today by scoring the whole prompt, and the docs say so.
+This is a false-positive control, not a security boundary. For false positives in the parts that vary (a slot whose third-party text legitimately looks like an attack), see guardrail exceptions (features/GuardrailExceptions.md), which soften the verdict for one app, filter, detector and channel. It must never make the gateway miss an attack it catches today by scoring the whole prompt, and the docs say so.
 
 ## Principles
 
@@ -121,7 +121,7 @@ The approval screen shows (the first, second and fourth are built for manual pro
 
 ## Operations
 
-- **Compliance events:** each flagged segment of a message tried against templates carries `template`: `{"id": "<name>@<version>", "exempt_share": 0.41}` for a match, with `"signals"` listing `template.mimicry` (a slot holds template text) and `template.over_cap` (plus `"backstop": "enforced"`) when they apply, or `{"signals": ["template.miss"]}` / `{"signals": ["template.mimicry"]}` with no match. Mimicry also records one `guardrail.template_mimicry` event (action `log`) per request, whether or not anything was flagged. Backstop findings under `log` are ordinary detector events with action `log` and `template_backstop: "log"`.
+- **Compliance events:** each flagged segment of a message tried against templates carries `template`: `{"id": "<name>@<version>", "exempt_share": 0.41}` for a match, with `"signals"` listing `template.mimicry` (a slot holds template text) and `template.over_cap` (plus `"backstop": "enforced"`) when they apply, or `{"signals": ["template.miss"]}` / `{"signals": ["template.mimicry"]}` with no match. Mimicry also records one `guardrail.template_mimicry` event (action `log`) per request, whether or not anything was flagged. Backstop findings under `log` are ordinary detector events with action `log` and `template_backstop: "log"`. The Filter Events tab shows the segment's `template` as badges in the event details (`compliance/FlaggedText.js`, `templateBadges`).
 - **Metrics:** `aistudio_guardrail_templates_total{provider,result}` (`hit`, `miss`, `mimicry`, `over_cap`, `backstop_only`, `backstop_unhandled`) and `aistudio_guardrail_template_exempt_share{provider}` (histogram). They carry no app or template label, to keep cardinality bounded; per-app and per-template detail is in the compliance events.
 - **Edge gateways** (bead .8):
   - The snapshot carries the approved, unlapsed templates of the Apps it carries (`ConfigurationSnapshot.prompt_templates`, `PromptTemplateConfig`), in app, name and version order. Apps are scoped per edge namespace already, so each edge gets only the templates of Apps it serves. Unlike Apps, templates count in the checksum: every template change emits `system.app.prompt_templates.changed`, the control server recomputes the namespaces' checksums, and an approve, retire, edit or delete marks edges Pending. With no templates the field is empty and the checksum is what it was before templates existed.

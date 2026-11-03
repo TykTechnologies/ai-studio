@@ -17,6 +17,8 @@ import {
   Collapse,
   IconButton,
   Link,
+  Autocomplete,
+  Button,
 } from "@mui/material";
 import {
   StyledTableHeaderCell,
@@ -32,6 +34,15 @@ import apiClient from "../../utils/apiClient";
 import { eventSourceLabel } from "./eventSource";
 import FlaggedText from "./FlaggedText";
 import EventGuide from "./EventGuide";
+import SoftenDialog from "./SoftenDialog";
+import { softenTarget } from "./softenTarget";
+import Can from "../rbac/Can";
+import { P } from "../../rbac/permissions";
+import { JUDGE_EVENT_TYPE, agreementByFilter, judgeIndex } from "./judgeOpinions";
+
+// JUDGE_SAMPLE is how many of the period's judge opinions the agreement
+// summary reads.
+export const JUDGE_SAMPLE = 500;
 
 const SEVERITY_COLORS = {
   critical: "error",
@@ -49,6 +60,17 @@ const FilterEventsTab = ({ startDate, endDate }) => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [expanded, setExpanded] = useState({});
+  // The event an administrator is softening for its app (SoftenDialog).
+  const [softening, setSoftening] = useState(null);
+  // The Application filter: the chosen app ({id, name}) and the picker's
+  // search, which loads matching apps only while the picker is open.
+  const [app, setApp] = useState(null);
+  const [appOpen, setAppOpen] = useState(false);
+  const [appSearch, setAppSearch] = useState("");
+  const [appOptions, setAppOptions] = useState([]);
+  // The period's guardrail.judge events, for the agreement summary and the
+  // opinions shown on flagged segments; loaded only when there are some.
+  const [judgeEvents, setJudgeEvents] = useState([]);
 
   const fetchEvents = useCallback(async () => {
     if (!startDate || !endDate) return;
@@ -63,6 +85,7 @@ const FilterEventsTab = ({ startDate, endDate }) => {
       };
       if (severity) params.severity = severity;
       if (eventType) params.event_type = eventType;
+      if (app) params.app_id = app.id;
 
       const response = await apiClient.get("/compliance/events", { params });
       setData(response.data);
@@ -71,16 +94,62 @@ const FilterEventsTab = ({ startDate, endDate }) => {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, severity, eventType, page, rowsPerPage]);
+  }, [startDate, endDate, severity, eventType, app, page, rowsPerPage]);
 
   useEffect(() => {
     fetchEvents();
   }, [fetchEvents]);
 
+  const judged = (data?.by_type || {})[JUDGE_EVENT_TYPE] > 0;
+  useEffect(() => {
+    if (!judged || !startDate || !endDate) {
+      setJudgeEvents([]);
+      return undefined;
+    }
+    let cancelled = false;
+    const params = { start_date: startDate, end_date: endDate, event_type: JUDGE_EVENT_TYPE, limit: JUDGE_SAMPLE, offset: 0 };
+    if (app) params.app_id = app.id;
+    apiClient
+      .get("/compliance/events", { params })
+      .then((response) => {
+        if (!cancelled) setJudgeEvents(Array.isArray(response?.data?.events) ? response.data.events : []);
+      })
+      .catch(() => {
+        if (!cancelled) setJudgeEvents([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [judged, startDate, endDate, app]);
+
+  const agreement = agreementByFilter(judgeEvents);
+  const opinions = judgeIndex([...judgeEvents, ...(data?.events || [])]);
+
   // Reset to first page when filters change.
   useEffect(() => {
     setPage(0);
-  }, [severity, eventType, startDate, endDate]);
+  }, [severity, eventType, app, startDate, endDate]);
+
+  useEffect(() => {
+    if (!appOpen) return undefined;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const params = { page_size: 20 };
+        if (appSearch) params.search = appSearch;
+        const response = await apiClient.get("/apps", { params });
+        if (cancelled) return;
+        const rows = Array.isArray(response?.data?.data) ? response.data.data : [];
+        setAppOptions(rows.map((a) => ({ id: Number(a.id), name: a.attributes?.name || `App ${a.id}` })));
+      } catch (err) {
+        if (!cancelled) setAppOptions([]);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [appOpen, appSearch]);
 
   const totals = data?.by_severity || {};
   const totalCount = data?.total_count || 0;
@@ -201,12 +270,56 @@ const FilterEventsTab = ({ startDate, endDate }) => {
             </MenuItem>
           ))}
         </TextField>
+        <Autocomplete
+          size="small"
+          sx={{ minWidth: 240 }}
+          open={appOpen}
+          onOpen={() => setAppOpen(true)}
+          onClose={() => setAppOpen(false)}
+          options={appOptions}
+          value={app}
+          onChange={(_, v) => setApp(v)}
+          onInputChange={(_, v, reason) => {
+            if (reason === "input") setAppSearch(v);
+            if (reason === "clear") setAppSearch("");
+          }}
+          getOptionLabel={(o) => o?.name || ""}
+          isOptionEqualToValue={(o, v) => o.id === v.id}
+          filterOptions={(x) => x}
+          noOptionsText="No matching applications"
+          renderInput={(params) => (
+            <TextField {...params} label="Application" placeholder="All" inputProps={{ ...params.inputProps, "data-testid": "app-filter-input" }} />
+          )}
+        />
       </Box>
 
       {error && (
         <Typography color="error" sx={{ mb: 2 }}>
           {error}
         </Typography>
+      )}
+
+      {agreement.length > 0 && (
+        <StyledPaper sx={{ p: 2, mb: 2 }} data-testid="judge-agreement">
+          <Typography variant="subtitle2" gutterBottom>
+            Second opinion (LLM judge)
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            How often the judge found harmless what a filter blocked or quarantined
+            {judgeEvents.length >= JUDGE_SAMPLE ? ` (latest ${JUDGE_SAMPLE} opinions)` : ""}. Look at these before letting
+            a judge soften blocks.
+          </Typography>
+          {agreement.map((row) => (
+            <Typography variant="body2" key={row.filter} data-testid={`judge-agreement-${row.filter}`}>
+              <Box component="span" sx={{ fontWeight: 500 }}>
+                {row.filter}
+              </Box>
+              {`: judge said benign on ${row.benign} of ${row.judged} flags`}
+              {row.benign > row.benignFull ? ` (${row.benign - row.benignFull} not shown in full)` : ""}
+              {row.noOpinion > 0 ? `; no opinion on ${row.noOpinion}` : ""}
+            </Typography>
+          ))}
+        </StyledPaper>
       )}
 
       <TableContainer>
@@ -317,7 +430,20 @@ const FilterEventsTab = ({ startDate, endDate }) => {
                           <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                             <Box sx={{ px: 4, py: 2, bgcolor: "action.hover" }}>
                               <EventGuide event={e} />
-                              <FlaggedText metadata={e.metadata} appId={e.app_id} eventType={e.event_type} />
+                              {softenTarget(e) && (
+                                <Can permission={P.APPS_WRITE}>
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    sx={{ mb: 2 }}
+                                    onClick={() => setSoftening(softenTarget(e))}
+                                    data-testid={`soften-${e.id}`}
+                                  >
+                                    Not a threat? Soften for this app
+                                  </Button>
+                                </Can>
+                              )}
+                              <FlaggedText metadata={e.metadata} appId={e.app_id} eventType={e.event_type} opinions={opinions} />
                               <Typography variant="caption" color="text.secondary">
                                 Metadata
                               </Typography>
@@ -367,6 +493,7 @@ const FilterEventsTab = ({ startDate, endDate }) => {
         }}
         rowsPerPageOptions={[10, 25, 50, 100]}
       />
+      <SoftenDialog open={Boolean(softening)} target={softening} onClose={() => setSoftening(null)} />
     </Box>
   );
 };

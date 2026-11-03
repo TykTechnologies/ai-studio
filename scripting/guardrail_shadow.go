@@ -11,6 +11,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
+	"github.com/TykTechnologies/midsommar/v2/services"
 )
 
 // Shadow guardrails (guardrails.Config.Shadow) never hold up traffic: the
@@ -191,7 +192,7 @@ func shadowInputBytes(in *ScriptInput) int64 {
 // detached from the request, bounded by the filter's own time budget, and
 // records its compliance events through input.RecordEvents. Its outcome
 // never changes the traffic, whatever it finds or however it fails.
-func (g *guardrailRunner) shadow(input *ScriptInput, p *preparedGuardrail) *ScriptOutput {
+func (g *guardrailRunner) shadow(input *ScriptInput, p *preparedGuardrail, svc services.ServiceInterface) *ScriptOutput {
 	cfg := p.cfg
 	record := input.RecordEvents
 	parent := input.Ctx
@@ -209,7 +210,7 @@ func (g *guardrailRunner) shadow(input *ScriptInput, p *preparedGuardrail) *Scri
 		defer cancel()
 		in := snapshot
 		in.Ctx = ctx
-		out, err := g.evaluateRecovered(&in, p)
+		out, err := g.evaluateRecovered(&in, p, svc)
 		if err != nil {
 			slog.Warn("shadow guardrail evaluation failed", "filter_name", g.filter.Name, "error_class", guardrails.ErrorClass(err))
 			return
@@ -221,25 +222,25 @@ func (g *guardrailRunner) shadow(input *ScriptInput, p *preparedGuardrail) *Scri
 				}
 				out.ComplianceEvents[i].Metadata["shadow"] = true
 			}
-			record(ctx, g.filter.Name, out)
+			g.recordEvents(record, ctx, out)
 		}
 	}
 	if reason := currentShadowPool().enqueue(job); reason != "" {
 		metrics.RecordGuardrailShadowDropped(parent, cfg.Provider, reason)
-		record(detached, g.filter.Name, &ScriptOutput{ComplianceEvents: []ComplianceEventOutput{shadowDroppedEvent(g.filter.Name, cfg, input, reason)}})
+		g.recordEvents(record, detached, &ScriptOutput{ComplianceEvents: []ComplianceEventOutput{shadowDroppedEvent(g.filter.Name, cfg, input, reason)}})
 	}
 	return passThrough(input)
 }
 
 // evaluateRecovered is evaluate with a panic turned into its recorded
 // outcome, as RunScript does.
-func (g *guardrailRunner) evaluateRecovered(input *ScriptInput, p *preparedGuardrail) (out *ScriptOutput, err error) {
+func (g *guardrailRunner) evaluateRecovered(input *ScriptInput, p *preparedGuardrail, svc services.ServiceInterface) (out *ScriptOutput, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			out, err = g.panicked(input, r), nil
 		}
 	}()
-	return g.evaluate(input, p)
+	return g.evaluate(input, p, svc)
 }
 
 // shadowDroppedEvent records a shadow evaluation that was dropped.

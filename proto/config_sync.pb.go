@@ -701,6 +701,11 @@ type HeartbeatRequest struct {
 	// request on this edge since its last heartbeat, so the hub's expiry
 	// counts edge traffic too.
 	MatchedPromptTemplateIds []uint32 `protobuf:"varint,8,rep,packed,name=matched_prompt_template_ids,json=matchedPromptTemplateIds,proto3" json:"matched_prompt_template_ids,omitempty"`
+	// Guardrail exceptions (GuardrailExceptionConfig.id) that applied to a
+	// request on this edge since its last heartbeat, so the hub's expiry and
+	// hit counts include edge traffic. The hub accepts only exceptions in the
+	// edge's own namespace.
+	HitGuardrailExceptionIds []uint32 `protobuf:"varint,9,rep,packed,name=hit_guardrail_exception_ids,json=hitGuardrailExceptionIds,proto3" json:"hit_guardrail_exception_ids,omitempty"`
 	unknownFields            protoimpl.UnknownFields
 	sizeCache                protoimpl.SizeCache
 }
@@ -787,6 +792,13 @@ func (x *HeartbeatRequest) GetLoadedConfigVersion() string {
 func (x *HeartbeatRequest) GetMatchedPromptTemplateIds() []uint32 {
 	if x != nil {
 		return x.MatchedPromptTemplateIds
+	}
+	return nil
+}
+
+func (x *HeartbeatRequest) GetHitGuardrailExceptionIds() []uint32 {
+	if x != nil {
+		return x.HitGuardrailExceptionIds
 	}
 	return nil
 }
@@ -4476,7 +4488,7 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x05topic\x18\x02 \x01(\tR\x05topic\x12\x16\n" +
 	"\x06origin\x18\x03 \x01(\tR\x06origin\x12\x10\n" +
 	"\x03dir\x18\x04 \x01(\x05R\x03dir\x12\x18\n" +
-	"\apayload\x18\x05 \x01(\fR\apayload\"\x96\x03\n" +
+	"\apayload\x18\x05 \x01(\fR\apayload\"\xd5\x03\n" +
 	"\x10HeartbeatRequest\x12\x17\n" +
 	"\aedge_id\x18\x01 \x01(\tR\x06edgeId\x12\x1d\n" +
 	"\n" +
@@ -4486,7 +4498,8 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\ttimestamp\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x124\n" +
 	"\x16loaded_config_checksum\x18\x06 \x01(\tR\x14loadedConfigChecksum\x122\n" +
 	"\x15loaded_config_version\x18\a \x01(\tR\x13loadedConfigVersion\x12=\n" +
-	"\x1bmatched_prompt_template_ids\x18\b \x03(\rR\x18matchedPromptTemplateIds\"\xf7\x01\n" +
+	"\x1bmatched_prompt_template_ids\x18\b \x03(\rR\x18matchedPromptTemplateIds\x12=\n" +
+	"\x1bhit_guardrail_exception_ids\x18\t \x03(\rR\x18hitGuardrailExceptionIds\"\xf7\x01\n" +
 	"\x11HeartbeatResponse\x12\"\n" +
 	"\facknowledged\x18\x01 \x01(\bR\facknowledged\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12*\n" +

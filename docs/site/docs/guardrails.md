@@ -18,7 +18,7 @@ In **Filters**, add a filter and choose **Guardrail** as the filter type. The fo
 | Field | Meaning |
 |---|---|
 | Provider | Which engine classifies the text. See [Providers](#providers). |
-| On detection | `block` refuses the request (or stops the response); `redact` rewrites the matched text before it reaches the vendor (requests only; on a response filter it only logs, see [Redaction](#redaction)); `quarantine` (requests only) replaces the whole flagged message or tool result with a placeholder and lets the request continue; `log` lets it through. All four record a compliance event. |
+| On detection | `block` refuses the request (or stops the response); `redact` rewrites the matched text before it reaches the vendor (requests only; on a response filter it only logs, see [Redaction](#redaction)); `quarantine` (requests only) replaces the whole flagged message or tool result with a placeholder and lets the request continue; `log` lets it through; `alert` (**Log and raise event**) lets it through and also raises a named event that webhooks can subscribe to, see [Alerts](#alerts-log-and-raise-event). All five record a compliance event. |
 | Detectors | What the provider looks for. For the built-in library these are categories; for external providers they are the provider's own detector names, with a threshold where the provider scores. |
 | Messages to inspect | On LLM requests: the user text of the current turn (`last_user`), all user messages (default), system and user messages, or every message. Tool results are inspected under every choice unless tool-result scanning is off (then only under every message); see [Tool results](#tool-results). Chat messages and tool calls always inspect the whole text. |
 | Tool results | Scan tool results (default on) and, optionally, a separate action for them. Unset, a tool result gets the filter's action, except that `block` becomes `quarantine`. |
@@ -230,6 +230,97 @@ An [HTTP classifier](#http) whose connection sets `templates: "true"` receives t
 
 Templates apply on AI Studio and on [edge gateways](./edge-gateways.md#trusted-prompt-templates), which receive the approved templates of their Apps in their configuration snapshot: a template change marks edges Pending, and an edge keeps its old templates until the next push.
 
+### Exceptions: softening a verdict for one app
+
+Some legitimate traffic looks like an attack to a classifier: a code-review bot whose pull requests contain prompt-injection test vectors, a security tool that quotes exploits, a support desk forwarding phishing mail. Turning the whole filter to `log` would drop protection for every app on the LLM. A **guardrail exception** changes the **consequence** of a verdict for one app instead, never the detection: for findings of one filter, one detector (or any) and one channel, the filter's action is softened, for example from `block` to `log`.
+
+Exceptions are scoped by who sends the traffic and where the flagged text sits, never by its content, a path or a phrase. They are bounded by what the app can do (its **guardrail capability**), expire when unused, and need a full administrator's approval.
+
+Exceptions are part of AI Studio in every edition, but they act through guardrail providers, which are Enterprise.
+
+#### App guardrail capability
+
+The capability is what a full administrator attests an app can do with what its model produces. Open the App and find **Guardrail capability** in App Information:
+
+| Capability | Meaning |
+|---|---|
+| Not attested | The default for every app. Treated as **Acting**, the strictest. |
+| Read-only | The app only reads model output; nothing acts on it. |
+| Reads with tools | The app's tools only read (GET requests, read-only MCP tools, datasources). |
+| Acting | The app's tools can change things (post, write, delete, send). |
+
+AI Studio suggests a capability, with its reasons, from what it can see of the app: no tools, MCP servers or datasources suggests Read-only; tools whose allowed operations are all read-only (GET, HEAD or OPTIONS, or `x-mcp-read-only: true` on the operation), MCP servers whose tools are all marked `readOnlyHint`, and datasources suggest Reads with tools; anything else, and anything AI Studio cannot tell (a spec it cannot parse, an MCP server whose primitives are not known, plugin resources), suggests Acting. A full administrator accepts the suggestion in one click or chooses another value: AI Studio cannot see everything the app can do, such as a CI job's own repository token, so the administrator's attestation is what counts.
+
+**When the app changes.** If anyone other than a full administrator changes an attested app's tools, datasources, MCP servers or plugin resources (in the app editor, through the API, or a plugin through the management API), the attestation is cleared: the app is Not attested, treated as Acting, until a full administrator attests again. A full administrator's own changes keep it, and a save that leaves those bindings as they were (a rename, a budget change) changes nothing.
+
+- If a guardrail filter is attached to one of the app's LLMs (in any mode), the reset is visible: the app editor warns before saving, the response says so (`guardrail_capability_reset: true`), the app page shows who changed what and when, and full administrators are notified to attest again. Exceptions the reset puts below the floor stop applying until then.
+- Otherwise the attestation is cleared quietly. It has no effect without a guardrail; if one is attached later the app starts at the strictest tier and shows the suggestion.
+
+**Known limitation:** an edit that widens what an app can do without changing its bindings, such as a POST operation added to a bound tool's OpenAPI spec or an MCP server's `readOnlyHint` annotations changing, does not reset the attestation. Attest the app again after such an edit.
+
+#### Floors
+
+A fixed table bounds how far an exception may soften, by the app's capability and the channel of the flagged text:
+
+| Capability | Own text (user, system) | Tool results | Tool calls and tool definitions |
+|---|---|---|---|
+| Read-only | down to `log` | down to `log` | down to `log` |
+| Reads with tools | down to `log` | down to `quarantine` | down to `log` |
+| Acting, or not attested | down to `quarantine` | no softening | no softening |
+
+What an exception may soften to also depends on the channel: text and tool results to `log` or `quarantine` (the flagged message or tool result is replaced), a tool call to `log`, a tool definition to `log` or `remove`. **Log and raise event** (`alert`) is allowed wherever `log` is. The floor is checked when an exception is saved and approved, and again every time it is applied, since the capability can change after approval: an exception the floor no longer allows changes nothing and records a `guardrail.exception_ignored` compliance event. It stays approved, so attesting the capability again restores it.
+
+#### From a flagged event to a softened verdict
+
+1. In **Compliance → Filter Events**, expand the guardrail event that flagged legitimate traffic and choose **Not a threat? Soften for this app**. The dialog names what it covers, taken from the event: the filter, the detector, the place (the app's own messages, a tool result and its tool, and so on) and the app. The filter still detects it, and every hit is recorded.
+2. If the app's capability is not attested yet, a full administrator answers **What can this app do?** in the dialog (AI Studio's suggestion and its reasons are shown). Anyone else sees that the app is treated as acting until a full administrator attests it on the app page.
+3. **Instead of blocking** offers only the actions the app's capability allows there, the softest first; if the floor allows none, the dialog says the app cannot be softened here. **Log and raise event** asks for an **Event name**: webhooks subscribe to `guardrail.alert.<name>` to hear whenever the exception lets something through.
+4. Keep or change **Expires after (days)** (30 days since it last applied, by default), give a one-line **Justification**, and choose **Soften** (a full administrator) or **Propose** (anyone else who may edit the app).
+
+A full administrator's own exception applies at once (recorded as both proposer and approver). Anyone else who may edit the app proposes it; full administrators are notified and approve it from the app page, which shows the exceptions with their status, hit count and last hit. An app has at most 20 approved exceptions, and one exception per filter, detector, channel and tool.
+
+**From the portal.** An app's owners see the requests of their app that a guardrail shared with them (`evidence.share_with_app_owners`) blocked, quarantined or changed. For a block they believe is wrong they choose **Report false positive** and say why: this proposes an exception for that filter, detector, place and tool, softened to the softest action the app's capability allows. Nothing changes until a full administrator approves it; owners cannot approve.
+
+Every hit still records the compliance event. The detector's event carries `exceptions: [id]`, its description says "softened by exception #id", and each flagged segment records `exception: {id, from, to}`.
+
+How exceptions apply:
+
+- The action is decided per finding. A segment flagged by a second detector with no exception still gets the filter's action, so an exception for one detector never hides another.
+- The most specific exception applies: a named detector over any detector, a named tool over any tool.
+- Findings that only record text the guardrail could not scan (over a budget, a provider failure) are never softened.
+- A model response's own text is never softened; tool calls in a response are.
+- Requests without an app (AI Studio chat) take no exceptions.
+
+**Expiry.** An approved exception that goes `expires_after_days` without a hit (counted from its approval when it has never hit) returns to proposed. AI Studio checks when it next serves the app's traffic, and in any case within the hour, so an app served only by edge gateways is covered too.
+
+**Approving through the API.** As with prompt templates, an approval names the version reviewed by its `content_hash` (filter, detector, channel, tool, action, alert event, justification and expiry); an exception that changed since is refused with `409 Conflict` (title `Guardrail Exception Changed`). A change to an approved exception by anyone but a full administrator returns it to proposed.
+
+```bash
+curl -X POST "$STUDIO/api/v1/apps/42/guardrail-exceptions" -H "Authorization: Bearer $TOKEN" -d '{
+  "filter_id": 7, "detector": "prompt_attack", "channel": "text_user",
+  "action": "log", "justification": "Pull request diffs carry injection test vectors",
+  "source_event": 1234
+}'
+curl -X POST "$STUDIO/api/v1/apps/42/guardrail-exceptions/5/approve" -H "Authorization: Bearer $TOKEN" \
+  -d '{"content_hash": "<content_hash from the GET>"}'
+```
+
+`channel` is `text_user`, `text_system`, `tool_result`, `tool_call` or `tool_definition`; `tool_name` narrows a tool channel to one tool; `detector` empty means any. `source_event`, when given, must be a guardrail compliance event of that app recorded by that filter. See [API](#api) for the routes.
+
+### Alerts (Log and raise event)
+
+**Log and raise event** (`alert`) is offered wherever an action is chosen: the filter's **On detection**, the tool result, tool call and tool definition actions, and an exception's softened action. For the traffic it is `log`: the request goes on and the compliance event is recorded. The event also names an **alert**, and AI Studio publishes it on the topic `guardrail.alert.<name>`, which [webhooks](./webhooks.md) can subscribe to.
+
+```json
+{"provider": "http", "on_detect": "alert", "alert": {"event": "pr-review-flag"}, ...}
+{"on_detect": "block", "tool_results": {"on_detect": "alert", "alert": {"event": "tool-result-flag"}}, ...}
+```
+
+- The name is 2 to 64 lowercase letters, digits, `-` or `_`, starting with a letter or digit, and is unique across all guardrail filters and exceptions, so a topic always identifies one source. The editor pre-fills it from the filter's name, shows the topic, and in Enterprise links **Create a webhook for this event**, which opens a new webhook target subscribed to it. `guardrail.alert.*` subscribes to every alert.
+- The alert carries the alert name, the filter, the app, the detector, where the text came from (kinds, roles, tool names), the highest score, the action taken, the exception (when one raised it), the request id, the compliance event id, the time and a link to the Compliance page. It carries **no flagged text** by default: webhook URLs leave your control. With `"include_excerpt": true` (allowed only when the filter's `evidence.excerpt` is on) it adds the masked excerpts. An alert raised by an exception never carries them.
+- AI Studio raises the alert once the compliance event is stored, and only when its own configuration names it (the event's filter, or the exception that softened it). The `guardrail.alert.` topics are reserved for it: a plugin cannot publish them, on AI Studio or on an edge, and AI Studio drops them when an edge sends them, so a webhook subscribed to an alert only receives alerts AI Studio checked. For traffic through edge gateways that is when the event arrives on the analytics pulse, so the alert follows the pulse interval.
+- Webhooks are Enterprise. In the Community Edition the action logs, and the editor says so.
+
 ### Shadow (don't wait)
 
 A guardrail set to `log` still calls its provider inline: the request waits for the verdict before going on, so a log-only rollout of a slow classifier adds its latency to every request the verdict cache cannot answer. With `"shadow": true` it does not wait. The request (or response, or chat message, or tool call) goes on at once, unchanged, and the classification runs in a background pool on the same node, with a context detached from the request and bounded by the filter's own timeout and time budget. When it finishes, its compliance events are recorded with the same attribution (app, LLM, user, request id, roles, kinds, tool names) as an inline `log` run would record, plus `"shadow": true` in their metadata so a review can tell them apart, and reach AI Studio from edges on the analytics pulse like any other event. Its successful verdicts fill the verdict cache; switching the filter to enforce changes its version, so everything is classified again.
@@ -238,13 +329,34 @@ A guardrail set to `log` still calls its provider inline: the request waits for 
 {"provider": "http", "on_detect": "log", "tool_results": {"on_detect": "log"}, "shadow": true, ...}
 ```
 
-- Shadow is allowed only when every action the filter can take is `log`: `on_detect`, the tool-result action (unset, it follows `on_detect`) and the tool-call action. Saving it with any other action is refused with HTTP 400.
+- Shadow is allowed only when every action the filter can take is `log` (or `alert`, which is `log` for the traffic, so a shadow filter can alert without adding latency): `on_detect`, the tool-result action (unset, it follows `on_detect`) and the tool-call action. Saving it with any other action is refused with HTTP 400.
 - A shadow filter never changes traffic, whatever it finds and however it fails: the fail mode only labels its `guardrail.error` events.
 - The pool is bounded. `GUARDRAIL_SHADOW_WORKERS` evaluations run at once per process (default four per CPU, at least 8), and at most `GUARDRAIL_SHADOW_QUEUE_BYTES` of text wait (default 64 MiB), of which one tenant (app, else user, else chat session) may hold half. An evaluation that does not fit is dropped, never waited for: it is counted in `aistudio_guardrail_shadow_dropped_total{provider,reason}` (`queue_full`, `tenant_share`, `shutdown`) and recorded as one `guardrail.unscanned` event with reason `shadow_dropped`.
 - A graceful shutdown waits up to 5 seconds for queued evaluations, then abandons them.
 - The filter **Test** panel runs a shadow filter inline, so it shows the verdict.
 
 The form shows **Shadow (don't wait)** when every action is Log.
+
+### Second opinion (LLM judge)
+
+Some legitimate traffic looks exactly like an attack: a code-review bot whose pull requests contain injection test vectors, a security tool, a support desk quoting phishing mail. A guardrail can ask a second opinion about what it blocks or quarantines: an LLM you configure in AI Studio (the judge) is shown the flagged text and asked whether it is benign for the app that sent it.
+
+```json
+{"provider": "http", "on_detect": "block", "judge": {"mode": "record", "llm_id": 12, "model": "claude-haiku-5-5", "timeout_ms": 3000}, ...}
+```
+
+In the filter form this is the collapsed **Second opinion (LLM judge)** section: a mode, the judge LLM (any active chat LLM; the model defaults to its default model) and, under Advanced, the timeout.
+
+- **Record only** (`record`) asks the judge about every segment the filter blocks or quarantines on a detector's finding, after the request has gone on with the filter's own verdict, which it never changes. It adds no latency: the call runs in the same background pool as shadow evaluations. Each opinion is a `guardrail.judge` compliance event (`metadata.judge`: `verdict` benign, suspicious or attack, a `reason`, `agreed`, `coverage`, `latency_ms`, `cached`), and the flagged segment of the filter's own event shows it in **Compliance → Filter Events**. Filter Events also sums it up per filter: *judge said benign on N of M flags*. That is the evidence to look at before letting a judge soften blocks.
+- **Soften blocks** (`soften`) asks the judge before the verdict is applied, for the segments it could change, and the request waits for it (at most its timeout). When the judge finds the text benign and was shown everything that was flagged in it, the segment gets the softest action the app's attested capability allows there, never less: for an app attested read-only, its own messages are logged; for an app nobody has attested (treated as acting), the flagged part is removed instead of blocking the request; an acting app's tool results, tool calls and tool definitions are never softened. A suspicious or attack opinion, no opinion, or an opinion on text it did not see in full keeps the filter's verdict. The filter's event records `judge: {verdict, softened_from}`. The form offers Soften blocks once the filter's judge has recorded at least 20 opinions in the last 30 days (Record only first), never on a shadow filter. That is advice, not a server check, and the agreement figures are only as trustworthy as the gateways, edges included, that reported them.
+- The judge's prompt is built in and versioned. It is told the app's name and description (the App description its owners wrote), where the text is (message role, tool result or call), the detector, the tools the request declares and whether the finding sits in a JSON string, a diff hunk or a code block. The flagged text is marked and fenced as data, at most 4000 characters around the finding. The judge must answer with a fixed JSON shape; anything else is no opinion.
+- `coverage` is `partial` when the judge was not shown everything that was flagged (a classifier that reports no position, such as Wolf Defender, in text longer than the window). A partial opinion is recorded but can never soften a verdict.
+- Opinions are cached for 10 minutes per app, judge LLM and text, so a client that sends the same context to several checks pays for one call.
+- The call goes straight to the judge LLM's vendor, never through the gateway, and is charged to the judge LLM: one analytics record with interaction type `guardrail_judge` and no app, so it counts toward the judge LLM's budget and never toward the budget of the app whose request was judged. A judge LLM over its budget is not called.
+- The judge LLM must be active, serve chat, have a privacy score at least that of every LLM the filter is attached to (it reads their traffic), and reach every edge the filter runs on (global, or in the namespace of those edges). Saving a filter that breaks one of these is refused with HTTP 400. At run time a judge scored below the request's LLM is not sent the text, and Studio chat, whose requests name no LLM to compare with, is not judged.
+- When the judge gives no opinion (timeout, failed call, unreadable answer, judge LLM unavailable, over budget, privacy, queue full), the verdict stands and the event says why (`verdict: none`, `error`).
+- The judge is only asked about prompt-injection findings (category `injection`, or the HTTP classifier's own labels, as Wolf Defender reports them). A segment with any other finding, such as a secret, personal data, a leak, hate or violence, a denied topic or a blocklisted word, is never sent to the judge (recorded as `error: category`). The judge weighs whether text is an attack, and "not an attack" says nothing about those policies, so it would wrongly soften their blocks. The judge also sees 'other' or uncategorised findings from HTTP classifiers, so turn it on only for filters whose HTTP classifier detects prompt injection (such as Wolf Defender); a classifier that reports moderation or PII as 'other' would have those judged.
+- A shadow filter only logs, so its judge has nothing to judge until the filter blocks or quarantines.
 
 ### Budgets and the verdict cache
 
@@ -582,7 +694,7 @@ The tool-result behaviour has an end-to-end suite of its own, `tests/guardrail_t
 
 ## Edge gateways
 
-Guardrail filters reach edges in the configuration snapshot like script filters do, with connection references resolved by the hub, since edges have no secret store. The same filter chain runs at the edge, so a guardrail behaves identically on both planes and its compliance events reach AI Studio on the analytics pulse.
+Guardrail filters reach edges in the configuration snapshot like script filters do, with connection references resolved by the hub, since edges have no secret store. The same filter chain runs at the edge, so a guardrail behaves identically on both planes and its compliance events reach AI Studio on the analytics pulse. Approved [exceptions](#exceptions-softening-a-verdict-for-one-app) travel to edges too (see [Edge gateways: guardrail exceptions](./edge-gateways.md#guardrail-exceptions)), and alerts for edge traffic are raised by AI Studio when the events arrive.
 
 ## API
 
@@ -613,6 +725,20 @@ A guardrail is a filter with `kind: "guardrail"` and a `config`:
 ```
 
 The stored config is normalised: defaults are written out, and an invalid config (unknown provider or detector, `redact` on a provider that cannot rewrite, a missing required connection field) is rejected with HTTP 400 and the reason. `POST /api/v1/filters/test` accepts `kind`, `config` and `response_filter` alongside `input` to run a guardrail without saving it. One rule applies to the connection block: `$SECRET/` and `$ENV/` references are only resolved when the request also carries `filter_id` and the provider and connection settings are exactly those saved on that filter. An ad-hoc config with a reference, or a saved filter tested with a changed endpoint, is refused with HTTP 400 and nothing is sent. Otherwise anyone allowed to run a test could have a stored secret resolved and posted to a host of their choosing. Literal connection values need no saved filter.
+
+### Exceptions and capability
+
+| Route | Permission |
+|---|---|
+| `GET /api/v1/apps/{id}/guardrail-capability` | apps read. Returns `value` (`""` when not attested), `effective`, `suggestion`, `reasons`, `guardrails_apply` (whether a resource change would reset the attestation visibly), `reset_by` and `reset_at`. |
+| `PUT /api/v1/apps/{id}/guardrail-capability` with `{"value": "read_only"}` | full administrator. `""` clears the attestation. |
+| `GET`, `POST /api/v1/apps/{id}/guardrail-exceptions` | apps read, apps write. The list's `meta` gives the actions each channel allows and the floors. |
+| `GET`, `PATCH`, `DELETE /api/v1/apps/{id}/guardrail-exceptions/{eid}` | apps read, write, delete |
+| `POST /api/v1/apps/{id}/guardrail-exceptions/{eid}/approve` with `{"content_hash": ...}` | full administrator |
+| `POST /api/v1/apps/{id}/guardrail-exceptions/{eid}/retire` | apps write |
+| `GET /api/v1/filters/{id}/exceptions` | filters read: the exceptions that soften a filter's verdicts, across apps |
+
+Exceptions are managed only through these routes: no plugin or management API reaches them.
 
 ### Connection references
 

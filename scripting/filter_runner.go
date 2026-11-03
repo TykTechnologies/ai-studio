@@ -256,9 +256,38 @@ func (g *guardrailRunner) RunScript(input *ScriptInput, svc services.ServiceInte
 		if r := recover(); r != nil {
 			out, err = g.panicked(input, r), nil
 		}
+		g.stampFilterID(out)
 		markOwnerVisible(g.filter.Config, out)
 	}()
 	return g.run(input, svc)
+}
+
+// FilterIDKey is the compliance event metadata key holding the ID of the
+// guardrail filter that recorded the event. compliance_events stores only the
+// filter's name, which an administrator can change; the ID lets the UI find
+// the filter (for example to soften its verdict for one app).
+const FilterIDKey = "filter_id"
+
+// stampFilterID sets FilterIDKey on every compliance event in out. A filter
+// that was never saved (ID 0, the editor's test run) records no ID.
+func (g *guardrailRunner) stampFilterID(out *ScriptOutput) {
+	if out == nil || g.filter.ID == 0 {
+		return
+	}
+	for i := range out.ComplianceEvents {
+		if out.ComplianceEvents[i].Metadata == nil {
+			out.ComplianceEvents[i].Metadata = map[string]interface{}{}
+		}
+		out.ComplianceEvents[i].Metadata[FilterIDKey] = g.filter.ID
+	}
+}
+
+// recordEvents records out's compliance events through record (a shadow
+// filter's events, which do not travel back in the run's output), stamped with
+// the filter's ID like the events RunScript returns.
+func (g *guardrailRunner) recordEvents(record func(context.Context, string, *ScriptOutput), ctx context.Context, out *ScriptOutput) {
+	g.stampFilterID(out)
+	record(ctx, g.filter.Name, out)
 }
 
 // OwnerVisibleKey marks, in a compliance event's metadata, an event the App's
@@ -320,7 +349,7 @@ func (g *guardrailRunner) panicked(input *ScriptInput, r any) *ScriptOutput {
 	return out
 }
 
-func (g *guardrailRunner) run(input *ScriptInput, _ services.ServiceInterface) (*ScriptOutput, error) {
+func (g *guardrailRunner) run(input *ScriptInput, svc services.ServiceInterface) (*ScriptOutput, error) {
 	p, err := g.prepare()
 	if errors.Is(err, guardrails.ErrNoProviders) {
 		warnNoProvidersOnce.Do(func() {
@@ -336,7 +365,7 @@ func (g *guardrailRunner) run(input *ScriptInput, _ services.ServiceInterface) (
 		if p.cfg.Shadow && input.RecordEvents != nil {
 			// A shadow filter never changes traffic, even when it cannot
 			// run: the failure is recorded and the traffic goes on.
-			input.RecordEvents(input.Ctx, g.filter.Name, &ScriptOutput{ComplianceEvents: failed.ComplianceEvents})
+			g.recordEvents(input.RecordEvents, input.Ctx, &ScriptOutput{ComplianceEvents: failed.ComplianceEvents})
 			return passThrough(input), nil
 		}
 		return failed, nil
@@ -346,15 +375,18 @@ func (g *guardrailRunner) run(input *ScriptInput, _ services.ServiceInterface) (
 		return passThrough(input), nil
 	}
 	if p.cfg.Shadow && input.RecordEvents != nil {
-		return g.shadow(input, p), nil
+		return g.shadow(input, p, svc), nil
 	}
-	return g.evaluate(input, p)
+	return g.evaluate(input, p, svc)
 }
 
 // evaluate classifies input with the prepared guardrail and maps the verdict
 // onto the output: the work of a run once the filter is prepared, inline or
 // (for a shadow filter) on the shadow pool.
-func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail) (*ScriptOutput, error) {
+//
+// svc is the runner's service, through which a judge (Config.Judge) finds its
+// LLM and the app; nil runs no judge.
+func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail, svc services.ServiceInterface) (*ScriptOutput, error) {
 	cfg, provider, caps := p.cfg, p.provider, p.caps
 
 	sel := buildSegments(input, cfg)
@@ -434,7 +466,9 @@ func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail) (*S
 	findings = append(findings, res.failedToolFindings()...)
 	rewritten := res.rewritten
 
-	o := decide(input, cfg, sel, findings, rewritten, res.unscanned)
+	exc := planExceptions(input, g.filter.ID)
+	o := decide(input, cfg, sel, findings, rewritten, res.unscanned, exc)
+	exc.recordHits(o)
 	if len(res.failedTools) > 0 {
 		// Fail closed would block the request; only the tool results went
 		// unscanned, so they are quarantined instead, whatever the filter's
@@ -443,6 +477,9 @@ func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail) (*S
 		o.quarantine(res.failedTools)
 		out.ComplianceEvents = append(out.ComplianceEvents, failedToolsEvent(g.filter.Name, cfg, sel.segments, res.failedTools, res.toolErr))
 	}
+	// Soften mode asks the judge before the verdict is applied; any other
+	// mode judges in the background once the verdict stands.
+	judgeEvents, judged := g.judgeSoften(input, cfg, sel, &o, svc)
 	if o.overall != guardrails.ActionBlock {
 		if err := o.apply(out, input, sel, cfg, rewritten); err != nil {
 			g.rewriteFailed()
@@ -454,6 +491,9 @@ func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail) (*S
 	out.ComplianceEvents = append(out.ComplianceEvents, unscannedEvents(g.filter.Name, cfg, sel.segments, res, o.overall)...)
 	if len(o.unredactable) > 0 {
 		out.ComplianceEvents = append(out.ComplianceEvents, unredactableEvent(g.filter.Name, cfg, sel.segments, o.unredactable, o.overall))
+	}
+	if len(o.ignored) > 0 {
+		out.ComplianceEvents = append(out.ComplianceEvents, exceptionIgnoredEvents(g.filter.Name, g.filter.ID, cfg, exc.capability, o.ignored, sel.segments)...)
 	}
 
 	switch o.overall {
@@ -469,6 +509,12 @@ func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail) (*S
 		out.Message = "guardrail removed tool definitions"
 	case guardrails.ActionRedact:
 		out.Message = "guardrail redacted content"
+	}
+	out.ComplianceEvents = append(out.ComplianceEvents, judgeEvents...)
+	if !judged {
+		if w := judgeWorkFor(input, cfg, sel, o, svc); w != nil {
+			g.dispatchJudge(input, w)
+		}
 	}
 	return out, nil
 }
@@ -492,19 +538,61 @@ type outcome struct {
 	// unredactable are the segments a redaction could not be applied to,
 	// which were quarantined or blocked instead.
 	unredactable []int
+	// softened records, by segment and detector, the guardrail exceptions
+	// that softened a finding's action; ignored the exceptions that matched
+	// but are outside the app's floor now; hits every exception that
+	// applied (guardrail_exceptions.go).
+	softened map[int]map[string]exceptionApplied
+	ignored  []exceptionIgnored
+	hits     map[uint]bool
+	// alerts are the alert events the findings raise, by segment and
+	// detector (the alert action: log, plus a named event).
+	alerts map[int]map[string]string
+	// judged records the segments the LLM judge softened in soften mode
+	// (guardrail_judge_soften.go).
+	judged map[int]judgeSoftening
+}
+
+// raise records that finding f on segment si raises an alert: the
+// exception's event when an exception softened the finding to alert, else
+// the filter's (cfg.AlertFor). Findings that only record unscanned text
+// raise none.
+func (o *outcome) raise(si int, f guardrails.Finding, filterAlert *guardrails.Alert) {
+	if f.Detector == unscannedDetector {
+		return
+	}
+	name := ""
+	if e, ok := o.softened[si][f.Detector]; ok && e.to == guardrails.ActionAlert {
+		name = e.alert
+	} else if filterAlert != nil {
+		name = filterAlert.Event
+	}
+	if name == "" {
+		return
+	}
+	if o.alerts == nil {
+		o.alerts = map[int]map[string]string{}
+	}
+	if o.alerts[si] == nil {
+		o.alerts[si] = map[string]string{}
+	}
+	o.alerts[si][f.Detector] = name
 }
 
 // actionRank orders actions by strength.
-var actionRank = map[string]int{guardrails.ActionLog: 1, guardrails.ActionRedact: 2, guardrails.ActionQuarantine: 3, guardrails.ActionRemove: 3, guardrails.ActionBlock: 4}
+var actionRank = map[string]int{guardrails.ActionLog: 1, guardrails.ActionAlert: 1, guardrails.ActionRedact: 2, guardrails.ActionQuarantine: 3, guardrails.ActionRemove: 3, guardrails.ActionBlock: 4}
 
 // decide picks the action for each flagged segment: the filter's on_detect,
 // or for a tool result its tool_results action (block becoming quarantine).
+// With guardrail exceptions (exc, nil for none) the action is decided per
+// finding, each softened by the app's exception for its detector and
+// channel within the app's floor, and the segment takes the strongest.
 // A redaction that cannot be applied (the segment was not scanned in full,
 // or the rewrite cannot be mapped onto the body: conditions whoever wrote the
 // text can arrange) never falls to the fail mode: a tool result is
 // quarantined instead and anything else is blocked. On the response side
 // quarantine is block and redact is log, as responses are block-only.
-func decide(input *ScriptInput, cfg guardrails.Config, sel selection, findings []guardrails.Finding, rewritten map[int]string, unscanned map[int]string) outcome {
+func decide(input *ScriptInput, cfg guardrails.Config, sel selection, findings []guardrails.Finding, rewritten map[int]string, unscanned map[int]string, exc *exceptionPlan) outcome {
 	o := outcome{actions: map[int]string{}, findings: sel.flaggedSegments(findings)}
 	instead := func(seg guardrails.Segment) string {
 		if seg.IsToolResult() {
@@ -518,7 +606,23 @@ func decide(input *ScriptInput, cfg guardrails.Config, sel selection, findings [
 		if seg.IsToolResult() {
 			kind = guardrails.KindToolResult
 		}
-		a := cfg.ActionFor(kind)
+		// Each finding's action: the filter's for the kind, softened by an
+		// exception; alert is log for the traffic and names its event. The
+		// segment takes the strongest.
+		configured, a := cfg.ActionFor(kind), ""
+		for _, f := range o.findings[si] {
+			fa := configured
+			if exc != nil {
+				fa = exc.soften(&o, configured, f, si, seg, input.IsResponse)
+			}
+			if fa == guardrails.ActionAlert {
+				o.raise(si, f, cfg.AlertFor(kind))
+				fa = guardrails.ActionLog
+			}
+			if actionRank[fa] > actionRank[a] {
+				a = fa
+			}
+		}
 		if input.IsResponse {
 			switch a {
 			case guardrails.ActionQuarantine:
@@ -1525,6 +1629,13 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 		action   string
 		refs     []map[string]any
 		seen     map[string]bool
+		// exceptions are the guardrail exceptions that softened this
+		// detector's findings; alerts the alert events they raise.
+		exceptions map[uint]bool
+		alerts     map[string]bool
+		// judgedFrom is the strongest action the LLM judge softened among
+		// this detector's segments, judgedVerdict its opinion.
+		judgedFrom, judgedVerdict string
 	}
 	groups := map[string]*group{}
 	order := []string{}
@@ -1547,12 +1658,33 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 		a := o.overall
 		if f.SegmentIndex >= 0 && f.SegmentIndex < len(segments) {
 			seg := segments[f.SegmentIndex]
+			if j, ok := o.judged[f.SegmentIndex]; ok && actionRank[j.from] > actionRank[g.judgedFrom] {
+				g.judgedFrom, g.judgedVerdict = j.from, j.verdict
+			}
+			if e, ok := o.softened[f.SegmentIndex][f.Detector]; ok {
+				if g.exceptions == nil {
+					g.exceptions = map[uint]bool{}
+				}
+				g.exceptions[e.id] = true
+			}
+			if name, ok := o.alerts[f.SegmentIndex][f.Detector]; ok {
+				if g.alerts == nil {
+					g.alerts = map[string]bool{}
+				}
+				g.alerts[name] = true
+			}
 			g.roles[seg.Role] = true
 			g.kinds[segmentKind(seg)] = true
 			if len(g.refs) < maxEvidenceSegments {
 				ref := segmentEvidence(seg, f.SegmentIndex, f, ec)
 				if t := ec.templates.templateRef(f.SegmentIndex); t != nil {
 					ref["template"] = t
+				}
+				if e := o.exceptionRef(f.SegmentIndex, f.Detector); e != nil {
+					ref["exception"] = e
+				}
+				if j, ok := o.judged[f.SegmentIndex]; ok {
+					ref["judge"] = map[string]any{"verdict": j.verdict, "reason": j.reason, "softened_from": j.from, "to": j.to}
 				}
 				if key := fmt.Sprintf("%d/%v", f.SegmentIndex, ref["sha256"]); !g.seen[key] {
 					g.seen[key] = true
@@ -1612,6 +1744,35 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 		if len(g.refs) > 0 {
 			metadata["segments"] = g.refs
 		}
+		description := fmt.Sprintf("guardrail %q (%s): %s detected (%d) in %s; action %s", filterName, cfg.Provider, label, g.count, strings.Join(roles, ","), action)
+		if len(g.exceptions) > 0 {
+			ids := make([]uint, 0, len(g.exceptions))
+			for id := range g.exceptions {
+				ids = append(ids, id)
+			}
+			sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+			metadata["exceptions"] = ids
+			parts := make([]string, len(ids))
+			for i, id := range ids {
+				parts[i] = fmt.Sprintf("#%d", id)
+			}
+			description += "; softened by exception " + strings.Join(parts, ", ")
+		}
+		if len(g.alerts) > 0 {
+			// The alert action: AI Studio raises guardrail.alert.<name>
+			// for this event. Several only when channels or exceptions
+			// with their own names flagged the same detector.
+			names := sortedKeys(g.alerts)
+			metadata["alert"] = names[0]
+			if len(names) > 1 {
+				metadata["alerts"] = names
+			}
+			description += "; alert " + strings.Join(names, ", ")
+		}
+		if g.judgedFrom != "" {
+			metadata["judge"] = map[string]any{"verdict": g.judgedVerdict, "softened_from": g.judgedFrom}
+			description += "; softened by the LLM judge (" + g.judgedVerdict + ")"
+		}
 		if action == guardrails.ActionBlock {
 			metadata["reason_code"] = ReasonDetected
 		}
@@ -1624,7 +1785,7 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 		events = append(events, ComplianceEventOutput{
 			EventType:   "guardrail." + strings.ReplaceAll(det, "/", "."),
 			Severity:    sev,
-			Description: fmt.Sprintf("guardrail %q (%s): %s detected (%d) in %s; action %s", filterName, cfg.Provider, label, g.count, strings.Join(roles, ","), action),
+			Description: description,
 			Metadata:    metadata,
 		})
 	}

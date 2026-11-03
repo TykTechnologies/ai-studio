@@ -115,6 +115,7 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 	)
 
 	attachNativeResourceStore(gatewayServiceAdapter, serviceContainer)
+	attachLLMBudgetChecker(gatewayServiceAdapter, serviceContainer.BudgetService)
 
 	budgetServiceAdapter := services.NewBudgetServiceAdapter(
 		serviceContainer.BudgetService,
@@ -421,4 +422,18 @@ func (s *Server) Reload() error {
 	
 	log.Debug().Msg("AI Gateway configuration reloaded successfully")
 	return nil
+}
+
+// attachLLMBudgetChecker lets a guardrail's judge calls be bounded by the
+// judge LLM's own budget, when the edge's budget service enforces budgets.
+func attachLLMBudgetChecker(adapter any, budget any) {
+	a, ok := adapter.(interface {
+		SetLLMBudgetChecker(services.LLMBudgetChecker)
+	})
+	if !ok {
+		return
+	}
+	if c, ok := budget.(services.LLMBudgetChecker); ok {
+		a.SetLLMBudgetChecker(c)
+	}
 }

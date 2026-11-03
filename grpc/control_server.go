@@ -764,6 +764,7 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 					edgeConnection.mu.Unlock()
 
 					s.recordEdgeTemplateMatches(edgeID, m.Heartbeat.MatchedPromptTemplateIds)
+					s.recordEdgeGuardrailExceptionHits(edgeID, edgeConnection.Namespace, m.Heartbeat.HitGuardrailExceptionIds)
 
 					// Get loaded config info from heartbeat
 					loadedChecksum := m.Heartbeat.LoadedConfigChecksum
@@ -986,6 +987,7 @@ func (s *ControlServer) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequ
 		return nil, status.Error(codes.Unavailable, "failed to record heartbeat")
 	}
 	s.recordEdgeTemplateMatches(req.EdgeId, req.MatchedPromptTemplateIds)
+	s.recordEdgeGuardrailExceptionHits(req.EdgeId, edgeInstance.Namespace, req.HitGuardrailExceptionIds)
 
 	// This replica holds the edge's stream: keep its view current too.
 	s.edgeMutex.RLock()
@@ -1218,7 +1220,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 				Currency:               edgeCurrency(event.Currency),
 				TotalTimeMS:            int(event.LatencyMs),
 				TimeStamp:              event.Timestamp.AsTime(),
-				InteractionType:        models.ProxyInteraction, // Mark as proxy interaction
+				InteractionType:        edgeInteractionType(event.InteractionType),
 				UserID:                 uint(event.UserId),      // User ID synced from edge (via config sync)
 				ChatID:                 "",                      // Not applicable for proxy
 				Choices:                1,                       // Default
@@ -1878,25 +1880,26 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		}
 
 		pbApp := &pb.AppConfig{
-			Id:                 uint32(app.ID),
-			Name:               app.Name,
-			Description:        app.Description,
-			OwnerEmail:         "", // AI Studio doesn't have owner email field yet
-			IsActive:           app.IsActive,
-			MonthlyBudget:      monthlyBudget,
-			BudgetStartDate:    budgetStartDate,
-			Metadata:           metadataJSON,
-			Namespace:          app.Namespace,
-			UserId:             uint32(app.UserID), // Owner user ID for analytics tracking
-			LlmIds:             llmIDs,
-			ToolIds:            toolIDs,
-			DatasourceIds:      datasourceIDs,
-			ModelRouterIds:     appModelRouterIDs(&app),
-			SemanticRouterIds:  appSemanticRouterIDs(&app),
-			CurrentPeriodUsage: currentPeriodUsage, // Current spending synced to edge for budget enforcement
-			Tracing:            app.Tracing.EdgeJSON(),
-			CreatedAt:          timestamppb.New(app.CreatedAt),
-			UpdatedAt:          timestamppb.New(app.UpdatedAt),
+			Id:                  uint32(app.ID),
+			Name:                app.Name,
+			Description:         app.Description,
+			OwnerEmail:          "", // AI Studio doesn't have owner email field yet
+			IsActive:            app.IsActive,
+			MonthlyBudget:       monthlyBudget,
+			BudgetStartDate:     budgetStartDate,
+			Metadata:            metadataJSON,
+			Namespace:           app.Namespace,
+			UserId:              uint32(app.UserID), // Owner user ID for analytics tracking
+			LlmIds:              llmIDs,
+			ToolIds:             toolIDs,
+			DatasourceIds:       datasourceIDs,
+			ModelRouterIds:      appModelRouterIDs(&app),
+			SemanticRouterIds:   appSemanticRouterIDs(&app),
+			CurrentPeriodUsage:  currentPeriodUsage, // Current spending synced to edge for budget enforcement
+			Tracing:             app.Tracing.EdgeJSON(),
+			GuardrailCapability: app.GuardrailCapability,
+			CreatedAt:           timestamppb.New(app.CreatedAt),
+			UpdatedAt:           timestamppb.New(app.UpdatedAt),
 		}
 
 		// Add plugin resource associations (from batch query above)
@@ -1939,6 +1942,8 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		snapshot.Apps = append(snapshot.Apps, pbApp)
 	}
 	snapshot.PromptTemplates = snapshotPromptTemplates(s.db, apps, takenAt)
+	snapshot.GuardrailExceptions = snapshotGuardrailExceptions(s.db, apps, takenAt)
+	snapshot.GuardrailCapabilities = snapshotGuardrailCapabilities(apps)
 
 	// Get Filters for namespace
 	var filters []models.Filter
@@ -1973,6 +1978,13 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		// The edge attaches filters from these lists too: a snapshot without
 		// them is not sent.
 		return nil, fmt.Errorf("failed to read LLM filter attachments: %w", err)
+	}
+
+	// LLM privacy scores, for a guardrail judge's privacy rule
+	// (edgeJudgeConfig).
+	llmPrivacy := make(map[uint]int, len(llms))
+	for _, l := range llms {
+		llmPrivacy[l.ID] = l.PrivacyScore
 	}
 
 	// Build map of filter_id -> []llm_id for efficient lookup
@@ -2034,7 +2046,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 				}
 				return c
 			}
-			configJSON, err := guardrails.ConfigJSONForEdge(filter.Config, resolveRef, encrypt)
+			configJSON, err := guardrails.ConfigJSONForEdge(edgeJudgeConfig(filter.ID, filter.Config, llmIDs, llmPrivacy), resolveRef, encrypt)
 			if err != nil {
 				logger.Log.Warn().Err(err).Uint("filter_id", filter.ID).Msg("Skipping guardrail filter with invalid config in snapshot")
 				continue
@@ -3099,6 +3111,10 @@ const (
 	// Trusted prompt templates: an App's approved templates are in the
 	// snapshot and its checksum.
 	topicPromptTemplatesChanged = "system.app.prompt_templates.changed"
+
+	// Guardrail exceptions: an App's approved exceptions are in the
+	// snapshot and its checksum.
+	topicGuardrailExceptionsChanged = "system.app.guardrail_exceptions.changed"
 )
 
 // subscribeToConfigChanges sets up event subscriptions for configuration changes.
@@ -3122,6 +3138,7 @@ func (s *ControlServer) subscribeToConfigChanges() {
 		topicGovernedMetadataUpdated, topicGovernedMetadataDeleted,
 		topicSecretCreated, topicSecretUpdated, topicSecretDeleted,
 		topicPromptTemplatesChanged,
+		topicGuardrailExceptionsChanged,
 	}
 
 	for _, topic := range configTopics {
@@ -3330,4 +3347,15 @@ func (s *ControlServer) governedMetadataJSON(objectType string, rec *models.Obje
 		return ""
 	}
 	return string(data)
+}
+
+// edgeInteractionType is the interaction type of a chat record ingested from
+// an edge: proxy, or guardrail_judge for a guardrail's judge call, which an
+// edge records with no App. Edge values are untrusted, so nothing else is
+// kept.
+func edgeInteractionType(t string) models.InteractionType {
+	if t == string(models.GuardrailJudgeInteraction) {
+		return models.GuardrailJudgeInteraction
+	}
+	return models.ProxyInteraction
 }
