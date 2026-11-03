@@ -533,10 +533,39 @@ type outcome struct {
 	softened map[int]map[string]exceptionApplied
 	ignored  []exceptionIgnored
 	hits     map[uint]bool
+	// alerts are the alert events the findings raise, by segment and
+	// detector (the alert action: log, plus a named event).
+	alerts map[int]map[string]string
+}
+
+// raise records that finding f on segment si raises an alert: the
+// exception's event when an exception softened the finding to alert, else
+// the filter's (cfg.AlertFor). Findings that only record unscanned text
+// raise none.
+func (o *outcome) raise(si int, f guardrails.Finding, filterAlert *guardrails.Alert) {
+	if f.Detector == unscannedDetector {
+		return
+	}
+	name := ""
+	if e, ok := o.softened[si][f.Detector]; ok && e.to == guardrails.ActionAlert {
+		name = e.alert
+	} else if filterAlert != nil {
+		name = filterAlert.Event
+	}
+	if name == "" {
+		return
+	}
+	if o.alerts == nil {
+		o.alerts = map[int]map[string]string{}
+	}
+	if o.alerts[si] == nil {
+		o.alerts[si] = map[string]string{}
+	}
+	o.alerts[si][f.Detector] = name
 }
 
 // actionRank orders actions by strength.
-var actionRank = map[string]int{guardrails.ActionLog: 1, guardrails.ActionRedact: 2, guardrails.ActionQuarantine: 3, guardrails.ActionRemove: 3, guardrails.ActionBlock: 4}
+var actionRank = map[string]int{guardrails.ActionLog: 1, guardrails.ActionAlert: 1, guardrails.ActionRedact: 2, guardrails.ActionQuarantine: 3, guardrails.ActionRemove: 3, guardrails.ActionBlock: 4}
 
 // decide picks the action for each flagged segment: the filter's on_detect,
 // or for a tool result its tool_results action (block becoming quarantine).
@@ -562,15 +591,22 @@ func decide(input *ScriptInput, cfg guardrails.Config, sel selection, findings [
 		if seg.IsToolResult() {
 			kind = guardrails.KindToolResult
 		}
-		a := cfg.ActionFor(kind)
-		if exc != nil {
-			configured, strongest := a, ""
-			for _, f := range o.findings[si] {
-				if fa := exc.soften(&o, configured, f, si, seg, input.IsResponse); actionRank[fa] > actionRank[strongest] {
-					strongest = fa
-				}
+		// Each finding's action: the filter's for the kind, softened by an
+		// exception; alert is log for the traffic and names its event. The
+		// segment takes the strongest.
+		configured, a := cfg.ActionFor(kind), ""
+		for _, f := range o.findings[si] {
+			fa := configured
+			if exc != nil {
+				fa = exc.soften(&o, configured, f, si, seg, input.IsResponse)
 			}
-			a = strongest
+			if fa == guardrails.ActionAlert {
+				o.raise(si, f, cfg.AlertFor(kind))
+				fa = guardrails.ActionLog
+			}
+			if actionRank[fa] > actionRank[a] {
+				a = fa
+			}
 		}
 		if input.IsResponse {
 			switch a {
@@ -1579,8 +1615,9 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 		refs     []map[string]any
 		seen     map[string]bool
 		// exceptions are the guardrail exceptions that softened this
-		// detector's findings.
+		// detector's findings; alerts the alert events they raise.
 		exceptions map[uint]bool
+		alerts     map[string]bool
 	}
 	groups := map[string]*group{}
 	order := []string{}
@@ -1608,6 +1645,12 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 					g.exceptions = map[uint]bool{}
 				}
 				g.exceptions[e.id] = true
+			}
+			if name, ok := o.alerts[f.SegmentIndex][f.Detector]; ok {
+				if g.alerts == nil {
+					g.alerts = map[string]bool{}
+				}
+				g.alerts[name] = true
 			}
 			g.roles[seg.Role] = true
 			g.kinds[segmentKind(seg)] = true
@@ -1690,6 +1733,17 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 				parts[i] = fmt.Sprintf("#%d", id)
 			}
 			description += "; softened by exception " + strings.Join(parts, ", ")
+		}
+		if len(g.alerts) > 0 {
+			// The alert action: AI Studio raises guardrail.alert.<name>
+			// for this event. Several only when channels or exceptions
+			// with their own names flagged the same detector.
+			names := sortedKeys(g.alerts)
+			metadata["alert"] = names[0]
+			if len(names) > 1 {
+				metadata["alerts"] = names
+			}
+			description += "; alert " + strings.Join(names, ", ")
 		}
 		if action == guardrails.ActionBlock {
 			metadata["reason_code"] = ReasonDetected

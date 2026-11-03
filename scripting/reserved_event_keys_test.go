@@ -20,7 +20,7 @@ func TestScriptFilter_CannotForgeGuardrailEventMetadata(t *testing.T) {
 			{EventType: "guardrail.flagged", Severity: "warning", Description: "x", Metadata: map[string]interface{}{
 				"filter_id": 13, "alert": "visor-pr-flag", "exception": map[string]any{"id": 1}, "judge": map[string]any{"verdict": "benign"},
 				"shadow": true, "owner_visible": true, "detector": "wolf", "kinds": []string{"text"},
-				"exceptions": []uint{7}, "exception_id": 7,
+				"exceptions": []uint{7}, "exception_id": 7, "alerts": []string{"visor-pr-flag", "other"},
 				"segments": []map[string]any{{"index": 0, "exception": map[string]any{"id": 7, "from": "block", "to": "log"}, "template": map[string]any{"id": "x"}}},
 			}},
 			{EventType: "custom", Severity: "info", Description: "no metadata"},
@@ -35,7 +35,7 @@ func TestScriptFilter_CannotForgeGuardrailEventMetadata(t *testing.T) {
 		t.Fatalf("events %+v", out.ComplianceEvents)
 	}
 	m := out.ComplianceEvents[0].Metadata
-	for _, k := range append([]string{"exceptions", "exception_id", "segments", "alert", "filter_id"}, ReservedEventKeys...) {
+	for _, k := range append([]string{"exceptions", "exception_id", "segments", "alert", "alerts", "filter_id"}, ReservedEventKeys...) {
 		if _, ok := m[k]; ok {
 			t.Errorf("script event kept reserved key %q = %v", k, m[k])
 		}

@@ -79,6 +79,9 @@ func (s *Service) CreateFilterFromSpec(spec FilterSpec) (*models.Filter, error) 
 	if err != nil {
 		return nil, err
 	}
+	if err := checkAlertEventsFree(s.DB, filterAlertEvents(kind, config), 0, 0); err != nil {
+		return nil, err
+	}
 
 	filter := &models.Filter{
 		Name:           spec.Name,
@@ -138,6 +141,9 @@ func (s *Service) UpdateFilterFromSpec(id uint, spec FilterSpec) (*models.Filter
 
 	kind, config, err := spec.validate()
 	if err != nil {
+		return nil, err
+	}
+	if err := checkAlertEventsFree(s.DB, filterAlertEvents(kind, config), id, 0); err != nil {
 		return nil, err
 	}
 

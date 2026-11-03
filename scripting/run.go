@@ -44,7 +44,7 @@ func (sr *ScriptRunner) RunScript(input *ScriptInput, serviceRef services.Servic
 // them; a script cannot pass its event off as another filter's. segments is
 // among them because the UI reads segments[].exception and
 // segments[].template, and only top-level keys are removed.
-var ReservedEventKeys = []string{FilterIDKey, "alert", "exception", "exceptions", "exception_id", "judge", "shadow", "segments", OwnerVisibleKey}
+var ReservedEventKeys = []string{FilterIDKey, "alert", "alerts", "exception", "exceptions", "exception_id", "judge", "shadow", "segments", OwnerVisibleKey}
 
 // stripReservedEventKeys removes ReservedEventKeys from a script filter's
 // compliance events.

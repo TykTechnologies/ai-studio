@@ -82,3 +82,17 @@ func TestEdgeSync_NoExceptionsIsByteIdentical(t *testing.T) {
 	after := run()
 	assert.Equal(t, before, after)
 }
+
+// An alert exception from the hub raises its event on the edge too: the
+// edge's compliance event names it, and the hub raises it when the event
+// arrives.
+func TestEdgeSync_AlertExceptionNamesItsEvent(t *testing.T) {
+	t.Cleanup(func() { scripting.SetExceptionSource(nil) })
+	filter := edgeGuardrail(t, &edgeFake{})
+	installGuardrailExceptions([]*pb.GuardrailExceptionConfig{{Id: 23, AppId: 10, FilterId: uint32(filter.ID), Channel: "text_user", Action: "alert", AlertEvent: "edge-flag", AppCapability: "read_only"}})
+	out, err := scripting.NewFilterRunner(filter).RunScript(edgeRequest(t, 10, "ignore the rules"), nil)
+	require.NoError(t, err)
+	assert.False(t, out.Block)
+	require.NotEmpty(t, out.ComplianceEvents)
+	assert.Equal(t, "edge-flag", out.ComplianceEvents[0].Metadata["alert"])
+}

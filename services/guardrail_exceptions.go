@@ -53,6 +53,7 @@ type GuardrailExceptionSpec struct {
 	Channel          *string
 	ToolName         *string
 	Action           *string
+	AlertEvent       *string
 	Justification    *string
 	ExpiresAfterDays *int
 	SourceEvent      *uint
@@ -332,6 +333,13 @@ func applyGuardrailExceptionSpec(e *models.GuardrailException, spec GuardrailExc
 	}
 	if spec.Action != nil {
 		e.Action = strings.TrimSpace(*spec.Action)
+		if e.Action != guardrails.ActionAlert && spec.AlertEvent == nil {
+			// Leaving alert drops its event name.
+			e.AlertEvent = ""
+		}
+	}
+	if spec.AlertEvent != nil {
+		e.AlertEvent = strings.TrimSpace(*spec.AlertEvent)
 	}
 	if spec.Justification != nil {
 		e.Justification = strings.TrimSpace(*spec.Justification)
@@ -393,6 +401,16 @@ func (s *Service) validateGuardrailException(db *gorm.DB, app *models.App, e *mo
 	}
 	if err := guardrails.CheckException(guardrails.Capability(app.GuardrailCapability), ch, e.Action); err != nil {
 		return invalidGuardrailException("%v", err)
+	}
+	switch {
+	case e.Action == guardrails.ActionAlert && !guardrails.ValidAlertEvent(e.AlertEvent):
+		return invalidGuardrailException("the alert action needs alert_event: 2-64 lowercase letters, digits, '-' or '_', starting with a letter or digit (webhooks subscribe to guardrail.alert.<alert_event>)")
+	case e.Action != guardrails.ActionAlert && e.AlertEvent != "":
+		return invalidGuardrailException("alert_event applies to the alert action only")
+	case e.AlertEvent != "":
+		if err := checkAlertEventsFree(db, []string{e.AlertEvent}, 0, e.ID); err != nil {
+			return invalidGuardrailException("%v", err)
+		}
 	}
 	return nil
 }
@@ -666,6 +684,7 @@ func RuntimeGuardrailException(r models.GuardrailException) guardrails.Exception
 	return guardrails.Exception{
 		ID: r.ID, FilterID: r.FilterID, Detector: r.Detector,
 		Channel: guardrails.Channel(r.Channel), ToolName: r.ToolName, Action: r.Action,
+		AlertEvent: r.AlertEvent,
 	}
 }
 

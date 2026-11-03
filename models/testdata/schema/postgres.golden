@@ -898,6 +898,7 @@ TABLE guardrail_exceptions
   column channel character varying(varchar) nullable=NO len=32
   column tool_name character varying(varchar) nullable=NO len=256 default=''::character varying
   column action character varying(varchar) nullable=NO len=16
+  column alert_event character varying(varchar) nullable=NO len=64 default=''::character varying
   column status character varying(varchar) nullable=NO len=16 default='proposed'::character varying
   column justification character varying(varchar) nullable=NO len=500
   column proposed_by bigint(int8) nullable=YES precision=64 scale=0

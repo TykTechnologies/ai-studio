@@ -347,6 +347,7 @@ const FilterForm = () => {
                   onChange={handleConfigChange}
                   responseFilter={!!filter.response_filter}
                   errors={errors}
+                  filterName={filter.name}
                 />
               </Grid>
             ) : (

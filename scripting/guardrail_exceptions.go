@@ -163,6 +163,8 @@ func (p *exceptionPlan) match(f guardrails.Finding, seg guardrails.Segment, ch g
 type exceptionApplied struct {
 	id       uint
 	from, to string
+	// alert is the exception's event when it softened to alert.
+	alert string
 }
 
 // exceptionIgnored is an exception that matched a finding but is outside
@@ -197,7 +199,7 @@ func (p *exceptionPlan) soften(o *outcome, a string, f guardrails.Finding, si in
 		if o.softened[si] == nil {
 			o.softened[si] = map[string]exceptionApplied{}
 		}
-		o.softened[si][f.Detector] = exceptionApplied{id: e.ID, from: a, to: to}
+		o.softened[si][f.Detector] = exceptionApplied{id: e.ID, from: a, to: to, alert: e.AlertEvent}
 	}
 	return to
 }

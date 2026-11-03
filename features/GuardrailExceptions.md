@@ -1,6 +1,6 @@
 # Guardrail exceptions and app capability
 
-Status: app guardrail capability implemented (model, suggestion, API, App page), 2026-11-03 (midsommar-clean-9u1j.2); exceptions model, floors, service and API, 2026-11-03 (.3); exceptions at runtime on the hub, 2026-11-03 (.4); exceptions and capability on edges, 2026-11-03 (.5). Their UI, the alert action and the LLM second opinion follow; the epic midsommar-clean-9u1j holds the full design.
+Status: app guardrail capability implemented (model, suggestion, API, App page), 2026-11-03 (midsommar-clean-9u1j.2); exceptions model, floors, service and API, 2026-11-03 (.3); exceptions at runtime on the hub, 2026-11-03 (.4); exceptions and capability on edges, 2026-11-03 (.5); the alert action, 2026-11-03 (.8). Their UI, the alert action and the LLM second opinion follow; the epic midsommar-clean-9u1j holds the full design.
 
 ## Problem
 
@@ -60,11 +60,11 @@ A fixed table (`guardrails/exceptions.go`, not configurable): the softest action
 | `read_tools` | down to `log` | down to `quarantine` | down to `log` |
 | `acting` / unattested | down to `quarantine` | no downgrade | no downgrade |
 
-What an exception may soften to also depends on what the runtime can do on the channel (`guardrails.ExceptionActions`): text and tool results `log` or `quarantine` (the flagged segment replaced), a tool call `log` only, a tool definition `log` or `remove`. `guardrails.CheckException` explains a refusal ("an app whose capability is not attested (treated as acting) cannot soften verdicts on tool_result; ..."). `guardrails.SoftenedAction` is what the runtime applies: the softer of the configured action and the exception's, or no change when the exception is outside the floor now.
+What an exception may soften to also depends on what the runtime can do on the channel (`guardrails.ExceptionActions`): text and tool results `log` or `quarantine` (the flagged segment replaced), a tool call `log` only, a tool definition `log` or `remove`. `alert` ("Log and raise event", see features/Filters.md) is allowed wherever `log` is and ranks as log. `guardrails.CheckException` explains a refusal ("an app whose capability is not attested (treated as acting) cannot soften verdicts on tool_result; ..."). `guardrails.SoftenedAction` is what the runtime applies: the softer of the configured action and the exception's, or no change when the exception is outside the floor now.
 
 ## Exceptions
 
-`guardrail_exceptions` (`models.GuardrailException`): `app_id`, `filter_id` (a guardrail filter), `detector` (`""` = any), `channel` (`text_user`, `text_system`, `tool_result`, `tool_call`, `tool_definition`), `tool_name` (tool channels only, `""` = any tool), `action` (the softened action), `status` (`proposed`, `approved`, `retired`), `justification` (required, one line, at most 500 bytes), `proposed_by`, `approved_by`, `approved_at`, `expires_after_days` (default 30), `last_hit_at`, `hit_count`, `source_event` (the compliance event it was created from: it must be a `guardrail.*` event of the app recorded by the exception's filter, by `metadata.filter_id` and `filter_name`). Never keyed on content, path or phrase.
+`guardrail_exceptions` (`models.GuardrailException`): `app_id`, `filter_id` (a guardrail filter), `detector` (`""` = any), `channel` (`text_user`, `text_system`, `tool_result`, `tool_call`, `tool_definition`), `tool_name` (tool channels only, `""` = any tool), `action` (the softened action), `alert_event` (with the `alert` action: the event it raises, a slug unique across filters and exceptions, part of the reviewed content hash), `status` (`proposed`, `approved`, `retired`), `justification` (required, one line, at most 500 bytes), `proposed_by`, `approved_by`, `approved_at`, `expires_after_days` (default 30), `last_hit_at`, `hit_count`, `source_event` (the compliance event it was created from: it must be a `guardrail.*` event of the app recorded by the exception's filter, by `metadata.filter_id` and `filter_name`). Never keyed on content, path or phrase.
 
 Rules (`services/guardrail_exceptions.go`):
 

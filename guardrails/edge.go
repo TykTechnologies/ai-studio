@@ -75,9 +75,13 @@ func ConfigJSONForEdge(raw map[string]any, resolve func(string) string, encrypt 
 	// real action where only newer edges look. New keys elsewhere in the
 	// config (quarantine, tool_results, budgets) are ignored by old edges,
 	// which then behave as they always have.
+	// Alert is log for the traffic, so an older edge logs.
 	if !legacyActions[cfg.OnDetect] {
 		cfg.OnDetectExt = cfg.OnDetect
 		cfg.OnDetect = ActionBlock
+		if cfg.OnDetectExt == ActionAlert {
+			cfg.OnDetect = ActionLog
+		}
 	}
 	b, err := json.Marshal(cfg)
 	if err != nil {

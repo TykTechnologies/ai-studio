@@ -64,7 +64,7 @@ func installGuardrailExceptions(cfgs []*pb.GuardrailExceptionConfig) {
 		}
 		app.Exceptions = append(app.Exceptions, guardrails.Exception{
 			ID: uint(c.Id), FilterID: uint(c.FilterId), Detector: c.Detector,
-			Channel: ch, ToolName: c.ToolName, Action: c.Action,
+			Channel: ch, ToolName: c.ToolName, Action: c.Action, AlertEvent: c.AlertEvent,
 		})
 	}
 	if len(src.byApp) == 0 {

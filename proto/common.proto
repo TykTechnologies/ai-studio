@@ -430,6 +430,7 @@ message GuardrailExceptionConfig {
   string tool_name = 6;
   string action = 7;
   string app_capability = 8;
+  string alert_event = 9; // the event the alert action raises
 }
 
 // PromptTemplateConfig is an approved trusted prompt template of an App.

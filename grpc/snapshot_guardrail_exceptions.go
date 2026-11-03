@@ -58,6 +58,7 @@ func snapshotGuardrailExceptions(db *gorm.DB, apps []models.App, now time.Time) 
 			ToolName:      e.ToolName,
 			Action:        e.Action,
 			AppCapability: string(c),
+			AlertEvent:    e.AlertEvent,
 		})
 	}
 	return out

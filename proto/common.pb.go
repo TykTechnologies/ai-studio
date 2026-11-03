@@ -2775,6 +2775,7 @@ type GuardrailExceptionConfig struct {
 	ToolName      string                 `protobuf:"bytes,6,opt,name=tool_name,json=toolName,proto3" json:"tool_name,omitempty"`
 	Action        string                 `protobuf:"bytes,7,opt,name=action,proto3" json:"action,omitempty"`
 	AppCapability string                 `protobuf:"bytes,8,opt,name=app_capability,json=appCapability,proto3" json:"app_capability,omitempty"`
+	AlertEvent    string                 `protobuf:"bytes,9,opt,name=alert_event,json=alertEvent,proto3" json:"alert_event,omitempty"` // the event the alert action raises
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2861,6 +2862,13 @@ func (x *GuardrailExceptionConfig) GetAction() string {
 func (x *GuardrailExceptionConfig) GetAppCapability() string {
 	if x != nil {
 		return x.AppCapability
+	}
+	return ""
+}
+
+func (x *GuardrailExceptionConfig) GetAlertEvent() string {
+	if x != nil {
+		return x.AlertEvent
 	}
 	return ""
 }
@@ -3803,7 +3811,7 @@ const file_proto_common_proto_rawDesc = "" +
 	"\x12agent_tracing_keys\x18\x11 \x01(\v2\x1e.microgateway.AgentTracingKeysR\x10agentTracingKeys\x12h\n" +
 	"\x1cagent_tracing_content_policy\x18\x12 \x01(\v2'.microgateway.AgentTracingContentPolicyR\x19agentTracingContentPolicy\x12M\n" +
 	"\x10prompt_templates\x18\x13 \x03(\v2\".microgateway.PromptTemplateConfigR\x0fpromptTemplates\x12Y\n" +
-	"\x14guardrail_exceptions\x18\x14 \x03(\v2&.microgateway.GuardrailExceptionConfigR\x13guardrailExceptions\"\xf0\x01\n" +
+	"\x14guardrail_exceptions\x18\x14 \x03(\v2&.microgateway.GuardrailExceptionConfigR\x13guardrailExceptions\"\x91\x02\n" +
 	"\x18GuardrailExceptionConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x15\n" +
 	"\x06app_id\x18\x02 \x01(\rR\x05appId\x12\x1b\n" +
@@ -3812,7 +3820,9 @@ const file_proto_common_proto_rawDesc = "" +
 	"\achannel\x18\x05 \x01(\tR\achannel\x12\x1b\n" +
 	"\ttool_name\x18\x06 \x01(\tR\btoolName\x12\x16\n" +
 	"\x06action\x18\a \x01(\tR\x06action\x12%\n" +
-	"\x0eapp_capability\x18\b \x01(\tR\rappCapability\"\xa2\x02\n" +
+	"\x0eapp_capability\x18\b \x01(\tR\rappCapability\x12\x1f\n" +
+	"\valert_event\x18\t \x01(\tR\n" +
+	"alertEvent\"\xa2\x02\n" +
 	"\x14PromptTemplateConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\x15\n" +
 	"\x06app_id\x18\x02 \x01(\rR\x05appId\x12\x12\n" +
