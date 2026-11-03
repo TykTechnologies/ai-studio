@@ -48,7 +48,9 @@ The capability columns (`AppGuardedColumns`) are written only by the capability 
 
 ### UI
 
-The App page's App Information shows a capability chip ("Not attested (treated as acting)" until set) with the suggestion. A full administrator accepts the suggestion in one click, or opens **Change**, which shows the suggestion pre-selected with its reasons. After a visible reset it says when (and by whom) the attestation was cleared.
+The App page's **Guardrails** section (`apps/AppGuardrails.js`, below "Used by"; see Exceptions UI) shows the capability first: a chip ("Not attested (treated as acting)" until set) with the suggestion. A full administrator accepts the suggestion in one click, or opens **Change**, which shows the suggestion pre-selected with its reasons. After a visible reset it says when (and by whom) the attestation was cleared.
+
+The app editor (`AppForm.js`) warns before saving when someone who is not a full administrator changes the tools, datasources or plugin resources of an app that has an attested capability and `guardrails_apply` (a confirmation, "Save anyway"); after a save whose response carries `guardrail_capability_reset: true` the app list shows a warning instead of the success message. Neither appears when no guardrail applies (the reset is then quiet).
 
 ## Floors
 
@@ -88,5 +90,9 @@ Rules (`services/guardrail_exceptions.go`):
 | `POST /api/v1/apps/{id}/guardrail-exceptions/{eid}/approve` (`{"content_hash": ...}`) | full administrator |
 | `POST /api/v1/apps/{id}/guardrail-exceptions/{eid}/retire` | apps write |
 | `GET /api/v1/filters/{id}/exceptions[?status=]` | filters read |
+
+### UI
+
+The App page's **Guardrails** section groups the capability, the exceptions and the app's prompt templates (`AppPromptTemplates` with `embedded`), with one Community Edition notice. The exceptions table (`apps/guardrailExceptions/AppGuardrailExceptions.js`) lists filter (linked), detector ("Any"), where (channel, and tool), the action ("Log only", "Remove the flagged part", "Remove the tool definition"), status, approver and time, hits, last hit and expiry (`exceptionExpiresAt`: `expires_after_days` after the later of approval and last hit, as `Lapsed`), with retired rows behind a switch, and "N of at most 20 approved". **Review** opens the exception; a full administrator approves a proposed one there after ticking a confirmation, sending its `content_hash` (a 409 reloads it). **Edit**, **Retire** (apps write) and **Delete** (apps delete) are gated with `Can`. **Add exception** (a full administrator, approved at once) / **Propose exception** opens the editor (`GuardrailExceptionEditor.js`): guardrail filter, detector, channel, tool name on tool channels, the action limited to `allowedActions(meta, capability, channel)` (the API's `meta` floors for the app's effective capability, softest first, none when the channel cannot be softened), expiry days and a required one-line justification. The filter's page (`filters/FilterExceptions.js` on `FilterDetails`) lists, read-only, the non-retired exceptions of that filter with links to their apps.
 
 These routes are the only way to manage exceptions: no plugin SDK service, gRPC management call (`TestGuardrailExceptions_NotOnManagementSurfaces`) or agent scope reaches them.

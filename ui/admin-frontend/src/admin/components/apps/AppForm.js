@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import apiClient, { appToolAPI } from "../../utils/apiClient"; // Import appToolAPI
 import focusFirstInvalid from "../../utils/focusFirstInvalid";
 import { formatPrivacyLevel } from "../common/privacy/privacyLevels";
@@ -42,6 +42,9 @@ import { listAll } from "../../utils/listAll";
 import AppTeamField from "./AppTeamField";
 import BudgetField from "../common/BudgetField";
 import { errorDetail } from "../../services/teamBudgetsService";
+import { usePermissions } from "../../context/PermissionsContext";
+import { getGuardrailCapability } from "../../services/guardrailCapabilityService";
+import ConfirmationDialog from "../common/ConfirmationDialog";
 import {
   AppTracingSection,
   appTracingFromResponse,
@@ -63,6 +66,18 @@ const itemsForIds = (ids, list, idOf, placeholder) =>
   });
 
 const jsonApiName = (item) => item?.attributes?.name ?? String(item?.id ?? "");
+
+// resourceKey identifies an app's tools, datasources and plugin resource
+// selections, order-free, to tell whether a save changes them.
+const resourceKey = (toolIds, datasourceIds, pluginSelections) =>
+  JSON.stringify({
+    t: [...(toolIds || [])].map(String).sort(),
+    d: [...(datasourceIds || [])].map(String).sort(),
+    p: Object.keys(pluginSelections || {})
+      .sort()
+      .map((k) => [k, [...(pluginSelections[k] || [])].map(String).sort()])
+      .filter(([, ids]) => ids.length > 0),
+  });
 
 const AppForm = () => {
   const [app, setApp] = useState({
@@ -97,6 +112,15 @@ const AppForm = () => {
   const [pluginResourceInstances, setPluginResourceInstances] = useState({}); // { "pluginId:slug": [...instances] }
   const [pluginResourceSelections, setPluginResourceSelections] = useState({}); // { "pluginId:slug": [...selectedIds] }
   const [loaded, setLoaded] = useState(false);
+  // The guardrail capability reset (features/GuardrailExceptions.md): a
+  // change to an app's tools, datasources or plugin resources by someone who
+  // is not a full administrator clears its attested capability, so its
+  // softened guardrail exceptions may block again. Warned about before the
+  // save, when the app has one and a guardrail applies to it.
+  const { isFullAdmin } = usePermissions();
+  const loadedResources = useRef(null);
+  const [capability, setCapability] = useState(null);
+  const [resetConfirm, setResetConfirm] = useState(null);
   const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -159,14 +183,19 @@ const AppForm = () => {
       setTracing(appTracingFromResponse(appData.tracing));
 
       // Load plugin resource selections from app response
+      const selections = {};
       if (Array.isArray(appData.plugin_resources)) {
-        const selections = {};
         for (const pr of appData.plugin_resources) {
           selections[`${pr.plugin_id}:${pr.resource_type_slug}`] =
             pr.instance_ids || [];
         }
         setPluginResourceSelections(selections);
       }
+      loadedResources.current = resourceKey(
+        (appData.tool_ids || []).map(String),
+        (appData.datasource_ids || []).map(String),
+        selections
+      );
 
       if (appData.credential_id) {
         fetchCredential(appData.credential_id);
@@ -388,6 +417,64 @@ const AppForm = () => {
     return Object.keys(newErrors).length === 0;
   };
 
+  useEffect(() => {
+    if (!id || isFullAdmin) return undefined;
+    let cancelled = false;
+    getGuardrailCapability(id)
+      .then((cap) => {
+        if (!cancelled) setCapability(cap || null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [id, isFullAdmin]);
+
+  // resetsCapability: saving now would clear the app's attested guardrail
+  // capability (the server does it; this only warns).
+  const resetsCapability = () =>
+    Boolean(
+      id &&
+        !isFullAdmin &&
+        capability?.value &&
+        capability?.guardrails_apply &&
+        loadedResources.current !== null &&
+        loadedResources.current !== resourceKey(app.tool_ids, app.datasource_ids, pluginResourceSelections)
+    );
+
+  const saveApp = async (appData) => {
+    try {
+      let response;
+      if (id) {
+        response = await apiClient.patch(`/apps/${id}`, appData);
+      } else {
+        response = await apiClient.post("/apps", appData);
+      }
+
+      markSaved();
+      const reset = Boolean(response?.data?.data?.attributes?.guardrail_capability_reset);
+      navigate("/admin/apps", {
+        state: {
+          snackbar: reset
+            ? {
+                message:
+                  "App updated. Its tools or resources changed, so its guardrail capability was reset to not attested until a full administrator attests it again; guardrail exceptions softened for it may block again.",
+                severity: "warning",
+              }
+            : { message: id ? "App updated successfully" : "App created successfully", severity: "success" },
+        },
+      });
+    } catch (error) {
+      console.error("Error saving app", error);
+      setSnackbar({
+        open: true,
+        // A refused team allocation explains itself (400 with the reason).
+        message: errorDetail(error, "Failed to save app. Please try again."),
+        severity: "error",
+      });
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm()) {
@@ -446,26 +533,11 @@ const AppForm = () => {
       },
     };
 
-    try {
-      if (id) {
-        await apiClient.patch(`/apps/${id}`, appData);
-      } else {
-        await apiClient.post("/apps", appData);
-      }
-
-      markSaved();
-      navigate("/admin/apps", {
-        state: { snackbar: { message: id ? "App updated successfully" : "App created successfully", severity: "success" } },
-      });
-    } catch (error) {
-      console.error("Error saving app", error);
-      setSnackbar({
-        open: true,
-        // A refused team allocation explains itself (400 with the reason).
-        message: errorDetail(error, "Failed to save app. Please try again."),
-        severity: "error",
-      });
+    if (resetsCapability()) {
+      setResetConfirm(appData);
+      return;
     }
+    await saveApp(appData);
   };
 
   const handleCloseSnackbar = (event, reason) => {
@@ -843,6 +915,18 @@ const AppForm = () => {
           </Box>
         </Box>
       </ContentBox>
+      <ConfirmationDialog
+        open={Boolean(resetConfirm)}
+        title="Reset the guardrail capability?"
+        message="You changed this app's tools, datasources or plugin resources. Its attested guardrail capability will be reset to not attested (the strictest) until a full administrator attests it again, so guardrail exceptions softened for it may block again."
+        buttonLabel="Save anyway"
+        onConfirm={() => {
+          const data = resetConfirm;
+          setResetConfirm(null);
+          saveApp(data);
+        }}
+        onCancel={() => setResetConfirm(null)}
+      />
       <Snackbar
         open={snackbar.open}
         autoHideDuration={6000}
