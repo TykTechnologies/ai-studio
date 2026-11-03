@@ -151,6 +151,37 @@ describe("SoftenDialog (midsommar-clean-9u1j.7)", () => {
   });
 });
 
+describe("SoftenDialog: Log and raise event", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockFullAdmin = true;
+  });
+
+  it("offers the alert action with its event name", async () => {
+    const alertMeta = { ...meta, actions: { ...meta.actions, text_user: ["log", "alert", "quarantine"] } };
+    apiClient.get.mockImplementation((url) => {
+      if (url === "/apps/9/guardrail-capability") return Promise.resolve({ data: { data: { value: "read_only", suggestion: "read_only", reasons: [] } } });
+      if (url === "/apps/9/guardrail-exceptions") return Promise.resolve({ data: { data: [], meta: alertMeta } });
+      return Promise.reject(new Error(url));
+    });
+    apiClient.post.mockResolvedValue({ data: { data: { id: 80, status: "approved", action: "alert" } } });
+    renderDialog();
+    await screen.findByTestId("soften-justification");
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Instead of blocking" }));
+    fireEvent.click(within(await screen.findByRole("listbox")).getByText("Log and raise event"));
+    fireEvent.change(screen.getByTestId("soften-justification"), { target: { value: "PR fixtures" } });
+    expect(screen.getByTestId("soften-submit")).toBeDisabled();
+    fireEvent.change(screen.getByTestId("soften-alert-event"), { target: { value: "visor-pr-flag" } });
+    fireEvent.click(screen.getByTestId("soften-submit"));
+    await waitFor(() =>
+      expect(apiClient.post).toHaveBeenCalledWith(
+        "/apps/9/guardrail-exceptions",
+        expect.objectContaining({ action: "alert", alert_event: "visor-pr-flag", source_event: 501 })
+      )
+    );
+  });
+});
+
 describe("softenTarget", () => {
   it("only offers a detector's verdict on an app's request from a named filter", () => {
     expect(softenTarget(event())).toMatchObject({ filterId: 13, detector: "prompt_attack", channel: "text_user", appId: 9, eventId: 501 });
