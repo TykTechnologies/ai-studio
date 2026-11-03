@@ -349,7 +349,7 @@ func (g *guardrailRunner) panicked(input *ScriptInput, r any) *ScriptOutput {
 	return out
 }
 
-func (g *guardrailRunner) run(input *ScriptInput, _ services.ServiceInterface) (*ScriptOutput, error) {
+func (g *guardrailRunner) run(input *ScriptInput, svc services.ServiceInterface) (*ScriptOutput, error) {
 	p, err := g.prepare()
 	if errors.Is(err, guardrails.ErrNoProviders) {
 		warnNoProvidersOnce.Do(func() {
@@ -375,15 +375,18 @@ func (g *guardrailRunner) run(input *ScriptInput, _ services.ServiceInterface) (
 		return passThrough(input), nil
 	}
 	if p.cfg.Shadow && input.RecordEvents != nil {
-		return g.shadow(input, p), nil
+		return g.shadow(input, p, svc), nil
 	}
-	return g.evaluate(input, p)
+	return g.evaluate(input, p, svc)
 }
 
 // evaluate classifies input with the prepared guardrail and maps the verdict
 // onto the output: the work of a run once the filter is prepared, inline or
 // (for a shadow filter) on the shadow pool.
-func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail) (*ScriptOutput, error) {
+//
+// svc is the runner's service, through which a judge (Config.Judge) finds its
+// LLM and the app; nil runs no judge.
+func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail, svc services.ServiceInterface) (*ScriptOutput, error) {
 	cfg, provider, caps := p.cfg, p.provider, p.caps
 
 	sel := buildSegments(input, cfg)
@@ -498,6 +501,9 @@ func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail) (*S
 		out.Message = "guardrail removed tool definitions"
 	case guardrails.ActionRedact:
 		out.Message = "guardrail redacted content"
+	}
+	if w := judgeWorkFor(input, cfg, sel, o, svc); w != nil {
+		g.dispatchJudge(input, w)
 	}
 	return out, nil
 }

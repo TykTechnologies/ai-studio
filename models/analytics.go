@@ -14,6 +14,11 @@ type InteractionType string
 const (
 	ChatInteraction  InteractionType = "chat"
 	ProxyInteraction InteractionType = "proxy"
+	// GuardrailJudgeInteraction is a guardrail's call to its judge LLM (the
+	// second opinion on a verdict). Recorded against the judge LLM with no
+	// App, so it counts toward the judge LLM's budget and analytics, never
+	// toward the budget of the App whose request was judged.
+	GuardrailJudgeInteraction InteractionType = "guardrail_judge"
 )
 
 // RequestKind is the model class a call was made to. It is orthogonal to

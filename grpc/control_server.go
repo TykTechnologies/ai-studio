@@ -1218,7 +1218,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 				Currency:               edgeCurrency(event.Currency),
 				TotalTimeMS:            int(event.LatencyMs),
 				TimeStamp:              event.Timestamp.AsTime(),
-				InteractionType:        models.ProxyInteraction, // Mark as proxy interaction
+				InteractionType:        edgeInteractionType(event.InteractionType),
 				UserID:                 uint(event.UserId),      // User ID synced from edge (via config sync)
 				ChatID:                 "",                      // Not applicable for proxy
 				Choices:                1,                       // Default
@@ -3330,4 +3330,15 @@ func (s *ControlServer) governedMetadataJSON(objectType string, rec *models.Obje
 		return ""
 	}
 	return string(data)
+}
+
+// edgeInteractionType is the interaction type of a chat record ingested from
+// an edge: proxy, or guardrail_judge for a guardrail's judge call, which an
+// edge records with no App. Edge values are untrusted, so nothing else is
+// kept.
+func edgeInteractionType(t string) models.InteractionType {
+	if t == string(models.GuardrailJudgeInteraction) {
+		return models.GuardrailJudgeInteraction
+	}
+	return models.ProxyInteraction
 }

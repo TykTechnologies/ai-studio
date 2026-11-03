@@ -218,11 +218,28 @@ func (c *Clients) Generate(ctx context.Context, ref sr.ModelRef, system, user st
 	if err != nil {
 		return Completion{}, err
 	}
+	return c.generate(ctx, llm, ref.Model, system, user, maxTokens)
+}
+
+// GenerateFor is Generate for an LLM the caller has already looked up (the
+// guardrail judge, which finds it through the runner's service: the store on
+// the hub, the loaded configuration on an edge). Its secret references are
+// resolved here, as Generate does.
+func (c *Clients) GenerateFor(ctx context.Context, llm *models.LLM, model, system, user string, maxTokens int) (Completion, error) {
+	if llm == nil {
+		return Completion{}, errors.New("no LLM configured")
+	}
+	cp := *llm
+	cp.APIKey = secrets.GetValue(cp.APIKey, false)
+	cp.APIEndpoint = secrets.GetValue(cp.APIEndpoint, false)
+	return c.generate(ctx, &cp, model, system, user, maxTokens)
+}
+
+func (c *Clients) generate(ctx context.Context, llm *models.LLM, model, system, user string, maxTokens int) (Completion, error) {
 	driver, err := c.driver(llm)
 	if err != nil {
 		return Completion{}, err
 	}
-	model := ref.Model
 	if model == "" {
 		model = llm.DefaultModel
 	}

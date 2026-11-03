@@ -248,3 +248,28 @@ func maxTokensOf(req map[string]interface{}) interface{} {
 	}
 	return req["max_tokens"]
 }
+
+// GenerateFor takes an LLM the caller looked up itself (the guardrail judge,
+// through the runner's service) and shares the driver cache.
+func TestClients_GenerateFor(t *testing.T) {
+	stub := &openAIStub{}
+	srv := httptest.NewServer(http.HandlerFunc(stub.handler))
+	defer srv.Close()
+	c := New(nil)
+	llm := &models.LLM{ID: 3, Name: "Judge", Vendor: models.OPENAI, APIEndpoint: srv.URL + "/v1", APIKey: "sk-for", DefaultModel: "m-default"}
+
+	out, err := c.GenerateFor(context.Background(), llm, "", "sys", "user", 32)
+	require.NoError(t, err)
+	assert.Equal(t, "m-default", out.Model)
+	assert.Equal(t, "Bearer sk-for", stub.auth[len(stub.auth)-1])
+	_, err = c.GenerateFor(context.Background(), llm, "m2", "sys", "user", 32)
+	require.NoError(t, err)
+	c.mu.Lock()
+	assert.Len(t, c.drivers, 1)
+	c.mu.Unlock()
+
+	_, err = c.GenerateFor(context.Background(), nil, "", "s", "u", 1)
+	assert.Error(t, err)
+	_, err = c.GenerateFor(context.Background(), &models.LLM{ID: 4, Vendor: models.SYSTEMONE}, "", "s", "u", 1)
+	assert.ErrorIs(t, err, ErrNoChat)
+}
