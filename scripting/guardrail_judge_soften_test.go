@@ -187,7 +187,7 @@ func TestJudgeSoften_NotWhenPartUnscanned(t *testing.T) {
 	o := outcome{
 		actions: map[int]string{0: guardrails.ActionBlock},
 		findings: map[int][]guardrails.Finding{0: {
-			{Detector: "prompt_attack", Category: guardrails.CategoryOther, Score: 1, SegmentIndex: 0},
+			{Detector: "prompt_attack", Category: guardrails.CategoryInjection, Score: 1, SegmentIndex: 0},
 			unscannedFinding(0, "Not scanned in full (max_scan_chars)"),
 		}},
 		overall: guardrails.ActionBlock,
@@ -220,7 +220,7 @@ func TestJudge_NeverJudgesDataFindings(t *testing.T) {
 					d := finding
 					d.Score, d.Severity, d.SegmentIndex = 1, "critical", s.Index
 					// An injection finding beside it does not make it judgeable.
-					v.Findings = append(v.Findings, d, guardrails.Finding{Detector: "prompt_attack", Category: guardrails.CategoryOther, Score: 1, Severity: "critical", SegmentIndex: s.Index})
+					v.Findings = append(v.Findings, d, guardrails.Finding{Detector: "prompt_attack", Category: guardrails.CategoryInjection, Score: 1, Severity: "critical", SegmentIndex: s.Index})
 				}
 			}
 			return v
@@ -249,5 +249,70 @@ func TestJudge_NeverJudgesDataFindings(t *testing.T) {
 				t.Errorf("%s/%s: the judge was asked about a data finding", f.Detector, mode)
 			}
 		}
+	}
+}
+
+// The judge's question ("is this an attack?") fits injection findings only:
+// moderation, denied topics, blocklists and other policy findings are never
+// judged, nor data findings; an HTTP or Unix-socket classifier's own "other"
+// (Wolf Defender) is judged (midsommar-clean-9u1j.61).
+func TestJudgeableFinding(t *testing.T) {
+	f := func(det, cat string) guardrails.Finding { return guardrails.Finding{Detector: det, Category: cat} }
+	for _, c := range []struct {
+		f        guardrails.Finding
+		provider string
+		want     bool
+	}{
+		{f("prompt_attack", guardrails.CategoryInjection), guardrails.ProviderLakera, true},
+		{f("injection.ignore_instructions", guardrails.CategoryInjection), guardrails.ProviderBuiltin, true},
+		{f("prompt_attack", guardrails.CategoryOther), guardrails.ProviderHTTP, true}, // Wolf
+		{f("prompt_attack", ""), guardrails.ProviderHTTP, true},
+		{f("secrets.aws", ""), guardrails.ProviderHTTP, false},
+		{f("pii.email", guardrails.CategoryOther), guardrails.ProviderHTTP, false},
+		{f("Hate", guardrails.CategoryModeration), guardrails.ProviderAzureContentSafety, false},
+		{f("Violence", guardrails.CategoryModeration), guardrails.ProviderHTTP, false},
+		{f("denied_topic.finance", "topic"), guardrails.ProviderBedrockGuardrails, false},
+		{f("blocklist.custom", guardrails.CategoryOther), guardrails.ProviderAzureContentSafety, false},
+		{f("word_filter", guardrails.CategoryOther), guardrails.ProviderBedrockGuardrails, false},
+		{f("custom", guardrails.CategoryOther), guardrails.ProviderBuiltin, false},
+		{f("unknown_links", ""), guardrails.ProviderBuiltin, false},
+		{f("secrets.test_key", guardrails.CategorySecrets), guardrails.ProviderBuiltin, false},
+	} {
+		if got := judgeableFinding(c.f, c.provider); got != c.want {
+			t.Errorf("judgeableFinding(%+v, %s) = %v, want %v", c.f, c.provider, got, c.want)
+		}
+	}
+}
+
+// A moderation finding (here beside an injection finding) keeps the segment
+// from the judge in soften mode: the verdict stands, nothing is asked.
+func TestJudgeSoften_ModerationNeverJudged(t *testing.T) {
+	stub := installStubJudge(t, answering(`{"verdict":"benign","reason":"fits_app_purpose"}`))
+	withCapability(t, guardrails.CapabilityReadOnly)
+	freshShadowPool(t, 2, 1<<20)
+	hate := func(in guardrails.Input) guardrails.Verdict {
+		v := guardrails.Verdict{}
+		for _, s := range in.Segments {
+			if strings.Contains(s.Text, "SECRET") {
+				v.Flagged = true
+				v.Findings = append(v.Findings,
+					guardrails.Finding{Detector: "Hate", Category: guardrails.CategoryModeration, Score: 1, Severity: "critical", SegmentIndex: s.Index},
+					guardrails.Finding{Detector: "prompt_attack", Category: guardrails.CategoryInjection, Score: 1, Severity: "critical", SegmentIndex: s.Index})
+			}
+		}
+		return v
+	}
+	cfg := installFake(t, fmt.Sprintf("fake_judge_mod_%d", judgeFakeSeq.Add(1)), &fakeProvider{verdict: hate}, guardrails.ActionBlock)
+	cfg["judge"] = map[string]any{"mode": "soften", "llm_id": 70, "timeout_ms": 1000}
+	flt := guardrailFilter("wolf", false, cfg)
+	flt.ID = 13
+	sink := newEventSink()
+	out, _ := NewFilterRunner(flt).RunScript(judgeInput(sink, judgeBody), newJudgeSvc())
+	if !out.Block {
+		t.Fatal("a moderation block was softened")
+	}
+	events := judgeEvents(sink.wait(t, 1, 5*time.Second))
+	if len(events) != 1 || judgeMeta(t, events[0])["error"] != judgeErrCategory || stub.calls.Load() != 0 {
+		t.Errorf("events %+v calls %d", events, stub.calls.Load())
 	}
 }

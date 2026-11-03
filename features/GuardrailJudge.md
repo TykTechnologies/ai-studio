@@ -1,6 +1,6 @@
 # Guardrail second opinion (LLM judge)
 
-Status: implemented 2026-11-03 (midsommar-clean-9u1j.11 config/client/prompt, .12 record-only runtime, .13 UI, .14 soften mode; security fixes .45 coverage, .46 privacy, .50 budget, .57 data categories). Implementation detail per bead is in [Filters.md](Filters.md); user docs in `docs/site/docs/guardrails.md` ("Second opinion (LLM judge)"). Epic: midsommar-clean-9u1j.
+Status: implemented 2026-11-03 (midsommar-clean-9u1j.11 config/client/prompt, .12 record-only runtime, .13 UI, .14 soften mode; security fixes .45 coverage, .46 privacy, .50 budget, .57/.61 injection findings only). Implementation detail per bead is in [Filters.md](Filters.md); user docs in `docs/site/docs/guardrails.md` ("Second opinion (LLM judge)"). Epic: midsommar-clean-9u1j.
 
 ## What it is
 
@@ -14,7 +14,7 @@ A guardrail filter can ask a gateway-managed LLM (the judge) whether a segment i
 
 Segments the filter blocks or quarantines on a detector's finding, at most 4 per request. Never judged (the event records why, `verdict: none` with `error`):
 
-- `category`: the segment has a finding in a data category (secrets, PII, leak; by category, or by the detector name when a provider leaves the category out). The judge is asked whether text is an attack, and a credential or an email address is rightly "benign", so judging it would downgrade data-loss blocks. A denylist, not an injection allowlist: HTTP classifiers such as Wolf Defender report "other".
+- `category`: the segment has a finding that is not an injection finding. The judge is asked whether text is an attack, which means nothing for a secret, personal data, a leak, hateful or violent text, a denied topic or a blocklisted word ("not an attack" is right there and says nothing about that policy), so judging them would downgrade those blocks. Judged only when every finding is category `injection`, or `other`/none from the HTTP classifier (also over a Unix socket; Wolf Defender reports "other"), and never one whose detector names a data category (`judgeableFinding`, midsommar-clean-9u1j.57, .61).
 - `over_segment_cap`, `privacy` (judge scored below the request's LLM, or a request naming no LLM: Studio chat is never judged, as exceptions do not apply there either), `over_budget` (the judge LLM's own budget is spent), `judge_unavailable`, `dropped` (background queue full).
 - A segment blocked only because it was not scanned.
 

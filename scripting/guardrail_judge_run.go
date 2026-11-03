@@ -58,9 +58,9 @@ const (
 	judgeErrParse       = "unparseable"
 	judgeErrDropped     = "dropped" // the shadow pool had no room
 	judgeErrSkipped     = "over_segment_cap"
-	// judgeErrCategory: the segment has a finding that marks the presence of
-	// data (a secret, personal data, a leak), not an intent the judge can
-	// weigh: "benign" means nothing there, so it is never asked.
+	// judgeErrCategory: the segment has a finding that is not an injection
+	// finding (judgeableFinding): "not an attack" says nothing about the
+	// policy it enforces, so the judge is never asked.
 	judgeErrCategory = "category"
 	// judgeErrPrivacy: the judge LLM's privacy score is below that of the
 	// LLM whose traffic it would read, or that LLM is unknown (Studio chat
@@ -118,7 +118,8 @@ type judgeTarget struct {
 	// unscanned: part of the segment was not scanned, so no opinion on the
 	// text the judge is shown may soften it.
 	unscanned bool
-	// data: the segment has a secrets, PII or leak finding; never judged.
+	// data: the segment has a finding the judge's question does not fit
+	// (not an injection finding; judgeableFinding); never judged.
 	data bool
 }
 
@@ -137,12 +138,19 @@ type judgeWork struct {
 	targets      []judgeTarget
 }
 
-// dataCategories are the finding categories that mark data in the text
-// rather than an intent: the judge (asked whether text is an attack) would
-// rightly call a credential or an email address benign, so a segment with
-// any such finding is never judged, in record or soften mode. A denylist,
-// not an injection-only allowlist: HTTP classifiers (Wolf Defender) report
-// their findings as "other".
+// The judge is asked one question: is this flagged text an attack (a prompt
+// injection) or benign? That question means something only for injection
+// findings. For a secret, personal data or a leak, a hateful or violent text,
+// a denied topic or a blocklisted word, "not an attack" is the right answer
+// and says nothing about the policy the filter enforces, so softening on it
+// would downgrade those blocks. A segment is judged only when every finding
+// in it is an injection finding: category injection, or (from an HTTP or
+// Unix-socket classifier, which reports its own labels, such as Wolf
+// Defender's) category "other" or none, unless its detector names a data
+// category. Anything else is recorded with error "category", in record and
+// soften mode (midsommar-clean-9u1j.57, .61).
+
+// dataCategories are the categories that mark data in the text.
 var dataCategories = map[string]bool{guardrails.CategorySecrets: true, guardrails.CategoryPII: true, guardrails.CategoryLeak: true}
 
 // isDataFinding reports a finding in a data category, by its category or,
@@ -156,6 +164,21 @@ func isDataFinding(f guardrails.Finding) bool {
 		if strings.HasPrefix(det, c+".") || strings.HasPrefix(det, c+"/") || det == c {
 			return true
 		}
+	}
+	return false
+}
+
+// judgeableFinding reports a finding the judge's question fits: an
+// injection finding (see above).
+func judgeableFinding(f guardrails.Finding, provider string) bool {
+	if isDataFinding(f) {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(f.Category)) {
+	case guardrails.CategoryInjection:
+		return true
+	case guardrails.CategoryOther, "":
+		return provider == guardrails.ProviderHTTP
 	}
 	return false
 }
@@ -195,7 +218,7 @@ func judgeWorkFor(input *ScriptInput, cfg guardrails.Config, sel selection, o ou
 				unscanned = true
 				continue
 			}
-			if isDataFinding(f) {
+			if !judgeableFinding(f, cfg.Provider) {
 				data = true
 			}
 			detectors = append(detectors, safeLabel(f.Detector))

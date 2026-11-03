@@ -103,15 +103,14 @@ func answering(text string) func(context.Context) (string, error) {
 
 var judgeFakeSeq atomic.Int32
 
-// injectionFake flags SECRET as a prompt attack in category "other", as an
-// HTTP classifier such as Wolf Defender reports it (a judgeable finding).
+// injectionFake flags SECRET as a prompt attack (a judgeable finding).
 func injectionFake() *fakeProvider {
 	return &fakeProvider{verdict: func(in guardrails.Input) guardrails.Verdict {
 		v := guardrails.Verdict{}
 		for _, s := range in.Segments {
 			if strings.Contains(s.Text, "SECRET") {
 				v.Flagged = true
-				v.Findings = append(v.Findings, guardrails.Finding{Detector: "prompt_attack", Category: guardrails.CategoryOther, Score: 1, Severity: "critical", SegmentIndex: s.Index})
+				v.Findings = append(v.Findings, guardrails.Finding{Detector: "prompt_attack", Category: guardrails.CategoryInjection, Score: 1, Severity: "critical", SegmentIndex: s.Index})
 			}
 		}
 		return v
