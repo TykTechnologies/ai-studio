@@ -764,6 +764,7 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 					edgeConnection.mu.Unlock()
 
 					s.recordEdgeTemplateMatches(edgeID, m.Heartbeat.MatchedPromptTemplateIds)
+					s.recordEdgeGuardrailExceptionHits(edgeID, edgeConnection.Namespace, m.Heartbeat.HitGuardrailExceptionIds)
 
 					// Get loaded config info from heartbeat
 					loadedChecksum := m.Heartbeat.LoadedConfigChecksum
@@ -986,6 +987,7 @@ func (s *ControlServer) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequ
 		return nil, status.Error(codes.Unavailable, "failed to record heartbeat")
 	}
 	s.recordEdgeTemplateMatches(req.EdgeId, req.MatchedPromptTemplateIds)
+	s.recordEdgeGuardrailExceptionHits(req.EdgeId, edgeInstance.Namespace, req.HitGuardrailExceptionIds)
 
 	// This replica holds the edge's stream: keep its view current too.
 	s.edgeMutex.RLock()
@@ -1878,25 +1880,26 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		}
 
 		pbApp := &pb.AppConfig{
-			Id:                 uint32(app.ID),
-			Name:               app.Name,
-			Description:        app.Description,
-			OwnerEmail:         "", // AI Studio doesn't have owner email field yet
-			IsActive:           app.IsActive,
-			MonthlyBudget:      monthlyBudget,
-			BudgetStartDate:    budgetStartDate,
-			Metadata:           metadataJSON,
-			Namespace:          app.Namespace,
-			UserId:             uint32(app.UserID), // Owner user ID for analytics tracking
-			LlmIds:             llmIDs,
-			ToolIds:            toolIDs,
-			DatasourceIds:      datasourceIDs,
-			ModelRouterIds:     appModelRouterIDs(&app),
-			SemanticRouterIds:  appSemanticRouterIDs(&app),
-			CurrentPeriodUsage: currentPeriodUsage, // Current spending synced to edge for budget enforcement
-			Tracing:            app.Tracing.EdgeJSON(),
-			CreatedAt:          timestamppb.New(app.CreatedAt),
-			UpdatedAt:          timestamppb.New(app.UpdatedAt),
+			Id:                  uint32(app.ID),
+			Name:                app.Name,
+			Description:         app.Description,
+			OwnerEmail:          "", // AI Studio doesn't have owner email field yet
+			IsActive:            app.IsActive,
+			MonthlyBudget:       monthlyBudget,
+			BudgetStartDate:     budgetStartDate,
+			Metadata:            metadataJSON,
+			Namespace:           app.Namespace,
+			UserId:              uint32(app.UserID), // Owner user ID for analytics tracking
+			LlmIds:              llmIDs,
+			ToolIds:             toolIDs,
+			DatasourceIds:       datasourceIDs,
+			ModelRouterIds:      appModelRouterIDs(&app),
+			SemanticRouterIds:   appSemanticRouterIDs(&app),
+			CurrentPeriodUsage:  currentPeriodUsage, // Current spending synced to edge for budget enforcement
+			Tracing:             app.Tracing.EdgeJSON(),
+			GuardrailCapability: app.GuardrailCapability,
+			CreatedAt:           timestamppb.New(app.CreatedAt),
+			UpdatedAt:           timestamppb.New(app.UpdatedAt),
 		}
 
 		// Add plugin resource associations (from batch query above)
@@ -1939,6 +1942,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		snapshot.Apps = append(snapshot.Apps, pbApp)
 	}
 	snapshot.PromptTemplates = snapshotPromptTemplates(s.db, apps, takenAt)
+	snapshot.GuardrailExceptions = snapshotGuardrailExceptions(s.db, apps, takenAt)
 
 	// Get Filters for namespace
 	var filters []models.Filter

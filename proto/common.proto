@@ -109,6 +109,13 @@ message AppConfig {
   // without the hub-only owner_may_view_content; empty when the App
   // inherits every global setting.
   string tracing = 25;
+
+  // Guardrail capability (features/GuardrailExceptions.md): what a full
+  // administrator attested the App can do ("", read_only, read_tools,
+  // acting; "" is unattested and treated as acting). Informational here:
+  // Apps are outside the checksum, so each GuardrailExceptionConfig carries
+  // the capability that bounds it.
+  string guardrail_capability = 26;
 }
 
 // TokenConfig represents an API token configuration
@@ -400,6 +407,29 @@ message ConfigurationSnapshot {
   // version. Unlike Apps they count in the checksum, so approving,
   // retiring or deleting one marks edges pending.
   repeated PromptTemplateConfig prompt_templates = 19;
+
+  // Guardrail exceptions (features/GuardrailExceptions.md): the approved,
+  // unlapsed exceptions of the Apps in this snapshot that are within the
+  // floor for their App's capability, by app and id. They count in the
+  // checksum, as does the capability each carries, so approving, retiring
+  // or changing one, or attesting its App's capability, marks edges pending.
+  repeated GuardrailExceptionConfig guardrail_exceptions = 20;
+}
+
+// GuardrailExceptionConfig is an approved guardrail exception of an App:
+// for findings of filter_id, detector ("" = any) and channel (and, on a
+// tool channel, tool_name, "" = any), the filter's action is softened to
+// action, within the floor for app_capability. Edges check the floor again
+// and drop an exception outside it.
+message GuardrailExceptionConfig {
+  uint32 id = 1;      // the hub's row, reported back when it applies
+  uint32 app_id = 2;
+  uint32 filter_id = 3;
+  string detector = 4;
+  string channel = 5;
+  string tool_name = 6;
+  string action = 7;
+  string app_capability = 8;
 }
 
 // PromptTemplateConfig is an approved trusted prompt template of an App.

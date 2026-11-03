@@ -1,6 +1,6 @@
 # Guardrail exceptions and app capability
 
-Status: app guardrail capability implemented (model, suggestion, API, App page), 2026-11-03 (midsommar-clean-9u1j.2); exceptions model, floors, service and API, 2026-11-03 (.3); exceptions at runtime on the hub, 2026-11-03 (.4). Exceptions on edges, their UI, the alert action and the LLM second opinion follow; the epic midsommar-clean-9u1j holds the full design.
+Status: app guardrail capability implemented (model, suggestion, API, App page), 2026-11-03 (midsommar-clean-9u1j.2); exceptions model, floors, service and API, 2026-11-03 (.3); exceptions at runtime on the hub, 2026-11-03 (.4); exceptions and capability on edges, 2026-11-03 (.5). Their UI, the alert action and the LLM second opinion follow; the epic midsommar-clean-9u1j holds the full design.
 
 ## Problem
 
@@ -86,6 +86,13 @@ Rules (`services/guardrail_exceptions.go`):
 - Every finding still produces its compliance event. A detector event softened by an exception carries `exceptions: [id]`, "softened by exception #id" in its description, and on each segment `exception: {id, from, to}`. Each exception that applied records a hit, once per request.
 - An exception that matches but is outside the floor for the app's capability now changes nothing and records `guardrail.exception_ignored` (`exception_id`, `channel`, `action`, `capability`, `floor`, `detector`, `filter_id`).
 - Requests with no app (Studio chat, app id 0) take no exceptions; neither does a build with no source.
+
+### Edge gateways
+
+- The configuration snapshot carries `guardrail_exceptions` (`GuardrailExceptionConfig`): the approved, unlapsed exceptions of the snapshot's Apps that are within the floor for their App's capability, each with `app_capability` (`grpc/snapshot_guardrail_exceptions.go`). Apps are outside the snapshot checksum, so the capability travels with each exception: approving, retiring or changing an exception, or attesting its App's capability (`system.app.guardrail_exceptions.changed`, `system.app.updated`), changes the checksum and marks the namespace's edges pending; a hit does not. `AppConfig.guardrail_capability` carries the capability too, for information.
+- The edge (`microgateway/internal/services/guardrail_exceptions.go`) installs them as the exception source when it applies a snapshot, checks the floor again and drops an exception outside it (an unknown capability is acting), and removes the source when a snapshot has none. The runtime is the same `decide()` as on the hub.
+- Heartbeats report `hit_guardrail_exception_ids`, the exceptions that applied since the last one (requeued when a heartbeat fails). The hub counts only exceptions the edge's own snapshot carries: approved, unlapsed, within the floor, of an active App and a filter in the edge's namespace; anything else an edge reports is dropped and logged. Each reported exception counts as one hit per heartbeat, written at most once a minute per hub replica, so `hit_count` counts edge heartbeats with hits rather than edge requests; `last_hit_at` keeps the exception from lapsing.
+- Compatibility: both are new proto3 fields (snapshot 20, heartbeat 9, `AppConfig` 26). An older edge ignores the exceptions (it applies the filters' actions) and an older hub sends none.
 
 ### API
 

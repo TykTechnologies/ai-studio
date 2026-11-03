@@ -267,6 +267,8 @@ func main() {
 				// Heartbeats report the trusted prompt templates that matched,
 				// so the hub's expiry counts edge traffic.
 				edgeClient.SetTemplateMatchSource(services.PromptTemplateMatches)
+				// ... and the guardrail exceptions that applied.
+				edgeClient.SetExceptionHitSource(services.GuardrailExceptionHits)
 
 				// If edge client already has configuration, sync it to SQLite
 				if initialConfig := edgeClient.GetCurrentConfiguration(); initialConfig != nil {
