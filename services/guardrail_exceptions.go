@@ -15,6 +15,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/replicas"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -697,4 +698,69 @@ func (p *GuardrailExceptionSource) forget(appID uint) {
 	p.mu.Lock()
 	delete(p.cache, appID)
 	p.mu.Unlock()
+}
+
+// guardrailExceptionSweepEvery is how often the leader replica lapses the
+// approved exceptions past their expiry; the first sweep runs after
+// guardrailExceptionSweepDelay.
+var (
+	guardrailExceptionSweepEvery = time.Hour
+	guardrailExceptionSweepDelay = time.Minute
+)
+
+// SweepLapsedGuardrailExceptions returns every approved exception past its
+// expiry (expires_after_days without a hit) to proposed and announces the
+// change for each app, so edges become pending and drop it at the next
+// push. ApprovedGuardrailExceptions lapses an app's exceptions when the hub
+// serves its traffic; this covers apps whose traffic goes through edges
+// only, which never ask the hub. It reports how many it lapsed.
+func (s *Service) SweepLapsedGuardrailExceptions(now time.Time) (int, error) {
+	var rows []models.GuardrailException
+	if err := s.DB.Where("status = ?", models.GuardrailExceptionApproved).Find(&rows).Error; err != nil {
+		return 0, err
+	}
+	apps := map[uint]bool{}
+	lapsed := 0
+	for i := range rows {
+		e := &rows[i]
+		if !e.Lapsed(now) {
+			continue
+		}
+		changed, err := models.LapseGuardrailException(s.DB, e.ID)
+		if err != nil {
+			slog.Warn("could not lapse an expired guardrail exception", "app_id", e.AppID, "exception_id", e.ID, "error", err)
+			continue
+		}
+		if changed {
+			lapsed++
+			apps[e.AppID] = true
+		}
+	}
+	for appID := range apps {
+		s.guardrailExceptionsChanged(appID)
+	}
+	return lapsed, nil
+}
+
+// RunGuardrailExceptionSweeper sweeps lapsed exceptions until ctx ends, on
+// the leader replica only (replicas.IsLeader; the sweep is idempotent, so a
+// change of leader between sweeps is harmless).
+func (s *Service) RunGuardrailExceptionSweeper(ctx context.Context) {
+	timer := time.NewTimer(guardrailExceptionSweepDelay)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
+		if replicas.IsLeader() {
+			if n, err := s.SweepLapsedGuardrailExceptions(time.Now()); err != nil {
+				slog.Warn("guardrail exception sweep failed", "error", err)
+			} else if n > 0 {
+				slog.Info("lapsed guardrail exceptions past their expiry", "count", n)
+			}
+		}
+		timer.Reset(guardrailExceptionSweepEvery)
+	}
 }

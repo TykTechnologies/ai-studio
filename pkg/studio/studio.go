@@ -412,6 +412,14 @@ func New(opts Options) (_ *Studio, err error) {
 	// Approved guardrail exceptions soften a filter's action for one app,
 	// detector and channel (features/GuardrailExceptions.md).
 	scripting.SetExceptionSource(service.GuardrailExceptionSource())
+	// Exceptions lapse after expires_after_days without a hit; the sweep
+	// lapses those of apps the hub never serves (edge traffic only), so
+	// edges become pending and drop them.
+	s.background.Add(1)
+	go func() {
+		defer s.background.Done()
+		service.RunGuardrailExceptionSweeper(backgroundCtx)
+	}()
 	if opts.HostTykConnection != nil {
 		if tykmcp.IsEnterpriseAvailable() {
 			service.SetTykMCPHost(opts.HostTykConnection)

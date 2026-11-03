@@ -9,6 +9,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -164,4 +165,34 @@ func TestEdgeGuardrailExceptionHitsRecorded(t *testing.T) {
 	assert.EqualValues(t, 1, hits(euOnly.ID))
 	server.recordEdgeGuardrailExceptionHits("edge-default", "default", []uint32{uint32(ok.ID)})
 	assert.EqualValues(t, 1, hits(ok.ID), "throttled")
+}
+
+// .52: an exception that lapses with no hub traffic is lapsed by the
+// sweep, the change event recomputes the checksum, and the snapshot no
+// longer carries it, so edges become pending and drop it at the push.
+func TestSnapshot_SweptExceptionLeavesTheSnapshot(t *testing.T) {
+	server, db := setupTestServer(t, nil)
+	llms := createTestLLMs(db, "")
+	apps := createTestApps(db, "", llms)
+	filter := guardrailFilter(t, db, "")
+	require.NoError(t, db.Model(&models.App{}).Where("id = ?", apps[0].ID).Update("guardrail_capability", "read_only").Error)
+	e := createGuardrailException(t, db, apps[0].ID, filter.ID, "text_user", "log", models.GuardrailExceptionApproved)
+
+	snap, err := server.getConfigurationSnapshot("default")
+	require.NoError(t, err)
+	require.Equal(t, []uint32{uint32(e.ID)}, snapshotExceptionIDs(snap))
+	carried := snap.Checksum
+
+	require.NoError(t, db.Model(e).Update("approved_at", time.Now().Add(-31*24*time.Hour)).Error)
+	n, err := services.NewService(db).SweepLapsedGuardrailExceptions(time.Now())
+	require.NoError(t, err)
+	require.Equal(t, 1, n)
+
+	snap, err = server.getConfigurationSnapshot("default")
+	require.NoError(t, err)
+	assert.Empty(t, snapshotExceptionIDs(snap))
+	assert.NotEqual(t, carried, snap.Checksum, "edges become pending")
+	var got models.GuardrailException
+	require.NoError(t, db.First(&got, e.ID).Error)
+	assert.Equal(t, models.GuardrailExceptionProposed, got.Status)
 }

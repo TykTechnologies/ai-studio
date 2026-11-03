@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/testinfra/studiodb"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -384,4 +385,43 @@ func TestGuardrailExceptionHits_TrailingFlush(t *testing.T) {
 		got, err := f.svc.GetGuardrailException(f.app.ID, e.ID)
 		return err == nil && got.HitCount == 3 && got.LastHitAt != nil
 	}, 2*time.Second, 10*time.Millisecond, "held hits are written by the timer")
+}
+
+// .52: an exception of an app whose traffic only goes through edges never
+// reaches ApprovedGuardrailExceptions; the sweep lapses it and announces
+// the change, so edges become pending.
+func TestSweepLapsedGuardrailExceptions(t *testing.T) {
+	f := newExceptionFixture(t, "read_only")
+	stale, err := f.svc.CreateGuardrailException(f.app.ID, f.asAdmin, f.spec("text_user", "log"))
+	require.NoError(t, err)
+	fresh, err := f.svc.CreateGuardrailException(f.app.ID, f.asAdmin, f.spec("text_system", "log"))
+	require.NoError(t, err)
+
+	bus := eventbridge.NewBus()
+	f.svc.SystemEvents = NewSystemEventEmitter(bus, "test")
+	announced := make(chan uint, 4)
+	sub := bus.Subscribe(TopicAppGuardrailExceptionsChanged, func(ev eventbridge.Event) { announced <- 1 })
+	defer bus.Unsubscribe(sub)
+
+	old := time.Now().Add(-31 * 24 * time.Hour)
+	require.NoError(t, f.db.Model(&models.GuardrailException{}).Where("id = ?", stale.ID).Update("approved_at", old).Error)
+
+	n, err := f.svc.SweepLapsedGuardrailExceptions(time.Now())
+	require.NoError(t, err)
+	assert.Equal(t, 1, n)
+	got, err := f.svc.GetGuardrailException(f.app.ID, stale.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.GuardrailExceptionProposed, got.Status)
+	got, err = f.svc.GetGuardrailException(f.app.ID, fresh.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.GuardrailExceptionApproved, got.Status)
+	select {
+	case <-announced:
+	case <-time.After(time.Second):
+		t.Fatal("the change was not announced, so edges would not become pending")
+	}
+
+	n, err = f.svc.SweepLapsedGuardrailExceptions(time.Now())
+	require.NoError(t, err)
+	assert.Equal(t, 0, n, "idempotent")
 }
