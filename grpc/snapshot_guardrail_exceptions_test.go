@@ -196,3 +196,36 @@ func TestSnapshot_SweptExceptionLeavesTheSnapshot(t *testing.T) {
 	require.NoError(t, db.First(&got, e.ID).Error)
 	assert.Equal(t, models.GuardrailExceptionProposed, got.Status)
 }
+
+// .58: the snapshot carries each attested app's capability in a list that
+// counts in the checksum, so attesting, lowering or resetting it marks
+// edges pending even for an app with no exceptions.
+func TestSnapshot_GuardrailCapabilitiesChangeTheChecksum(t *testing.T) {
+	server, db := setupTestServer(t, nil)
+	llms := createTestLLMs(db, "")
+	apps := createTestApps(db, "", llms)
+	setCapability := func(c string) {
+		require.NoError(t, db.Model(&models.App{}).Where("id = ?", apps[0].ID).Update("guardrail_capability", c).Error)
+	}
+	snapshot := func() *pb.ConfigurationSnapshot {
+		snap, err := server.getConfigurationSnapshot("default")
+		require.NoError(t, err)
+		return snap
+	}
+
+	unattested := snapshot()
+	assert.Empty(t, unattested.GuardrailCapabilities, "unattested apps are not listed")
+	assert.Empty(t, unattested.GuardrailExceptions)
+
+	setCapability("read_only")
+	readOnly := snapshot()
+	require.Len(t, readOnly.GuardrailCapabilities, 1)
+	assert.Equal(t, uint32(apps[0].ID), readOnly.GuardrailCapabilities[0].AppId)
+	assert.Equal(t, "read_only", readOnly.GuardrailCapabilities[0].Capability)
+	assert.NotEqual(t, unattested.Checksum, readOnly.Checksum, "attesting marks edges pending")
+
+	setCapability("acting")
+	assert.NotEqual(t, readOnly.Checksum, snapshot().Checksum, "lowering marks edges pending")
+	setCapability("")
+	assert.Equal(t, unattested.Checksum, snapshot().Checksum, "a reset marks edges pending")
+}

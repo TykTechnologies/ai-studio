@@ -96,3 +96,21 @@ func TestEdgeSync_AlertExceptionNamesItsEvent(t *testing.T) {
 	require.NotEmpty(t, out.ComplianceEvents)
 	assert.Equal(t, "edge-flag", out.ComplianceEvents[0].Metadata["alert"])
 }
+
+// .58: the edge serves an app's capability from the snapshot's checksummed
+// list, with or without exceptions; a snapshot without it removes it.
+func TestEdgeSync_GuardrailCapabilities(t *testing.T) {
+	t.Cleanup(func() { scripting.SetCapabilitySource(nil) })
+	db := setupToolsSyncTestDB(t)
+	sync := NewEdgeSyncService(db, "")
+	snap := exceptionSnapshot()
+	snap.GuardrailCapabilities = []*pb.AppGuardrailCapabilityConfig{{AppId: 10, Capability: "read_only"}, {AppId: 11, Capability: "bogus"}}
+	require.NoError(t, sync.SyncConfiguration(snap))
+
+	assert.Equal(t, "read_only", string(scripting.AppCapabilityFor(edgeRequest(t, 10, "x"))))
+	assert.Equal(t, "", string(scripting.AppCapabilityFor(edgeRequest(t, 11, "x"))), "an unknown value is acting")
+	assert.Equal(t, "", string(scripting.AppCapabilityFor(edgeRequest(t, 12, "x"))))
+
+	require.NoError(t, sync.SyncConfiguration(exceptionSnapshot()))
+	assert.Equal(t, "", string(scripting.AppCapabilityFor(edgeRequest(t, 10, "x"))), "the next snapshot without it removes it")
+}

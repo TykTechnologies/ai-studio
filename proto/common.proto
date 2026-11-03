@@ -414,6 +414,20 @@ message ConfigurationSnapshot {
   // checksum, as does the capability each carries, so approving, retiring
   // or changing one, or attesting its App's capability, marks edges pending.
   repeated GuardrailExceptionConfig guardrail_exceptions = 20;
+
+  // Guardrail capabilities (features/GuardrailExceptions.md): the attested
+  // capability of each App in this snapshot that has one, by app. Apps are
+  // outside the checksum, so the capability travels here, where it counts:
+  // attesting, lowering or resetting one marks edges pending. Read by
+  // what needs the capability without an exception (the LLM second
+  // opinion's soften mode). An App not listed is unattested (acting).
+  repeated AppGuardrailCapabilityConfig guardrail_capabilities = 21;
+}
+
+// AppGuardrailCapabilityConfig is an App's attested guardrail capability.
+message AppGuardrailCapabilityConfig {
+  uint32 app_id = 1;
+  string capability = 2; // read_only, read_tools or acting
 }
 
 // GuardrailExceptionConfig is an approved guardrail exception of an App:

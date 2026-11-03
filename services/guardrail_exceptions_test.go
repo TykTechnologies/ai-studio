@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/testinfra/studiodb"
@@ -424,4 +425,22 @@ func TestSweepLapsedGuardrailExceptions(t *testing.T) {
 	n, err = f.svc.SweepLapsedGuardrailExceptions(time.Now())
 	require.NoError(t, err)
 	assert.Equal(t, 0, n, "idempotent")
+}
+
+// .58: the source serves an app's capability with no exceptions, and drops
+// it at once on this replica when it changes.
+func TestGuardrailExceptionSource_AppCapability(t *testing.T) {
+	f := newExceptionFixture(t, "read_tools")
+	src := f.svc.GuardrailExceptionSource()
+	assert.Nil(t, src.AppExceptions(context.Background(), f.app.ID), "no exceptions")
+	assert.Equal(t, guardrails.CapabilityReadTools, src.AppCapability(context.Background(), f.app.ID))
+	assert.Equal(t, guardrails.CapabilityUnattested, src.AppCapability(context.Background(), 0))
+	assert.Equal(t, guardrails.CapabilityUnattested, src.AppCapability(context.Background(), 9999))
+
+	_, err := f.svc.SetAppGuardrailCapability(f.app.ID, "read_only", f.admin.ID)
+	require.NoError(t, err)
+	assert.Equal(t, guardrails.CapabilityReadOnly, src.AppCapability(context.Background(), f.app.ID))
+	_, err = f.svc.SetAppGuardrailCapability(f.app.ID, "", f.admin.ID)
+	require.NoError(t, err)
+	assert.Equal(t, guardrails.CapabilityUnattested, src.AppCapability(context.Background(), f.app.ID))
 }

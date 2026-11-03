@@ -1943,6 +1943,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	}
 	snapshot.PromptTemplates = snapshotPromptTemplates(s.db, apps, takenAt)
 	snapshot.GuardrailExceptions = snapshotGuardrailExceptions(s.db, apps, takenAt)
+	snapshot.GuardrailCapabilities = snapshotGuardrailCapabilities(apps)
 
 	// Get Filters for namespace
 	var filters []models.Filter

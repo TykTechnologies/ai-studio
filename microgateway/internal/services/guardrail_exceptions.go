@@ -77,3 +77,36 @@ func installGuardrailExceptions(cfgs []*pb.GuardrailExceptionConfig) {
 // GuardrailExceptionHits holds the IDs of the guardrail exceptions that
 // applied since the last heartbeat (grpc.TemplateMatchSource).
 var GuardrailExceptionHits = &templateMatches{}
+
+// edgeCapabilitySource serves one applied snapshot's capability list
+// (scripting.CapabilitySource), which counts in the checksum, so a
+// capability attested, lowered or reset on the hub marks the edge pending.
+type edgeCapabilitySource struct {
+	byApp map[uint]guardrails.Capability
+}
+
+// AppCapability implements scripting.CapabilitySource.
+func (s *edgeCapabilitySource) AppCapability(_ context.Context, appID uint) guardrails.Capability {
+	return s.byApp[appID]
+}
+
+// installGuardrailCapabilities registers the snapshot's capabilities, or
+// none (every app unattested). An unknown value is left out (acting).
+func installGuardrailCapabilities(cfgs []*pb.AppGuardrailCapabilityConfig) {
+	src := &edgeCapabilitySource{byApp: map[uint]guardrails.Capability{}}
+	for _, c := range cfgs {
+		if c == nil || c.AppId == 0 {
+			continue
+		}
+		capability, err := guardrails.ParseCapability(c.Capability)
+		if err != nil || capability == guardrails.CapabilityUnattested {
+			continue
+		}
+		src.byApp[uint(c.AppId)] = capability
+	}
+	if len(src.byApp) == 0 {
+		scripting.SetCapabilitySource(nil)
+		return
+	}
+	scripting.SetCapabilitySource(src)
+}

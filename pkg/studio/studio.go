@@ -412,6 +412,9 @@ func New(opts Options) (_ *Studio, err error) {
 	// Approved guardrail exceptions soften a filter's action for one app,
 	// detector and channel (features/GuardrailExceptions.md).
 	scripting.SetExceptionSource(service.GuardrailExceptionSource())
+	// ... and the app's capability, which the LLM second opinion's soften
+	// mode needs whether or not the app has exceptions.
+	scripting.SetCapabilitySource(service.GuardrailExceptionSource())
 	// Stored compliance events that name a guardrail alert raise it on the
 	// bus (guardrail.alert.<name>), for webhooks.
 	analytics.SetComplianceEventsStored(service.PublishGuardrailAlerts)

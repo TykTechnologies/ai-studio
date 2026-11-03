@@ -182,6 +182,7 @@ func (s *EdgeSyncService) SyncConfigurationReport(raw *pb.ConfigurationSnapshot)
 	installAgentTracingContent(config.AgentTracingContentPolicy, s.db)
 	installPromptTemplates(config.PromptTemplates)
 	installGuardrailExceptions(config.GuardrailExceptions)
+	installGuardrailCapabilities(config.GuardrailCapabilities)
 	for _, line := range skipped {
 		log.Error().Str("version", config.Version).Str("namespace", s.namespace).
 			Msg("Configuration entry not applied: " + line)

@@ -64,6 +64,21 @@ func snapshotGuardrailExceptions(db *gorm.DB, apps []models.App, now time.Time) 
 	return out
 }
 
+// snapshotGuardrailCapabilities returns the attested capability of each of
+// apps that has one, by app. Unattested apps are left out (an edge treats
+// them as acting).
+func snapshotGuardrailCapabilities(apps []models.App) []*pb.AppGuardrailCapabilityConfig {
+	var out []*pb.AppGuardrailCapabilityConfig
+	for _, a := range apps {
+		c, err := guardrails.ParseCapability(a.GuardrailCapability)
+		if err != nil || c == guardrails.CapabilityUnattested {
+			continue
+		}
+		out = append(out, &pb.AppGuardrailCapabilityConfig{AppId: uint32(a.ID), Capability: string(c)})
+	}
+	return out
+}
+
 // edgeExceptionHitFlushEvery bounds how often one exception's edge hits are
 // written on this replica.
 const edgeExceptionHitFlushEvery = time.Minute

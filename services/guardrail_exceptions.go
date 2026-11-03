@@ -635,6 +635,14 @@ type GuardrailExceptionSource struct {
 
 	mu    sync.Mutex
 	cache map[uint]guardrailExceptionEntry
+	// capabilities caches each app's attested capability alone, for what
+	// needs it without exceptions (scripting.SetCapabilitySource).
+	capabilities map[uint]guardrailCapabilityEntry
+}
+
+type guardrailCapabilityEntry struct {
+	at         time.Time
+	capability guardrails.Capability
 }
 
 type guardrailExceptionEntry struct {
@@ -645,7 +653,7 @@ type guardrailExceptionEntry struct {
 // GuardrailExceptionSource returns the service's exception source.
 func (s *Service) GuardrailExceptionSource() *GuardrailExceptionSource {
 	s.guardrailExceptionSourceOnce.Do(func() {
-		s.guardrailExceptionSource = &GuardrailExceptionSource{svc: s, cache: map[uint]guardrailExceptionEntry{}}
+		s.guardrailExceptionSource = &GuardrailExceptionSource{svc: s, cache: map[uint]guardrailExceptionEntry{}, capabilities: map[uint]guardrailCapabilityEntry{}}
 	})
 	return s.guardrailExceptionSource
 }
@@ -697,7 +705,35 @@ func (p *GuardrailExceptionSource) Hit(id uint) {
 func (p *GuardrailExceptionSource) forget(appID uint) {
 	p.mu.Lock()
 	delete(p.cache, appID)
+	delete(p.capabilities, appID)
 	p.mu.Unlock()
+}
+
+// AppCapability implements scripting.CapabilitySource: the app's attested
+// capability, whether or not it has exceptions, cached like its exceptions
+// and dropped with them. "" when it cannot be read (acting).
+func (p *GuardrailExceptionSource) AppCapability(_ context.Context, appID uint) guardrails.Capability {
+	if appID == 0 {
+		return guardrails.CapabilityUnattested
+	}
+	p.mu.Lock()
+	e, ok := p.capabilities[appID]
+	p.mu.Unlock()
+	if ok && time.Since(e.at) < guardrailExceptionTTL {
+		return e.capability
+	}
+	var app models.App
+	if err := p.svc.DB.Select("id", "guardrail_capability").First(&app, appID).Error; err != nil {
+		return guardrails.CapabilityUnattested
+	}
+	c, err := guardrails.ParseCapability(app.GuardrailCapability)
+	if err != nil {
+		c = guardrails.CapabilityUnattested
+	}
+	p.mu.Lock()
+	p.capabilities[appID] = guardrailCapabilityEntry{at: time.Now(), capability: c}
+	p.mu.Unlock()
+	return c
 }
 
 // guardrailExceptionSweepEvery is how often the leader replica lapses the
