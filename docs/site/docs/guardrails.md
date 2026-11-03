@@ -272,16 +272,14 @@ What an exception may soften to also depends on the channel: text and tool resul
 
 #### From a flagged event to a softened verdict
 
-<!-- PLACEHOLDER (midsommar-clean-9u1j.7): the dialog steps below follow the design; check labels and steps against the Soften dialog when .7 lands. -->
-
-1. In **Compliance → Filter Events**, expand the guardrail event that flagged legitimate traffic and choose **Not a threat? Soften for this app**. The dialog is filled in from the event: the filter, the detector, the app and the channel (the app's own messages, a tool result from a named tool, and so on).
-2. If the app's capability is not attested yet, attest it (the suggestion is pre-selected).
-3. Choose what happens instead of the filter's action. Only actions the floor allows are offered, the softest first. **Log and raise event** asks for an event name, so the team gets a webhook whenever the exception lets something through.
-4. Give a one-line justification, and keep or change the expiry (30 days without a hit by default).
+1. In **Compliance → Filter Events**, expand the guardrail event that flagged legitimate traffic and choose **Not a threat? Soften for this app**. The dialog names what it covers, taken from the event: the filter, the detector, the place (the app's own messages, a tool result and its tool, and so on) and the app. The filter still detects it, and every hit is recorded.
+2. If the app's capability is not attested yet, a full administrator answers **What can this app do?** in the dialog (AI Studio's suggestion and its reasons are shown). Anyone else sees that the app is treated as acting until a full administrator attests it on the app page.
+3. **Instead of blocking** offers only the actions the app's capability allows there, the softest first; if the floor allows none, the dialog says the app cannot be softened here. **Log and raise event** asks for an **Event name**: webhooks subscribe to `guardrail.alert.<name>` to hear whenever the exception lets something through.
+4. Keep or change **Expires after (days)** (30 days since it last applied, by default), give a one-line **Justification**, and choose **Soften** (a full administrator) or **Propose** (anyone else who may edit the app).
 
 A full administrator's own exception applies at once (recorded as both proposer and approver). Anyone else who may edit the app proposes it; full administrators are notified and approve it from the app page, which shows the exceptions with their status, hit count and last hit. An app has at most 20 approved exceptions, and one exception per filter, detector, channel and tool.
 
-<!-- PLACEHOLDER (midsommar-clean-9u1j.7): the portal's "Report false positive" for App owners (creates a proposed exception) goes here when .7 lands. -->
+**From the portal.** An app's owners see the requests of their app that a guardrail shared with them (`evidence.share_with_app_owners`) blocked, quarantined or changed. For a block they believe is wrong they choose **Report false positive** and say why: this proposes an exception for that filter, detector, place and tool, softened to the softest action the app's capability allows. Nothing changes until a full administrator approves it; owners cannot approve.
 
 Every hit still records the compliance event. The detector's event carries `exceptions: [id]`, its description says "softened by exception #id", and each flagged segment records `exception: {id, from, to}`.
 
