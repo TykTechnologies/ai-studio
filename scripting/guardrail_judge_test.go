@@ -65,6 +65,14 @@ func TestJudgePrompt_DatamarksTheSpanAndStatesTheFacts(t *testing.T) {
 			t.Errorf("system prompt does not list %q", v)
 		}
 	}
+	// guardrail-judge/2: newer models add keys or explain themselves unless told
+	// not to, and the parser (rightly) takes that for no opinion.
+	if !strings.Contains(sys, `Use only the keys "verdict" and "reason". Do not explain your answer`) {
+		t.Errorf("system prompt does not hold the judge to the closed answer shape:\n%s", sys)
+	}
+	if JudgePromptVersion != "guardrail-judge/2" {
+		t.Errorf("JudgePromptVersion = %q; a prompt change needs a new version (it keys cached opinions)", JudgePromptVersion)
+	}
 }
 
 // Flagged text cannot fake the marker or the boundary, and control

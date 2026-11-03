@@ -213,6 +213,7 @@ This changes what plugins and filter scripts see for Bedrock traffic. Read the [
 - **The filter script editor crashed** if a chat page had been opened earlier in the same browser session.
 - **Built-in filter templates:** pattern matching is case-insensitive, and the LLM Check template blocks when its check fails.
 - **A response filter let responses through when its `tyk.llm` call failed.** Scripts can now handle this with `return_errors`.
+- **The LLM judge gave no opinion on about a third of flags with Claude Sonnet 5.5**, which added keys to its answer or wrote a sentence as the reason. The judge prompt (now `guardrail-judge/2`) tells it to answer in the fixed form only; in our tests unreadable answers fell from 34% to 4%, with no attack judged benign.
 - **The filter form's help text** now says correctly what each kind of filter does on tools, and that Redact only logs on a response filter.
 
 ### Gateway
