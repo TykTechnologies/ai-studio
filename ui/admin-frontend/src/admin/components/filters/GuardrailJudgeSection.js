@@ -235,7 +235,9 @@ const GuardrailJudgeSection = ({ value, onChange, shadow = false, error = "", fi
               <Grid item xs={12}>
                 <Alert severity="info">
                   The judge reads the flagged text, which may be written by an attacker. It is told to treat it as data,
-                  only answers in a fixed form, and its calls are charged to the judge LLM, never to the app.
+                  only answers in a fixed form, and its calls are charged to the judge LLM, never to the app. It is
+                  only asked about prompt-injection findings: segments with secrets, personal data, moderation or other
+                  policy findings are never sent to it, and Studio chat is not judged.
                 </Alert>
               </Grid>
               <Grid item xs={12} md={4}>

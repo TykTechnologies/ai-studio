@@ -356,7 +356,8 @@ const FilterForm = () => {
                   onChange={handleConfigChange}
                   responseFilter={!!filter.response_filter}
                   errors={errors}
-                  filterName={id ? filter.name : ""}
+                  filterName={filter.name}
+                  savedFilterName={id ? filter.name : ""}
                 />
               </Grid>
             ) : (

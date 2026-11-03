@@ -55,6 +55,10 @@ type SimpleEdgeClient struct {
 	// matched since the last heartbeat (services.PromptTemplateMatches);
 	// guarded by configMu.
 	templateMatches TemplateMatchSource
+	// exceptionHits, when set, holds the guardrail exceptions that applied
+	// since the last heartbeat (services.GuardrailExceptionHits); guarded
+	// by configMu.
+	exceptionHits TemplateMatchSource
 
 	// Build information
 	version   string
@@ -290,6 +294,15 @@ func (c *SimpleEdgeClient) SetTemplateMatchSource(source TemplateMatchSource) {
 	c.configMu.Lock()
 	defer c.configMu.Unlock()
 	c.templateMatches = source
+}
+
+// SetExceptionHitSource makes heartbeats report the guardrail exceptions
+// that applied since the last one, so the hub's expiry and hit counts
+// include edge traffic.
+func (c *SimpleEdgeClient) SetExceptionHitSource(source TemplateMatchSource) {
+	c.configMu.Lock()
+	defer c.configMu.Unlock()
+	c.exceptionHits = source
 }
 
 // loadedConfig returns the checksum and version of the loaded snapshot.
@@ -1019,16 +1032,24 @@ func (c *SimpleEdgeClient) sendHeartbeatMessage() {
 	}
 	c.configMu.RLock()
 	matches := c.templateMatches
+	hits := c.exceptionHits
 	c.configMu.RUnlock()
-	var matched []uint32
+	var matched, hit []uint32
 	if matches != nil {
 		matched = matches.DrainMatched()
 		heartbeat.GetHeartbeat().MatchedPromptTemplateIds = matched
+	}
+	if hits != nil {
+		hit = hits.DrainMatched()
+		heartbeat.GetHeartbeat().HitGuardrailExceptionIds = hit
 	}
 
 	if err := c.send(heartbeat); err != nil {
 		if len(matched) > 0 {
 			matches.Requeue(matched)
+		}
+		if len(hit) > 0 {
+			hits.Requeue(hit)
 		}
 		log.Error().Err(err).Msg("Failed to send heartbeat")
 	} else {

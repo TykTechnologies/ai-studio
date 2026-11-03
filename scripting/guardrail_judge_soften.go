@@ -24,23 +24,11 @@ type judgeSoftening struct {
 	from, to        string
 }
 
-// appCapabilityOf is the request's app's attested guardrail capability, from
-// the exception source; unattested (treated as acting) when unknown.
+// appCapabilityOf is the request's app's attested guardrail capability,
+// from the capability source, whether or not the app has exceptions;
+// unattested (treated as acting) when unknown (midsommar-clean-9u1j.58).
 func appCapabilityOf(input *ScriptInput) guardrails.Capability {
-	src := currentExceptionSource()
-	appID := appIDOf(input)
-	if src == nil || appID == 0 {
-		return guardrails.CapabilityUnattested
-	}
-	ctx := input.Ctx
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	all := src.AppExceptions(ctx, appID)
-	if all == nil {
-		return guardrails.CapabilityUnattested
-	}
-	return all.Capability
+	return AppCapabilityFor(input)
 }
 
 // softestAllowed is the softest action the capability's floor allows on the

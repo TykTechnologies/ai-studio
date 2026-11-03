@@ -69,7 +69,7 @@ func TestGuardrailExceptionHandlers(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &list))
 	require.Len(t, list.Data, 1)
 	assert.Equal(t, 20, list.Meta.MaxApproved)
-	assert.Equal(t, []string{"log"}, list.Meta.Actions["tool_call"])
+	assert.Equal(t, []string{"log", "alert"}, list.Meta.Actions["tool_call"])
 	assert.Equal(t, "", list.Meta.Floors["acting"]["tool_result"])
 
 	item := fmt.Sprintf("%s/%d", base, created.ID)

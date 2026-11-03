@@ -163,6 +163,8 @@ func (p *exceptionPlan) match(f guardrails.Finding, seg guardrails.Segment, ch g
 type exceptionApplied struct {
 	id       uint
 	from, to string
+	// alert is the exception's event when it softened to alert.
+	alert string
 }
 
 // exceptionIgnored is an exception that matched a finding but is outside
@@ -197,7 +199,7 @@ func (p *exceptionPlan) soften(o *outcome, a string, f guardrails.Finding, si in
 		if o.softened[si] == nil {
 			o.softened[si] = map[string]exceptionApplied{}
 		}
-		o.softened[si][f.Detector] = exceptionApplied{id: e.ID, from: a, to: to}
+		o.softened[si][f.Detector] = exceptionApplied{id: e.ID, from: a, to: to, alert: e.AlertEvent}
 	}
 	return to
 }
@@ -268,4 +270,48 @@ func exceptionIgnoredEvents(filterName string, filterID uint, cfg guardrails.Con
 		})
 	}
 	return out
+}
+
+// CapabilitySource serves an app's attested guardrail capability,
+// independently of whether it has exceptions: the LLM second opinion's
+// soften mode needs the floor of apps that have none. Studio serves it from
+// the database (services.GuardrailExceptionSource), edges from the
+// snapshot's checksummed capability list.
+type CapabilitySource interface {
+	// AppCapability returns the app's attested capability; "" when it has
+	// none or it cannot be read (treated as acting).
+	AppCapability(ctx context.Context, appID uint) guardrails.Capability
+}
+
+type capabilitySourceHolder struct{ src CapabilitySource }
+
+var capabilitySource atomic.Pointer[capabilitySourceHolder]
+
+// SetCapabilitySource sets where the guardrails read an app's capability;
+// nil leaves every app unattested.
+func SetCapabilitySource(src CapabilitySource) {
+	if src == nil {
+		capabilitySource.Store(nil)
+		return
+	}
+	capabilitySource.Store(&capabilitySourceHolder{src: src})
+}
+
+// AppCapabilityFor is the attested capability of the request's app; ""
+// (acting, by Capability.Effective) when the request has no app, there is
+// no source, or the app is unattested.
+func AppCapabilityFor(input *ScriptInput) guardrails.Capability {
+	h := capabilitySource.Load()
+	if h == nil || input == nil {
+		return guardrails.CapabilityUnattested
+	}
+	appID := appIDOf(input)
+	if appID == 0 {
+		return guardrails.CapabilityUnattested
+	}
+	ctx := input.Ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return h.src.AppCapability(ctx, appID)
 }

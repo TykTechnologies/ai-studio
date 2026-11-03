@@ -15,6 +15,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/replicas"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -53,6 +54,7 @@ type GuardrailExceptionSpec struct {
 	Channel          *string
 	ToolName         *string
 	Action           *string
+	AlertEvent       *string
 	Justification    *string
 	ExpiresAfterDays *int
 	SourceEvent      *uint
@@ -332,6 +334,13 @@ func applyGuardrailExceptionSpec(e *models.GuardrailException, spec GuardrailExc
 	}
 	if spec.Action != nil {
 		e.Action = strings.TrimSpace(*spec.Action)
+		if e.Action != guardrails.ActionAlert && spec.AlertEvent == nil {
+			// Leaving alert drops its event name.
+			e.AlertEvent = ""
+		}
+	}
+	if spec.AlertEvent != nil {
+		e.AlertEvent = strings.TrimSpace(*spec.AlertEvent)
 	}
 	if spec.Justification != nil {
 		e.Justification = strings.TrimSpace(*spec.Justification)
@@ -393,6 +402,16 @@ func (s *Service) validateGuardrailException(db *gorm.DB, app *models.App, e *mo
 	}
 	if err := guardrails.CheckException(guardrails.Capability(app.GuardrailCapability), ch, e.Action); err != nil {
 		return invalidGuardrailException("%v", err)
+	}
+	switch {
+	case e.Action == guardrails.ActionAlert && !guardrails.ValidAlertEvent(e.AlertEvent):
+		return invalidGuardrailException("the alert action needs alert_event: 2-64 lowercase letters, digits, '-' or '_', starting with a letter or digit (webhooks subscribe to guardrail.alert.<alert_event>)")
+	case e.Action != guardrails.ActionAlert && e.AlertEvent != "":
+		return invalidGuardrailException("alert_event applies to the alert action only")
+	case e.AlertEvent != "":
+		if err := checkAlertEventsFree(db, []string{e.AlertEvent}, 0, e.ID); err != nil {
+			return invalidGuardrailException("%v", err)
+		}
 	}
 	return nil
 }
@@ -616,6 +635,14 @@ type GuardrailExceptionSource struct {
 
 	mu    sync.Mutex
 	cache map[uint]guardrailExceptionEntry
+	// capabilities caches each app's attested capability alone, for what
+	// needs it without exceptions (scripting.SetCapabilitySource).
+	capabilities map[uint]guardrailCapabilityEntry
+}
+
+type guardrailCapabilityEntry struct {
+	at         time.Time
+	capability guardrails.Capability
 }
 
 type guardrailExceptionEntry struct {
@@ -626,7 +653,7 @@ type guardrailExceptionEntry struct {
 // GuardrailExceptionSource returns the service's exception source.
 func (s *Service) GuardrailExceptionSource() *GuardrailExceptionSource {
 	s.guardrailExceptionSourceOnce.Do(func() {
-		s.guardrailExceptionSource = &GuardrailExceptionSource{svc: s, cache: map[uint]guardrailExceptionEntry{}}
+		s.guardrailExceptionSource = &GuardrailExceptionSource{svc: s, cache: map[uint]guardrailExceptionEntry{}, capabilities: map[uint]guardrailCapabilityEntry{}}
 	})
 	return s.guardrailExceptionSource
 }
@@ -666,6 +693,7 @@ func RuntimeGuardrailException(r models.GuardrailException) guardrails.Exception
 	return guardrails.Exception{
 		ID: r.ID, FilterID: r.FilterID, Detector: r.Detector,
 		Channel: guardrails.Channel(r.Channel), ToolName: r.ToolName, Action: r.Action,
+		AlertEvent: r.AlertEvent,
 	}
 }
 
@@ -677,5 +705,98 @@ func (p *GuardrailExceptionSource) Hit(id uint) {
 func (p *GuardrailExceptionSource) forget(appID uint) {
 	p.mu.Lock()
 	delete(p.cache, appID)
+	delete(p.capabilities, appID)
 	p.mu.Unlock()
+}
+
+// AppCapability implements scripting.CapabilitySource: the app's attested
+// capability, whether or not it has exceptions, cached like its exceptions
+// and dropped with them. "" when it cannot be read (acting).
+func (p *GuardrailExceptionSource) AppCapability(_ context.Context, appID uint) guardrails.Capability {
+	if appID == 0 {
+		return guardrails.CapabilityUnattested
+	}
+	p.mu.Lock()
+	e, ok := p.capabilities[appID]
+	p.mu.Unlock()
+	if ok && time.Since(e.at) < guardrailExceptionTTL {
+		return e.capability
+	}
+	var app models.App
+	if err := p.svc.DB.Select("id", "guardrail_capability").First(&app, appID).Error; err != nil {
+		return guardrails.CapabilityUnattested
+	}
+	c, err := guardrails.ParseCapability(app.GuardrailCapability)
+	if err != nil {
+		c = guardrails.CapabilityUnattested
+	}
+	p.mu.Lock()
+	p.capabilities[appID] = guardrailCapabilityEntry{at: time.Now(), capability: c}
+	p.mu.Unlock()
+	return c
+}
+
+// guardrailExceptionSweepEvery is how often the leader replica lapses the
+// approved exceptions past their expiry; the first sweep runs after
+// guardrailExceptionSweepDelay.
+var (
+	guardrailExceptionSweepEvery = time.Hour
+	guardrailExceptionSweepDelay = time.Minute
+)
+
+// SweepLapsedGuardrailExceptions returns every approved exception past its
+// expiry (expires_after_days without a hit) to proposed and announces the
+// change for each app, so edges become pending and drop it at the next
+// push. ApprovedGuardrailExceptions lapses an app's exceptions when the hub
+// serves its traffic; this covers apps whose traffic goes through edges
+// only, which never ask the hub. It reports how many it lapsed.
+func (s *Service) SweepLapsedGuardrailExceptions(now time.Time) (int, error) {
+	var rows []models.GuardrailException
+	if err := s.DB.Where("status = ?", models.GuardrailExceptionApproved).Find(&rows).Error; err != nil {
+		return 0, err
+	}
+	apps := map[uint]bool{}
+	lapsed := 0
+	for i := range rows {
+		e := &rows[i]
+		if !e.Lapsed(now) {
+			continue
+		}
+		changed, err := models.LapseGuardrailException(s.DB, e.ID)
+		if err != nil {
+			slog.Warn("could not lapse an expired guardrail exception", "app_id", e.AppID, "exception_id", e.ID, "error", err)
+			continue
+		}
+		if changed {
+			lapsed++
+			apps[e.AppID] = true
+		}
+	}
+	for appID := range apps {
+		s.guardrailExceptionsChanged(appID)
+	}
+	return lapsed, nil
+}
+
+// RunGuardrailExceptionSweeper sweeps lapsed exceptions until ctx ends, on
+// the leader replica only (replicas.IsLeader; the sweep is idempotent, so a
+// change of leader between sweeps is harmless).
+func (s *Service) RunGuardrailExceptionSweeper(ctx context.Context) {
+	timer := time.NewTimer(guardrailExceptionSweepDelay)
+	defer timer.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-timer.C:
+		}
+		if replicas.IsLeader() {
+			if n, err := s.SweepLapsedGuardrailExceptions(time.Now()); err != nil {
+				slog.Warn("guardrail exception sweep failed", "error", err)
+			} else if n > 0 {
+				slog.Info("lapsed guardrail exceptions past their expiry", "count", n)
+			}
+		}
+		timer.Reset(guardrailExceptionSweepEvery)
+	}
 }

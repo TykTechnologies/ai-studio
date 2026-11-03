@@ -411,7 +411,8 @@ func unscannedHeldCalls(llm *models.LLM, calls []*heldCall, reason string, r *ht
 		if err != nil {
 			continue
 		}
-		action := cfg.ActionFor(guardrails.KindToolCall)
+		// Alert is log for the traffic; unscanned calls raise no alert.
+		action := guardrails.LogIfAlert(cfg.ActionFor(guardrails.KindToolCall))
 		scripting.RecordComplianceEvents(r.Context(), &scripting.ScriptOutput{ComplianceEvents: []scripting.ComplianceEventOutput{{
 			EventType:   "guardrail.unscanned",
 			Severity:    map[bool]string{true: "critical", false: "warning"}[action == guardrails.ActionBlock],

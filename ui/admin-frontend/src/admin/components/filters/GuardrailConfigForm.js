@@ -13,13 +13,16 @@ import {
   FormHelperText,
   Grid,
   InputLabel,
+  Link,
   MenuItem,
   Select,
   TextField,
   Typography,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import { Link as RouterLink } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
+import { useEditionOptional } from "../../context/EditionContext";
 import AllowInternalHostSwitch from "../common/AllowInternalHostSwitch";
 import GuardrailJudgeSection from "./GuardrailJudgeSection";
 
@@ -72,11 +75,76 @@ const ACTIONS = [
     label: "Log only",
     help: "Let it through and record a compliance event.",
     responseHelp: "Let it through and record a compliance event.",
+  },  {
+    // Log for the traffic; the compliance event also names an alert event,
+    // which AI Studio raises as guardrail.alert.<event> for webhooks.
+    value: "alert",
+    label: "Log and raise event",
+    help: "Let it through, record a compliance event, and raise a named event that webhooks can subscribe to.",
+    responseHelp: "Let it through, record a compliance event, and raise a named event that webhooks can subscribe to.",
   },
 ];
 
+// Alert event names: unique across filters and exceptions, used in the topic
+// guardrail.alert.<event> (guardrails.ValidAlertEvent).
+export const ALERT_EVENT_PATTERN = /^[a-z0-9][a-z0-9_-]{1,63}$/;
+
+// alertEventFrom suggests an event name from a filter name: lowercase, runs
+// of anything else turned into '-', at most 64 characters.
+export const alertEventFrom = (name, suffix = "") => {
+  const base = String(name || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^[-_]+|[-_]+$/g, "");
+  const full = (base || "guardrail") + (suffix ? `-${suffix}` : "");
+  return full.slice(0, 64).replace(/[-_]+$/g, "");
+};
+
+const alertEventError = (alert) => {
+  const name = (alert && alert.event) || "";
+  if (!name) return "An event name is required";
+  if (!ALERT_EVENT_PATTERN.test(name)) return "2-64 lowercase letters, digits, '-' or '_', starting with a letter or digit";
+  return "";
+};
+
+// webhookLinkFor opens the webhook target editor with the alert's topic.
+export const webhookLinkFor = (name) => `/admin/webhooks?topic=${encodeURIComponent(`guardrail.alert.${name}`)}`;
+
+// AlertEventField edits the event an alert action raises. Webhooks are
+// Enterprise: in Community Edition the action logs and the field says so.
+const AlertEventField = ({ alert, onChange, testId, label = "Event name" }) => {
+  const edition = useEditionOptional();
+  const name = (alert && alert.event) || "";
+  const error = alertEventError(alert);
+  return (
+    <Box sx={{ mt: 1 }}>
+      <TextField
+        fullWidth
+        size="small"
+        label={label}
+        value={name}
+        onChange={(e) => onChange({ ...(alert || {}), event: e.target.value.trim() })}
+        error={!!error}
+        helperText={error || `Webhooks subscribe to guardrail.alert.${name || "<name>"}`}
+        inputProps={{ maxLength: 64, "data-testid": testId }}
+      />
+      {edition && !edition.isEnterprise && (
+        <FormHelperText data-testid={`${testId}-ce`}>
+          Raising events to webhooks needs Enterprise Edition; here the action logs.
+        </FormHelperText>
+      )}
+      {edition && edition.isEnterprise && name && !error && (
+        <Link component={RouterLink} to={webhookLinkFor(name)} variant="body2" data-testid={`${testId}-webhook`}>
+          Create a webhook for this event
+        </Link>
+      )}
+    </Box>
+  );
+};
+
 // What each action does to a flagged tool result.
 const TOOL_ACTION_HELP = {
+  alert: "The tool result goes through unchanged, a compliance event is recorded and a named event is raised for webhooks.",
   quarantine: "The whole tool result is replaced with the placeholder and the request continues. Its tool call id is kept.",
   block:
     "The request is blocked. The client resends the tool result on its next turn and is blocked again, so the agent stops.",
@@ -112,7 +180,7 @@ export const scansToolCalls = (config) => !!(config.tool_calls && config.tool_ca
 export const effectiveToolCallAction = (config) => {
   const override = config.tool_calls && config.tool_calls.on_detect;
   if (override) return override;
-  return config.on_detect === "block" ? "block" : "log";
+  return config.on_detect === "block" || config.on_detect === "alert" ? config.on_detect : "log";
 };
 
 // Tool definitions are scanned only when tool_definitions.scan is true.
@@ -123,16 +191,19 @@ export const scansToolDefinitions = (config) => !!(config.tool_definitions && co
 export const effectiveToolDefinitionAction = (config) => {
   const override = config.tool_definitions && config.tool_definitions.on_detect;
   if (override) return override;
+  if (config.on_detect === "alert") return "alert";
   return config.on_detect === "block" || config.on_detect === "quarantine" ? "remove" : "log";
 };
 
 // Shadow (don't wait) is allowed only when every action the filter can take
 // is log (guardrails.Config shadowAllowed).
+// Alert is log for the traffic, so a shadow filter may alert.
+const logLike = (a) => a === "log" || a === "alert";
 export const shadowAllowed = (config) =>
-  config.on_detect === "log" &&
-  effectiveToolAction(config) === "log" &&
-  effectiveToolCallAction(config) === "log" &&
-  effectiveToolDefinitionAction(config) === "log";
+  logLike(config.on_detect) &&
+  logLike(effectiveToolAction(config)) &&
+  logLike(effectiveToolCallAction(config)) &&
+  logLike(effectiveToolDefinitionAction(config));
 
 export const DEFAULT_QUARANTINE_PLACEHOLDER = "[content removed by policy: {{detector}} detected in {{source}}]";
 
@@ -233,7 +304,10 @@ const connectionFieldHelp = (f) => {
   return f.description;
 };
 
-const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors = {}, filterName = "" }) => {
+// filterName pre-fills alert event names; savedFilterName is the saved
+// filter's name ("" while it is being created), for the judge's agreement
+// view.
+const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors = {}, filterName = "", savedFilterName = "" }) => {
   const [providers, setProviders] = useState([]);
   const [loadError, setLoadError] = useState("");
   const [newDetector, setNewDetector] = useState("");
@@ -301,7 +375,23 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
   // a key left out takes the server default, and a stored filter without
   // tool_results scans tool results, so a cleared setting is removed rather
   // than written as its default.
-  const setToolResults = (patch) => {
+  // withAlert keeps an action's alert in step with it: choosing alert
+  // pre-fills an event name from the filter's name, leaving it drops it.
+  const withAlert = (current, patch, suffix) => {
+    if (!("on_detect" in patch)) return patch;
+    if (patch.on_detect === "alert") {
+      return { ...patch, alert: (current && current.alert) || { event: alertEventFrom(filterName, suffix) } };
+    }
+    return { ...patch, alert: undefined };
+  };
+
+  const setOnDetect = (onDetect) => {
+    const next = withAlert(config, { on_detect: onDetect }, "");
+    update(next);
+  };
+
+  const setToolResults = (rawPatch) => {
+    const patch = withAlert(config.tool_results, rawPatch, "tool-results");
     const next = withoutEmpty({ ...(config.tool_results || {}), ...patch });
     if (next.scan === true) delete next.scan;
     update({ tool_results: Object.keys(next).length ? next : undefined });
@@ -309,7 +399,8 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
 
   // tool_calls carries only what the admin set; scanning is off unless
   // scan is true, so an unchecked box removes the key.
-  const setToolCalls = (patch) => {
+  const setToolCalls = (rawPatch) => {
+    const patch = withAlert(config.tool_calls, rawPatch, "tool-calls");
     const next = withoutEmpty({ ...(config.tool_calls || {}), ...patch });
     if (next.scan === false) delete next.scan;
     if (next.include_system === false) delete next.include_system;
@@ -323,7 +414,8 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
     update({ evidence: Object.keys(next).length ? next : undefined });
   };
 
-  const setToolDefinitions = (patch) => {
+  const setToolDefinitions = (rawPatch) => {
+    const patch = withAlert(config.tool_definitions, rawPatch, "tool-definitions");
     const next = withoutEmpty({ ...(config.tool_definitions || {}), ...patch });
     if (next.scan === false) delete next.scan;
     update({ tool_definitions: Object.keys(next).length ? next : undefined });
@@ -397,7 +489,7 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
               labelId="guardrail-action-label"
               label="On detection"
               value={config.on_detect}
-              onChange={(e) => update({ on_detect: e.target.value })}
+              onChange={(e) => setOnDetect(e.target.value)}
               inputProps={{ "data-testid": "guardrail-action" }}
             >
               {actionsFor(responseFilter).map((a) => (
@@ -409,6 +501,13 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
             </Select>
             <FormHelperText>{responseFilter ? selectedAction.responseHelp : selectedAction.help}</FormHelperText>
           </FormControl>
+          {config.on_detect === "alert" && (
+            <AlertEventField
+              alert={config.alert}
+              onChange={(alert) => update({ alert })}
+              testId="guardrail-alert-event"
+            />
+          )}
           {config.on_detect === "redact" && responseFilter && (
             <Alert severity="warning" sx={{ mt: 1 }} data-testid="guardrail-response-redact-warning">
               Redact does not change responses. On a response filter, a detection is recorded as a compliance event and
@@ -683,6 +782,14 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
                   </Select>
                   <FormHelperText>{TOOL_ACTION_HELP[toolAction]}</FormHelperText>
                 </FormControl>
+                {toolOverride === "alert" && (
+                  <AlertEventField
+                    alert={config.tool_results && config.tool_results.alert}
+                    onChange={(alert) => setToolResults({ alert })}
+                    testId="guardrail-tool-alert-event"
+                    label="Event name for tool results"
+                  />
+                )}
               </Grid>
               {scanTools && remoteProvider && (
                 <Grid item xs={12}>
@@ -740,9 +847,18 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
                   <MenuItem value="">{`Default (${actionLabel(effectiveToolCallAction(config))})`}</MenuItem>
                   <MenuItem value="block">{actionLabel("block")}</MenuItem>
                   <MenuItem value="log">{actionLabel("log")}</MenuItem>
+                  <MenuItem value="alert">{actionLabel("alert")}</MenuItem>
                 </Select>
                 <FormHelperText>A tool call cannot be redacted or quarantined: it is blocked or logged.</FormHelperText>
               </FormControl>
+              {callOverride === "alert" && (
+                <AlertEventField
+                  alert={config.tool_calls && config.tool_calls.alert}
+                  onChange={(alert) => setToolCalls({ alert })}
+                  testId="guardrail-tool-call-alert-event"
+                  label="Event name for tool calls"
+                />
+              )}
             </Grid>
             <Grid item xs={12} md={4}>
               <FormControlLabel
@@ -809,10 +925,11 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
                     onChange={(e) => setToolDefinitions({ on_detect: e.target.value })}
                     inputProps={{ "data-testid": "guardrail-tool-definition-action" }}
                   >
-                    <MenuItem value="">{`Default (${effectiveToolDefinitionAction(config) === "remove" ? "Remove the tool" : actionLabel("log")})`}</MenuItem>
+                    <MenuItem value="">{`Default (${effectiveToolDefinitionAction(config) === "remove" ? "Remove the tool" : actionLabel(effectiveToolDefinitionAction(config))})`}</MenuItem>
                     <MenuItem value="remove">Remove the tool</MenuItem>
                     <MenuItem value="block">{actionLabel("block")}</MenuItem>
                     <MenuItem value="log">{actionLabel("log")}</MenuItem>
+                    <MenuItem value="alert">{actionLabel("alert")}</MenuItem>
                   </Select>
                   <FormHelperText>
                     Remove drops the tool from the request and lets it go on (the request is blocked when that would
@@ -820,6 +937,14 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
                     tools are screened when their list is built.
                   </FormHelperText>
                 </FormControl>
+                {defOverride === "alert" && (
+                  <AlertEventField
+                    alert={config.tool_definitions && config.tool_definitions.alert}
+                    onChange={(alert) => setToolDefinitions({ alert })}
+                    testId="guardrail-tool-definition-alert-event"
+                    label="Event name for tool definitions"
+                  />
+                )}
               </Grid>
             </Grid>
           </Grid>
@@ -1043,7 +1168,7 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
             onChange={(judge) => update({ judge })}
             shadow={!!config.shadow}
             error={errors.judge}
-            filterName={filterName}
+            filterName={savedFilterName}
           />
         </Grid>
 

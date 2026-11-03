@@ -59,7 +59,7 @@ func (c Channel) IsTool() bool {
 // < block. An unknown action ranks 0.
 func ActionRank(a string) int {
 	switch a {
-	case ActionLog:
+	case ActionLog, ActionAlert:
 		return 1
 	case ActionRedact:
 		return 2
@@ -83,12 +83,13 @@ func Softer(a, b string) string {
 // what the runtime can do on that channel. Text and tool results can be
 // logged or have the flagged segment replaced (quarantine); a tool call can
 // only be logged; a tool definition logged or removed from the request.
+// Alert (log and raise an event) ranks as log wherever log is allowed.
 var exceptionActions = map[Channel][]string{
-	ChannelTextUser:       {ActionLog, ActionQuarantine},
-	ChannelTextSystem:     {ActionLog, ActionQuarantine},
-	ChannelToolResult:     {ActionLog, ActionQuarantine},
-	ChannelToolCall:       {ActionLog},
-	ChannelToolDefinition: {ActionLog, ActionRemove},
+	ChannelTextUser:       {ActionLog, ActionAlert, ActionQuarantine},
+	ChannelTextSystem:     {ActionLog, ActionAlert, ActionQuarantine},
+	ChannelToolResult:     {ActionLog, ActionAlert, ActionQuarantine},
+	ChannelToolCall:       {ActionLog, ActionAlert},
+	ChannelToolDefinition: {ActionLog, ActionAlert, ActionRemove},
 }
 
 // ExceptionActions lists the actions an exception on the channel may soften
@@ -188,6 +189,8 @@ type Exception struct {
 	ToolName string
 	// Action is what it softens to.
 	Action string
+	// AlertEvent names the event raised when Action is alert.
+	AlertEvent string
 }
 
 // AppExceptions are an app's approved exceptions and its guardrail

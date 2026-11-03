@@ -21,10 +21,14 @@ func softenFilter(t *testing.T, onDetect string, timeoutMs int, extra map[string
 	return judgeFilter(t, onDetect, cfg)
 }
 
-// withCapability serves app 9's attested capability (and no exceptions).
+// withCapability serves app 9's attested capability through the capability
+// source, with no exceptions at all (midsommar-clean-9u1j.58).
 func withCapability(t *testing.T, c guardrails.Capability) {
 	t.Helper()
-	withExceptions(t, &fakeExceptions{byApp: map[uint]*AppExceptions{9: {Capability: c}}})
+	withExceptions(t, nil)
+	prev := capabilitySource.Load()
+	SetCapabilitySource(fakeCapabilities{9: c})
+	t.Cleanup(func() { capabilitySource.Store(prev) })
 }
 
 func secretsEvent(t *testing.T, out *ScriptOutput) ComplianceEventOutput {
@@ -314,5 +318,29 @@ func TestJudgeSoften_ModerationNeverJudged(t *testing.T) {
 	events := judgeEvents(sink.wait(t, 1, 5*time.Second))
 	if len(events) != 1 || judgeMeta(t, events[0])["error"] != judgeErrCategory || stub.calls.Load() != 0 {
 		t.Errorf("events %+v calls %d", events, stub.calls.Load())
+	}
+}
+
+// .58: an attested app with no exceptions softens to its floor; once its
+// attestation is reset it is acting again, and its own text can then only
+// be quarantined.
+func TestJudgeSoften_CapabilityWithoutExceptions(t *testing.T) {
+	installStubJudge(t, answering(`{"verdict":"benign","reason":"code_or_data"}`))
+	run := func() string {
+		t.Helper()
+		out, err := NewFilterRunner(softenFilter(t, guardrails.ActionBlock, 2000, nil)).RunScript(judgeInput(newEventSink(), judgeBody), newJudgeSvc())
+		if err != nil {
+			t.Fatal(err)
+		}
+		a, _ := secretsEvent(t, out).Metadata["action"].(string)
+		return a
+	}
+	withCapability(t, guardrails.CapabilityReadOnly)
+	if a := run(); a != guardrails.ActionLog {
+		t.Errorf("read_only, no exceptions: action %q, want log", a)
+	}
+	withCapability(t, guardrails.CapabilityUnattested)
+	if a := run(); a != guardrails.ActionQuarantine {
+		t.Errorf("after a reset: action %q, want quarantine (the acting floor)", a)
 	}
 }

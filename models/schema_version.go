@@ -111,7 +111,9 @@ const (
 	//     resource change (midsommar-clean-9u1j.2).
 	// 33: guardrail_exceptions (new table, additive): per-app guardrail
 	//     verdict exceptions (midsommar-clean-9u1j.3).
-	SchemaVersion          = 33
+	// 34: guardrail_exceptions.alert_event (defaulted '', additive): the
+	//     event an exception's alert action raises (midsommar-clean-9u1j.8).
+	SchemaVersion          = 34
 	MinReaderSchemaVersion = 26
 )
 

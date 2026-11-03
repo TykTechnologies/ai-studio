@@ -249,3 +249,22 @@ func TestChannelOf(t *testing.T) {
 		assert.Equal(t, c.want, channelOf(c.seg, c.response), fmt.Sprint(i, " ", strings.TrimSpace(fmt.Sprint(c.seg))))
 	}
 }
+
+type fakeCapabilities map[uint]guardrails.Capability
+
+func (f fakeCapabilities) AppCapability(_ context.Context, appID uint) guardrails.Capability {
+	return f[appID]
+}
+
+func TestAppCapabilityFor(t *testing.T) {
+	prev := capabilitySource.Load()
+	t.Cleanup(func() { capabilitySource.Store(prev) })
+
+	SetCapabilitySource(nil)
+	assert.Equal(t, guardrails.CapabilityUnattested, AppCapabilityFor(openAIRequest(t, 1, chatMsg{Role: "user", Content: "x"})))
+
+	SetCapabilitySource(fakeCapabilities{1: guardrails.CapabilityReadOnly})
+	assert.Equal(t, guardrails.CapabilityReadOnly, AppCapabilityFor(openAIRequest(t, 1, chatMsg{Role: "user", Content: "x"})))
+	assert.Equal(t, guardrails.CapabilityUnattested, AppCapabilityFor(openAIRequest(t, 2, chatMsg{Role: "user", Content: "x"})))
+	assert.Equal(t, guardrails.CapabilityUnattested, AppCapabilityFor(openAIRequest(t, 0, chatMsg{Role: "user", Content: "x"})), "Studio chat has no app")
+}
