@@ -133,6 +133,23 @@ The **App Details View** provides a comprehensive overview of a specific app, in
 
 ---
 
+### **Guardrails**
+The **Guardrails** section shows the app's guardrail capability, its [guardrail exceptions](./guardrails.md#exceptions-softening-a-verdict-for-one-app) and its trusted prompt templates.
+
+- **Capability**: a chip with what a full administrator attested the app can do with what its model produces. It bounds how far an exception may soften a guardrail verdict for the app.
+  - **Not attested (treated as acting)**: the default for every app; treated as the strictest.
+  - **Read-only**: only reads model output; no tools, datasources or MCP servers act for it.
+  - **Reads with tools**: its tools only read (GET requests, read-only MCP tools, datasources).
+  - **Acting**: its tools can change things (post, write, delete, send).
+- **Suggestion**: AI Studio suggests a value from the app's tools, MCP servers, datasources and plugin resources, with its reasons. A full administrator accepts it in one click (**Accept suggestion**) or chooses another value with **Change**; AI Studio cannot see everything the app can do, so the attestation is what counts.
+- **When the app's resources change**: if someone who is not a full administrator changes the tools, datasources, MCP servers or plugin resources of an attested app, the capability is cleared to not attested until a full administrator attests it again. A full administrator's own changes keep it, and a save that leaves those resources as they were changes nothing.
+  - When a guardrail filter is attached to one of the app's LLMs, the reset is visible: the app editor warns before saving, a notice after saving says the capability was reset, the chip says when it was cleared and by whom, and full administrators are [notified](./notifications.md) to attest it again.
+  - Otherwise the capability is cleared quietly, with no warning or notification: it has no effect without guardrails.
+
+See [App guardrail capability](./guardrails.md#app-guardrail-capability) for the floors each value allows.
+
+---
+
 ### **Credential Information**
 1. **Key ID**:
    - The unique identifier for the app's credentials.

@@ -30,6 +30,9 @@ Examples of events that might trigger notifications include:
     *   New user registration/invitation.
     *   Password reset request.
     *   Changes in user roles or group memberships.
+*   **[Guardrails](./guardrails.md#exceptions-softening-a-verdict-for-one-app):** sent to administrators (Owner and Administrator) who have notifications on, in-app and by email, never to the person who caused them:
+    *   **Guardrail exception proposed**: someone who is not a full administrator proposes an exception for an app (from a flagged event, the app page, the API, or an app owner's **Report false positive** in the Portal), or changes an approved one, which returns it to proposed. Links to the app page, where it is approved.
+    *   **Re-attest the guardrail capability**: someone who is not a full administrator changed the tools, datasources, MCP servers or plugin resources of an app whose capability was attested, on an app whose LLMs run a guardrail, so the capability was cleared. Links to the app page.
 *   **System Health & Errors:**
     *   Significant system errors or failures.
     *   Service degradation alerts.

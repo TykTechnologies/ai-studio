@@ -54,6 +54,7 @@ The analytics subsystem in the Microgateway also supports plugins, offering mult
     *   Service tier, when the vendor billed the usage at a tier other than list price (for example `batch` for Anthropic Message Batches, `priority` or `flex`)
     *   Latency (ms)
     *   Success/Error Status
+*   **Guardrail second opinions:** a guardrail's call to its [judge LLM](./guardrails.md#second-opinion-llm-judge) is recorded with interaction type `guardrail_judge`, against the judge LLM and with no app. It counts toward the judge LLM's budget and analytics, never toward the budget of the app whose request was judged.
 *   **Per Tool Call (if applicable):**
     *   Timestamp
     *   Tool ID
