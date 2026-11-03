@@ -460,7 +460,9 @@ func (a *API) updateApp(c *gin.Context) {
 			})
 			return
 		}
-		app.GuardrailCapabilityReset = reset
+		// A reset by an earlier step of the same request stays reported,
+		// as in applyAppMCPServers.
+		app.GuardrailCapabilityReset = app.GuardrailCapabilityReset || reset
 	}
 
 	if input.Data.Attributes.MCPServerIDs != nil {

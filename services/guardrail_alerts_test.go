@@ -10,6 +10,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -228,4 +229,33 @@ func TestPublishGuardrailAlerts_ObjectEventShape(t *testing.T) {
 	assert.Equal(t, "visor-pr-flag", obj["name"])
 	assert.Equal(t, "visor-pr-flag", obj["alert"])
 	assert.Equal(t, f.filter.Name, obj["filter_name"])
+}
+
+// A batch costs one lookup per distinct filter, app and (app, filter,
+// alert), not one per event (Visor on #936).
+func TestPublishGuardrailAlerts_LookupsMemoisedPerBatch(t *testing.T) {
+	f, sink := alertFixture(t, false, "guardrail.alert.visor-softened")
+	s := f.spec("text_user", guardrails.ActionAlert)
+	s.AlertEvent = ptr("visor-softened")
+	e, err := f.svc.CreateGuardrailException(f.app.ID, f.asAdmin, s)
+	require.NoError(t, err)
+
+	var events []*models.ComplianceEvent
+	for i := 0; i < 5; i++ {
+		events = append(events,
+			storedEvent(t, f, f.filter.Name, "guardrail.prompt_injection", detectorMeta(f, map[string]any{"alert": "visor-pr-flag"})),
+			storedEvent(t, f, f.filter.Name, "guardrail.prompt_injection", detectorMeta(f, map[string]any{"alert": "visor-softened", "exceptions": []uint{e.ID}})))
+	}
+	queries := map[string]int{}
+	require.NoError(t, f.db.Callback().Query().Before("gorm:query").Register("test:count", func(tx *gorm.DB) {
+		queries[tx.Statement.Table]++
+	}))
+	t.Cleanup(func() { _ = f.db.Callback().Query().Remove("test:count") })
+
+	f.svc.PublishGuardrailAlerts(events)
+	got := waitAlerts(t, sink, 10)
+	assert.Len(t, got, 10, "every alert is still raised")
+	assert.Equal(t, 1, queries["filters"], "one filter lookup")
+	assert.Equal(t, 1, queries["apps"], "one app lookup")
+	assert.Equal(t, 1, queries["guardrail_exceptions"], "one exception lookup")
 }

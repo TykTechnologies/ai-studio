@@ -111,9 +111,75 @@ func (s *Service) PublishGuardrailAlerts(events []*models.ComplianceEvent) {
 	safe.Call("guardrail_alerts", func() { s.publishGuardrailAlerts(events) })
 }
 
+// alertBatch memoises, for one batch of stored events, what validating
+// their alerts reads: each filter (and its parsed config), each app's name
+// and the exceptions naming each alert, so a batch costs one lookup per
+// distinct filter, app and (app, filter, alert) rather than per event.
+type alertBatch struct {
+	s          *Service
+	filters    map[uint]*alertFilterEntry
+	apps       map[uint]string
+	exceptions map[alertExceptionKey][]uint
+}
+
+type alertFilterEntry struct {
+	filter *models.Filter
+	cfg    guardrails.Config
+	ok     bool
+}
+
+type alertExceptionKey struct {
+	appID, filterID uint
+	name            string
+}
+
+// filter returns the guardrail filter id with its parsed config; ok is
+// false when there is none or its config does not parse.
+func (b *alertBatch) filter(id uint) *alertFilterEntry {
+	if e, ok := b.filters[id]; ok {
+		return e
+	}
+	e := &alertFilterEntry{filter: b.s.alertFilter(id)}
+	if e.filter != nil {
+		cfg, err := guardrails.ParseConfig(e.filter.Config)
+		e.cfg, e.ok = cfg, err == nil
+	}
+	b.filters[id] = e
+	return e
+}
+
+func (b *alertBatch) appName(id uint) string {
+	if name, ok := b.apps[id]; ok {
+		return name
+	}
+	var app models.App
+	name := ""
+	if b.s.DB.Select("id", "name").First(&app, id).Error == nil {
+		name = app.Name
+	}
+	b.apps[id] = name
+	return name
+}
+
+// exceptionIDs are the approved exceptions of the app and filter whose
+// alert event is name, by id.
+func (b *alertBatch) exceptionIDs(appID, filterID uint, name string) []uint {
+	key := alertExceptionKey{appID, filterID, name}
+	if ids, ok := b.exceptions[key]; ok {
+		return ids
+	}
+	var ids []uint
+	if err := b.s.DB.Model(&models.GuardrailException{}).
+		Where("app_id = ? AND filter_id = ? AND alert_event = ? AND status = ?", appID, filterID, name, models.GuardrailExceptionApproved).
+		Order("id").Pluck("id", &ids).Error; err != nil {
+		ids = nil
+	}
+	b.exceptions[key] = ids
+	return ids
+}
+
 func (s *Service) publishGuardrailAlerts(events []*models.ComplianceEvent) {
-	filters := map[uint]*models.Filter{}
-	apps := map[uint]string{}
+	batch := &alertBatch{s: s, filters: map[uint]*alertFilterEntry{}, apps: map[uint]string{}, exceptions: map[alertExceptionKey][]uint{}}
 	for _, ev := range events {
 		if ev == nil || !strings.HasPrefix(ev.EventType, "guardrail.") || !strings.Contains(ev.Metadata, `"alert`) {
 			continue
@@ -126,34 +192,24 @@ func (s *Service) publishGuardrailAlerts(events []*models.ComplianceEvent) {
 		if len(names) == 0 {
 			continue
 		}
-		filter, ok := filters[meta.FilterID]
-		if !ok {
-			filter = s.alertFilter(meta.FilterID)
-			filters[meta.FilterID] = filter
-		}
-		if filter == nil || filter.Name != ev.FilterName {
+		fe := batch.filter(meta.FilterID)
+		if fe.filter == nil || fe.filter.Name != ev.FilterName {
 			slog.Warn("guardrail alert ignored: its event does not come from the guardrail filter it names", "compliance_event_id", ev.ID, "filter_id", meta.FilterID)
 			continue
 		}
-		cfg, err := guardrails.ParseConfig(filter.Config)
-		if err != nil {
+		if !fe.ok {
 			continue
 		}
+		filter, cfg := fe.filter, fe.cfg
 		for _, name := range names {
-			payload, ok := s.alertPayload(ev, meta, name, filter, cfg)
+			payload, ok := batch.alertPayload(ev, meta, name, filter, cfg)
 			if !ok {
 				slog.Warn("guardrail alert ignored: no alert of that name is configured on the event's filter or exception", "compliance_event_id", ev.ID, "filter_id", filter.ID, "alert", safeAlertName(name))
 				continue
 			}
-			if _, seen := apps[ev.AppID]; !seen && ev.AppID != 0 {
-				var app models.App
-				if s.DB.Select("id", "name").First(&app, ev.AppID).Error == nil {
-					apps[ev.AppID] = app.Name
-				} else {
-					apps[ev.AppID] = ""
-				}
+			if ev.AppID != 0 {
+				payload.AppName = batch.appName(ev.AppID)
 			}
-			payload.AppName = apps[ev.AppID]
 			payload.Name = payload.Alert
 			if err := s.SystemEvents.PublishLocal(payload.Topic, GuardrailAlertEvent{
 				ObjectType: "guardrail_alert", Action: "raised", ObjectID: ev.ID,
@@ -180,7 +236,7 @@ func (s *Service) alertFilter(id uint) *models.Filter {
 // alertPayload builds the alert name raises for ev, if the hub's own
 // configuration names it: the filter's alert, else an exception of the
 // event's app and filter that the event lists.
-func (s *Service) alertPayload(ev *models.ComplianceEvent, meta alertEventMetadata, name string, filter *models.Filter, cfg guardrails.Config) (GuardrailAlertPayload, bool) {
+func (b *alertBatch) alertPayload(ev *models.ComplianceEvent, meta alertEventMetadata, name string, filter *models.Filter, cfg guardrails.Config) (GuardrailAlertPayload, bool) {
 	if !guardrails.ValidAlertEvent(name) {
 		return GuardrailAlertPayload{}, false
 	}
@@ -208,14 +264,20 @@ func (s *Service) alertPayload(ev *models.ComplianceEvent, meta alertEventMetada
 	if len(meta.Exceptions) == 0 || ev.AppID == 0 {
 		return p, false
 	}
-	var e models.GuardrailException
-	if err := s.DB.Select("id").Where("id IN ? AND app_id = ? AND filter_id = ? AND alert_event = ? AND status = ?", meta.Exceptions, ev.AppID, filter.ID, name, models.GuardrailExceptionApproved).
-		First(&e).Error; err != nil {
-		return p, false
+	// The lowest-id approved exception of this app and filter naming the
+	// alert that the event lists.
+	listed := map[uint]bool{}
+	for _, id := range meta.Exceptions {
+		listed[id] = true
 	}
-	// An exception's alert never carries the flagged text.
-	p.ExceptionID = e.ID
-	return p, true
+	for _, id := range b.exceptionIDs(ev.AppID, filter.ID, name) {
+		if listed[id] {
+			// An exception's alert never carries the flagged text.
+			p.ExceptionID = id
+			return p, true
+		}
+	}
+	return p, false
 }
 
 // safeAlertName bounds an untrusted alert name for a log line.
