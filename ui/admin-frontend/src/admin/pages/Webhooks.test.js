@@ -18,10 +18,10 @@ jest.mock("../styles/sharedStyles", () => ({
 
 const theme = createTheme();
 
-const renderPage = () =>
+const renderPage = (initialEntries) =>
   render(
     <ThemeProvider theme={theme}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={initialEntries}>
         <Webhooks />
       </MemoryRouter>
     </ThemeProvider>
@@ -238,5 +238,13 @@ describe("Webhooks", () => {
     });
     renderPage();
     expect(await screen.findByText("Enterprise Feature")).toBeInTheDocument();
+  });
+
+  it("opens a new target subscribed to the topic in the link (a guardrail alert)", async () => {
+    mockApi();
+    renderPage(["/admin/webhooks?topic=guardrail.alert.visor-pr-flag"]);
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByLabelText(/^Name/)).toHaveValue("guardrail.alert.visor-pr-flag");
+    expect(within(dialog).getByText("guardrail.alert.visor-pr-flag", { selector: ".MuiChip-label" })).toBeInTheDocument();
   });
 });

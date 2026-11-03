@@ -47,3 +47,7 @@ export const useEdition = () => {
 	}
 	return context;
 };
+
+// useEditionOptional is useEdition for components that may render outside
+// an EditionProvider (in tests, embedded): null when there is none.
+export const useEditionOptional = () => useContext(EditionContext) || null;

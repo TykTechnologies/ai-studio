@@ -66,3 +66,33 @@ func filterAlertEvents(kind string, config models.JSONMap) []string {
 	}
 	return cfg.AlertEvents()
 }
+
+// GuardrailAlertTopics lists the bus topics of every configured guardrail
+// alert (guardrail.alert.<event>), from guardrail filters and exceptions,
+// sorted: the webhook target editor offers them (Enterprise ListTopics).
+func GuardrailAlertTopics(db *gorm.DB) ([]string, error) {
+	set := map[string]bool{}
+	var filters []models.Filter
+	if err := db.Select("id", "kind", "config").Where("kind = ?", models.FilterKindGuardrail).Find(&filters).Error; err != nil {
+		return nil, err
+	}
+	for _, f := range filters {
+		for _, name := range filterAlertEvents(f.Kind, f.Config) {
+			set[name] = true
+		}
+	}
+	var names []string
+	if err := db.Model(&models.GuardrailException{}).Where("alert_event <> '' AND status <> ?", models.GuardrailExceptionRetired).
+		Distinct("alert_event").Pluck("alert_event", &names).Error; err != nil {
+		return nil, err
+	}
+	for _, n := range names {
+		set[n] = true
+	}
+	out := make([]string, 0, len(set))
+	for n := range set {
+		out = append(out, guardrails.AlertTopicPrefix+n)
+	}
+	slices.Sort(out)
+	return out, nil
+}

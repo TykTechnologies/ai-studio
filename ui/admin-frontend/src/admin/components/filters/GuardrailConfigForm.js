@@ -13,13 +13,16 @@ import {
   FormHelperText,
   Grid,
   InputLabel,
+  Link,
   MenuItem,
   Select,
   TextField,
   Typography,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import { Link as RouterLink } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
+import { useEditionOptional } from "../../context/EditionContext";
 import AllowInternalHostSwitch from "../common/AllowInternalHostSwitch";
 
 // The stored shape of a guardrail filter's config. Everything the server
@@ -103,22 +106,38 @@ const alertEventError = (alert) => {
   return "";
 };
 
-// AlertEventField edits the event an alert action raises.
+// webhookLinkFor opens the webhook target editor with the alert's topic.
+export const webhookLinkFor = (name) => `/admin/webhooks?topic=${encodeURIComponent(`guardrail.alert.${name}`)}`;
+
+// AlertEventField edits the event an alert action raises. Webhooks are
+// Enterprise: in Community Edition the action logs and the field says so.
 const AlertEventField = ({ alert, onChange, testId, label = "Event name" }) => {
+  const edition = useEditionOptional();
   const name = (alert && alert.event) || "";
   const error = alertEventError(alert);
   return (
-    <TextField
-      fullWidth
-      size="small"
-      label={label}
-      value={name}
-      onChange={(e) => onChange({ ...(alert || {}), event: e.target.value.trim() })}
-      error={!!error}
-      helperText={error || `Webhooks subscribe to guardrail.alert.${name || "<name>"}`}
-      inputProps={{ maxLength: 64, "data-testid": testId }}
-      sx={{ mt: 1 }}
-    />
+    <Box sx={{ mt: 1 }}>
+      <TextField
+        fullWidth
+        size="small"
+        label={label}
+        value={name}
+        onChange={(e) => onChange({ ...(alert || {}), event: e.target.value.trim() })}
+        error={!!error}
+        helperText={error || `Webhooks subscribe to guardrail.alert.${name || "<name>"}`}
+        inputProps={{ maxLength: 64, "data-testid": testId }}
+      />
+      {edition && !edition.isEnterprise && (
+        <FormHelperText data-testid={`${testId}-ce`}>
+          Raising events to webhooks needs Enterprise Edition; here the action logs.
+        </FormHelperText>
+      )}
+      {edition && edition.isEnterprise && name && !error && (
+        <Link component={RouterLink} to={webhookLinkFor(name)} variant="body2" data-testid={`${testId}-webhook`}>
+          Create a webhook for this event
+        </Link>
+      )}
+    </Box>
   );
 };
 
