@@ -21,8 +21,9 @@ type alertSink struct {
 }
 
 func (a *alertSink) handler(ev eventbridge.Event) {
-	var p GuardrailAlertPayload
-	_ = json.Unmarshal(ev.Payload, &p)
+	var e GuardrailAlertEvent
+	_ = json.Unmarshal(ev.Payload, &e)
+	p := e.Object
 	a.mu.Lock()
 	a.got = append(a.got, p)
 	a.tops = append(a.tops, ev.Topic)
@@ -199,4 +200,32 @@ func TestPublishGuardrailAlerts_RetiredExceptionRaisesNone(t *testing.T) {
 	f.svc.PublishGuardrailAlerts([]*models.ComplianceEvent{ev})
 	time.Sleep(50 * time.Millisecond)
 	assert.Empty(t, sink.all())
+}
+
+// .59: the alert travels as an object event, so webhook presets that render
+// .Object, .ObjectType and .ObjectID show it.
+func TestPublishGuardrailAlerts_ObjectEventShape(t *testing.T) {
+	f, _ := alertFixture(t, false)
+	bus := eventbridge.NewBus()
+	f.svc.SystemEvents = NewSystemEventEmitter(bus, "test")
+	raw := make(chan []byte, 1)
+	sub := bus.Subscribe("guardrail.alert.visor-pr-flag", func(ev eventbridge.Event) { raw <- ev.Payload })
+	defer bus.Unsubscribe(sub)
+	ev := storedEvent(t, f, f.filter.Name, "guardrail.prompt_injection", detectorMeta(f, map[string]any{"alert": "visor-pr-flag"}))
+	f.svc.PublishGuardrailAlerts([]*models.ComplianceEvent{ev})
+	var m map[string]any
+	select {
+	case b := <-raw:
+		require.NoError(t, json.Unmarshal(b, &m))
+	case <-time.After(time.Second):
+		t.Fatal("no alert")
+	}
+	assert.Equal(t, "guardrail_alert", m["object_type"])
+	assert.Equal(t, "raised", m["action"])
+	assert.EqualValues(t, ev.ID, m["object_id"])
+	obj, _ := m["object"].(map[string]any)
+	require.NotNil(t, obj)
+	assert.Equal(t, "visor-pr-flag", obj["name"])
+	assert.Equal(t, "visor-pr-flag", obj["alert"])
+	assert.Equal(t, f.filter.Name, obj["filter_name"])
 }

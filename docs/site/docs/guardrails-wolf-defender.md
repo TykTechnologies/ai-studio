@@ -53,7 +53,8 @@ The guardrail adds three things beyond the model:
   24 hours). Agents resend their whole history on every request, so the
   history is answered from the store in milliseconds, and a flagged tool
   result stops every later request of its conversation, not just the one it
-  first appeared in. False flags are lifted by hash.
+  first appeared in. A single false flag is lifted by hash; recurring false
+  positives from one app are softened with a guardrail exception in AI Studio.
 - **A versioned policy.** Thresholds, the questions asked per stage, per-app
   system context, per-stage enforcement modes and kill switches live in a
   YAML policy that the guardrail hot-reloads.
@@ -431,6 +432,15 @@ body.
 - Stop the guardrail. With tool results set to block, requests over 32,768
   characters that carry tool results are blocked while it is down (their
   tool results are unscanned), so detach the filters first.
+
+**False positives from one app.** When an app's legitimate traffic keeps
+being flagged (a code-review bot whose pull requests contain injection test
+vectors, say), soften the verdict for that app in AI Studio with a
+[guardrail exception](./guardrails.md#exceptions-softening-a-verdict-for-one-app)
+rather than allowing texts by hash: an exception covers every request of the
+app for that detector and channel, is bounded by what the app can do,
+expires when unused and records every hit. Keep the hash allow below for a
+single text.
 
 **Lift a false flag.** A flagged tool result keeps stopping its conversation
 for 7 days. Find its `sha256` in the compliance event (or the decision log, or `GET /v1/admin/flags`),

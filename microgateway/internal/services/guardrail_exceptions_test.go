@@ -85,7 +85,7 @@ func TestEdgeSync_NoExceptionsIsByteIdentical(t *testing.T) {
 	before := run()
 	require.NoError(t, NewEdgeSyncService(db, "").SyncConfiguration(exceptionSnapshot()))
 	after := run()
-	assert.Equal(t, before, after)
+	assert.Equal(t, withoutTimings(before), withoutTimings(after))
 }
 
 // An alert exception from the hub raises its event on the edge too: the
@@ -181,4 +181,47 @@ func TestEdgeSync_JudgeSoftenCapabilityWithoutExceptions(t *testing.T) {
 
 	require.NoError(t, sync.SyncConfiguration(exceptionSnapshot()))
 	assert.Equal(t, "quarantine", run(), "after the attestation is reset on the hub and pushed, the acting floor")
+}
+
+// withoutTimings drops the timing fields (latency_ms, at any depth) from
+// the events of out, which differ between two runs of the same request
+// under load (midsommar-clean-9u1j.60).
+func withoutTimings(out *scripting.ScriptOutput) *scripting.ScriptOutput {
+	if out == nil {
+		return nil
+	}
+	cp := *out
+	cp.ComplianceEvents = make([]scripting.ComplianceEventOutput, len(out.ComplianceEvents))
+	for i, e := range out.ComplianceEvents {
+		e.Metadata = dropTimings(e.Metadata).(map[string]interface{})
+		cp.ComplianceEvents[i] = e
+	}
+	return &cp
+}
+
+func dropTimings(v any) any {
+	switch x := v.(type) {
+	case map[string]interface{}:
+		m := make(map[string]interface{}, len(x))
+		for k, val := range x {
+			if k == "latency_ms" {
+				continue
+			}
+			m[k] = dropTimings(val)
+		}
+		return m
+	case []map[string]any:
+		out := make([]map[string]any, len(x))
+		for i, val := range x {
+			out[i] = dropTimings(val).(map[string]interface{})
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, val := range x {
+			out[i] = dropTimings(val)
+		}
+		return out
+	}
+	return v
 }

@@ -85,6 +85,7 @@ The configuration checksum includes objects that need to be synchronized to edge
 - **Model Routers** - Request routing rules (Enterprise)
 - **OAuth Clients & Access Tokens** - MCP authentication state for tool access via OAuth
 - **Trusted prompt templates** - the approved [prompt templates](./guardrails.md#trusted-prompt-templates) of the Apps in the snapshot (see below)
+- **Guardrail exceptions** - the approved [guardrail exceptions](./guardrails.md#exceptions-softening-a-verdict-for-one-app) of the Apps in the snapshot, each with its App's guardrail capability (see below)
 
 Any create, update, or delete operation on these objects triggers a checksum recalculation. This includes changes a plugin saves through the Plugin SDK, such as its own configuration (for example a load balancer's upstream pools edited on the plugin's page) or the plugin chain of an LLM.
 
@@ -96,6 +97,15 @@ The approved prompt templates of the Apps an edge serves (the snapshot's Apps: a
 - **Lapsing.** A template that has gone `expires_after_days` without a match is left out of the next snapshot. Edges report the templates that matched in their heartbeats (every 30 seconds), and AI Studio records those matches, so a template used only through edges does not lapse.
 - **Apps learnt by pull-on-miss** (created after the edge's snapshot) have no templates on that edge until the next push: their messages are scored whole.
 - Templates are held in memory on the edge; an edge always starts from a snapshot, so they are never stale across a restart. With no templates the edge screens requests exactly as before.
+
+### Guardrail exceptions
+
+The approved, unexpired [guardrail exceptions](./guardrails.md#exceptions-softening-a-verdict-for-one-app) of the Apps an edge serves travel in its snapshot, each with its App's guardrail capability, and they count in the checksum (the Apps themselves do not, which is why the capability travels with each exception). An exception outside its App's floor is left out. The edge applies them with the same rules as AI Studio and checks the floor again itself.
+
+- **Every change reaches an edge only at the next push.** Approving, changing or retiring an exception, attesting or resetting an App's capability, and an exception lapsing all mark the namespace's edges **Pending**; until an administrator pushes, an edge keeps applying its old set.
+- **Expiry.** AI Studio checks for exceptions that have gone `expires_after_days` without a hit every hour, so on an edge a lapsed exception stops applying after that check plus the next push.
+- **Hits.** Edges report the exceptions that applied in their heartbeats, and AI Studio counts only exceptions the edge's own namespace snapshot carries. A reported exception counts once per heartbeat, so an exception's hit count is the number of heartbeats in which it applied, not of requests; its last hit keeps it from lapsing. Hits are attributed by the namespace the edge declares.
+- An edge from before this release ignores exceptions and applies the filters' own actions.
 
 Two properties keep the checksum meaningful:
 

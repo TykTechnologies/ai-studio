@@ -108,7 +108,7 @@ func TestExceptions_NoneIsByteIdentical(t *testing.T) {
 	}
 	for name, src := range sources {
 		withExceptions(t, src)
-		assert.Equal(t, want, runInput(t, f, req()), name)
+		assert.Equal(t, withoutTimings(want), withoutTimings(runInput(t, f, req())), name)
 	}
 
 	// Studio chat (app id 0) never takes exceptions.
@@ -267,4 +267,47 @@ func TestAppCapabilityFor(t *testing.T) {
 	assert.Equal(t, guardrails.CapabilityReadOnly, AppCapabilityFor(openAIRequest(t, 1, chatMsg{Role: "user", Content: "x"})))
 	assert.Equal(t, guardrails.CapabilityUnattested, AppCapabilityFor(openAIRequest(t, 2, chatMsg{Role: "user", Content: "x"})))
 	assert.Equal(t, guardrails.CapabilityUnattested, AppCapabilityFor(openAIRequest(t, 0, chatMsg{Role: "user", Content: "x"})), "Studio chat has no app")
+}
+
+// withoutTimings drops the timing fields (latency_ms, at any depth) from
+// the events of out, which differ between two runs of the same request
+// under load (midsommar-clean-9u1j.60).
+func withoutTimings(out *ScriptOutput) *ScriptOutput {
+	if out == nil {
+		return nil
+	}
+	cp := *out
+	cp.ComplianceEvents = make([]ComplianceEventOutput, len(out.ComplianceEvents))
+	for i, e := range out.ComplianceEvents {
+		e.Metadata = dropTimings(e.Metadata).(map[string]interface{})
+		cp.ComplianceEvents[i] = e
+	}
+	return &cp
+}
+
+func dropTimings(v any) any {
+	switch x := v.(type) {
+	case map[string]interface{}:
+		m := make(map[string]interface{}, len(x))
+		for k, val := range x {
+			if k == "latency_ms" {
+				continue
+			}
+			m[k] = dropTimings(val)
+		}
+		return m
+	case []map[string]any:
+		out := make([]map[string]any, len(x))
+		for i, val := range x {
+			out[i] = dropTimings(val).(map[string]interface{})
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, val := range x {
+			out[i] = dropTimings(val)
+		}
+		return out
+	}
+	return v
 }

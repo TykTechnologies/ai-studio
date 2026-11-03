@@ -8,7 +8,7 @@ Request guardrails classify a whole message. An app that wraps third-party conte
 
 The feature lets an operator approve an app's own template once. Guardrails then score only the parts that vary, the **slots**.
 
-This is a false-positive control, not a security boundary. It must never make the gateway miss an attack it catches today by scoring the whole prompt, and the docs say so.
+This is a false-positive control, not a security boundary. For false positives in the parts that vary (a slot whose third-party text legitimately looks like an attack), see guardrail exceptions (features/GuardrailExceptions.md), which soften the verdict for one app, filter, detector and channel. It must never make the gateway miss an attack it catches today by scoring the whole prompt, and the docs say so.
 
 ## Principles
 

@@ -34,6 +34,9 @@ import (
 // (include_excerpt, which needs evidence.excerpt); an exception's alert
 // never does.
 type GuardrailAlertPayload struct {
+	// Name is the alert's name too, under the key the webhook presets show
+	// for an object.
+	Name              string   `json:"name"`
 	Alert             string   `json:"alert"`
 	Topic             string   `json:"topic"`
 	FilterID          uint     `json:"filter_id"`
@@ -52,6 +55,18 @@ type GuardrailAlertPayload struct {
 	Timestamp         string   `json:"timestamp"`
 	Link              string   `json:"link"`
 	Excerpts          []string `json:"excerpts,omitempty"`
+}
+
+// GuardrailAlertEvent is the bus event a guardrail alert is raised as:
+// shaped like an object event (ObjectEventPayload), with the alert as its
+// object (the compliance event is its id), so the webhook presets render it
+// as they render any event.
+type GuardrailAlertEvent struct {
+	ObjectType string                `json:"object_type"`
+	Action     string                `json:"action"`
+	ObjectID   uint                  `json:"object_id"`
+	Timestamp  string                `json:"timestamp"`
+	Object     GuardrailAlertPayload `json:"object"`
 }
 
 // alertEventMetadata is the part of a guardrail event's metadata an alert
@@ -139,7 +154,11 @@ func (s *Service) publishGuardrailAlerts(events []*models.ComplianceEvent) {
 				}
 			}
 			payload.AppName = apps[ev.AppID]
-			if err := s.SystemEvents.PublishLocal(payload.Topic, payload); err != nil {
+			payload.Name = payload.Alert
+			if err := s.SystemEvents.PublishLocal(payload.Topic, GuardrailAlertEvent{
+				ObjectType: "guardrail_alert", Action: "raised", ObjectID: ev.ID,
+				Timestamp: payload.Timestamp, Object: payload,
+			}); err != nil {
 				slog.Warn("could not raise a guardrail alert", "topic", payload.Topic, "error", err)
 			}
 		}
