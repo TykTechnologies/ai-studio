@@ -3106,6 +3106,10 @@ const (
 	// Trusted prompt templates: an App's approved templates are in the
 	// snapshot and its checksum.
 	topicPromptTemplatesChanged = "system.app.prompt_templates.changed"
+
+	// Guardrail exceptions: an App's approved exceptions are in the
+	// snapshot and its checksum.
+	topicGuardrailExceptionsChanged = "system.app.guardrail_exceptions.changed"
 )
 
 // subscribeToConfigChanges sets up event subscriptions for configuration changes.
@@ -3129,6 +3133,7 @@ func (s *ControlServer) subscribeToConfigChanges() {
 		topicGovernedMetadataUpdated, topicGovernedMetadataDeleted,
 		topicSecretCreated, topicSecretUpdated, topicSecretDeleted,
 		topicPromptTemplatesChanged,
+		topicGuardrailExceptionsChanged,
 	}
 
 	for _, topic := range configTopics {

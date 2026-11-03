@@ -42,12 +42,14 @@ func (a *API) validateAppMCPBindings(c *gin.Context, actorID uint, actorAdmin bo
 // applyAppMCPServers replaces the App's bindings and returns the App
 // reloaded with them. It writes the error response itself.
 func (a *API) applyAppMCPServers(c *gin.Context, app *models.App, serverIDs []uint) (*models.App, bool) {
-	reloaded, err := a.service.SetAppMCPServers(app.ID, serverIDs)
+	reloaded, err := a.service.SetAppMCPServers(app.ID, serverIDs, capabilityActorOption(c))
 	if err != nil {
 		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
 		return app, false
 	}
 	if reloaded != nil {
+		// A reset by an earlier step of the same request stays reported.
+		reloaded.GuardrailCapabilityReset = reloaded.GuardrailCapabilityReset || app.GuardrailCapabilityReset
 		return reloaded, true
 	}
 	return app, true

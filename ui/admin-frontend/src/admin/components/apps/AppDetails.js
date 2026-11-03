@@ -17,6 +17,7 @@ import ConfirmationDialog from "../common/ConfirmationDialog";
 import AppTeamBudgetRow from "./AppTeamBudgetRow";
 import AppGovernanceFlags from "./AppGovernanceFlags";
 import AppPromptTemplates from "./promptTemplates/AppPromptTemplates";
+import AppGuardrailCapability from "./AppGuardrailCapability";
 import {
   Alert,
   Typography,
@@ -754,6 +755,12 @@ const AppDetails = () => {
                   </Grid>
                 </>
               )}
+            <Grid item xs={3}>
+              <FieldLabel>Guardrail capability:</FieldLabel>
+            </Grid>
+            <Grid item xs={9}>
+              <AppGuardrailCapability appId={id} />
+            </Grid>
             <Grid item xs={3}>
               <FieldLabel>LLM providers:</FieldLabel>
             </Grid>

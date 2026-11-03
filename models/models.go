@@ -146,6 +146,8 @@ func InitModels(db *gorm.DB) error {
 		&NativeResource{}, // Vendor resources created on this node (message batches)
 		// Trusted prompt templates (features/TrustedPromptTemplates.md)
 		&AppPromptTemplate{},
+		// Guardrail exceptions (features/GuardrailExceptions.md)
+		&GuardrailException{},
 	); err != nil {
 		return err
 	}

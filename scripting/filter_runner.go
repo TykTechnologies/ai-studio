@@ -466,7 +466,9 @@ func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail, svc
 	findings = append(findings, res.failedToolFindings()...)
 	rewritten := res.rewritten
 
-	o := decide(input, cfg, sel, findings, rewritten, res.unscanned)
+	exc := planExceptions(input, g.filter.ID)
+	o := decide(input, cfg, sel, findings, rewritten, res.unscanned, exc)
+	exc.recordHits(o)
 	if len(res.failedTools) > 0 {
 		// Fail closed would block the request; only the tool results went
 		// unscanned, so they are quarantined instead, whatever the filter's
@@ -486,6 +488,9 @@ func (g *guardrailRunner) evaluate(input *ScriptInput, p *preparedGuardrail, svc
 	out.ComplianceEvents = append(out.ComplianceEvents, unscannedEvents(g.filter.Name, cfg, sel.segments, res, o.overall)...)
 	if len(o.unredactable) > 0 {
 		out.ComplianceEvents = append(out.ComplianceEvents, unredactableEvent(g.filter.Name, cfg, sel.segments, o.unredactable, o.overall))
+	}
+	if len(o.ignored) > 0 {
+		out.ComplianceEvents = append(out.ComplianceEvents, exceptionIgnoredEvents(g.filter.Name, g.filter.ID, cfg, exc.capability, o.ignored, sel.segments)...)
 	}
 
 	switch o.overall {
@@ -527,6 +532,13 @@ type outcome struct {
 	// unredactable are the segments a redaction could not be applied to,
 	// which were quarantined or blocked instead.
 	unredactable []int
+	// softened records, by segment and detector, the guardrail exceptions
+	// that softened a finding's action; ignored the exceptions that matched
+	// but are outside the app's floor now; hits every exception that
+	// applied (guardrail_exceptions.go).
+	softened map[int]map[string]exceptionApplied
+	ignored  []exceptionIgnored
+	hits     map[uint]bool
 }
 
 // actionRank orders actions by strength.
@@ -534,12 +546,15 @@ var actionRank = map[string]int{guardrails.ActionLog: 1, guardrails.ActionRedact
 
 // decide picks the action for each flagged segment: the filter's on_detect,
 // or for a tool result its tool_results action (block becoming quarantine).
+// With guardrail exceptions (exc, nil for none) the action is decided per
+// finding, each softened by the app's exception for its detector and
+// channel within the app's floor, and the segment takes the strongest.
 // A redaction that cannot be applied (the segment was not scanned in full,
 // or the rewrite cannot be mapped onto the body: conditions whoever wrote the
 // text can arrange) never falls to the fail mode: a tool result is
 // quarantined instead and anything else is blocked. On the response side
 // quarantine is block and redact is log, as responses are block-only.
-func decide(input *ScriptInput, cfg guardrails.Config, sel selection, findings []guardrails.Finding, rewritten map[int]string, unscanned map[int]string) outcome {
+func decide(input *ScriptInput, cfg guardrails.Config, sel selection, findings []guardrails.Finding, rewritten map[int]string, unscanned map[int]string, exc *exceptionPlan) outcome {
 	o := outcome{actions: map[int]string{}, findings: sel.flaggedSegments(findings)}
 	instead := func(seg guardrails.Segment) string {
 		if seg.IsToolResult() {
@@ -554,6 +569,15 @@ func decide(input *ScriptInput, cfg guardrails.Config, sel selection, findings [
 			kind = guardrails.KindToolResult
 		}
 		a := cfg.ActionFor(kind)
+		if exc != nil {
+			configured, strongest := a, ""
+			for _, f := range o.findings[si] {
+				if fa := exc.soften(&o, configured, f, si, seg, input.IsResponse); actionRank[fa] > actionRank[strongest] {
+					strongest = fa
+				}
+			}
+			a = strongest
+		}
 		if input.IsResponse {
 			switch a {
 			case guardrails.ActionQuarantine:
@@ -1560,6 +1584,9 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 		action   string
 		refs     []map[string]any
 		seen     map[string]bool
+		// exceptions are the guardrail exceptions that softened this
+		// detector's findings.
+		exceptions map[uint]bool
 	}
 	groups := map[string]*group{}
 	order := []string{}
@@ -1582,12 +1609,21 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 		a := o.overall
 		if f.SegmentIndex >= 0 && f.SegmentIndex < len(segments) {
 			seg := segments[f.SegmentIndex]
+			if e, ok := o.softened[f.SegmentIndex][f.Detector]; ok {
+				if g.exceptions == nil {
+					g.exceptions = map[uint]bool{}
+				}
+				g.exceptions[e.id] = true
+			}
 			g.roles[seg.Role] = true
 			g.kinds[segmentKind(seg)] = true
 			if len(g.refs) < maxEvidenceSegments {
 				ref := segmentEvidence(seg, f.SegmentIndex, f, ec)
 				if t := ec.templates.templateRef(f.SegmentIndex); t != nil {
 					ref["template"] = t
+				}
+				if e := o.exceptionRef(f.SegmentIndex, f.Detector); e != nil {
+					ref["exception"] = e
 				}
 				if key := fmt.Sprintf("%d/%v", f.SegmentIndex, ref["sha256"]); !g.seen[key] {
 					g.seen[key] = true
@@ -1647,6 +1683,20 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 		if len(g.refs) > 0 {
 			metadata["segments"] = g.refs
 		}
+		description := fmt.Sprintf("guardrail %q (%s): %s detected (%d) in %s; action %s", filterName, cfg.Provider, label, g.count, strings.Join(roles, ","), action)
+		if len(g.exceptions) > 0 {
+			ids := make([]uint, 0, len(g.exceptions))
+			for id := range g.exceptions {
+				ids = append(ids, id)
+			}
+			sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+			metadata["exceptions"] = ids
+			parts := make([]string, len(ids))
+			for i, id := range ids {
+				parts[i] = fmt.Sprintf("#%d", id)
+			}
+			description += "; softened by exception " + strings.Join(parts, ", ")
+		}
 		if action == guardrails.ActionBlock {
 			metadata["reason_code"] = ReasonDetected
 		}
@@ -1659,7 +1709,7 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 		events = append(events, ComplianceEventOutput{
 			EventType:   "guardrail." + strings.ReplaceAll(det, "/", "."),
 			Severity:    sev,
-			Description: fmt.Sprintf("guardrail %q (%s): %s detected (%d) in %s; action %s", filterName, cfg.Provider, label, g.count, strings.Join(roles, ","), action),
+			Description: description,
 			Metadata:    metadata,
 		})
 	}

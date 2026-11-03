@@ -105,7 +105,13 @@ const (
 	//     recalculations (midsommar-clean-kq3b.7).
 	// 31: app_prompt_templates (new table, additive): trusted prompt
 	//     templates guardrails do not score (midsommar-clean-x5f5.2).
-	SchemaVersion          = 31
+	// 32: apps.guardrail_capability (defaulted '', additive) and
+	//     guardrail_capability_reset_by/_at (nullable, additive): the
+	//     attested app guardrail capability and its last reset after a
+	//     resource change (midsommar-clean-9u1j.2).
+	// 33: guardrail_exceptions (new table, additive): per-app guardrail
+	//     verdict exceptions (midsommar-clean-9u1j.3).
+	SchemaVersion          = 33
 	MinReaderSchemaVersion = 26
 )
 

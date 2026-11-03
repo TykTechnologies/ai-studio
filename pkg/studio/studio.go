@@ -409,6 +409,9 @@ func New(opts Options) (_ *Studio, err error) {
 	// Request guardrails leave the approved constants of an app's trusted
 	// prompt templates unscored (features/TrustedPromptTemplates.md).
 	scripting.SetPromptTemplateSource(service.PromptTemplateSource())
+	// Approved guardrail exceptions soften a filter's action for one app,
+	// detector and channel (features/GuardrailExceptions.md).
+	scripting.SetExceptionSource(service.GuardrailExceptionSource())
 	if opts.HostTykConnection != nil {
 		if tykmcp.IsEnterpriseAvailable() {
 			service.SetTykMCPHost(opts.HostTykConnection)
