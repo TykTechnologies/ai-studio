@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, IconButton, Link, Tooltip, Typography } from "@mui/material";
+import { Box, Chip, IconButton, Link, Tooltip, Typography } from "@mui/material";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import { Link as RouterLink } from "react-router-dom";
 
@@ -42,6 +42,38 @@ export const noExcerpt = (status, notScanned) =>
   (notScanned
     ? NO_EXCERPT.not_scanned
     : 'No excerpt (if "Show flagged text in compliance events" is off on the filter, turn it on).');
+
+// How a segment met the app's trusted prompt templates (seg.template,
+// scripting/guardrail_templates.go templateRef): a matched template's ref
+// (name@version) and the share of the text it exempted, whether the backstop
+// still scored the template text, and the signals of a near miss or of
+// template text found where the template does not put it.
+const TEMPLATE_SIGNALS = {
+  "template.mimicry": { label: "Template text out of place", color: "warning" },
+  "template.miss": { label: "No template matched", color: "default" },
+  "template.over_cap": { label: "Over the exempt cap", color: "warning" },
+};
+
+export const templateBadges = (tpl) => {
+  if (!tpl || typeof tpl !== "object") return [];
+  const out = [];
+  if (typeof tpl.id === "string" && tpl.id !== "") {
+    let label = `Matched template ${tpl.id}`;
+    if (typeof tpl.exempt_share === "number") {
+      label += `, ${Math.round(tpl.exempt_share * 100)}% exempt`;
+    }
+    out.push({ key: "match", label, color: "info" });
+  }
+  const signals = Array.isArray(tpl.signals) ? tpl.signals : [];
+  for (const s of signals) {
+    const known = TEMPLATE_SIGNALS[s];
+    if (known) out.push({ key: s, ...known });
+  }
+  if (tpl.backstop === "enforced") {
+    out.push({ key: "backstop", label: "Backstop scored the template text", color: "warning" });
+  }
+  return out;
+};
 
 const copy = (text) => {
   try {
@@ -108,6 +140,13 @@ const FlaggedText = ({ metadata, appId, eventType }) => {
               <Box component="span" sx={{ color: "text.secondary", fontSize: "0.75rem" }}>{` · #${seg.index}`}</Box>
             )}
           </Typography>
+          {templateBadges(seg.template).length > 0 && (
+            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mt: 0.5 }} data-testid="flagged-template">
+              {templateBadges(seg.template).map((b) => (
+                <Chip key={b.key} size="small" variant="outlined" color={b.color} label={b.label} />
+              ))}
+            </Box>
+          )}
           {typeof seg.excerpt === "string" && seg.excerpt !== "" ? (
             <Box
               component="blockquote"

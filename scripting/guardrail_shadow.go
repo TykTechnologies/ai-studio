@@ -221,12 +221,12 @@ func (g *guardrailRunner) shadow(input *ScriptInput, p *preparedGuardrail) *Scri
 				}
 				out.ComplianceEvents[i].Metadata["shadow"] = true
 			}
-			record(ctx, g.filter.Name, out)
+			g.recordEvents(record, ctx, out)
 		}
 	}
 	if reason := currentShadowPool().enqueue(job); reason != "" {
 		metrics.RecordGuardrailShadowDropped(parent, cfg.Provider, reason)
-		record(detached, g.filter.Name, &ScriptOutput{ComplianceEvents: []ComplianceEventOutput{shadowDroppedEvent(g.filter.Name, cfg, input, reason)}})
+		g.recordEvents(record, detached, &ScriptOutput{ComplianceEvents: []ComplianceEventOutput{shadowDroppedEvent(g.filter.Name, cfg, input, reason)}})
 	}
 	return passThrough(input)
 }

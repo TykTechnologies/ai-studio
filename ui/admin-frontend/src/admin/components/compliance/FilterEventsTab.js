@@ -17,6 +17,7 @@ import {
   Collapse,
   IconButton,
   Link,
+  Autocomplete,
 } from "@mui/material";
 import {
   StyledTableHeaderCell,
@@ -49,6 +50,12 @@ const FilterEventsTab = ({ startDate, endDate }) => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [expanded, setExpanded] = useState({});
+  // The Application filter: the chosen app ({id, name}) and the picker's
+  // search, which loads matching apps only while the picker is open.
+  const [app, setApp] = useState(null);
+  const [appOpen, setAppOpen] = useState(false);
+  const [appSearch, setAppSearch] = useState("");
+  const [appOptions, setAppOptions] = useState([]);
 
   const fetchEvents = useCallback(async () => {
     if (!startDate || !endDate) return;
@@ -63,6 +70,7 @@ const FilterEventsTab = ({ startDate, endDate }) => {
       };
       if (severity) params.severity = severity;
       if (eventType) params.event_type = eventType;
+      if (app) params.app_id = app.id;
 
       const response = await apiClient.get("/compliance/events", { params });
       setData(response.data);
@@ -71,7 +79,7 @@ const FilterEventsTab = ({ startDate, endDate }) => {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, severity, eventType, page, rowsPerPage]);
+  }, [startDate, endDate, severity, eventType, app, page, rowsPerPage]);
 
   useEffect(() => {
     fetchEvents();
@@ -80,7 +88,28 @@ const FilterEventsTab = ({ startDate, endDate }) => {
   // Reset to first page when filters change.
   useEffect(() => {
     setPage(0);
-  }, [severity, eventType, startDate, endDate]);
+  }, [severity, eventType, app, startDate, endDate]);
+
+  useEffect(() => {
+    if (!appOpen) return undefined;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const params = { page_size: 20 };
+        if (appSearch) params.search = appSearch;
+        const response = await apiClient.get("/apps", { params });
+        if (cancelled) return;
+        const rows = Array.isArray(response?.data?.data) ? response.data.data : [];
+        setAppOptions(rows.map((a) => ({ id: Number(a.id), name: a.attributes?.name || `App ${a.id}` })));
+      } catch (err) {
+        if (!cancelled) setAppOptions([]);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [appOpen, appSearch]);
 
   const totals = data?.by_severity || {};
   const totalCount = data?.total_count || 0;
@@ -201,6 +230,27 @@ const FilterEventsTab = ({ startDate, endDate }) => {
             </MenuItem>
           ))}
         </TextField>
+        <Autocomplete
+          size="small"
+          sx={{ minWidth: 240 }}
+          open={appOpen}
+          onOpen={() => setAppOpen(true)}
+          onClose={() => setAppOpen(false)}
+          options={appOptions}
+          value={app}
+          onChange={(_, v) => setApp(v)}
+          onInputChange={(_, v, reason) => {
+            if (reason === "input") setAppSearch(v);
+            if (reason === "clear") setAppSearch("");
+          }}
+          getOptionLabel={(o) => o?.name || ""}
+          isOptionEqualToValue={(o, v) => o.id === v.id}
+          filterOptions={(x) => x}
+          noOptionsText="No matching applications"
+          renderInput={(params) => (
+            <TextField {...params} label="Application" placeholder="All" inputProps={{ ...params.inputProps, "data-testid": "app-filter-input" }} />
+          )}
+        />
       </Box>
 
       {error && (

@@ -419,6 +419,7 @@ func unscannedHeldCalls(llm *models.LLM, calls []*heldCall, reason string, r *ht
 			Metadata: map[string]interface{}{
 				"provider": cfg.Provider, "detector": "unscanned", "reason": "held_call_" + reason, "count": len(calls),
 				"action": action, "kinds": []string{guardrails.KindToolCall}, "tool_names": names,
+				scripting.FilterIDKey: f.ID,
 			},
 		}}}, f.Name, "proxy_response", 0, 0, llm.ID, string(llm.Vendor), "")
 		if action == guardrails.ActionBlock {
