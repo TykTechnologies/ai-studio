@@ -2,7 +2,7 @@ import React from "react";
 import { render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { MemoryRouter } from "react-router-dom";
-import FlaggedText, { noExcerpt, segmentLabel } from "./FlaggedText";
+import FlaggedText, { noExcerpt, segmentLabel, templateBadges } from "./FlaggedText";
 
 describe("FlaggedText", () => {
   it("shows the request id, each flagged segment, its excerpt and hash", () => {
@@ -80,5 +80,39 @@ describe("FlaggedText", () => {
     expect(segmentLabel({ kind: "tool_call", tool: "shell" })).toBe("Tool call to shell");
     expect(segmentLabel({ kind: "tool_definition", tool: "fetch" })).toBe("Tool definition fetch");
     expect(segmentLabel({ role: "assistant" })).toBe("Assistant message");
+  });
+
+  it("shows how a segment matched the app's prompt templates", () => {
+    render(
+      <FlaggedText
+        metadata={{
+          segments: [
+            { index: 2, role: "user", sha256: "aa", template: { id: "visor-overview@1", exempt_share: 0.021 } },
+            { index: 4, role: "user", sha256: "bb", template: { signals: ["template.mimicry"] } },
+            {
+              index: 5,
+              role: "user",
+              sha256: "cc",
+              template: { id: "pr-review@3", exempt_share: 0.9, signals: ["template.over_cap"], backstop: "enforced" },
+            },
+          ],
+        }}
+      />
+    );
+    const segs = screen.getAllByTestId("flagged-segment");
+    expect(segs[0]).toHaveTextContent("Matched template visor-overview@1, 2% exempt");
+    expect(segs[1]).toHaveTextContent("Template text out of place");
+    expect(segs[1]).not.toHaveTextContent("Matched template");
+    expect(segs[2]).toHaveTextContent("Matched template pr-review@3, 90% exempt");
+    expect(segs[2]).toHaveTextContent("Over the exempt cap");
+    expect(segs[2]).toHaveTextContent("Backstop scored the template text");
+  });
+
+  it("shows nothing about templates when the segment has no template info", () => {
+    render(<FlaggedText metadata={{ segments: [{ index: 1, role: "user", sha256: "ef" }] }} />);
+    expect(screen.queryByTestId("flagged-template")).not.toBeInTheDocument();
+    expect(templateBadges(undefined)).toEqual([]);
+    expect(templateBadges("visor@1")).toEqual([]);
+    expect(templateBadges({ signals: ["unknown.signal"] })).toEqual([]);
   });
 });

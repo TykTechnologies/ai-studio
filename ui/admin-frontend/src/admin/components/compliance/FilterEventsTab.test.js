@@ -270,3 +270,47 @@ describe("FilterEventsTab: event source", () => {
     expect(screen.getByText("Source")).toBeInTheDocument();
   });
 });
+
+// midsommar-clean-9u1j.1: events can be narrowed to one application.
+describe("FilterEventsTab: application filter", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test("picking an application re-fetches with its app_id; clearing it drops the param", async () => {
+    apiClient.get.mockImplementation((url) => {
+      if (url === "/apps") {
+        return Promise.resolve({
+          data: { data: [{ id: "7", attributes: { name: "Visor" } }, { id: "9", attributes: { name: "Support desk" } }] },
+        });
+      }
+      return Promise.resolve(buildResponse());
+    });
+
+    renderTab();
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith("/compliance/events", expect.anything()));
+    // The app list is loaded only when the picker opens.
+    expect(apiClient.get).not.toHaveBeenCalledWith("/apps", expect.anything());
+
+    const input = screen.getByRole("combobox", { name: /application/i });
+    fireEvent.mouseDown(input);
+    fireEvent.change(input, { target: { value: "vis" } });
+    await waitFor(() =>
+      expect(apiClient.get).toHaveBeenCalledWith("/apps", { params: { page_size: 20, search: "vis" } })
+    );
+    fireEvent.click(await screen.findByText("Visor"));
+
+    await waitFor(() => {
+      expect(apiClient.get).toHaveBeenLastCalledWith(
+        "/compliance/events",
+        expect.objectContaining({ params: expect.objectContaining({ app_id: 7, offset: 0 }) })
+      );
+    });
+
+    fireEvent.click(screen.getByLabelText("Clear"));
+    await waitFor(() => {
+      const last = apiClient.get.mock.calls.filter(([u]) => u === "/compliance/events").pop();
+      expect(last[1].params).not.toHaveProperty("app_id");
+    });
+  });
+});
