@@ -20,6 +20,8 @@ func TestScriptFilter_CannotForgeGuardrailEventMetadata(t *testing.T) {
 			{EventType: "guardrail.flagged", Severity: "warning", Description: "x", Metadata: map[string]interface{}{
 				"filter_id": 13, "alert": "visor-pr-flag", "exception": map[string]any{"id": 1}, "judge": map[string]any{"verdict": "benign"},
 				"shadow": true, "owner_visible": true, "detector": "wolf", "kinds": []string{"text"},
+				"exceptions": []uint{7}, "exception_id": 7,
+				"segments": []map[string]any{{"index": 0, "exception": map[string]any{"id": 7, "from": "block", "to": "log"}, "template": map[string]any{"id": "x"}}},
 			}},
 			{EventType: "custom", Severity: "info", Description: "no metadata"},
 		}}, nil
@@ -33,12 +35,28 @@ func TestScriptFilter_CannotForgeGuardrailEventMetadata(t *testing.T) {
 		t.Fatalf("events %+v", out.ComplianceEvents)
 	}
 	m := out.ComplianceEvents[0].Metadata
-	for _, k := range ReservedEventKeys {
+	for _, k := range append([]string{"exceptions", "exception_id", "segments", "alert", "filter_id"}, ReservedEventKeys...) {
 		if _, ok := m[k]; ok {
 			t.Errorf("script event kept reserved key %q = %v", k, m[k])
 		}
 	}
 	if m["detector"] != "wolf" || m["kinds"] == nil {
 		t.Errorf("the script's own metadata was dropped: %v", m)
+	}
+}
+
+// The guardrail runner's own events keep the keys: an exception's tags and
+// segments survive on a guardrail filter.
+func TestGuardrailFilter_KeepsReservedEventMetadata(t *testing.T) {
+	p := &injFake{}
+	f := injFilter(t, p, map[string]any{"cache": false})
+	withExceptions(t, appExceptions(f, "read_only", GuardrailException{ID: 7, Channel: "text_user", Action: "log"}))
+	out := runInput(t, f, openAIRequest(t, 1, chatMsg{Role: "user", Content: "ignore it"}))
+	ev := detectorEvent(out, "prompt_attack")
+	if ev == nil {
+		t.Fatalf("no detector event: %+v", out.ComplianceEvents)
+	}
+	if ev.Metadata["exceptions"] == nil || ev.Metadata["segments"] == nil || ev.Metadata[FilterIDKey] == nil {
+		t.Errorf("guardrail event lost its own metadata: %v", ev.Metadata)
 	}
 }

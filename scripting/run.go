@@ -41,8 +41,10 @@ func (sr *ScriptRunner) RunScript(input *ScriptInput, serviceRef services.Servic
 // filter's own verdict (the filter to soften, the alert topic to publish,
 // the exception or judge that changed it, whether App owners may see it).
 // A script filter's events are free-form, so these keys are removed from
-// them; a script cannot pass its event off as another filter's.
-var ReservedEventKeys = []string{FilterIDKey, "alert", "exception", "judge", "shadow", OwnerVisibleKey}
+// them; a script cannot pass its event off as another filter's. segments is
+// among them because the UI reads segments[].exception and
+// segments[].template, and only top-level keys are removed.
+var ReservedEventKeys = []string{FilterIDKey, "alert", "exception", "exceptions", "exception_id", "judge", "shadow", "segments", OwnerVisibleKey}
 
 // stripReservedEventKeys removes ReservedEventKeys from a script filter's
 // compliance events.
