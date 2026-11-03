@@ -478,6 +478,17 @@ different keys to the gateway and the vendor alike and pass. Batch params and
 `count_tokens` use the same check; OpenAI batch lines fold at the line, its
 `body`, each chat message and tool (`batchLineFoldPaths`).
 
+`nativeapi.CheckJSONKeys` is a byte scanner, not a JSON decode (53e.50): it
+runs on every `/v1/messages` request on top of the model check's and the
+vendor screen's decodes, which v2.2.2 already had, and at 256 KB it costs
+about 0.18 ms where the `json.Decoder.Token` version cost 1.8 ms. A decoded
+map cannot see duplicate keys, so the check does not reuse one. It accepts
+exactly what encoding/json accepts, and compares keys as encoding/json
+decodes them (escapes, invalid UTF-8 and lone surrogates as U+FFFD; plain
+ASCII keys without escapes are their bytes). `TestCheckJSONKeys_MatchesDecoder`
+and `FuzzCheckJSONKeys` hold it to the decoder version, kept in the test as
+the reference.
+
 The Anthropic `AnalyzeResponse` treats only a `/messages` suffix as a Messages
 call. Other `/v1/messages/*` paths that still reach the legacy chain (a
 `count_tokens` with a trailing slash) are logged without a chat record.

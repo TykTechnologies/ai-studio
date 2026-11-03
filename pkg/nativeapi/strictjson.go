@@ -34,33 +34,491 @@ var ErrDuplicateKey = errors.New("duplicate key")
 // a "[]" suffix names the elements of an array: "messages[]" is every
 // message, "messages[].content[]" every content block.
 func CheckJSONKeys(b []byte, foldAt ...string) error {
-	fold := make(map[string]bool, len(foldAt))
-	for _, p := range foldAt {
-		fold[p] = true
+	// A byte scanner rather than json.Decoder.Token: this runs on every
+	// native Messages request, before the model checks decode the same body,
+	// and v2.2.2 had no such pass (53e.50). It accepts exactly the JSON
+	// encoding/json accepts and compares keys as encoding/json decodes them;
+	// TestCheckJSONKeys_MatchesDecoder and FuzzCheckJSONKeys hold it to the
+	// json.Decoder version it replaced.
+	s := keyScanner{b: b, fold: newFoldPaths(foldAt)}
+	s.skipSpace()
+	if s.i == len(b) {
+		return errors.New("empty JSON body")
 	}
+	err := s.value()
+	if err == nil {
+		s.skipSpace()
+		if s.i != len(b) {
+			err = errors.New("trailing data after JSON value")
+		}
+	}
+	if err != nil && !errors.Is(err, ErrDuplicateKey) {
+		// Malformed: report it in encoding/json's words, as before (53e.56).
+		// Only a body the client must fix pays for the second read; should
+		// the decoder ever accept it, the scanner's refusal stands.
+		if derr := checkJSONKeysDecoder(b, foldAt...); derr != nil {
+			return derr
+		}
+	}
+	return err
+}
+
+// DuplicateKey is the first exact duplicate key FindDuplicateKey found: Key
+// as encoding/json decodes it, in the object at Path.
+type DuplicateKey struct {
+	Key  string
+	Path []PathElem
+}
+
+// PathElem is one step from the root to a value: an object key, or (when
+// IsIndex) an array index.
+type PathElem struct {
+	Key     string
+	Index   int
+	IsIndex bool
+}
+
+// FindDuplicateKey reads all of b, as CheckJSONKeys does with no foldAt.
+// It returns a syntax error when b is not one JSON value json.Valid would
+// accept (nesting deeper than encoding/json's 10000 included), even after a
+// duplicate (a caller that ignores bodies it cannot read keeps ignoring
+// them); otherwise the first exact duplicate key in document order, or nil.
+func FindDuplicateKey(b []byte) (*DuplicateKey, error) {
+	s := keyScanner{b: b, all: true}
+	s.skipSpace()
+	if s.i == len(b) {
+		return nil, errors.New("empty JSON body")
+	}
+	if err := s.value(); err != nil {
+		return nil, err
+	}
+	s.skipSpace()
+	if s.i != len(b) {
+		return nil, errors.New("trailing data after JSON value")
+	}
+	return s.dup, nil
+}
+
+// path is the path to the innermost open object.
+func (s *keyScanner) path() []PathElem {
+	var p []PathElem
+	for _, f := range s.stack[:len(s.stack)-1] {
+		if f.isArray {
+			p = append(p, PathElem{Index: f.index, IsIndex: true})
+		} else {
+			p = append(p, PathElem{Key: f.key})
+		}
+	}
+	return p
+}
+
+// keyFrame is one open object or array.
+type keyFrame struct {
+	path    string // foldPaths.child; "" when not live
+	live    bool
+	isArray bool
+	exact   map[string]bool
+	folded  map[string]bool // nil: case variants are not checked here
+	key     string          // the key whose value comes next
+	index   int             // the element being read, in an array
+}
+
+type keyScanner struct {
+	b     []byte
+	i     int
+	fold  foldPaths
+	stack []*keyFrame
+	// all keeps scanning past the first duplicate, which dup records, so
+	// a body that is not valid JSON is reported as such (FindDuplicateKey).
+	all bool
+	dup *DuplicateKey
+}
+
+// maxNestingDepth is encoding/json's: json.Valid refuses deeper input, and
+// every caller decodes the body with encoding/json after the key check, so
+// refusing it here changes no verdict (53e.55, 53e.58).
+const maxNestingDepth = 10000
+
+// push opens an object or array.
+func (s *keyScanner) push(f *keyFrame) error {
+	if len(s.stack) == maxNestingDepth {
+		return s.syntaxError("exceeded max depth")
+	}
+	s.stack = append(s.stack, f)
+	return nil
+}
+
+// foldPaths decides which objects are checked for case variants: those at
+// a foldAt path. A value's path is kept only while it can still lead to a
+// foldAt path; below that it is not built at all, so the paths' memory is
+// bounded by the longest foldAt path however deep the body nests (53e.58).
+type foldPaths struct {
+	fold   map[string]bool // the foldAt paths
+	prefix map[string]bool // every path that is or leads to one, "" included
+}
+
+func newFoldPaths(foldAt []string) foldPaths {
+	fp := foldPaths{fold: make(map[string]bool, len(foldAt)), prefix: map[string]bool{"": true}}
+	for _, p := range foldAt {
+		fp.fold[p] = true
+		fp.prefix[p] = true
+		for i := 1; i < len(p); i++ {
+			if p[i] == '.' || p[i] == '[' {
+				fp.prefix[p[:i]] = true
+			}
+		}
+	}
+	return fp
+}
+
+// child is the path of a value read in the container at path: the
+// container's key for it (object) or "[]" (array) appended. live is false
+// when the path cannot lead to a foldAt path, and then path is not built.
+// A value with no container (the body) is at "".
+func (fp foldPaths) child(hasParent, parentLive, parentArray bool, parentPath, key string) (path string, live bool) {
+	switch {
+	case !hasParent:
+		return "", true
+	case !parentLive:
+		return "", false
+	case parentArray:
+		path = parentPath + "[]"
+	case parentPath == "":
+		path = key
+	default:
+		path = parentPath + "." + key
+	}
+	if !fp.prefix[path] {
+		return "", false
+	}
+	return path, true
+}
+
+func (s *keyScanner) syntaxError(what string) error {
+	return fmt.Errorf("invalid JSON at offset %d: %s", s.i, what)
+}
+
+func (s *keyScanner) skipSpace() {
+	for s.i < len(s.b) {
+		switch s.b[s.i] {
+		case ' ', '\t', '\n', '\r':
+			s.i++
+		default:
+			return
+		}
+	}
+}
+
+// childPath is the path of the value about to be read (foldPaths.child).
+func (s *keyScanner) childPath() (string, bool) {
+	if len(s.stack) == 0 {
+		return s.fold.child(false, false, false, "", "")
+	}
+	f := s.stack[len(s.stack)-1]
+	return s.fold.child(true, f.live, f.isArray, f.path, f.key)
+}
+
+// value reads one JSON value and everything nested in it. Nesting is kept on
+// s.stack, not the Go stack, so deep input cannot overflow it.
+func (s *keyScanner) value() error {
+	for {
+		s.skipSpace()
+		if s.i == len(s.b) {
+			return s.syntaxError("unexpected end of input")
+		}
+		switch c := s.b[s.i]; {
+		case c == '{':
+			s.i++
+			p, live := s.childPath()
+			f := &keyFrame{path: p, live: live, exact: map[string]bool{}}
+			if live && s.fold.fold[p] {
+				f.folded = map[string]bool{}
+			}
+			if err := s.push(f); err != nil {
+				return err
+			}
+			s.skipSpace()
+			if s.i < len(s.b) && s.b[s.i] == '}' {
+				s.i++
+				s.stack = s.stack[:len(s.stack)-1]
+				break
+			}
+			if err := s.member(f); err != nil {
+				return err
+			}
+			continue // the member's value
+		case c == '[':
+			s.i++
+			p, live := s.childPath()
+			if err := s.push(&keyFrame{path: p, live: live, isArray: true}); err != nil {
+				return err
+			}
+			s.skipSpace()
+			if s.i < len(s.b) && s.b[s.i] == ']' {
+				s.i++
+				s.stack = s.stack[:len(s.stack)-1]
+				break
+			}
+			continue // the first element
+		case c == '"':
+			if _, err := s.str(false); err != nil {
+				return err
+			}
+		case c == '-' || (c >= '0' && c <= '9'):
+			if err := s.number(); err != nil {
+				return err
+			}
+		case c == 't':
+			if err := s.literal("true"); err != nil {
+				return err
+			}
+		case c == 'f':
+			if err := s.literal("false"); err != nil {
+				return err
+			}
+		case c == 'n':
+			if err := s.literal("null"); err != nil {
+				return err
+			}
+		default:
+			return s.syntaxError(fmt.Sprintf("invalid character %q looking for a value", c))
+		}
+		// A value ended: close what it ends, then expect the next one.
+		for {
+			if len(s.stack) == 0 {
+				return nil
+			}
+			f := s.stack[len(s.stack)-1]
+			s.skipSpace()
+			if s.i == len(s.b) {
+				return s.syntaxError("unexpected end of input")
+			}
+			c := s.b[s.i]
+			if f.isArray {
+				if c == ']' {
+					s.i++
+					s.stack = s.stack[:len(s.stack)-1]
+					continue
+				}
+				if c != ',' {
+					return s.syntaxError("expected ',' or ']' after an array element")
+				}
+				s.i++
+				f.index++
+				break // the next element
+			}
+			if c == '}' {
+				s.i++
+				s.stack = s.stack[:len(s.stack)-1]
+				continue
+			}
+			if c != ',' {
+				return s.syntaxError("expected ',' or '}' after an object value")
+			}
+			s.i++
+			s.skipSpace()
+			if err := s.member(f); err != nil {
+				return err
+			}
+			break // the member's value
+		}
+	}
+}
+
+// member reads an object key, checks it against the object's other keys,
+// and reads the ':' after it.
+func (s *keyScanner) member(f *keyFrame) error {
+	if s.i == len(s.b) || s.b[s.i] != '"' {
+		return s.syntaxError("expected an object key")
+	}
+	key, err := s.str(true)
+	if err != nil {
+		return err
+	}
+	if f.exact[key] {
+		if !s.all {
+			return fmt.Errorf("%w %q", ErrDuplicateKey, key)
+		}
+		if s.dup == nil {
+			s.dup = &DuplicateKey{Key: key, Path: s.path()}
+		}
+	}
+	f.exact[key] = true
+	if f.folded != nil {
+		folded := FoldKey(key)
+		if f.folded[folded] {
+			return fmt.Errorf("%w %q", ErrDuplicateKey, key)
+		}
+		f.folded[folded] = true
+	}
+	f.key = key
+	s.skipSpace()
+	if s.i == len(s.b) || s.b[s.i] != ':' {
+		return s.syntaxError("expected ':' after an object key")
+	}
+	s.i++
+	return nil
+}
+
+// str reads a string at s.i and, for a key, returns it as encoding/json
+// decodes it: for plain ASCII without escapes the bytes themselves, otherwise
+// encoding/json's own decoding (invalid UTF-8 and lone surrogates become
+// U+FFFD, as for every key it decodes). A value's text is not needed.
+func (s *keyScanner) str(key bool) (string, error) {
+	start := s.i
+	s.i++ // opening quote
+	plain := true
+	for {
+		// Skip the bulk of a long string fast: only '"', '\\' and control
+		// characters need a look.
+		j := s.i
+		for j < len(s.b) && !strStop[s.b[j]] {
+			j++
+		}
+		if key && plain {
+			for _, c := range s.b[s.i:j] {
+				if c >= 0x80 {
+					plain = false
+					break
+				}
+			}
+		}
+		s.i = j
+		if s.i == len(s.b) {
+			return "", s.syntaxError("unterminated string")
+		}
+		switch c := s.b[s.i]; {
+		case c == '"':
+			s.i++
+			raw := s.b[start:s.i]
+			if !key {
+				return "", nil
+			}
+			if plain {
+				return string(raw[1 : len(raw)-1]), nil
+			}
+			var out string
+			if err := json.Unmarshal(raw, &out); err != nil {
+				return "", err
+			}
+			return out, nil
+		case c == '\\':
+			plain = false
+			if s.i+1 == len(s.b) {
+				return "", s.syntaxError("unterminated string")
+			}
+			switch s.b[s.i+1] {
+			case '"', '\\', '/', 'b', 'f', 'n', 'r', 't':
+				s.i += 2
+			case 'u':
+				if s.i+6 > len(s.b) {
+					return "", s.syntaxError("unterminated string")
+				}
+				for _, h := range s.b[s.i+2 : s.i+6] {
+					if !isHex(h) {
+						return "", s.syntaxError("invalid \\u escape")
+					}
+				}
+				s.i += 6
+			default:
+				return "", s.syntaxError("invalid escape in string")
+			}
+		default:
+			return "", s.syntaxError("control character in string")
+		}
+	}
+}
+
+// strStop marks the bytes a string scan must look at: '"', '\\' and the
+// control characters JSON does not allow in a string.
+var strStop = func() (t [256]bool) {
+	for c := 0; c < 0x20; c++ {
+		t[c] = true
+	}
+	t['"'], t['\\'] = true, true
+	return t
+}()
+
+func isHex(c byte) bool {
+	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+}
+
+// number reads -?(0|[1-9][0-9]*)(.[0-9]+)?([eE][+-]?[0-9]+)?.
+func (s *keyScanner) number() error {
+	digits := func() int {
+		n := 0
+		for s.i < len(s.b) && s.b[s.i] >= '0' && s.b[s.i] <= '9' {
+			s.i++
+			n++
+		}
+		return n
+	}
+	if s.b[s.i] == '-' {
+		s.i++
+	}
+	switch {
+	case s.i < len(s.b) && s.b[s.i] == '0':
+		s.i++
+	case digits() == 0:
+		return s.syntaxError("invalid number")
+	}
+	if s.i < len(s.b) && s.b[s.i] == '.' {
+		s.i++
+		if digits() == 0 {
+			return s.syntaxError("invalid number")
+		}
+	}
+	if s.i < len(s.b) && (s.b[s.i] == 'e' || s.b[s.i] == 'E') {
+		s.i++
+		if s.i < len(s.b) && (s.b[s.i] == '+' || s.b[s.i] == '-') {
+			s.i++
+		}
+		if digits() == 0 {
+			return s.syntaxError("invalid number")
+		}
+	}
+	return nil
+}
+
+func (s *keyScanner) literal(lit string) error {
+	if !bytes.HasPrefix(s.b[s.i:], []byte(lit)) {
+		return s.syntaxError("invalid literal")
+	}
+	s.i += len(lit)
+	return nil
+}
+
+// checkJSONKeysDecoder is CheckJSONKeys as it was before 53e.50, on
+// json.Decoder.Token. CheckJSONKeys runs it on a body the scanner found
+// malformed, so the client's 400 keeps encoding/json's wording (53e.56);
+// the tests hold the scanner's verdicts to it.
+func checkJSONKeysDecoder(b []byte, foldAt ...string) error {
+	fp := newFoldPaths(foldAt)
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.UseNumber()
 	// One frame per open object or array.
 	type frame struct {
 		path    string
+		live    bool
 		isArray bool
 		exact   map[string]bool
 		folded  map[string]bool // nil: case variants are not checked here
 		key     string          // the key whose value comes next
 	}
 	var stack []*frame
-	childPath := func() string {
+	childPath := func() (string, bool) {
 		if len(stack) == 0 {
-			return ""
+			return fp.child(false, false, false, "", "")
 		}
 		f := stack[len(stack)-1]
-		if f.isArray {
-			return f.path + "[]"
+		return fp.child(true, f.live, f.isArray, f.path, f.key)
+	}
+	push := func(f *frame) error {
+		if len(stack) == maxNestingDepth {
+			return errors.New("exceeded max depth")
 		}
-		if f.path == "" {
-			return f.key
-		}
-		return f.path + "." + f.key
+		stack = append(stack, f)
+		return nil
 	}
 	started := false
 	for {
@@ -105,14 +563,19 @@ func CheckJSONKeys(b []byte, foldAt ...string) error {
 		if d, ok := tok.(json.Delim); ok {
 			switch d {
 			case '{':
-				p := childPath()
-				f := &frame{path: p, exact: map[string]bool{}}
-				if fold[p] {
+				p, live := childPath()
+				f := &frame{path: p, live: live, exact: map[string]bool{}}
+				if live && fp.fold[p] {
 					f.folded = map[string]bool{}
 				}
-				stack = append(stack, f)
+				if err := push(f); err != nil {
+					return err
+				}
 			case '[':
-				stack = append(stack, &frame{path: childPath(), isArray: true})
+				p, live := childPath()
+				if err := push(&frame{path: p, live: live, isArray: true}); err != nil {
+					return err
+				}
 			case '}', ']':
 				stack = stack[:len(stack)-1]
 			}

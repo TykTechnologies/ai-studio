@@ -378,8 +378,27 @@ func ReadWith(format string, body []byte, opts Options) ([]Unit, error) {
 // CheckKeys reports a repeated key anywhere in a JSON body as ErrDuplicateKey.
 // A body that is not JSON returns ErrUnrecognisedBody.
 func CheckKeys(body []byte) error {
-	_, err := parseTree(body)
-	return err
+	// A byte scanner rather than parseTree: no tree is needed to find a
+	// repeated key, and this runs on every request a filter screens (53e.52).
+	// Its verdicts are parseTree's (TestCheckKeys_MatchesParseTree): not
+	// JSON, even after a repeated key, is ErrUnrecognisedBody; else the first
+	// repeated key in document order, with the same masked text.
+	dup, err := nativeapi.FindDuplicateKey(body)
+	if err != nil {
+		return fmt.Errorf("%w: not valid JSON", ErrUnrecognisedBody)
+	}
+	if dup == nil {
+		return nil
+	}
+	ptr := ""
+	for _, e := range dup.Path {
+		if e.IsIndex {
+			ptr = pointerIndex(ptr, e.Index)
+		} else {
+			ptr = pointer(ptr, e.Key)
+		}
+	}
+	return fmt.Errorf("%w: repeated key%s at %s", ErrDuplicateKey, keyName(dup.Key), maskPath(ptr))
 }
 
 func extract(format string, body []byte, opts Options) (*extraction, error) {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -244,8 +245,10 @@ func TestSplitJoinConversationItems(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, items, "no items, nothing to screen")
 
+	// Nested deeper than encoding/json's limit (53e.58).
+	deep := `{"items":[{"role":"user","content":` + strings.Repeat("[", 10001) + `"x"` + strings.Repeat("]", 10001) + `}]}`
 	for _, b := range []string{`nope`, `{"items":{}}`, `{"items":"x"}`, `{"items":[],"Items":[]}`,
-		`{"items":[{"role":"user","content":"a","content":"b"}]}`} {
+		`{"items":[{"role":"user","content":"a","content":"b"}]}`, deep} {
 		_, err := splitConversationItems([]byte(b))
 		assert.ErrorIs(t, err, errConversationBody, b)
 	}

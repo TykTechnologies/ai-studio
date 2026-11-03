@@ -146,15 +146,18 @@ func TestSplitBatchFileRejects(t *testing.T) {
 		return b.Bytes()
 	}
 	for name, body := range map[string][]byte{
-		"not multipart":      []byte(line),
-		"preamble":           append([]byte("preamble\r\n"), uploadBody(t, "batch", line)...),
-		"other purpose":      uploadBody(t, "fine-tune", line),
-		"no purpose":         uploadBody(t, "", line),
-		"two file parts":     twoFiles(),
-		"no disposition":     noDisposition(),
-		"quoted-printable":   []byte(qp),
-		"empty file":         uploadBody(t, "batch", "\n\n"),
-		"not json":           uploadBody(t, "batch", "nope"),
+		"not multipart":    []byte(line),
+		"preamble":         append([]byte("preamble\r\n"), uploadBody(t, "batch", line)...),
+		"other purpose":    uploadBody(t, "fine-tune", line),
+		"no purpose":       uploadBody(t, "", line),
+		"two file parts":   twoFiles(),
+		"no disposition":   noDisposition(),
+		"quoted-printable": []byte(qp),
+		"empty file":       uploadBody(t, "batch", "\n\n"),
+		"not json":         uploadBody(t, "batch", "nope"),
+		// Nested deeper than encoding/json's limit (53e.58).
+		"too deep": uploadBody(t, "batch", `{"custom_id":"a","method":"POST","url":"/v1/chat/completions","body":{"model":"gpt-4o","messages":[],"metadata":`+
+			strings.Repeat("[", 10001)+"1"+strings.Repeat("]", 10001)+`}}`),
 		"get method":         uploadBody(t, "batch", strings.Replace(line, `"POST"`, `"GET"`, 1)),
 		"unsupported url":    uploadBody(t, "batch", strings.Replace(line, "/v1/chat/completions", "/v1/files", 1)),
 		"missing model":      uploadBody(t, "batch", `{"custom_id":"a","method":"POST","url":"/v1/chat/completions","body":{"messages":[]}}`),

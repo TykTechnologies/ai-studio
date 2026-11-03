@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/nativeapi"
 	"github.com/TykTechnologies/midsommar/v2/switches"
@@ -101,8 +100,10 @@ func (ch *nativeChain) fail(w http.ResponseWriter, status int, typ, msg string) 
 }
 
 // prepare sets up the ID codec and verifies and unwraps the request's
-// resource references in r's body. On failure it has answered the client.
-func (ch *nativeChain) prepare(w http.ResponseWriter, r *http.Request) bool {
+// resource references in r's body. body is that body as the handler has just
+// read it (helpers.CopyRequestBody), so it is not read a third time (53e.50);
+// prepare never changes it. On failure it has answered the client.
+func (ch *nativeChain) prepare(w http.ResponseWriter, r *http.Request, body []byte) bool {
 	c := ch.c
 	c.r = r
 	for _, name := range ch.hook.DropHeaders {
@@ -119,11 +120,6 @@ func (ch *nativeChain) prepare(w http.ResponseWriter, r *http.Request) bool {
 	}
 	if len(ch.hook.RequestRefs) == 0 && ch.hook.CheckBody == nil {
 		return true
-	}
-	body, err := helpers.CopyRequestBody(r)
-	if err != nil {
-		ch.fail(w, http.StatusBadRequest, nativeErrInvalidRequest, "failed to read request body")
-		return false
 	}
 	if ch.hook.CheckBody != nil {
 		if err := ch.hook.CheckBody(body); err != nil {

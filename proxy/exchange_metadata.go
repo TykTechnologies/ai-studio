@@ -111,8 +111,8 @@ func (f *requestFields) keepObject(body []byte, obj map[string]any) {
 // map[string]any does: the kept map when it was decoded from the same
 // bytes, else a new one, which it keeps.
 func (f *requestFields) decodeObject(body []byte) (map[string]any, error) {
-	if f != nil && f.hasObj && bytes.Equal(f.body, body) {
-		return f.obj, nil
+	if obj, ok := f.keptObject(body); ok {
+		return obj, nil
 	}
 	var obj map[string]any
 	if err := json.Unmarshal(body, &obj); err != nil {
@@ -120,6 +120,14 @@ func (f *requestFields) decodeObject(body []byte) (map[string]any, error) {
 	}
 	f.keepObject(body, obj)
 	return obj, nil
+}
+
+// keptObject is the map a step decoded from these same bytes, if one did.
+func (f *requestFields) keptObject(body []byte) (map[string]any, bool) {
+	if f != nil && f.hasObj && bytes.Equal(f.body, body) {
+		return f.obj, true
+	}
+	return nil, false
 }
 
 // objectReader is reader for a step that comes before the model extractors:

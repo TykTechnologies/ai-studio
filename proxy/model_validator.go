@@ -194,6 +194,33 @@ func decodeRequestBody(r *http.Request, body []byte) (map[string]any, error) {
 	return f.decodeObject(body)
 }
 
+// keptBodyModelID reads "modelId" as BedrockModelExtractor's struct decode
+// would, from the map an earlier step of r decoded from the same bytes: the
+// one key equal to "modelId" but for case, when its value is a string ("",
+// true otherwise). ok is false when nothing was kept for these bytes, or
+// when two keys match (the struct keeps the later one in the body, an order
+// the map has lost): decode the body then.
+func keptBodyModelID(r *http.Request, body []byte) (id string, ok bool) {
+	if r == nil {
+		return "", false
+	}
+	obj, ok := requestFieldsOf(r.Context()).keptObject(body)
+	if !ok {
+		return "", false
+	}
+	matches := 0
+	for k, v := range obj {
+		if strings.EqualFold(k, "modelId") {
+			matches++
+			id, _ = v.(string)
+		}
+	}
+	if matches > 1 {
+		return "", false
+	}
+	return id, true
+}
+
 func AzureModelExtractor(r *http.Request, body []byte) (string, error) {
 	// Extract from URL path
 	parts := strings.Split(r.URL.Path, "/")
@@ -322,7 +349,15 @@ func BedrockModelExtractor(r *http.Request, body []byte) (string, error) {
 		return modelID, nil
 	}
 
-	// Check request body for modelId field
+	// Check request body for modelId field: in the map the edge's post_auth
+	// hook already decoded from these bytes, if it did (53e.50), else by
+	// decoding it here.
+	if id, ok := keptBodyModelID(r, body); ok {
+		if id != "" {
+			return id, nil
+		}
+		return "", &BadRequestError{"model ID not found in URL path or request body"}
+	}
 	var req struct {
 		ModelId string `json:"modelId"`
 	}
