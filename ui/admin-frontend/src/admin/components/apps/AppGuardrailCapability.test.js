@@ -81,6 +81,14 @@ describe("AppGuardrailCapability", () => {
     );
   });
 
+  it("shows a reset after a resource change", async () => {
+    apiClient.get.mockResolvedValue({
+      data: { data: { ...unattested, reset_by: 4, reset_at: "2026-11-03T10:00:00Z", guardrails_apply: true } },
+    });
+    renderIt();
+    expect(await screen.findByTestId("capability-reset")).toHaveTextContent("by user #4");
+  });
+
   it("is read-only for users who are not full admins", async () => {
     mockFullAdmin = false;
     renderIt();

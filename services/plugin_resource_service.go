@@ -291,7 +291,22 @@ func (s *Service) GetPluginResourceTypesBatch(keys []PluginResourceTypeKey) (map
 
 // SetAppPluginResources replaces all plugin resource associations for an app
 // and a given resource type. This is a full replace (delete old, insert new).
-func (s *Service) SetAppPluginResources(appID, resourceTypeID uint, instanceIDs []string) error {
+// Unless opts name a full administrator (WithCapabilityActor), a change
+// clears the App's attested guardrail capability.
+func (s *Service) SetAppPluginResources(appID, resourceTypeID uint, instanceIDs []string, opts ...AppOption) error {
+	_, err := s.SetAppPluginResourcesReportingReset(appID, resourceTypeID, instanceIDs, opts...)
+	return err
+}
+
+// SetAppPluginResourcesReportingReset is SetAppPluginResources, reporting
+// whether it cleared the App's guardrail capability visibly.
+func (s *Service) SetAppPluginResourcesReportingReset(appID, resourceTypeID uint, instanceIDs []string, opts ...AppOption) (bool, error) {
+	return s.guardCapabilityDrift(appID, resolveAppOptions(opts), func() error {
+		return s.setAppPluginResources(appID, resourceTypeID, instanceIDs)
+	})
+}
+
+func (s *Service) setAppPluginResources(appID, resourceTypeID uint, instanceIDs []string) error {
 	// Delete existing associations for this app+type
 	if err := models.DeleteAppPluginResourcesByType(s.DB, appID, resourceTypeID); err != nil {
 		return fmt.Errorf("failed to clear app plugin resources: %w", err)

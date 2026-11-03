@@ -586,6 +586,10 @@ type AppResponse struct {
 		// GuardrailCapability is the attested capability ("" = unattested,
 		// treated as acting); set with PUT /apps/{id}/guardrail-capability.
 		GuardrailCapability string `json:"guardrail_capability"`
+		// GuardrailCapabilityReset is true on the response to a change that
+		// cleared the attested capability (a resource change by someone who
+		// is not a full administrator, on an App whose LLMs run guardrails).
+		GuardrailCapabilityReset bool `json:"guardrail_capability_reset,omitempty"`
 	} `json:"attributes"`
 }
 

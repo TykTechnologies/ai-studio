@@ -373,6 +373,10 @@ func (a *API) updateApp(c *gin.Context) {
 		appOpts = append(appOpts, tracingOpt)
 	}
 
+	// A change to the App's resources by anyone but a full administrator
+	// clears its attested guardrail capability.
+	appOpts = append(appOpts, capabilityActorOption(c))
+
 	var app *models.App
 	if len(pluginResources) > 0 {
 		app, err = a.service.UpdateAppWithResources(
@@ -446,6 +450,7 @@ func (a *API) updateApp(c *gin.Context) {
 	}
 
 	if input.Data.Attributes.IsActive != nil && app.IsActive != *input.Data.Attributes.IsActive {
+		reset := app.GuardrailCapabilityReset
 		if app, err = a.service.SetAppActive(app.ID, *input.Data.Attributes.IsActive, currentUserID(c)); err != nil {
 			c.JSON(http.StatusInternalServerError, ErrorResponse{
 				Errors: []struct {
@@ -455,6 +460,7 @@ func (a *API) updateApp(c *gin.Context) {
 			})
 			return
 		}
+		app.GuardrailCapabilityReset = reset
 	}
 
 	if input.Data.Attributes.MCPServerIDs != nil {
@@ -618,6 +624,7 @@ func serializeApp(app *models.App) AppResponse {
 	resp.Attributes.Namespace = app.Namespace
 	resp.Attributes.Tracing = app.Tracing
 	resp.Attributes.GuardrailCapability = app.GuardrailCapability
+	resp.Attributes.GuardrailCapabilityReset = app.GuardrailCapabilityReset
 	return resp
 }
 
@@ -998,7 +1005,7 @@ func (a *API) addToolToApp(c *gin.Context) {
 		return
 	}
 
-	app, err := a.service.AddToolToApp(uint(appID), uint(toolID))
+	app, err := a.service.AddToolToApp(uint(appID), uint(toolID), capabilityActorOption(c))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, createErrorResponse("Not Found", "App or Tool not found"))
@@ -1035,13 +1042,19 @@ func (a *API) removeToolFromApp(c *gin.Context) {
 		return
 	}
 
-	err = a.service.RemoveToolFromApp(uint(appID), uint(toolID))
+	reset, err := a.service.RemoveToolFromAppReportingReset(uint(appID), uint(toolID), capabilityActorOption(c))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, createErrorResponse("Not Found", "App or Tool not found, or tool not associated with app"))
 			return
 		}
 		c.JSON(http.StatusInternalServerError, createErrorResponse("Internal Server Error", err.Error()))
+		return
+	}
+	if reset {
+		// The removal cleared the App's attested guardrail capability: say
+		// so (200 with a body instead of the usual 204).
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"guardrail_capability_reset": true}})
 		return
 	}
 	c.Status(http.StatusNoContent)

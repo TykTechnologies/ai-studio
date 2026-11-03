@@ -47,7 +47,24 @@ type App struct {
 	// unattested and treated as acting. Set only through
 	// Service.SetAppGuardrailCapability.
 	GuardrailCapability string `json:"guardrail_capability" gorm:"size:16;default:''"`
+	// GuardrailCapabilityResetBy and GuardrailCapabilityResetAt record the
+	// last time a change to the App's tools, datasources, MCP servers or
+	// plugin resources by someone other than a full administrator cleared
+	// the attestation, on an App whose LLMs run guardrails (a quiet reset
+	// leaves them empty). ResetBy is nil when no user is known (a plugin).
+	// Cleared when the capability is attested again.
+	GuardrailCapabilityResetBy *uint      `json:"guardrail_capability_reset_by"`
+	GuardrailCapabilityResetAt *time.Time `json:"guardrail_capability_reset_at"`
+	// GuardrailCapabilityReset is not stored: the service sets it on the App
+	// it returns when that call reset the capability visibly.
+	GuardrailCapabilityReset bool `json:"-" gorm:"-"`
 }
+
+// AppGuardedColumns are written only by the guardrail capability service
+// (Service.SetAppGuardrailCapability and the reset on a resource change),
+// never by a save of the whole App, which could write back a stale value
+// loaded before an administrator changed it.
+var AppGuardedColumns = []string{"guardrail_capability", "guardrail_capability_reset_by", "guardrail_capability_reset_at"}
 
 type Apps []App
 
@@ -77,9 +94,10 @@ func (a *App) Get(db *gorm.DB, id uint) error {
 	return db.Preload("Credential").Preload("Datasources").Preload("LLMs").Preload("Tools").Preload("MCPServers").Preload("ModelRouters").Preload("SemanticRouters").Preload("Tags").First(a, id).Error
 }
 
-// Update an existing app
+// Update an existing app. The guardrail capability columns are left alone
+// (AppGuardedColumns).
 func (a *App) Update(db *gorm.DB) error {
-	return db.Save(a).Error
+	return db.Omit(AppGuardedColumns...).Save(a).Error
 }
 
 // Delete an app

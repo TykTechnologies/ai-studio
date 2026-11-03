@@ -320,27 +320,32 @@ func (s *Service) UpdateApp(id uint, name, description string, userID uint, data
 	app.BudgetStartDate = budgetStartDate
 	app.Metadata = keepGovernanceFlags(metadata, app.Metadata)
 
-	// Update datasources
-	if err := s.updateAppDatasources(app, datasourceIDs); err != nil {
-		return nil, err
-	}
+	// A change to the datasources or tools by anyone but a full
+	// administrator clears the attested guardrail capability.
+	reset, err := s.guardCapabilityDrift(app.ID, o, func() error {
+		// Update datasources
+		if err := s.updateAppDatasources(app, datasourceIDs); err != nil {
+			return err
+		}
 
-	// Update LLMs
-	if err := s.updateAppLLMs(app, llmIDs); err != nil {
-		return nil, err
-	}
+		// Update LLMs
+		if err := s.updateAppLLMs(app, llmIDs); err != nil {
+			return err
+		}
 
-	// Update Tools
-	if err := s.updateAppTools(app, toolIDs); err != nil {
-		return nil, fmt.Errorf("failed to update app tools: %w", err)
-	}
+		// Update Tools
+		if err := s.updateAppTools(app, toolIDs); err != nil {
+			return fmt.Errorf("failed to update app tools: %w", err)
+		}
 
-	// Update router grants, when the change sets them
-	if err := s.setAppRouterGrants(app, o, false); err != nil {
-		return nil, err
-	}
+		// Update router grants, when the change sets them
+		if err := s.setAppRouterGrants(app, o, false); err != nil {
+			return err
+		}
 
-	if err := app.Update(s.DB); err != nil {
+		return app.Update(s.DB)
+	})
+	if err != nil {
 		return nil, err
 	}
 	// Reload app to get all associations
@@ -348,6 +353,7 @@ func (s *Service) UpdateApp(id uint, name, description string, userID uint, data
 	if err != nil {
 		return nil, fmt.Errorf("failed to reload app: %w", err)
 	}
+	app.GuardrailCapabilityReset = reset
 
 	// Emit system event
 	if s.SystemEvents != nil {
@@ -396,7 +402,7 @@ func (s *Service) PatchAppMetadata(appID uint, key, value string, deleteKey bool
 		}
 
 		// Use Save to properly trigger GORM's JSON serializer for the metadata field
-		if err := tx.Save(&app).Error; err != nil {
+		if err := tx.Omit(models.AppGuardedColumns...).Save(&app).Error; err != nil {
 			return err
 		}
 
@@ -799,8 +805,10 @@ func (s *Service) ResetAppBudget(appID uint) error {
 	return nil
 }
 
-// AddDatasourceToApp adds a datasource to an app
-func (s *Service) AddDatasourceToApp(appID, datasourceID uint) error {
+// AddDatasourceToApp adds a datasource to an app. Unless opts name a full
+// administrator (WithCapabilityActor), it clears an attested guardrail
+// capability.
+func (s *Service) AddDatasourceToApp(appID, datasourceID uint, opts ...AppOption) error {
 	app, err := s.GetAppByID(appID)
 	if err != nil {
 		return err
@@ -811,11 +819,16 @@ func (s *Service) AddDatasourceToApp(appID, datasourceID uint) error {
 		return err
 	}
 
-	return app.AddDatasource(s.DB, datasource)
+	_, err = s.guardCapabilityDrift(appID, resolveAppOptions(opts), func() error {
+		return app.AddDatasource(s.DB, datasource)
+	})
+	return err
 }
 
-// RemoveDatasourceFromApp removes a datasource from an app
-func (s *Service) RemoveDatasourceFromApp(appID, datasourceID uint) error {
+// RemoveDatasourceFromApp removes a datasource from an app. Unless opts name
+// a full administrator (WithCapabilityActor), it clears an attested
+// guardrail capability.
+func (s *Service) RemoveDatasourceFromApp(appID, datasourceID uint, opts ...AppOption) error {
 	app, err := s.GetAppByID(appID)
 	if err != nil {
 		return err
@@ -826,7 +839,10 @@ func (s *Service) RemoveDatasourceFromApp(appID, datasourceID uint) error {
 		return err
 	}
 
-	return app.RemoveDatasource(s.DB, datasource)
+	_, err = s.guardCapabilityDrift(appID, resolveAppOptions(opts), func() error {
+		return app.RemoveDatasource(s.DB, datasource)
+	})
+	return err
 }
 
 // GetAppDatasources retrieves all datasources associated with an app
@@ -888,8 +904,10 @@ func (s *Service) GetAppLLMs(appID uint, pageSize int, pageNumber int, all bool)
 	return llms, totalCount, totalPages, nil
 }
 
-// AddToolToApp adds a tool to an app
-func (s *Service) AddToolToApp(appID, toolID uint) (*models.App, error) {
+// AddToolToApp adds a tool to an app. Unless opts name a full administrator
+// (WithCapabilityActor), it clears an attested guardrail capability; the
+// returned App's GuardrailCapabilityReset says so.
+func (s *Service) AddToolToApp(appID, toolID uint, opts ...AppOption) (*models.App, error) {
 	app, err := s.GetAppByID(appID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get app %d: %w", appID, err)
@@ -912,7 +930,10 @@ func (s *Service) AddToolToApp(appID, toolID uint) (*models.App, error) {
 	// 	}
 	// }
 
-	if err := app.AddTool(s.DB, tool); err != nil {
+	reset, err := s.guardCapabilityDrift(appID, resolveAppOptions(opts), func() error {
+		return app.AddTool(s.DB, tool)
+	})
+	if err != nil {
 		return nil, fmt.Errorf("failed to add tool %d to app %d: %w", toolID, appID, err)
 	}
 	// Reload app to get all associations, including the newly added tool.
@@ -920,29 +941,42 @@ func (s *Service) AddToolToApp(appID, toolID uint) (*models.App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to reload app %d: %w", appID, err)
 	}
+	app.GuardrailCapabilityReset = reset
 	return app, nil
 }
 
-// RemoveToolFromApp removes a tool from an app
-func (s *Service) RemoveToolFromApp(appID, toolID uint) error {
+// RemoveToolFromApp removes a tool from an app. Unless opts name a full
+// administrator (WithCapabilityActor), it clears an attested guardrail
+// capability.
+func (s *Service) RemoveToolFromApp(appID, toolID uint, opts ...AppOption) error {
+	_, err := s.RemoveToolFromAppReportingReset(appID, toolID, opts...)
+	return err
+}
+
+// RemoveToolFromAppReportingReset is RemoveToolFromApp, reporting whether it
+// cleared the App's guardrail capability visibly.
+func (s *Service) RemoveToolFromAppReportingReset(appID, toolID uint, opts ...AppOption) (bool, error) {
 	app, err := s.GetAppByID(appID)
 	if err != nil {
-		return fmt.Errorf("failed to get app %d: %w", appID, err)
+		return false, fmt.Errorf("failed to get app %d: %w", appID, err)
 	}
 
 	tool, err := s.GetToolByID(toolID) // Assuming GetToolByID exists
 	if err != nil {
-		return fmt.Errorf("failed to get tool %d: %w", toolID, err)
+		return false, fmt.Errorf("failed to get tool %d: %w", toolID, err)
 	}
 
-	if err := app.RemoveTool(s.DB, tool); err != nil {
+	reset, err := s.guardCapabilityDrift(appID, resolveAppOptions(opts), func() error {
+		return app.RemoveTool(s.DB, tool)
+	})
+	if err != nil {
 		// Check if the error is because the association does not exist
 		if errors.Is(err, gorm.ErrRecordNotFound) || err.Error() == "record not found" { // GORM might return different error types/messages
-			return fmt.Errorf("tool %d not associated with app %d or not found: %w", toolID, appID, err)
+			return reset, fmt.Errorf("tool %d not associated with app %d or not found: %w", toolID, appID, err)
 		}
-		return fmt.Errorf("failed to remove tool %d from app %d: %w", toolID, appID, err)
+		return reset, fmt.Errorf("failed to remove tool %d from app %d: %w", toolID, appID, err)
 	}
-	return nil
+	return reset, nil
 }
 
 // GetAppTools retrieves all tools associated with an app
@@ -1275,8 +1309,13 @@ func (s *Service) UpdateAppWithResources(
 		if err != nil {
 			return nil, fmt.Errorf("unknown resource type %s: %w", pr.ResourceTypeSlug, err)
 		}
-		if err := s.SetAppPluginResources(app.ID, prt.ID, pr.InstanceIDs); err != nil {
+		reset, err := s.SetAppPluginResourcesReportingReset(app.ID, prt.ID, pr.InstanceIDs, opts...)
+		if err != nil {
 			return nil, fmt.Errorf("failed to set plugin resources for type %s: %w", pr.ResourceTypeSlug, err)
+		}
+		if reset {
+			app.GuardrailCapabilityReset = true
+			app.GuardrailCapability = ""
 		}
 	}
 

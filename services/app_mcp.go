@@ -89,7 +89,10 @@ func (s *Service) ValidateMCPServerBindings(userID uint, isAdmin bool, llmIDs []
 // access-grant ledger and returns the App reloaded with its associations,
 // so callers answer with the new state without a second fetch. Callers
 // validate with ValidateMCPServerBindings first.
-func (s *Service) SetAppMCPServers(appID uint, serverIDs []uint) (*models.App, error) {
+// Unless opts name a full administrator (WithCapabilityActor), a change
+// clears the App's attested guardrail capability; the returned App's
+// GuardrailCapabilityReset says so.
+func (s *Service) SetAppMCPServers(appID uint, serverIDs []uint, opts ...AppOption) (*models.App, error) {
 	var app models.App
 	if err := s.DB.First(&app, appID).Error; err != nil {
 		return nil, err
@@ -101,11 +104,19 @@ func (s *Service) SetAppMCPServers(appID uint, serverIDs []uint) (*models.App, e
 			return nil, err
 		}
 	}
-	if err := s.DB.Model(&app).Association("MCPServers").Replace(servers); err != nil {
+	reset, err := s.guardCapabilityDrift(appID, resolveAppOptions(opts), func() error {
+		return s.DB.Model(&app).Association("MCPServers").Replace(servers)
+	})
+	if err != nil {
 		return nil, fmt.Errorf("failed to set app MCP servers: %w", err)
 	}
 	s.syncAppMCPGrants(appID)
-	return s.GetAppByID(appID)
+	out, err := s.GetAppByID(appID)
+	if err != nil {
+		return nil, err
+	}
+	out.GuardrailCapabilityReset = reset
+	return out, nil
 }
 
 // ClearAppMCPServers removes every MCP binding (App deletion).

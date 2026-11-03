@@ -122,6 +122,12 @@ const AppGuardrailCapability = ({ appId }) => {
           </Button>
         )}
       </Box>
+      {!attested && cap.reset_at && (
+        <Typography variant="caption" color="warning.main" component="div" sx={{ mt: 0.5 }} data-testid="capability-reset">
+          Cleared on {new Date(cap.reset_at).toLocaleString()} after a change to the app's tools or resources
+          {cap.reset_by ? ` by user #${cap.reset_by}` : ""}; a full administrator needs to attest it again.
+        </Typography>
+      )}
       {!attested && cap.suggestion && (
         <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.5 }}>
           Suggested: {capabilityLabel(cap.suggestion)}
