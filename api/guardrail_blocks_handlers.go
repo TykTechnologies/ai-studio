@@ -17,6 +17,12 @@ const guardrailBlocksLimit = 100
 // GuardrailBlock is one request of an App that a guardrail acted on, as the
 // App's owner sees it: no text, no scores, no event metadata.
 type GuardrailBlock struct {
+	// ID is the compliance event's, for reporting it as a false positive.
+	ID uint `json:"id"`
+	// Reportable is true when the owner can report the block as a false
+	// positive: a detector's verdict on the App's request, from a filter
+	// the event names.
+	Reportable bool      `json:"reportable"`
 	Timestamp  time.Time `json:"timestamp"`
 	Filter     string    `json:"filter"`
 	Action     string    `json:"action"`
@@ -85,7 +91,8 @@ func (a *API) getUserAppGuardrailBlocks(c *gin.Context) {
 		}
 		action, code, reason := scripting.OwnerSummary(e.EventType, m)
 		rid, _ := m["request_id"].(string)
-		out = append(out, GuardrailBlock{Timestamp: e.TimeStamp, Filter: e.FilterName, Action: action, ReasonCode: code, Reason: reason, RequestID: rid})
+		_, _, reportable := reportableBlock(&e, m)
+		out = append(out, GuardrailBlock{ID: e.ID, Reportable: reportable, Timestamp: e.TimeStamp, Filter: e.FilterName, Action: action, ReasonCode: code, Reason: reason, RequestID: rid})
 	}
 	c.JSON(http.StatusOK, gin.H{"data": out})
 }

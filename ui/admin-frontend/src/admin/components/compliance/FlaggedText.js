@@ -140,6 +140,18 @@ const FlaggedText = ({ metadata, appId, eventType }) => {
               <Box component="span" sx={{ color: "text.secondary", fontSize: "0.75rem" }}>{` · #${seg.index}`}</Box>
             )}
           </Typography>
+          {seg.exception && typeof seg.exception === "object" && Number.isInteger(seg.exception.id) && (
+            <Box sx={{ mt: 0.5 }} data-testid="flagged-exception">
+              <Chip
+                size="small"
+                variant="outlined"
+                color="info"
+                label={`Softened by exception #${seg.exception.id}${
+                  seg.exception.from && seg.exception.to ? ` (${seg.exception.from} to ${seg.exception.to})` : ""
+                }`}
+              />
+            </Box>
+          )}
           {templateBadges(seg.template).length > 0 && (
             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mt: 0.5 }} data-testid="flagged-template">
               {templateBadges(seg.template).map((b) => (

@@ -598,6 +598,7 @@ func (a *API) setupRoutes() error {
 	authed.GET("/apps/:id/analytics/mcp", a.getUserAppMCPUsage)
 	authed.GET("/apps/:id/analytics/interactions", a.getUserAppInteractions)
 	authed.GET("/apps/:id/guardrail-blocks", a.getUserAppGuardrailBlocks)
+	authed.POST("/apps/:id/guardrail-blocks/:event_id/report", a.reportGuardrailBlock)
 
 	// Notification routes
 	notificationHandlers := NewNotificationHandlers(a.service.NotificationService)
