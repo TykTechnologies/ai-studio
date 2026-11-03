@@ -16,8 +16,7 @@ import RequestIdCaption from "../common/RequestIdCaption";
 import ConfirmationDialog from "../common/ConfirmationDialog";
 import AppTeamBudgetRow from "./AppTeamBudgetRow";
 import AppGovernanceFlags from "./AppGovernanceFlags";
-import AppPromptTemplates from "./promptTemplates/AppPromptTemplates";
-import AppGuardrailCapability from "./AppGuardrailCapability";
+import AppGuardrails from "./AppGuardrails";
 import {
   Alert,
   Typography,
@@ -756,12 +755,6 @@ const AppDetails = () => {
                 </>
               )}
             <Grid item xs={3}>
-              <FieldLabel>Guardrail capability:</FieldLabel>
-            </Grid>
-            <Grid item xs={9}>
-              <AppGuardrailCapability appId={id} />
-            </Grid>
-            <Grid item xs={3}>
               <FieldLabel>LLM providers:</FieldLabel>
             </Grid>
             <Grid item xs={9}>
@@ -919,7 +912,7 @@ const AppDetails = () => {
 
         <UsedBySection resourcePath="apps" id={id} objectLabel="app" />
 
-        <AppPromptTemplates appId={id} />
+        <AppGuardrails appId={id} />
 
         {credential && (
           <>

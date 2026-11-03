@@ -43,7 +43,9 @@ const ReasonList = ({ reasons }) =>
     </Box>
   ) : null;
 
-const AppGuardrailCapability = ({ appId }) => {
+// onChange, when set, is told the capability each time it loads or changes
+// (the exceptions table offers only what it allows).
+const AppGuardrailCapability = ({ appId, onChange }) => {
   const { isFullAdmin } = usePermissions();
   const [cap, setCap] = useState(null);
   const [error, setError] = useState(null);
@@ -63,6 +65,10 @@ const AppGuardrailCapability = ({ appId }) => {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (cap && onChange) onChange(cap);
+  }, [cap, onChange]);
 
   const save = async (value) => {
     setSaving(true);

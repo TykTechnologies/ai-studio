@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import Section from "../common/Section";
 import UsedBySection from "../common/UsedBySection";
+import FilterExceptions from "./FilterExceptions";
 import {
   Typography,
   CircularProgress,
@@ -229,6 +230,8 @@ const FilterDetails = () => {
             </Box>
           </Section>
         )}
+
+        {isGuardrail && <FilterExceptions filterId={id} />}
 
         <Box mt={4} display="flex" justifyContent="flex-end">
           <PrimaryButton
