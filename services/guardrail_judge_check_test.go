@@ -115,3 +115,32 @@ func TestEdgeNamespacesFor(t *testing.T) {
 		}
 	}
 }
+
+// The judge reads the traffic of every LLM the filter guards: its privacy
+// score must be at least theirs (midsommar-clean-9u1j.46).
+func TestFilterSave_JudgePrivacyScore(t *testing.T) {
+	s := judgeTestService(t)
+	judge := judgeLLM(t, s, "judge", models.OPENAI, true, "")
+	require.NoError(t, s.DB.Model(judge).Update("privacy_score", 50).Error)
+	on := map[string]any{"mode": "record", "llm_id": judge.ID}
+
+	f, err := s.CreateFilterFromSpec(judgeSpec("", on))
+	require.NoError(t, err, "a new filter guards no LLM yet")
+
+	low := judgeLLM(t, s, "public", models.OPENAI, true, "")
+	require.NoError(t, s.DB.Model(low).Update("privacy_score", 30).Error)
+	require.NoError(t, s.DB.Model(low).Association("Filters").Append(f))
+	_, err = s.UpdateFilterFromSpec(f.ID, judgeSpec("", on))
+	require.NoError(t, err, "judge 50 may read an LLM scored 30")
+
+	high := judgeLLM(t, s, "on-prem", models.OPENAI, true, "")
+	require.NoError(t, s.DB.Model(high).Update("privacy_score", 90).Error)
+	require.NoError(t, s.DB.Model(high).Association("Filters").Append(f))
+	_, err = s.UpdateFilterFromSpec(f.ID, judgeSpec("", on))
+	if !errors.Is(err, ErrInvalidFilterSpec) || !strings.Contains(err.Error(), "privacy score 50") || !strings.Contains(err.Error(), `"on-prem"`) {
+		t.Errorf("err = %v, want the privacy score refusal naming on-prem", err)
+	}
+	// The judge off: no judge reads anything.
+	_, err = s.UpdateFilterFromSpec(f.ID, judgeSpec("", map[string]any{"mode": "off", "llm_id": judge.ID}))
+	require.NoError(t, err)
+}

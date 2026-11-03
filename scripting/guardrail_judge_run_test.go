@@ -21,17 +21,20 @@ import (
 // app and the judge model's price.
 type judgeSvc struct {
 	services.ServiceInterface
-	llm   *models.LLM
-	app   *models.App
-	price *models.ModelPrice
+	llm    *models.LLM
+	source *models.LLM
+	app    *models.App
+	price  *models.ModelPrice
 }
 
 func (s *judgeSvc) GetLLMByID(id uint) (*models.LLM, error) {
-	if s.llm == nil || s.llm.ID != id {
-		return nil, errors.New("not found")
+	for _, l := range []*models.LLM{s.llm, s.source} {
+		if l != nil && l.ID == id {
+			cp := *l
+			return &cp, nil
+		}
 	}
-	cp := *s.llm
-	return &cp, nil
+	return nil, errors.New("not found")
 }
 
 func (s *judgeSvc) GetAppByID(id uint) (*models.App, error) {
@@ -49,11 +52,12 @@ func (s *judgeSvc) GetModelPriceByModelNameAndVendor(model, vendor string) (*mod
 }
 
 func newJudgeSvc() *judgeSvc {
-	llm := &models.LLM{ID: 70, Name: "judge", Vendor: models.OPENAI, Active: true, DefaultModel: "judge-mini"}
+	llm := &models.LLM{ID: 70, Name: "judge", Vendor: models.OPENAI, Active: true, DefaultModel: "judge-mini", PrivacyScore: 80}
 	llm.UpdatedAt = time.Unix(1700000000, 0)
+	source := &models.LLM{ID: 5, Name: "gpt", Vendor: models.OPENAI, Active: true, PrivacyScore: 50}
 	app := &models.App{Name: "Visor", Description: "Reviews pull requests"}
 	app.ID = 9
-	return &judgeSvc{llm: llm, app: app, price: &models.ModelPrice{ModelName: "judge-mini", Vendor: "openai", CPT: 1, CPIT: 2, Currency: "USD"}}
+	return &judgeSvc{llm: llm, source: source, app: app, price: &models.ModelPrice{ModelName: "judge-mini", Vendor: "openai", CPT: 1, CPIT: 2, Currency: "USD"}}
 }
 
 // stubJudge stands in the judge LLM: answer is called for each call.
@@ -112,7 +116,7 @@ func judgeFilter(t *testing.T, onDetect string, extra map[string]any) *models.Fi
 func judgeInput(sink *eventSink, body string) *ScriptInput {
 	return &ScriptInput{
 		RawInput: body, Format: "openai",
-		Context:      map[string]interface{}{"app_id": 9, "request_id": "tyai_judge1"},
+		Context:      map[string]interface{}{"app_id": 9, "llm_id": int64(5), "request_id": "tyai_judge1"},
 		RecordEvents: sink.record,
 	}
 }
@@ -457,5 +461,50 @@ func TestJudgeRecord_PartialCoverageCannotSoften(t *testing.T) {
 	}
 	if (judgeResult{ok: true, opinion: JudgeOpinion{Verdict: JudgeSuspicious, Reason: "unclear"}, covered: true}).softens() {
 		t.Error("a suspicious opinion softens")
+	}
+}
+
+// The judge reads the traffic of the LLM the request went to: a judge LLM
+// with a lower privacy score than that LLM, or a request whose LLM is
+// unknown, is not sent the text (midsommar-clean-9u1j.46).
+func TestJudgeRecord_PrivacyScoreGate(t *testing.T) {
+	freshShadowPool(t, 4, 1<<20)
+	stub := installStubJudge(t, answering(`{"verdict":"benign","reason":"code_or_data"}`))
+	for _, c := range []struct {
+		name   string
+		judge  int
+		noLLM  bool
+		wantOK bool
+	}{
+		{"judge above the source", 80, false, true},
+		{"judge equal to the source", 50, false, true},
+		{"judge below the source", 10, false, false},
+		{"source LLM unknown", 80, true, false},
+	} {
+		svc := newJudgeSvc()
+		svc.llm.PrivacyScore = c.judge
+		sink := newEventSink()
+		in := judgeInput(sink, judgeBody)
+		if c.noLLM {
+			delete(in.Context, "llm_id")
+		}
+		before := stub.calls.Load()
+		judgeCache.Reset()
+		out, _ := NewFilterRunner(judgeFilter(t, guardrails.ActionBlock, nil)).RunScript(in, svc)
+		if !out.Block {
+			t.Fatalf("%s: verdict changed", c.name)
+		}
+		events := judgeEvents(sink.wait(t, 1, 5*time.Second))
+		if len(events) != 1 {
+			t.Fatalf("%s: events %+v", c.name, events)
+		}
+		j := judgeMeta(t, events[0])
+		called := stub.calls.Load() > before
+		if c.wantOK && (!called || j["verdict"] != JudgeBenign) {
+			t.Errorf("%s: judge metadata %+v, called %v", c.name, j, called)
+		}
+		if !c.wantOK && (called || j["error"] != judgeErrPrivacy) {
+			t.Errorf("%s: judge metadata %+v, called %v; want no call, error privacy", c.name, j, called)
+		}
 	}
 }

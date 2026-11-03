@@ -15,10 +15,11 @@ import (
 // not be asked where the filter runs: the judge LLM must exist, be active,
 // serve chat, and reach every edge that runs the filter. An edge runs a
 // filter through the LLMs it is attached to, so the judge LLM must be global
-// or in the one namespace those edges are in. filterID is 0 for a new filter
-// (attached to no LLM yet). A filter attached to an LLM later is not checked
-// again here; an edge that cannot find the judge keeps the filter's own
-// verdict.
+// or in the one namespace those edges are in; and its privacy score must be
+// at least that of every LLM the filter is attached to. filterID is 0 for a
+// new filter (attached to no LLM yet). A filter attached to an LLM later is
+// not checked again here: at run time an edge that cannot find the judge,
+// or a judge scored below the request's LLM, keeps the filter's own verdict.
 func (s *Service) checkJudge(filterID uint, filterNamespace string, config models.JSONMap) error {
 	if config == nil {
 		return nil
@@ -40,8 +41,7 @@ func (s *Service) checkJudge(filterID uint, filterNamespace string, config model
 	if _, known := switches.VendorMap[judge.Vendor]; !known || !switches.SupportsChat(judge.Vendor) {
 		return fmt.Errorf("%w: judge LLM %q does not serve chat completions", ErrInvalidFilterSpec, judge.Name)
 	}
-	judgeNS := strings.TrimSpace(judge.Namespace)
-	if judgeNS == "" || filterID == 0 {
+	if filterID == 0 {
 		return nil
 	}
 
@@ -51,6 +51,18 @@ func (s *Service) checkJudge(filterID uint, filterNamespace string, config model
 		Where("llm_filters.filter_id = ?", filterID).
 		Find(&attached).Error; err != nil {
 		return err
+	}
+	// The judge reads the traffic of every LLM the filter guards, so it must
+	// be trusted with it: a privacy score at least theirs (the platform's
+	// rule that data never flows to a provider scored below its source).
+	for _, llm := range attached {
+		if judge.PrivacyScore < llm.PrivacyScore {
+			return fmt.Errorf("%w: judge LLM %q has privacy score %d, below the %d of LLM %q whose traffic it would read; choose a judge LLM with a privacy score of at least %d", ErrInvalidFilterSpec, judge.Name, judge.PrivacyScore, llm.PrivacyScore, llm.Name, llm.PrivacyScore)
+		}
+	}
+	judgeNS := strings.TrimSpace(judge.Namespace)
+	if judgeNS == "" {
+		return nil
 	}
 	filterNS := strings.TrimSpace(filterNamespace)
 	for _, llm := range attached {

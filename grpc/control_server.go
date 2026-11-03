@@ -1975,6 +1975,13 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		return nil, fmt.Errorf("failed to read LLM filter attachments: %w", err)
 	}
 
+	// LLM privacy scores, for a guardrail judge's privacy rule
+	// (edgeJudgeConfig).
+	llmPrivacy := make(map[uint]int, len(llms))
+	for _, l := range llms {
+		llmPrivacy[l.ID] = l.PrivacyScore
+	}
+
 	// Build map of filter_id -> []llm_id for efficient lookup
 	filterLLMMap := make(map[uint][]uint32)
 	for _, assoc := range llmFilterAssociations {
@@ -2034,7 +2041,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 				}
 				return c
 			}
-			configJSON, err := guardrails.ConfigJSONForEdge(filter.Config, resolveRef, encrypt)
+			configJSON, err := guardrails.ConfigJSONForEdge(edgeJudgeConfig(filter.ID, filter.Config, llmIDs, llmPrivacy), resolveRef, encrypt)
 			if err != nil {
 				logger.Log.Warn().Err(err).Uint("filter_id", filter.ID).Msg("Skipping guardrail filter with invalid config in snapshot")
 				continue

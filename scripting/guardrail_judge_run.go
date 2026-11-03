@@ -57,6 +57,10 @@ const (
 	judgeErrParse       = "unparseable"
 	judgeErrDropped     = "dropped" // the shadow pool had no room
 	judgeErrSkipped     = "over_segment_cap"
+	// judgeErrPrivacy: the judge LLM's privacy score is below that of the
+	// LLM whose traffic it would read, or that LLM is unknown (Studio chat
+	// records none), so the text is not sent to it.
+	judgeErrPrivacy = "privacy"
 )
 
 // judgeClients makes the judge calls; drivers are cached per LLM version.
@@ -102,7 +106,10 @@ type judgeWork struct {
 	provider  string
 	appID     uint
 	requestID string
-	svc       services.ServiceInterface
+	// sourceLLMID is the LLM whose traffic is judged (context llm_id), 0
+	// when the call site does not say.
+	sourceLLMID uint
+	svc         services.ServiceInterface
 	// format and body are the request, read for the tool names it declares.
 	format, body string
 	targets      []judgeTarget
@@ -125,7 +132,8 @@ func judgeWorkFor(input *ScriptInput, cfg guardrails.Config, sel selection, o ou
 	sort.Ints(idx)
 	w := &judgeWork{
 		judge: cfg.Judge, provider: cfg.Provider, appID: appIDOf(input), requestID: requestIDOf(input),
-		svc: svc,
+		sourceLLMID: contextUint(input.Context, "llm_id"),
+		svc:         svc,
 	}
 	if !input.IsResponse {
 		w.format, w.body = input.Format, input.RawInput
@@ -263,7 +271,39 @@ func (w *judgeWork) judgeLLM() (*models.LLM, string) {
 	if err != nil || llm == nil || !llm.Active {
 		return nil, judgeErrUnavailable
 	}
+	// Checked at save against the filter's LLMs, and again here: the
+	// filter may have been attached to an LLM since.
+	if w.sourceLLMID == 0 {
+		return nil, judgeErrPrivacy
+	}
+	src, err := w.svc.GetLLMByID(w.sourceLLMID)
+	if err != nil || src == nil || llm.PrivacyScore < src.PrivacyScore {
+		return nil, judgeErrPrivacy
+	}
 	return llm, ""
+}
+
+// contextUint reads a non-negative integer id from a script context.
+func contextUint(ctx map[string]interface{}, key string) uint {
+	switch v := ctx[key].(type) {
+	case int:
+		if v > 0 {
+			return uint(v)
+		}
+	case int64:
+		if v > 0 {
+			return uint(v)
+		}
+	case uint:
+		return v
+	case uint32:
+		return uint(v)
+	case float64:
+		if v > 0 {
+			return uint(v)
+		}
+	}
+	return 0
 }
 
 // describeApp fills in the app's name and description.
