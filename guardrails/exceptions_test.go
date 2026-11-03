@@ -10,22 +10,22 @@ import (
 // TestExceptionFloors checks every capability x channel x action against
 // the epic's floor table (features/GuardrailExceptions.md).
 func TestExceptionFloors(t *testing.T) {
-	actions := []string{ActionLog, ActionRedact, ActionQuarantine, ActionRemove, ActionBlock, "alert", ""}
+	actions := []string{ActionLog, ActionAlert, ActionRedact, ActionQuarantine, ActionRemove, ActionBlock, ""}
 	// allowed[capability][channel] = the actions an exception may soften to.
 	allowed := map[Capability]map[Channel][]string{
 		CapabilityReadOnly: {
-			ChannelTextUser:       {ActionLog, ActionQuarantine},
-			ChannelTextSystem:     {ActionLog, ActionQuarantine},
-			ChannelToolResult:     {ActionLog, ActionQuarantine},
-			ChannelToolCall:       {ActionLog},
-			ChannelToolDefinition: {ActionLog, ActionRemove},
+			ChannelTextUser:       {ActionLog, ActionAlert, ActionQuarantine},
+			ChannelTextSystem:     {ActionLog, ActionAlert, ActionQuarantine},
+			ChannelToolResult:     {ActionLog, ActionAlert, ActionQuarantine},
+			ChannelToolCall:       {ActionLog, ActionAlert},
+			ChannelToolDefinition: {ActionLog, ActionAlert, ActionRemove},
 		},
 		CapabilityReadTools: {
-			ChannelTextUser:       {ActionLog, ActionQuarantine},
-			ChannelTextSystem:     {ActionLog, ActionQuarantine},
+			ChannelTextUser:       {ActionLog, ActionAlert, ActionQuarantine},
+			ChannelTextSystem:     {ActionLog, ActionAlert, ActionQuarantine},
 			ChannelToolResult:     {ActionQuarantine},
-			ChannelToolCall:       {ActionLog},
-			ChannelToolDefinition: {ActionLog, ActionRemove},
+			ChannelToolCall:       {ActionLog, ActionAlert},
+			ChannelToolDefinition: {ActionLog, ActionAlert, ActionRemove},
 		},
 		CapabilityActing: {
 			ChannelTextUser:   {ActionQuarantine},

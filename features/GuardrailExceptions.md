@@ -1,6 +1,6 @@
 # Guardrail exceptions and app capability
 
-Status: app guardrail capability implemented (model, suggestion, API, App page), 2026-11-03 (midsommar-clean-9u1j.2); exceptions model, floors, service and API, 2026-11-03 (.3); exceptions at runtime on the hub, 2026-11-03 (.4). Exceptions on edges, their UI, the alert action and the LLM second opinion follow; the epic midsommar-clean-9u1j holds the full design.
+Status: app guardrail capability implemented (model, suggestion, API, App page), 2026-11-03 (midsommar-clean-9u1j.2); exceptions model, floors, service and API, 2026-11-03 (.3); exceptions at runtime on the hub, 2026-11-03 (.4); exceptions and capability on edges, 2026-11-03 (.5); the alert action, 2026-11-03 (.8). Their UI, the alert action and the LLM second opinion follow; the epic midsommar-clean-9u1j holds the full design.
 
 ## Problem
 
@@ -62,11 +62,11 @@ A fixed table (`guardrails/exceptions.go`, not configurable): the softest action
 | `read_tools` | down to `log` | down to `quarantine` | down to `log` |
 | `acting` / unattested | down to `quarantine` | no downgrade | no downgrade |
 
-What an exception may soften to also depends on what the runtime can do on the channel (`guardrails.ExceptionActions`): text and tool results `log` or `quarantine` (the flagged segment replaced), a tool call `log` only, a tool definition `log` or `remove`. `guardrails.CheckException` explains a refusal ("an app whose capability is not attested (treated as acting) cannot soften verdicts on tool_result; ..."). `guardrails.SoftenedAction` is what the runtime applies: the softer of the configured action and the exception's, or no change when the exception is outside the floor now.
+What an exception may soften to also depends on what the runtime can do on the channel (`guardrails.ExceptionActions`): text and tool results `log` or `quarantine` (the flagged segment replaced), a tool call `log` only, a tool definition `log` or `remove`. `alert` ("Log and raise event", see features/Filters.md) is allowed wherever `log` is and ranks as log. `guardrails.CheckException` explains a refusal ("an app whose capability is not attested (treated as acting) cannot soften verdicts on tool_result; ..."). `guardrails.SoftenedAction` is what the runtime applies: the softer of the configured action and the exception's, or no change when the exception is outside the floor now.
 
 ## Exceptions
 
-`guardrail_exceptions` (`models.GuardrailException`): `app_id`, `filter_id` (a guardrail filter), `detector` (`""` = any), `channel` (`text_user`, `text_system`, `tool_result`, `tool_call`, `tool_definition`), `tool_name` (tool channels only, `""` = any tool), `action` (the softened action), `status` (`proposed`, `approved`, `retired`), `justification` (required, one line, at most 500 bytes), `proposed_by`, `approved_by`, `approved_at`, `expires_after_days` (default 30), `last_hit_at`, `hit_count`, `source_event` (the compliance event it was created from: it must be a `guardrail.*` event of the app recorded by the exception's filter, by `metadata.filter_id` and `filter_name`). Never keyed on content, path or phrase.
+`guardrail_exceptions` (`models.GuardrailException`): `app_id`, `filter_id` (a guardrail filter), `detector` (`""` = any), `channel` (`text_user`, `text_system`, `tool_result`, `tool_call`, `tool_definition`), `tool_name` (tool channels only, `""` = any tool), `action` (the softened action), `alert_event` (with the `alert` action: the event it raises, a slug unique across filters and exceptions, part of the reviewed content hash), `status` (`proposed`, `approved`, `retired`), `justification` (required, one line, at most 500 bytes), `proposed_by`, `approved_by`, `approved_at`, `expires_after_days` (default 30), `last_hit_at`, `hit_count`, `source_event` (the compliance event it was created from: it must be a `guardrail.*` event of the app recorded by the exception's filter, by `metadata.filter_id` and `filter_name`). Never keyed on content, path or phrase.
 
 Rules (`services/guardrail_exceptions.go`):
 
@@ -88,6 +88,13 @@ Rules (`services/guardrail_exceptions.go`):
 - Every finding still produces its compliance event. A detector event softened by an exception carries `exceptions: [id]`, "softened by exception #id" in its description, and on each segment `exception: {id, from, to}`. Each exception that applied records a hit, once per request.
 - An exception that matches but is outside the floor for the app's capability now changes nothing and records `guardrail.exception_ignored` (`exception_id`, `channel`, `action`, `capability`, `floor`, `detector`, `filter_id`).
 - Requests with no app (Studio chat, app id 0) take no exceptions; neither does a build with no source.
+
+### Edge gateways
+
+- The configuration snapshot carries `guardrail_exceptions` (`GuardrailExceptionConfig`): the approved, unlapsed exceptions of the snapshot's Apps that are within the floor for their App's capability, each with `app_capability` (`grpc/snapshot_guardrail_exceptions.go`). Apps are outside the snapshot checksum, so the capability travels with each exception: approving, retiring or changing an exception, or attesting its App's capability (`system.app.guardrail_exceptions.changed`, `system.app.updated`), changes the checksum and marks the namespace's edges pending; a hit does not. `AppConfig.guardrail_capability` carries the capability too, for information.
+- The edge (`microgateway/internal/services/guardrail_exceptions.go`) installs them as the exception source when it applies a snapshot, checks the floor again and drops an exception outside it (an unknown capability is acting), and removes the source when a snapshot has none. The runtime is the same `decide()` as on the hub.
+- Heartbeats report `hit_guardrail_exception_ids`, the exceptions that applied since the last one (requeued when a heartbeat fails). The hub counts only exceptions the edge's own snapshot carries: approved, unlapsed, within the floor, of an active App and a filter in the edge's namespace; anything else an edge reports is dropped and logged. Each reported exception counts as one hit per heartbeat, written at most once a minute per hub replica, so `hit_count` counts edge heartbeats with hits rather than edge requests; `last_hit_at` keeps the exception from lapsing.
+- Compatibility: both are new proto3 fields (snapshot 20, heartbeat 9, `AppConfig` 26). An older edge ignores the exceptions (it applies the filters' actions) and an older hub sends none.
 
 ### API
 

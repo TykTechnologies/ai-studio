@@ -3,6 +3,7 @@ package guardrails
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -36,7 +37,46 @@ const (
 	// before it is forwarded, so the model goes on without that tool. Tool
 	// definitions only.
 	ActionRemove = "remove"
+	// ActionAlert ("Log and raise event") is log for the traffic: the
+	// request goes on and the compliance event is recorded, which also
+	// names the filter's alert event (Alert.Event). AI Studio raises one bus
+	// event per such compliance event (guardrail.alert.<event>), which
+	// webhooks subscribe to. It ranks as log everywhere: in floors, and for
+	// shadow filters, which may alert.
+	ActionAlert = "alert"
 )
+
+// Alert names the event an alert action raises (Config.Alert and the
+// per-channel Alert fields).
+type Alert struct {
+	// Event is the alert's name: a slug ([a-z0-9][a-z0-9_-]{1,63}) unique
+	// across every filter and guardrail exception, so the topic
+	// guardrail.alert.<event> identifies one source.
+	Event string `json:"event"`
+	// IncludeExcerpt adds the flagged text's masked excerpt to the raised
+	// event. Webhook URLs are an exfiltration path, so it is off by default
+	// and allowed only when the filter's evidence.excerpt is on.
+	IncludeExcerpt bool `json:"include_excerpt,omitempty"`
+}
+
+// alertEventPattern is the form of an alert event name.
+var alertEventPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{1,63}$`)
+
+// ValidAlertEvent reports whether name is a well-formed alert event name.
+func ValidAlertEvent(name string) bool {
+	return alertEventPattern.MatchString(name)
+}
+
+// AlertTopicPrefix prefixes the bus topic an alert is raised on.
+const AlertTopicPrefix = "guardrail.alert."
+
+// LogIfAlert is the action the traffic sees: alert is log.
+func LogIfAlert(a string) string {
+	if a == ActionAlert {
+		return ActionLog
+	}
+	return a
+}
 
 // Scopes select which messages of a request are sent to the provider. On the
 // response side and on tool calls there is only one text, and the scope is
@@ -124,6 +164,11 @@ type ToolResults struct {
 	// request for a tool result its client resends every turn stops the
 	// agent for good.
 	OnDetect string `json:"on_detect,omitempty"`
+	// Alert names the event when OnDetect is alert.
+	Alert *Alert `json:"alert,omitempty"`
+	// OnDetectExt is the edge snapshot's carrier for an action edges
+	// before it do not know (alert), as Config.OnDetectExt; never stored.
+	OnDetectExt string `json:"on_detect_ext,omitempty"`
 }
 
 // ScansToolResults reports whether tool results are scanned in the whole
@@ -155,6 +200,11 @@ type ToolCalls struct {
 	// tool call to providers that judge calls against the goal
 	// (Capabilities.WantsGoal). The user's goal is always sent to them.
 	IncludeSystem bool `json:"include_system,omitempty"`
+	// Alert names the event when OnDetect is alert.
+	Alert *Alert `json:"alert,omitempty"`
+	// OnDetectExt is the edge snapshot's carrier for an action edges
+	// before it do not know (alert), as Config.OnDetectExt; never stored.
+	OnDetectExt string `json:"on_detect_ext,omitempty"`
 }
 
 // ToolDefinitions configures how a request guardrail treats the tools a
@@ -168,6 +218,11 @@ type ToolDefinitions struct {
 	// remove on a filter whose on_detect is block or quarantine, and log
 	// otherwise.
 	OnDetect string `json:"on_detect,omitempty"`
+	// Alert names the event when OnDetect is alert.
+	Alert *Alert `json:"alert,omitempty"`
+	// OnDetectExt is the edge snapshot's carrier for an action edges
+	// before it do not know (alert), as Config.OnDetectExt; never stored.
+	OnDetectExt string `json:"on_detect_ext,omitempty"`
 }
 
 // ScansToolDefinitions reports whether tool definitions are scanned.
@@ -205,6 +260,8 @@ func (c Config) ActionFor(kind string) string {
 			return c.ToolDefinitions.OnDetect
 		case c.OnDetect == ActionBlock || c.OnDetect == ActionQuarantine:
 			return ActionRemove
+		case c.OnDetect == ActionAlert:
+			return ActionAlert
 		}
 		return ActionLog
 	}
@@ -212,8 +269,8 @@ func (c Config) ActionFor(kind string) string {
 		switch {
 		case c.ToolCalls.OnDetect != "":
 			return c.ToolCalls.OnDetect
-		case c.OnDetect == ActionBlock:
-			return ActionBlock
+		case c.OnDetect == ActionBlock, c.OnDetect == ActionAlert:
+			return c.OnDetect
 		}
 		return ActionLog
 	}
@@ -227,6 +284,81 @@ func (c Config) ActionFor(kind string) string {
 		return ActionQuarantine
 	}
 	return c.OnDetect
+}
+
+// AlertFor is the alert that applies to a flagged segment of the given kind
+// whose action is alert: the channel's own when it sets alert, else the
+// filter's. nil when the kind's action is not alert.
+func (c Config) AlertFor(kind string) *Alert {
+	if c.ActionFor(kind) != ActionAlert {
+		return nil
+	}
+	switch kind {
+	case KindToolResult:
+		if c.ToolResults.OnDetect == ActionAlert {
+			return c.ToolResults.Alert
+		}
+	case KindToolCall:
+		if c.ToolCalls.OnDetect == ActionAlert {
+			return c.ToolCalls.Alert
+		}
+	case KindToolDefinition:
+		if c.ToolDefinitions.OnDetect == ActionAlert {
+			return c.ToolDefinitions.Alert
+		}
+	}
+	return c.Alert
+}
+
+// AlertEvents lists the alert event names the filter configures.
+func (c Config) AlertEvents() []string {
+	var out []string
+	for _, a := range []*Alert{c.Alert, c.ToolResults.Alert, c.ToolCalls.Alert, c.ToolDefinitions.Alert} {
+		if a != nil && a.Event != "" {
+			out = append(out, a.Event)
+		}
+	}
+	return out
+}
+
+// normalizeAlerts checks the alert of each place an action is chosen: an
+// alert action needs an event name, an event name needs an alert action,
+// the names of one filter differ, and include_excerpt needs the filter's
+// evidence.excerpt. Names unique across filters and exceptions are checked
+// where filters are saved (services).
+func (c Config) normalizeAlerts() error {
+	places := []struct {
+		field, action string
+		alert         *Alert
+	}{
+		{"", c.OnDetect, c.Alert},
+		{"tool_results.", c.ToolResults.OnDetect, c.ToolResults.Alert},
+		{"tool_calls.", c.ToolCalls.OnDetect, c.ToolCalls.Alert},
+		{"tool_definitions.", c.ToolDefinitions.OnDetect, c.ToolDefinitions.Alert},
+	}
+	seen := map[string]string{}
+	for _, p := range places {
+		if p.action != ActionAlert {
+			if p.alert != nil {
+				return fmt.Errorf("%w: %salert is set but %son_detect is not alert", ErrInvalidConfig, p.field, p.field)
+			}
+			continue
+		}
+		if p.alert == nil || p.alert.Event == "" {
+			return fmt.Errorf("%w: %son_detect alert needs %salert.event (the name webhooks subscribe to as guardrail.alert.<event>)", ErrInvalidConfig, p.field, p.field)
+		}
+		if !ValidAlertEvent(p.alert.Event) {
+			return fmt.Errorf("%w: %salert.event %q must be 2-64 lowercase letters, digits, '-' or '_', starting with a letter or digit", ErrInvalidConfig, p.field, p.alert.Event)
+		}
+		if other, dup := seen[p.alert.Event]; dup {
+			return fmt.Errorf("%w: %salert.event %q is also %salert.event; each alert needs its own name", ErrInvalidConfig, p.field, p.alert.Event, other)
+		}
+		seen[p.alert.Event] = p.field
+		if p.alert.IncludeExcerpt && !c.Evidence.Excerpt {
+			return fmt.Errorf("%w: %salert.include_excerpt needs evidence.excerpt on", ErrInvalidConfig, p.field)
+		}
+	}
+	return nil
 }
 
 // Stream configures evaluation cadence on streaming responses.
@@ -249,9 +381,12 @@ type Config struct {
 	Detectors         []DetectorConfig `json:"detectors"`
 	// Exclude names detectors to leave out when a category is enabled, e.g.
 	// "pii.ipv4" while "pii" is on. Built-in provider only.
-	Exclude     []string    `json:"exclude,omitempty"`
-	Scope       string      `json:"scope,omitempty"`
-	OnDetect    string      `json:"on_detect"`
+	Exclude  []string `json:"exclude,omitempty"`
+	Scope    string   `json:"scope,omitempty"`
+	OnDetect string   `json:"on_detect"`
+	// Alert names the event when OnDetect is alert ("Log and raise
+	// event"); per-channel actions name their own.
+	Alert       *Alert      `json:"alert,omitempty"`
 	Redaction   Redaction   `json:"redaction,omitempty"`
 	Quarantine  Quarantine  `json:"quarantine,omitempty"`
 	ToolResults ToolResults `json:"tool_results,omitempty"`
@@ -405,6 +540,16 @@ func ParseConfig(raw map[string]any) (Config, error) {
 		cfg.OnDetect = cfg.OnDetectExt
 	}
 	cfg.OnDetectExt = ""
+	for _, ch := range []struct{ action, ext *string }{
+		{&cfg.ToolResults.OnDetect, &cfg.ToolResults.OnDetectExt},
+		{&cfg.ToolCalls.OnDetect, &cfg.ToolCalls.OnDetectExt},
+		{&cfg.ToolDefinitions.OnDetect, &cfg.ToolDefinitions.OnDetectExt},
+	} {
+		if *ch.ext == ActionAlert {
+			*ch.action = ActionAlert
+		}
+		*ch.ext = ""
+	}
 	if ext := cfg.FailModeExt; ext != nil && (*ext == "" || *ext == FailOpen || *ext == FailClosed) {
 		cfg.FailMode = *ext
 	}
@@ -414,7 +559,7 @@ func ParseConfig(raw map[string]any) (Config, error) {
 }
 
 // knownActions are the on_detect values this build applies.
-var knownActions = map[string]bool{ActionBlock: true, ActionRedact: true, ActionLog: true, ActionQuarantine: true}
+var knownActions = map[string]bool{ActionBlock: true, ActionRedact: true, ActionLog: true, ActionQuarantine: true, ActionAlert: true}
 
 // legacyActions are the on_detect values every edge release understands.
 // An edge rejects a config with any other value, so the snapshot never
@@ -468,7 +613,7 @@ func Normalize(cfg Config, responseFilter bool) (Config, error) {
 	}
 
 	switch cfg.OnDetect {
-	case ActionBlock, ActionLog:
+	case ActionBlock, ActionLog, ActionAlert:
 	case ActionRedact:
 		if !spec.Redacts {
 			return cfg, fmt.Errorf("%w: provider %q cannot redact; use block or log", ErrInvalidConfig, cfg.Provider)
@@ -480,13 +625,13 @@ func Normalize(cfg Config, responseFilter bool) (Config, error) {
 			return cfg, fmt.Errorf("%w: quarantine applies to requests only; use block or log on responses", ErrInvalidConfig)
 		}
 	case "":
-		return cfg, fmt.Errorf("%w: on_detect is required (block, redact, quarantine or log)", ErrInvalidConfig)
+		return cfg, fmt.Errorf("%w: on_detect is required (block, redact, quarantine, log or alert)", ErrInvalidConfig)
 	default:
-		return cfg, fmt.Errorf("%w: on_detect %q is not one of block, redact, quarantine, log", ErrInvalidConfig, cfg.OnDetect)
+		return cfg, fmt.Errorf("%w: on_detect %q is not one of block, redact, quarantine, log, alert", ErrInvalidConfig, cfg.OnDetect)
 	}
 
 	switch cfg.ToolResults.OnDetect {
-	case "", ActionBlock, ActionLog:
+	case "", ActionBlock, ActionLog, ActionAlert:
 	case ActionRedact:
 		if !spec.Redacts {
 			return cfg, fmt.Errorf("%w: provider %q cannot redact; use block, quarantine or log for tool_results.on_detect", ErrInvalidConfig, cfg.Provider)
@@ -496,19 +641,22 @@ func Normalize(cfg Config, responseFilter bool) (Config, error) {
 			return cfg, fmt.Errorf("%w: quarantine applies to requests only; use block or log on responses", ErrInvalidConfig)
 		}
 	default:
-		return cfg, fmt.Errorf("%w: tool_results.on_detect %q is not one of block, redact, quarantine, log", ErrInvalidConfig, cfg.ToolResults.OnDetect)
+		return cfg, fmt.Errorf("%w: tool_results.on_detect %q is not one of block, redact, quarantine, log, alert", ErrInvalidConfig, cfg.ToolResults.OnDetect)
 	}
 
 	switch cfg.ToolCalls.OnDetect {
-	case "", ActionBlock, ActionLog:
+	case "", ActionBlock, ActionLog, ActionAlert:
 	default:
-		return cfg, fmt.Errorf("%w: tool_calls.on_detect %q is not one of block, log (a tool call cannot be redacted or quarantined)", ErrInvalidConfig, cfg.ToolCalls.OnDetect)
+		return cfg, fmt.Errorf("%w: tool_calls.on_detect %q is not one of block, log, alert (a tool call cannot be redacted or quarantined)", ErrInvalidConfig, cfg.ToolCalls.OnDetect)
 	}
 
 	switch cfg.ToolDefinitions.OnDetect {
-	case "", ActionBlock, ActionLog, ActionRemove:
+	case "", ActionBlock, ActionLog, ActionRemove, ActionAlert:
 	default:
-		return cfg, fmt.Errorf("%w: tool_definitions.on_detect %q is not one of block, remove, log", ErrInvalidConfig, cfg.ToolDefinitions.OnDetect)
+		return cfg, fmt.Errorf("%w: tool_definitions.on_detect %q is not one of block, remove, log, alert", ErrInvalidConfig, cfg.ToolDefinitions.OnDetect)
+	}
+	if err := cfg.normalizeAlerts(); err != nil {
+		return cfg, err
 	}
 	if responseFilter && cfg.ScansToolDefinitions() {
 		return cfg, fmt.Errorf("%w: tool definitions are scanned on requests only", ErrInvalidConfig)
@@ -622,7 +770,7 @@ func (c Config) Backstop() string {
 }
 
 // shadowAllowed reports why the filter cannot run in shadow: some action it
-// can take is not log.
+// can take is not log (alert is log for the traffic).
 func (c Config) shadowAllowed() error {
 	actions := map[string]string{
 		"on_detect":                  c.OnDetect,
@@ -631,7 +779,7 @@ func (c Config) shadowAllowed() error {
 		"tool_definitions.on_detect": c.ActionFor(KindToolDefinition),
 	}
 	for _, field := range []string{"on_detect", "tool_results.on_detect", "tool_calls.on_detect", "tool_definitions.on_detect"} {
-		if a := actions[field]; a != ActionLog {
+		if a := actions[field]; LogIfAlert(a) != ActionLog {
 			return fmt.Errorf("%w: shadow requires every action to be log, and %s is %s", ErrInvalidConfig, field, a)
 		}
 	}

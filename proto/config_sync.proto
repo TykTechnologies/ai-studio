@@ -114,6 +114,11 @@ message HeartbeatRequest {
   // request on this edge since its last heartbeat, so the hub's expiry
   // counts edge traffic too.
   repeated uint32 matched_prompt_template_ids = 8;
+  // Guardrail exceptions (GuardrailExceptionConfig.id) that applied to a
+  // request on this edge since its last heartbeat, so the hub's expiry and
+  // hit counts include edge traffic. The hub accepts only exceptions in the
+  // edge's own namespace.
+  repeated uint32 hit_guardrail_exception_ids = 9;
 }
 
 // HeartbeatResponse acknowledges heartbeat and may contain control directives

@@ -838,6 +838,7 @@ TABLE guardrail_exceptions
   column `channel` text NOT NULL
   column `tool_name` text NOT NULL DEFAULT ""
   column `action` text NOT NULL
+  column `alert_event` text NOT NULL DEFAULT ""
   column `status` text NOT NULL DEFAULT "proposed"
   column `justification` text NOT NULL
   column `proposed_by` integer

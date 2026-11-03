@@ -30,6 +30,7 @@ type GuardrailExceptionInput struct {
 	Channel          *string `json:"channel"`
 	ToolName         *string `json:"tool_name"`
 	Action           *string `json:"action"`
+	AlertEvent       *string `json:"alert_event"`
 	Justification    *string `json:"justification"`
 	ExpiresAfterDays *int    `json:"expires_after_days"`
 	SourceEvent      *uint   `json:"source_event"`
@@ -44,7 +45,9 @@ type GuardrailExceptionResponse struct {
 	Channel  string `json:"channel"`
 	ToolName string `json:"tool_name"`
 	Action   string `json:"action"`
-	Status   string `json:"status"`
+	// AlertEvent names the event the alert action raises.
+	AlertEvent string `json:"alert_event,omitempty"`
+	Status     string `json:"status"`
 
 	Justification    string     `json:"justification"`
 	ProposedBy       uint       `json:"proposed_by"`
@@ -100,7 +103,7 @@ func guardrailExceptionMeta() GuardrailExceptionMeta {
 func serializeGuardrailException(e *models.GuardrailException) GuardrailExceptionResponse {
 	return GuardrailExceptionResponse{
 		ID: e.ID, AppID: e.AppID, FilterID: e.FilterID, Detector: e.Detector, Channel: e.Channel,
-		ToolName: e.ToolName, Action: e.Action, Status: e.Status, Justification: e.Justification,
+		ToolName: e.ToolName, Action: e.Action, AlertEvent: e.AlertEvent, Status: e.Status, Justification: e.Justification,
 		ProposedBy: e.ProposedBy, ApprovedBy: e.ApprovedBy, ApprovedAt: e.ApprovedAt,
 		ExpiresAfterDays: e.ExpiresAfterDays, LastHitAt: e.LastHitAt, HitCount: e.HitCount,
 		SourceEvent: e.SourceEvent, CreatedAt: e.CreatedAt, UpdatedAt: e.UpdatedAt,
@@ -119,7 +122,7 @@ func serializeGuardrailExceptions(list []models.GuardrailException) []GuardrailE
 func (in GuardrailExceptionInput) spec() services.GuardrailExceptionSpec {
 	return services.GuardrailExceptionSpec{
 		FilterID: in.FilterID, Detector: in.Detector, Channel: in.Channel, ToolName: in.ToolName,
-		Action: in.Action, Justification: in.Justification, ExpiresAfterDays: in.ExpiresAfterDays,
+		Action: in.Action, AlertEvent: in.AlertEvent, Justification: in.Justification, ExpiresAfterDays: in.ExpiresAfterDays,
 		SourceEvent: in.SourceEvent,
 	}
 }

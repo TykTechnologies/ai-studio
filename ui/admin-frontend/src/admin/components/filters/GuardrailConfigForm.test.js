@@ -4,6 +4,7 @@ import "@testing-library/jest-dom";
 import { ThemeProvider } from "@mui/material/styles";
 import testTheme from "../../utils/testTheme";
 import GuardrailConfigForm, {
+  alertEventFrom,
   backstopMinScoreError,
   budgetErrors,
   effectiveToolAction,
@@ -12,6 +13,7 @@ import GuardrailConfigForm, {
   emptyGuardrailConfig,
   scansToolCalls,
   scansToolResults,
+  shadowAllowed,
 } from "./GuardrailConfigForm";
 
 jest.mock("../../utils/apiClient", () => ({
@@ -67,13 +69,14 @@ const providers = [
 
 // A stateful harness: the form is controlled, so the test must feed changes
 // back in the way FilterForm does.
-const Harness = ({ initial, responseFilter = false, onChange = () => {} }) => {
+const Harness = ({ initial, responseFilter = false, onChange = () => {}, filterName = "" }) => {
   const [value, setValue] = React.useState(initial);
   return (
     <ThemeProvider theme={testTheme}>
       <GuardrailConfigForm
         value={value}
         responseFilter={responseFilter}
+        filterName={filterName}
         onChange={(next) => {
           setValue(next);
           onChange(next);
@@ -593,5 +596,51 @@ describe("GuardrailConfigForm template backstop (53e.31)", () => {
   it("shows a stored ParseBool-true value as checked", async () => {
     await rendered({ provider: "http", connection: { endpoint: "https://c", templates: "1" } });
     expect(screen.getByTestId("guardrail-connection-templates")).toBeChecked();
+  });
+
+  it("'Log and raise event' asks for an event name, pre-filled from the filter name", async () => {
+    const onChange = jest.fn();
+    render(<Harness initial={emptyGuardrailConfig()} onChange={onChange} filterName="Wolf Defender (Visor)" />);
+    await screen.findByTestId("guardrail-detector-secrets");
+    expect(screen.queryByTestId("guardrail-alert-event")).not.toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getByLabelText(/on detection/i));
+    fireEvent.click(await screen.findByRole("option", { name: "Log and raise event" }));
+    const field = await screen.findByTestId("guardrail-alert-event");
+    expect(field).toHaveValue("wolf-defender-visor");
+    expect(screen.getByText("Webhooks subscribe to guardrail.alert.wolf-defender-visor")).toBeInTheDocument();
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ on_detect: "alert", alert: { event: "wolf-defender-visor" } })
+    );
+
+    fireEvent.change(field, { target: { value: "Bad Name" } });
+    expect(screen.getByText(/2-64 lowercase letters/)).toBeInTheDocument();
+    fireEvent.change(field, { target: { value: "visor-pr-flag" } });
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ alert: { event: "visor-pr-flag" } }));
+
+    // Leaving the action drops the alert.
+    fireEvent.mouseDown(screen.getByLabelText(/on detection/i));
+    fireEvent.click(await screen.findByRole("option", { name: "Log only" }));
+    expect(onChange.mock.calls[onChange.mock.calls.length - 1][0].alert).toBeUndefined();
+    expect(screen.queryByTestId("guardrail-alert-event")).not.toBeInTheDocument();
+  });
+
+  it("tool results can raise their own event", async () => {
+    const onChange = jest.fn();
+    render(<Harness initial={emptyGuardrailConfig()} onChange={onChange} filterName="Wolf" />);
+    await screen.findByTestId("guardrail-detector-secrets");
+    fireEvent.mouseDown(screen.getByLabelText(/action on tool results/i));
+    fireEvent.click(await screen.findByRole("option", { name: "Log and raise event" }));
+    expect(await screen.findByTestId("guardrail-tool-alert-event")).toHaveValue("wolf-tool-results");
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ tool_results: { on_detect: "alert", alert: { event: "wolf-tool-results" } } })
+    );
+  });
+
+  it("alert counts as log for shadow, and names are slugs", () => {
+    expect(shadowAllowed({ ...emptyGuardrailConfig(), on_detect: "alert", alert: { event: "x1" } })).toBe(true);
+    expect(alertEventFrom("Wolf Defender!")).toBe("wolf-defender");
+    expect(alertEventFrom("")).toBe("guardrail");
+    expect(alertEventFrom("a".repeat(80), "tool-results")).toHaveLength(64);
   });
 });

@@ -45,6 +45,9 @@ type GuardrailException struct {
 	// Action is what the exception softens the filter's action to (log,
 	// quarantine, remove).
 	Action string `json:"action" gorm:"size:16;not null"`
+	// AlertEvent names the event raised when Action is alert (a slug
+	// unique across filters and exceptions); "" otherwise.
+	AlertEvent string `json:"alert_event" gorm:"size:64;not null;default:''"`
 
 	Status        string `json:"status" gorm:"size:16;not null;default:proposed;index:idx_guardrail_exception_app_status"`
 	Justification string `json:"justification" gorm:"size:500;not null"`
@@ -92,9 +95,10 @@ func (e *GuardrailException) ContentHash() string {
 		Channel          string `json:"channel"`
 		ToolName         string `json:"tool_name"`
 		Action           string `json:"action"`
+		AlertEvent       string `json:"alert_event,omitempty"`
 		Justification    string `json:"justification"`
 		ExpiresAfterDays int    `json:"expires_after_days"`
-	}{e.FilterID, e.Detector, e.Channel, e.ToolName, e.Action, e.Justification, e.ExpiresAfterDays})
+	}{e.FilterID, e.Detector, e.Channel, e.ToolName, e.Action, e.AlertEvent, e.Justification, e.ExpiresAfterDays})
 	if err != nil {
 		// Strings and ints always marshal.
 		panic(err)
