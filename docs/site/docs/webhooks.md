@@ -119,7 +119,11 @@ Example custom template:
 A template can use `.StudioLink`: the AI Studio page the event links to, set
 only for guardrail alerts and outcome events (topics only AI Studio raises)
 and only when it is an `http(s)` URL, so no other event's fields become a
-link. For example, in a Slack message: `{{ with .StudioLink }}<{{ . }}|Open in AI Studio>{{ end }}`.
+link. For example, in a Slack message:
+
+```
+{{ with .StudioLink }}<{{ . }}|Open in AI Studio>{{ end }}
+```
 
 Secret-bearing fields (`api_key`, `password`, `token`, `authorization`, ...)
 are replaced with `[REDACTED]` before the event is stored and before any
