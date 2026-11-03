@@ -1,6 +1,6 @@
 # Guardrail exceptions and app capability
 
-Status: app guardrail capability implemented (model, suggestion, API, App page), 2026-11-03 (midsommar-clean-9u1j.2); exceptions model, floors, service and API, 2026-11-03 (.3); exceptions at runtime on the hub, 2026-11-03 (.4); exceptions and capability on edges, 2026-11-03 (.5); the alert action, 2026-11-03 (.8). Their UI, the alert action and the LLM second opinion follow; the epic midsommar-clean-9u1j holds the full design.
+Status: app guardrail capability implemented (model, suggestion, API, App page), 2026-11-03 (midsommar-clean-9u1j.2); exceptions model, floors, service and API, 2026-11-03 (.3); exceptions at runtime on the hub, 2026-11-03 (.4); exceptions and capability on edges, 2026-11-03 (.5); the alert action, 2026-11-03 (.8); alerts to webhooks and docs, 2026-11-03 (.9, .10). Their UI, the alert action and the LLM second opinion follow; the epic midsommar-clean-9u1j holds the full design.
 
 ## Problem
 
@@ -109,3 +109,14 @@ Rules (`services/guardrail_exceptions.go`):
 | `GET /api/v1/filters/{id}/exceptions[?status=]` | filters read |
 
 These routes are the only way to manage exceptions: no plugin SDK service, gRPC management call (`TestGuardrailExceptions_NotOnManagementSurfaces`) or agent scope reaches them.
+
+## Decisions
+
+- **A full administrator's own exception applies at once**, recorded as proposer and approver (decided with Martin); anyone else proposes.
+- **Never keyed on content, path or phrase.** Exceptions are scoped by app, filter, detector, channel and tool only, so they cannot be used to allow a payload.
+- **Studio chat is out of scope**: chat requests carry no app (app id 0) and take no exceptions.
+- **A response's own text takes no exception**; tool calls in a response do (the design's channels have no model-output text channel).
+- **Timing on edges**: approving, retiring or changing an exception, attesting or resetting a capability, and a lapse reach an edge only at the next config push (edges show Pending); a lapsed exception stops applying on an edge after the hourly sweep plus the push. Edge `hit_count` counts heartbeats with hits, not requests, and hits are attributed by the edge's declared namespace (see jyx.86 on edge identity).
+- **Known limitation** (midsommar-clean-7657, deferred): an attested app keeps its tier when a bound tool's OpenAPI spec or an MCP server's annotations widen what it can do without changing its bindings; admins re-attest after such edits.
+
+User docs: docs/site/docs/guardrails.md (Exceptions, Alerts, API), edge-gateways.md (Guardrail exceptions), compliance-events.md (Guardrail event metadata), webhooks.md (guardrail.alert.*), guardrails-wolf-defender.md; CHANGELOG-v2.3.0.md.

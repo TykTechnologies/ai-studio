@@ -55,9 +55,20 @@ Targets subscribe with glob patterns:
 | `system.*.deleted` | every deletion |
 | `*` | everything |
 | `asset_catalog.*` | topics published by the asset catalog plugin |
+| `guardrail.alert.*` | every [guardrail alert](./guardrails.md#alerts-log-and-raise-event) (`guardrail.alert.<name>`) |
 
-The target editor lists the platform's system topics and every topic seen on
-the bus in the last 30 days.
+The target editor lists the platform's system topics, the guardrail alert
+topics configured on filters and exceptions, and every topic seen on the bus
+in the last 30 days. A guardrail's **Create a webhook for this event** link
+opens a new target already subscribed to its alert.
+
+A guardrail alert's object carries `alert`, `topic`, `filter_id`,
+`filter_name`, `app_id`, `app_name`, `detector`, `kinds`, `roles`,
+`tool_names`, `max_score`, `action`, `exception_id` (when an exception raised
+it), `request_id`, `compliance_event_id`, `timestamp` and `link`; `excerpts`
+only when the filter's alert opts in. Alerts for traffic through edge
+gateways are raised when the edge's analytics pulse arrives. Only AI Studio raises
+`guardrail.alert.*`: plugins cannot publish those topics.
 
 ## Payloads
 
