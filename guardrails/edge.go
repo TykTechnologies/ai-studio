@@ -83,6 +83,20 @@ func ConfigJSONForEdge(raw map[string]any, resolve func(string) string, encrypt 
 			cfg.OnDetect = ActionLog
 		}
 	}
+	// The per-channel actions likewise: an edge from before alert rejects
+	// it in tool_results, tool_calls and tool_definitions, which would
+	// break the whole filter there (a request filter errors, a response
+	// filter fails open). It gets log, the real action rides in
+	// on_detect_ext.
+	for _, ch := range []struct{ action, ext *string }{
+		{&cfg.ToolResults.OnDetect, &cfg.ToolResults.OnDetectExt},
+		{&cfg.ToolCalls.OnDetect, &cfg.ToolCalls.OnDetectExt},
+		{&cfg.ToolDefinitions.OnDetect, &cfg.ToolDefinitions.OnDetectExt},
+	} {
+		if *ch.action == ActionAlert {
+			*ch.ext, *ch.action = ActionAlert, ActionLog
+		}
+	}
 	b, err := json.Marshal(cfg)
 	if err != nil {
 		return "", err

@@ -166,6 +166,9 @@ type ToolResults struct {
 	OnDetect string `json:"on_detect,omitempty"`
 	// Alert names the event when OnDetect is alert.
 	Alert *Alert `json:"alert,omitempty"`
+	// OnDetectExt is the edge snapshot's carrier for an action edges
+	// before it do not know (alert), as Config.OnDetectExt; never stored.
+	OnDetectExt string `json:"on_detect_ext,omitempty"`
 }
 
 // ScansToolResults reports whether tool results are scanned in the whole
@@ -199,6 +202,9 @@ type ToolCalls struct {
 	IncludeSystem bool `json:"include_system,omitempty"`
 	// Alert names the event when OnDetect is alert.
 	Alert *Alert `json:"alert,omitempty"`
+	// OnDetectExt is the edge snapshot's carrier for an action edges
+	// before it do not know (alert), as Config.OnDetectExt; never stored.
+	OnDetectExt string `json:"on_detect_ext,omitempty"`
 }
 
 // ToolDefinitions configures how a request guardrail treats the tools a
@@ -214,6 +220,9 @@ type ToolDefinitions struct {
 	OnDetect string `json:"on_detect,omitempty"`
 	// Alert names the event when OnDetect is alert.
 	Alert *Alert `json:"alert,omitempty"`
+	// OnDetectExt is the edge snapshot's carrier for an action edges
+	// before it do not know (alert), as Config.OnDetectExt; never stored.
+	OnDetectExt string `json:"on_detect_ext,omitempty"`
 }
 
 // ScansToolDefinitions reports whether tool definitions are scanned.
@@ -531,6 +540,16 @@ func ParseConfig(raw map[string]any) (Config, error) {
 		cfg.OnDetect = cfg.OnDetectExt
 	}
 	cfg.OnDetectExt = ""
+	for _, ch := range []struct{ action, ext *string }{
+		{&cfg.ToolResults.OnDetect, &cfg.ToolResults.OnDetectExt},
+		{&cfg.ToolCalls.OnDetect, &cfg.ToolCalls.OnDetectExt},
+		{&cfg.ToolDefinitions.OnDetect, &cfg.ToolDefinitions.OnDetectExt},
+	} {
+		if *ch.ext == ActionAlert {
+			*ch.action = ActionAlert
+		}
+		*ch.ext = ""
+	}
 	if ext := cfg.FailModeExt; ext != nil && (*ext == "" || *ext == FailOpen || *ext == FailClosed) {
 		cfg.FailMode = *ext
 	}

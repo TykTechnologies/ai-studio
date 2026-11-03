@@ -132,3 +132,73 @@ func TestLogIfAlert(t *testing.T) {
 	assert.Equal(t, ActionBlock, LogIfAlert(ActionBlock))
 	assert.Equal(t, ActionRank(ActionLog), ActionRank(ActionAlert))
 }
+
+// preAlertView is what an edge released before alert reads of an edge
+// config: it knows the top-level on_detect_ext (quarantine) but not the
+// alert objects nor the per-channel on_detect_ext, which it ignores.
+func preAlertView(t *testing.T, js string) map[string]any {
+	t.Helper()
+	m, err := ConfigFromJSON(js)
+	require.NoError(t, err)
+	delete(m, "alert")
+	for _, ch := range []string{"tool_results", "tool_calls", "tool_definitions"} {
+		if sub, ok := m[ch].(map[string]any); ok {
+			delete(sub, "alert")
+			delete(sub, "on_detect_ext")
+		}
+	}
+	return m
+}
+
+// .53: per-channel alert reaches an edge from before alert as log, which
+// it parses and applies (alert is log for the traffic); a current edge
+// reads alert back. Request and response filters alike.
+func TestAlertAction_PerChannelOnOlderEdges(t *testing.T) {
+	preAlert := map[string]bool{"": true, ActionBlock: true, ActionLog: true, ActionRedact: true, ActionQuarantine: true, ActionRemove: true}
+	for _, response := range []bool{false, true} {
+		raw := alertConfig(func(m map[string]any) {
+			m["on_detect"] = ActionBlock
+			delete(m, "alert")
+			m["tool_results"] = map[string]any{"on_detect": ActionAlert, "alert": map[string]any{"event": "tool-results-flag"}}
+			m["tool_calls"] = map[string]any{"scan": true, "on_detect": ActionAlert, "alert": map[string]any{"event": "tool-calls-flag"}}
+			if !response {
+				m["tool_definitions"] = map[string]any{"scan": true, "on_detect": ActionAlert, "alert": map[string]any{"event": "tool-defs-flag"}}
+			}
+		})
+		_, err := normalizeRaw(t, raw, response)
+		require.NoError(t, err, "the hub accepts it")
+		js, err := ConfigJSONForEdge(raw, nil, nil)
+		require.NoError(t, err)
+
+		old := preAlertView(t, js)
+		for _, ch := range []string{"tool_results", "tool_calls", "tool_definitions"} {
+			if sub, ok := old[ch].(map[string]any); ok {
+				a, _ := sub["on_detect"].(string)
+				assert.True(t, preAlert[a], "response=%v: an older edge reads %s.on_detect %q", response, ch, a)
+			}
+		}
+		cfg, err := ParseConfig(old)
+		require.NoError(t, err)
+		cfg, err = Normalize(cfg, response)
+		require.NoError(t, err, "response=%v: an older edge parses it", response)
+		assert.Equal(t, ActionLog, cfg.ActionFor(KindToolResult))
+		assert.Equal(t, ActionLog, cfg.ActionFor(KindToolCall))
+		if !response {
+			assert.Equal(t, ActionLog, cfg.ActionFor(KindToolDefinition))
+		}
+		assert.Equal(t, ActionBlock, cfg.ActionFor(KindText), "the rest of the filter is unchanged")
+
+		// A current edge reads alert back, with its events.
+		curRaw, err := ConfigFromJSON(js)
+		require.NoError(t, err)
+		cur, err := ParseConfig(curRaw)
+		require.NoError(t, err)
+		cur, err = Normalize(cur, response)
+		require.NoError(t, err)
+		assert.Equal(t, "tool-results-flag", cur.AlertFor(KindToolResult).Event)
+		assert.Equal(t, "tool-calls-flag", cur.AlertFor(KindToolCall).Event)
+		if !response {
+			assert.Equal(t, "tool-defs-flag", cur.AlertFor(KindToolDefinition).Event)
+		}
+	}
+}
