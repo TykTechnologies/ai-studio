@@ -256,9 +256,38 @@ func (g *guardrailRunner) RunScript(input *ScriptInput, svc services.ServiceInte
 		if r := recover(); r != nil {
 			out, err = g.panicked(input, r), nil
 		}
+		g.stampFilterID(out)
 		markOwnerVisible(g.filter.Config, out)
 	}()
 	return g.run(input, svc)
+}
+
+// FilterIDKey is the compliance event metadata key holding the ID of the
+// guardrail filter that recorded the event. compliance_events stores only the
+// filter's name, which an administrator can change; the ID lets the UI find
+// the filter (for example to soften its verdict for one app).
+const FilterIDKey = "filter_id"
+
+// stampFilterID sets FilterIDKey on every compliance event in out. A filter
+// that was never saved (ID 0, the editor's test run) records no ID.
+func (g *guardrailRunner) stampFilterID(out *ScriptOutput) {
+	if out == nil || g.filter.ID == 0 {
+		return
+	}
+	for i := range out.ComplianceEvents {
+		if out.ComplianceEvents[i].Metadata == nil {
+			out.ComplianceEvents[i].Metadata = map[string]interface{}{}
+		}
+		out.ComplianceEvents[i].Metadata[FilterIDKey] = g.filter.ID
+	}
+}
+
+// recordEvents records out's compliance events through record (a shadow
+// filter's events, which do not travel back in the run's output), stamped with
+// the filter's ID like the events RunScript returns.
+func (g *guardrailRunner) recordEvents(record func(context.Context, string, *ScriptOutput), ctx context.Context, out *ScriptOutput) {
+	g.stampFilterID(out)
+	record(ctx, g.filter.Name, out)
 }
 
 // OwnerVisibleKey marks, in a compliance event's metadata, an event the App's
@@ -336,7 +365,7 @@ func (g *guardrailRunner) run(input *ScriptInput, _ services.ServiceInterface) (
 		if p.cfg.Shadow && input.RecordEvents != nil {
 			// A shadow filter never changes traffic, even when it cannot
 			// run: the failure is recorded and the traffic goes on.
-			input.RecordEvents(input.Ctx, g.filter.Name, &ScriptOutput{ComplianceEvents: failed.ComplianceEvents})
+			g.recordEvents(input.RecordEvents, input.Ctx, &ScriptOutput{ComplianceEvents: failed.ComplianceEvents})
 			return passThrough(input), nil
 		}
 		return failed, nil

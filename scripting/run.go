@@ -30,7 +30,29 @@ func (sr *ScriptRunner) RunScript(input *ScriptInput, serviceRef services.Servic
 			output = nil
 			err = fmt.Errorf("script panic: %v", r)
 		}
+		stripReservedEventKeys(output)
 	}()
 
 	return sr.runScript(input, serviceRef)
+}
+
+// ReservedEventKeys are the compliance event metadata keys only the
+// guardrail runner sets: consumers trust them to describe a guardrail
+// filter's own verdict (the filter to soften, the alert topic to publish,
+// the exception or judge that changed it, whether App owners may see it).
+// A script filter's events are free-form, so these keys are removed from
+// them; a script cannot pass its event off as another filter's.
+var ReservedEventKeys = []string{FilterIDKey, "alert", "exception", "judge", "shadow", OwnerVisibleKey}
+
+// stripReservedEventKeys removes ReservedEventKeys from a script filter's
+// compliance events.
+func stripReservedEventKeys(out *ScriptOutput) {
+	if out == nil {
+		return
+	}
+	for i := range out.ComplianceEvents {
+		for _, k := range ReservedEventKeys {
+			delete(out.ComplianceEvents[i].Metadata, k)
+		}
+	}
 }
