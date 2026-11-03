@@ -1,6 +1,7 @@
 package services
 
 import (
+	"fmt"
 	"strconv"
 	"sync"
 	"testing"
@@ -131,22 +132,40 @@ func TestGuardrailException_Validation(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("a source event must be the app's", func(t *testing.T) {
+	t.Run("a source event must be this filter's guardrail event for the app", func(t *testing.T) {
+		event := func(appID uint, eventType, filterName, metadata string) *uint {
+			ev := &models.ComplianceEvent{AppID: appID, EventType: eventType, FilterName: filterName, Metadata: metadata}
+			require.NoError(t, f.db.Create(ev).Error)
+			return &ev.ID
+		}
+		mine := fmt.Sprintf(`{"filter_id":%d,"detector":"prompt_injection"}`, f.filter.ID)
 		other := &models.App{Name: "Other", UserID: f.writer.ID}
 		require.NoError(t, other.Create(f.db))
-		ev := &models.ComplianceEvent{AppID: other.ID, FilterName: "Wolf Defender"}
-		require.NoError(t, f.db.Create(ev).Error)
-		s := f.spec("text_system", "quarantine")
-		s.SourceEvent = &ev.ID
-		_, err := f.svc.CreateGuardrailException(f.app.ID, f.asAdmin, s)
-		require.ErrorIs(t, err, ErrInvalidGuardrailException)
+		otherFilter := &models.Filter{Name: "Other guardrail", Kind: models.FilterKindGuardrail}
+		require.NoError(t, f.db.Create(otherFilter).Error)
 
-		own := &models.ComplianceEvent{AppID: f.app.ID, FilterName: "Wolf Defender"}
-		require.NoError(t, f.db.Create(own).Error)
-		s.SourceEvent = &own.ID
+		refused := map[string]*uint{
+			"another app's":           event(other.ID, "guardrail.prompt_injection", f.filter.Name, mine),
+			"another filter's":        event(f.app.ID, "guardrail.prompt_injection", otherFilter.Name, fmt.Sprintf(`{"filter_id":%d}`, otherFilter.ID)),
+			"filter id of another":    event(f.app.ID, "guardrail.prompt_injection", f.filter.Name, fmt.Sprintf(`{"filter_id":%d}`, otherFilter.ID)),
+			"name of another":         event(f.app.ID, "guardrail.prompt_injection", otherFilter.Name, mine),
+			"a script filter's event": event(f.app.ID, "pii_redacted", f.script.Name, fmt.Sprintf(`{"filter_id":%d}`, f.script.ID)),
+			"not a guardrail event":   event(f.app.ID, "pii_redacted", f.filter.Name, mine),
+			"no filter id":            event(f.app.ID, "guardrail.prompt_injection", f.filter.Name, `{"detector":"x"}`),
+			"no metadata":             event(f.app.ID, "guardrail.prompt_injection", f.filter.Name, ""),
+		}
+		for name, id := range refused {
+			s := f.spec("text_system", "quarantine")
+			s.SourceEvent = id
+			_, err := f.svc.CreateGuardrailException(f.app.ID, f.asAdmin, s)
+			assert.ErrorIs(t, err, ErrInvalidGuardrailException, name)
+		}
+
+		s := f.spec("text_system", "quarantine")
+		s.SourceEvent = event(f.app.ID, "guardrail.prompt_injection", f.filter.Name, mine)
 		e, err := f.svc.CreateGuardrailException(f.app.ID, f.asAdmin, s)
 		require.NoError(t, err)
-		assert.Equal(t, own.ID, *e.SourceEvent)
+		assert.Equal(t, *s.SourceEvent, *e.SourceEvent)
 	})
 }
 

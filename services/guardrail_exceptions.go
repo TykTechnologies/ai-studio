@@ -1,9 +1,11 @@
 package services
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -105,7 +107,7 @@ func (s *Service) CreateGuardrailException(appID uint, actor GuardrailExceptionA
 		return nil, err
 	}
 	if spec.SourceEvent != nil && *spec.SourceEvent != 0 {
-		if err := s.checkExceptionSourceEvent(appID, *spec.SourceEvent); err != nil {
+		if err := s.checkExceptionSourceEvent(appID, *spec.SourceEvent, e.FilterID); err != nil {
 			return nil, err
 		}
 		e.SourceEvent = spec.SourceEvent
@@ -434,10 +436,13 @@ func checkApprovedExceptionCap(tx *gorm.DB, appID, except uint) error {
 }
 
 // checkExceptionSourceEvent checks that the compliance event an exception
-// is created from exists and belongs to the app.
-func (s *Service) checkExceptionSourceEvent(appID, eventID uint) error {
+// is created from is a guardrail event of this app recorded by this filter:
+// the stored claim of where the exception came from must hold. A guardrail
+// event names its filter twice, by name (filter_name) and by id
+// (metadata.filter_id); both must be the exception's filter.
+func (s *Service) checkExceptionSourceEvent(appID, eventID, filterID uint) error {
 	var ev models.ComplianceEvent
-	if err := s.DB.Select("id", "app_id").First(&ev, eventID).Error; err != nil {
+	if err := s.DB.Select("id", "app_id", "event_type", "filter_name", "metadata").First(&ev, eventID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return invalidGuardrailException("compliance event %d does not exist", eventID)
 		}
@@ -445,6 +450,27 @@ func (s *Service) checkExceptionSourceEvent(appID, eventID uint) error {
 	}
 	if ev.AppID != appID {
 		return invalidGuardrailException("compliance event %d is not one of this app's", eventID)
+	}
+	if !strings.HasPrefix(ev.EventType, "guardrail.") {
+		return invalidGuardrailException("compliance event %d is not a guardrail event", eventID)
+	}
+	var meta struct {
+		FilterID *json.Number `json:"filter_id"`
+	}
+	dec := json.NewDecoder(strings.NewReader(ev.Metadata))
+	dec.UseNumber()
+	if ev.Metadata == "" || dec.Decode(&meta) != nil || meta.FilterID == nil || meta.FilterID.String() != strconv.FormatUint(uint64(filterID), 10) {
+		return invalidGuardrailException("compliance event %d was not recorded by filter %d", eventID, filterID)
+	}
+	var filter models.Filter
+	if err := s.DB.Select("id", "name").First(&filter, filterID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return invalidGuardrailException("filter %d does not exist", filterID)
+		}
+		return err
+	}
+	if ev.FilterName != filter.Name {
+		return invalidGuardrailException("compliance event %d was not recorded by filter %d", eventID, filterID)
 	}
 	return nil
 }
