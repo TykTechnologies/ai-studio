@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { ThemeProvider } from "@mui/material/styles";
 import testTheme from "../../utils/testTheme";
+import { MemoryRouter } from "react-router-dom";
 import GuardrailConfigForm, {
   alertEventFrom,
   backstopMinScoreError,
@@ -19,6 +20,11 @@ import GuardrailConfigForm, {
 jest.mock("../../utils/apiClient", () => ({
   __esModule: true,
   default: { get: jest.fn() },
+}));
+
+let mockEdition = null;
+jest.mock("../../context/EditionContext", () => ({
+  useEditionOptional: () => mockEdition,
 }));
 
 const apiClient = require("../../utils/apiClient").default;
@@ -73,6 +79,7 @@ const Harness = ({ initial, responseFilter = false, onChange = () => {}, filterN
   const [value, setValue] = React.useState(initial);
   return (
     <ThemeProvider theme={testTheme}>
+      <MemoryRouter>
       <GuardrailConfigForm
         value={value}
         responseFilter={responseFilter}
@@ -82,6 +89,7 @@ const Harness = ({ initial, responseFilter = false, onChange = () => {}, filterN
           onChange(next);
         }}
       />
+      </MemoryRouter>
     </ThemeProvider>
   );
 };
@@ -89,6 +97,7 @@ const Harness = ({ initial, responseFilter = false, onChange = () => {}, filterN
 describe("GuardrailConfigForm", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockEdition = null;
     apiClient.get.mockResolvedValue({ data: providers });
   });
 
@@ -642,5 +651,20 @@ describe("GuardrailConfigForm template backstop (53e.31)", () => {
     expect(alertEventFrom("Wolf Defender!")).toBe("wolf-defender");
     expect(alertEventFrom("")).toBe("guardrail");
     expect(alertEventFrom("a".repeat(80), "tool-results")).toHaveLength(64);
+  });
+
+  it("links an alert to a new webhook in Enterprise, and says it only logs in CE", async () => {
+    mockEdition = { isEnterprise: true };
+    const config = { ...emptyGuardrailConfig(), on_detect: "alert", alert: { event: "visor-pr-flag" } };
+    const { unmount } = render(<Harness initial={config} />);
+    const link = await screen.findByTestId("guardrail-alert-event-webhook");
+    expect(link).toHaveAttribute("href", "/admin/webhooks?topic=guardrail.alert.visor-pr-flag");
+    expect(screen.queryByTestId("guardrail-alert-event-ce")).not.toBeInTheDocument();
+    unmount();
+
+    mockEdition = { isEnterprise: false };
+    render(<Harness initial={config} />);
+    expect(await screen.findByTestId("guardrail-alert-event-ce")).toHaveTextContent(/needs Enterprise/);
+    expect(screen.queryByTestId("guardrail-alert-event-webhook")).not.toBeInTheDocument();
   });
 });

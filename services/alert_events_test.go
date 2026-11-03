@@ -97,3 +97,17 @@ func TestGuardrailException_AlertAction(t *testing.T) {
 	_, err = f.svc.CreateGuardrailException(f.app.ID, f.asAdmin, s3)
 	assert.ErrorIs(t, err, ErrInvalidGuardrailException)
 }
+
+func TestGuardrailAlertTopics(t *testing.T) {
+	f := newExceptionFixture(t, "read_only")
+	_, err := f.svc.CreateFilterFromSpec(alertFilterSpec("Alerting", "visor-pr-flag"))
+	require.NoError(t, err)
+	s := f.spec("text_user", guardrails.ActionAlert)
+	s.AlertEvent = ptr("visor-softened")
+	_, err = f.svc.CreateGuardrailException(f.app.ID, f.asAdmin, s)
+	require.NoError(t, err)
+
+	topics, err := GuardrailAlertTopics(f.db)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"guardrail.alert.visor-pr-flag", "guardrail.alert.visor-softened"}, topics)
+}

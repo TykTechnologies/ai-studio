@@ -144,6 +144,15 @@ func (e *SystemEventEmitter) EmitObjectEvent(topic string, objectType string, ac
 	}
 }
 
+// PublishLocal publishes payload on topic on this node's bus (DirLocal),
+// for events that are not object CRUD (guardrail alerts).
+func (e *SystemEventEmitter) PublishLocal(topic string, payload interface{}) error {
+	if e == nil || e.bus == nil {
+		return nil
+	}
+	return eventbridge.PublishLocal(e.bus, e.nodeID, topic, payload)
+}
+
 // Convenience methods for each object type
 
 // EmitLLMCreated emits an event when an LLM is created
