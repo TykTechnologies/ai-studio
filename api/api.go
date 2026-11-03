@@ -808,6 +808,8 @@ func (a *API) setupRoutes() error {
 	v1.DELETE("/apps/:id/prompt-templates/:template_id", authz.Delete("apps"), a.deleteAppPromptTemplate)
 	v1.POST("/apps/:id/prompt-templates/:template_id/approve", authz.FullAdmin, a.approveAppPromptTemplate)
 	v1.POST("/apps/:id/prompt-templates/:template_id/retire", authz.Write("apps"), a.retireAppPromptTemplate)
+	v1.GET("/apps/:id/guardrail-capability", authz.Read("apps"), a.getAppGuardrailCapability)
+	v1.PUT("/apps/:id/guardrail-capability", authz.FullAdmin, a.setAppGuardrailCapability)
 
 	// Plugin Resource Type routes
 	v1.GET("/plugin-resource-types", authz.Read("plugins"), a.listPluginResourceTypes)

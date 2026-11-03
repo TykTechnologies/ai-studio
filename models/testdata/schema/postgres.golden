@@ -377,6 +377,7 @@ TABLE apps
   column metadata text(text) nullable=YES
   column namespace text(text) nullable=YES default=''::text
   column tracing json(json) nullable=YES
+  column guardrail_capability character varying(varchar) nullable=YES len=16 default=''::character varying
 TABLE attestation_templates
   constraint attestation_templates_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX attestation_templates_pkey ON attestation_templates USING btree (id)

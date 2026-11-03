@@ -617,6 +617,7 @@ func serializeApp(app *models.App) AppResponse {
 	resp.Attributes.Metadata = app.Metadata
 	resp.Attributes.Namespace = app.Namespace
 	resp.Attributes.Tracing = app.Tracing
+	resp.Attributes.GuardrailCapability = app.GuardrailCapability
 	return resp
 }
 

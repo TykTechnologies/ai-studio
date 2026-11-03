@@ -41,6 +41,12 @@ type App struct {
 	// Tracing overrides the global agent tracing settings for this App
 	// (Enterprise; see AppTracingSettings).
 	Tracing AppTracingSettings `json:"tracing" gorm:"type:json"`
+	// GuardrailCapability is what a full administrator attests the App can
+	// do (a guardrails.Capability: "", read_only, read_tools, acting). It
+	// bounds how far guardrail exceptions may soften a verdict; "" is
+	// unattested and treated as acting. Set only through
+	// Service.SetAppGuardrailCapability.
+	GuardrailCapability string `json:"guardrail_capability" gorm:"size:16;default:''"`
 }
 
 type Apps []App

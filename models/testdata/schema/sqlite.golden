@@ -357,6 +357,7 @@ TABLE apps
   column `metadata` text
   column `namespace` text DEFAULT ""
   column `tracing` json
+  column `guardrail_capability` text DEFAULT ""
   constraint CONSTRAINT `fk_apps_credential` FOREIGN KEY (`credential_id`) REFERENCES `credentials`(`id`)
   index CREATE INDEX `idx_app_namespace` ON `apps`(`namespace`)
   index CREATE INDEX `idx_apps_deleted_at` ON `apps`(`deleted_at`)

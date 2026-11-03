@@ -583,6 +583,9 @@ type AppResponse struct {
 		SemanticRouters   []AppSemanticRouterOutput `json:"semantic_routers,omitempty"`
 		// Agent tracing overrides (Enterprise).
 		Tracing models.AppTracingSettings `json:"tracing"`
+		// GuardrailCapability is the attested capability ("" = unattested,
+		// treated as acting); set with PUT /apps/{id}/guardrail-capability.
+		GuardrailCapability string `json:"guardrail_capability"`
 	} `json:"attributes"`
 }
 
