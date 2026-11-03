@@ -67,9 +67,11 @@ func filterAlertEvents(kind string, config models.JSONMap) []string {
 	return cfg.AlertEvents()
 }
 
-// GuardrailAlertTopics lists the bus topics of every configured guardrail
-// alert (guardrail.alert.<event>), from guardrail filters and exceptions,
-// sorted: the webhook target editor offers them (Enterprise ListTopics).
+// GuardrailAlertTopics lists the guardrail topics a webhook can subscribe
+// to, sorted: the bus topic of every configured guardrail alert
+// (guardrail.alert.<event>, from guardrail filters and exceptions) and the
+// fixed outcome event topics (GuardrailOutcomeTopics). The webhook target
+// editor offers them (Enterprise ListTopics).
 func GuardrailAlertTopics(db *gorm.DB) ([]string, error) {
 	set := map[string]bool{}
 	var filters []models.Filter
@@ -89,10 +91,11 @@ func GuardrailAlertTopics(db *gorm.DB) ([]string, error) {
 	for _, n := range names {
 		set[n] = true
 	}
-	out := make([]string, 0, len(set))
+	out := make([]string, 0, len(set)+len(GuardrailOutcomeTopics))
 	for n := range set {
 		out = append(out, guardrails.AlertTopicPrefix+n)
 	}
+	out = append(out, GuardrailOutcomeTopics...)
 	slices.Sort(out)
 	return out, nil
 }

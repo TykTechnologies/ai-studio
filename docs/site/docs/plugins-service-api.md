@@ -260,6 +260,18 @@ Events have a direction that controls routing:
 
 Topics starting with `system.` are reserved for AI Studio's object change events. A control plane drops `system.*` events that arrive from an edge, so gateway plugins should publish under their own topics.
 
+`guardrail.alert.` and `guardrail.outcome.` are reserved too: AI Studio raises them for [guardrail alerts and outcome events](./guardrails.md#outcome-events-blocked-quarantined-softened-by-the-judge) (a block, a quarantine, a judge softening), and a plugin's publish on them is refused, on AI Studio and on an edge. A Studio plugin can subscribe to them like any topic, one topic per subscription:
+
+```go
+for _, topic := range []string{"guardrail.outcome.blocked", "guardrail.outcome.quarantined", "guardrail.outcome.judge_softened"} {
+    ctx.Services.Events().Subscribe(topic, func(ev plugin_sdk.Event) {
+        // ev.Payload: {"object_type":"guardrail","action":"blocked","object_id":<compliance event id>,"object":{...}}
+    })
+}
+```
+
+They are raised on AI Studio (DirLocal), for edge traffic too once the edge's analytics pulse arrives; gateway plugins do not receive them.
+
 #### Publish Event
 
 Publish an event with a JSON-serializable payload:
