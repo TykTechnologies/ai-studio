@@ -173,6 +173,22 @@ type piece struct {
 	// overlap across a cut whose findings count but whose rewrite is never
 	// used.
 	ordinal int
+	// sliced is set when text is the segment's text from byte at on, so a
+	// provider's span in the piece maps onto the segment. A seam rescanned
+	// from rewritten text is no slice of the segment: its spans are dropped.
+	sliced bool
+	at     int
+}
+
+// segmentSpan maps a span the provider reported in the piece onto the
+// piece's segment: nil when there is none, the piece is no slice of the
+// segment, or the span does not lie in the piece's text (a provider's
+// mistake, not to be trusted to locate anything).
+func (p piece) segmentSpan(s *guardrails.Span) *guardrails.Span {
+	if s == nil || !p.sliced || s.Start < 0 || s.End < s.Start || s.End > len(p.text) {
+		return nil
+	}
+	return &guardrails.Span{Start: p.at + s.Start, End: p.at + s.End}
 }
 
 // call is one provider call's pieces.
@@ -819,8 +835,9 @@ func (j *scanJob) addVerdict(c call, v guardrails.Verdict) {
 		if f.SegmentIndex >= 0 && f.SegmentIndex < len(c) {
 			f.Evidence = j.evidence(memo, f.SegmentIndex, c[f.SegmentIndex].text, f.Span)
 		}
-		f.Span = nil // piece-relative; meaningless on the whole segment
 		if f.SegmentIndex < 0 || f.SegmentIndex >= len(c) {
+			f.Span = nil // no piece to place it in
+
 			for _, parent := range parents(c) {
 				g := f
 				g.SegmentIndex = parent
@@ -831,6 +848,10 @@ func (j *scanJob) addVerdict(c call, v guardrails.Verdict) {
 		}
 		p := c[f.SegmentIndex]
 		f.SegmentIndex = p.parent
+		// The provider's span is in the piece: moved onto the segment, so a
+		// second opinion can tell whether it saw what was flagged
+		// (judgeCovers). Evidence above stays piece-relative.
+		f.Span = p.segmentSpan(f.Span)
 		if p.ordinal < 0 {
 			j.seamFindings = append(j.seamFindings, f)
 			continue
@@ -1105,17 +1126,25 @@ func (e *providerError) Unwrap() error { return e.err }
 // cut when withSeams is set.
 func splitSegment(parent int, text string, pieceMax int, withSeams bool) []piece {
 	if pieceMax <= 0 || utf8.RuneCountInString(text) <= pieceMax {
-		return []piece{{parent: parent, text: text}}
+		return []piece{{parent: parent, text: text, sliced: true}}
 	}
 	runes := []rune(text)
+	// byteAt[i] is the byte offset of runes[i] in text. Text that is not
+	// valid UTF-8 loses bytes to U+FFFD in the pieces, so they are no slice.
+	sliced := utf8.ValidString(text)
+	byteAt := make([]int, len(runes)+1)
+	for i, r := range runes {
+		byteAt[i+1] = byteAt[i] + utf8.RuneLen(r)
+	}
 	k := seamRunes(pieceMax)
 	var out []piece
 	for start, n := 0, 0; start < len(runes); start, n = start+pieceMax, n+1 {
 		end := min(start+pieceMax, len(runes))
 		if withSeams && start > 0 {
-			out = append(out, piece{parent: parent, text: string(runes[max(start-k, 0):min(start+k, len(runes))]), ordinal: -1})
+			from := max(start-k, 0)
+			out = append(out, piece{parent: parent, text: string(runes[from:min(start+k, len(runes))]), ordinal: -1, sliced: sliced, at: byteAt[from]})
 		}
-		out = append(out, piece{parent: parent, text: string(runes[start:end]), ordinal: n})
+		out = append(out, piece{parent: parent, text: string(runes[start:end]), ordinal: n, sliced: sliced, at: byteAt[start]})
 	}
 	return out
 }
