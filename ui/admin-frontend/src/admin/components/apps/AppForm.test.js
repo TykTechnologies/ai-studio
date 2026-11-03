@@ -450,3 +450,82 @@ describe("AppForm team budgets (Enterprise)", () => {
     expect(await screen.findByText(/40.00 of the team budget is unallocated/)).toBeInTheDocument();
   });
 });
+
+// midsommar-clean-9u1j.6: a change to an app's tools, datasources or plugin
+// resources by someone who is not a full administrator resets its attested
+// guardrail capability; the form warns first, when a guardrail applies.
+describe("AppForm guardrail capability reset", () => {
+  let capability;
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockParams = { id: "5" };
+    mockFeatures = {};
+    capability = { value: "read_only", effective: "read_only", guardrails_apply: true };
+    useEdition.mockReturnValue({ isEnterprise: false });
+    apiClient.get.mockImplementation((url) => {
+      if (url === "/users") return Promise.resolve({ data: { data: users } });
+      if (url === "/llms") return Promise.resolve({ data: { data: llms } });
+      if (url === "/datasources") return Promise.resolve({ data: { data: datasources } });
+      if (url === "/apps/5") return Promise.resolve(appPayload());
+      if (url === "/apps/5/guardrail-capability") return Promise.resolve({ data: { data: capability } });
+      if (url === "/credentials/9") return Promise.resolve(credentialPayload(false));
+      if (url === "/plugin-resource-types") return Promise.resolve({ data: { data: resourceTypes } });
+      if (url === "/plugin-resource-types/3/vector-db/instances") {
+        return Promise.resolve({ data: { data: instances } });
+      }
+      return Promise.resolve({ data: { data: [] } });
+    });
+    appToolAPI.listAvailableTools.mockResolvedValue({ data: { data: tools } });
+    apiClient.patch.mockResolvedValue({ data: { data: { id: "5", attributes: {} } } });
+  });
+
+  const capabilityLoaded = () =>
+    waitFor(() => expect(apiClient.get).toHaveBeenCalledWith("/apps/5/guardrail-capability"));
+
+  it("warns before a tool change clears the attested capability", async () => {
+    renderForm();
+    await waitForLoaded();
+    await capabilityLoaded();
+    fireEvent.click(within(picker("tool")).getByTestId("relationship-picker-remove"));
+    fireEvent.click(screen.getByRole("button", { name: "Update app" }));
+
+    expect(await screen.findByText("Reset the guardrail capability?")).toBeInTheDocument();
+    expect(apiClient.patch).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Save anyway" }));
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
+  });
+
+  it("does not warn when the resources are unchanged or no guardrail applies", async () => {
+    renderForm();
+    await waitForLoaded();
+    await capabilityLoaded();
+    fireEvent.click(within(picker("LLM provider")).getByTestId("relationship-picker-add"));
+    fireEvent.click(screen.getByRole("button", { name: "Update app" }));
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
+    expect(screen.queryByText("Reset the guardrail capability?")).not.toBeInTheDocument();
+  });
+
+  it("says nothing when no guardrail applies to the app", async () => {
+    capability = { value: "read_only", effective: "read_only", guardrails_apply: false };
+    renderForm();
+    await waitForLoaded();
+    await capabilityLoaded();
+    fireEvent.click(within(picker("tool")).getByTestId("relationship-picker-remove"));
+    fireEvent.click(screen.getByRole("button", { name: "Update app" }));
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
+    expect(screen.queryByText("Reset the guardrail capability?")).not.toBeInTheDocument();
+  });
+
+  it("tells the editor after the save when the capability was reset", async () => {
+    capability = { value: "", effective: "acting", guardrails_apply: true };
+    apiClient.patch.mockResolvedValue({ data: { data: { id: "5", attributes: { guardrail_capability_reset: true } } } });
+    renderForm();
+    await waitForLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Update app" }));
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith("/admin/apps", {
+        state: { snackbar: expect.objectContaining({ severity: "warning", message: expect.stringMatching(/guardrail capability was reset/) }) },
+      })
+    );
+  });
+});

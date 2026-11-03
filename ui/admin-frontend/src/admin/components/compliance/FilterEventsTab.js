@@ -18,6 +18,7 @@ import {
   IconButton,
   Link,
   Autocomplete,
+  Button,
 } from "@mui/material";
 import {
   StyledTableHeaderCell,
@@ -33,6 +34,10 @@ import apiClient from "../../utils/apiClient";
 import { eventSourceLabel } from "./eventSource";
 import FlaggedText from "./FlaggedText";
 import EventGuide from "./EventGuide";
+import SoftenDialog from "./SoftenDialog";
+import { softenTarget } from "./softenTarget";
+import Can from "../rbac/Can";
+import { P } from "../../rbac/permissions";
 import { JUDGE_EVENT_TYPE, agreementByFilter, judgeIndex } from "./judgeOpinions";
 
 // JUDGE_SAMPLE is how many of the period's judge opinions the agreement
@@ -55,6 +60,8 @@ const FilterEventsTab = ({ startDate, endDate }) => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [expanded, setExpanded] = useState({});
+  // The event an administrator is softening for its app (SoftenDialog).
+  const [softening, setSoftening] = useState(null);
   // The Application filter: the chosen app ({id, name}) and the picker's
   // search, which loads matching apps only while the picker is open.
   const [app, setApp] = useState(null);
@@ -423,6 +430,19 @@ const FilterEventsTab = ({ startDate, endDate }) => {
                           <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                             <Box sx={{ px: 4, py: 2, bgcolor: "action.hover" }}>
                               <EventGuide event={e} />
+                              {softenTarget(e) && (
+                                <Can permission={P.APPS_WRITE}>
+                                  <Button
+                                    size="small"
+                                    variant="outlined"
+                                    sx={{ mb: 2 }}
+                                    onClick={() => setSoftening(softenTarget(e))}
+                                    data-testid={`soften-${e.id}`}
+                                  >
+                                    Not a threat? Soften for this app
+                                  </Button>
+                                </Can>
+                              )}
                               <FlaggedText metadata={e.metadata} appId={e.app_id} eventType={e.event_type} opinions={opinions} />
                               <Typography variant="caption" color="text.secondary">
                                 Metadata
@@ -473,6 +493,7 @@ const FilterEventsTab = ({ startDate, endDate }) => {
         }}
         rowsPerPageOptions={[10, 25, 50, 100]}
       />
+      <SoftenDialog open={Boolean(softening)} target={softening} onClose={() => setSoftening(null)} />
     </Box>
   );
 };

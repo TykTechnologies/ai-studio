@@ -15,6 +15,7 @@ A guardrail filter can ask a gateway-managed LLM (the judge) whether a segment i
 Segments the filter blocks or quarantines on a detector's finding, at most 4 per request. Never judged (the event records why, `verdict: none` with `error`):
 
 - `category`: the segment has a finding that is not an injection finding. The judge is asked whether text is an attack, which means nothing for a secret, personal data, a leak, hateful or violent text, a denied topic or a blocklisted word ("not an attack" is right there and says nothing about that policy), so judging them would downgrade those blocks. Judged only when every finding is category `injection`, or `other`/none from the HTTP classifier (also over a Unix socket; Wolf Defender reports "other"), and never one whose detector names a data category (`judgeableFinding`, midsommar-clean-9u1j.57, .61).
+  The judge also sees 'other' or uncategorised findings from HTTP classifiers, so turn it on only for filters whose HTTP classifier detects prompt injection (such as Wolf Defender); a classifier that reports moderation or PII as 'other' would have those judged.
 - `over_segment_cap`, `privacy` (judge scored below the request's LLM, or a request naming no LLM: Studio chat is never judged, as exceptions do not apply there either), `over_budget` (the judge LLM's own budget is spent), `judge_unavailable`, `dropped` (background queue full).
 - A segment blocked only because it was not scanned.
 
