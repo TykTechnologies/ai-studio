@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	sr "github.com/TykTechnologies/midsommar/v2/pkg/semanticrouting"
@@ -178,4 +179,72 @@ func TestClients_InlineEmbedder(t *testing.T) {
 	failing := New(noLLMs, WithDecrypter(func(string) (string, error) { return "", errors.New("bad key") }))
 	_, err = failing.Embed(context.Background(), edgeRef, []string{"a"})
 	assert.ErrorContains(t, err, "decrypt embedder key")
+}
+
+// Generate (the guardrail judge's call) takes a token limit, defaults the
+// model to the LLM's default model, reports usage, reuses the vendor driver
+// while the LLM is unchanged and rejects a vendor that serves no chat.
+func TestClients_Generate(t *testing.T) {
+	stub := &openAIStub{}
+	srv := httptest.NewServer(http.HandlerFunc(stub.handler))
+	defer srv.Close()
+
+	now := time.Now()
+	judge := &models.LLM{ID: 1, Name: "Judge", Vendor: models.OPENAI, APIEndpoint: srv.URL + "/v1", APIKey: "sk-judge", DefaultModel: "gpt-judge"}
+	judge.UpdatedAt = now
+	decisions := &models.LLM{ID: 2, Name: "Decisions", Vendor: models.SYSTEMONE, APIEndpoint: srv.URL, APIKey: "k"}
+	byID := map[uint]*models.LLM{1: judge, 2: decisions}
+	c := New(func(id uint) (*models.LLM, error) {
+		if l, ok := byID[id]; ok {
+			return l, nil
+		}
+		return nil, errors.New("not found")
+	})
+
+	out, err := c.Generate(context.Background(), sr.ModelRef{LLMID: 1}, "sys", "user", 200)
+	require.NoError(t, err)
+	assert.Equal(t, `{"route": "complex"}`, out.Text)
+	assert.Equal(t, "gpt-judge", out.Model)
+	assert.Equal(t, 1, out.PromptTokens)
+	assert.Equal(t, 1, out.CompletionTokens)
+	last := stub.requests[len(stub.requests)-1]
+	assert.Equal(t, "gpt-judge", last["model"], "an empty model asks the LLM's default")
+	assert.EqualValues(t, 200, maxTokensOf(last))
+
+	// A named model and no limit: the vendor decides the length.
+	_, err = c.Generate(context.Background(), sr.ModelRef{LLMID: 1, Model: "gpt-other"}, "sys", "user", 0)
+	require.NoError(t, err)
+	last = stub.requests[len(stub.requests)-1]
+	assert.Equal(t, "gpt-other", last["model"])
+	assert.Nil(t, maxTokensOf(last))
+
+	// Complete keeps the router judge's short limit.
+	_, err = c.Complete(context.Background(), sr.ModelRef{LLMID: 1, Model: "m"}, "sys", "user")
+	require.NoError(t, err)
+	assert.EqualValues(t, judgeMaxTokens, maxTokensOf(stub.requests[len(stub.requests)-1]))
+
+	// One driver for the unchanged LLM; an edit gets a new one.
+	c.mu.Lock()
+	assert.Len(t, c.drivers, 1)
+	c.mu.Unlock()
+	judge.UpdatedAt = now.Add(time.Second)
+	_, err = c.Generate(context.Background(), sr.ModelRef{LLMID: 1}, "sys", "user", 10)
+	require.NoError(t, err)
+	c.mu.Lock()
+	assert.Len(t, c.drivers, 2)
+	c.mu.Unlock()
+
+	// A decision-only vendor cannot judge.
+	_, err = c.Generate(context.Background(), sr.ModelRef{LLMID: 2}, "sys", "user", 10)
+	assert.ErrorIs(t, err, ErrNoChat)
+	_, err = c.Generate(context.Background(), sr.ModelRef{LLMID: 0}, "sys", "user", 10)
+	assert.Error(t, err)
+}
+
+// maxTokensOf is the request's token limit, whichever name the client used.
+func maxTokensOf(req map[string]interface{}) interface{} {
+	if v, ok := req["max_completion_tokens"]; ok {
+		return v
+	}
+	return req["max_tokens"]
 }

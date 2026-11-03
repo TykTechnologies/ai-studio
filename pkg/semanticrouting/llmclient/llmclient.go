@@ -1,12 +1,13 @@
-// Package llmclient reaches LLMs for the Semantic Router engine: embeddings
-// for the example and request vectors, and a completion for the judge. It
+// Package llmclient reaches LLMs for the Semantic Router engine (embeddings
+// for the example and request vectors, and a completion for its judge) and
+// for the guardrail second opinion (Generate). It
 // builds on the same vendor drivers the gateway uses, so any LLM configured
 // in AI Studio whose vendor offers embeddings (OpenAI, Ollama, Google AI,
 // Vertex, Hugging Face) can embed, and any LLM can judge.
 //
-// These calls go straight to the vendor. They are the router's own traffic,
-// not the App's request, so they do not pass through the App's gateway
-// filters or budget.
+// These calls go straight to the vendor. They are the router's (or the
+// guardrail's) own traffic, not the App's request, so they do not pass
+// through the App's gateway filters or budget, and cannot re-enter them.
 package llmclient
 
 import (
@@ -31,6 +32,10 @@ type LLMLookup func(id uint) (*models.LLM, error)
 // ErrNoEmbeddings is returned for an LLM whose vendor offers no embeddings.
 var ErrNoEmbeddings = errors.New("this LLM's vendor does not provide embeddings")
 
+// ErrNoChat is returned for an LLM whose vendor serves no chat completions
+// (a decision-only vendor).
+var ErrNoChat = errors.New("this LLM's vendor does not provide chat completions")
+
 // judgeMaxTokens bounds the judge's answer: it only names a route.
 const judgeMaxTokens = 64
 
@@ -46,6 +51,7 @@ type Clients struct {
 
 	mu        sync.Mutex
 	embedders map[string]*embeddings.EmbedderImpl
+	drivers   map[string]llms.Model
 }
 
 // Option configures Clients.
@@ -56,7 +62,7 @@ func WithDecrypter(d Decrypter) Option { return func(c *Clients) { c.decrypt = d
 
 // New returns clients that find LLMs with lookup.
 func New(lookup LLMLookup, opts ...Option) *Clients {
-	c := &Clients{lookup: lookup, embedders: map[string]*embeddings.EmbedderImpl{}}
+	c := &Clients{lookup: lookup, embedders: map[string]*embeddings.EmbedderImpl{}, drivers: map[string]llms.Model{}}
 	for _, o := range opts {
 		o(c)
 	}
@@ -69,6 +75,9 @@ func (c *Clients) Deps() sr.Deps { return sr.Deps{Embedder: c, Completer: c} }
 // maxCachedEmbedders bounds the embedder cache; an entry is keyed by the
 // LLM's configuration, so an edited LLM gets a new one.
 const maxCachedEmbedders = 64
+
+// maxCachedDrivers bounds the chat driver cache, keyed the same way.
+const maxCachedDrivers = 64
 
 // resolved is the LLM with its secret references resolved.
 func (c *Clients) resolved(id uint) (*models.LLM, error) {
@@ -183,23 +192,87 @@ func (c *Clients) Embed(ctx context.Context, ref sr.ModelRef, texts []string) ([
 // Anthropic models (Claude Sonnet 5 and later) reject any sampling
 // parameter with a 400, so a judge on one of them failed every judgement.
 func (c *Clients) Complete(ctx context.Context, ref sr.ModelRef, system, user string) (string, error) {
-	llm, err := c.resolved(ref.LLMID)
+	out, err := c.Generate(ctx, ref, system, user, judgeMaxTokens)
 	if err != nil {
 		return "", err
 	}
-	driver, err := switches.FetchDriver(llm, nil, nil, nil)
+	return out.Text, nil
+}
+
+// Completion is an answer from Generate with what it cost.
+type Completion struct {
+	Text string
+	// Model is the model that was asked: the reference's, or the LLM's
+	// default model when the reference names none.
+	Model            string
+	PromptTokens     int
+	CompletionTokens int
+}
+
+// Generate asks the LLM for an answer of at most maxTokens tokens (0 leaves
+// it to the vendor), with a system and a user message. Like Complete it sends
+// no sampling parameters. An empty ref.Model asks the LLM's default model.
+// The vendor's driver is reused across calls while the LLM is unchanged.
+func (c *Clients) Generate(ctx context.Context, ref sr.ModelRef, system, user string, maxTokens int) (Completion, error) {
+	llm, err := c.resolved(ref.LLMID)
 	if err != nil {
-		return "", err
+		return Completion{}, err
+	}
+	driver, err := c.driver(llm)
+	if err != nil {
+		return Completion{}, err
+	}
+	model := ref.Model
+	if model == "" {
+		model = llm.DefaultModel
+	}
+	opts := []llms.CallOption{llms.WithModel(model)}
+	if maxTokens > 0 {
+		opts = append(opts, llms.WithMaxTokens(maxTokens))
 	}
 	resp, err := driver.GenerateContent(ctx, []llms.MessageContent{
 		llms.TextParts(llms.ChatMessageTypeSystem, system),
 		llms.TextParts(llms.ChatMessageTypeHuman, user),
-	}, llms.WithModel(ref.Model), llms.WithMaxTokens(judgeMaxTokens))
+	}, opts...)
 	if err != nil {
-		return "", err
+		return Completion{}, err
 	}
-	if resp == nil || len(resp.Choices) == 0 {
-		return "", errors.New("the judge returned no answer")
+	if resp == nil || len(resp.Choices) == 0 || resp.Choices[0] == nil {
+		return Completion{}, errors.New("the LLM returned no answer")
 	}
-	return strings.TrimSpace(resp.Choices[0].Content), nil
+	_, prompt, completion := switches.GetTokenCounts(resp.Choices[0], llm.Vendor)
+	return Completion{
+		Text:             strings.TrimSpace(resp.Choices[0].Content),
+		Model:            model,
+		PromptTokens:     prompt,
+		CompletionTokens: completion,
+	}, nil
+}
+
+// driver returns the chat driver for llm, building it on a miss. The key
+// holds everything the driver is built from, so an edited LLM (or a rotated
+// key) gets a new one.
+func (c *Clients) driver(llm *models.LLM) (llms.Model, error) {
+	if !switches.SupportsChat(llm.Vendor) {
+		return nil, ErrNoChat
+	}
+	key := fmt.Sprintf("%d|%d|%s|%s|%s|%t", llm.ID, llm.UpdatedAt.UnixNano(), llm.Vendor, llm.APIEndpoint, llm.APIKey, llm.AllowInternalHost)
+	c.mu.Lock()
+	if d, ok := c.drivers[key]; ok {
+		c.mu.Unlock()
+		return d, nil
+	}
+	c.mu.Unlock()
+
+	d, err := switches.FetchDriver(llm, nil, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	if len(c.drivers) >= maxCachedDrivers {
+		c.drivers = map[string]llms.Model{}
+	}
+	c.drivers[key] = d
+	c.mu.Unlock()
+	return d, nil
 }

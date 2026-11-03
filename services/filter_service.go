@@ -79,6 +79,9 @@ func (s *Service) CreateFilterFromSpec(spec FilterSpec) (*models.Filter, error) 
 	if err != nil {
 		return nil, err
 	}
+	if err := s.checkJudge(0, spec.Namespace, config); err != nil {
+		return nil, err
+	}
 
 	filter := &models.Filter{
 		Name:           spec.Name,
@@ -138,6 +141,9 @@ func (s *Service) UpdateFilterFromSpec(id uint, spec FilterSpec) (*models.Filter
 
 	kind, config, err := spec.validate()
 	if err != nil {
+		return nil, err
+	}
+	if err := s.checkJudge(id, spec.Namespace, config); err != nil {
 		return nil, err
 	}
 

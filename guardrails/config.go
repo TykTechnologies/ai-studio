@@ -293,6 +293,10 @@ type Config struct {
 	// cache: for a provider whose verdict depends on more than the text (an
 	// HTTP classifier that reads the request metadata). Nil means true.
 	Cache *bool `json:"cache,omitempty"`
+	// Judge is the filter's LLM second opinion on what it would block or
+	// quarantine (see Judge). Off when absent. Edges that predate it ignore
+	// it and keep the filter's own verdict.
+	Judge Judge `json:"judge,omitzero"`
 	// OnDetectExt is the edge snapshot's carrier for an action edges before
 	// v2.3 do not know (quarantine): those edges read on_detect, which then
 	// holds block, so they block on a hit rather than reject the config and
@@ -518,6 +522,10 @@ func Normalize(cfg Config, responseFilter bool) (Config, error) {
 		if err := cfg.shadowAllowed(); err != nil {
 			return cfg, err
 		}
+	}
+
+	if err := cfg.Judge.normalize(cfg.Shadow); err != nil {
+		return cfg, err
 	}
 
 	if p := cfg.Quarantine.Placeholder; p == nil {
