@@ -388,6 +388,7 @@ func (h *MicrogatewaAnalyticsHandler) RecordChatRecord(_ context.Context, record
 			ServiceTier:            record.ServiceTier,
 			RequestedModel:         record.RequestedModel,
 			PriceMultiplier:        record.PriceMultiplier,
+			InteractionType:        string(record.InteractionType),
 		}
 
 		// Execute analytics plugins

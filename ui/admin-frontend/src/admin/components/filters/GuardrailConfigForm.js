@@ -24,6 +24,7 @@ import { Link as RouterLink } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import { useEditionOptional } from "../../context/EditionContext";
 import AllowInternalHostSwitch from "../common/AllowInternalHostSwitch";
+import GuardrailJudgeSection from "./GuardrailJudgeSection";
 
 // The stored shape of a guardrail filter's config. Everything the server
 // defaults is left empty here so the saved config shows what the server chose.
@@ -303,7 +304,10 @@ const connectionFieldHelp = (f) => {
   return f.description;
 };
 
-const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors = {}, filterName = "" }) => {
+// filterName pre-fills alert event names; savedFilterName is the saved
+// filter's name ("" while it is being created), for the judge's agreement
+// view.
+const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors = {}, filterName = "", savedFilterName = "" }) => {
   const [providers, setProviders] = useState([]);
   const [loadError, setLoadError] = useState("");
   const [newDetector, setNewDetector] = useState("");
@@ -1156,6 +1160,16 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
               inputProps={{ min: 1, max: 1000, "data-testid": "guardrail-evidence-chars" }}
             />
           )}
+        </Grid>
+
+        <Grid item xs={12}>
+          <GuardrailJudgeSection
+            value={config.judge}
+            onChange={(judge) => update({ judge })}
+            shadow={!!config.shadow}
+            error={errors.judge}
+            filterName={savedFilterName}
+          />
         </Grid>
 
         {!responseFilter && (

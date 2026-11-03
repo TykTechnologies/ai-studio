@@ -33,6 +33,11 @@ import apiClient from "../../utils/apiClient";
 import { eventSourceLabel } from "./eventSource";
 import FlaggedText from "./FlaggedText";
 import EventGuide from "./EventGuide";
+import { JUDGE_EVENT_TYPE, agreementByFilter, judgeIndex } from "./judgeOpinions";
+
+// JUDGE_SAMPLE is how many of the period's judge opinions the agreement
+// summary reads.
+export const JUDGE_SAMPLE = 500;
 
 const SEVERITY_COLORS = {
   critical: "error",
@@ -56,6 +61,9 @@ const FilterEventsTab = ({ startDate, endDate }) => {
   const [appOpen, setAppOpen] = useState(false);
   const [appSearch, setAppSearch] = useState("");
   const [appOptions, setAppOptions] = useState([]);
+  // The period's guardrail.judge events, for the agreement summary and the
+  // opinions shown on flagged segments; loaded only when there are some.
+  const [judgeEvents, setJudgeEvents] = useState([]);
 
   const fetchEvents = useCallback(async () => {
     if (!startDate || !endDate) return;
@@ -84,6 +92,31 @@ const FilterEventsTab = ({ startDate, endDate }) => {
   useEffect(() => {
     fetchEvents();
   }, [fetchEvents]);
+
+  const judged = (data?.by_type || {})[JUDGE_EVENT_TYPE] > 0;
+  useEffect(() => {
+    if (!judged || !startDate || !endDate) {
+      setJudgeEvents([]);
+      return undefined;
+    }
+    let cancelled = false;
+    const params = { start_date: startDate, end_date: endDate, event_type: JUDGE_EVENT_TYPE, limit: JUDGE_SAMPLE, offset: 0 };
+    if (app) params.app_id = app.id;
+    apiClient
+      .get("/compliance/events", { params })
+      .then((response) => {
+        if (!cancelled) setJudgeEvents(Array.isArray(response?.data?.events) ? response.data.events : []);
+      })
+      .catch(() => {
+        if (!cancelled) setJudgeEvents([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [judged, startDate, endDate, app]);
+
+  const agreement = agreementByFilter(judgeEvents);
+  const opinions = judgeIndex([...judgeEvents, ...(data?.events || [])]);
 
   // Reset to first page when filters change.
   useEffect(() => {
@@ -259,6 +292,29 @@ const FilterEventsTab = ({ startDate, endDate }) => {
         </Typography>
       )}
 
+      {agreement.length > 0 && (
+        <StyledPaper sx={{ p: 2, mb: 2 }} data-testid="judge-agreement">
+          <Typography variant="subtitle2" gutterBottom>
+            Second opinion (LLM judge)
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            How often the judge found harmless what a filter blocked or quarantined
+            {judgeEvents.length >= JUDGE_SAMPLE ? ` (latest ${JUDGE_SAMPLE} opinions)` : ""}. Look at these before letting
+            a judge soften blocks.
+          </Typography>
+          {agreement.map((row) => (
+            <Typography variant="body2" key={row.filter} data-testid={`judge-agreement-${row.filter}`}>
+              <Box component="span" sx={{ fontWeight: 500 }}>
+                {row.filter}
+              </Box>
+              {`: judge said benign on ${row.benign} of ${row.judged} flags`}
+              {row.benign > row.benignFull ? ` (${row.benign - row.benignFull} not shown in full)` : ""}
+              {row.noOpinion > 0 ? `; no opinion on ${row.noOpinion}` : ""}
+            </Typography>
+          ))}
+        </StyledPaper>
+      )}
+
       <TableContainer>
         <Table>
           <TableHead>
@@ -367,7 +423,7 @@ const FilterEventsTab = ({ startDate, endDate }) => {
                           <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                             <Box sx={{ px: 4, py: 2, bgcolor: "action.hover" }}>
                               <EventGuide event={e} />
-                              <FlaggedText metadata={e.metadata} appId={e.app_id} eventType={e.event_type} />
+                              <FlaggedText metadata={e.metadata} appId={e.app_id} eventType={e.event_type} opinions={opinions} />
                               <Typography variant="caption" color="text.secondary">
                                 Metadata
                               </Typography>

@@ -1220,7 +1220,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 				Currency:               edgeCurrency(event.Currency),
 				TotalTimeMS:            int(event.LatencyMs),
 				TimeStamp:              event.Timestamp.AsTime(),
-				InteractionType:        models.ProxyInteraction, // Mark as proxy interaction
+				InteractionType:        edgeInteractionType(event.InteractionType),
 				UserID:                 uint(event.UserId),      // User ID synced from edge (via config sync)
 				ChatID:                 "",                      // Not applicable for proxy
 				Choices:                1,                       // Default
@@ -1980,6 +1980,13 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 		return nil, fmt.Errorf("failed to read LLM filter attachments: %w", err)
 	}
 
+	// LLM privacy scores, for a guardrail judge's privacy rule
+	// (edgeJudgeConfig).
+	llmPrivacy := make(map[uint]int, len(llms))
+	for _, l := range llms {
+		llmPrivacy[l.ID] = l.PrivacyScore
+	}
+
 	// Build map of filter_id -> []llm_id for efficient lookup
 	filterLLMMap := make(map[uint][]uint32)
 	for _, assoc := range llmFilterAssociations {
@@ -2039,7 +2046,7 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 				}
 				return c
 			}
-			configJSON, err := guardrails.ConfigJSONForEdge(filter.Config, resolveRef, encrypt)
+			configJSON, err := guardrails.ConfigJSONForEdge(edgeJudgeConfig(filter.ID, filter.Config, llmIDs, llmPrivacy), resolveRef, encrypt)
 			if err != nil {
 				logger.Log.Warn().Err(err).Uint("filter_id", filter.ID).Msg("Skipping guardrail filter with invalid config in snapshot")
 				continue
@@ -3340,4 +3347,15 @@ func (s *ControlServer) governedMetadataJSON(objectType string, rec *models.Obje
 		return ""
 	}
 	return string(data)
+}
+
+// edgeInteractionType is the interaction type of a chat record ingested from
+// an edge: proxy, or guardrail_judge for a guardrail's judge call, which an
+// edge records with no App. Edge values are untrusted, so nothing else is
+// kept.
+func edgeInteractionType(t string) models.InteractionType {
+	if t == string(models.GuardrailJudgeInteraction) {
+		return models.GuardrailJudgeInteraction
+	}
+	return models.ProxyInteraction
 }

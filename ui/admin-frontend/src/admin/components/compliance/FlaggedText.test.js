@@ -1,8 +1,9 @@
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { MemoryRouter } from "react-router-dom";
 import FlaggedText, { noExcerpt, segmentLabel, templateBadges } from "./FlaggedText";
+import { judgeIndex } from "./judgeOpinions";
 
 describe("FlaggedText", () => {
   it("shows the request id, each flagged segment, its excerpt and hash", () => {
@@ -115,4 +116,58 @@ describe("FlaggedText", () => {
     expect(templateBadges("visor@1")).toEqual([]);
     expect(templateBadges({ signals: ["unknown.signal"] })).toEqual([]);
   });
+
+  it("shows a judge event's opinion (midsommar-clean-9u1j.13)", () => {
+    render(
+      <MemoryRouter>
+        <FlaggedText
+          eventType="guardrail.judge"
+          appId={9}
+          metadata={{
+            request_id: "tyai_judge1",
+            judge: {
+              verdict: "benign", reason: "code_or_data", agreed: false, coverage: "partial", action: "block",
+              model: "judge-mini", latency_ms: 840, cached: false, sha256: "ab12",
+            },
+          }}
+        />
+      </MemoryRouter>
+    );
+    expect(screen.getByText("Second opinion")).toBeInTheDocument();
+    const op = screen.getByTestId("judge-opinion");
+    expect(op).toHaveTextContent("Judge: benign (code or data)");
+    expect(op).toHaveTextContent("on a block verdict");
+    expect(op).toHaveTextContent("not shown everything that was flagged");
+    expect(op).toHaveTextContent("840 ms");
+    expect(screen.getByText("tyai_judge1")).toBeInTheDocument();
+  });
+
+  it("says why a judge gave no opinion", () => {
+    render(<FlaggedText eventType="guardrail.judge" metadata={{ judge: { verdict: "none", error: "over_budget" } }} />);
+    expect(screen.getByTestId("judge-opinion")).toHaveTextContent("Judge: no opinion (judge LLM over budget)");
+  });
+
+  it("shows the judge's opinion on the flagged segment it judged", () => {
+    const opinions = judgeIndex([
+      { event_type: "guardrail.judge", metadata: { request_id: "r1", judge: { verdict: "attack", reason: "role_override", sha256: "cd34" } } },
+      { event_type: "guardrail.judge", metadata: { request_id: "r2", judge: { verdict: "benign", reason: "quoted_example", sha256: "ab12" } } },
+    ]);
+    render(
+      <FlaggedText
+        opinions={opinions}
+        metadata={{
+          request_id: "r1",
+          segments: [
+            { index: 1, role: "user", sha256: "cd34" },
+            { index: 2, role: "user", sha256: "ab12" },
+          ],
+        }}
+      />
+    );
+    const segs = screen.getAllByTestId("flagged-segment");
+    expect(segs[0]).toHaveTextContent("Judge: an attack (role override)");
+    // Another request's opinion on the same text is not this one's.
+    expect(within(segs[1]).queryByTestId("flagged-judge")).not.toBeInTheDocument();
+  });
 });
+

@@ -12,8 +12,9 @@ import (
 
 // testAnalyticsHandler captures compliance events for test assertions
 type testAnalyticsHandler struct {
-	mu     sync.Mutex
-	events []*models.ComplianceEvent
+	mu          sync.Mutex
+	events      []*models.ComplianceEvent
+	chatRecords []*models.LLMChatRecord
 }
 
 func (h *testAnalyticsHandler) RecordComplianceEvents(_ context.Context, events []*models.ComplianceEvent) {
@@ -21,7 +22,17 @@ func (h *testAnalyticsHandler) RecordComplianceEvents(_ context.Context, events 
 	defer h.mu.Unlock()
 	h.events = append(h.events, events...)
 }
-func (h *testAnalyticsHandler) RecordChatRecord(_ context.Context, record *models.LLMChatRecord)  {}
+func (h *testAnalyticsHandler) RecordChatRecord(_ context.Context, record *models.LLMChatRecord) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.chatRecords = append(h.chatRecords, record)
+}
+
+func (h *testAnalyticsHandler) getChatRecords() []*models.LLMChatRecord {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]*models.LLMChatRecord(nil), h.chatRecords...)
+}
 func (h *testAnalyticsHandler) RecordChatLogEntry(_ context.Context, log *models.LLMChatLogEntry)  {}
 func (h *testAnalyticsHandler) RecordProxyLog(_ context.Context, log *models.ProxyLog)             {}
 func (h *testAnalyticsHandler) RecordToolCall(_ context.Context, name string, t time.Time, execTime int, toolID uint) {
