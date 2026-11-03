@@ -21,6 +21,7 @@ import {
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import apiClient from "../../utils/apiClient";
 import AllowInternalHostSwitch from "../common/AllowInternalHostSwitch";
+import GuardrailJudgeSection from "./GuardrailJudgeSection";
 
 // The stored shape of a guardrail filter's config. Everything the server
 // defaults is left empty here so the saved config shows what the server chose.
@@ -1034,6 +1035,15 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
               inputProps={{ min: 1, max: 1000, "data-testid": "guardrail-evidence-chars" }}
             />
           )}
+        </Grid>
+
+        <Grid item xs={12}>
+          <GuardrailJudgeSection
+            value={config.judge}
+            onChange={(judge) => update({ judge })}
+            shadow={!!config.shadow}
+            error={errors.judge}
+          />
         </Grid>
 
         {!responseFilter && (

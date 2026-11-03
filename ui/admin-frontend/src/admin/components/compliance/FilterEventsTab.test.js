@@ -314,3 +314,64 @@ describe("FilterEventsTab: application filter", () => {
     });
   });
 });
+
+// midsommar-clean-9u1j.13: the judge's agreement per filter, from the
+// period's guardrail.judge events, and its opinion on a flagged segment.
+describe("FilterEventsTab: second opinion", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  const judgeEvent = (id, filter, judge, requestId = `r${id}`) => ({
+    id, timestamp: "2026-11-03T10:30:00Z", app_id: 9, app_name: "Visor", filter_name: filter, filter_scope: "proxy_request",
+    event_type: "guardrail.judge", severity: "info", description: "guardrail judge", metadata: { request_id: requestId, judge },
+  });
+
+  test("summarises how often the judge found a filter's flags benign", async () => {
+    const judges = [
+      judgeEvent(1, "Wolf", { verdict: "benign", reason: "code_or_data", coverage: "full", sha256: "aa" }),
+      judgeEvent(2, "Wolf", { verdict: "benign", reason: "quoted_example", coverage: "partial", sha256: "bb" }),
+      judgeEvent(3, "Wolf", { verdict: "attack", reason: "role_override", coverage: "full", sha256: "cc" }),
+      judgeEvent(4, "Wolf", { verdict: "none", error: "timeout" }),
+      judgeEvent(5, "PII", { verdict: "suspicious", reason: "unclear", coverage: "full", sha256: "dd" }),
+    ];
+    const detector = {
+      id: 10, timestamp: "2026-11-03T10:30:00Z", app_id: 9, app_name: "Visor", filter_name: "Wolf", filter_scope: "proxy_request",
+      event_type: "guardrail.prompt_attack", severity: "critical", description: "blocked",
+      metadata: { request_id: "r1", action: "block", segments: [{ index: 0, role: "user", sha256: "aa" }] },
+    };
+    apiClient.get.mockImplementation((url, { params }) => {
+      if (params.event_type === "guardrail.judge") {
+        return Promise.resolve({ data: { events: judges } });
+      }
+      return Promise.resolve(buildResponse({
+        events: [detector], total_count: 6,
+        by_type: { "guardrail.judge": 5, "guardrail.prompt_attack": 1 },
+      }));
+    });
+
+    renderTab();
+
+    const summary = await screen.findByTestId("judge-agreement");
+    expect(within(summary).getByTestId("judge-agreement-Wolf")).toHaveTextContent(
+      "Wolf: judge said benign on 2 of 3 flags (1 not shown in full); no opinion on 1"
+    );
+    expect(within(summary).getByTestId("judge-agreement-PII")).toHaveTextContent("PII: judge said benign on 0 of 1 flags");
+    expect(apiClient.get).toHaveBeenCalledWith("/compliance/events", {
+      params: expect.objectContaining({ event_type: "guardrail.judge", limit: 500, offset: 0 }),
+    });
+
+    // The detector event's flagged segment shows the judge's opinion.
+    fireEvent.click(screen.getAllByTestId("ExpandMoreIcon")[0].closest("button"));
+    expect(await screen.findByTestId("flagged-judge")).toHaveTextContent("Judge: benign (code or data)");
+  });
+
+  test("asks for no judge events when the period has none", async () => {
+    apiClient.get.mockResolvedValue(buildResponse({ by_type: { pii_redacted: 2 } }));
+    renderTab();
+    await screen.findByText("Total Events");
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId("judge-agreement")).not.toBeInTheDocument();
+  });
+});
+

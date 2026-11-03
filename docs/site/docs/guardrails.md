@@ -246,6 +246,26 @@ A guardrail set to `log` still calls its provider inline: the request waits for 
 
 The form shows **Shadow (don't wait)** when every action is Log.
 
+### Second opinion (LLM judge)
+
+Some legitimate traffic looks exactly like an attack: a code-review bot whose pull requests contain injection test vectors, a security tool, a support desk quoting phishing mail. A guardrail can ask a second opinion about what it blocks or quarantines: an LLM you configure in AI Studio (the judge) is shown the flagged text and asked whether it is benign for the app that sent it.
+
+```json
+{"provider": "http", "on_detect": "block", "judge": {"mode": "record", "llm_id": 12, "model": "claude-haiku-5-5", "timeout_ms": 3000}, ...}
+```
+
+In the filter form this is the collapsed **Second opinion (LLM judge)** section: a mode, the judge LLM (any active chat LLM; the model defaults to its default model) and, under Advanced, the timeout.
+
+- **Record only** (`record`) asks the judge about every segment the filter blocks or quarantines on a detector's finding, after the request has gone on with the filter's own verdict, which it never changes. It adds no latency: the call runs in the same background pool as shadow evaluations. Each opinion is a `guardrail.judge` compliance event (`metadata.judge`: `verdict` benign, suspicious or attack, a `reason`, `agreed`, `coverage`, `latency_ms`, `cached`), and the flagged segment of the filter's own event shows it in **Compliance → Filter Events**. Filter Events also sums it up per filter: *judge said benign on N of M flags*. That is the evidence to look at before letting a judge soften blocks.
+- **Soften blocks** (`soften`) is not applied yet; a filter set to it is judged as Record only.
+- The judge's prompt is built in and versioned. It is told the app's name and description (the App description its owners wrote), where the text is (message role, tool result or call), the detector, the tools the request declares and whether the finding sits in a JSON string, a diff hunk or a code block. The flagged text is marked and fenced as data, at most 4000 characters around the finding. The judge must answer with a fixed JSON shape; anything else is no opinion.
+- `coverage` is `partial` when the judge was not shown everything that was flagged (a classifier that reports no position, such as Wolf Defender, in text longer than the window). A partial opinion is recorded but can never soften a verdict.
+- Opinions are cached for 10 minutes per app, judge LLM and text, so a client that sends the same context to several checks pays for one call.
+- The call goes straight to the judge LLM's vendor, never through the gateway, and is charged to the judge LLM: one analytics record with interaction type `guardrail_judge` and no app, so it counts toward the judge LLM's budget and never toward the budget of the app whose request was judged. A judge LLM over its budget is not called.
+- The judge LLM must be active, serve chat, have a privacy score at least that of every LLM the filter is attached to (it reads their traffic), and reach every edge the filter runs on (global, or in the namespace of those edges). Saving a filter that breaks one of these is refused with HTTP 400. At run time a judge scored below the request's LLM is not sent the text, and Studio chat, whose requests name no LLM to compare with, is not judged.
+- When the judge gives no opinion (timeout, failed call, unreadable answer, judge LLM unavailable, over budget, privacy, queue full), the verdict stands and the event says why (`verdict: none`, `error`).
+- A shadow filter only logs, so its judge has nothing to judge until the filter blocks or quarantines.
+
 ### Budgets and the verdict cache
 
 A request guardrail screens text whose size and shape the sender controls: a tool result can be padded to any length, and an agent's request carries its whole history every turn. Two mechanisms keep that affordable without opening a way past the guardrail.

@@ -34,6 +34,7 @@ import highlightScript from "./highlightScript";
 import ScriptTemplateSelector from "./ScriptTemplateSelector";
 import ScriptTestPanel from "./ScriptTestPanel";
 import GuardrailConfigForm, { emptyGuardrailConfig, budgetErrors, backstopMinScoreError } from "./GuardrailConfigForm";
+import { judgeErrors } from "./GuardrailJudgeSection";
 
 export const FILTER_KIND_SCRIPT = "script";
 export const FILTER_KIND_GUARDRAIL = "guardrail";
@@ -184,6 +185,9 @@ const FilterForm = () => {
       if (!filter.response_filter && backstopMinScoreError(config)) {
         newErrors.template_backstop_min_score = backstopMinScoreError(config);
       }
+      if (Object.keys(judgeErrors(config.judge)).length > 0) {
+        newErrors.judge = Object.values(judgeErrors(config.judge))[0];
+      }
     } else if (!filter.script.trim()) {
       newErrors.script = "Script is required";
     }
@@ -237,6 +241,11 @@ const FilterForm = () => {
       // The server names what is wrong with a guardrail config; show that
       // rather than a generic failure.
       const detail = error.response?.data?.errors?.[0]?.detail;
+      // A refused second opinion (judge LLM, privacy, namespaces) is shown
+      // where it is set, too.
+      if (isGuardrail && detail && /judge/i.test(detail)) {
+        setErrors((prev) => ({ ...prev, judge: detail }));
+      }
       setSnackbar({
         open: true,
         message: detail ? `Failed to save filter: ${detail}` : "Failed to save filter. Please try again.",

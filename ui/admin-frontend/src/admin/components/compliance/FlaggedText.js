@@ -2,6 +2,7 @@ import React from "react";
 import { Box, Chip, IconButton, Link, Tooltip, Typography } from "@mui/material";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import { Link as RouterLink } from "react-router-dom";
+import { JUDGE_EVENT_TYPE, judgeOf, lookupOpinion, opinionColor, opinionLabel } from "./judgeOpinions";
 
 // What a guardrail compliance event says about the text it flagged
 // (scripting/filter_runner.go): metadata.segments lists the flagged segments
@@ -83,11 +84,36 @@ const copy = (text) => {
   }
 };
 
-const FlaggedText = ({ metadata, appId, eventType }) => {
+// JudgeOpinion is a guardrail.judge event's own details.
+const JudgeOpinion = ({ judge }) => (
+  <Box sx={{ mt: 0.5 }} data-testid="judge-opinion">
+    <Chip size="small" variant="outlined" color={opinionColor(judge)} label={opinionLabel(judge)} />
+    <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 0.5 }}>
+      {[
+        judge.action ? `on a ${judge.action} verdict` : "",
+        judge.coverage === "partial" ? "not shown everything that was flagged, so it could not soften" : "",
+        judge.model ? `model ${judge.model}` : "",
+        typeof judge.latency_ms === "number" ? `${judge.latency_ms} ms` : "",
+        judge.cached ? "cached" : "",
+      ]
+        .filter(Boolean)
+        .join(" · ")}
+    </Typography>
+    {judge.sha256 && (
+      <Typography variant="caption" color="text.secondary" component="div" sx={mono}>
+        Segment SHA-256 {judge.sha256}
+      </Typography>
+    )}
+  </Box>
+);
+
+const FlaggedText = ({ metadata, appId, eventType, opinions }) => {
   const segments = Array.isArray(metadata?.segments) ? metadata.segments.filter((s) => s && typeof s === "object") : [];
   const requestId = typeof metadata?.request_id === "string" ? metadata.request_id : "";
   const clientId = typeof metadata?.client_request_id === "string" ? metadata.client_request_id : "";
-  if (segments.length === 0 && !requestId) return null;
+  const ownJudge = judgeOf(metadata);
+  const isJudgeEvent = eventType === JUDGE_EVENT_TYPE && !!ownJudge;
+  if (segments.length === 0 && !requestId && !isJudgeEvent) return null;
   const notScanned = eventType === "guardrail.unscanned";
   const listed = segments.length;
   // count is the segments of an unscanned event, but the findings of a
@@ -98,8 +124,9 @@ const FlaggedText = ({ metadata, appId, eventType }) => {
   return (
     <Box sx={{ mb: 2 }} data-testid="flagged-text">
       <Typography variant="caption" color="text.secondary">
-        {notScanned ? "Not checked" : "Flagged text"}
+        {isJudgeEvent ? "Second opinion" : notScanned ? "Not checked" : "Flagged text"}
       </Typography>
+      {isJudgeEvent && <JudgeOpinion judge={ownJudge} />}
       {requestId && (
         <Typography variant="body2" sx={{ mt: 0.5 }}>
           Request ID: <Box component="span" sx={mono}>{requestId}</Box>
@@ -140,6 +167,16 @@ const FlaggedText = ({ metadata, appId, eventType }) => {
               <Box component="span" sx={{ color: "text.secondary", fontSize: "0.75rem" }}>{` · #${seg.index}`}</Box>
             )}
           </Typography>
+          {lookupOpinion(opinions, requestId, seg.sha256) && (
+            <Box sx={{ mt: 0.5 }} data-testid="flagged-judge">
+              <Chip
+                size="small"
+                variant="outlined"
+                color={opinionColor(lookupOpinion(opinions, requestId, seg.sha256))}
+                label={opinionLabel(lookupOpinion(opinions, requestId, seg.sha256))}
+              />
+            </Box>
+          )}
           {templateBadges(seg.template).length > 0 && (
             <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, mt: 0.5 }} data-testid="flagged-template">
               {templateBadges(seg.template).map((b) => (
