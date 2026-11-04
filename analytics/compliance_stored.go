@@ -8,7 +8,8 @@ import (
 
 // storedHook is called with each batch of compliance events the database
 // handler stored, after the insert (their IDs are set). Studio sets it to
-// raise guardrail alerts (services.Service.PublishGuardrailAlerts); edges,
+// raise guardrail alerts and outcome events
+// (services.Service.PublishGuardrailEvents); edges,
 // which record through their own handler, never do.
 var storedHook atomic.Pointer[func([]*models.ComplianceEvent)]
 

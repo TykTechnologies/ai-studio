@@ -321,6 +321,23 @@ curl -X POST "$STUDIO/api/v1/apps/42/guardrail-exceptions/5/approve" -H "Authori
 - AI Studio raises the alert once the compliance event is stored, and only when its own configuration names it (the event's filter, or the exception that softened it). The `guardrail.alert.` topics are reserved for it: a plugin cannot publish them, on AI Studio or on an edge, and AI Studio drops them when an edge sends them, so a webhook subscribed to an alert only receives alerts AI Studio checked. For traffic through edge gateways that is when the event arrives on the analytics pulse, so the alert follows the pulse interval.
 - Webhooks are Enterprise. In the Community Edition the action logs, and the editor says so.
 
+### Outcome events (blocked, quarantined, softened by the judge)
+
+Alerts need the alert action, so a filter that blocks raises none. Whatever its actions, AI Studio also raises an **outcome event** for what a guardrail filter did to traffic, with nothing to configure:
+
+| Topic | Raised when |
+|---|---|
+| `guardrail.outcome.blocked` | a guardrail blocked a request or response (a detection, or the provider failing with `fail_mode: closed`) |
+| `guardrail.outcome.quarantined` | a guardrail quarantined content, such as a tool result |
+| `guardrail.outcome.judge_softened` | the [second opinion](#second-opinion-llm-judge) found flagged text benign and softened its block or quarantine (judge mode Soften) |
+
+[Webhooks](./webhooks.md) subscribe to them (`guardrail.outcome.*` for all three), and so can AI Studio plugins (subscribe to each topic; see [Plugin Service APIs](./plugins-service-api.md)).
+
+- One event per compliance event with that outcome: a request that two detectors block raises two. A webhook on `guardrail.outcome.blocked` hears about every block of every App, so subscribe to `judge_softened` alone to hear only what the judge let through.
+- The event carries a summary (`name`: filter, detector and App), the outcome, the filter, the App, the compliance event's type and severity, the detector, where the text came from (kinds, roles, tool names), the highest score, the action the traffic saw, the reason code, the exceptions that applied, the request id, the compliance event id, the time and a link to the Compliance page. A judge softening adds the judge's verdict, reason, model, prompt version, coverage and the actions it softened from and to. It never carries the flagged text.
+- AI Studio raises it once the compliance event is stored, so for edge traffic it follows the analytics pulse, and only for an event that names the guardrail filter it came from; a judge softening counts only when that filter's judge is on Soften. A shadow filter changes no traffic and raises none. Like alerts, the `guardrail.outcome.` topics are reserved: plugins cannot publish them, on AI Studio or on an edge.
+- Webhooks are Enterprise; plugins receive the events in both editions.
+
 ### Shadow (don't wait)
 
 A guardrail set to `log` still calls its provider inline: the request waits for the verdict before going on, so a log-only rollout of a slow classifier adds its latency to every request the verdict cache cannot answer. With `"shadow": true` it does not wait. The request (or response, or chat message, or tool call) goes on at once, unchanged, and the classification runs in a background pool on the same node, with a context detached from the request and bounded by the filter's own timeout and time budget. When it finishes, its compliance events are recorded with the same attribution (app, LLM, user, request id, roles, kinds, tool names) as an inline `log` run would record, plus `"shadow": true` in their metadata so a review can tell them apart, and reach AI Studio from edges on the analytics pulse like any other event. Its successful verdicts fill the verdict cache; switching the filter to enforce changes its version, so everything is classified again.

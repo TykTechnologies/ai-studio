@@ -109,5 +109,6 @@ func TestGuardrailAlertTopics(t *testing.T) {
 
 	topics, err := GuardrailAlertTopics(f.db)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"guardrail.alert.visor-pr-flag", "guardrail.alert.visor-softened"}, topics)
+	assert.Equal(t, []string{"guardrail.alert.visor-pr-flag", "guardrail.alert.visor-softened",
+		"guardrail.outcome.blocked", "guardrail.outcome.judge_softened", "guardrail.outcome.quarantined"}, topics)
 }

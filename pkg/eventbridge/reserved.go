@@ -9,8 +9,18 @@ import "strings"
 // a webhook subscribed to an alert receives only checked alerts.
 const GuardrailAlertTopicPrefix = "guardrail.alert."
 
-// IsGuardrailAlertTopic reports a topic only Studio's alert publisher may
-// raise.
+// GuardrailOutcomeTopicPrefix prefixes the topics guardrail outcome events
+// are raised on (guardrail.outcome.blocked, .quarantined, .judge_softened;
+// services.PublishGuardrailOutcomes). They are reserved like alerts.
+const GuardrailOutcomeTopicPrefix = "guardrail.outcome."
+
+// IsGuardrailAlertTopic reports a guardrail alert topic.
 func IsGuardrailAlertTopic(topic string) bool {
 	return strings.HasPrefix(topic, GuardrailAlertTopicPrefix)
+}
+
+// IsGuardrailTopic reports a topic only Studio may raise: a guardrail alert
+// or outcome event.
+func IsGuardrailTopic(topic string) bool {
+	return IsGuardrailAlertTopic(topic) || strings.HasPrefix(topic, GuardrailOutcomeTopicPrefix)
 }

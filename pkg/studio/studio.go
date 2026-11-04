@@ -416,8 +416,10 @@ func New(opts Options) (_ *Studio, err error) {
 	// mode needs whether or not the app has exceptions.
 	scripting.SetCapabilitySource(service.GuardrailExceptionSource())
 	// Stored compliance events that name a guardrail alert raise it on the
-	// bus (guardrail.alert.<name>), for webhooks.
-	analytics.SetComplianceEventsStored(service.PublishGuardrailAlerts)
+	// bus (guardrail.alert.<name>), and those that record a block, a
+	// quarantine or a judge softening raise an outcome event
+	// (guardrail.outcome.*), for webhooks and plugins.
+	analytics.SetComplianceEventsStored(service.PublishGuardrailEvents)
 	// Exceptions lapse after expires_after_days without a hit; the sweep
 	// lapses those of apps the hub never serves (edge traffic only), so
 	// edges become pending and drop them.

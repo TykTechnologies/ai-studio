@@ -74,9 +74,10 @@ func TestBridge_EdgeAcceptsSystemEventsFromControl(t *testing.T) {
 	}
 }
 
-// Guardrail alerts (guardrail.alert.*) are raised by Studio only, after its
-// checks: a control node drops the ones an edge sends (an edge plugin's
-// DirUp publish), as it drops system.* (midsommar-clean-9u1j.55).
+// Guardrail alerts (guardrail.alert.*) and outcome events
+// (guardrail.outcome.*) are raised by Studio only, after its checks: a
+// control node drops the ones an edge sends (an edge plugin's DirUp
+// publish), as it drops system.* (midsommar-clean-9u1j.55, .66).
 func TestBridge_ControlDropsGuardrailAlertsFromEdges(t *testing.T) {
 	bus := NewBus()
 	stream := newMockStream()
@@ -97,6 +98,7 @@ func TestBridge_ControlDropsGuardrailAlertsFromEdges(t *testing.T) {
 	bridge.Start(ctx)
 
 	stream.toRecv <- &EventFrame{ID: "1", Topic: "guardrail.alert.visor-pr-flag", Origin: "plugin:7@edge-1", Dir: int32(DirUp), Payload: []byte(`{"alert":"visor-pr-flag"}`)}
+	stream.toRecv <- &EventFrame{ID: "1b", Topic: "guardrail.outcome.judge_softened", Origin: "plugin:7@edge-1", Dir: int32(DirUp), Payload: []byte(`{}`)}
 	stream.toRecv <- &EventFrame{ID: "2", Topic: "metrics.report", Origin: "edge-1", Dir: int32(DirUp), Payload: []byte(`{}`)}
 
 	require.Eventually(t, func() bool {

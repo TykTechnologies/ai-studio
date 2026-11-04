@@ -56,9 +56,11 @@ Targets subscribe with glob patterns:
 | `*` | everything |
 | `asset_catalog.*` | topics published by the asset catalog plugin |
 | `guardrail.alert.*` | every [guardrail alert](./guardrails.md#alerts-log-and-raise-event) (`guardrail.alert.<name>`) |
+| `guardrail.outcome.*` | every [guardrail outcome event](./guardrails.md#outcome-events-blocked-quarantined-softened-by-the-judge): `guardrail.outcome.blocked`, `.quarantined` and `.judge_softened` |
 
 The target editor lists the platform's system topics, the guardrail alert
-topics configured on filters and exceptions, and every topic seen on the bus
+topics configured on filters and exceptions, the guardrail outcome topics,
+and every topic seen on the bus
 in the last 30 days. A guardrail's **Create a webhook for this event** link
 opens a new target already subscribed to its alert.
 
@@ -72,6 +74,18 @@ it), `request_id`, `compliance_event_id`, `timestamp` and `link`; `excerpts`
 only when the filter's alert opts in. Alerts for traffic through edge
 gateways are raised when the edge's analytics pulse arrives. Only AI Studio raises
 `guardrail.alert.*`: plugins cannot publish those topics.
+
+A guardrail outcome event arrives with object type `guardrail`, the outcome
+(`blocked`, `quarantined` or `judge_softened`) as its action and the
+compliance event's id as its object id. Its object carries `name` (filter,
+detector and App), `outcome`, `topic`, `filter_id`, `filter_name`, `app_id`,
+`app_name`, `event_type`, `severity`, `detector` (or `detectors` for a judge
+softening), `kinds`, `roles`, `tool_names`, `max_score`, `action` (what the
+traffic saw), `reason_code`, `exception_ids`, `request_id`,
+`compliance_event_id`, `timestamp` and `link`, and on a judge softening
+`judge` (`verdict`, `reason`, `model`, `prompt_version`, `coverage`,
+`softened_from`, `softened_to`). No flagged text. Only AI Studio raises
+`guardrail.outcome.*`.
 
 ## Payloads
 
