@@ -159,7 +159,12 @@ jobs:
           echo "Waiting for AI Studio backend to start..."
           started=$(date +%s)
           attempts=0
-          max_attempts=60
+          # 10 minutes. Release tags and the nightly Release Gate build cold
+          # (no restored caches), and on a busy runner the studio container
+          # took just over the old 5 minutes to compile and start
+          # (v2.3.0-unstable.21's gate, 2 of 3 shards). A failed build still
+          # fails fast: the loop stops as soon as the container exits.
+          max_attempts=120
           # Check the backend directly on port 8081 (the container's 8080).
           # An authenticated endpoint answers 401 once the API is up.
           while [ "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8081/common/api/v1/notifications/unread/count)" != "401" ]; do
