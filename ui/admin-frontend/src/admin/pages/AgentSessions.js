@@ -191,13 +191,23 @@ const AgentSessions = () => {
         headerName: "Started",
         sortable: true,
         sx: { whiteSpace: "nowrap" },
-        renderCell: (s) => new Date(s.started_at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }),
+        renderCell: (s) => {
+          const d = new Date(s.started_at);
+          return (
+            <>
+              <Typography variant="body2">{d.toLocaleDateString(undefined, { dateStyle: "short" })}</Typography>
+              <Typography variant="caption" color="text.secondary">
+                {d.toLocaleTimeString(undefined, { timeStyle: "short" })}
+              </Typography>
+            </>
+          );
+        },
       },
       {
         field: "session",
         headerName: "Session",
         renderCell: (s) => (
-          <Stack direction="row" alignItems="center" spacing={0.5}>
+          <Stack direction="row" alignItems="center" flexWrap="wrap" useFlexGap spacing={0.5}>
             {s.status === "active" && <LiveDot />}
             <Typography variant="body2" sx={{ fontFamily: s.name ? undefined : "monospace" }}>
               {s.name || shortId(s.id)}
@@ -225,7 +235,7 @@ const AgentSessions = () => {
         field: "agents",
         headerName: "Agents · models",
         renderCell: (s) => (
-          <Box sx={{ minWidth: 0, maxWidth: 220 }}>
+          <Box sx={{ minWidth: 0, maxWidth: 180 }}>
             <Typography variant="body2" noWrap>
               {s.agent_names?.length ? `${s.agent_names.length} · ${names(s.agent_names)}` : "—"}
             </Typography>
@@ -244,9 +254,12 @@ const AgentSessions = () => {
         sx: { whiteSpace: "nowrap" },
         renderCell: (s) => (
           <Tooltip title={`${s.totals?.turn_count ?? 0} turns · ${s.totals?.llm_call_count ?? 0} LLM calls · ${s.totals?.tool_call_count ?? 0} tool calls`}>
-            <Typography variant="body2">
-              {s.totals?.turn_count ?? 0} turns · {s.totals?.llm_call_count ?? 0} LLM · {s.totals?.tool_call_count ?? 0} tools
-            </Typography>
+            <Box>
+              <Typography variant="body2">{s.totals?.turn_count ?? 0} turns</Typography>
+              <Typography variant="caption" color="text.secondary">
+                {s.totals?.llm_call_count ?? 0} LLM · {s.totals?.tool_call_count ?? 0} tools
+              </Typography>
+            </Box>
           </Tooltip>
         ),
       },
@@ -285,7 +298,7 @@ const AgentSessions = () => {
       {
         field: "correlation",
         headerName: "Correlation",
-        renderCell: (s) => <CorrelationQualityBar counts={s.confidence_counts} />,
+        renderCell: (s) => <CorrelationQualityBar counts={s.confidence_counts} width={64} />,
       },
     ],
     [canReadContent],

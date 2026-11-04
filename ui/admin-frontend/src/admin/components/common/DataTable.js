@@ -247,6 +247,9 @@ const DataTable = memo(({
           onClear={() => emitSelection([])}
         />
       )}
+      {/* StyledPaper clips its children (rounded corners), so a table wider
+          than the page scrolls inside this box instead of being cut off. */}
+      <Box sx={{ overflowX: "auto" }}>
       <Table aria-label={tableLabel} aria-busy={loading ? "true" : undefined}>
         <TableHead>
           <TableRow>
@@ -361,6 +364,7 @@ const DataTable = memo(({
           })}
         </TableBody>
       </Table>
+      </Box>
 
       {pagination && (
         <PaginationControls
