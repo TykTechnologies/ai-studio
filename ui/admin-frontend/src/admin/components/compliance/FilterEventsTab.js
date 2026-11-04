@@ -18,7 +18,6 @@ import {
   IconButton,
   Link,
   Autocomplete,
-  Button,
 } from "@mui/material";
 import {
   StyledTableHeaderCell,
@@ -32,12 +31,9 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import apiClient from "../../utils/apiClient";
 import { eventSourceLabel } from "./eventSource";
-import FlaggedText from "./FlaggedText";
-import EventGuide from "./EventGuide";
 import SoftenDialog from "./SoftenDialog";
-import { softenTarget } from "./softenTarget";
-import Can from "../rbac/Can";
-import { P } from "../../rbac/permissions";
+import EventDetails from "./EventDetails";
+import LinkedEvent from "./LinkedEvent";
 import { JUDGE_EVENT_TYPE, agreementByFilter, judgeIndex } from "./judgeOpinions";
 
 // JUDGE_SAMPLE is how many of the period's judge opinions the agreement
@@ -50,7 +46,10 @@ const SEVERITY_COLORS = {
   info: "info",
 };
 
-const FilterEventsTab = ({ startDate, endDate }) => {
+// eventId, when set, is the compliance event a link names
+// (/admin/compliance?event=<id>): it is shown open above the table, whatever
+// the period; onCloseEvent drops the link.
+const FilterEventsTab = ({ startDate, endDate, eventId, onCloseEvent }) => {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -178,6 +177,7 @@ const FilterEventsTab = ({ startDate, endDate }) => {
 
   return (
     <Box>
+      {eventId && <LinkedEvent eventId={eventId} opinions={opinions} onSoften={setSoftening} onClose={onCloseEvent} />}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid item xs={12} sm={3}>
           <StyledPaper sx={{ p: 2, textAlign: "center" }}>
@@ -428,39 +428,7 @@ const FilterEventsTab = ({ startDate, endDate }) => {
                       <TableRow>
                         <StyledTableCell colSpan={9} sx={{ py: 0, px: 0 }}>
                           <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                            <Box sx={{ px: 4, py: 2, bgcolor: "action.hover" }}>
-                              <EventGuide event={e} />
-                              {softenTarget(e) && (
-                                <Can permission={P.APPS_WRITE}>
-                                  <Button
-                                    size="small"
-                                    variant="outlined"
-                                    sx={{ mb: 2 }}
-                                    onClick={() => setSoftening(softenTarget(e))}
-                                    data-testid={`soften-${e.id}`}
-                                  >
-                                    Not a threat? Soften for this app
-                                  </Button>
-                                </Can>
-                              )}
-                              <FlaggedText metadata={e.metadata} appId={e.app_id} eventType={e.event_type} opinions={opinions} />
-                              <Typography variant="caption" color="text.secondary">
-                                Metadata
-                              </Typography>
-                              <Box
-                                component="pre"
-                                sx={{
-                                  m: 0,
-                                  mt: 1,
-                                  fontSize: "0.8rem",
-                                  fontFamily: "monospace",
-                                  whiteSpace: "pre-wrap",
-                                  wordBreak: "break-all",
-                                }}
-                              >
-                                {JSON.stringify(e.metadata, null, 2)}
-                              </Box>
-                            </Box>
+                            <EventDetails event={e} opinions={opinions} onSoften={setSoftening} />
                           </Collapse>
                         </StyledTableCell>
                       </TableRow>

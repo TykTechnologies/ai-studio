@@ -373,5 +373,78 @@ describe("FilterEventsTab: second opinion", () => {
     await waitFor(() => expect(apiClient.get).toHaveBeenCalledTimes(1));
     expect(screen.queryByTestId("judge-agreement")).not.toBeInTheDocument();
   });
-});
 
+  // A link to one event (/admin/compliance?event=<id>, carried by guardrail
+  // alerts and outcome events) shows it open above the table, whatever the
+  // period (midsommar-clean-9u1j.67).
+  describe("linked event", () => {
+    const linked = {
+      id: 4242,
+      timestamp: "2026-02-01T09:00:00Z",
+      app_id: 409,
+      app_name: "Visor",
+      filter_name: "Wolf Defender: stop conversation",
+      filter_scope: "proxy_request",
+      event_type: "guardrail.user_message.block",
+      severity: "critical",
+      description: "guardrail blocked a user message",
+      metadata: { action: "block", detector: "user_message.block", roles: ["user"] },
+    };
+    const mockApi = (single) =>
+      apiClient.get.mockImplementation((url) => {
+        if (url === "/compliance/events/4242") return single();
+        return Promise.resolve(buildResponse());
+      });
+
+    test("fetches the event by id and shows it open, with its details", async () => {
+      mockApi(() => Promise.resolve({ data: linked }));
+      renderTab({ eventId: "4242", onCloseEvent: jest.fn() });
+
+      const panel = await screen.findByTestId("linked-event");
+      expect(apiClient.get).toHaveBeenCalledWith("/compliance/events/4242");
+      expect(within(panel).getByText("Linked event #4242")).toBeInTheDocument();
+      expect(within(panel).getByText("guardrail.user_message.block")).toBeInTheDocument();
+      expect(within(panel).getByText("critical")).toBeInTheDocument();
+      expect(within(panel).getByText("Visor")).toHaveAttribute("href", "/admin/apps/409");
+      expect(within(panel).getByTestId("linked-event-description")).toHaveTextContent("guardrail blocked a user message");
+      // Open, with no click: the metadata the row would only show expanded.
+      expect(within(panel).getByText(/"detector": "user_message.block"/)).toBeInTheDocument();
+      // The table still loads for the period.
+      expect(apiClient.get).toHaveBeenCalledWith("/compliance/events", expect.anything());
+    });
+
+    test("Show all events drops the link", async () => {
+      mockApi(() => Promise.resolve({ data: linked }));
+      const onCloseEvent = jest.fn();
+      renderTab({ eventId: "4242", onCloseEvent });
+      await screen.findByTestId("linked-event");
+      fireEvent.click(screen.getByTestId("linked-event-close"));
+      expect(onCloseEvent).toHaveBeenCalledTimes(1);
+    });
+
+    test("an event that no longer exists says so", async () => {
+      mockApi(() => Promise.reject({ response: { status: 404 } }));
+      const onCloseEvent = jest.fn();
+      renderTab({ eventId: "4242", onCloseEvent });
+      const alert = await screen.findByTestId("linked-event-error");
+      expect(alert).toHaveTextContent("Compliance event 4242 was not found");
+      fireEvent.click(within(alert).getByTestId("linked-event-close"));
+      expect(onCloseEvent).toHaveBeenCalledTimes(1);
+    });
+
+    test("a permission refusal says so", async () => {
+      mockApi(() => Promise.reject({ isPermissionDenied: true, response: { status: 403 } }));
+      renderTab({ eventId: "4242", onCloseEvent: jest.fn() });
+      expect(await screen.findByTestId("linked-event-error")).toHaveTextContent("You do not have permission to view this compliance event.");
+    });
+
+    test("without a link nothing is fetched by id", async () => {
+      apiClient.get.mockResolvedValue(buildResponse());
+      renderTab();
+      await screen.findByText("Total Events");
+      await waitFor(() => expect(apiClient.get).toHaveBeenCalled());
+      expect(apiClient.get.mock.calls.some(([u]) => /^\/compliance\/events\/\d/.test(u))).toBe(false);
+      expect(screen.queryByTestId("linked-event")).not.toBeInTheDocument();
+    });
+  });
+});

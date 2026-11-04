@@ -1257,6 +1257,7 @@ func (a *API) setupRoutes() error {
 	v1.GET("/compliance/policy-violations", authz.Read("compliance"), a.getPolicyViolations)
 	v1.GET("/compliance/violations", authz.Read("compliance"), a.getViolationRecords)
 	v1.GET("/compliance/events", authz.Read("compliance"), a.getComplianceEvents)
+	v1.GET("/compliance/events/:id", authz.Read("compliance"), a.getComplianceEvent)
 	v1.GET("/compliance/budget-alerts", authz.Read("compliance"), a.getBudgetAlerts)
 	v1.GET("/compliance/errors", authz.Read("compliance"), a.getComplianceErrors)
 	v1.GET("/compliance/app/:id/risk-profile", authz.Read("compliance"), a.getAppRiskProfile)

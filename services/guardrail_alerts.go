@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
@@ -54,7 +56,10 @@ type GuardrailAlertPayload struct {
 	ComplianceEventID uint     `json:"compliance_event_id"`
 	Timestamp         string   `json:"timestamp"`
 	Link              string   `json:"link"`
-	Excerpts          []string `json:"excerpts,omitempty"`
+	// URL is Link made absolute with SITE_URL, for a message read outside
+	// AI Studio (a Slack post links to it); empty when SITE_URL is not set.
+	URL      string   `json:"url,omitempty"`
+	Excerpts []string `json:"excerpts,omitempty"`
 }
 
 // GuardrailAlertEvent is the bus event a guardrail alert is raised as:
@@ -246,7 +251,7 @@ func (b *alertBatch) alertPayload(ev *models.ComplianceEvent, meta alertEventMet
 		Detector: meta.Detector, Kinds: meta.Kinds, Roles: meta.Roles, ToolNames: meta.ToolNames,
 		MaxScore: meta.MaxScore, Action: meta.Action, RequestID: meta.RequestID,
 		ComplianceEventID: ev.ID, Timestamp: ev.TimeStamp.UTC().Format(time.RFC3339),
-		Link: fmt.Sprintf("/admin/compliance?event=%d", ev.ID),
+		Link: complianceEventLink(ev.ID), URL: complianceEventURL(ev.ID),
 	}
 	for _, a := range []*guardrails.Alert{cfg.Alert, cfg.ToolResults.Alert, cfg.ToolCalls.Alert, cfg.ToolDefinitions.Alert} {
 		if a == nil || a.Event != name {
@@ -278,6 +283,23 @@ func (b *alertBatch) alertPayload(ev *models.ComplianceEvent, meta alertEventMet
 		}
 	}
 	return p, false
+}
+
+// complianceEventLink is the Compliance page's path that opens compliance
+// event id (the page reads ?event=).
+func complianceEventLink(id uint) string {
+	return fmt.Sprintf("/admin/compliance?event=%d", id)
+}
+
+// complianceEventURL is complianceEventLink under SITE_URL (which includes
+// BASE_PATH), or "" when SITE_URL is not an http(s) URL.
+func complianceEventURL(id uint) string {
+	site := strings.TrimRight(config.Get("").SiteURL, "/")
+	u, err := url.Parse(site)
+	if site == "" || err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+		return ""
+	}
+	return site + complianceEventLink(id)
 }
 
 // safeAlertName bounds an untrusted alert name for a log line.

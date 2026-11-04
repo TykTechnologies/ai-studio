@@ -36,6 +36,7 @@ func TestComplianceCommunityEdition_ReturnsEnterpriseError(t *testing.T) {
 	v1.GET("/compliance/errors", api.getComplianceErrors)
 	v1.GET("/compliance/app/:id/risk-profile", api.getAppRiskProfile)
 	v1.GET("/compliance/export", api.exportComplianceData)
+	v1.GET("/compliance/events/:id", api.getComplianceEvent)
 
 	t.Run("isComplianceAvailable returns false for CE", func(t *testing.T) {
 		w := apitest.PerformRequest(r, "GET", "/api/v1/compliance/available", nil)
@@ -48,6 +49,15 @@ func TestComplianceCommunityEdition_ReturnsEnterpriseError(t *testing.T) {
 		err := json.Unmarshal(w.Body.Bytes(), &response)
 		assert.NoError(t, err)
 		assert.False(t, response.Available, "Compliance should not be available in CE")
+	})
+
+	t.Run("getComplianceEvent returns 403 in CE and 400 for a bad id", func(t *testing.T) {
+		w := apitest.PerformRequest(r, "GET", "/api/v1/compliance/events/42", nil)
+		assert.Equal(t, http.StatusForbidden, w.Code)
+		w = apitest.PerformRequest(r, "GET", "/api/v1/compliance/events/abc", nil)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+		w = apitest.PerformRequest(r, "GET", "/api/v1/compliance/events/0", nil)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 
 	t.Run("getComplianceSummary returns 403 in CE", func(t *testing.T) {

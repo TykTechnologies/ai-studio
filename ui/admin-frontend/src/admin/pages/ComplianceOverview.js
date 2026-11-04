@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import apiClient from "../utils/apiClient";
 import {
   Typography,
@@ -24,6 +25,9 @@ import FilterEventsTab from "../components/compliance/FilterEventsTab";
 import AppRiskModal from "../components/compliance/AppRiskModal";
 import { isEnterpriseFeature, isPermissionDenied } from "../utils/apiErrors";
 
+// FILTER_EVENTS_TAB is the Filter Events tab's index.
+const FILTER_EVENTS_TAB = 3;
+
 const ComplianceOverview = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -39,8 +43,23 @@ const ComplianceOverview = () => {
     new Date().toISOString().split("T")[0]
   );
 
+  // ?event=<id> links one compliance event (guardrail alerts and outcome
+  // events carry the link): it opens the Filter Events tab with that event
+  // shown open.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawEvent = searchParams.get("event");
+  const linkedEvent = rawEvent && /^[1-9][0-9]{0,9}$/.test(rawEvent) ? rawEvent : null;
+
   // Tab state
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState(linkedEvent ? FILTER_EVENTS_TAB : 0);
+  useEffect(() => {
+    if (linkedEvent) setActiveTab(FILTER_EVENTS_TAB);
+  }, [linkedEvent]);
+  const closeLinkedEvent = useCallback(() => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("event");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   // Data states
   const [summary, setSummary] = useState(null);
@@ -265,7 +284,9 @@ const ComplianceOverview = () => {
               {activeTab === 0 && <PolicyViolationsTab data={policyViolations} onAppClick={handleAppClick} startDate={startDate} endDate={endDate} />}
               {activeTab === 1 && <BudgetComplianceTab data={budgetAlerts} />}
               {activeTab === 2 && <ErrorsTab data={errors} />}
-              {activeTab === 3 && <FilterEventsTab startDate={startDate} endDate={endDate} />}
+              {activeTab === FILTER_EVENTS_TAB && (
+                <FilterEventsTab startDate={startDate} endDate={endDate} eventId={linkedEvent} onCloseEvent={closeLinkedEvent} />
+              )}
             </Box>
           </StyledPaper>
         </Box>

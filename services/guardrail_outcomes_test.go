@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
@@ -208,4 +209,49 @@ func TestPublishGuardrailEvents_AlertAndOutcome(t *testing.T) {
 	_, tops := sink.wait(t, 1)
 	assert.Equal(t, []string{"guardrail.outcome.quarantined"}, tops)
 	assert.Len(t, waitAlerts(t, alerts, 1), 1)
+}
+
+// Alerts and outcome events link to their compliance event: link is the
+// Compliance page's path, url the same under SITE_URL (BASE_PATH included),
+// and no url without an http(s) SITE_URL.
+func TestGuardrailEvents_LinkToTheEvent(t *testing.T) {
+	prev := config.Get("")
+	t.Cleanup(func() { config.Set(prev) })
+	for _, c := range []struct{ site, want string }{
+		{"https://studio.example.com/ai-studio/", "https://studio.example.com/ai-studio/admin/compliance?event=%d"},
+		{"http://localhost:3000", "http://localhost:3000/admin/compliance?event=%d"},
+		{"", ""},
+		{"studio.example.com", ""},
+		{"javascript:alert(1)", ""},
+	} {
+		t.Run(c.site, func(t *testing.T) {
+			conf := *prev
+			conf.SiteURL = c.site
+			config.Set(&conf)
+
+			f, sink := outcomeFixture(t, "")
+			f.filter.Config["on_detect"] = guardrails.ActionAlert
+			f.filter.Config["alert"] = map[string]any{"event": "visor-pr-flag"}
+			require.NoError(t, f.db.Save(f.filter).Error)
+			alerts := &alertSink{}
+			sub := f.svc.SystemEvents.bus.Subscribe("guardrail.alert.visor-pr-flag", alerts.handler)
+			t.Cleanup(func() { f.svc.SystemEvents.bus.Unsubscribe(sub) })
+
+			ev := storedEvent(t, f, f.filter.Name, "guardrail.prompt_injection", detectorMeta(f, map[string]any{"action": "quarantine", "alert": "visor-pr-flag"}))
+			f.svc.PublishGuardrailEvents([]*models.ComplianceEvent{ev})
+			got, _ := sink.wait(t, 1)
+			al := waitAlerts(t, alerts, 1)
+			require.Len(t, got, 1)
+			require.Len(t, al, 1)
+			link := fmt.Sprintf("/admin/compliance?event=%d", ev.ID)
+			want := ""
+			if c.want != "" {
+				want = fmt.Sprintf(c.want, ev.ID)
+			}
+			assert.Equal(t, link, got[0].Object.Link)
+			assert.Equal(t, want, got[0].Object.URL)
+			assert.Equal(t, link, al[0].Link)
+			assert.Equal(t, want, al[0].URL)
+		})
+	}
 }

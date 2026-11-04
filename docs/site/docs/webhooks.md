@@ -70,7 +70,7 @@ preset renders it. Its object carries `name` and `alert` (the alert's name),
 `topic`, `filter_id`,
 `filter_name`, `app_id`, `app_name`, `detector`, `kinds`, `roles`,
 `tool_names`, `max_score`, `action`, `exception_id` (when an exception raised
-it), `request_id`, `compliance_event_id`, `timestamp` and `link`; `excerpts`
+it), `request_id`, `compliance_event_id`, `timestamp`, `link` and `url`; `excerpts`
 only when the filter's alert opts in. Alerts for traffic through edge
 gateways are raised when the edge's analytics pulse arrives. Only AI Studio raises
 `guardrail.alert.*`: plugins cannot publish those topics.
@@ -82,10 +82,17 @@ detector and App), `outcome`, `topic`, `filter_id`, `filter_name`, `app_id`,
 `app_name`, `event_type`, `severity`, `detector` (or `detectors` for a judge
 softening), `kinds`, `roles`, `tool_names`, `max_score`, `action` (what the
 traffic saw), `reason_code`, `exception_ids`, `request_id`,
-`compliance_event_id`, `timestamp` and `link`, and on a judge softening
+`compliance_event_id`, `timestamp`, `link` and `url`, and on a judge softening
 `judge` (`verdict`, `reason`, `model`, `prompt_version`, `coverage`,
 `softened_from`, `softened_to`). No flagged text. Only AI Studio raises
 `guardrail.outcome.*`.
+
+`link` is the Compliance page's path that opens the event
+(`/admin/compliance?event=<id>`); `url` is the same link in full, built from
+`SITE_URL`, and is left out when `SITE_URL` is not set. The Slack preset adds
+an **Open in AI Studio** link to it, so anyone who sees the message can click
+through to the event (they still sign in and need permission to read
+compliance).
 
 ## Payloads
 
@@ -93,7 +100,8 @@ Choose a preset or write a template:
 
 - **standard** – a full envelope: event id, type, timestamps, the object
   (with secrets redacted), the actor and delivery metadata.
-- **slack** – a Slack incoming-webhook message summarising the event.
+- **slack** – a Slack incoming-webhook message summarising the event; for a
+  guardrail alert or outcome event it links to the event in AI Studio.
 - **minimal** – identifiers only.
 - **custom** – a Go `text/template` that must render to JSON. Use
   **Preview** in the editor to render it against a sample event.
@@ -106,6 +114,15 @@ Example custom template:
   "event_id": {{ jsonStr .Event.ID }},
   "object": {{ toJson .Object }}
 }
+```
+
+A template can use `.StudioLink`: the AI Studio page the event links to, set
+only for guardrail alerts and outcome events (topics only AI Studio raises)
+and only when it is an `http(s)` URL, so no other event's fields become a
+link. For example, in a Slack message:
+
+```
+{{ with .StudioLink }}<{{ . }}|Open in AI Studio>{{ end }}
 ```
 
 Secret-bearing fields (`api_key`, `password`, `token`, `authorization`, ...)
