@@ -55,6 +55,8 @@ type navInputs struct {
 	// plugins are the plugin-contributed sections, already filtered by
 	// permission.
 	plugins []services.SidebarMenuItem
+	// isOwner shows the License page, which only Owners may open.
+	isOwner bool
 }
 
 func when(cond bool, items ...NavItem) []NavItem {
@@ -175,6 +177,8 @@ func adminNav(in navInputs) []NavItem {
 				page("branding", "Branding", "/admin/branding", authz.Write("branding")),
 			},
 			when(f("feature_tyk_mcp"), page("tyk-connections", "Tyk Connections", "/admin/tyk-connections", r("tyk-connections"))),
+			// Owner only, which no permission expresses.
+			when(in.isOwner, NavItem{ID: "license", Text: "License", Path: "/admin/license"}),
 		),
 	)
 	if f("feature_chat") {
@@ -464,6 +468,8 @@ func (a *API) getNavManifest(c *gin.Context) {
 			identityProviders: a.showSSOConfig(u, perms), // off when the host signs users in
 			plugins:           plugins,
 		}
+		in.isOwner, err = a.service.Authz().IsOwner(c.Request.Context(), u.ID)
+		logNavError("owner check", err)
 		if admin := filterNav(adminNav(in), func(item NavItem) bool {
 			return item.Permission == "" || allow(item.Permission)
 		}); admin != nil {

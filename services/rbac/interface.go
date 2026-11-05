@@ -148,6 +148,10 @@ type Service interface {
 	// IsLastOwner reports whether the user is the only Owner, and therefore
 	// cannot be deleted or demoted. Always false in CE.
 	IsLastOwner(ctx context.Context, userID uint) (bool, error)
+	// IsOwner reports whether the user holds the Owner role directly, which
+	// alone may see and manage the licence. Without roles (CE, or roles
+	// unlicensed) the Super Admin is the Owner (IsSuperAdminUser).
+	IsOwner(ctx context.Context, userID uint) (bool, error)
 	// SyncHostRoles makes the user's host-managed role bindings (direct,
 	// global, Source RoleBindingSourceHost) match the role slugs the host
 	// application gives. Unknown slugs are logged and skipped; a role the

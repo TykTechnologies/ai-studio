@@ -1217,6 +1217,9 @@ type UserWithEntitlementsResponse struct {
 		Roles []rbac.RoleSummary `json:"roles"`
 		// RBACEnabled reports whether fine-grained roles are active.
 		RBACEnabled bool `json:"rbac_enabled"`
+		// IsOwner: the user holds the Owner role (the Super Admin without
+		// roles), and so may open the License page.
+		IsOwner bool `json:"is_owner"`
 
 		// Profile fields for the signed-in user's own menu. AccountType is
 		// the legacy role label the users list shows as "role"; the key

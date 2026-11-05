@@ -479,6 +479,9 @@ func (a *API) handleMe(c *gin.Context) {
 	response.Attributes.Permissions = perms.List()
 	response.Attributes.Roles = []rbac.RoleSummary{}
 	response.Attributes.RBACEnabled = rbacSvc.Enabled()
+	if response.Attributes.IsOwner, err = rbacSvc.IsOwner(c.Request.Context(), u.ID); err != nil {
+		log.Printf("Owner check for user %d failed: %v", u.ID, err)
+	}
 	if rbacSvc.Enabled() {
 		if eff, err := rbacSvc.EffectivePermissions(c.Request.Context(), u.ID); err == nil && eff.Roles != nil {
 			response.Attributes.Roles = eff.Roles

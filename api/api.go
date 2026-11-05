@@ -675,6 +675,9 @@ func (a *API) setupRoutes() error {
 	v1.GET("/team-budgets/settings", authz.Read("groups"), a.getTeamBudgetSettings)
 	v1.PUT("/team-budgets/settings", authz.Write("groups"), a.setTeamBudgetSettings)
 	v1.PUT("/users/:id/budget-team", authz.Write("users"), a.setUserBudgetTeam)
+	// Licence (Owner only; the handlers check; CE answers 402)
+	v1.GET("/license", authz.AnyAdmin, a.getLicense)
+	v1.DELETE("/license/namespaces/:namespace", authz.AnyAdmin, a.releaseLicensedNamespace)
 
 	// LLM routes
 	v1.POST("/llms", authz.Write("llms"), a.createLLM)

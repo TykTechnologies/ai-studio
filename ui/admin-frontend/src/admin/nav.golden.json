@@ -255,6 +255,11 @@
           "text": "Tyk Connections",
           "path": "/admin/tyk-connections",
           "permission": "tyk-connections:read"
+        },
+        {
+          "id": "license",
+          "text": "License",
+          "path": "/admin/license"
         }
       ]
     },

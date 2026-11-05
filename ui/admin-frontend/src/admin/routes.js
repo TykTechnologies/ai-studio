@@ -81,6 +81,8 @@ import AgentForm from "./components/agents/AgentForm";
 import Marketplace from "./components/marketplace/Marketplace";
 import MarketplaceSettings from "./pages/MarketplaceSettings";
 import BrandingSettings from "./pages/BrandingSettings";
+import License from "./pages/License";
+import RequireOwner from "./components/rbac/RequireOwner";
 
 import ModelRouterList from "./pages/ModelRouterList";
 import ModelRouterDetails from "./components/model-routers/ModelRouterDetails";
@@ -136,6 +138,8 @@ const mainAdminRoutes = [
   { path: "dash", element: <Dashboard />, permission: P.ANALYTICS_READ },
   { path: "dashboard", element: <Dashboard />, permission: P.ANALYTICS_READ },
   { path: "branding", element: <BrandingSettings />, permission: P.BRANDING_WRITE },
+  // Owner only: ownership is a role, not a permission.
+  { path: "license", element: <RequireOwner><License /></RequireOwner> },
   { path: "users", element: <Users />, permission: P.USERS_READ },
   { path: "users/:id", element: <UserDetails />, permission: P.USERS_READ },
   { path: "users/:id/chat-log/:sessionId", element: <UserMessageLog />, permission: P.CHAT_HISTORY_READ },

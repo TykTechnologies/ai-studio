@@ -18,6 +18,7 @@ const emptyAccess = {
   hasAdminAccess: false,
   canAccessAdmin: false,
   rbacEnabled: false,
+  isOwner: false,
 };
 
 /**
@@ -57,6 +58,7 @@ export const PermissionsProvider = ({ identity: initialIdentity, children }) => 
           hasAdminAccess: identity.hasAdminAccess,
           canAccessAdmin: identity.hasAdminAccess,
           rbacEnabled: identity.rbacEnabled,
+          isOwner: identity.isOwner === true,
         }
       : emptyAccess;
     const can = (perm) => hasPermission(base.permissions, perm);
@@ -97,6 +99,7 @@ export const usePermissions = () => {
           hasAdminAccess: identity.hasAdminAccess,
           canAccessAdmin: identity.hasAdminAccess,
           rbacEnabled: identity.rbacEnabled,
+          isOwner: identity.isOwner === true,
         }
       : {}),
     loading: false,
