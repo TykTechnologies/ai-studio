@@ -14,6 +14,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services/entitlements"
 	"github.com/TykTechnologies/midsommar/v2/services/rbac"
 )
 
@@ -90,7 +91,14 @@ func (s *Service) ProvisionHostUser(id HostIdentity) (*models.User, error) {
 		return nil, err
 	}
 	if id.Roles != nil {
-		rolesChanged, err := s.Authz().SyncHostRoles(context.Background(), user.ID, id.Roles)
+		// The host's roles are authoritative: over the licensed admin seats
+		// they are refused, not quietly left out.
+		var rolesChanged bool
+		err := s.EntitlementsService().GuardUserChange(s.DB, func(tx *gorm.DB) error {
+			var err error
+			rolesChanged, err = s.Authz().SyncHostRoles(rbac.WithTx(context.Background(), tx), user.ID, id.Roles)
+			return err
+		})
 		if err != nil {
 			return nil, fmt.Errorf("sync host roles: %w", err)
 		}
@@ -163,13 +171,21 @@ func (s *Service) linkOrCreateHostUser(id HostIdentity) (*models.User, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Licence seats: portal access and team memberships that would go over
+	// a limit are left out rather than refusing sign-in. The host's admin
+	// flag is authoritative: over the limit, CreateUser refuses it.
+	ent := s.EntitlementsService()
+	showPortal := ent.CanGrant(s.DB, entitlements.Seat{Email: id.Email, Portal: true})
+	if !id.Admin {
+		groups = s.grantableHostGroups(0, id.Email, nil, groups)
+	}
 	user, err := s.CreateUser(UserDTO{
 		Email:         id.Email,
 		Name:          id.Name,
 		Password:      password,
 		IsAdmin:       id.Admin,
 		ShowChat:      true,
-		ShowPortal:    true,
+		ShowPortal:    showPortal,
 		EmailVerified: true,
 		Groups:        groups,
 	})
@@ -198,6 +214,9 @@ func (s *Service) syncHostUser(user *models.User, id HostIdentity) (bool, error)
 		if groups, err = s.hostGroupIDs(id.Groups); err != nil {
 			return false, err
 		}
+		if !id.Admin {
+			groups = s.grantableHostGroups(user.ID, user.Email, user.ExtractGroupIDs(), groups)
+		}
 	}
 	name := id.Name
 	if name == "" {
@@ -216,7 +235,11 @@ func (s *Service) syncHostUser(user *models.User, id HostIdentity) (bool, error)
 			return false, fmt.Errorf("read host user roles: %w", err)
 		}
 		if direct != id.Admin {
-			err := s.Authz().SetFullAdmin(context.Background(), nil, user.ID, id.Admin)
+			// Authoritative like the host's roles: over the licensed
+			// admin seats it is refused.
+			err := s.EntitlementsService().GuardUserChange(s.DB, func(tx *gorm.DB) error {
+				return s.Authz().SetFullAdmin(rbac.WithTx(context.Background(), tx), nil, user.ID, id.Admin)
+			})
 			switch {
 			case errors.Is(err, rbac.ErrLastOwner):
 				// The host cannot demote the only Owner: keep them one
@@ -261,6 +284,20 @@ func (s *Service) syncHostUser(user *models.User, id HostIdentity) (bool, error)
 	}
 	*user = *updated
 	return true, nil
+}
+
+// grantableHostGroups leaves out the teams the user would join over the
+// licensed admin seats (a team with roles bound to it gives admin access).
+// Teams the user already belongs to are kept.
+func (s *Service) grantableHostGroups(userID uint, email string, current, groups []uint) []uint {
+	ent := s.EntitlementsService()
+	out := make([]uint, 0, len(groups))
+	for _, g := range groups {
+		if slices.Contains(current, g) || ent.CanGrant(s.DB, entitlements.Seat{UserID: userID, Email: email, GroupID: g}) {
+			out = append(out, g)
+		}
+	}
+	return out
 }
 
 // hostGroupIDs resolves group names to IDs, always including the Default

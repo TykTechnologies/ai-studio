@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"sort"
 	"errors"
 	"net/http"
@@ -356,27 +357,34 @@ func (a *API) reconcileUserRoles(c *gin.Context, userID uint, desired []uint) bo
 		return false
 	}
 	actor, _ := auth.UserFromContext(c)
-	for roleID, bindingID := range have {
-		if want[roleID] {
-			continue
+	// One transaction under the licence seat guard: a role is an admin seat.
+	err = a.service.EntitlementsService().GuardUserChange(a.service.DB, func(tx *gorm.DB) error {
+		ctx := rbac.WithTx(ctx, tx)
+		for roleID, bindingID := range have {
+			if want[roleID] {
+				continue
+			}
+			if err := svc.DeleteBinding(ctx, actor, bindingID); err != nil && !errors.Is(err, rbac.ErrNotFound) {
+				return err
+			}
 		}
-		if err := svc.DeleteBinding(ctx, actor, bindingID); err != nil && !errors.Is(err, rbac.ErrNotFound) {
-			rbacErrorResponse(c, err)
-			return false
+		for roleID := range want {
+			if _, ok := have[roleID]; ok {
+				continue
+			}
+			_, err := svc.CreateBinding(ctx, actor, rbac.BindingInput{
+				Subject: rbac.Subject{Type: models.RoleBindingSubjectUser, ID: userID},
+				RoleID:  roleID,
+			})
+			if err != nil && !errors.Is(err, rbac.ErrDuplicateBinding) {
+				return err
+			}
 		}
-	}
-	for roleID := range want {
-		if _, ok := have[roleID]; ok {
-			continue
-		}
-		_, err := svc.CreateBinding(ctx, actor, rbac.BindingInput{
-			Subject: rbac.Subject{Type: models.RoleBindingSubjectUser, ID: userID},
-			RoleID:  roleID,
-		})
-		if err != nil && !errors.Is(err, rbac.ErrDuplicateBinding) {
-			rbacErrorResponse(c, err)
-			return false
-		}
+		return nil
+	})
+	if err != nil {
+		rbacErrorResponse(c, err)
+		return false
 	}
 	return true
 }

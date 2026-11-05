@@ -56,6 +56,9 @@ func setupIntegrationTestEnv(t *testing.T) (*http.Client, string, string) {
 
 	// Create main service bundle
 	serviceInstance := apitesting.SetupTestService(testDB)
+	// No licence is loaded here; this test is about OAuth, not licence
+	// limits (user seats included).
+	serviceInstance.Entitlements = entitlements.NewCommunityService()
 	authConfig := apitesting.SetupTestAuthConfig(testDB, serviceInstance)
 	authService := apitesting.SetupTestAuthService(testDB, serviceInstance) // Uses real services
 	// Setup Dashboard API server

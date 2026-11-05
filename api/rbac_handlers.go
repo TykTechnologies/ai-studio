@@ -1,6 +1,9 @@
 package api
 
 import (
+	"github.com/TykTechnologies/midsommar/v2/helpers"
+	"github.com/TykTechnologies/midsommar/v2/services/entitlements"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"fmt"
 	"errors"
 	"net/http"
@@ -21,6 +24,11 @@ import (
 
 // rbacErrorResponse maps service errors onto the authz error envelope.
 func rbacErrorResponse(c *gin.Context, err error) {
+	if _, exceeded := entitlements.AsExceeded(err); exceeded {
+		he, _ := asHelperError(err)
+		helpers.SendErrorResponse(c, he)
+		return
+	}
 	switch {
 	case errors.Is(err, rbac.ErrEnterpriseFeature):
 		c.JSON(http.StatusPaymentRequired, authz.EnterpriseRequired(err.Error()))
@@ -512,9 +520,15 @@ func (a *API) createRoleBinding(c *gin.Context) {
 		return
 	}
 	actor, _ := auth.UserFromContext(c)
-	b, err := a.service.Authz().CreateBinding(c.Request.Context(), actor, rbac.BindingInput{
-		Subject: rbac.Subject{Type: in.SubjectType, ID: in.SubjectID},
-		RoleID:  in.RoleID,
+	// A role is an admin seat, for every member when bound to a team.
+	var b *models.RoleBinding
+	err := a.service.EntitlementsService().GuardUserChange(a.service.DB, func(tx *gorm.DB) error {
+		var err error
+		b, err = a.service.Authz().CreateBinding(rbac.WithTx(c.Request.Context(), tx), actor, rbac.BindingInput{
+			Subject: rbac.Subject{Type: in.SubjectType, ID: in.SubjectID},
+			RoleID:  in.RoleID,
+		})
+		return err
 	})
 	if err != nil {
 		rbacErrorResponse(c, err)

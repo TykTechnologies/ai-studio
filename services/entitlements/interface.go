@@ -30,6 +30,8 @@ var ErrEnterpriseFeature = errors.New("license limits and App quotas are an Ente
 type Seat struct {
 	// UserID is the user receiving the access; 0 for a user not yet created.
 	UserID uint `json:"user_id"`
+	// Email identifies the user in the refusal's log line and notice.
+	Email string `json:"email"`
 	// Portal grants portal access (User.ShowPortal).
 	Portal bool `json:"portal"`
 	// Admin grants the admin flag (User.IsAdmin).
@@ -138,7 +140,8 @@ type Service interface {
 
 	// CanGrant reports whether an automatic provisioning path may give the
 	// seat. When it may not, the caller leaves the access out rather than
-	// failing the login.
+	// failing the login; the implementation logs the refusal and tells the
+	// Owners. The caller still makes its change under GuardUserChange.
 	CanGrant(db *gorm.DB, seat Seat) bool
 
 	// Report returns the License page data.
