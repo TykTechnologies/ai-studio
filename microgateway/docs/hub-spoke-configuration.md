@@ -25,7 +25,10 @@ GATEWAY_MODE=standalone  # or omit entirely
 - All configuration stored locally in database
 - No external dependencies
 
-### Control Mode
+### Control Mode (deprecated)
+
+> **Deprecated:** control mode (`GATEWAY_MODE=control`) is deprecated and will be removed in a future release. AI Studio is the supported control plane: run edge gateways (`GATEWAY_MODE=edge`) against AI Studio. A microgateway started in control mode logs a deprecation warning. In Enterprise builds it serves only the default namespace (`""`, `global` or `default`) and refuses edges in any other namespace, because AI Studio licenses namespaces.
+
 ```bash
 GATEWAY_MODE=control
 ```

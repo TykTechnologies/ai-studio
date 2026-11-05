@@ -70,6 +70,8 @@ func NewControlServer(cfg *config.Config, db *gorm.DB) *ControlServer {
 		maxStreams = 1000 // Sensible default
 	}
 
+	logControlModeDeprecation()
+
 	server := &ControlServer{
 		config:               cfg,
 		db:                   db,
@@ -246,6 +248,10 @@ func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrati
 	if err := s.validateEdgeRegistrationRequest(req); err != nil {
 		return nil, err
 	}
+	if err := checkControlModeNamespace(req.EdgeNamespace); err != nil {
+		log.Warn().Str("edge_id", req.EdgeId).Str("namespace", req.EdgeNamespace).Msg("Edge registration refused: non-default namespace on a deprecated control-mode microgateway")
+		return nil, err
+	}
 	
 	// Generate session ID
 	sessionID := uuid.New().String()
@@ -317,7 +323,10 @@ func (s *ControlServer) GetFullConfiguration(ctx context.Context, req *pb.Config
 	log.Debug().
 		Str("namespace", req.EdgeNamespace).
 		Msg("Full configuration request")
-	
+	if err := checkControlModeNamespace(req.EdgeNamespace); err != nil {
+		return nil, err
+	}
+
 	snapshot, err := s.getConfigurationSnapshot(req.EdgeNamespace)
 	if err != nil {
 		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to get configuration: %v", err))
@@ -666,6 +675,9 @@ func (s *ControlServer) SendReloadRequest(edgeID string, reloadReq *pb.Configura
 func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidationRequest) (*pb.TokenValidationResponse, error) {
 	// Validate request
 	if err := s.validateTokenValidationRequest(req); err != nil {
+		return nil, err
+	}
+	if err := checkControlModeNamespace(req.EdgeNamespace); err != nil {
 		return nil, err
 	}
 

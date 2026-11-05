@@ -481,6 +481,9 @@ func TestEdgeInstance_StreamActivity(t *testing.T) {
 }
 
 func TestControlServer_ValidationIntegration(t *testing.T) {
+	if controlModeDefaultNamespaceOnly {
+		t.Skip("namespaced token validation: Enterprise control mode serves only the default namespace (TestControlModeNamespaces)")
+	}
 	// Setup test database with test data
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)

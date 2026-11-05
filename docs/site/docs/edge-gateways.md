@@ -23,6 +23,10 @@ This architecture enables:
 - **High Availability:** Continue processing even if the hub is temporarily unreachable
 - **Multi-Tenancy:** Isolate resources between different teams or customers using namespaces
 
+### AI Studio is the control plane
+
+Edge gateways register with AI Studio. The microgateway's own control mode (`GATEWAY_MODE=control`) is deprecated and will be removed in a future release. A microgateway started in that mode logs a deprecation warning, and in Enterprise builds it serves only the default namespace (`""`, `global` or `default`) and refuses edges in any other namespace with an error telling the operator to register against AI Studio. Namespaces are licensed by AI Studio, so they can only be served from there.
+
 ### No management API on edges
 
 An edge gateway (`GATEWAY_MODE=edge`) does not serve the microgateway management API: every `/api/v1/...` path answers `404`. Its LLMs, Apps, credentials, filters and plugins come only from the control plane, over gRPC. The `mgw` CLI, which uses that API, works only against a standalone microgateway. An edge still serves the AI gateway endpoints (`/llm/`, `/ai/`, `/v1/`, `/tools/`, `/datasource/`, `/anthropic/`, `/router/`), custom plugin endpoints under `/plugins/`, `/health`, `/ready` and, when enabled, metrics.

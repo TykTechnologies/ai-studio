@@ -113,6 +113,9 @@ func TestControlServer_Authentication(t *testing.T) {
 }
 
 func TestControlServer_NamespaceFiltering(t *testing.T) {
+	if controlModeDefaultNamespaceOnly {
+		t.Skip("namespaced token validation: Enterprise control mode serves only the default namespace (TestControlModeNamespaces)")
+	}
 	// Setup test database with namespaced data
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
@@ -529,7 +532,8 @@ func TestControlServer_ConcurrentOperations(t *testing.T) {
 
 				req := &pb.EdgeRegistrationRequest{
 					EdgeId:        fmt.Sprintf("concurrent-edge-%d", edgeNum),
-					EdgeNamespace: "test",
+					// Default namespace: Enterprise control mode refuses others.
+					EdgeNamespace: "default",
 					Version:       "1.0.0",
 					Health: &pb.HealthStatus{
 						Status:    pb.HealthStatus_HEALTHY,
