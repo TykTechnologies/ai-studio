@@ -26,7 +26,7 @@ type Service interface {
 	// Entitlement checks if a specific feature is available
 	// Returns the feature value and whether it exists
 	// CE: All features return true
-	// ENT: Checks JWT scope claim
+	// ENT: Checks the features the license grants AI Studio
 	Entitlement(name string) (Feature, bool)
 
 	// DaysLeft returns the number of days until license expiry
