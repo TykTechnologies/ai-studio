@@ -277,6 +277,10 @@ func (a *API) addUserToGroup(c *gin.Context) {
 	}
 
 	err = a.service.AddUserToGroup(uint(userID), uint(groupID))
+	if he, ok := asHelperError(err); ok && he.Code != "" {
+		helpers.SendErrorResponse(c, he)
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -406,6 +410,10 @@ func (a *API) updateGroupUsers(c *gin.Context) {
 	}
 
 	err = a.service.UpdateGroupUsers(uint(id), input.Data.Attributes.Members)
+	if he, ok := asHelperError(err); ok && he.Code != "" {
+		helpers.SendErrorResponse(c, he)
+		return
+	}
 	if err != nil {
 		helpers.SendErrorResponse(c, helpers.NewInternalServerError("Failed to update group users: "+err.Error()))
 		return

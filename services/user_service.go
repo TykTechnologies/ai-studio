@@ -151,7 +151,7 @@ func (s *Service) CreateUser(dto UserDTO) (*models.User, error) {
 	// Provenance is not a plugin's to rewrite.
 	user.AuthSource = models.AuthSourceAdmin
 
-	if err := user.Create(s.DB); err != nil {
+	if err := s.EntitlementsService().GuardUserChange(s.DB, func(tx *gorm.DB) error { return user.Create(tx) }); err != nil {
 		return nil, err
 	}
 
@@ -262,7 +262,8 @@ func (s *Service) SetUserDisabled(actorID, id uint, disabled bool) (*models.User
 		}
 	}
 
-	err = s.DB.Transaction(func(tx *gorm.DB) error {
+	// Re-enabling gives the user back the seats their access counts under.
+	err = s.inUserChange(func(tx *gorm.DB) error {
 		if err := models.SetDisabled(tx, id, disabled); err != nil {
 			return err
 		}
@@ -317,13 +318,7 @@ func (s *Service) UpdateUser(user *models.User, dto UserDTO) (*models.User, erro
 		return nil, err
 	}
 
-	// Enterprise: an is_admin change is an Administrator binding change,
-	// subject to the Owner rules (the last Owner cannot be demoted).
-	if s.Authz().Enabled() && dto.IsAdmin != user.IsAdmin {
-		if err := s.Authz().SetFullAdmin(context.Background(), nil, user.ID, dto.IsAdmin); err != nil {
-			return nil, rbacRuleError(err)
-		}
-	}
+	adminChange := s.Authz().Enabled() && dto.IsAdmin != user.IsAdmin
 
 	user.Email = dto.Email
 	user.Name = dto.Name
@@ -367,21 +362,30 @@ func (s *Service) UpdateUser(user *models.User, dto UserDTO) (*models.User, erro
 		}
 	}
 
-	tx := s.DB.Begin()
-
-	if err := user.Update(tx); err != nil {
-		tx.Rollback()
-		return nil, err
-	}
-
-	if newGroups != nil {
-		if err := user.ReplaceGroupAssociation(tx, newGroups); err != nil {
-			tx.Rollback()
-			return nil, err
+	// One transaction under the licence seat guard: admin access, portal
+	// access and team memberships may each take a seat.
+	err := s.inUserChange(func(tx *gorm.DB) error {
+		// Enterprise: an is_admin change is an Administrator binding
+		// change, subject to the Owner rules (the last Owner cannot be
+		// demoted).
+		if adminChange {
+			if err := s.Authz().SetFullAdmin(rbac.WithTx(context.Background(), tx), nil, user.ID, dto.IsAdmin); err != nil {
+				return rbacRuleError(err)
+			}
 		}
-	}
 
-	if err := tx.Commit().Error; err != nil {
+		if err := user.Update(tx); err != nil {
+			return err
+		}
+
+		if newGroups != nil {
+			if err := user.ReplaceGroupAssociation(tx, newGroups); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 
@@ -780,19 +784,15 @@ func (s *Service) UpdateGroupUsers(id uint, userIDs []uint) error {
 	}
 	affected = append(affected, userIDs...)
 
-	tx := s.DB.Begin()
-
 	users := make([]models.User, 0, len(userIDs))
 	for _, userID := range userIDs {
 		users = append(users, models.User{ID: userID})
 	}
 
-	if err := group.ReplaceAssociation(tx, "Users", users); err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	if err := tx.Commit().Error; err != nil {
+	// Joining a team with roles bound to it is an admin seat.
+	if err := s.inUserChange(func(tx *gorm.DB) error {
+		return group.ReplaceAssociation(tx, "Users", users)
+	}); err != nil {
 		return err
 	}
 	return s.syncAdminFlags(affected...)
@@ -821,6 +821,15 @@ func (s *Service) syncAdminBinding(user *models.User, wantAdmin bool) error {
 	}
 	user.IsAdmin = fresh.IsAdmin
 	return nil
+}
+
+// inUserChange runs fn in one transaction under the licence seat guard
+// (entitlements.GuardUserChange), for changes to users, team memberships
+// and role bindings.
+func (s *Service) inUserChange(fn func(tx *gorm.DB) error) error {
+	return s.DB.Transaction(func(tx *gorm.DB) error {
+		return s.EntitlementsService().GuardUserChange(tx, fn)
+	})
 }
 
 // syncAdminFlags recomputes users.is_admin for the given users after a team
