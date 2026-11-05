@@ -11,9 +11,10 @@ jest.mock("../../hooks/useNamespaces", () => ({
   default: () => ({ getAvailableNamespaces: () => [] }),
 }));
 
+let mockMultiTenant = false;
 jest.mock("../../hooks/useSystemFeatures", () => ({
   __esModule: true,
-  default: () => ({ features: { hub_spoke_multi_tenant: false } }),
+  default: () => ({ features: { hub_spoke_multi_tenant: mockMultiTenant } }),
 }));
 
 jest.mock("../../context/SyncStatusContext", () => ({
@@ -109,5 +110,30 @@ describe("EdgeGatewayList FIPS status", () => {
     expect(await screen.findByText("edge-a")).toBeInTheDocument();
     const cells = screen.getAllByTestId("edge-fips").map((c) => c.textContent);
     expect(cells).toEqual(["FIPS: On (v1.0.0-c2097c7c)", "FIPS: Off", "FIPS: Unknown"]);
+  });
+});
+
+describe("EdgeGatewayList unlicensed namespaces", () => {
+  let edges;
+  beforeEach(() => {
+    mockMultiTenant = true;
+    edgeGatewayService.listEdgeGateways.mockImplementation(() => Promise.resolve({ data: edges, meta: {} }));
+  });
+  afterEach(() => {
+    mockMultiTenant = false;
+  });
+
+  it("marks edges whose namespace holds no licensed slot", async () => {
+    edges = [
+      edge("edge-a", { namespace: "team-a" }),
+      edge("edge-b", { namespace: "team-b", unlicensed: true }),
+    ];
+    renderList();
+
+    expect(await screen.findByText("edge-a")).toBeInTheDocument();
+    const chips = screen.getAllByTestId("edge-unlicensed");
+    expect(chips).toHaveLength(1);
+    expect(chips[0]).toHaveTextContent("Unlicensed namespace");
+    expect(chips[0].closest("tr")).toHaveTextContent("edge-b");
   });
 });

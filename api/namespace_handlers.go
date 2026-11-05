@@ -20,6 +20,9 @@ type NamespaceResponse struct {
 		LLMCount   int64  `json:"llm_count"`
 		AppCount   int64  `json:"app_count"`
 		TokenCount int64  `json:"token_count"`
+		// Licensed is false for a namespace holding no licensed slot: its
+		// edges get no configuration and are not push targets.
+		Licensed bool `json:"licensed"`
 	} `json:"attributes"`
 }
 
@@ -75,12 +78,14 @@ func (a *API) listNamespaces(c *gin.Context) {
 				LLMCount   int64  `json:"llm_count"`
 				AppCount   int64  `json:"app_count"`
 				TokenCount int64  `json:"token_count"`
+				Licensed   bool   `json:"licensed"`
 			}{
 				Name:       ns.Name,
 				EdgeCount:  ns.EdgeCount,
 				LLMCount:   ns.LLMCount,
 				AppCount:   ns.AppCount,
 				TokenCount: ns.TokenCount,
+				Licensed:   a.service.EntitlementsService().IsNamespaceLicensed(a.service.DB, ns.Name),
 			},
 		}
 	}

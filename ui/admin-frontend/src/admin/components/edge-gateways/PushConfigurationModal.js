@@ -53,6 +53,9 @@ const PushConfigurationModal = ({ open, onClose, onSuccess, pollIntervalMs }) =>
   const success = operation !== null;
 
   const availableNamespaces = getAvailableNamespaces();
+  // Edges in a namespace with no licensed slot are never push targets.
+  const licensedNamespaces = availableNamespaces.filter((ns) => ns.licensed !== false);
+  const unlicensedCount = availableNamespaces.length - licensedNamespaces.length;
 
   // Which namespaces the preview describes: the chosen one, or -- for "all" --
   // every namespace the sync status knows about, the ones with something
@@ -218,8 +221,9 @@ const PushConfigurationModal = ({ open, onClose, onSuccess, pollIntervalMs }) =>
                   onChange={(e) => changeTarget(targetType, e.target.value)}
                 >
                   {availableNamespaces.map((namespace) => (
-                    <MenuItem key={namespace.name} value={namespace.name}>
+                    <MenuItem key={namespace.name} value={namespace.name} disabled={namespace.licensed === false}>
                       {namespace.name === 'global' ? 'Global' : namespace.name} ({namespace.edgeCount} edges)
+                      {namespace.licensed === false && ' - not licensed'}
                     </MenuItem>
                   ))}
                 </Select>
@@ -228,7 +232,9 @@ const PushConfigurationModal = ({ open, onClose, onSuccess, pollIntervalMs }) =>
 
             {targetType === 'all' && !noTargets && (
               <Alert severity="info" sx={{ mb: 2 }}>
-                This will push configuration to all {availableNamespaces.length} namespaces with active edges.
+                This will push configuration to all {licensedNamespaces.length} namespaces with active edges.
+                {unlicensedCount > 0 &&
+                  ` ${unlicensedCount} unlicensed namespace${unlicensedCount === 1 ? ' is' : 's are'} left out.`}
               </Alert>
             )}
           </>

@@ -748,6 +748,8 @@ func (s *Studio) wireControlPlane(version string, tlsConfig *tls.Config) error {
 	}
 	s.control = control
 
+	// Licensed namespaces (Enterprise licence slots) gate edge config.
+	control.SetEntitlements(service.EntitlementsService())
 	control.SetGovernedMetadataReader(service.GovernedMetadataService)
 	// Enterprise: edges learn which Apps to refuse (budget 0, team over a
 	// hard-blocking budget) and edge spend raises budget alerts.
@@ -757,7 +759,7 @@ func (s *Studio) wireControlPlane(version string, tlsConfig *tls.Config) error {
 
 	// Pushes are recorded in the database; this replica delivers those for
 	// edges whose streams it holds and reports on any of them.
-	s.pushes = pushes.New(s.db, s.clusterNode.ID(), control, pushes.Options{})
+	s.pushes = pushes.New(s.db, s.clusterNode.ID(), control, pushes.Options{Entitlements: service.EntitlementsService()})
 	control.SetPushDelivery(s.pushes)
 	service.NamespaceService.SetPushes(s.pushes)
 	if err := s.pushes.Start(context.Background()); err != nil {

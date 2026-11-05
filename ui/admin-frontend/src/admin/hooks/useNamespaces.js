@@ -19,6 +19,8 @@ const useNamespaces = () => {
           llmCount: ns.attributes.llm_count,
           appCount: ns.attributes.app_count,
           tokenCount: ns.attributes.token_count,
+          // false when the namespace holds no licensed slot (Enterprise)
+          licensed: ns.attributes.licensed !== false,
         }));
         setNamespaces(namespaceData);
       }
