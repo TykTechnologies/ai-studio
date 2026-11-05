@@ -17,7 +17,9 @@ Complete reference for all microgateway configuration options, environment varia
 
 | Variable | Values | Default | Description |
 |----------|--------|---------|-------------|
-| `GATEWAY_MODE` | `standalone`, `control`, `edge` | `standalone` | Operational mode of the gateway |
+| `GATEWAY_MODE` | `standalone`, `control` (deprecated), `edge` | `standalone` | Operational mode of the gateway |
+
+> **Deprecated:** control mode (`GATEWAY_MODE=control`) is deprecated and will be removed in a future release. AI Studio is the supported control plane: run edge gateways (`GATEWAY_MODE=edge`) against AI Studio. A microgateway started in control mode logs a deprecation warning. In Enterprise builds it serves only the default namespace (`""`, `global` or `default`) and refuses edges in any other namespace, because AI Studio licenses namespaces.
 
 ### Mode Descriptions
 

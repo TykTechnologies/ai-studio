@@ -21,7 +21,10 @@ The microgateway supports three operational modes:
 - All configuration stored and managed locally in database
 - No external dependencies
 
-#### Control Mode
+#### Control Mode (deprecated)
+
+> **Deprecated:** control mode (`GATEWAY_MODE=control`) is deprecated and will be removed in a future release. AI Studio is the supported control plane: run edge gateways (`GATEWAY_MODE=edge`) against AI Studio. A microgateway started in control mode logs a deprecation warning. In Enterprise builds it serves only the default namespace (`""`, `global` or `default`) and refuses edges in any other namespace, because AI Studio licenses namespaces.
+
 - Acts as the central hub in hub-and-spoke topology
 - Manages configuration in database
 - Exposes gRPC API for edge instances
