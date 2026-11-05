@@ -29,6 +29,9 @@ var ErrEnterpriseFeature = errors.New("license limits and App quotas are an Ente
 var (
 	ErrInvalidQuota = errors.New("invalid App quota: give a non-negative max_apps_per_member, or set unlimited")
 	ErrTeamNotFound = errors.New("team not found")
+	// ErrUnknownNotice refuses dismissing a key that is not a notice key
+	// (handlers map it onto 400).
+	ErrUnknownNotice = errors.New("unknown notice")
 )
 
 // Seat describes access an automatic provisioning path (SSO, host identity,
