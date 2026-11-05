@@ -21,8 +21,9 @@ func (f *fakeNotices) Notices(*gorm.DB, *models.User) ([]entitlements.Notice, er
 	return []entitlements.Notice{{Key: "quota:apps:3", Label: "Apps", Used: 2, Max: 3, Message: "near"}}, nil
 }
 
+// DismissNotice accepts only the notice the user has, as the engine does.
 func (f *fakeNotices) DismissNotice(_ *gorm.DB, _ *models.User, key string) error {
-	if key == "bad" {
+	if key != "quota:apps:3" {
 		return entitlements.ErrUnknownNotice
 	}
 	f.dismissed = append(f.dismissed, key)
@@ -43,8 +44,13 @@ func TestNoticeHandlers(t *testing.T) {
 	assert.Equal(t, http.StatusNoContent, w.Code)
 	assert.Equal(t, []string{"quota:apps:3"}, fake.dismissed)
 
-	w = quotaCall(api.dismissMyNotice, http.MethodPost, "", user, gin.Params{{Key: "key", Value: "bad"}})
-	assert.Equal(t, http.StatusBadRequest, w.Code)
+	// A key that is not one of the user's notices is refused and stores
+	// nothing.
+	for _, key := range []string{"bad", "quota:bogus:1"} {
+		w = quotaCall(api.dismissMyNotice, http.MethodPost, "", user, gin.Params{{Key: "key", Value: key}})
+		assert.Equal(t, http.StatusBadRequest, w.Code, key)
+	}
+	assert.Equal(t, []string{"quota:apps:3"}, fake.dismissed)
 }
 
 // Community Edition has no notices: an empty list, and nothing to dismiss.

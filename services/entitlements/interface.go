@@ -29,8 +29,8 @@ var ErrEnterpriseFeature = errors.New("license limits and App quotas are an Ente
 var (
 	ErrInvalidQuota = errors.New("invalid App quota: give a non-negative max_apps_per_member, or set unlimited")
 	ErrTeamNotFound = errors.New("team not found")
-	// ErrUnknownNotice refuses dismissing a key that is not a notice key
-	// (handlers map it onto 400).
+	// ErrUnknownNotice refuses dismissing a key that is not one of the
+	// user's current notices (handlers map it onto 400).
 	ErrUnknownNotice = errors.New("unknown notice")
 )
 
@@ -186,7 +186,9 @@ type Service interface {
 	Report(db *gorm.DB) (*Report, error)
 	// Notices returns the near-limit notices u has not dismissed.
 	Notices(db *gorm.DB, u *models.User) ([]Notice, error)
-	// DismissNotice hides the notice with key for u for good.
+	// DismissNotice hides the notice with key for u for good. Only a notice
+	// u has now can be dismissed (ErrUnknownNotice otherwise); dismissing
+	// one already dismissed is a no-op.
 	DismissNotice(db *gorm.DB, u *models.User, key string) error
 
 	// GetTeamAppQuota returns a team's per-member App quota.
