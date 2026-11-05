@@ -120,6 +120,8 @@ type ControlServer struct {
 	// entitlementsService.
 	entMu           sync.RWMutex
 	entitlementsSvc entitlements.Service
+	// entChanged wakes the namespace sweep loop when the service changes.
+	entChanged chan struct{}
 
 	// gRPC server, set by Serve and read by Stop
 	serverMu   sync.Mutex
@@ -127,7 +129,6 @@ type ControlServer struct {
 
 	// Cleanup ticker for stale connections
 	cleanupTicker *time.Ticker
-	sweepTicker   *time.Ticker
 
 	// stopping is closed by Stop: every edge stream handler returns, so
 	// the edges reconnect (to another replica) and pushes in flight on
@@ -304,10 +305,11 @@ func NewControlServer(cfg *Config, db *gorm.DB) (*ControlServer, error) {
 		// No licensing service yet: on Enterprise no non-default
 		// namespace is licensed until the host calls SetEntitlements.
 		entitlementsSvc: entitlements.NewService(entitlements.Deps{DB: db}),
-		eventBus:              eventbridge.NewBus(),
-		encryptionKey:         encryptionKey,
-		nodeID:                cfg.NodeID,
-		pushReadyGrace:        defaultPushReadyGrace,
+		entChanged:      make(chan struct{}, 1),
+		eventBus:        eventbridge.NewBus(),
+		encryptionKey:   encryptionKey,
+		nodeID:          cfg.NodeID,
+		pushReadyGrace:  defaultPushReadyGrace,
 	}
 	if server.nodeID == "" {
 		server.nodeID = "control"
@@ -341,8 +343,12 @@ func NewControlServer(cfg *Config, db *gorm.DB) (*ControlServer, error) {
 // namespaces are licensed. The host passes the one its licence feeds.
 func (s *ControlServer) SetEntitlements(e entitlements.Service) {
 	s.entMu.Lock()
-	defer s.entMu.Unlock()
 	s.entitlementsSvc = e
+	s.entMu.Unlock()
+	select {
+	case s.entChanged <- struct{}{}:
+	default:
+	}
 }
 
 func (s *ControlServer) entitlementsService() entitlements.Service {
@@ -481,9 +487,6 @@ func (s *ControlServer) Stop() {
 	}
 
 	// Stop cleanup routine
-	if s.sweepTicker != nil {
-		s.sweepTicker.Stop()
-	}
 	if s.cleanupTicker != nil {
 		s.cleanupTicker.Stop()
 	}
@@ -513,11 +516,6 @@ func (s *ControlServer) Stop() {
 		}
 	}
 }
-
-// namespaceSweepInterval is how often the control server asks the
-// entitlements service to release idle namespace slots and admit waiting
-// namespaces: the edge heartbeat interval.
-const namespaceSweepInterval = 30 * time.Second
 
 // stopGracePeriod bounds how long Stop waits for in-flight unary calls.
 var stopGracePeriod = 10 * time.Second
@@ -3121,10 +3119,6 @@ func (s *ControlServer) isEdgeStreamActive(edge *EdgeInstanceConnection) bool {
 func (s *ControlServer) startCleanupRoutine() {
 	s.cleanupTicker = time.NewTicker(2 * time.Minute) // Run cleanup every 2 minutes
 	ticks := s.cleanupTicker.C
-	// Namespace slots: idle release and admission of waiting namespaces,
-	// at least once per edge heartbeat interval.
-	s.sweepTicker = time.NewTicker(namespaceSweepInterval)
-	sweeps := s.sweepTicker.C
 	// Ends with Stop: a stopped ticker never closes its channel.
 	go safe.Loop("edge connection cleanup", s.stopping, func() {
 		for {
@@ -3133,8 +3127,26 @@ func (s *ControlServer) startCleanupRoutine() {
 				return
 			case <-ticks:
 				s.cleanupStaleConnections()
-			case <-sweeps:
-				s.sweepNamespaces()
+			}
+		}
+	})
+	// Namespace slots: idle release and admission of waiting namespaces, as
+	// often as the entitlements service asks (never in CE).
+	go safe.Loop("namespace licence sweep", s.stopping, func() {
+		for {
+			interval := s.entitlementsService().SweepInterval()
+			wait := interval
+			if wait <= 0 {
+				wait = time.Hour // nothing to do until the service changes
+			}
+			select {
+			case <-s.stopping:
+				return
+			case <-s.entChanged:
+			case <-time.After(wait):
+				if interval > 0 {
+					s.sweepNamespaces()
+				}
 			}
 		}
 	})

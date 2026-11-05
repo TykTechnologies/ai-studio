@@ -21,11 +21,12 @@ import (
 // counting), so the control server's call sites can be tested in core.
 type slotEntitlements struct {
 	entitlements.Service
-	mu     sync.Mutex
-	max    int
-	slots  map[string]bool
-	moves  [][3]string // edge, from, to
-	sweeps int
+	mu       sync.Mutex
+	max      int
+	slots    map[string]bool
+	moves    [][3]string // edge, from, to
+	sweeps   int
+	interval time.Duration
 }
 
 func (e *slotEntitlements) MoveNamespace(tx *gorm.DB, edgeID, from, to string) (bool, error) {
@@ -41,6 +42,8 @@ func (e *slotEntitlements) Sweep(*gorm.DB) error {
 	e.sweeps++
 	return nil
 }
+
+func (e *slotEntitlements) SweepInterval() time.Duration { return e.interval }
 
 func (e *slotEntitlements) sweepCount() int {
 	e.mu.Lock()
@@ -257,4 +260,20 @@ func TestNamespaceSlots_WaitingEdgeHeartbeatSweeps(t *testing.T) {
 	assert.Equal(t, 0, ent.sweepCount())
 	heartbeat(waiting, "edge-b")
 	assert.Equal(t, 1, ent.sweepCount())
+}
+
+// The control server sweeps as often as the entitlements service asks,
+// and never when it asks for no sweeps (CE).
+func TestNamespaceSlots_PeriodicSweepFollowsTheService(t *testing.T) {
+	server, _, ent := licensedTestServerWith(t, 0)
+	defer server.Stop()
+	time.Sleep(100 * time.Millisecond)
+	assert.Equal(t, 0, ent.sweepCount(), "interval 0: no sweeps")
+
+	fast := newSlotEntitlements(0)
+	fast.interval = 20 * time.Millisecond
+	server2, _ := setupTestServer(t, nil)
+	defer server2.Stop()
+	server2.SetEntitlements(fast)
+	require.Eventually(t, func() bool { return fast.sweepCount() >= 3 }, 5*time.Second, 10*time.Millisecond)
 }

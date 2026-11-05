@@ -169,6 +169,8 @@ type Service interface {
 	// admits waiting namespaces. Hosts call it regularly and when an edge
 	// in an unlicensed namespace heartbeats.
 	Sweep(db *gorm.DB) error
+	// SweepInterval is how often the host should call Sweep; 0 for never.
+	SweepInterval() time.Duration
 	// OnNamespacesAdmitted registers fn, called with the namespaces newly
 	// given a slot (by any of the calls above), after the change is
 	// committed. The host pushes configuration to their edges.

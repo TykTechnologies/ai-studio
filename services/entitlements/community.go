@@ -1,6 +1,8 @@
 package entitlements
 
 import (
+	"time"
+
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -36,6 +38,8 @@ func (communityService) MoveNamespace(*gorm.DB, string, string, string) (bool, e
 }
 
 func (communityService) Sweep(*gorm.DB) error { return nil }
+
+func (communityService) SweepInterval() time.Duration { return 0 }
 
 func (communityService) OnNamespacesAdmitted(func([]string)) {}
 
