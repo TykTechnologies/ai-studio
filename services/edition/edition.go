@@ -14,6 +14,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/services/compliance"
 	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
+	"github.com/TykTechnologies/midsommar/v2/services/entitlements"
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
 	"github.com/TykTechnologies/midsommar/v2/services/group_access"
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
@@ -43,6 +44,7 @@ var enterpriseFeatures = []feature{
 	{"budget", budget.IsEnterpriseAvailable},
 	{"compliance", compliance.IsEnterpriseAvailable},
 	{"edge_management", edge_management.FactoryRegistered},
+	{"entitlements", entitlements.IsEnterpriseAvailable},
 	{"governed_metadata", governed_metadata.IsEnterpriseAvailable},
 	{"group_access", group_access.FactoryRegistered},
 	{"guardrails", guardrails.Available},

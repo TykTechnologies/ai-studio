@@ -113,7 +113,10 @@ const (
 	//     verdict exceptions (midsommar-clean-9u1j.3).
 	// 34: guardrail_exceptions.alert_event (defaulted '', additive): the
 	//     event an exception's alert action raises (midsommar-clean-9u1j.8).
-	SchemaVersion          = 34
+	// 35: licensed_namespaces, team_app_quotas, quota_locks and
+	//     user_notice_dismissals (new tables), edge_instances.license_state
+	//     (defaulted '', additive): license limits (midsommar-clean-zmwd.3).
+	SchemaVersion          = 35
 	MinReaderSchemaVersion = 26
 )
 

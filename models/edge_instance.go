@@ -33,10 +33,14 @@ type EdgeInstance struct {
 	// FIPS is the edge's FIPS 140-3 status from its registration and
 	// heartbeats (pkg/fipsinfo); nil (unknown) for an edge that does not
 	// report it, such as one released before the field.
-	FIPS      *fipsinfo.Status `json:"fips" gorm:"column:fips;serializer:json"`
-	CreatedAt time.Time        `json:"created_at"`
-	UpdatedAt time.Time        `json:"updated_at"`
-	DeletedAt gorm.DeletedAt   `json:"deleted_at,omitempty" gorm:"index"`
+	FIPS *fipsinfo.Status `json:"fips" gorm:"column:fips;serializer:json"`
+	// LicenseState is EdgeLicenseStateUnlicensed for an edge whose
+	// namespace holds no licensed slot (it gets no configuration); empty
+	// otherwise.
+	LicenseState string         `json:"license_state" gorm:"size:16;default:''"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	DeletedAt    gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index"`
 }
 
 type EdgeInstances []EdgeInstance
@@ -54,6 +58,10 @@ const (
 	EdgeStatusDisconnected = "disconnected"
 	EdgeStatusUnhealthy    = "unhealthy"
 )
+
+// EdgeLicenseStateUnlicensed marks an edge whose namespace holds no licensed
+// slot (EdgeInstance.LicenseState).
+const EdgeLicenseStateUnlicensed = "unlicensed"
 
 // Edge sync status constants
 const (
