@@ -20,6 +20,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/entitlements"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -294,6 +295,8 @@ func TestFullAuthorizationCodeFlowAndProxyAccess(t *testing.T) {
 	require.NoError(t, testDB.Create(dummyTool).Error)
 
 	testService := services.NewService(testDB)
+	// No licence is loaded here; this test is about OAuth, not licence limits.
+	testService.Entitlements = entitlements.NewCommunityService()
 	testApp, err := testService.CreateApp(
 		"Test OAuth App",
 		"Test app for OAuth",

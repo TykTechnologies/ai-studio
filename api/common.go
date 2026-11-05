@@ -492,7 +492,7 @@ func (a *API) createUserApp(c *gin.Context) {
 	if !a.validateAppRouterBindings(c, currentUser.ID, currentUser.IsAdmin, modelRouterIDs, semanticRouterIDs) {
 		return
 	}
-	routerOpts := appRouterOptions(modelRouterIDs, semanticRouterIDs)
+	routerOpts := append(appRouterOptions(modelRouterIDs, semanticRouterIDs), services.WithSelfService())
 
 	// Create the app (with plugin resources if any)
 	var app *models.App

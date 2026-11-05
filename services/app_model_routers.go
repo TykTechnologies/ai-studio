@@ -37,6 +37,9 @@ type appOptions struct {
 	// capabilityActor is who changes the App's resources, for the guardrail
 	// capability reset (see WithCapabilityActor); nil is an unknown caller.
 	capabilityActor *capabilityActor
+	// selfService marks a create made by the App's owner (portal, plugin
+	// SDK) rather than an administrator; see WithSelfService.
+	selfService bool
 }
 
 func resolveAppOptions(opts []AppOption) appOptions {
@@ -47,6 +50,13 @@ func resolveAppOptions(opts []AppOption) appOptions {
 		}
 	}
 	return o
+}
+
+// WithSelfService marks an App create as self-service (portal, plugin SDK),
+// which the entitlements service also holds to the per-user App quota.
+// Administrator creates leave it out.
+func WithSelfService() AppOption {
+	return func(o *appOptions) { o.selfService = true }
 }
 
 // WithModelRouters sets the App's Model Router grants. Callers check
