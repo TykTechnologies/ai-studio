@@ -1764,6 +1764,15 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	if err := llmQuery.Order("id ASC").Find(&llms).Error; err != nil {
 		return nil, fmt.Errorf("failed to get LLMs: %w", err)
 	}
+	// Filters and plugins are attached only to LLMs the snapshot carries. A
+	// deleted (or inactive, or other-namespace) LLM keeps its llm_filters
+	// and llm_plugins rows on the hub; sent on, they made the edge store
+	// attachments to an LLM it never has, which its next sync could not
+	// clear and then failed to re-insert.
+	snapshotLLMs := make(map[uint]bool, len(llms))
+	for _, llm := range llms {
+		snapshotLLMs[llm.ID] = true
+	}
 	// Filters run top to bottom in the arranged order; the edge stores the
 	// FilterIds position as llm_filters.order_index.
 	if err := models.OrderLLMFilterList(s.db, llms); err != nil {
@@ -2109,6 +2118,9 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	// Build map of filter_id -> []llm_id for efficient lookup
 	filterLLMMap := make(map[uint][]uint32)
 	for _, assoc := range llmFilterAssociations {
+		if !snapshotLLMs[assoc.LLMID] {
+			continue
+		}
 		filterLLMMap[assoc.FilterID] = append(filterLLMMap[assoc.FilterID], uint32(assoc.LLMID))
 	}
 
@@ -2248,6 +2260,9 @@ func (s *ControlServer) getConfigurationSnapshot(namespace string) (*pb.Configur
 	// Create a map of plugin_id -> []LLMPlugin for fast lookup
 	llmPluginMap := make(map[uint][]models.LLMPlugin)
 	for _, lp := range allLLMPlugins {
+		if !snapshotLLMs[lp.LLMID] {
+			continue
+		}
 		llmPluginMap[lp.PluginID] = append(llmPluginMap[lp.PluginID], lp)
 	}
 

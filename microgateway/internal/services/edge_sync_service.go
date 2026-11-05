@@ -320,11 +320,15 @@ func (s *EdgeSyncService) clearExistingData(tx *gorm.DB) error {
 		return fmt.Errorf("failed to clear app_llms: %w", err)
 	}
 
-	if err := tx.Exec("DELETE FROM llm_plugins WHERE llm_id IN (SELECT id FROM llms WHERE namespace = ? OR namespace = '')", s.namespace).Error; err != nil {
+	// Attachments go by either side: the plugins and filters are re-created
+	// below too, and an attachment to an LLM this edge never stored (a hub
+	// used to send those of deleted LLMs) is cleared by its plugin or filter.
+	// Left behind, it failed the next sync on the join table's key.
+	if err := tx.Exec("DELETE FROM llm_plugins WHERE llm_id IN (SELECT id FROM llms WHERE namespace = ? OR namespace = '') OR plugin_id IN (SELECT id FROM plugins WHERE namespace = ? OR namespace = '')", s.namespace, s.namespace).Error; err != nil {
 		return fmt.Errorf("failed to clear llm_plugins: %w", err)
 	}
 
-	if err := tx.Exec("DELETE FROM llm_filters WHERE llm_id IN (SELECT id FROM llms WHERE namespace = ? OR namespace = '')", s.namespace).Error; err != nil {
+	if err := tx.Exec("DELETE FROM llm_filters WHERE llm_id IN (SELECT id FROM llms WHERE namespace = ? OR namespace = '') OR filter_id IN (SELECT id FROM filters WHERE namespace = ? OR namespace = '')", s.namespace, s.namespace).Error; err != nil {
 		return fmt.Errorf("failed to clear llm_filters: %w", err)
 	}
 
