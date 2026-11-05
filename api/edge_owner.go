@@ -48,3 +48,10 @@ func (a *API) withEdgeOwners(ctx context.Context, resps []EdgeResponse) {
 type EdgeFIPS struct {
 	FIPS *fipsinfo.Status `json:"fips"`
 }
+
+// EdgeLicence is the edge's licence state: "unlicensed" when its namespace
+// holds no licensed namespace slot (Enterprise), so it gets no
+// configuration; empty otherwise.
+type EdgeLicence struct {
+	LicenseState string `json:"license_state,omitempty"`
+}

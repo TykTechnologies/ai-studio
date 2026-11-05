@@ -71,6 +71,8 @@ class EdgeGatewayService {
             buildHash: edge.attributes.build_hash,
             // FIPS 140-3 status from heartbeats; null when the edge has not reported one
             fips: edge.attributes.fips || null,
+            // Its namespace holds no licensed slot (Enterprise): no config, no pushes
+            unlicensed: edge.attributes.license_state === 'unlicensed',
             metadata: edge.attributes.metadata || {},
             lastHeartbeat: edge.attributes.last_heartbeat,
             sessionId: edge.attributes.session_id,
@@ -112,6 +114,8 @@ class EdgeGatewayService {
           buildHash: edge.attributes.build_hash,
           // FIPS 140-3 status from heartbeats; null when the edge has not reported one
           fips: edge.attributes.fips || null,
+          // Its namespace holds no licensed slot (Enterprise): no config, no pushes
+          unlicensed: edge.attributes.license_state === 'unlicensed',
           metadata: edge.attributes.metadata || {},
           lastHeartbeat: edge.attributes.last_heartbeat,
           sessionId: edge.attributes.session_id,
@@ -151,6 +155,8 @@ class EdgeGatewayService {
             buildHash: edge.attributes.build_hash,
             // FIPS 140-3 status from heartbeats; null when the edge has not reported one
             fips: edge.attributes.fips || null,
+            // Its namespace holds no licensed slot (Enterprise): no config, no pushes
+            unlicensed: edge.attributes.license_state === 'unlicensed',
             metadata: edge.attributes.metadata || {},
             lastHeartbeat: edge.attributes.last_heartbeat,
             sessionId: edge.attributes.session_id,

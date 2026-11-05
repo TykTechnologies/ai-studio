@@ -34,6 +34,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
+	"github.com/TykTechnologies/midsommar/v2/services/entitlements"
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
@@ -113,6 +114,12 @@ type ControlServer struct {
 
 	// Edge management service (CE: forces "default", ENT: multi-tenant)
 	edgeManagementService edge_management.Service
+
+	// entitlements decides which namespaces are licensed (ENT: licence
+	// namespace slots; CE: all). Set by SetEntitlements; read through
+	// entitlementsService.
+	entMu           sync.RWMutex
+	entitlementsSvc entitlements.Service
 
 	// gRPC server, set by Serve and read by Stop
 	serverMu   sync.Mutex
@@ -293,6 +300,9 @@ func NewControlServer(cfg *Config, db *gorm.DB) (*ControlServer, error) {
 		stopping:              make(chan struct{}),
 		maxConcurrentStreams:  maxStreams,
 		edgeManagementService: edge_management.NewService(db),
+		// No licensing service yet: on Enterprise no non-default
+		// namespace is licensed until the host calls SetEntitlements.
+		entitlementsSvc: entitlements.NewService(entitlements.Deps{DB: db}),
 		eventBus:              eventbridge.NewBus(),
 		encryptionKey:         encryptionKey,
 		nodeID:                cfg.NodeID,
@@ -324,6 +334,51 @@ func NewControlServer(cfg *Config, db *gorm.DB) (*ControlServer, error) {
 	server.startCleanupRoutine()
 
 	return server, nil
+}
+
+// SetEntitlements sets the entitlements service that decides which edge
+// namespaces are licensed. The host passes the one its licence feeds.
+func (s *ControlServer) SetEntitlements(e entitlements.Service) {
+	s.entMu.Lock()
+	defer s.entMu.Unlock()
+	s.entitlementsSvc = e
+}
+
+func (s *ControlServer) entitlementsService() entitlements.Service {
+	s.entMu.RLock()
+	defer s.entMu.RUnlock()
+	return s.entitlementsSvc
+}
+
+// admitNamespace claims a licensed slot for ns if it has none and one is
+// free, and records the outcome on every edge in ns. A failure to decide is
+// treated as unlicensed.
+func (s *ControlServer) admitNamespace(ns string) bool {
+	licensed, err := s.entitlementsService().AdmitNamespace(s.db, ns)
+	if err != nil {
+		logger.Log.Error().Err(err).Str("namespace", ns).Msg("Failed to check the namespace's licence; treating it as unlicensed")
+		licensed = false
+	}
+	state := ""
+	if !licensed {
+		state = models.EdgeLicenseStateUnlicensed
+	}
+	if err := s.db.Model(&models.EdgeInstance{}).Where("namespace IN ?", models.NamespaceAliases(ns)).
+		Update("license_state", state).Error; err != nil {
+		logger.Log.Warn().Err(err).Str("namespace", ns).Msg("Failed to record the namespace's licence state on its edges")
+	}
+	return licensed
+}
+
+// namespaceLicensed reports whether ns holds a licensed slot (or is the
+// default namespace).
+func (s *ControlServer) namespaceLicensed(ns string) bool {
+	return s.entitlementsService().IsNamespaceLicensed(s.db, ns)
+}
+
+// unlicensedNamespaceMessage tells an edge why it gets no configuration.
+func unlicensedNamespaceMessage(ns string) string {
+	return fmt.Sprintf("namespace %q is not licensed: the licence has no free namespace slot, so edges in it get no configuration", ns)
 }
 
 // SetEdgeBudgetSource has the budget sync push budget blocks to edges and
@@ -516,6 +571,17 @@ func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrati
 		}
 	}
 
+	// An edge in a namespace over the licence registers but gets no
+	// configuration.
+	if !s.admitNamespace(namespace) {
+		logger.Log.Warn().Str("edge_id", req.EdgeId).Str("namespace", namespace).Msg("Edge registered in an unlicensed namespace; it gets no configuration")
+		return &pb.EdgeRegistrationResponse{
+			Success:   true,
+			Message:   "Edge registered with AI Studio, but " + unlicensedNamespaceMessage(namespace),
+			SessionId: sessionID,
+		}, nil
+	}
+
 	// Get initial configuration using normalized namespace
 	initialConfig, err := s.getConfigurationSnapshot(namespace)
 	if err != nil {
@@ -576,6 +642,10 @@ func (s *ControlServer) GetFullConfiguration(ctx context.Context, req *pb.Config
 		Str("requested_namespace", req.EdgeNamespace).
 		Str("namespace", namespace).
 		Msg("AI Studio control server: full configuration request")
+
+	if !s.namespaceLicensed(namespace) {
+		return nil, status.Error(codes.FailedPrecondition, unlicensedNamespaceMessage(namespace))
+	}
 
 	snapshot, err := s.getConfigurationSnapshot(namespace)
 	if err != nil {
@@ -742,11 +812,15 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 					}
 
 					// Send registration response
+					streamMessage := "Stream connected to AI Studio"
+					if !s.admitNamespace(normalizedNamespace) {
+						streamMessage += ", but " + unlicensedNamespaceMessage(normalizedNamespace)
+					}
 					response := &pb.ControlMessage{
 						Message: &pb.ControlMessage_RegistrationResponse{
 							RegistrationResponse: &pb.EdgeRegistrationResponse{
 								Success:   true,
-								Message:   "Stream connected to AI Studio",
+								Message:   streamMessage,
 								SessionId: edgeConnection.SessionID,
 							},
 						},
@@ -850,7 +924,9 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 
 			case *pb.EdgeMessage_ConfigRequest:
 				// Handle configuration request
-				if edgeConnection != nil {
+				if edgeConnection != nil && !s.namespaceLicensed(edgeConnection.Namespace) {
+					logger.Log.Warn().Str("edge_id", edgeID).Str("namespace", edgeConnection.Namespace).Msg("Configuration request from an edge in an unlicensed namespace; not answered")
+				} else if edgeConnection != nil {
 					snapshot, err := s.getConfigurationSnapshot(edgeConnection.Namespace)
 					if err != nil {
 						logger.Log.Error().Err(err).Str("edge_id", edgeID).Msg("Failed to get configuration snapshot")
@@ -1040,6 +1116,19 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 		Str("edge_id", req.EdgeId).
 		Str("edge_namespace", req.EdgeNamespace).
 		Msg("AI Studio control server: on-demand token validation request")
+
+	// Edges in an unlicensed namespace validate no tokens. The namespace is
+	// the registered edge's, as for its configuration.
+	edgeNamespace := s.edgeManagementService.GetNamespaceForEdge(req.EdgeNamespace)
+	if req.EdgeId != "" {
+		var edge models.EdgeInstance
+		if err := edge.GetByEdgeID(s.db, req.EdgeId); err == nil {
+			edgeNamespace = edge.Namespace
+		}
+	}
+	if !s.namespaceLicensed(edgeNamespace) {
+		return &pb.TokenValidationResponse{Valid: false, ErrorMessage: unlicensedNamespaceMessage(edgeNamespace)}, nil
+	}
 
 	// Query credential (secret) - tokens are global in AI Studio
 	var credential models.Credential
@@ -3189,9 +3278,10 @@ func (s *ControlServer) onConfigurationChanged(topic string, event eventbridge.E
 	}
 }
 
-// namespacesToRecompute returns every namespace an edge is registered in
-// or a sync status is kept for, in canonical spelling, plus "default". It
-// reads the database, so the answer is the same on every replica.
+// namespacesToRecompute returns every licensed namespace an edge is
+// registered in or a sync status is kept for, in canonical spelling, plus
+// "default". It reads the database, so the answer is the same on every
+// replica.
 func (s *ControlServer) namespacesToRecompute() []string {
 	set := map[string]bool{models.CanonicalNamespace("default"): true}
 	var fromEdges, fromStatus []string
@@ -3201,8 +3291,12 @@ func (s *ControlServer) namespacesToRecompute() []string {
 	if err := s.db.Model(&models.NamespaceSyncStatus{}).Distinct("namespace").Pluck("namespace", &fromStatus).Error; err != nil {
 		logger.Log.Warn().Err(err).Msg("Failed to list namespace sync statuses for checksum recompute")
 	}
+	ent := s.entitlementsService()
 	for _, ns := range append(fromEdges, fromStatus...) {
-		set[models.CanonicalNamespace(ns)] = true
+		// Unlicensed namespaces get no snapshot, so none is computed.
+		if ns := models.CanonicalNamespace(ns); !set[ns] && ent.IsNamespaceLicensed(s.db, ns) {
+			set[ns] = true
+		}
 	}
 	namespaces := make([]string, 0, len(set))
 	for ns := range set {

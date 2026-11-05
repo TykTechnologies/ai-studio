@@ -35,6 +35,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/pglisten"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/TykTechnologies/midsommar/v2/services/entitlements"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -87,6 +88,11 @@ type Options struct {
 	// ListenerDSN is the connection string for LISTEN; empty means the
 	// database's own. Tests give each replica its own.
 	ListenerDSN string
+	// Entitlements decides which namespaces are licensed: edges in other
+	// namespaces are never push targets. Nil builds the edition's service
+	// with no licence (on Enterprise only the default namespace is then
+	// licensed).
+	Entitlements entitlements.Service
 }
 
 func (o Options) withDefaults() Options {
@@ -108,6 +114,9 @@ func (o Options) withDefaults() Options {
 	}
 	return o
 }
+
+// unlicensedReason is the skip reason of an edge in an unlicensed namespace.
+const unlicensedReason = "its namespace is not licensed"
 
 // Push scopes.
 const (
@@ -174,6 +183,9 @@ type Coordinator struct {
 
 // New returns the coordinator for node. It does nothing until Start.
 func New(db *gorm.DB, node string, streams Streams, opts Options) *Coordinator {
+	if opts.Entitlements == nil {
+		opts.Entitlements = entitlements.NewService(entitlements.Deps{DB: db})
+	}
 	return &Coordinator{
 		db:      db,
 		node:    node,
@@ -325,6 +337,10 @@ func (c *Coordinator) Push(ctx context.Context, req Request) (*Result, error) {
 	var edges []models.EdgeInstance
 	var skipped []models.EdgeInstance
 	var skippedTotal int64
+	// Edges left out because their namespace is not licensed.
+	var unlicensed []models.EdgeInstance
+	var unlicensedTotal int64
+	licensedEdgeIDs := c.opts.Entitlements.LicensedNamespaceScope(db.Model(&models.EdgeInstance{})).Select("edge_id")
 	switch req.Scope {
 	case ScopeEdge:
 		if len(req.EdgeIDs) == 0 {
@@ -346,6 +362,27 @@ func (c *Coordinator) Push(ctx context.Context, req Request) (*Result, error) {
 			}
 			return nil, fmt.Errorf("%w: %s", ErrEdgeNotFound, strings.Join(missing, ", "))
 		}
+		var licensedIDs []string
+		if err := db.Model(&models.EdgeInstance{}).Where("edge_id IN ?", req.EdgeIDs).
+			Where("edge_id IN (?)", licensedEdgeIDs).Pluck("edge_id", &licensedIDs).Error; err != nil {
+			return nil, err
+		}
+		licensed := map[string]bool{}
+		for _, id := range licensedIDs {
+			licensed[id] = true
+		}
+		kept := edges[:0]
+		for _, e := range edges {
+			if licensed[e.EdgeID] {
+				kept = append(kept, e)
+			} else {
+				unlicensed = append(unlicensed, e)
+			}
+		}
+		edges, unlicensedTotal = kept, int64(len(unlicensed))
+		if len(edges) == 0 {
+			return nil, fmt.Errorf("%w: the edge(s) are in a namespace that is not licensed", ErrNoTargets)
+		}
 	case ScopeNamespace, ScopeAll:
 		// Targets: connected or registered edges, and edges that dropped
 		// off within RecentlyOffline (mid-reconnect or restarting: worth
@@ -359,8 +396,17 @@ func (c *Coordinator) Push(ctx context.Context, req Request) (*Result, error) {
 			return q
 		}
 		cond, args := c.targetCondition(now.Add(-c.opts.RecentlyOffline))
-		if err := scoped().Where(cond, args...).Order("edge_id").Find(&edges).Error; err != nil {
+		if err := scoped().Where(cond, args...).Where("edge_id IN (?)", licensedEdgeIDs).Order("edge_id").Find(&edges).Error; err != nil {
 			return nil, err
+		}
+		if err := scoped().Where(cond, args...).Where("edge_id NOT IN (?)", licensedEdgeIDs).Count(&unlicensedTotal).Error; err != nil {
+			return nil, err
+		}
+		if unlicensedTotal > 0 {
+			if err := scoped().Where(cond, args...).Where("edge_id NOT IN (?)", licensedEdgeIDs).Select("edge_id", "namespace").
+				Order("edge_id").Limit(maxSkippedListed).Find(&unlicensed).Error; err != nil {
+				return nil, err
+			}
 		}
 		if err := scoped().Where("NOT "+cond, args...).Count(&skippedTotal).Error; err != nil {
 			return nil, err
@@ -372,6 +418,9 @@ func (c *Coordinator) Push(ctx context.Context, req Request) (*Result, error) {
 			}
 		}
 		if len(edges) == 0 {
+			if unlicensedTotal > 0 {
+				return nil, fmt.Errorf("%w: the %d edge(s) %s are in a namespace that is not licensed", ErrNoTargets, unlicensedTotal, scopeLabel(req))
+			}
 			if skippedTotal > 0 {
 				return nil, fmt.Errorf("%w: the %d edge(s) %s have been offline for more than %s", ErrNoTargets, skippedTotal, scopeLabel(req), c.opts.RecentlyOffline)
 			}
@@ -414,7 +463,7 @@ func (c *Coordinator) Push(ctx context.Context, req Request) (*Result, error) {
 	}
 	c.notify()
 
-	res := &Result{Operation: op, SkippedTotal: int(skippedTotal)}
+	res := &Result{Operation: op, SkippedTotal: int(skippedTotal + unlicensedTotal)}
 	live := c.liveNodes()
 	unreachable := 0
 	for _, e := range edges {
@@ -424,12 +473,18 @@ func (c *Coordinator) Push(ctx context.Context, req Request) (*Result, error) {
 		}
 		res.Targets = append(res.Targets, t)
 	}
+	for _, e := range unlicensed {
+		res.Skipped = append(res.Skipped, Target{EdgeID: e.EdgeID, Namespace: e.Namespace, Reason: unlicensedReason})
+	}
 	for _, e := range skipped {
 		res.Skipped = append(res.Skipped, Target{EdgeID: e.EdgeID, Namespace: e.Namespace, Reason: offlineReason(e)})
 	}
 	if unreachable > 0 {
 		res.Warnings = append(res.Warnings, fmt.Sprintf("%d of %d edge(s) are not connected to the control plane; the push waits up to %s for them to reconnect.",
 			unreachable, len(edges), c.opts.Deadline.Round(time.Second)))
+	}
+	if unlicensedTotal > 0 {
+		res.Warnings = append(res.Warnings, fmt.Sprintf("%d edge(s) were left out because their namespace is not licensed.", unlicensedTotal))
 	}
 	if skippedTotal > 0 {
 		res.Warnings = append(res.Warnings, fmt.Sprintf("%d edge(s) were left out because they have been offline for more than %s.", skippedTotal, c.opts.RecentlyOffline))
