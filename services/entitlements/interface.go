@@ -24,6 +24,13 @@ import (
 // notice and team quota calls.
 var ErrEnterpriseFeature = errors.New("license limits and App quotas are an Enterprise Edition feature - visit https://tyk.io/ai-studio/pricing for more information")
 
+// Team App quota errors. Handlers map ErrInvalidQuota onto 400 and
+// ErrTeamNotFound onto 404.
+var (
+	ErrInvalidQuota = errors.New("invalid App quota: give a non-negative max_apps_per_member, or set unlimited")
+	ErrTeamNotFound = errors.New("team not found")
+)
+
 // Seat describes access an automatic provisioning path (SSO, host identity,
 // self-registration) is about to give a user, so the implementation can say
 // whether it fits before the grant is made. Set the fields being granted.
