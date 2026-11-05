@@ -746,6 +746,7 @@ TABLE edge_instances
   column sync_status character varying(varchar) nullable=YES len=20 default='unknown'::character varying
   column last_sync_ack timestamp with time zone(timestamptz) nullable=YES
   column fips text(text) nullable=YES
+  column license_state character varying(varchar) nullable=YES len=16 default=''::character varying
 TABLE edge_push_commands
   constraint edge_push_commands_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX edge_push_commands_pkey ON edge_push_commands USING btree (id)
@@ -935,6 +936,13 @@ TABLE kv_pairs
   column store_key text(text) nullable=NO
   column org_id text(text) nullable=YES
   column store_value bytea(bytea) nullable=YES
+TABLE licensed_namespaces
+  constraint licensed_namespaces_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX idx_licensed_namespaces_namespace ON licensed_namespaces USING btree (namespace)
+  index CREATE UNIQUE INDEX licensed_namespaces_pkey ON licensed_namespaces USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('licensed_namespaces_id_seq'::regclass)
+  column namespace character varying(varchar) nullable=NO len=255
+  column claimed_at timestamp with time zone(timestamptz) nullable=NO
 TABLE llm_chat_log_entries
   constraint llm_chat_log_entries_pkey PRIMARY KEY (id)
   index CREATE INDEX idx_llm_chat_log_entries_deleted_at ON llm_chat_log_entries USING btree (deleted_at)
@@ -1853,6 +1861,10 @@ TABLE push_operations
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column deadline_at timestamp with time zone(timestamptz) nullable=YES
   column completed_at timestamp with time zone(timestamptz) nullable=YES
+TABLE quota_locks
+  constraint quota_locks_pkey PRIMARY KEY (name)
+  index CREATE UNIQUE INDEX quota_locks_pkey ON quota_locks USING btree (name)
+  column name character varying(varchar) nullable=NO len=64
 TABLE registered_plugins
   constraint fk_registered_plugins_plugin FOREIGN KEY (plugin_id) REFERENCES plugins(id)
   constraint registered_plugins_pkey PRIMARY KEY (id)
@@ -2082,6 +2094,16 @@ TABLE tags
   column updated_at timestamp with time zone(timestamptz) nullable=YES
   column deleted_at timestamp with time zone(timestamptz) nullable=YES
   column name text(text) nullable=YES
+TABLE team_app_quotas
+  constraint team_app_quotas_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX idx_team_app_quotas_group_id ON team_app_quotas USING btree (group_id)
+  index CREATE UNIQUE INDEX team_app_quotas_pkey ON team_app_quotas USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('team_app_quotas_id_seq'::regclass)
+  column group_id bigint(int8) nullable=NO precision=64 scale=0
+  column max_apps_per_member bigint(int8) nullable=YES precision=64 scale=0
+  column unlimited boolean(bool) nullable=NO default=false
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
 TABLE team_budget_settings
   constraint team_budget_settings_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX team_budget_settings_pkey ON team_budget_settings USING btree (id)
@@ -2371,6 +2393,14 @@ TABLE user_groups
   index CREATE UNIQUE INDEX user_groups_pkey ON user_groups USING btree (group_id, user_id)
   column group_id bigint(int8) nullable=NO precision=64 scale=0
   column user_id bigint(int8) nullable=NO precision=64 scale=0
+TABLE user_notice_dismissals
+  constraint user_notice_dismissals_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX idx_user_notice_dismissals_user_key ON user_notice_dismissals USING btree (user_id, key)
+  index CREATE UNIQUE INDEX user_notice_dismissals_pkey ON user_notice_dismissals USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('user_notice_dismissals_id_seq'::regclass)
+  column user_id bigint(int8) nullable=NO precision=64 scale=0
+  column key character varying(varchar) nullable=NO len=255
+  column dismissed_at timestamp with time zone(timestamptz) nullable=NO
 TABLE users
   constraint users_pkey PRIMARY KEY (id)
   index CREATE INDEX idx_users_auth_source ON users USING btree (auth_source)
