@@ -3,6 +3,7 @@ package services
 import (
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 func (s *Service) validateGroupName(name string, groupID uint) error {
@@ -63,28 +64,27 @@ func (s *Service) UpdateGroup(id uint, name string, userIDs, catalogueIDs, dataC
 		return nil, err
 	}
 
-	tx := s.DB.Begin()
-
-	if name != "" && name != group.Name {
-		group.Name = name
-		if err := group.Update(tx); err != nil {
-			tx.Rollback()
-			return nil, err
-		}
-	}
-
-	associations := group.GetAssociationsToUpdate(userIDs, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs)
-
-	for _, assoc := range associations {
-		if assoc.NeedsUpdate {
-			if err := group.ReplaceAssociation(tx, assoc.Name, assoc.GetValue()); err != nil {
-				tx.Rollback()
-				return nil, err
+	// New members of a team with roles bound to it take admin seats.
+	err = s.inUserChange(func(tx *gorm.DB) error {
+		if name != "" && name != group.Name {
+			group.Name = name
+			if err := group.Update(tx); err != nil {
+				return err
 			}
 		}
-	}
 
-	if err := tx.Commit().Error; err != nil {
+		associations := group.GetAssociationsToUpdate(userIDs, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs)
+
+		for _, assoc := range associations {
+			if assoc.NeedsUpdate {
+				if err := group.ReplaceAssociation(tx, assoc.Name, assoc.GetValue()); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 
@@ -171,7 +171,8 @@ func (s *Service) AddUserToGroup(userID, groupID uint) error {
 		return err
 	}
 
-	if err := group.AddUser(s.DB, user); err != nil {
+	// Joining a team with roles bound to it is an admin seat.
+	if err := s.EntitlementsService().GuardUserChange(s.DB, func(tx *gorm.DB) error { return group.AddUser(tx, user) }); err != nil {
 		return err
 	}
 	return s.syncAdminFlags(userID)

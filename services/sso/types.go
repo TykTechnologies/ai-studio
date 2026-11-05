@@ -3,6 +3,7 @@ package sso
 import (
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/services/entitlements"
 	"github.com/TykTechnologies/tyk-identity-broker/tap"
 )
 
@@ -28,6 +29,11 @@ type Config struct {
 	// drops a Secure cookie set over plain HTTP, and the login callback then
 	// finds no state.
 	CookieSecure bool
+	// Entitlements holds new SSO logins to the licensed seats: access that
+	// would go over a limit is left out rather than failing the login. Nil
+	// means a fresh service over the database (Enterprise: no licence, so
+	// no seats).
+	Entitlements entitlements.Service
 }
 
 // NonceTokenRequest represents a request to create a nonce token for SSO authentication

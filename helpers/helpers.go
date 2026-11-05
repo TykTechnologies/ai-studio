@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -235,6 +236,13 @@ func SendErrorResponse(c *gin.Context, err error) {
 			"errors": []gin.H{body},
 		})
 	default:
+		// A wrapped error that converts itself into a coded ErrorResponse
+		// (a licence limit refusal: 409 QUOTA_EXCEEDED) keeps its status.
+		var he ErrorResponse
+		if errors.As(err, &he) && he.Code != "" {
+			SendErrorResponse(c, he)
+			return
+		}
 		// Unexpected error type
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"errors": []gin.H{{

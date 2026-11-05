@@ -5,12 +5,22 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
+// Notifier is the slice of the notification service the implementation
+// needs. It is declared here to avoid the import cycle (services imports
+// this package); *services.NotificationService satisfies it.
+type Notifier interface {
+	Notify(notificationID, title, templatePath string, data interface{}, userFlags uint) error
+}
+
 // Deps is everything the enterprise implementation needs from the host.
 type Deps struct {
 	DB *gorm.DB
 	// Licensing returns the licensing service, nil while none is set. It is
 	// a getter because the license is attached after the service exists.
 	Licensing func() licensing.Service
+	// Notifier returns the notification service, nil while none is set
+	// (a getter: the service is rebuilt once SMTP is configured).
+	Notifier func() Notifier
 }
 
 // FactoryFunc builds an entitlements service. The enterprise submodule

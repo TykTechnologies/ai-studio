@@ -636,6 +636,12 @@ func (s *Service) newEntitlements() entitlements.Service {
 	return entitlements.NewService(entitlements.Deps{
 		DB:        s.DB,
 		Licensing: func() licensing.Service { return s.LicensingService },
+		Notifier: func() entitlements.Notifier {
+			if s.NotificationService == nil {
+				return nil
+			}
+			return s.NotificationService
+		},
 	})
 }
 

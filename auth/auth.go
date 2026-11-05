@@ -18,6 +18,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/entitlements"
 	"github.com/TykTechnologies/midsommar/v2/templates"
 	"github.com/gin-gonic/gin"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -571,6 +572,16 @@ func (a *AuthService) ValidatePasswordComplexity(password string) error {
 	return nil
 }
 
+// entitlements returns the host's entitlements service. A ServiceInterface
+// without one gets a fresh service over the database: in Enterprise that is
+// the engine with no licence, which allows no seats (fail closed).
+func (a *AuthService) entitlements() entitlements.Service {
+	if p, ok := a.Config.Service.(interface{ EntitlementsService() entitlements.Service }); ok {
+		return p.EntitlementsService()
+	}
+	return entitlements.NewService(entitlements.Deps{DB: a.Config.DB})
+}
+
 func (a *AuthService) Register(email, name, password string, showPortal, showChat bool) error {
 	if !a.Config.RegistrationAllowed {
 		return errors.New("registration is currently disabled")
@@ -638,7 +649,9 @@ func (a *AuthService) Register(email, name, password string, showPortal, showCha
 		user.AccessToSSOConfig = true
 	}
 
-	if err := user.Create(a.Config.DB); err != nil {
+	// Seats count from the first user on: without a licensed admin seat,
+	// even the first registration (which is an admin) is refused.
+	if err := a.entitlements().GuardUserChange(a.Config.DB, func(tx *gorm.DB) error { return user.Create(tx) }); err != nil {
 		return err
 	}
 

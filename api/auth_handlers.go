@@ -13,6 +13,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
+	"github.com/TykTechnologies/midsommar/v2/services/entitlements"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
@@ -199,6 +200,11 @@ func (a *API) handleRegister(c *gin.Context) {
 
 	err := a.auth.Register(input.Data.Attributes.Email, input.Data.Attributes.Name,
 		input.Data.Attributes.Password, input.Data.Attributes.WithPortal, input.Data.Attributes.WithChat)
+	if _, exceeded := entitlements.AsExceeded(err); exceeded {
+		he, _ := asHelperError(err)
+		helpers.SendErrorResponse(c, he)
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
