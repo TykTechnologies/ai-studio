@@ -538,6 +538,7 @@ func (a *API) setupRoutes() error {
 	// Self-service profile: preferences and the caller's own API key. Same
 	// policy and service path as the admin user routes, scoped to the caller.
 	authed.GET("/me/preferences", a.getMyPreferences)
+	authed.GET("/me/app-quota", a.getMyAppQuota)
 	authed.PATCH("/me/preferences", a.updateMyPreferences)
 	authed.POST("/me/api-key/roll", a.rollMyAPIKey)
 	authed.DELETE("/me/api-key", a.revokeMyAPIKey)
@@ -679,6 +680,10 @@ func (a *API) setupRoutes() error {
 	// Licence (Owner only; the handlers check; CE answers 402)
 	v1.GET("/license", authz.AnyAdmin, a.getLicense)
 	v1.DELETE("/license/namespaces/:namespace", authz.AnyAdmin, a.releaseLicensedNamespace)
+	// Per-member App quota of self-service creation (Enterprise; CE answers 402)
+	v1.GET("/groups/:id/app-quota", authz.Read("groups"), a.getTeamAppQuota)
+	v1.PUT("/groups/:id/app-quota", authz.Write("groups"), a.setTeamAppQuota)
+	v1.DELETE("/groups/:id/app-quota", authz.Delete("groups"), a.deleteTeamAppQuota)
 
 	// LLM routes
 	v1.POST("/llms", authz.Write("llms"), a.createLLM)

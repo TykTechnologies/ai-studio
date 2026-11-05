@@ -219,6 +219,9 @@ const AppBuilder = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [submittedApp, setSubmittedApp] = useState(null);
+  // The user's self-service App quota (Enterprise); null when there is none
+  // (Community Edition answers 402) or it is unlimited.
+  const [quota, setQuota] = useState(null);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -297,6 +300,16 @@ const AppBuilder = () => {
 
     fetchData();
   }, [location.search]);
+
+  useEffect(() => {
+    pubClient
+      .get("/common/me/app-quota")
+      .then((response) => {
+        const q = response?.data;
+        setQuota(q && typeof q.max === "number" && !q.unlimited ? q : null);
+      })
+      .catch(() => setQuota(null));
+  }, []);
 
   const toggleItem = (key, id) =>
     setSelection((prev) => {
@@ -448,6 +461,11 @@ const AppBuilder = () => {
       <Typography variant="h4" component="h1" gutterBottom>
         Create New App
       </Typography>
+      {quota && (
+        <Typography variant="bodyMediumDefault" color="text.secondary" component="p" sx={{ mb: 2 }} data-testid="app-quota-hint">
+          You are using {quota.used} of {quota.max} {quota.max === 1 ? "app" : "apps"} you may create.
+        </Typography>
+      )}
       <Card>
         <CardContent sx={{ p: 3 }}>
           {error && (
