@@ -539,6 +539,8 @@ func (a *API) setupRoutes() error {
 	// policy and service path as the admin user routes, scoped to the caller.
 	authed.GET("/me/preferences", a.getMyPreferences)
 	authed.GET("/me/app-quota", a.getMyAppQuota)
+	authed.GET("/notices", a.getMyNotices)
+	authed.POST("/notices/:key/dismiss", a.dismissMyNotice)
 	authed.PATCH("/me/preferences", a.updateMyPreferences)
 	authed.POST("/me/api-key/roll", a.rollMyAPIKey)
 	authed.DELETE("/me/api-key", a.revokeMyAPIKey)
