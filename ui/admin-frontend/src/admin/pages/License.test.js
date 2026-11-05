@@ -19,7 +19,7 @@ const identity = (isOwner) => ({
   attributes: { email: "a@example.com", is_admin: true, permissions: ["*"], is_owner: isOwner },
 });
 
-const report = (namespaces) => ({
+const report = (namespaces, waiting = []) => ({
   data: {
     data: {
       valid: true,
@@ -36,6 +36,7 @@ const report = (namespaces) => ({
         { key: "l3", label: "Namespaces", used: 2, max: 2, unlimited: false },
       ],
       namespaces,
+      waiting,
     },
   },
 });
@@ -103,5 +104,41 @@ describe("License page", () => {
     apiClient.delete.mockResolvedValueOnce({ status: 204 });
     fireEvent.click(screen.getAllByRole("button", { name: "Release slot" })[0]);
     await waitFor(() => expect(apiClient.get).toHaveBeenCalledTimes(2));
+  });
+
+  it("shows idle slots with when they free, and the waiting namespaces in order", async () => {
+    apiClient.get.mockResolvedValue(
+      report(
+        [
+          {
+            namespace: "team-a",
+            claimed_at: "2026-11-01T00:00:00Z",
+            connected_edges: 0,
+            idle_since: "2026-11-05T10:00:00Z",
+            frees_at: "2026-11-06T10:00:00Z",
+          },
+          { namespace: "team-b", claimed_at: "2026-11-02T00:00:00Z", connected_edges: 1 },
+        ],
+        [
+          { namespace: "team-c", waiting_since: "2026-11-03T00:00:00Z", position: 1, connected_edges: 2 },
+          { namespace: "team-d", waiting_since: "2026-11-04T00:00:00Z", position: 2, connected_edges: 0 },
+        ]
+      )
+    );
+    renderLicense(true);
+
+    await screen.findByText("team-a");
+    expect(screen.getByTestId("license-idle-team-a")).toHaveTextContent(/^Since .+; frees .+$/);
+    expect(screen.getByTestId("license-idle-team-b")).toHaveTextContent(/^$/);
+    expect(screen.getByText("Waiting namespaces")).toBeInTheDocument();
+    expect(screen.getByTestId("license-waiting-team-c")).toHaveTextContent(/^1team-c.*2$/);
+    expect(screen.getByTestId("license-waiting-team-d")).toHaveTextContent(/^2team-d/);
+  });
+
+  it("hides the waiting section when nothing waits", async () => {
+    apiClient.get.mockResolvedValue(report([]));
+    renderLicense(true);
+    await screen.findByText("Products: product-x");
+    expect(screen.queryByText("Waiting namespaces")).not.toBeInTheDocument();
   });
 });

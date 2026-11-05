@@ -762,6 +762,7 @@ func (s *Studio) wireControlPlane(version string, tlsConfig *tls.Config) error {
 	s.pushes = pushes.New(s.db, s.clusterNode.ID(), control, pushes.Options{Entitlements: service.EntitlementsService()})
 	control.SetPushDelivery(s.pushes)
 	service.NamespaceService.SetPushes(s.pushes)
+	service.EntitlementsService().OnNamespacesAdmitted(pushAdmittedNamespaces(s.pushes))
 	if err := s.pushes.Start(context.Background()); err != nil {
 		return fmt.Errorf("studio: start edge push delivery: %w", err)
 	}

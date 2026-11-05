@@ -127,6 +127,7 @@ type ControlServer struct {
 
 	// Cleanup ticker for stale connections
 	cleanupTicker *time.Ticker
+	sweepTicker   *time.Ticker
 
 	// stopping is closed by Stop: every edge stream handler returns, so
 	// the edges reconnect (to another replica) and pushes in flight on
@@ -351,10 +352,18 @@ func (s *ControlServer) entitlementsService() entitlements.Service {
 }
 
 // admitNamespace claims a licensed slot for ns if it has none and one is
-// free, and records the outcome on every edge in ns. A failure to decide is
-// treated as unlicensed.
-func (s *ControlServer) admitNamespace(ns string) bool {
-	licensed, err := s.entitlementsService().AdmitNamespace(s.db, ns)
+// free, and records the outcome on every edge in ns. from is the namespace
+// the edge was registered in before, when it re-registers in another one
+// (its slot may move with it). A failure to decide is treated as
+// unlicensed.
+func (s *ControlServer) admitNamespace(edgeID, from, ns string) bool {
+	var licensed bool
+	var err error
+	if from != "" && models.CanonicalNamespace(from) != models.CanonicalNamespace(ns) {
+		licensed, err = s.entitlementsService().MoveNamespace(s.db, edgeID, from, ns)
+	} else {
+		licensed, err = s.entitlementsService().AdmitNamespace(s.db, ns)
+	}
 	if err != nil {
 		logger.Log.Error().Err(err).Str("namespace", ns).Msg("Failed to check the namespace's licence; treating it as unlicensed")
 		licensed = false
@@ -368,6 +377,14 @@ func (s *ControlServer) admitNamespace(ns string) bool {
 		logger.Log.Warn().Err(err).Str("namespace", ns).Msg("Failed to record the namespace's licence state on its edges")
 	}
 	return licensed
+}
+
+// sweepNamespaces releases idle namespace slots and admits waiting
+// namespaces (Enterprise).
+func (s *ControlServer) sweepNamespaces() {
+	if err := s.entitlementsService().Sweep(s.db); err != nil {
+		logger.Log.Warn().Err(err).Msg("Namespace licence sweep failed")
+	}
 }
 
 // namespaceLicensed reports whether ns holds a licensed slot (or is the
@@ -464,6 +481,9 @@ func (s *ControlServer) Stop() {
 	}
 
 	// Stop cleanup routine
+	if s.sweepTicker != nil {
+		s.sweepTicker.Stop()
+	}
 	if s.cleanupTicker != nil {
 		s.cleanupTicker.Stop()
 	}
@@ -494,6 +514,11 @@ func (s *ControlServer) Stop() {
 	}
 }
 
+// namespaceSweepInterval is how often the control server asks the
+// entitlements service to release idle namespace slots and admit waiting
+// namespaces: the edge heartbeat interval.
+const namespaceSweepInterval = 30 * time.Second
+
 // stopGracePeriod bounds how long Stop waits for in-flight unary calls.
 var stopGracePeriod = 10 * time.Second
 
@@ -521,6 +546,7 @@ func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrati
 		return nil, status.Error(codes.Internal, "failed to check edge instance")
 	}
 
+	previousNamespace := "" // set when the edge was registered before
 	if err == gorm.ErrRecordNotFound {
 		// Create new edge instance
 		edgeInstance = models.EdgeInstance{
@@ -547,6 +573,7 @@ func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrati
 		}
 	} else {
 		// Update existing edge instance
+		previousNamespace = edgeInstance.Namespace
 		edgeInstance.Namespace = namespace // Update to normalized namespace (CE: forces "default")
 		edgeInstance.Version = req.Version
 		edgeInstance.BuildHash = req.BuildHash
@@ -573,7 +600,7 @@ func (s *ControlServer) RegisterEdge(ctx context.Context, req *pb.EdgeRegistrati
 
 	// An edge in a namespace over the licence registers but gets no
 	// configuration.
-	if !s.admitNamespace(namespace) {
+	if !s.admitNamespace(req.EdgeId, previousNamespace, namespace) {
 		logger.Log.Warn().Str("edge_id", req.EdgeId).Str("namespace", namespace).Msg("Edge registered in an unlicensed namespace; it gets no configuration")
 		return &pb.EdgeRegistrationResponse{
 			Success:   true,
@@ -813,7 +840,7 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 
 					// Send registration response
 					streamMessage := "Stream connected to AI Studio"
-					if !s.admitNamespace(normalizedNamespace) {
+					if !s.admitNamespace(edgeID, "", normalizedNamespace) {
 						streamMessage += ", but " + unlicensedNamespaceMessage(normalizedNamespace)
 					}
 					response := &pb.ControlMessage{
@@ -863,6 +890,11 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 							logger.Log.Warn().Err(err).Str("edge_id", edgeID).Msg("Failed to record edge heartbeat")
 						} else if reclaimed {
 							logger.Log.Info().Str("edge_id", edgeID).Msg("Edge stream ownership restored from its heartbeat")
+						}
+						// An edge waiting for a licensed slot: admit it as
+						// soon as one is free, without a reconnect.
+						if edgeInstance.LicenseState == models.EdgeLicenseStateUnlicensed {
+							s.sweepNamespaces()
 						}
 
 						// Check sync status against namespace expected checksum
@@ -3089,6 +3121,10 @@ func (s *ControlServer) isEdgeStreamActive(edge *EdgeInstanceConnection) bool {
 func (s *ControlServer) startCleanupRoutine() {
 	s.cleanupTicker = time.NewTicker(2 * time.Minute) // Run cleanup every 2 minutes
 	ticks := s.cleanupTicker.C
+	// Namespace slots: idle release and admission of waiting namespaces,
+	// at least once per edge heartbeat interval.
+	s.sweepTicker = time.NewTicker(namespaceSweepInterval)
+	sweeps := s.sweepTicker.C
 	// Ends with Stop: a stopped ticker never closes its channel.
 	go safe.Loop("edge connection cleanup", s.stopping, func() {
 		for {
@@ -3097,6 +3133,8 @@ func (s *ControlServer) startCleanupRoutine() {
 				return
 			case <-ticks:
 				s.cleanupStaleConnections()
+			case <-sweeps:
+				s.sweepNamespaces()
 			}
 		}
 	})

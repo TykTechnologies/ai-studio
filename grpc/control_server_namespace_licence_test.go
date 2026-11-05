@@ -21,9 +21,31 @@ import (
 // counting), so the control server's call sites can be tested in core.
 type slotEntitlements struct {
 	entitlements.Service
-	mu    sync.Mutex
-	max   int
-	slots map[string]bool
+	mu     sync.Mutex
+	max    int
+	slots  map[string]bool
+	moves  [][3]string // edge, from, to
+	sweeps int
+}
+
+func (e *slotEntitlements) MoveNamespace(tx *gorm.DB, edgeID, from, to string) (bool, error) {
+	e.mu.Lock()
+	e.moves = append(e.moves, [3]string{edgeID, from, to})
+	e.mu.Unlock()
+	return e.AdmitNamespace(tx, to)
+}
+
+func (e *slotEntitlements) Sweep(*gorm.DB) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.sweeps++
+	return nil
+}
+
+func (e *slotEntitlements) sweepCount() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.sweeps
 }
 
 func newSlotEntitlements(max int) *slotEntitlements {
@@ -65,11 +87,18 @@ func (passthroughNamespaces) GetNamespaceStats(string) (map[string]interface{}, 
 
 func licensedTestServer(t *testing.T, max int) (*ControlServer, *gorm.DB) {
 	t.Helper()
+	server, db, _ := licensedTestServerWith(t, max)
+	return server, db
+}
+
+func licensedTestServerWith(t *testing.T, max int) (*ControlServer, *gorm.DB, *slotEntitlements) {
+	t.Helper()
 	server, db := setupTestServer(t, nil)
 	server.edgeManagementService = passthroughNamespaces{}
-	server.SetEntitlements(newSlotEntitlements(max))
+	ent := newSlotEntitlements(max)
+	server.SetEntitlements(ent)
 	createTestLLMs(db, "")
-	return server, db
+	return server, db, ent
 }
 
 // With one namespace slot: edges in the default namespace and in the first
@@ -175,4 +204,57 @@ func TestNamespaceSlots_StreamUnlicensedNamespace(t *testing.T) {
 	for _, m := range stream.sent() {
 		assert.Nil(t, m.GetConfiguration(), "no snapshot for the unlicensed edge")
 	}
+}
+
+// An edge that re-registers in another namespace asks for its old
+// namespace's slot to move with it; a first registration does not.
+func TestNamespaceSlots_ReRegistrationMovesTheSlot(t *testing.T) {
+	server, _, ent := licensedTestServerWith(t, 1)
+	ctx := context.Background()
+	_, err := server.RegisterEdge(ctx, &pb.EdgeRegistrationRequest{EdgeId: "edge-1", EdgeNamespace: "team-a", Version: "1"})
+	require.NoError(t, err)
+	_, err = server.RegisterEdge(ctx, &pb.EdgeRegistrationRequest{EdgeId: "edge-1", EdgeNamespace: "team-a", Version: "1"})
+	require.NoError(t, err)
+	assert.Empty(t, ent.moves, "same namespace: a plain admission")
+
+	_, err = server.RegisterEdge(ctx, &pb.EdgeRegistrationRequest{EdgeId: "edge-1", EdgeNamespace: "team-b", Version: "1"})
+	require.NoError(t, err)
+	assert.Equal(t, [][3]string{{"edge-1", "team-a", "team-b"}}, ent.moves)
+}
+
+// A heartbeat from an edge waiting for a slot sweeps, so the edge is
+// admitted as soon as a slot frees, without reconnecting; a licensed
+// edge's heartbeat does not.
+func TestNamespaceSlots_WaitingEdgeHeartbeatSweeps(t *testing.T) {
+	server, _, ent := licensedTestServerWith(t, 0)
+	registerEdge(t, server, "edge-b", "team-b")
+	registerEdge(t, server, "edge-d", "default")
+	waiting, stopWaiting := connect(t, server, "edge-b", "team-b")
+	defer stopWaiting()
+	licensed, stopLicensed := connect(t, server, "edge-d", "default")
+	defer stopLicensed()
+	heartbeat := func(stream *fakeEdgeStream, id string) {
+		t.Helper()
+		n := 0
+		for _, m := range stream.sent() {
+			if m.GetHeartbeatResponse() != nil {
+				n++
+			}
+		}
+		stream.in <- &pb.EdgeMessage{Message: &pb.EdgeMessage_Heartbeat{Heartbeat: &pb.HeartbeatRequest{EdgeId: id}}}
+		require.Eventually(t, func() bool {
+			c := 0
+			for _, m := range stream.sent() {
+				if m.GetHeartbeatResponse() != nil {
+					c++
+				}
+			}
+			return c > n
+		}, 5*time.Second, 10*time.Millisecond)
+	}
+
+	heartbeat(licensed, "edge-d")
+	assert.Equal(t, 0, ent.sweepCount())
+	heartbeat(waiting, "edge-b")
+	assert.Equal(t, 1, ent.sweepCount())
 }

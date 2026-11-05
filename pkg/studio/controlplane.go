@@ -228,6 +228,7 @@ func NewControlPlane(opts ControlPlaneOptions) (_ *ControlPlane, err error) {
 
 	c.pushes = pushes.New(c.db, nodeID, c.control, pushes.Options{Entitlements: ent})
 	c.control.SetPushDelivery(c.pushes)
+	ent.OnNamespacesAdmitted(pushAdmittedNamespaces(c.pushes))
 	if err := c.pushes.Start(context.Background()); err != nil {
 		return nil, fmt.Errorf("studio: start edge push delivery: %w", err)
 	}

@@ -145,6 +145,7 @@ func InitModels(db *gorm.DB) error {
 		// License limits and App quotas (services/entitlements; Enterprise,
 		// tables exist in CE, unused)
 		&LicensedNamespace{},   // Namespaces holding a licensed slot
+		&NamespaceWait{},       // Namespaces waiting for a licensed slot
 		&TeamAppQuota{},        // Per-team, per-member self-service App quota
 		&QuotaLock{},           // Rows locked while a limit is counted
 		&UserNoticeDismissal{}, // Near-limit notices a user dismissed

@@ -31,6 +31,14 @@ func (communityService) LicensedNamespaceScope(q *gorm.DB) *gorm.DB { return q }
 
 func (communityService) ReleaseNamespace(*gorm.DB, string) error { return ErrEnterpriseFeature }
 
+func (communityService) MoveNamespace(*gorm.DB, string, string, string) (bool, error) {
+	return true, nil
+}
+
+func (communityService) Sweep(*gorm.DB) error { return nil }
+
+func (communityService) OnNamespacesAdmitted(func([]string)) {}
+
 func (communityService) CanGrant(*gorm.DB, Seat) bool { return true }
 
 func (communityService) Report(*gorm.DB) (*Report, error) { return nil, ErrEnterpriseFeature }

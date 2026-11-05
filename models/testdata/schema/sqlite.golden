@@ -880,6 +880,7 @@ TABLE licensed_namespaces
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `namespace` text NOT NULL
   column `claimed_at` datetime NOT NULL
+  column `idle_since` datetime
   index CREATE UNIQUE INDEX `idx_licensed_namespaces_namespace` ON `licensed_namespaces`(`namespace`)
 TABLE llm_chat_log_entries
   column `id` integer PRIMARY KEY AUTOINCREMENT
@@ -1363,6 +1364,11 @@ TABLE namespace_sync_status
   column `last_push_at` datetime
   index CREATE INDEX `idx_namespace_sync_status_deleted_at` ON `namespace_sync_status`(`deleted_at`)
   index CREATE UNIQUE INDEX `idx_namespace_sync_status_namespace` ON `namespace_sync_status`(`namespace`)
+TABLE namespace_waits
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `namespace` text NOT NULL
+  column `since` datetime NOT NULL
+  index CREATE UNIQUE INDEX `idx_namespace_waits_namespace` ON `namespace_waits`(`namespace`)
 TABLE native_resources
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `vendor` text NOT NULL

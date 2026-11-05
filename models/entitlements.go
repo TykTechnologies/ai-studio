@@ -13,6 +13,17 @@ type LicensedNamespace struct {
 	ID        uint      `json:"id" gorm:"primaryKey"`
 	Namespace string    `json:"namespace" gorm:"size:255;not null;uniqueIndex"`
 	ClaimedAt time.Time `json:"claimed_at" gorm:"not null"`
+	// IdleSince is when the namespace last had a connected edge, while it
+	// has none; nil while one is connected.
+	IdleSince *time.Time `json:"idle_since"`
+}
+
+// NamespaceWait is a non-default namespace waiting for a licensed slot,
+// since when. Rows are deleted outright when the namespace is admitted.
+type NamespaceWait struct {
+	ID        uint      `json:"id" gorm:"primaryKey"`
+	Namespace string    `json:"namespace" gorm:"size:255;not null;uniqueIndex"`
+	Since     time.Time `json:"since" gorm:"not null"`
 }
 
 // TeamAppQuota is a team's (Group's) per-member quota of self-service Apps.

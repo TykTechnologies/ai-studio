@@ -76,6 +76,19 @@ type NamespaceSlot struct {
 	// ConnectedEdges counts the namespace's edges; a slot with connected
 	// edges cannot be released.
 	ConnectedEdges int64 `json:"connected_edges"`
+	// IdleSince is set while no edge is connected, and FreesAt is when the
+	// slot is then released automatically.
+	IdleSince *time.Time `json:"idle_since,omitempty"`
+	FreesAt   *time.Time `json:"frees_at,omitempty"`
+}
+
+// NamespaceWait is a namespace waiting for a licensed slot. Position 1 is
+// admitted first when a slot frees.
+type NamespaceWait struct {
+	Namespace      string    `json:"namespace"`
+	WaitingSince   time.Time `json:"waiting_since"`
+	Position       int       `json:"position"`
+	ConnectedEdges int64     `json:"connected_edges"`
 }
 
 // Report is everything the License page shows. Core renders it as given.
@@ -88,6 +101,8 @@ type Report struct {
 	Limits    []Limit    `json:"limits"`
 	// Namespaces lists the namespaces holding a slot.
 	Namespaces []NamespaceSlot `json:"namespaces"`
+	// Waiting lists the namespaces waiting for a slot, in admission order.
+	Waiting []NamespaceWait `json:"waiting"`
 }
 
 // Notice is a near-limit message for one user. Key identifies it for
@@ -147,6 +162,17 @@ type Service interface {
 	LicensedNamespaceScope(q *gorm.DB) *gorm.DB
 	// ReleaseNamespace frees ns's slot.
 	ReleaseNamespace(db *gorm.DB, ns string) error
+	// MoveNamespace admits the namespace an edge re-registers in (to),
+	// which may take over the slot of the namespace it leaves (from).
+	MoveNamespace(tx *gorm.DB, edgeID, from, to string) (licensed bool, err error)
+	// Sweep does the periodic namespace work: it releases idle slots and
+	// admits waiting namespaces. Hosts call it regularly and when an edge
+	// in an unlicensed namespace heartbeats.
+	Sweep(db *gorm.DB) error
+	// OnNamespacesAdmitted registers fn, called with the namespaces newly
+	// given a slot (by any of the calls above), after the change is
+	// committed. The host pushes configuration to their edges.
+	OnNamespacesAdmitted(fn func(namespaces []string))
 
 	// CanGrant reports whether an automatic provisioning path may give the
 	// seat. When it may not, the caller leaves the access out rather than

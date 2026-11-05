@@ -142,8 +142,9 @@ const License = () => {
 
             <Section title="Licensed namespaces">
               <Typography variant="body2" component="p" sx={{ mb: 1.5 }}>
-                Each edge namespace other than the default one holds a licensed slot. Releasing a slot lets another
-                namespace claim it; edges in a released namespace get no configuration.
+                Each edge namespace other than the default one holds a licensed slot. A slot with no connected edge
+                gateway is freed automatically after a day; releasing it frees it now. A freed slot goes to the
+                longest-waiting namespace, whose edge gateways are configured straight away.
               </Typography>
               {releaseError && (
                 <Alert severity="error" sx={{ mb: 2 }} onClose={() => setReleaseError(null)}>
@@ -159,6 +160,7 @@ const License = () => {
                       <TableCell>Namespace</TableCell>
                       <TableCell>Claimed</TableCell>
                       <TableCell>Connected edges</TableCell>
+                      <TableCell>Idle</TableCell>
                       <TableCell />
                     </TableRow>
                   </TableHead>
@@ -182,6 +184,9 @@ const License = () => {
                           <TableCell>{ns.namespace}</TableCell>
                           <TableCell>{formatDate(ns.claimed_at)}</TableCell>
                           <TableCell>{ns.connected_edges}</TableCell>
+                          <TableCell data-testid={`license-idle-${ns.namespace}`}>
+                            {ns.frees_at ? `Since ${formatDate(ns.idle_since)}; frees ${formatDate(ns.frees_at)}` : ""}
+                          </TableCell>
                           <TableCell align="right">
                             {busy ? (
                               <Tooltip title="Disconnect the namespace's edge gateways before releasing its slot.">
@@ -198,6 +203,35 @@ const License = () => {
                 </Table>
               )}
             </Section>
+
+            {(report.waiting || []).length > 0 && (
+              <Section title="Waiting namespaces">
+                <Typography variant="body2" component="p" sx={{ mb: 1.5 }}>
+                  These namespaces have no licensed slot, so their edge gateways get no configuration. They are
+                  admitted in this order as slots free.
+                </Typography>
+                <Table size="small" aria-label="Waiting namespaces">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Position</TableCell>
+                      <TableCell>Namespace</TableCell>
+                      <TableCell>Waiting since</TableCell>
+                      <TableCell>Connected edges</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {report.waiting.map((w) => (
+                      <TableRow key={w.namespace} data-testid={`license-waiting-${w.namespace}`}>
+                        <TableCell>{w.position}</TableCell>
+                        <TableCell>{w.namespace}</TableCell>
+                        <TableCell>{formatDate(w.waiting_since)}</TableCell>
+                        <TableCell>{w.connected_edges}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Section>
+            )}
           </>
         )}
       </ContentBox>

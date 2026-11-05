@@ -116,7 +116,10 @@ const (
 	// 35: licensed_namespaces, team_app_quotas, quota_locks and
 	//     user_notice_dismissals (new tables), edge_instances.license_state
 	//     (defaulted '', additive): license limits (midsommar-clean-zmwd.3).
-	SchemaVersion          = 35
+	// 36: namespace_waits (new table) and licensed_namespaces.idle_since
+	//     (nullable, additive): namespace slot queue and idle release
+	//     (midsommar-clean-zmwd.30).
+	SchemaVersion          = 36
 	MinReaderSchemaVersion = 26
 )
 
