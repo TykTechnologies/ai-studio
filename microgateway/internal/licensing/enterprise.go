@@ -5,28 +5,13 @@ package licensing
 
 import (
 	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"log"
 	"sync"
 	"time"
 
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/TykTechnologies/ai-studio-enterprise/v2/licensing/verify"
 )
-
-// RSA public key for JWT verification (same as main service)
-const publicKey = `
------BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA13oqkgO3RaYCMUxskU72
-S5iBxTsc/KDNgcpoV3nujJuxRHC5jj3+bGaNMfpzMFCdzmtIjdkBnefLiCnqeGlT
-CZCK627P1JT9ZRR9R6DGBk5Swr2ZXs0TefIR3HDJmtzBBGj63t9j6VTBYS7fnn2V
-3MQG66cszXr6qPUpaN6EK61oGGs4517Ql1BzxGPdC8GJpr9teqgSLuFeeJwyqBqe
-CxXxNjZ6OMjWqU2IT+lgUS97UbF1ep8iZJUdvwOmFBoWs6cY9SoTdzlzB4q90Kqs
-tapRIa8HM7WWnwmI+i9uGl1QOmZfshOovOgzIZSJh1K43cdFSxgBvpO5ENyLeKai
-ZwIDAQAB
------END PUBLIC KEY-----
-`
 
 // enterpriseService implements licensing for microgateway enterprise edition
 type enterpriseService struct {
@@ -44,22 +29,11 @@ func NewService(config Config) Service {
 		done:   make(chan bool),
 	}
 
-	// Parse RSA public key
-	block, _ := pem.Decode([]byte(publicKey))
-	if block == nil {
-		log.Fatalf("Failed to parse PEM block containing the public key")
-	}
-
-	pubKey, err := x509.ParsePKIXPublicKey(block.Bytes)
+	pubKey, err := verify.DefaultPublicKey()
 	if err != nil {
 		log.Fatalf("Failed to parse RSA public key: %v", err)
 	}
-
-	rsaPubKey, ok := pubKey.(*rsa.PublicKey)
-	if !ok {
-		log.Fatalf("Public key is not RSA")
-	}
-	service.publicKey = rsaPubKey
+	service.publicKey = pubKey
 
 	return service
 }
@@ -112,39 +86,13 @@ func (s *enterpriseService) validateLicense() error {
 		return fmt.Errorf("no license key provided")
 	}
 
-	// Parse JWT token
-	token, err := jwt.Parse(s.config.LicenseKey, func(token *jwt.Token) (interface{}, error) {
-		// Verify signing method
-		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return s.publicKey, nil
-	})
-
+	// The shared verifier checks the signature, expiry and the AI Studio
+	// SKU. Limits are enforced by AI Studio, not the gateway.
+	claims, err := verify.Verify(s.config.LicenseKey, s.publicKey)
 	if err != nil {
-		return fmt.Errorf("invalid license signature: %v", err)
+		return err
 	}
-
-	if !token.Valid {
-		return fmt.Errorf("invalid license")
-	}
-
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return fmt.Errorf("invalid license claims")
-	}
-
-	// Parse expiration
-	exp, ok := claims["exp"].(float64)
-	if !ok {
-		return fmt.Errorf("missing or invalid exp claim")
-	}
-	expiresAt := time.Unix(int64(exp), 0)
-
-	// Check if expired
-	if time.Now().After(expiresAt) {
-		return fmt.Errorf("license expired")
-	}
+	expiresAt := claims.ExpiresAt
 
 	// Store expiration time
 	s.lock.Lock()

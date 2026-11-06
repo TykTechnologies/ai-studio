@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,6 +25,9 @@ type ErrorResponse struct {
 	StatusCode int
 	Title      string
 	Message    string
+	// Code is an optional machine-readable error code, sent as
+	// errors[0].code when set.
+	Code string
 }
 
 func (e ErrorResponse) Error() string {
@@ -75,6 +79,14 @@ func NewPaymentRequiredError(message string) ErrorResponse {
 	return ErrorResponse{
 		StatusCode: http.StatusPaymentRequired,
 		Title:      "Payment Required",
+		Message:    message,
+	}
+}
+
+func NewConflictError(message string) ErrorResponse {
+	return ErrorResponse{
+		StatusCode: http.StatusConflict,
+		Title:      "Conflict",
 		Message:    message,
 	}
 }
@@ -213,13 +225,24 @@ func IntToObjectId(id uint) *string {
 func SendErrorResponse(c *gin.Context, err error) {
 	switch e := err.(type) {
 	case ErrorResponse:
+		body := gin.H{
+			"title":  e.Title,
+			"detail": e.Message,
+		}
+		if e.Code != "" {
+			body["code"] = e.Code
+		}
 		c.JSON(e.StatusCode, gin.H{
-			"errors": []gin.H{{
-				"title":  e.Title,
-				"detail": e.Message,
-			}},
+			"errors": []gin.H{body},
 		})
 	default:
+		// A wrapped error that converts itself into a coded ErrorResponse
+		// (a licence limit refusal: 409 QUOTA_EXCEEDED) keeps its status.
+		var he ErrorResponse
+		if errors.As(err, &he) && he.Code != "" {
+			SendErrorResponse(c, he)
+			return
+		}
 		// Unexpected error type
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"errors": []gin.H{{

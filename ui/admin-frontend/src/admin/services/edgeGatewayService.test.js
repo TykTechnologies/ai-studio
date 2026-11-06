@@ -53,6 +53,7 @@ describe('EdgeGatewayService', () => {
         version: '1.0.0',
         buildHash: 'abc123',
         fips: null,
+        unlicensed: false,
         metadata: { region: 'us-east' },
         lastHeartbeat: '2024-01-01T12:00:00Z',
         sessionId: 'session-001',
@@ -67,6 +68,16 @@ describe('EdgeGatewayService', () => {
         ownerLabel: '',
         ownerLive: false,
       });
+    });
+
+    test('should flag an edge whose namespace is not licensed', async () => {
+      const unlicensed = JSON.parse(JSON.stringify(mockEdgeResponse));
+      unlicensed.data.data[0].attributes.license_state = 'unlicensed';
+      apiClient.get.mockResolvedValueOnce(unlicensed);
+
+      const result = await edgeGatewayService.listEdgeGateways();
+
+      expect(result.data[0].unlicensed).toBe(true);
     });
 
     test('should map the replica holding the edge', async () => {

@@ -15,6 +15,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	pb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/entitlements"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
@@ -318,12 +319,16 @@ func (s *AIStudioManagementServer) CreateApp(ctx context.Context, req *pb.Create
 		req.MonthlyBudget,
 		nil, // BudgetStartDate
 		metadata,
+		services.WithSelfService(),
 	)
 	if err != nil {
 		log.Error().Err(err).
 			Str("name", req.GetName()).
 			Uint32("user_id", req.GetUserId()).
 			Msg("Failed to create app via gRPC")
+		if gerr, ok := entitlements.GRPCError(err); ok {
+			return nil, gerr
+		}
 		return nil, status.Errorf(codes.Internal, "failed to create app: %v", err)
 	}
 

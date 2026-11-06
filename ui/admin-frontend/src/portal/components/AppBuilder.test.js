@@ -327,3 +327,49 @@ describe("AppBuilder access picker, name default and commit semantics", () => {
     expect(within(summary).getByTestId("app-submitted-semantic-router-note")).toBeInTheDocument();
   });
 });
+
+describe("AppBuilder app quota", () => {
+  const baseGet = (quota) => (url, config) => {
+    if (url === "/common/me/app-quota") {
+      return quota instanceof Error ? Promise.reject(quota) : Promise.resolve({ data: quota });
+    }
+    if (url === "/common/accessible-llms") return Promise.resolve({ data: llms });
+    if (url === "/common/accessible-plugin-resources") return Promise.resolve({ data: { data: [] } });
+    if (url === "/common/catalog") return Promise.resolve({ data: { data: [] } });
+    return Promise.resolve({ data: [] });
+  };
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it("shows how many of the user's apps are used", async () => {
+    pubClient.get.mockImplementation(baseGet({ used: 1, max: 3, unlimited: false }));
+    renderBuilder();
+    expect(await screen.findByTestId("app-quota-hint")).toHaveTextContent("You are using 1 of 3 apps you may create.");
+  });
+
+  it("shows no hint for an unlimited quota or on Community Edition", async () => {
+    pubClient.get.mockImplementation(baseGet({ used: 4, max: 0, unlimited: true }));
+    const { unmount } = renderBuilder();
+    expect(await screen.findByText("Create New App")).toBeInTheDocument();
+    expect(screen.queryByTestId("app-quota-hint")).not.toBeInTheDocument();
+    unmount();
+
+    pubClient.get.mockImplementation(baseGet(Object.assign(new Error("402"), { response: { status: 402 } })));
+    renderBuilder();
+    expect(await screen.findByText("Create New App")).toBeInTheDocument();
+    expect(screen.queryByTestId("app-quota-hint")).not.toBeInTheDocument();
+  });
+
+  it("shows the quota refusal the API sends", async () => {
+    pubClient.get.mockImplementation(baseGet({ used: 1, max: 1, unlimited: false }));
+    const detail = "You have reached your quota of 1 app. Remove an app to make room, or ask an administrator to increase your quota.";
+    pubClient.post.mockRejectedValue({ response: { status: 409, data: { errors: [{ title: "Quota Exceeded", detail, code: "QUOTA_EXCEEDED" }] } } });
+    renderBuilder({ path: "/portal/apps/new?llm=1" });
+    expect(await screen.findByTestId("app-quota-hint")).toHaveTextContent("You are using 1 of 1 app you may create.");
+    await waitFor(() => expect(requested("llm")).toEqual(["OpenAI"]));
+    fireEvent.change(screen.getByRole("textbox", { name: /App Name/ }), { target: { value: "Second" } });
+    fireEvent.change(screen.getByRole("textbox", { name: /Description/ }), { target: { value: "Over" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create App" }));
+    expect(await screen.findByText(detail)).toBeInTheDocument();
+  });
+});

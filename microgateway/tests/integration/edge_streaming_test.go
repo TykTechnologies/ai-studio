@@ -56,7 +56,8 @@ func TestSimpleEdgeClient_StreamingConnection(t *testing.T) {
 			Mode:              "edge",
 			ControlEndpoint:   "localhost:9999",
 			EdgeID:            "test-edge-1",
-			EdgeNamespace:     "test-namespace",
+			// Default namespace: Enterprise control mode refuses others.
+			EdgeNamespace:     "default",
 			ClientToken:       "test-auth-token", // Match control server auth token
 			HeartbeatInterval: 100 * time.Millisecond, // Required for heartbeat worker
 			AllowInsecure:     true,                   // Enable insecure connections for testing
@@ -86,7 +87,7 @@ func TestSimpleEdgeClient_StreamingConnection(t *testing.T) {
 	require.True(t, ok, "Edge info should be a map")
 
 	assert.Equal(t, "test-edge-1", edgeInfoMap["edge_id"])
-	assert.Equal(t, "test-namespace", edgeInfoMap["namespace"])
+	assert.Equal(t, "default", edgeInfoMap["namespace"])
 	// Note: Status might be "registered" or "connected" depending on timing
 
 	// Cleanup
@@ -264,7 +265,8 @@ func TestSimpleEdgeClient_BidirectionalStreaming(t *testing.T) {
 			ClientToken:       "test-auth-token", // Match control server auth token
 			AllowInsecure:     true, // Enable insecure connections for testing
 			EdgeID:            "test-edge-streaming",
-			EdgeNamespace:     "test-namespace",
+			// Default namespace: Enterprise control mode refuses others.
+			EdgeNamespace:     "default",
 			HeartbeatInterval: 100 * time.Millisecond, // Fast heartbeats for testing
 		},
 	}

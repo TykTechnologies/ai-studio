@@ -69,3 +69,37 @@ func TestCommunity_EffectivePermissionsFromDB(t *testing.T) {
 	_, err = s.EffectivePermissions(context.Background(), 999)
 	assert.ErrorIs(t, err, ErrNotFound)
 }
+
+// Without roles the Super Admin (the first user, still an administrator) is
+// the Owner; other administrators are not.
+func TestCommunity_IsOwnerIsTheSuperAdmin(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&models.User{}))
+	first := &models.User{Email: "first@example.com", IsAdmin: true}
+	require.NoError(t, db.Create(first).Error)
+	require.Equal(t, models.SuperAdminID, first.ID)
+	other := &models.User{Email: "other@example.com", IsAdmin: true}
+	require.NoError(t, db.Create(other).Error)
+
+	s := newCommunityService(db)
+	ctx := context.Background()
+	owner, err := s.IsOwner(ctx, first.ID)
+	require.NoError(t, err)
+	assert.True(t, owner)
+	owner, err = s.IsOwner(ctx, other.ID)
+	require.NoError(t, err)
+	assert.False(t, owner)
+	owner, err = s.IsOwner(ctx, 999)
+	require.NoError(t, err)
+	assert.False(t, owner)
+
+	require.NoError(t, db.Model(first).Update("is_admin", false).Error)
+	owner, err = s.IsOwner(ctx, first.ID)
+	require.NoError(t, err)
+	assert.False(t, owner, "a demoted first user is not the Super Admin")
+
+	owner, err = newCommunityService(nil).IsOwner(ctx, 1)
+	require.NoError(t, err)
+	assert.False(t, owner)
+}

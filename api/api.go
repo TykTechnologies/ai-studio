@@ -240,6 +240,7 @@ func New(service *services.Service, disableCORS bool, authService *auth.AuthServ
 		LogLevel:  logLevel,
 		// The broker's state cookie is Secure exactly when the session cookie is.
 		CookieSecure: config.CookieSecure,
+		Entitlements: service.EntitlementsService(),
 	}
 	api.ssoService = sso.NewService(ssoConfig, router, config.DB, service.NotificationService)
 	// The identity broker keeps process-wide state; skip it when a host
@@ -537,6 +538,9 @@ func (a *API) setupRoutes() error {
 	// Self-service profile: preferences and the caller's own API key. Same
 	// policy and service path as the admin user routes, scoped to the caller.
 	authed.GET("/me/preferences", a.getMyPreferences)
+	authed.GET("/me/app-quota", a.getMyAppQuota)
+	authed.GET("/notices", a.getMyNotices)
+	authed.POST("/notices/:key/dismiss", a.dismissMyNotice)
 	authed.PATCH("/me/preferences", a.updateMyPreferences)
 	authed.POST("/me/api-key/roll", a.rollMyAPIKey)
 	authed.DELETE("/me/api-key", a.revokeMyAPIKey)
@@ -675,6 +679,13 @@ func (a *API) setupRoutes() error {
 	v1.GET("/team-budgets/settings", authz.Read("groups"), a.getTeamBudgetSettings)
 	v1.PUT("/team-budgets/settings", authz.Write("groups"), a.setTeamBudgetSettings)
 	v1.PUT("/users/:id/budget-team", authz.Write("users"), a.setUserBudgetTeam)
+	// Licence (Owner only; the handlers check; CE answers 402)
+	v1.GET("/license", authz.AnyAdmin, a.getLicense)
+	v1.DELETE("/license/namespaces/:namespace", authz.AnyAdmin, a.releaseLicensedNamespace)
+	// Per-member App quota of self-service creation (Enterprise; CE answers 402)
+	v1.GET("/groups/:id/app-quota", authz.Read("groups"), a.getTeamAppQuota)
+	v1.PUT("/groups/:id/app-quota", authz.Write("groups"), a.setTeamAppQuota)
+	v1.DELETE("/groups/:id/app-quota", authz.Delete("groups"), a.deleteTeamAppQuota)
 
 	// LLM routes
 	v1.POST("/llms", authz.Write("llms"), a.createLLM)

@@ -6,13 +6,15 @@ import { ThemeProvider } from "@mui/material/styles";
 import testTheme from "../../utils/testTheme";
 import PushConfigurationModal from "./PushConfigurationModal";
 
+const defaultNamespaces = [
+  { name: "default", edgeCount: 1 },
+  { name: "team-a", edgeCount: 2 },
+];
+let mockNamespaces = defaultNamespaces;
 jest.mock("../../hooks/useNamespaces", () => ({
   __esModule: true,
   default: () => ({
-    getAvailableNamespaces: () => [
-      { name: "default", edgeCount: 1 },
-      { name: "team-a", edgeCount: 2 },
-    ],
+    getAvailableNamespaces: () => mockNamespaces,
   }),
 }));
 
@@ -77,7 +79,30 @@ const renderModal = (props = {}) =>
 describe("PushConfigurationModal", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockNamespaces = defaultNamespaces;
     edgeGatewayService.getPendingChanges.mockImplementation(pendingFor);
+  });
+
+  // Edges in a namespace with no licensed slot are not push targets: the
+  // count covers the licensed namespaces and says how many are left out,
+  // and an unlicensed namespace cannot be chosen.
+  it("counts only licensed namespaces and marks the unlicensed ones", async () => {
+    mockNamespaces = [
+      { name: "default", edgeCount: 1, licensed: true },
+      { name: "team-a", edgeCount: 2, licensed: true },
+      { name: "team-b", edgeCount: 1, licensed: false },
+      { name: "team-c", edgeCount: 3, licensed: false },
+    ];
+    renderModal();
+    expect(
+      screen.getByText(/push configuration to all 2 namespaces with active edges\. 2 unlicensed namespaces are left out\./i)
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText(/specific namespace/i));
+    fireEvent.mouseDown(screen.getByRole("combobox"));
+    const option = await screen.findByRole("option", { name: /team-b .* not licensed/i });
+    expect(option).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("option", { name: /team-a \(2 edges\)$/i })).not.toHaveAttribute("aria-disabled");
   });
 
   // On Enterprise this opened defaulted to "Specific Namespace" with nothing

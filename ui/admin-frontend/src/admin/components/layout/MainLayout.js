@@ -5,6 +5,7 @@ import MyAppBar from "./AppBar";
 import Drawer from "./Drawer";
 import { Outlet } from "react-router-dom";
 import SyncStatusBanner from "../common/SyncStatusBanner";
+import QuotaNagBar from "../common/QuotaNagBar";
 import PushReminderToast from "../common/PushReminderToast";
 import PermissionDeniedToaster from "../rbac/PermissionDeniedToaster";
 import { CONTENT_MAX_WIDTH } from "../../../constants/layout";
@@ -29,6 +30,8 @@ const MainLayout = ({ hideAppBar, hideDrawer }) => {
         <Container maxWidth={CONTENT_MAX_WIDTH} disableGutters>
           {/* Sync status banner for edge gateway configuration sync */}
           <SyncStatusBanner />
+          {/* Near-limit licence and App quota notices (admin and portal) */}
+          <QuotaNagBar />
           <PushReminderToast />
           <PermissionDeniedToaster />
           <Outlet />

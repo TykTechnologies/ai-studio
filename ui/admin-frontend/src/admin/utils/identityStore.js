@@ -31,6 +31,8 @@ export const buildIdentity = (me) => {
     isFullAdmin,
     hasAdminAccess,
     rbacEnabled: attributes.rbac_enabled === true,
+    // Owner role (the Super Admin without roles): may open the License page.
+    isOwner: attributes.is_owner === true,
     permissions,
     roles: Array.isArray(attributes.roles) ? attributes.roles : [],
     uiOptions: attributes.ui_options || {},

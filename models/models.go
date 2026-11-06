@@ -142,6 +142,13 @@ func InitModels(db *gorm.DB) error {
 		// Team budgets (Enterprise; tables exist in CE for team cost reporting)
 		&TeamBudget{},         // Per-team budget, allocation pool and enforcement
 		&TeamBudgetSettings{}, // Global team budget switch
+		// License limits and App quotas (services/entitlements; Enterprise,
+		// tables exist in CE, unused)
+		&LicensedNamespace{},   // Namespaces holding a licensed slot
+		&NamespaceWait{},       // Namespaces waiting for a licensed slot
+		&TeamAppQuota{},        // Per-team, per-member self-service App quota
+		&QuotaLock{},           // Rows locked while a limit is counted
+		&UserNoticeDismissal{}, // Near-limit notices a user dismissed
 		// Native API extensions (pkg/nativeapi)
 		&NativeResource{}, // Vendor resources created on this node (message batches)
 		// Trusted prompt templates (features/TrustedPromptTemplates.md)

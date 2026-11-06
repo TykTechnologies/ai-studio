@@ -695,6 +695,7 @@ TABLE edge_instances
   column `sync_status` text DEFAULT "unknown"
   column `last_sync_ack` datetime
   column `fips` text
+  column `license_state` text DEFAULT ""
   index CREATE INDEX `idx_edge_instances_deleted_at` ON `edge_instances`(`deleted_at`,`deleted_at`)
   index CREATE INDEX `idx_edge_instances_heartbeat` ON `edge_instances`(`last_heartbeat`)
   index CREATE INDEX `idx_edge_instances_namespace` ON `edge_instances`(`namespace`)
@@ -875,6 +876,12 @@ TABLE kv_pairs
   constraint PRIMARY KEY (`store_key`)
   autoindex origin=pk unique=1 (store_key)
   index CREATE INDEX `idx_kv_pairs_org_id` ON `kv_pairs`(`org_id`)
+TABLE licensed_namespaces
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `namespace` text NOT NULL
+  column `claimed_at` datetime NOT NULL
+  column `idle_since` datetime
+  index CREATE UNIQUE INDEX `idx_licensed_namespaces_namespace` ON `licensed_namespaces`(`namespace`)
 TABLE llm_chat_log_entries
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime
@@ -1357,6 +1364,11 @@ TABLE namespace_sync_status
   column `last_push_at` datetime
   index CREATE INDEX `idx_namespace_sync_status_deleted_at` ON `namespace_sync_status`(`deleted_at`)
   index CREATE UNIQUE INDEX `idx_namespace_sync_status_namespace` ON `namespace_sync_status`(`namespace`)
+TABLE namespace_waits
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `namespace` text NOT NULL
+  column `since` datetime NOT NULL
+  index CREATE UNIQUE INDEX `idx_namespace_waits_namespace` ON `namespace_waits`(`namespace`)
 TABLE native_resources
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `vendor` text NOT NULL
@@ -1721,6 +1733,11 @@ TABLE push_operations
   index CREATE INDEX `idx_push_operations_completed_at` ON `push_operations`(`completed_at`)
   index CREATE INDEX `idx_push_operations_created_at` ON `push_operations`(`created_at`)
   index CREATE INDEX `idx_push_operations_status` ON `push_operations`(`status`)
+TABLE quota_locks
+  column `name` text
+  column `marked_at` datetime
+  constraint PRIMARY KEY (`name`)
+  autoindex origin=pk unique=1 (name)
 TABLE registered_plugins
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime
@@ -1923,6 +1940,14 @@ TABLE tags
   column `deleted_at` datetime
   column `name` text
   index CREATE INDEX `idx_tags_deleted_at` ON `tags`(`deleted_at`)
+TABLE team_app_quotas
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `group_id` integer NOT NULL
+  column `max_apps_per_member` integer
+  column `unlimited` numeric NOT NULL DEFAULT false
+  column `created_at` datetime
+  column `updated_at` datetime
+  index CREATE UNIQUE INDEX `idx_team_app_quotas_group_id` ON `team_app_quotas`(`group_id`)
 TABLE team_budget_settings
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `enabled` numeric NOT NULL DEFAULT false
@@ -2191,6 +2216,12 @@ TABLE user_groups
   constraint CONSTRAINT `fk_user_groups_user` FOREIGN KEY (`user_id`) REFERENCES `users`(`id`)
   constraint PRIMARY KEY (`group_id`,`user_id`)
   autoindex origin=pk unique=1 (group_id, user_id)
+TABLE user_notice_dismissals
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `user_id` integer NOT NULL
+  column `key` text NOT NULL
+  column `dismissed_at` datetime NOT NULL
+  index CREATE UNIQUE INDEX `idx_user_notice_dismissals_user_key` ON `user_notice_dismissals`(`user_id`,`key`)
 TABLE users
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime

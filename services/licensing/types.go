@@ -13,7 +13,7 @@ type LicenseInfo struct {
 	NotBefore time.Time
 	Version   string
 
-	// Feature entitlements from scope claim
+	// Feature entitlements the license grants AI Studio
 	Features map[string]Feature
 
 	// Raw token

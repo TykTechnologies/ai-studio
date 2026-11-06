@@ -156,7 +156,7 @@ func TestFilterNavByPermission(t *testing.T) {
 // UPDATE_NAV_GOLDEN=1 rewrites it.
 func TestNavGolden(t *testing.T) {
 	golden := map[string][]NavItem{
-		"admin": filterNav(adminNav(navInputs{features: features(allFeatures()), enterprise: true, identityProviders: true}), allowAll),
+		"admin": filterNav(adminNav(navInputs{features: features(allFeatures()), enterprise: true, identityProviders: true, isOwner: true}), allowAll),
 		"portal": portalNav(portalNavInputs{
 			features:      features(allFeatures()),
 			resourceTypes: []navResourceType{{PluginID: 7, Slug: "datasets", Name: "Datasets"}},

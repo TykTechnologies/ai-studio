@@ -64,6 +64,7 @@ export default defineConfig({
           { text: 'SSO Integration', link: '/docs/sso' }, // New
           { text: 'Secrets Management', link: '/docs/secrets' }, // Keep secrets
           { text: 'Budget Control', link: '/docs/budgeting' }, // New
+          { text: 'License & Quotas (Enterprise)', link: '/docs/license' }, // License page, limits, App quota
           { text: 'Analytics & Monitoring', link: '/docs/analytics' }, // New (replace dashboard)
           { text: 'Compliance Events', link: '/docs/compliance-events' }, // v2.1
           { text: 'Governed Metadata (Enterprise)', link: '/docs/governed-metadata' }, // v2.2

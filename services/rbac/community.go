@@ -2,6 +2,7 @@ package rbac
 
 import (
 	"context"
+	"errors"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
@@ -34,6 +35,28 @@ func (s *communityService) HasDirectAdministrator(context.Context, uint) (bool, 
 // Resolve is the CE rule: admins hold everything, everyone else nothing.
 func (s *communityService) Resolve(_ context.Context, user *models.User) (authz.Set, error) {
 	return ResolveByAdminFlag(user), nil
+}
+
+// IsOwner: without roles the Super Admin is the Owner.
+func (s *communityService) IsOwner(_ context.Context, userID uint) (bool, error) {
+	return IsSuperAdminUser(s.db, userID)
+}
+
+// IsSuperAdminUser reports whether userID is the Super Admin (the first
+// user, still an administrator), the Owner when roles are off. Shared with
+// the enterprise implementation for when the feature is unlicensed.
+func IsSuperAdminUser(db *gorm.DB, userID uint) (bool, error) {
+	if db == nil || userID != models.SuperAdminID {
+		return false, nil
+	}
+	var user models.User
+	if err := db.Select("id", "is_admin").First(&user, userID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return user.GetRole() == models.RoleSuperAdmin, nil
 }
 
 // ResolveByAdminFlag is the admin-or-not rule, shared with the enterprise

@@ -18,6 +18,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/audit"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/services/edge_management"
+	"github.com/TykTechnologies/midsommar/v2/services/entitlements"
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
 	"github.com/TykTechnologies/midsommar/v2/services/group_access"
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
@@ -78,6 +79,10 @@ type Service struct {
 	SyncStatusService *SyncStatusService
 	// Role-based access control (ENT: roles and bindings, CE: admin-or-not stub)
 	RBAC rbac.Service
+	// Entitlements applies license limits and App quotas (ENT); the CE stub
+	// allows everything. Use EntitlementsService(), which also covers
+	// hand-built Services.
+	Entitlements entitlements.Service
 	// Webhooks (Enterprise; set by InitWebhooks once the event bus is wired)
 	Webhooks webhooks.Service
 	// AgentTracing is Agent Call Tracing (Enterprise; set by InitAgentTracing)
@@ -403,6 +408,8 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 
 	service.InitBudgets(notificationService)
 
+	service.Entitlements = service.newEntitlements()
+
 	// Governed metadata: hooks are optional (nil when no plugin manager); the event
 	// emitter is resolved lazily because SetEventBus runs after construction.
 	service.GovernedMetadataService = governed_metadata.NewService(db, governed_metadata.Deps{
@@ -621,6 +628,33 @@ func (s *Service) Authz() rbac.Service {
 		s.RBAC = rbac.NewService(s.DB)
 	}
 	return s.RBAC
+}
+
+// newEntitlements builds the entitlements service over this Service's
+// database and (late-bound) licensing service.
+func (s *Service) newEntitlements() entitlements.Service {
+	return entitlements.NewService(entitlements.Deps{
+		DB:        s.DB,
+		Licensing: func() licensing.Service { return s.LicensingService },
+		Notifier: func() entitlements.Notifier {
+			if s.NotificationService == nil {
+				return nil
+			}
+			return s.NotificationService
+		},
+	})
+}
+
+// EntitlementsService returns the entitlements service, building the
+// edition-appropriate one when the Service was constructed by hand (tests).
+func (s *Service) EntitlementsService() entitlements.Service {
+	if s == nil {
+		return entitlements.NewCommunityService()
+	}
+	if s.Entitlements == nil {
+		s.Entitlements = s.newEntitlements()
+	}
+	return s.Entitlements
 }
 
 // NewOCIPluginClient creates an OCI plugin client wired to the shared plugin

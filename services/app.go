@@ -69,7 +69,7 @@ func (s *Service) CreateApp(name, description string, userID uint, datasourceIDs
 		}
 	}
 
-	if err := app.Create(s.DB); err != nil {
+	if err := s.EntitlementsService().GuardAppCreate(s.DB, userID, o.selfService, func(tx *gorm.DB) error { return app.Create(tx) }); err != nil {
 		return nil, err
 	}
 
@@ -214,7 +214,7 @@ func (s *Service) CreateAppWithNamespace(name, description string, userID uint, 
 		}
 	}
 
-	if err := app.Create(s.DB); err != nil {
+	if err := s.EntitlementsService().GuardAppCreate(s.DB, userID, o.selfService, func(tx *gorm.DB) error { return app.Create(tx) }); err != nil {
 		return nil, err
 	}
 

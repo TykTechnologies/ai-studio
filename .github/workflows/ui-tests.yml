@@ -120,7 +120,7 @@ jobs:
 
       - name: Start Test Environment
         env:
-          TYK_AI_LICENSE: ${{ secrets.TYK_AI_LICENSE }}
+          TYK_AI_LICENSE: ${{ secrets.TYK_AI_LICENSE_V2 }}
           TYK_AI_SECRET_KEY: ${{ secrets.TYK_AI_SECRET_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_KEY }}
           ANTHROPIC_AI_KEY: ${{ secrets.ANTHROPIC_KEY }}

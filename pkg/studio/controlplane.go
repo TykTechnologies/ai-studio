@@ -26,6 +26,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services/edition"
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
+	"github.com/TykTechnologies/midsommar/v2/services/entitlements"
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
 	"github.com/TykTechnologies/midsommar/v2/services/pushes"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -221,8 +222,13 @@ func NewControlPlane(opts ControlPlaneOptions) (_ *ControlPlane, err error) {
 	// (Enterprise), with no hooks or events of its own.
 	c.control.SetGovernedMetadataReader(governed_metadata.NewService(c.db, governed_metadata.Deps{}))
 
-	c.pushes = pushes.New(c.db, nodeID, c.control, pushes.Options{})
+	// Licensed namespaces (Enterprise licence slots) gate edge config.
+	ent := entitlements.NewService(entitlements.Deps{DB: c.db, Licensing: func() licensing.Service { return c.licensing }})
+	c.control.SetEntitlements(ent)
+
+	c.pushes = pushes.New(c.db, nodeID, c.control, pushes.Options{Entitlements: ent})
 	c.control.SetPushDelivery(c.pushes)
+	ent.OnNamespacesAdmitted(pushAdmittedNamespaces(c.pushes))
 	if err := c.pushes.Start(context.Background()); err != nil {
 		return nil, fmt.Errorf("studio: start edge push delivery: %w", err)
 	}

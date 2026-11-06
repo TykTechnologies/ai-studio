@@ -16,6 +16,7 @@ import RoleBadge from "../roles/RoleBadge";
 import { usePermissions } from "../../context/PermissionsContext";
 import { useEdition } from "../../context/EditionContext";
 import TeamBudgetPanel from "./components/TeamBudgetPanel";
+import TeamAppQuotaPanel from "./components/TeamAppQuotaPanel";
 
 const GroupDetail = () => {
   const navigate = useNavigate();
@@ -127,6 +128,9 @@ const GroupDetail = () => {
 
         {/* Budget (Enterprise) */}
         {isEnterprise && <TeamBudgetPanel teamId={group.id} />}
+
+        {/* Per-member App quota (Enterprise) */}
+        {isEnterprise && <TeamAppQuotaPanel teamId={group.id} />}
 
         {/* Section 2: Team Members */}
         <CollapsibleSection title="Team members" defaultExpanded>

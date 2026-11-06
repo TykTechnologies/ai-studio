@@ -23,6 +23,10 @@ This architecture enables:
 - **High Availability:** Continue processing even if the hub is temporarily unreachable
 - **Multi-Tenancy:** Isolate resources between different teams or customers using namespaces
 
+### AI Studio is the control plane
+
+Edge gateways register with AI Studio. The microgateway's own control mode (`GATEWAY_MODE=control`) is deprecated and will be removed in a future release. A microgateway started in that mode logs a deprecation warning, and in Enterprise builds it serves only the default namespace (`""`, `global` or `default`) and refuses edges in any other namespace with an error telling the operator to register against AI Studio. Namespaces are licensed by AI Studio, so they can only be served from there.
+
 ### No management API on edges
 
 An edge gateway (`GATEWAY_MODE=edge`) does not serve the microgateway management API: every `/api/v1/...` path answers `404`. Its LLMs, Apps, credentials, filters and plugins come only from the control plane, over gRPC. The `mgw` CLI, which uses that API, works only against a standalone microgateway. An edge still serves the AI gateway endpoints (`/llm/`, `/ai/`, `/v1/`, `/tools/`, `/datasource/`, `/anthropic/`, `/router/`), custom plugin endpoints under `/plugins/`, `/health`, `/ready` and, when enabled, metrics.
@@ -44,7 +48,7 @@ The list view displays all registered edge gateways with key status information:
 | Column | Description |
 |--------|-------------|
 | **Edge ID** | Unique identifier for the edge gateway |
-| **Namespace** | The namespace the edge belongs to (Enterprise) |
+| **Namespace** | The namespace the edge belongs to (Enterprise). **Unlicensed namespace** marks an edge whose namespace has no licensed slot yet (see [Licensed Namespaces](#licensed-namespaces-enterprise)) |
 | **Connection** | Connection status based on heartbeat: Connected, Disconnected, or Stale |
 | **Config Sync** | Whether the edge has the latest configuration |
 | **Held by** | The AI Studio replica holding the edge's connection, by its label (for example `dashboard` or `mdcb-eu-1`), or its node ID when it has none. Shown only when the listed edges are spread over more than one replica; "(not responding)" marks a replica that has stopped refreshing its registration, and the edge reconnects elsewhere shortly |
@@ -60,6 +64,23 @@ Click on any edge gateway to view detailed information:
 - **Configuration Sync Status:** Detailed sync status including checksums and last sync acknowledgment
 - **Timestamps:** When the edge was registered and last updated
 - **Metadata:** Any custom metadata reported by the edge
+
+## Licensed Namespaces (Enterprise)
+
+An Enterprise licence sets how many edge namespaces a deployment may use. The default namespace (`default`, `global` or an empty `EDGE_NAMESPACE`) is always available and does not count. Every other namespace holds one **slot** while it is in use.
+
+- **Registering always works.** An edge in a namespace without a slot registers and stays connected, but gets no configuration: no snapshot, no pushes, and its API tokens are not validated. The Edge Gateways list marks it **Unlicensed namespace**, and the edge keeps any configuration it already had.
+- **Waiting namespaces are admitted automatically.** Namespaces without a slot wait in the order they first had to wait. As soon as a slot is free (the licence allows more namespaces, an Owner releases a slot, or an idle slot frees itself), the longest-waiting namespace with an edge connected gets it, and AI Studio pushes the configuration to its edges straight away. No edge needs a restart or reconnect.
+- **A slot follows a renamed edge.** When an edge is restarted with a new `EDGE_NAMESPACE`, and no other edge is connected in its old namespace, the old namespace's slot moves to the new one. If other edges are still connected in the old namespace, the new namespace needs a free slot or waits for one.
+- **Idle slots free themselves.** A namespace with no connected edge for 24 hours loses its slot, which then goes to the next waiting namespace. An edge counts as connected while it is streaming to AI Studio and has sent a heartbeat in the last 90 seconds, so a crashed edge does not hold a slot.
+- **An AI Studio outage costs no slot.** Idle time counts only while AI Studio is running: time while every AI Studio instance is down does not count, and after a restart no slot is freed and the queue is not reordered for the first few minutes, so edges that reconnect keep their own namespaces and waiting namespaces keep their place. A namespace that stops waiting (no edge connected for 24 hours) leaves the queue.
+- **Owners manage slots on the License page.** It lists the namespaces holding a slot (with when an idle one frees), the waiting namespaces in order, and lets an Owner release a slot that has no connected edge (see [License and Quotas](./license.md)).
+
+Upgrading an existing deployment: when the licence is first loaded, the namespaces that already have edges take the available slots in the order their first edge registered; the rest wait in that order.
+
+A licence with fewer namespaces than are in use takes nothing away: the namespaces keep their slots until they go idle.
+
+Community Edition uses the default namespace only and has no namespace limit.
 
 ## Configuration Synchronization
 
@@ -176,7 +197,7 @@ When you push configuration:
    - **Failed**: the edge could not apply it (its error is shown), or three delivery attempts in a row were cut short.
    - **Timed out**: the edge did not connect, or did not finish, before the deadline.
 
-You can close the modal at any time; the push carries on. Edges that are offline when you push receive it as soon as they reconnect, until the deadline (an edge that is restarting gets it as soon as it is up; edges from 2.2 and before, which drop a push that arrives while they are still starting, get it 10 seconds after they connect). The "not connected" warning stays only while an edge is still waiting to connect. When no edge can receive the push (every edge offline for more than 5 minutes, or none registered), the modal says so at its top and disables **Push** until you choose another target. If an edge's connection drops while it is reloading, or the AI Studio instance it was connected to stops, the push is sent again when the edge reconnects (from 2.3, to any replica). A namespace or "all" push leaves out edges that have been offline for more than 5 minutes and lists them. Community Edition shows the push's overall outcome; the per-edge breakdown is part of Enterprise Edition.
+You can close the modal at any time; the push carries on. Edges that are offline when you push receive it as soon as they reconnect, until the deadline (an edge that is restarting gets it as soon as it is up; edges from 2.2 and before, which drop a push that arrives while they are still starting, get it 10 seconds after they connect). The "not connected" warning stays only while an edge is still waiting to connect. When no edge can receive the push (every edge offline for more than 5 minutes, or none registered), the modal says so at its top and disables **Push** until you choose another target. If an edge's connection drops while it is reloading, or the AI Studio instance it was connected to stops, the push is sent again when the edge reconnects (from 2.3, to any replica). A namespace or "all" push leaves out edges that have been offline for more than 5 minutes, and (Enterprise) edges in a namespace without a licensed slot, and lists them with the reason. The "All Namespaces" choice in the modal counts the licensed namespaces only, and a namespace without a slot cannot be chosen. Community Edition shows the push's overall outcome; the per-edge breakdown is part of Enterprise Edition.
 
 How an edge applies a snapshot:
 

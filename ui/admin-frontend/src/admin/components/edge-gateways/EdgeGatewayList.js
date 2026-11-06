@@ -350,6 +350,17 @@ const EdgeGatewayList = () => {
                             variant="outlined"
                             color={edge.namespace === 'global' ? 'default' : 'primary'}
                           />
+                          {edge.unlicensed && (
+                            <Tooltip title="This namespace has no licensed namespace slot: its edges get no configuration and are left out of pushes.">
+                              <Chip
+                                label="Unlicensed namespace"
+                                size="small"
+                                color="warning"
+                                sx={{ ml: 1 }}
+                                data-testid="edge-unlicensed"
+                              />
+                            </Tooltip>
+                          )}
                         </StyledTableCell>
                       )}
                       <StyledTableCell>

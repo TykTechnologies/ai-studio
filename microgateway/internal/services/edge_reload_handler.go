@@ -111,10 +111,15 @@ func (h *EdgeReloadHandler) HandleReloadRequest(req *pb.ConfigurationReloadReque
 	}
 
 	newVersion := newConfig.Version
+	// Up to date only when this version was applied to SQLite: the edge
+	// client holds the snapshot it received even when applying it failed,
+	// and a push must then apply it again (and report FAILED if it fails
+	// again), not answer READY.
 	if newVersion == h.currentVersion {
-		// No change in configuration - still successful
-		h.sendStatus(req.OperationId, pb.ReloadPhase_READY, true, "Configuration up to date, no changes needed", h.currentVersion, newVersion)
-		return
+		if _, applied, ok := h.syncService.ReportedConfig(); ok && applied == newVersion {
+			h.sendStatus(req.OperationId, pb.ReloadPhase_READY, true, "Configuration up to date, no changes needed", h.currentVersion, newVersion)
+			return
+		}
 	}
 
 	// Phase 3: UPDATING - Apply configuration with safe SQLite update

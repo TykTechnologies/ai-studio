@@ -192,14 +192,14 @@ jobs:
       - name: Build packages and run smoke tests
         if: inputs.include_package_smoke == true
         env:
-          TYK_AI_LICENSE: ${{ secrets.TYK_AI_LICENSE }}
+          TYK_AI_LICENSE: ${{ secrets.TYK_AI_LICENSE_V2 }}
           CI: "false"
         run: make test-package-smoke-ent
 
       - name: Build packages and run the FIPS smoke test
         if: inputs.include_package_smoke != true
         env:
-          TYK_AI_LICENSE: ${{ secrets.TYK_AI_LICENSE }}
+          TYK_AI_LICENSE: ${{ secrets.TYK_AI_LICENSE_V2 }}
           CI: "false"
         run: make package-ent test-fips-smoke
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services/entitlements"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -277,6 +278,10 @@ func (a *API) addUserToGroup(c *gin.Context) {
 	}
 
 	err = a.service.AddUserToGroup(uint(userID), uint(groupID))
+	if ee, exceeded := entitlements.AsExceeded(err); exceeded {
+		helpers.SendErrorResponse(c, ee.HTTPError())
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -406,6 +411,10 @@ func (a *API) updateGroupUsers(c *gin.Context) {
 	}
 
 	err = a.service.UpdateGroupUsers(uint(id), input.Data.Attributes.Members)
+	if ee, exceeded := entitlements.AsExceeded(err); exceeded {
+		helpers.SendErrorResponse(c, ee.HTTPError())
+		return
+	}
 	if err != nil {
 		helpers.SendErrorResponse(c, helpers.NewInternalServerError("Failed to update group users: "+err.Error()))
 		return

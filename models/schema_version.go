@@ -113,7 +113,16 @@ const (
 	//     verdict exceptions (midsommar-clean-9u1j.3).
 	// 34: guardrail_exceptions.alert_event (defaulted '', additive): the
 	//     event an exception's alert action raises (midsommar-clean-9u1j.8).
-	SchemaVersion          = 34
+	// 35: licensed_namespaces, team_app_quotas, quota_locks and
+	//     user_notice_dismissals (new tables), edge_instances.license_state
+	//     (defaulted '', additive): license limits (midsommar-clean-zmwd.3).
+	// 36: namespace_waits (new table) and licensed_namespaces.idle_since
+	//     (nullable, additive): namespace slot queue and idle release
+	//     (midsommar-clean-zmwd.30).
+	// 37: quota_locks.marked_at (nullable, additive): when the namespace
+	//     sweep last ran, so control-plane downtime never counts as idle
+	//     (midsommar-clean-zmwd.39).
+	SchemaVersion          = 37
 	MinReaderSchemaVersion = 26
 )
 

@@ -13,6 +13,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
+	"github.com/TykTechnologies/midsommar/v2/services/entitlements"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
@@ -199,6 +200,11 @@ func (a *API) handleRegister(c *gin.Context) {
 
 	err := a.auth.Register(input.Data.Attributes.Email, input.Data.Attributes.Name,
 		input.Data.Attributes.Password, input.Data.Attributes.WithPortal, input.Data.Attributes.WithChat)
+	if _, exceeded := entitlements.AsExceeded(err); exceeded {
+		he, _ := asHelperError(err)
+		helpers.SendErrorResponse(c, he)
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
@@ -479,6 +485,9 @@ func (a *API) handleMe(c *gin.Context) {
 	response.Attributes.Permissions = perms.List()
 	response.Attributes.Roles = []rbac.RoleSummary{}
 	response.Attributes.RBACEnabled = rbacSvc.Enabled()
+	if response.Attributes.IsOwner, err = rbacSvc.IsOwner(c.Request.Context(), u.ID); err != nil {
+		log.Printf("Owner check for user %d failed: %v", u.ID, err)
+	}
 	if rbacSvc.Enabled() {
 		if eff, err := rbacSvc.EffectivePermissions(c.Request.Context(), u.ID); err == nil && eff.Roles != nil {
 			response.Attributes.Roles = eff.Roles

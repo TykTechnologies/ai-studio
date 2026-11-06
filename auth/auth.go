@@ -18,6 +18,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/entitlements"
 	"github.com/TykTechnologies/midsommar/v2/templates"
 	"github.com/gin-gonic/gin"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -232,6 +233,10 @@ func (a *AuthService) GetAuthenticatedUser(c *gin.Context) *models.User {
 	return nil
 }
 
+// hostRefusalKey holds, on the request, a licence limit refusal of the
+// host's identity (see hostUser).
+const hostRefusalKey = "host_identity_refusal"
+
 // hostUser asks the host authenticator about the request. decided is false
 // when the host has no identity for it, leaving Studio's own credentials to
 // decide; otherwise user is the provisioned user, or nil when the host
@@ -252,6 +257,11 @@ func (a *AuthService) hostUser(c *gin.Context) (user *models.User, decided bool)
 	user, err = a.Config.ProvisionHostUser(*identity)
 	if err != nil {
 		slog.Warn("Host identity could not be provisioned", "error", err)
+		// A licence limit refusal (a host-granted admin over the licensed
+		// seats) is answered with its message, so the host can show it.
+		if _, exceeded := entitlements.AsExceeded(err); exceeded {
+			c.Set(hostRefusalKey, err)
+		}
 		return nil, true
 	}
 	c.Set(AuthMethodKey, AuthMethodHost)
@@ -335,6 +345,17 @@ func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
 		if a.Config.TestMode {
 			c.Next()
 			return
+		}
+
+		// The host's identity was refused by a licence limit: 409
+		// QUOTA_EXCEEDED with the limit's message, as other refusals.
+		if refusal, ok := c.Get(hostRefusalKey); ok {
+			err, _ := refusal.(error)
+			if ee, exceeded := entitlements.AsExceeded(err); exceeded {
+				helpers.SendErrorResponse(c, ee.HTTPError())
+				c.Abort()
+				return
+			}
 		}
 
 		// No valid authentication found
@@ -571,6 +592,16 @@ func (a *AuthService) ValidatePasswordComplexity(password string) error {
 	return nil
 }
 
+// entitlements returns the host's entitlements service. A ServiceInterface
+// without one gets a fresh service over the database: in Enterprise that is
+// the engine with no licence, which allows no seats (fail closed).
+func (a *AuthService) entitlements() entitlements.Service {
+	if p, ok := a.Config.Service.(interface{ EntitlementsService() entitlements.Service }); ok {
+		return p.EntitlementsService()
+	}
+	return entitlements.NewService(entitlements.Deps{DB: a.Config.DB})
+}
+
 func (a *AuthService) Register(email, name, password string, showPortal, showChat bool) error {
 	if !a.Config.RegistrationAllowed {
 		return errors.New("registration is currently disabled")
@@ -638,7 +669,9 @@ func (a *AuthService) Register(email, name, password string, showPortal, showCha
 		user.AccessToSSOConfig = true
 	}
 
-	if err := user.Create(a.Config.DB); err != nil {
+	// Seats count from the first user on: without a licensed admin seat,
+	// even the first registration (which is an admin) is refused.
+	if err := a.entitlements().GuardUserChange(a.Config.DB, func(tx *gorm.DB) error { return user.Create(tx) }); err != nil {
 		return err
 	}
 

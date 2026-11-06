@@ -201,6 +201,10 @@ function App() {
           clearIdentity();
           if (authError.response && authError.response.status === 401) {
             setIsAuthenticated(false);
+          } else if (authError.response?.status === 409 && authError.response.data?.errors?.[0]?.detail) {
+            // Sign-in refused by a licence limit (a host-granted admin over
+            // the licensed seats): show why.
+            setError(authError.response.data.errors[0].detail);
           } else {
             console.error("Authentication check failed:", authError);
             setError("Failed to check authentication status.");
