@@ -29,14 +29,12 @@ const renderLayout = () =>
   );
 
 describe('Admin MainLayout content width', () => {
-  it('wraps routed pages and the sync banner in an xl container without extra gutters', () => {
+  it('renders routed pages full-width, with no max-width container', () => {
     renderLayout();
     const page = screen.getByTestId('page');
-    const container = page.closest('.MuiContainer-maxWidthXl');
-    expect(container).not.toBeNull();
-    expect(container).toHaveClass('MuiContainer-disableGutters');
-    expect(container).toContainElement(screen.getByTestId('sync-banner'));
-    // Centred in the space beside the drawer (MUI Container default)
-    expect(container).toHaveStyle({ marginLeft: 'auto', marginRight: 'auto' });
+    expect(page.closest('.MuiContainer-root')).toBeNull();
+    const main = page.closest('main');
+    expect(main).not.toBeNull();
+    expect(main).toContainElement(screen.getByTestId('sync-banner'));
   });
 });
