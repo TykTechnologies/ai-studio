@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/gin-gonic/gin"
 )
 
@@ -64,6 +65,20 @@ func (a *API) listNamespaces(c *gin.Context) {
 		return
 	}
 
+	// One query for which namespaces' edges are licensed (rather than one
+	// licence check per namespace). A namespace with no edge has nothing to
+	// gate and is reported licensed.
+	var licensedNamespaces []string
+	if err := a.service.EntitlementsService().LicensedNamespaceScope(a.service.DB.Model(&models.EdgeInstance{})).
+		Distinct("namespace").Pluck("namespace", &licensedNamespaces).Error; err != nil {
+		helpers.SendErrorResponse(c, helpers.NewInternalServerError(err.Error()))
+		return
+	}
+	licensed := make(map[string]bool, len(licensedNamespaces))
+	for _, ns := range licensedNamespaces {
+		licensed[models.CanonicalNamespace(ns)] = true
+	}
+
 	response := NamespaceListResponse{
 		Data: make([]NamespaceResponse, len(namespaces)),
 	}
@@ -85,7 +100,7 @@ func (a *API) listNamespaces(c *gin.Context) {
 				LLMCount:   ns.LLMCount,
 				AppCount:   ns.AppCount,
 				TokenCount: ns.TokenCount,
-				Licensed:   a.service.EntitlementsService().IsNamespaceLicensed(a.service.DB, ns.Name),
+				Licensed:   ns.EdgeCount == 0 || licensed[models.CanonicalNamespace(ns.Name)],
 			},
 		}
 	}
