@@ -233,6 +233,10 @@ func (a *AuthService) GetAuthenticatedUser(c *gin.Context) *models.User {
 	return nil
 }
 
+// hostRefusalKey holds, on the request, a licence limit refusal of the
+// host's identity (see hostUser).
+const hostRefusalKey = "host_identity_refusal"
+
 // hostUser asks the host authenticator about the request. decided is false
 // when the host has no identity for it, leaving Studio's own credentials to
 // decide; otherwise user is the provisioned user, or nil when the host
@@ -253,6 +257,11 @@ func (a *AuthService) hostUser(c *gin.Context) (user *models.User, decided bool)
 	user, err = a.Config.ProvisionHostUser(*identity)
 	if err != nil {
 		slog.Warn("Host identity could not be provisioned", "error", err)
+		// A licence limit refusal (a host-granted admin over the licensed
+		// seats) is answered with its message, so the host can show it.
+		if _, exceeded := entitlements.AsExceeded(err); exceeded {
+			c.Set(hostRefusalKey, err)
+		}
 		return nil, true
 	}
 	c.Set(AuthMethodKey, AuthMethodHost)
@@ -336,6 +345,17 @@ func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
 		if a.Config.TestMode {
 			c.Next()
 			return
+		}
+
+		// The host's identity was refused by a licence limit: 409
+		// QUOTA_EXCEEDED with the limit's message, as other refusals.
+		if refusal, ok := c.Get(hostRefusalKey); ok {
+			var he helpers.ErrorResponse
+			if err, _ := refusal.(error); errors.As(err, &he) {
+				helpers.SendErrorResponse(c, he)
+				c.Abort()
+				return
+			}
 		}
 
 		// No valid authentication found

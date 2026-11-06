@@ -162,6 +162,17 @@ describe('host sign-in', () => {
     );
   });
 
+  test('a sign-in refused by a licence limit shows the limit message, not a login loop', async () => {
+    host('/login?next={return_to}');
+    const detail = 'Your organisation has reached its licensed limit of 1 user with admin access.';
+    const err = new Error('conflict');
+    err.response = { status: 409, data: { errors: [{ title: 'Quota Exceeded', detail, code: 'QUOTA_EXCEEDED' }] } };
+    pubClient.get.mockRejectedValue(err);
+    open('/admin/llms', { base: '/ai-studio' });
+    expect(await screen.findByText(detail)).toBeInTheDocument();
+    expect(window.location.assign).not.toHaveBeenCalled();
+  });
+
   test('a login URL without the placeholder is used as it is', async () => {
     host('/login');
     signedOut();
