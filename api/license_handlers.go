@@ -7,8 +7,16 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/services/entitlements"
 )
+
+// sendInternalError answers 500 with a generic message and logs the cause,
+// so database or internal detail never reaches the client.
+func sendInternalError(c *gin.Context, what string, err error) {
+	logger.Errorf("%s %s: %s: %v", c.Request.Method, c.Request.URL.Path, what, err)
+	helpers.SendErrorResponse(c, helpers.NewInternalServerError(what))
+}
 
 // requireOwner answers 403 unless the signed-in user is an Owner (the Super
 // Admin without roles). The License page is theirs alone.
@@ -20,7 +28,7 @@ func (a *API) requireOwner(c *gin.Context) bool {
 	}
 	owner, err := a.service.Authz().IsOwner(c.Request.Context(), u.ID)
 	if err != nil {
-		helpers.SendErrorResponse(c, helpers.NewInternalServerError(err.Error()))
+		sendInternalError(c, "failed to check the Owner role", err)
 		return false
 	}
 	if !owner {
@@ -40,7 +48,7 @@ func licenseErrorResponse(c *gin.Context, err error) {
 		helpers.SendErrorResponse(c, he)
 		return
 	}
-	helpers.SendErrorResponse(c, helpers.NewInternalServerError(err.Error()))
+	sendInternalError(c, "failed to read the licence", err)
 }
 
 // getLicense godoc

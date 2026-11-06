@@ -27,7 +27,7 @@ func appQuotaErrorResponse(c *gin.Context, err error) {
 	case errors.Is(err, entitlements.ErrInvalidQuota):
 		helpers.SendErrorResponse(c, helpers.NewBadRequestError(err.Error()))
 	default:
-		helpers.SendErrorResponse(c, helpers.NewInternalServerError(err.Error()))
+		sendInternalError(c, "failed to read or change the App quota", err)
 	}
 }
 

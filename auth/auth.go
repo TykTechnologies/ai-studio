@@ -350,9 +350,9 @@ func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
 		// The host's identity was refused by a licence limit: 409
 		// QUOTA_EXCEEDED with the limit's message, as other refusals.
 		if refusal, ok := c.Get(hostRefusalKey); ok {
-			var he helpers.ErrorResponse
-			if err, _ := refusal.(error); errors.As(err, &he) {
-				helpers.SendErrorResponse(c, he)
+			err, _ := refusal.(error)
+			if ee, exceeded := entitlements.AsExceeded(err); exceeded {
+				helpers.SendErrorResponse(c, ee.HTTPError())
 				c.Abort()
 				return
 			}

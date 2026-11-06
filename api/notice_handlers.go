@@ -33,7 +33,7 @@ func (a *API) getMyNotices(c *gin.Context) {
 	case errors.Is(err, entitlements.ErrEnterpriseFeature):
 		notices = nil
 	case err != nil:
-		helpers.SendErrorResponse(c, helpers.NewInternalServerError(err.Error()))
+		sendInternalError(c, "failed to read notices", err)
 		return
 	}
 	if notices == nil {
@@ -64,7 +64,7 @@ func (a *API) dismissMyNotice(c *gin.Context) {
 	case errors.Is(err, entitlements.ErrUnknownNotice):
 		helpers.SendErrorResponse(c, helpers.NewBadRequestError(err.Error()))
 	case err != nil:
-		helpers.SendErrorResponse(c, helpers.NewInternalServerError(err.Error()))
+		sendInternalError(c, "failed to dismiss the notice", err)
 	default:
 		c.Status(http.StatusNoContent)
 	}
