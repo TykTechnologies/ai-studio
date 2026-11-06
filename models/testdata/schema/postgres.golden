@@ -1873,6 +1873,7 @@ TABLE quota_locks
   constraint quota_locks_pkey PRIMARY KEY (name)
   index CREATE UNIQUE INDEX quota_locks_pkey ON quota_locks USING btree (name)
   column name character varying(varchar) nullable=NO len=64
+  column marked_at timestamp with time zone(timestamptz) nullable=YES
 TABLE registered_plugins
   constraint fk_registered_plugins_plugin FOREIGN KEY (plugin_id) REFERENCES plugins(id)
   constraint registered_plugins_pkey PRIMARY KEY (id)

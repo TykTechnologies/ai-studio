@@ -41,7 +41,7 @@ The page shows:
 - each limit with its usage ("3 of 10", or "of unlimited"), marked **At limit** when it is reached;
 - the licensed features;
 - the **licensed namespaces**, each with when it took its slot, its connected edge gateways, and, for an idle one, when its slot frees itself. **Release slot** frees a slot now, for a namespace with no connected edge gateway (`DELETE /api/v1/license/namespaces/{namespace}`); the freed slot goes to the next waiting namespace;
-- the **waiting namespaces**, in the order they will get a slot.
+- the **waiting namespaces** that have an edge gateway connected, in the order they will get a slot.
 
 ## App quota
 

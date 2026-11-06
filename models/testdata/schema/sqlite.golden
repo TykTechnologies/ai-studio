@@ -1735,6 +1735,7 @@ TABLE push_operations
   index CREATE INDEX `idx_push_operations_status` ON `push_operations`(`status`)
 TABLE quota_locks
   column `name` text
+  column `marked_at` datetime
   constraint PRIMARY KEY (`name`)
   autoindex origin=pk unique=1 (name)
 TABLE registered_plugins

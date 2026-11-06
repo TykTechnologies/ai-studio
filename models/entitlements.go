@@ -46,6 +46,9 @@ func (TeamAppQuota) TableName() string { return "team_app_quotas" }
 // serialised per limit.
 type QuotaLock struct {
 	Name string `gorm:"primaryKey;size:64"`
+	// MarkedAt is a time a lock row can carry, for state kept under the
+	// lock (the namespace sweep's last run).
+	MarkedAt *time.Time `gorm:"column:marked_at"`
 }
 
 // UserNoticeDismissal records that a user dismissed a notice for good.

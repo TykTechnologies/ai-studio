@@ -119,7 +119,10 @@ const (
 	// 36: namespace_waits (new table) and licensed_namespaces.idle_since
 	//     (nullable, additive): namespace slot queue and idle release
 	//     (midsommar-clean-zmwd.30).
-	SchemaVersion          = 36
+	// 37: quota_locks.marked_at (nullable, additive): when the namespace
+	//     sweep last ran, so control-plane downtime never counts as idle
+	//     (midsommar-clean-zmwd.39).
+	SchemaVersion          = 37
 	MinReaderSchemaVersion = 26
 )
 

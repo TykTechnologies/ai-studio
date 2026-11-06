@@ -207,8 +207,8 @@ const License = () => {
             {(report.waiting || []).length > 0 && (
               <Section title="Waiting namespaces">
                 <Typography variant="body2" component="p" sx={{ mb: 1.5 }}>
-                  These namespaces have no licensed slot, so their edge gateways get no configuration. They are
-                  admitted in this order as slots free.
+                  These namespaces have edge gateways connected but no licensed slot, so the gateways get no
+                  configuration. They are admitted in this order as slots free.
                 </Typography>
                 <Table size="small" aria-label="Waiting namespaces">
                   <TableHead>
