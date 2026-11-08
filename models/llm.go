@@ -1,6 +1,7 @@
 package models
 
 import (
+	"errors"
 	"reflect"
 	"time"
 
@@ -133,31 +134,23 @@ func (l *LLM) BeforeSave(tx *gorm.DB) error {
 	return nil
 }
 
+// Create inserts the LLM and its filters. It runs in a transaction of its
+// own, or as a savepoint when db is already one (the entitlements guard).
 func (l *LLM) Create(db *gorm.DB) error {
-	tx := db.Begin()
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-	if err := tx.Error; err != nil {
-		return err
-	}
-	if err := tx.Create(l).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-	if len(l.Filters) > 0 {
-		if err := tx.Model(l).Association("Filters").Replace(l.Filters); err != nil {
-			tx.Rollback()
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(l).Error; err != nil {
 			return err
 		}
-		if err := writeLLMFilterOrder(tx, l); err != nil {
-			tx.Rollback()
-			return err
+		if len(l.Filters) > 0 {
+			if err := tx.Model(l).Association("Filters").Replace(l.Filters); err != nil {
+				return err
+			}
+			if err := writeLLMFilterOrder(tx, l); err != nil {
+				return err
+			}
 		}
-	}
-	return tx.Commit().Error
+		return nil
+	})
 }
 
 func (l *LLM) Update(db *gorm.DB) error {
@@ -260,11 +253,22 @@ func GetTotalTokensByInteractionType(db *gorm.DB, interactionType InteractionTyp
 	return totalTokens, err
 }
 
+// ErrDefaultLLMSkipped is returned by a GetOrCreateDefaultLLMs guard to leave
+// that default out without failing the seed (a licence limit refused it).
+var ErrDefaultLLMSkipped = errors.New("default LLM skipped")
+
 // GetOrCreateDefaultLLMs ensures default LLM configurations exist in the database.
 // This function creates OpenAI and Anthropic LLM configurations with secret references
-// if they don't already exist, providing a quick-start experience for new users.
-// Newly created LLMs are also added to the default catalogue if it exists.
-func GetOrCreateDefaultLLMs(db *gorm.DB) error {
+// if they were never created, providing a quick-start experience for new users.
+// A default an administrator deleted stays deleted. Newly created LLMs are also
+// added to the default catalogue if it exists.
+//
+// guard wraps each create (the licence's LLM limit); nil creates directly. A
+// guard returning ErrDefaultLLMSkipped leaves that default out.
+func GetOrCreateDefaultLLMs(db *gorm.DB, guard func(tx *gorm.DB, fn func(*gorm.DB) error) error) error {
+	if guard == nil {
+		guard = func(tx *gorm.DB, fn func(*gorm.DB) error) error { return fn(tx) }
+	}
 	defaults := []LLM{
 		{
 			Name:         "OpenAI",
@@ -289,15 +293,19 @@ func GetOrCreateDefaultLLMs(db *gorm.DB) error {
 	catalogueExists := db.Where("name = ?", DefaultCatalogueName).First(&defaultCatalogue).Error == nil
 
 	for _, llm := range defaults {
-		// Check if LLM with this name already exists
+		// Check if an LLM with this name exists or was deleted
 		var count int64
-		if err := db.Model(&LLM{}).Where("name = ?", llm.Name).Count(&count).Error; err != nil {
+		if err := db.Unscoped().Model(&LLM{}).Where("name = ?", llm.Name).Count(&count).Error; err != nil {
 			return err
 		}
 
-		// Only create if it doesn't exist
+		// Only create if it never existed
 		if count == 0 {
-			if err := llm.Create(db); err != nil {
+			err := guard(db, func(tx *gorm.DB) error { return llm.Create(tx) })
+			if errors.Is(err, ErrDefaultLLMSkipped) {
+				continue
+			}
+			if err != nil {
 				return err
 			}
 

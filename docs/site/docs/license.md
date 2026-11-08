@@ -10,8 +10,13 @@ An Enterprise licence limits how much of AI Studio a deployment may use. This pa
 | **Users with admin access** | Each enabled user who can open the admin area, whatever their role: Viewers and Auditors count, and so does access through a team's role. |
 | **Users with portal access** | Each enabled user with portal access. |
 | **Apps** | Each App, however it was created. |
+| **LLMs** | Each LLM, active or not, however it was created. |
 
-A limit is a number or unlimited. Disabling a user frees their seats; deleting an App frees its slot.
+A limit is a number or unlimited. Disabling a user frees their seats; deleting an App or an LLM frees its slot.
+
+The default OpenAI and Anthropic LLMs that AI Studio adds on first start count towards the LLM limit. If the limit leaves no room for one, it is not added and AI Studio logs a warning; a default LLM you delete is not added again.
+
+A standalone microgateway enforces the LLM limit of its own licence (`TYK_AI_LICENSE`) on the LLMs created through its management API, and logs a warning at start-up when it is at the limit. Edge gateways receive their LLMs from AI Studio, so AI Studio's limit applies to them.
 
 ## At a limit
 
@@ -19,7 +24,7 @@ A change that would go over a limit is refused with a message that says what to 
 
 > Your organisation has reached its licensed limit of 10 apps. Remove an app to make room, or contact your administrator to increase the quota.
 
-The API answers HTTP 409 with `errors[0].code` set to `QUOTA_EXCEEDED`; plugins calling through the SDK get gRPC `ResourceExhausted`. This applies to creating Apps, creating and editing users, adding users to teams, and granting roles, including a role granted to a team, which gives every member admin access.
+The API answers HTTP 409 with `errors[0].code` set to `QUOTA_EXCEEDED`; plugins calling through the SDK get gRPC `ResourceExhausted`. This applies to creating Apps and LLMs, creating and editing users, adding users to teams, and granting roles, including a role granted to a team, which gives every member admin access.
 
 Nothing that exists is taken away. If a new licence has lower limits than what is in use, everything keeps working, and new use is refused until usage drops below the limit.
 

@@ -4,6 +4,7 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
@@ -16,6 +17,10 @@ type ManagementService struct {
 	db     *gorm.DB
 	repo   *database.Repository
 	crypto CryptoServiceInterface
+
+	// llmLimit is the licence's LLM limit (SetLLMLimit); nil is unlimited.
+	llmLimit   LLMLimitFunc
+	llmLimitMu sync.Mutex
 }
 
 // NewManagementService creates a new management service
@@ -92,8 +97,11 @@ func (s *ManagementService) CreateLLM(req *CreateLLMRequest) (*database.LLM, err
 		MetadataSecretsEncrypted: metadataSecrets,
 	}
 
-	// Save to database
-	if err := s.repo.CreateLLM(llm); err != nil {
+	// Save to database, within the licence's LLM limit
+	if err := s.createLLMWithinLimit(llm); err != nil {
+		if IsLLMLimitError(err) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("failed to create LLM: %w", err)
 	}
 

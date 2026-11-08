@@ -555,6 +555,11 @@ const LLMForm = () => {
         setSnackbar({ open: true, message: detail, severity: "error" });
         return;
       }
+      if (error.response?.status === 409 && error.response?.data?.errors?.[0]?.code === "QUOTA_EXCEEDED") {
+        // The licence's LLM limit: the server says what to remove or whom to ask.
+        setSnackbar({ open: true, message: detail || "The licensed LLM limit has been reached.", severity: "error" });
+        return;
+      }
       const slugConflict = slugConflictDetail(error);
       if (slugConflict) {
         // Another LLM already has this name's slug: say so on the Name field.

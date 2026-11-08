@@ -53,6 +53,34 @@ func TestMicrogatewayLicenceNeedsAIStudioSKU(t *testing.T) {
 		assert.InDelta(t, 1, s.DaysLeft(), 1)
 	})
 
+	t.Run("max_llms is read from the licence", func(t *testing.T) {
+		c := base()
+		c[verify.ClaimProducts] = map[string]interface{}{verify.SKU: map[string]interface{}{
+			verify.ClaimLimits: map[string]interface{}{verify.LimitLLMs: 3},
+		}}
+		s := newSvc(sign(c))
+		require.NoError(t, s.validateLicense())
+		max, unlimited := s.MaxLLMs()
+		assert.Equal(t, int64(3), max)
+		assert.False(t, unlimited)
+
+		c[verify.ClaimProducts] = map[string]interface{}{verify.SKU: map[string]interface{}{
+			verify.ClaimLimits: map[string]interface{}{verify.LimitLLMs: verify.Unlimited},
+		}}
+		s = newSvc(sign(c))
+		require.NoError(t, s.validateLicense())
+		_, unlimited = s.MaxLLMs()
+		assert.True(t, unlimited)
+	})
+
+	t.Run("a licence without max_llms allows none", func(t *testing.T) {
+		s := newSvc(sign(base()))
+		require.NoError(t, s.validateLicense())
+		max, unlimited := s.MaxLLMs()
+		assert.Equal(t, int64(0), max)
+		assert.False(t, unlimited)
+	})
+
 	t.Run("another product's licence fails with the SKU error", func(t *testing.T) {
 		c := base()
 		c[verify.ClaimSKUs] = []interface{}{"tyk-dashboard"}

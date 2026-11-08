@@ -1,9 +1,12 @@
 package models
 
 import (
+	"errors"
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestLLMSettings_NewLLMSettings(t *testing.T) {
@@ -170,7 +173,7 @@ func TestDefaultBootstrapModelsAreInCatalogue(t *testing.T) {
 func TestDefaultLLMsUseBootstrapModels(t *testing.T) {
 	db := setupTestDB(t)
 
-	err := GetOrCreateDefaultLLMs(db)
+	err := GetOrCreateDefaultLLMs(db, nil)
 	assert.NoError(t, err)
 
 	for vendor, want := range DefaultBootstrapModels {
@@ -179,4 +182,63 @@ func TestDefaultLLMsUseBootstrapModels(t *testing.T) {
 		assert.NoError(t, err, "expected a seeded provider for vendor %q", vendor)
 		assert.Equal(t, want, llm.DefaultModel)
 	}
+}
+
+// A default an administrator deleted is not seeded again on the next start,
+// so it does not quietly take back a licensed LLM slot.
+func TestDefaultLLMsStayDeleted(t *testing.T) {
+	db := setupTestDB(t)
+	require.NoError(t, GetOrCreateDefaultLLMs(db, nil))
+
+	var openai LLM
+	require.NoError(t, db.Where("name = ?", "OpenAI").First(&openai).Error)
+	require.NoError(t, openai.Delete(db))
+
+	require.NoError(t, GetOrCreateDefaultLLMs(db, nil))
+	var n int64
+	require.NoError(t, db.Model(&LLM{}).Where("name = ?", "OpenAI").Count(&n).Error)
+	assert.Equal(t, int64(0), n)
+	require.NoError(t, db.Model(&LLM{}).Where("name = ?", "Anthropic").Count(&n).Error)
+	assert.Equal(t, int64(1), n)
+}
+
+// A guard that skips a default leaves it out and seeds the rest; any other
+// guard error fails the seed.
+func TestDefaultLLMsGuard(t *testing.T) {
+	db := setupTestDB(t)
+	calls := 0
+	skipFirst := func(tx *gorm.DB, fn func(*gorm.DB) error) error {
+		calls++
+		if calls == 1 {
+			return ErrDefaultLLMSkipped
+		}
+		return tx.Transaction(fn)
+	}
+	require.NoError(t, GetOrCreateDefaultLLMs(db, skipFirst))
+	var n int64
+	require.NoError(t, db.Model(&LLM{}).Count(&n).Error)
+	assert.Equal(t, int64(1), n)
+
+	boom := errors.New("boom")
+	err := GetOrCreateDefaultLLMs(setupTestDB(t), func(*gorm.DB, func(*gorm.DB) error) error { return boom })
+	assert.ErrorIs(t, err, boom)
+}
+
+// LLM.Create works inside a caller's transaction (the licence guard) and
+// rolls back with it.
+func TestLLMCreateInsideTransaction(t *testing.T) {
+	db := setupTestDB(t)
+	refused := errors.New("refused")
+	err := db.Transaction(func(tx *gorm.DB) error {
+		require.NoError(t, (&LLM{Name: "inner", Vendor: OPENAI}).Create(tx))
+		return refused
+	})
+	require.ErrorIs(t, err, refused)
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		return (&LLM{Name: "kept", Vendor: OPENAI}).Create(tx)
+	}))
+
+	var names []string
+	require.NoError(t, db.Model(&LLM{}).Pluck("name", &names).Error)
+	assert.Equal(t, []string{"kept"}, names)
 }

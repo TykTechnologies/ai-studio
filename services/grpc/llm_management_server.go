@@ -7,6 +7,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	pb "github.com/TykTechnologies/midsommar/v2/proto/ai_studio_management"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/entitlements"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc/codes"
@@ -208,6 +209,9 @@ func (s *LLMManagementServer) CreateLLM(ctx context.Context, req *pb.CreateLLMRe
 			Str("name", req.GetName()).
 			Str("vendor", req.GetVendor()).
 			Msg("Failed to create LLM via gRPC")
+		if gerr, ok := entitlements.GRPCError(err); ok {
+			return nil, gerr
+		}
 		if errors.Is(err, models.ErrSlugConflict) {
 			return nil, status.Error(codes.AlreadyExists, err.Error())
 		}
