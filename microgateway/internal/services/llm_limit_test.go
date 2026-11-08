@@ -2,7 +2,12 @@ package services
 
 import (
 	"fmt"
+	"path/filepath"
+	"sync"
 	"testing"
+
+	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -72,4 +77,69 @@ func TestCreateLLMZeroAndDowngrade(t *testing.T) {
 	n, err := countLLMs(db)
 	require.NoError(t, err)
 	assert.Equal(t, int64(3), n, "nothing is revoked")
+}
+
+// parallelCreatesStayWithinLimit runs attempts LLM creates in parallel,
+// alternating between two gateways' services on their own connections to one
+// database, and checks that exactly max succeed and the rest are refused.
+func parallelCreatesStayWithinLimit(t *testing.T, a, b *gorm.DB) {
+	t.Helper()
+	const max, attempts = 3, 16
+	crypto := NewCryptoService("12345678901234567890123456789012")
+	gateways := []*ManagementService{
+		NewManagementService(a, database.NewRepository(a), crypto).(*ManagementService),
+		NewManagementService(b, database.NewRepository(b), crypto).(*ManagementService),
+	}
+	for _, g := range gateways {
+		g.SetLLMLimit(fixedLimit(max, false))
+	}
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var ok, refused int
+	var others []error
+	for i := 0; i < attempts; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, err := gateways[i%2].CreateLLM(llmRequest(fmt.Sprintf("parallel-%d", i), true))
+			mu.Lock()
+			defer mu.Unlock()
+			switch {
+			case err == nil:
+				ok++
+			case IsLLMLimitError(err):
+				refused++
+			default:
+				others = append(others, err)
+			}
+		}(i)
+	}
+	wg.Wait()
+	require.Empty(t, others)
+	assert.Equal(t, max, ok)
+	assert.Equal(t, attempts-max, refused)
+	n, err := countLLMs(a)
+	require.NoError(t, err)
+	assert.Equal(t, int64(max), n)
+}
+
+// Two gateways on one SQLite file, opened as the gateway opens it.
+func TestParallelLLMCreatesWithinLimitSQLiteFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gateway.db")
+	open := func() *gorm.DB {
+		db, err := database.Connect(database.DatabaseConfig{Type: "sqlite", DSN: path, MaxOpenConns: 4, MaxIdleConns: 4, LogLevel: "silent"})
+		require.NoError(t, err)
+		t.Cleanup(func() { database.Close(db) })
+		return db
+	}
+	a := open()
+	require.NoError(t, database.Migrate(a))
+	parallelCreatesStayWithinLimit(t, a, open())
+}
+
+// Two gateways sharing a Postgres database (MGW_TEST_POSTGRES_DSN).
+func TestParallelLLMCreatesWithinLimitPostgres(t *testing.T) {
+	a := openPostgresSchema(t)
+	parallelCreatesStayWithinLimit(t, a, a.Session(&gorm.Session{NewDB: true}))
 }

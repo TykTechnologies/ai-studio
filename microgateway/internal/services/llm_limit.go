@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 	"fmt"
+	"hash/fnv"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -45,10 +46,30 @@ func countLLMs(db *gorm.DB) (int64, error) {
 	return n, err
 }
 
+// llmLimitLockKey is the Postgres advisory lock that serialises LLM creates
+// under the licence limit across gateways sharing a database.
+var llmLimitLockKey = func() int64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte("microgateway|llm-limit"))
+	return int64(h.Sum64())
+}()
+
+// lockLLMLimit serialises LLM creates under the limit for the rest of tx: a
+// transaction-scoped advisory lock on Postgres. SQLite needs none, since the
+// gateway opens it with txlock=immediate, so a transaction holds the write
+// lock from its start.
+func lockLLMLimit(tx *gorm.DB) error {
+	if tx.Dialector.Name() != "postgres" {
+		return nil
+	}
+	return tx.Exec("SELECT pg_advisory_xact_lock(?)", llmLimitLockKey).Error
+}
+
 // createLLMWithinLimit stores llm unless that would take the LLM count past
 // the licensed limit. Only increases are refused: after a licence downgrade
-// the existing LLMs stay. The count and the insert are serialised in this
-// process; a gateway's own management API is the only writer of its LLMs.
+// the existing LLMs stay. The count and the insert run in one transaction
+// under lockLLMLimit, so gateways sharing a database cannot both pass the
+// check.
 func (s *ManagementService) createLLMWithinLimit(llm *database.LLM) error {
 	if s.llmLimit == nil {
 		return s.repo.CreateLLM(llm)
@@ -57,18 +78,24 @@ func (s *ManagementService) createLLMWithinLimit(llm *database.LLM) error {
 	if unlimited {
 		return s.repo.CreateLLM(llm)
 	}
-	s.llmLimitMu.Lock()
-	defer s.llmLimitMu.Unlock()
-	n, err := countLLMs(s.db)
-	if err != nil {
-		return fmt.Errorf("failed to count LLMs: %w", err)
+	var n int64
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := lockLLMLimit(tx); err != nil {
+			return fmt.Errorf("failed to lock the LLM limit: %w", err)
+		}
+		var err error
+		if n, err = countLLMs(tx); err != nil {
+			return fmt.Errorf("failed to count LLMs: %w", err)
+		}
+		if n >= max {
+			return &LLMLimitError{Max: max}
+		}
+		return database.NewRepository(tx).CreateLLM(llm)
+	})
+	if IsLLMLimitError(err) {
+		log.Warn().Int64("llms", n).Int64("max_llms", max).Msg("LLM not created: " + err.Error())
 	}
-	if n >= max {
-		refusal := &LLMLimitError{Max: max}
-		log.Warn().Int64("llms", n).Int64("max_llms", max).Msg("LLM not created: " + refusal.Error())
-		return refusal
-	}
-	return s.repo.CreateLLM(llm)
+	return err
 }
 
 // WarnIfAtLLMLimit logs a warning when the gateway's LLMs are at or over the

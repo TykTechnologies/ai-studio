@@ -4,7 +4,6 @@ package services
 import (
 	"encoding/json"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
@@ -19,8 +18,7 @@ type ManagementService struct {
 	crypto CryptoServiceInterface
 
 	// llmLimit is the licence's LLM limit (SetLLMLimit); nil is unlimited.
-	llmLimit   LLMLimitFunc
-	llmLimitMu sync.Mutex
+	llmLimit LLMLimitFunc
 }
 
 // NewManagementService creates a new management service
