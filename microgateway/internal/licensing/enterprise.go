@@ -18,6 +18,7 @@ type enterpriseService struct {
 	config    Config
 	publicKey *rsa.PublicKey
 	expiresAt time.Time
+	maxLLMs   verify.Limit
 	lock      sync.RWMutex
 	done      chan bool
 }
@@ -80,6 +81,14 @@ func (s *enterpriseService) DaysLeft() int {
 	return days
 }
 
+// MaxLLMs returns the licence's max_llms; a licence without it allows 0
+func (s *enterpriseService) MaxLLMs() (int64, bool) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	return s.maxLLMs.Max, s.maxLLMs.Unlimited
+}
+
 // validateLicense validates the JWT license token
 func (s *enterpriseService) validateLicense() error {
 	if s.config.LicenseKey == "" {
@@ -87,16 +96,17 @@ func (s *enterpriseService) validateLicense() error {
 	}
 
 	// The shared verifier checks the signature, expiry and the AI Studio
-	// SKU. Limits are enforced by AI Studio, not the gateway.
+	// SKU. AI Studio enforces the limits; a standalone gateway enforces
+	// max_llms on its own LLMs.
 	claims, err := verify.Verify(s.config.LicenseKey, s.publicKey)
 	if err != nil {
 		return err
 	}
-	expiresAt := claims.ExpiresAt
 
-	// Store expiration time
+	// Store expiration time and the LLM limit
 	s.lock.Lock()
-	s.expiresAt = expiresAt
+	s.expiresAt = claims.ExpiresAt
+	s.maxLLMs = claims.Limit(verify.LimitLLMs)
 	s.lock.Unlock()
 
 	return nil

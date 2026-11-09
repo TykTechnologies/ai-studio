@@ -436,6 +436,17 @@ func main() {
 		os.Exit(0)
 	}
 
+	// A gateway's own LLMs (standalone and control mode; edges get theirs
+	// from AI Studio) are held to the licence's LLM limit.
+	if limiter, ok := serviceContainer.Management.(interface {
+		SetLLMLimit(services.LLMLimitFunc)
+	}); ok {
+		limiter.SetLLMLimit(licensingService.MaxLLMs)
+	}
+	if !cfg.IsEdge() {
+		services.WarnIfAtLLMLimit(db, licensingService.MaxLLMs)
+	}
+
 	// Wire licensing service to management server for plugin license checks
 	if mgmtServer := serviceContainer.PluginManager.GetManagementServer(); mgmtServer != nil {
 		if setter, ok := mgmtServer.(interface {

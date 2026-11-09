@@ -68,6 +68,14 @@ func CreateLLM(serviceContainer *services.ServiceContainer) gin.HandlerFunc {
 		// Create LLM
 		llm, err := serviceContainer.Management.CreateLLM(&req)
 		if err != nil {
+			if services.IsLLMLimitError(err) {
+				c.JSON(http.StatusConflict, gin.H{
+					"error":   "Licence limit reached",
+					"code":    "QUOTA_EXCEEDED",
+					"message": err.Error(),
+				})
+				return
+			}
 			if isConflictError(err) {
 				c.JSON(http.StatusConflict, gin.H{
 					"error":   "Conflict",

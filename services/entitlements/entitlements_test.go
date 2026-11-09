@@ -60,11 +60,13 @@ func TestCommunityStubAllowsEverything(t *testing.T) {
 	fn := func(*gorm.DB) error { ran++; return nil }
 	require.NoError(t, s.GuardAppCreate(nil, 1, true, fn))
 	require.NoError(t, s.GuardUserChange(nil, fn))
-	assert.Equal(t, 2, ran)
+	require.NoError(t, s.GuardLLMCreate(nil, fn))
+	assert.Equal(t, 3, ran)
 
 	// The guard returns fn's own error unchanged.
 	boom := errors.New("boom")
 	assert.Equal(t, boom, s.GuardAppCreate(nil, 1, false, func(*gorm.DB) error { return boom }))
+	assert.Equal(t, boom, s.GuardLLMCreate(nil, func(*gorm.DB) error { return boom }))
 
 	licensed, err := s.AdmitNamespace(nil, "team-a")
 	require.NoError(t, err)

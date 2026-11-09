@@ -12,6 +12,7 @@ import {
   InputLabel,
   Typography,
   Box,
+  Alert,
 } from "@mui/material";
 import apiClient from "../../utils/apiClient";
 
@@ -199,7 +200,9 @@ const ChatRoomWizard = ({ open, onClose, fetchData }) => {
       await fetchData();
     } catch (error) {
       console.error("Error creating chat room:", error);
-      setError("Failed to create chat room. Please try again.");
+      // A licence limit (409 QUOTA_EXCEEDED) says what to remove or whom to ask.
+      const quota = error.response?.status === 409 && error.response?.data?.errors?.[0]?.code === "QUOTA_EXCEEDED";
+      setError((quota && error.response.data.errors[0].detail) || "Failed to create chat room. Please try again.");
     }
   };
 
@@ -401,6 +404,11 @@ const ChatRoomWizard = ({ open, onClose, fetchData }) => {
             : `Step ${activeStep + 1}`}
         </Typography>
         {renderStepContent(activeStep)}
+        {error && (
+          <Alert severity="error" sx={{ mt: 2 }} onClose={() => setError(null)}>
+            {error}
+          </Alert>
+        )}
       </StyledDialogContent>
       <DialogActions sx={{ justifyContent: 'space-between', px: 3 }}>
         <Box>

@@ -348,3 +348,31 @@ func boolPtr(b bool) *bool {
 func stringPtr(s string) *string {
 	return &s
 }
+// Over the licence's LLM limit the API answers 409 QUOTA_EXCEEDED with the
+// limit's message, and stores nothing.
+func TestCreateLLM_Handler_LicenceLimit(t *testing.T) {
+	container, router := setupTestHandlers(t)
+	router.POST("/llms", CreateLLM(container))
+	container.Management.(*services.ManagementService).SetLLMLimit(func() (int64, bool) { return 1, false })
+
+	post := func(name string) *httptest.ResponseRecorder {
+		jsonData, _ := json.Marshal(services.CreateLLMRequest{Name: name, Vendor: "openai", DefaultModel: "gpt-4", APIKey: "sk-test123", IsActive: true})
+		req := httptest.NewRequest("POST", "/llms", bytes.NewBuffer(jsonData))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		return w
+	}
+
+	require.Equal(t, http.StatusCreated, post("first").Code)
+	w := post("second")
+	require.Equal(t, http.StatusConflict, w.Code, w.Body.String())
+	var response map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	assert.Equal(t, "QUOTA_EXCEEDED", response["code"])
+	assert.Contains(t, response["message"], "licensed limit of 1 LLM.")
+
+	var n int64
+	require.NoError(t, container.DB.Model(&database.LLM{}).Count(&n).Error)
+	assert.Equal(t, int64(1), n)
+}

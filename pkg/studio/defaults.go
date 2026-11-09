@@ -11,6 +11,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/entitlements"
 	"github.com/TykTechnologies/midsommar/v2/services/governed_metadata"
 )
 
@@ -88,11 +89,8 @@ func ensureDefaults(db *gorm.DB, skipLLMDefaults, skipFilterDefaults bool) error
 			return fmt.Errorf("failed to create default secrets: %w", err)
 		}
 		logger.Info("Default secrets checked/initialized")
-
-		if err := models.GetOrCreateDefaultLLMs(db); err != nil {
-			return fmt.Errorf("failed to create default LLM configurations: %w", err)
-		}
-		logger.Info("Default LLM configurations checked/initialized")
+		// The default LLMs are seeded by ensureDefaultLLMs once the
+		// licence's LLM limit can be consulted.
 	}
 
 	// Seed the default guardrail filters (Enterprise, where filters execute).
@@ -107,6 +105,24 @@ func ensureDefaults(db *gorm.DB, skipLLMDefaults, skipFilterDefaults bool) error
 	}
 
 	logger.Info("Default group and catalogues successfully initialized and linked")
+	return nil
+}
+
+// ensureDefaultLLMs seeds the default LLMs under the licence's LLM limit. A
+// default the limit refuses is left out with a warning; start-up goes on.
+func ensureDefaultLLMs(db *gorm.DB, ent entitlements.Service) error {
+	guard := func(tx *gorm.DB, fn func(*gorm.DB) error) error {
+		err := ent.GuardLLMCreate(tx, fn)
+		if ee, exceeded := entitlements.AsExceeded(err); exceeded {
+			logger.Warnf("Default LLM not created: %s", ee.Message)
+			return models.ErrDefaultLLMSkipped
+		}
+		return err
+	}
+	if err := models.GetOrCreateDefaultLLMs(db, guard); err != nil {
+		return fmt.Errorf("failed to create default LLM configurations: %w", err)
+	}
+	logger.Info("Default LLM configurations checked/initialized")
 	return nil
 }
 

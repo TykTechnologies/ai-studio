@@ -1,19 +1,21 @@
 package api
 
 import (
-	"maps"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/entitlements"
 	"github.com/gin-gonic/gin"
 )
 
@@ -370,8 +372,12 @@ func failoverChanged(existing models.LLMFailover, incoming *models.LLMFailover) 
 
 // respondLLMServiceError maps a service failure to the right status: a
 // waterfall that fails validation is the caller's 400, naming the rung;
-// anything else stays a 500.
+// a licence limit is 409 QUOTA_EXCEEDED; anything else stays a 500.
 func respondLLMServiceError(c *gin.Context, err error) {
+	if ee, exceeded := entitlements.AsExceeded(err); exceeded {
+		helpers.SendErrorResponse(c, ee.HTTPError())
+		return
+	}
 	if llmEmbedderConflict(err) {
 		c.JSON(http.StatusConflict, ErrorResponse{
 			Errors: []struct {
@@ -695,34 +701,34 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 			Type: "plugins",
 			ID:   strconv.FormatUint(uint64(plugin.ID), 10),
 			Attributes: struct {
-				Name         string                 `json:"name"`
-				Description  string                 `json:"description"`
-				Command      string                 `json:"command"`
-				Checksum     string                 `json:"checksum,omitempty"`
-				Config       map[string]interface{} `json:"config"`
-				HookType     string                 `json:"hook_type"`
-				IsActive     bool                   `json:"is_active"`
-				Namespace    string                 `json:"namespace"`
-				PluginType   string                 `json:"plugin_type"`   // "gateway" or "ai_studio"
-				OCIReference string                 `json:"oci_reference"` // OCI artifact reference (for OCI plugins)
-				Manifest     map[string]interface{} `json:"manifest"`      // Plugin manifest for UI extensions
-				CreatedAt    string                 `json:"created_at"`
-				UpdatedAt    string                 `json:"updated_at"`
-				AllowInternalHost bool `json:"allow_internal_host"`
+				Name              string                 `json:"name"`
+				Description       string                 `json:"description"`
+				Command           string                 `json:"command"`
+				Checksum          string                 `json:"checksum,omitempty"`
+				Config            map[string]interface{} `json:"config"`
+				HookType          string                 `json:"hook_type"`
+				IsActive          bool                   `json:"is_active"`
+				Namespace         string                 `json:"namespace"`
+				PluginType        string                 `json:"plugin_type"`   // "gateway" or "ai_studio"
+				OCIReference      string                 `json:"oci_reference"` // OCI artifact reference (for OCI plugins)
+				Manifest          map[string]interface{} `json:"manifest"`      // Plugin manifest for UI extensions
+				CreatedAt         string                 `json:"created_at"`
+				UpdatedAt         string                 `json:"updated_at"`
+				AllowInternalHost bool                   `json:"allow_internal_host"`
 			}{
-				Name:         plugin.Name,
-				Description:  plugin.Description,
-				Command:      plugin.Command,
-				Checksum:     plugin.Checksum,
-				Config:       plugin.Config,
-				PluginType:   plugin.GetCapabilityCategory(),
-				OCIReference: plugin.OCIReference,
-				Manifest:     plugin.Manifest,
-				HookType:    plugin.HookType,
-				IsActive:    plugin.IsActive,
-				Namespace:   plugin.Namespace,
-				CreatedAt:   plugin.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-				UpdatedAt:   plugin.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+				Name:              plugin.Name,
+				Description:       plugin.Description,
+				Command:           plugin.Command,
+				Checksum:          plugin.Checksum,
+				Config:            plugin.Config,
+				PluginType:        plugin.GetCapabilityCategory(),
+				OCIReference:      plugin.OCIReference,
+				Manifest:          plugin.Manifest,
+				HookType:          plugin.HookType,
+				IsActive:          plugin.IsActive,
+				Namespace:         plugin.Namespace,
+				CreatedAt:         plugin.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+				UpdatedAt:         plugin.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 				AllowInternalHost: plugin.AllowInternalHost,
 			},
 		}
@@ -734,60 +740,60 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 		Type: "llms",
 		ID:   strconv.FormatUint(uint64(llm.ID), 10),
 		Attributes: struct {
-			Name             string           `json:"name"`
-			APIKey           string           `json:"api_key"`
-			HasAPIKey        bool             `json:"has_api_key"`
-			CredentialStatus string           `json:"credential_status"`
-			CredentialRef    string           `json:"credential_ref,omitempty"`
-			CredentialSource string `json:"credential_source,omitempty"`
-			APIEndpoint      string           `json:"api_endpoint"`
-			PrivacyScore     int              `json:"privacy_score"`
-			ShortDescription string           `json:"short_description"`
-			LongDescription  string           `json:"long_description"`
-			LogoURL          string           `json:"logo_url"`
-			Vendor           string           `json:"vendor"`
-			Active           bool             `json:"active"`
-			Filters          []FilterResponse `json:"filters"`
-			DefaultModel     string           `json:"default_model"`
-			AllowedModels    []string         `json:"allowed_models"`
-			MonthlyBudget    *float64         `json:"monthly_budget"`
-			BudgetStartDate  *time.Time       `json:"budget_start_date"`
-			Namespace        string                 `json:"namespace"`
-			DontLogBodies    bool                   `json:"dont_log_bodies"`
-			Plugins          []PluginResponse       `json:"plugins"`
-			Metadata         map[string]interface{} `json:"metadata,omitempty"`
-			Failover         *models.LLMFailover    `json:"failover,omitempty"`
-			VendorWorkspaceID string `json:"vendor_workspace_id"`
-			PriceMultipliers  models.LLMPriceMultipliers `json:"price_multipliers"`
-			TracingContentModeMax    string `json:"tracing_content_mode_max"`
-			TracingPropagationOptOut bool   `json:"tracing_propagation_opt_out"`
-			AllowInternalHost        bool   `json:"allow_internal_host"`
+			Name                     string                     `json:"name"`
+			APIKey                   string                     `json:"api_key"`
+			HasAPIKey                bool                       `json:"has_api_key"`
+			CredentialStatus         string                     `json:"credential_status"`
+			CredentialRef            string                     `json:"credential_ref,omitempty"`
+			CredentialSource         string                     `json:"credential_source,omitempty"`
+			APIEndpoint              string                     `json:"api_endpoint"`
+			PrivacyScore             int                        `json:"privacy_score"`
+			ShortDescription         string                     `json:"short_description"`
+			LongDescription          string                     `json:"long_description"`
+			LogoURL                  string                     `json:"logo_url"`
+			Vendor                   string                     `json:"vendor"`
+			Active                   bool                       `json:"active"`
+			Filters                  []FilterResponse           `json:"filters"`
+			DefaultModel             string                     `json:"default_model"`
+			AllowedModels            []string                   `json:"allowed_models"`
+			MonthlyBudget            *float64                   `json:"monthly_budget"`
+			BudgetStartDate          *time.Time                 `json:"budget_start_date"`
+			Namespace                string                     `json:"namespace"`
+			DontLogBodies            bool                       `json:"dont_log_bodies"`
+			Plugins                  []PluginResponse           `json:"plugins"`
+			Metadata                 map[string]interface{}     `json:"metadata,omitempty"`
+			Failover                 *models.LLMFailover        `json:"failover,omitempty"`
+			VendorWorkspaceID        string                     `json:"vendor_workspace_id"`
+			PriceMultipliers         models.LLMPriceMultipliers `json:"price_multipliers"`
+			TracingContentModeMax    string                     `json:"tracing_content_mode_max"`
+			TracingPropagationOptOut bool                       `json:"tracing_propagation_opt_out"`
+			AllowInternalHost        bool                       `json:"allow_internal_host"`
 		}{
-			Name:             llm.Name,
-			APIKey:           services.REDACTED_VALUE,
-			HasAPIKey:        llm.APIKey != "",
-			CredentialStatus: llmCredentialStatus,
-			CredentialRef:    llmCredentialRef,
-			CredentialSource: credentialSource(llm.APIKey),
-			APIEndpoint:      llm.APIEndpoint,
-			PrivacyScore:     llm.PrivacyScore,
-			ShortDescription: llm.ShortDescription,
-			LongDescription:  llm.LongDescription,
-			LogoURL:          llm.LogoURL,
-			Vendor:           string(llm.Vendor),
-			Active:           llm.Active,
-			Filters:          serializeFilters(llm.Filters),
-			DefaultModel:     llm.DefaultModel,
-			AllowedModels:    llm.AllowedModels,
-			MonthlyBudget:    llm.MonthlyBudget,
-			BudgetStartDate:  llm.BudgetStartDate,
-			Namespace:        llm.Namespace,
-			DontLogBodies:    llm.DontLogBodies,
-			Plugins:          plugins,
-			Metadata:         redactMetadataSecrets(llm.Metadata),
-			Failover:         failoverForResponse(llm.Failover),
-			VendorWorkspaceID: llm.VendorWorkspaceID,
-			PriceMultipliers:  llm.PriceMultipliers,
+			Name:                     llm.Name,
+			APIKey:                   services.REDACTED_VALUE,
+			HasAPIKey:                llm.APIKey != "",
+			CredentialStatus:         llmCredentialStatus,
+			CredentialRef:            llmCredentialRef,
+			CredentialSource:         credentialSource(llm.APIKey),
+			APIEndpoint:              llm.APIEndpoint,
+			PrivacyScore:             llm.PrivacyScore,
+			ShortDescription:         llm.ShortDescription,
+			LongDescription:          llm.LongDescription,
+			LogoURL:                  llm.LogoURL,
+			Vendor:                   string(llm.Vendor),
+			Active:                   llm.Active,
+			Filters:                  serializeFilters(llm.Filters),
+			DefaultModel:             llm.DefaultModel,
+			AllowedModels:            llm.AllowedModels,
+			MonthlyBudget:            llm.MonthlyBudget,
+			BudgetStartDate:          llm.BudgetStartDate,
+			Namespace:                llm.Namespace,
+			DontLogBodies:            llm.DontLogBodies,
+			Plugins:                  plugins,
+			Metadata:                 redactMetadataSecrets(llm.Metadata),
+			Failover:                 failoverForResponse(llm.Failover),
+			VendorWorkspaceID:        llm.VendorWorkspaceID,
+			PriceMultipliers:         llm.PriceMultipliers,
 			TracingContentModeMax:    llm.TracingContentModeMax,
 			TracingPropagationOptOut: llm.TracingPropagationOptOut,
 			AllowInternalHost:        llm.AllowInternalHost,
@@ -828,34 +834,34 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 				Type: "plugins",
 				ID:   strconv.FormatUint(uint64(plugin.ID), 10),
 				Attributes: struct {
-					Name         string                 `json:"name"`
-					Description  string                 `json:"description"`
-					Command      string                 `json:"command"`
-					Checksum     string                 `json:"checksum,omitempty"`
-					Config       map[string]interface{} `json:"config"`
-					HookType     string                 `json:"hook_type"`
-					IsActive     bool                   `json:"is_active"`
-					Namespace    string                 `json:"namespace"`
-					PluginType   string                 `json:"plugin_type"`   // "gateway" or "ai_studio"
-					OCIReference string                 `json:"oci_reference"` // OCI artifact reference (for OCI plugins)
-					Manifest     map[string]interface{} `json:"manifest"`      // Plugin manifest for UI extensions
-					CreatedAt    string                 `json:"created_at"`
-					UpdatedAt    string                 `json:"updated_at"`
-					AllowInternalHost bool `json:"allow_internal_host"`
+					Name              string                 `json:"name"`
+					Description       string                 `json:"description"`
+					Command           string                 `json:"command"`
+					Checksum          string                 `json:"checksum,omitempty"`
+					Config            map[string]interface{} `json:"config"`
+					HookType          string                 `json:"hook_type"`
+					IsActive          bool                   `json:"is_active"`
+					Namespace         string                 `json:"namespace"`
+					PluginType        string                 `json:"plugin_type"`   // "gateway" or "ai_studio"
+					OCIReference      string                 `json:"oci_reference"` // OCI artifact reference (for OCI plugins)
+					Manifest          map[string]interface{} `json:"manifest"`      // Plugin manifest for UI extensions
+					CreatedAt         string                 `json:"created_at"`
+					UpdatedAt         string                 `json:"updated_at"`
+					AllowInternalHost bool                   `json:"allow_internal_host"`
 				}{
-					Name:         plugin.Name,
-					Description:  plugin.Description,
-					Command:      plugin.Command,
-					Checksum:     plugin.Checksum,
-					Config:       plugin.Config,
-					HookType:     plugin.HookType,
-					IsActive:     plugin.IsActive,
-					Namespace:    plugin.Namespace,
-					PluginType:   plugin.GetCapabilityCategory(),
-					OCIReference: plugin.OCIReference,
-					Manifest:     plugin.Manifest,
-					CreatedAt:    plugin.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-					UpdatedAt:    plugin.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+					Name:              plugin.Name,
+					Description:       plugin.Description,
+					Command:           plugin.Command,
+					Checksum:          plugin.Checksum,
+					Config:            plugin.Config,
+					HookType:          plugin.HookType,
+					IsActive:          plugin.IsActive,
+					Namespace:         plugin.Namespace,
+					PluginType:        plugin.GetCapabilityCategory(),
+					OCIReference:      plugin.OCIReference,
+					Manifest:          plugin.Manifest,
+					CreatedAt:         plugin.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+					UpdatedAt:         plugin.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 					AllowInternalHost: plugin.AllowInternalHost,
 				},
 			}
@@ -867,60 +873,60 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 			Type: "llms",
 			ID:   strconv.FormatUint(uint64(llm.ID), 10),
 			Attributes: struct {
-				Name             string           `json:"name"`
-				APIKey           string           `json:"api_key"`
-				HasAPIKey        bool             `json:"has_api_key"`
-				CredentialStatus string           `json:"credential_status"`
-				CredentialRef    string           `json:"credential_ref,omitempty"`
-				CredentialSource string `json:"credential_source,omitempty"`
-				APIEndpoint      string           `json:"api_endpoint"`
-				PrivacyScore     int              `json:"privacy_score"`
-				ShortDescription string           `json:"short_description"`
-				LongDescription  string           `json:"long_description"`
-				LogoURL          string           `json:"logo_url"`
-				Vendor           string           `json:"vendor"`
-				Active           bool             `json:"active"`
-				Filters          []FilterResponse `json:"filters"`
-				DefaultModel     string           `json:"default_model"`
-				AllowedModels    []string         `json:"allowed_models"`
-				MonthlyBudget    *float64         `json:"monthly_budget"`
-				BudgetStartDate  *time.Time       `json:"budget_start_date"`
-				Namespace        string                 `json:"namespace"`
-				DontLogBodies    bool                   `json:"dont_log_bodies"`
-				Plugins          []PluginResponse       `json:"plugins"`
-				Metadata         map[string]interface{} `json:"metadata,omitempty"`
-				Failover         *models.LLMFailover    `json:"failover,omitempty"`
-				VendorWorkspaceID string `json:"vendor_workspace_id"`
-				PriceMultipliers  models.LLMPriceMultipliers `json:"price_multipliers"`
-				TracingContentModeMax    string `json:"tracing_content_mode_max"`
-				TracingPropagationOptOut bool   `json:"tracing_propagation_opt_out"`
-				AllowInternalHost        bool   `json:"allow_internal_host"`
+				Name                     string                     `json:"name"`
+				APIKey                   string                     `json:"api_key"`
+				HasAPIKey                bool                       `json:"has_api_key"`
+				CredentialStatus         string                     `json:"credential_status"`
+				CredentialRef            string                     `json:"credential_ref,omitempty"`
+				CredentialSource         string                     `json:"credential_source,omitempty"`
+				APIEndpoint              string                     `json:"api_endpoint"`
+				PrivacyScore             int                        `json:"privacy_score"`
+				ShortDescription         string                     `json:"short_description"`
+				LongDescription          string                     `json:"long_description"`
+				LogoURL                  string                     `json:"logo_url"`
+				Vendor                   string                     `json:"vendor"`
+				Active                   bool                       `json:"active"`
+				Filters                  []FilterResponse           `json:"filters"`
+				DefaultModel             string                     `json:"default_model"`
+				AllowedModels            []string                   `json:"allowed_models"`
+				MonthlyBudget            *float64                   `json:"monthly_budget"`
+				BudgetStartDate          *time.Time                 `json:"budget_start_date"`
+				Namespace                string                     `json:"namespace"`
+				DontLogBodies            bool                       `json:"dont_log_bodies"`
+				Plugins                  []PluginResponse           `json:"plugins"`
+				Metadata                 map[string]interface{}     `json:"metadata,omitempty"`
+				Failover                 *models.LLMFailover        `json:"failover,omitempty"`
+				VendorWorkspaceID        string                     `json:"vendor_workspace_id"`
+				PriceMultipliers         models.LLMPriceMultipliers `json:"price_multipliers"`
+				TracingContentModeMax    string                     `json:"tracing_content_mode_max"`
+				TracingPropagationOptOut bool                       `json:"tracing_propagation_opt_out"`
+				AllowInternalHost        bool                       `json:"allow_internal_host"`
 			}{
-				Name:             llm.Name,
-				APIKey:           services.REDACTED_VALUE,
-				HasAPIKey:        llm.APIKey != "",
-				CredentialStatus: itemCredentialStatus,
-				CredentialRef:    itemCredentialRef,
-				CredentialSource: credentialSource(llm.APIKey),
-				APIEndpoint:      llm.APIEndpoint,
-				PrivacyScore:     llm.PrivacyScore,
-				ShortDescription: llm.ShortDescription,
-				LongDescription:  llm.LongDescription,
-				LogoURL:          llm.LogoURL,
-				Vendor:           string(llm.Vendor),
-				Active:           llm.Active,
-				Filters:          serializeFilters(llm.Filters),
-				DefaultModel:     llm.DefaultModel,
-				AllowedModels:    llm.AllowedModels,
-				MonthlyBudget:    llm.MonthlyBudget,
-				BudgetStartDate:  llm.BudgetStartDate,
-				Namespace:        llm.Namespace,
-				DontLogBodies:    llm.DontLogBodies,
-				Plugins:          plugins,
-				Metadata:         redactMetadataSecrets(llm.Metadata),
-				Failover:         failoverForResponse(llm.Failover),
-				VendorWorkspaceID: llm.VendorWorkspaceID,
-				PriceMultipliers:  llm.PriceMultipliers,
+				Name:                     llm.Name,
+				APIKey:                   services.REDACTED_VALUE,
+				HasAPIKey:                llm.APIKey != "",
+				CredentialStatus:         itemCredentialStatus,
+				CredentialRef:            itemCredentialRef,
+				CredentialSource:         credentialSource(llm.APIKey),
+				APIEndpoint:              llm.APIEndpoint,
+				PrivacyScore:             llm.PrivacyScore,
+				ShortDescription:         llm.ShortDescription,
+				LongDescription:          llm.LongDescription,
+				LogoURL:                  llm.LogoURL,
+				Vendor:                   string(llm.Vendor),
+				Active:                   llm.Active,
+				Filters:                  serializeFilters(llm.Filters),
+				DefaultModel:             llm.DefaultModel,
+				AllowedModels:            llm.AllowedModels,
+				MonthlyBudget:            llm.MonthlyBudget,
+				BudgetStartDate:          llm.BudgetStartDate,
+				Namespace:                llm.Namespace,
+				DontLogBodies:            llm.DontLogBodies,
+				Plugins:                  plugins,
+				Metadata:                 redactMetadataSecrets(llm.Metadata),
+				Failover:                 failoverForResponse(llm.Failover),
+				VendorWorkspaceID:        llm.VendorWorkspaceID,
+				PriceMultipliers:         llm.PriceMultipliers,
 				TracingContentModeMax:    llm.TracingContentModeMax,
 				TracingPropagationOptOut: llm.TracingPropagationOptOut,
 				AllowInternalHost:        llm.AllowInternalHost,
@@ -1020,7 +1026,7 @@ func (a *API) updateLLMPluginConfig(c *gin.Context) {
 	llmID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct{
+			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
 			}{{Title: "Bad Request", Detail: "Invalid LLM ID"}},
@@ -1031,7 +1037,7 @@ func (a *API) updateLLMPluginConfig(c *gin.Context) {
 	pluginID, err := strconv.ParseUint(c.Param("pluginId"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct{
+			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
 			}{{Title: "Bad Request", Detail: "Invalid Plugin ID"}},
@@ -1044,7 +1050,7 @@ func (a *API) updateLLMPluginConfig(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
-			Errors: []struct{
+			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
 			}{{Title: "Bad Request", Detail: err.Error()}},
@@ -1055,7 +1061,7 @@ func (a *API) updateLLMPluginConfig(c *gin.Context) {
 	if err := a.service.PluginService.UpdateLLMPluginConfig(uint(llmID), uint(pluginID), req.ConfigOverride); err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, ErrorResponse{
-				Errors: []struct{
+				Errors: []struct {
 					Title  string `json:"title"`
 					Detail string `json:"detail"`
 				}{{Title: "Not Found", Detail: "Plugin-LLM association not found"}},
@@ -1064,7 +1070,7 @@ func (a *API) updateLLMPluginConfig(c *gin.Context) {
 		}
 
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct{
+			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
 			}{{Title: "Internal Server Error", Detail: err.Error()}},

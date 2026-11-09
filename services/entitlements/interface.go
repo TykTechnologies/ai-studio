@@ -1,6 +1,6 @@
 // Package entitlements is the hook through which a license limits what a
-// deployment may create: Apps, users with admin or portal access, and edge
-// namespaces, plus the per-user App quota of self-service creation.
+// deployment may create: Apps, LLMs, users with admin or portal access, and
+// edge namespaces, plus the per-user App quota of self-service creation.
 //
 // Core only wraps its create and grant points in this interface and renders
 // the opaque data it returns. Every rule (which limits exist, how they are
@@ -146,6 +146,8 @@ type Service interface {
 	// selfService is true for portal and plugin SDK creates, which are
 	// also subject to the per-user App quota; admin creates pass false.
 	GuardAppCreate(tx *gorm.DB, owner uint, selfService bool, fn func(*gorm.DB) error) error
+	// GuardLLMCreate wraps the creation of an LLM.
+	GuardLLMCreate(tx *gorm.DB, fn func(*gorm.DB) error) error
 	// GuardUserChange wraps any change that may give users admin or portal
 	// access: user create/update, team membership, role bindings.
 	GuardUserChange(tx *gorm.DB, fn func(*gorm.DB) error) error

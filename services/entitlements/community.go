@@ -21,6 +21,10 @@ func (communityService) GuardAppCreate(tx *gorm.DB, _ uint, _ bool, fn func(*gor
 	return fn(tx)
 }
 
+func (communityService) GuardLLMCreate(tx *gorm.DB, fn func(*gorm.DB) error) error {
+	return fn(tx)
+}
+
 func (communityService) GuardUserChange(tx *gorm.DB, fn func(*gorm.DB) error) error {
 	return fn(tx)
 }

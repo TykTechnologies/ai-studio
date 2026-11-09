@@ -406,6 +406,11 @@ func New(opts Options) (_ *Studio, err error) {
 	service := services.NewServiceWithOCI(s.db, ociConfig)
 	s.service = service
 	service.SetLicensingService(s.licensing)
+	if !opts.SkipLLMDefaults {
+		if err := ensureDefaultLLMs(s.db, service.EntitlementsService()); err != nil {
+			return nil, fmt.Errorf("studio: seed defaults: %w", err)
+		}
+	}
 	// Request guardrails leave the approved constants of an app's trusted
 	// prompt templates unscored (features/TrustedPromptTemplates.md).
 	scripting.SetPromptTemplateSource(service.PromptTemplateSource())

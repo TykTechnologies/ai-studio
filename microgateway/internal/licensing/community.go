@@ -26,6 +26,11 @@ func (s *communityService) IsValid() bool {
 	return true
 }
 
+// MaxLLMs is always unlimited for community edition
+func (s *communityService) MaxLLMs() (int64, bool) {
+	return 0, true
+}
+
 // DaysLeft returns -1 for community edition (never expires)
 func (s *communityService) DaysLeft() int {
 	return -1

@@ -10,6 +10,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/modelmatch"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // REDACTED_VALUE is the value used to redact sensitive fields in API responses
@@ -138,7 +139,7 @@ func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int,
 		}
 	}
 
-	if err := llm.Create(s.DB); err != nil {
+	if err := s.EntitlementsService().GuardLLMCreate(s.DB, func(tx *gorm.DB) error { return llm.Create(tx) }); err != nil {
 		return nil, err
 	}
 
@@ -242,7 +243,7 @@ func (s *Service) CreateLLMWithNamespace(name, apiKey, apiEndpoint string, priva
 		}
 	}
 
-	if err := llm.Create(s.DB); err != nil {
+	if err := s.EntitlementsService().GuardLLMCreate(s.DB, func(tx *gorm.DB) error { return llm.Create(tx) }); err != nil {
 		return nil, err
 	}
 

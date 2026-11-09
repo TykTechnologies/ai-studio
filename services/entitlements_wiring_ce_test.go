@@ -41,6 +41,12 @@ func TestEntitlements_CommunityWiringIsTheStub(t *testing.T) {
 		})
 	})
 	require.NoError(t, err)
+	err = db.Transaction(func(tx *gorm.DB) error {
+		return got.GuardLLMCreate(tx, func(inner *gorm.DB) error {
+			return (&models.LLM{Name: "kept-llm", Vendor: models.OPENAI}).Create(inner)
+		})
+	})
+	require.NoError(t, err)
 
 	boom := errors.New("boom")
 	err = db.Transaction(func(tx *gorm.DB) error {
@@ -56,4 +62,7 @@ func TestEntitlements_CommunityWiringIsTheStub(t *testing.T) {
 	var names []string
 	require.NoError(t, db.Model(&models.App{}).Order("id").Pluck("name", &names).Error)
 	assert.Equal(t, []string{"kept"}, names)
+	var llms int64
+	require.NoError(t, db.Model(&models.LLM{}).Where("name = ?", "kept-llm").Count(&llms).Error)
+	assert.Equal(t, int64(1), llms)
 }

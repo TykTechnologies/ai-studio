@@ -23,6 +23,13 @@ type Service interface {
 	// CE: Returns -1 (never expires)
 	// ENT: Returns days until JWT exp claim
 	DaysLeft() int
+
+	// MaxLLMs returns the licence's LLM limit (max_llms), which a standalone
+	// gateway enforces on its own LLMs. Edges get their LLMs from AI Studio,
+	// which enforces its own licence.
+	// CE: Always unlimited
+	// ENT: The verified licence's limit; a licence without it allows 0
+	MaxLLMs() (max int64, unlimited bool)
 }
 
 // Config holds licensing configuration

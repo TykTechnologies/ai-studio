@@ -22,7 +22,7 @@ format and how to issue one (`enterprise/docs/LicenseLimits.md`,
 
 ## Limits
 
-A licence limits four things across the whole deployment:
+A licence limits five things across the whole deployment:
 
 | Limit | What uses it |
 |-------|--------------|
@@ -30,12 +30,22 @@ A licence limits four things across the whole deployment:
 | Users with admin access | each enabled user who can open the admin area, whatever their role |
 | Users with portal access | each enabled user with portal access |
 | Apps | each App |
+| LLMs | each LLM, active or not |
 
 Each limit is a number or unlimited. Reaching a limit stops new use only:
 the change that would go over it is refused with HTTP 409 and the code
 `QUOTA_EXCEEDED` (gRPC: `ResourceExhausted`), and a message saying what to
 remove or whom to ask. Nothing that exists is revoked, so after a licence
 with lower limits is loaded, usage above them stays until it is reduced.
+
+The default LLMs AI Studio seeds at start-up are held to the LLM limit too:
+a default the limit refuses is left out with a warning, and a default an
+administrator deleted is not seeded again.
+
+A standalone microgateway holds the LLMs created through its own management
+API to its own licence's LLM limit (409 `QUOTA_EXCEEDED`, and a warning in
+its log at start-up when it is at the limit). Edge gateways get their LLMs
+from AI Studio, which enforces its licence.
 
 Single sign-on and host-managed sign-in never fail because of a seat limit:
 the user signs in without the access that would go over it, and the Owners
@@ -66,7 +76,7 @@ The Enterprise microgateway verifies its `TYK_AI_LICENSE` the same way
   days left, telemetry). Community Edition's implementation is always
   valid.
 - `services/entitlements` is the hook through which limits are enforced:
-  App creation, user, team and role changes, edge namespace admission, the
+  App and LLM creation, user, team and role changes, edge namespace admission, the
   License page and near-limit notices call it. Community Edition's stub
   allows everything, licenses every namespace and has no License page
   (402).
