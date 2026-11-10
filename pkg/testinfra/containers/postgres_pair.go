@@ -184,10 +184,10 @@ func NewPostgresPair(ctx context.Context, cfg *PostgresPairConfig) (*PostgresPai
 	var errs [2]error
 	for i := range names {
 		wg.Add(1)
-		go func() {
+		go func(i int) {
 			defer wg.Done()
 			p.nodes[i], errs[i] = p.startContainer(ctx, names[i])
-		}()
+		}(i)
 	}
 	wg.Wait()
 	if err := errors.Join(errs[:]...); err != nil {
@@ -755,7 +755,14 @@ func (n *PostgresNode) waitFor(ctx context.Context, database, query, what string
 		if ctx.Err() != nil || time.Now().After(deadline) {
 			return fmt.Errorf("%s did not %s (last answer %q, error %v)\n%s", n.name, what, last, lastErr, n.Logs(ctx))
 		}
-		time.Sleep(50 * time.Millisecond)
+		// A cancelled context ends the wait at once; the check above
+		// then reports it with the last answer.
+		pause := time.NewTimer(50 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			pause.Stop()
+		case <-pause.C:
+		}
 	}
 }
 
