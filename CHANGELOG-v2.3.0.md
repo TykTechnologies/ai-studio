@@ -449,6 +449,12 @@ No new setting is required to run 2.3. Defaults that changed are listed in [Upgr
 | `PLUGIN_GRPC_MAX_MSG_BYTES` | `67108864` (64 MiB) | Largest message between the host and its plugins |
 | `DB_LOG_SQL_PARAMS` | `false` | Log SQL values (local debugging only) |
 
+**Several replicas** (AI Studio):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `CLUSTER_NODE_LABEL` | `studio` | Names a replica (for example its site) on the cluster status and in the Edge Gateways "Held by" column. At most 64 characters; an invalid value stops startup |
+
 The Helm chart adds `config.logLevel` (AI Studio's `LOG_LEVEL`), and `config.pluginAllowedSources` (AI Studio) and `config.pluginsAllowedSources` (Microgateway chart) for the plugin sources below.
 
 **Plugin signatures** (Enterprise; an invalid value stops startup):

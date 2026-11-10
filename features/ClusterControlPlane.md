@@ -124,7 +124,7 @@ and every minute. Single replica and SQLite: the same code runs with one
 node.
 
 Each row also carries a `label` for operators (`Options.NodeLabel`, default
-`studio`; `ControlPlaneOptions.NodeLabel`, default `control-plane`, e.g.
+`studio`, set in the Studio binary by `CLUSTER_NODE_LABEL`; `ControlPlaneOptions.NodeLabel`, default `control-plane`, e.g.
 `mdcb-eu-1`; at most 64 letters, digits, spaces and `. _ - : / ( )`) and
 `leader_eligible` (false for a headless control plane, which never takes the
 leader lease). Both are nullable: a row written before they existed counts

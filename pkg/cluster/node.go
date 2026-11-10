@@ -73,15 +73,20 @@ type NodeOptions struct {
 const MaxLabelLength = 64
 
 func (o NodeOptions) validate() error {
-	if len([]rune(o.Label)) > MaxLabelLength {
+	return ValidateLabel(o.Label)
+}
+
+// ValidateLabel reports why label cannot be a NodeOptions.Label, or nil.
+func ValidateLabel(label string) error {
+	if len([]rune(label)) > MaxLabelLength {
 		return fmt.Errorf("node label is longer than %d characters", MaxLabelLength)
 	}
 	// Operators read labels in the UI, logs and API output: nothing that
 	// means something to HTML, a shell or a query string, whatever renders
 	// it.
-	for _, r := range o.Label {
+	for _, r := range label {
 		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune(" ._-:/()", r) {
-			return fmt.Errorf("node label %q may contain only letters, digits, spaces and . _ - : / ( )", o.Label)
+			return fmt.Errorf("node label %q may contain only letters, digits, spaces and . _ - : / ( )", label)
 		}
 	}
 	return nil

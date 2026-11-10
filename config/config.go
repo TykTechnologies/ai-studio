@@ -171,6 +171,11 @@ type AppConf struct {
 	// (GRPC_MAX_CONNECTION_AGE, GRPC_MAX_CONNECTION_AGE_GRACE; default off).
 	GRPCMaxConnectionAge      time.Duration
 	GRPCMaxConnectionAgeGrace time.Duration
+	// ClusterNodeLabel names this replica (its site, for example) on the
+	// cluster status and the Edge Gateways page (CLUSTER_NODE_LABEL; empty
+	// means the default label, "studio"). The Studio binary validates it at
+	// start-up.
+	ClusterNodeLabel string
 
 	// Licensing Configuration (Enterprise Edition)
 	LicenseKey                  string
@@ -850,6 +855,7 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 	}
 	conf.GRPCMaxConnectionAge = parseDurationWithDefault(getenv, "GRPC_MAX_CONNECTION_AGE", 0)
 	conf.GRPCMaxConnectionAgeGrace = parseDurationWithDefault(getenv, "GRPC_MAX_CONNECTION_AGE_GRACE", 0)
+	conf.ClusterNodeLabel = strings.TrimSpace(getenv("CLUSTER_NODE_LABEL"))
 
 	// Plugin source lockdown: the deployment types this installation
 	// accepts. A security setting, so an invalid value refuses to start.

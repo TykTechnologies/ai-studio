@@ -17,6 +17,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/docs"
 	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/TykTechnologies/midsommar/v2/pkg/cluster"
 	"github.com/TykTechnologies/midsommar/v2/pkg/fipsinfo"
 	"github.com/TykTechnologies/midsommar/v2/pkg/studio"
 	// SQLite for DATABASE_TYPE=sqlite; it needs cgo, so pkg/studio leaves it out.
@@ -46,6 +47,11 @@ func main() {
 	fips := fipsinfo.Current()
 	logger.Infof("FIPS 140-3: enabled=%t version=%s enforced=%t", fips.Enabled, fips.Version, fips.Enforced)
 
+	// A label the cluster registry would refuse: say which setting it is.
+	if err := cluster.ValidateLabel(appConf.ClusterNodeLabel); err != nil {
+		logger.FatalErr("Invalid CLUSTER_NODE_LABEL", err)
+	}
+
 	// Report every configured path (grep 'startup path'); problems are WARNs.
 	startup.ReportPaths(appConf, *envFile)
 
@@ -68,6 +74,7 @@ func main() {
 		BuildHash:       BuildHash,
 		BuildTime:       BuildTime,
 		SkipLLMDefaults: *noLLMDefaults,
+		NodeLabel:       appConf.ClusterNodeLabel,
 	})
 	if err != nil {
 		logger.FatalErr("Failed to start AI Studio", err)
