@@ -144,7 +144,7 @@ describe("FlaggedText", () => {
 
   it("says why a judge gave no opinion", () => {
     render(<FlaggedText eventType="guardrail.judge" metadata={{ judge: { verdict: "none", error: "over_budget" } }} />);
-    expect(screen.getByTestId("judge-opinion")).toHaveTextContent("Judge: no opinion (judge LLM over budget)");
+    expect(screen.getByTestId("judge-opinion")).toHaveTextContent("Judge: no opinion (judge model provider over budget)");
   });
 
   it("shows the judge's opinion on the flagged segment it judged", () => {

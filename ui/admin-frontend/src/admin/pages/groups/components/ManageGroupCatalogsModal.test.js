@@ -117,7 +117,7 @@ describe("ManageGroupCatalogsModal", () => {
 
     expect(screen.getByText("Manage Catalogs")).toBeInTheDocument();
     expect(screen.getByText("Select one or more catalogs to make available to this team")).toBeInTheDocument();
-    expect(screen.getByText("LLM providers catalogs")).toBeInTheDocument();
+    expect(screen.getByText("Model provider catalogs")).toBeInTheDocument();
     expect(screen.getByText("Data sources catalogs")).toBeInTheDocument();
     expect(screen.getByText("Tools catalogs")).toBeInTheDocument();
   });
@@ -271,7 +271,7 @@ describe("ManageGroupCatalogsModal", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("hides LLM providers catalogs when portal is disabled", () => {
+  it("hides model providers catalogs when portal is disabled", () => {
     getFeatureFlags.mockReturnValueOnce({
       isPortalEnabled: false,
       isChatEnabled: true,
@@ -293,7 +293,7 @@ describe("ManageGroupCatalogsModal", () => {
       />
     );
 
-    expect(screen.queryByText("LLM providers catalogs")).not.toBeInTheDocument();
+    expect(screen.queryByText("Model provider catalogs")).not.toBeInTheDocument();
     expect(screen.getByText("Data sources catalogs")).toBeInTheDocument();
     expect(screen.getByText("Tools catalogs")).toBeInTheDocument();
   });
@@ -320,7 +320,7 @@ describe("ManageGroupCatalogsModal", () => {
       />
     );
 
-    expect(screen.getByText("LLM providers catalogs")).toBeInTheDocument();
+    expect(screen.getByText("Model provider catalogs")).toBeInTheDocument();
     expect(screen.getByText("Data sources catalogs")).toBeInTheDocument();
     expect(screen.queryByText("Tools catalogs")).not.toBeInTheDocument();
   });

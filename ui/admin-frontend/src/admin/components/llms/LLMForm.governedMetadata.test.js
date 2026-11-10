@@ -92,7 +92,7 @@ describe("LLMForm governed metadata embedding", () => {
     fireEvent.mouseDown(await screen.findByLabelText(/Risk tier/));
     fireEvent.click(await screen.findByRole("option", { name: "High" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "Add LLM provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add model provider" }));
     await waitFor(() => expect(apiClient.post).toHaveBeenCalled());
     const [url, body] = apiClient.post.mock.calls[0];
     expect(url).toBe("/llms");
@@ -110,11 +110,11 @@ describe("LLMForm governed metadata embedding", () => {
     await screen.findByText("Governance Metadata");
     await fillRequired();
 
-    fireEvent.click(screen.getByRole("button", { name: "Add LLM provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add model provider" }));
     await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
     const [, opts] = mockNavigate.mock.calls[0];
     expect(opts.state.snackbar.severity).toBe("warning");
-    expect(opts.state.snackbar.message).toMatch(/LLM provider created, but Governance metadata was not saved: UNIQUE constraint failed/);
+    expect(opts.state.snackbar.message).toMatch(/Model provider created, but Governance metadata was not saved: UNIQUE constraint failed/);
   });
 
   it("maps a 422 to the field and suppresses the generic failure message", async () => {
@@ -132,7 +132,7 @@ describe("LLMForm governed metadata embedding", () => {
     await screen.findByText("Governance Metadata");
     await fillRequired();
 
-    fireEvent.click(screen.getByRole("button", { name: "Add LLM provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add model provider" }));
     expect(await screen.findByText("Risk tier is required")).toBeInTheDocument();
     expect(screen.getByText(/Governance metadata failed validation/)).toBeInTheDocument();
     expect(screen.queryByText(/Failed to save LLM/)).not.toBeInTheDocument();

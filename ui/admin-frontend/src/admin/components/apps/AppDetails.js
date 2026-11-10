@@ -755,7 +755,7 @@ const AppDetails = () => {
                 </>
               )}
             <Grid item xs={3}>
-              <FieldLabel>LLM providers:</FieldLabel>
+              <FieldLabel>Model providers:</FieldLabel>
             </Grid>
             <Grid item xs={9}>
               <Box display="flex" flexWrap="wrap" gap={1}>

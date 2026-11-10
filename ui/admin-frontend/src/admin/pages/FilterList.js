@@ -191,7 +191,7 @@ const FilterList = memo(() => {
         resourcePath="filters"
         objectLabel="filter"
         item={deleteTarget ? { id: deleteTarget.id, name: deleteTarget.attributes?.name } : null}
-        consequence="Deleting it removes it from all of them; the LLMs and apps that use it will run without this filter."
+        consequence="Deleting it removes it from all of them; the model providers and apps that use it will run without this filter."
         onConfirm={() => {
           const id = deleteTarget?.id;
           setDeleteTarget(null);
@@ -206,7 +206,7 @@ const FilterList = memo(() => {
         objectLabel="filter"
         objectLabelPlural="filters"
         items={bulk.deleteDialogItems}
-        consequence="Deleting them removes them from all of those; the LLMs and apps that use them will run without these filters."
+        consequence="Deleting them removes them from all of those; the model providers and apps that use them will run without these filters."
         onConfirm={bulk.confirmDelete}
         onCancel={bulk.cancelDelete}
       />

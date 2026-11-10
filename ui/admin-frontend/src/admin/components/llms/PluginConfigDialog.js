@@ -111,11 +111,11 @@ const PluginConfigDialog = ({
         <Box display="flex" alignItems="center" gap={1}>
           <SettingsIcon color="primary" />
           <Typography variant="h6">
-            Configure Plugin for LLM
+            Configure Plugin for model provider
           </Typography>
         </Box>
         <Typography variant="body2" color="textSecondary">
-          {plugin?.name} configuration for this specific LLM
+          {plugin?.name} configuration for this specific model provider
         </Typography>
       </DialogTitle>
 
@@ -165,7 +165,7 @@ const PluginConfigDialog = ({
               <AccordionDetails>
                 <Typography variant="body2" color="textSecondary" paragraph>
                   This is the default configuration for this plugin.
-                  Changes here would affect all LLMs using this plugin.
+                  Changes here would affect all model providers using this plugin.
                 </Typography>
                 <Box
                   component="pre"
@@ -187,11 +187,11 @@ const PluginConfigDialog = ({
             <Card variant="outlined">
               <CardContent>
                 <Typography variant="subtitle1" gutterBottom>
-                  LLM-Specific Configuration Override
+                  Model provider-specific configuration override
                 </Typography>
                 <Typography variant="body2" color="textSecondary" paragraph>
-                  Configure plugin settings specific to this LLM. These values will override
-                  the base configuration when this plugin executes for this LLM.
+                  Configure plugin settings specific to this model provider. These values will override
+                  the base configuration when this plugin executes for this model provider.
                 </Typography>
 
                 <LLMPluginConfigSection
@@ -214,7 +214,7 @@ const PluginConfigDialog = ({
                 <AccordionDetails>
                   <Typography variant="body2" color="textSecondary" paragraph>
                     This is the final configuration that will be passed to the plugin
-                    when it executes for this LLM (base + overrides).
+                    when it executes for this model provider (base + overrides).
                   </Typography>
                   <Box
                     component="pre"

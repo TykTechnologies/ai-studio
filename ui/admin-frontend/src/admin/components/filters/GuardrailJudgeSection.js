@@ -37,7 +37,7 @@ export const MAX_JUDGE_TIMEOUT_MS = 30000;
 export const judgeErrors = (judge) => {
   const errors = {};
   if (!judge || !judge.mode || judge.mode === "off") return errors;
-  if (!judge.llm_id) errors.llm_id = "Choose the LLM that gives the second opinion";
+  if (!judge.llm_id) errors.llm_id = "Choose the model provider that gives the second opinion";
   const t = judge.timeout_ms;
   if (t !== undefined && t !== null && t !== "" && (Number(t) < 0 || Number(t) > MAX_JUDGE_TIMEOUT_MS)) {
     errors.timeout_ms = `Between 0 and ${MAX_JUDGE_TIMEOUT_MS} ms`;
@@ -87,7 +87,7 @@ const GuardrailJudgeSection = ({ value, onChange, shadow = false, error = "", fi
         if (!cancelled) setLLMs(chatCapableLLMs(response.data.data).filter((l) => l.attributes?.active !== false));
       })
       .catch(() => {
-        if (!cancelled) setLoadError("Failed to load the LLM list");
+        if (!cancelled) setLoadError("Failed to load the model provider list");
       });
     return () => {
       cancelled = true;
@@ -198,15 +198,15 @@ const GuardrailJudgeSection = ({ value, onChange, shadow = false, error = "", fi
               <Grid item xs={12} md={4}>
                 <RowSelect
                   id="guardrail-judge-llm"
-                  label="Judge LLM"
+                  label="Judge model provider"
                   value={llms.some((l) => String(l.id) === String(judge.llm_id)) ? judge.llm_id : ""}
                   onChange={pickLLM}
                   rows={llms}
                   error={errs.llm_id}
                   helperText={
                     judge.llm_id && llms.length > 0 && !llms.some((l) => String(l.id) === String(judge.llm_id))
-                      ? `LLM #${judge.llm_id} is no longer an active chat LLM; choose another.`
-                      : "A chat LLM with a privacy score at least that of the LLMs this filter guards."
+                      ? `Model provider #${judge.llm_id} is no longer an active chat model provider; choose another.`
+                      : "A chat model provider with a privacy score at least that of the model providers this filter guards."
                   }
                 />
               </Grid>
@@ -216,9 +216,9 @@ const GuardrailJudgeSection = ({ value, onChange, shadow = false, error = "", fi
                   label="Model"
                   value={judge.model || ""}
                   onChange={(e) => set({ model: e.target.value || undefined })}
-                  placeholder="The LLM's default model"
+                  placeholder="The model provider's default model"
                   InputLabelProps={{ shrink: true }}
-                  helperText="Defaults to the judge LLM's default model."
+                  helperText="Defaults to the judge model provider's default model."
                   inputProps={{ "data-testid": "guardrail-judge-model" }}
                 />
               </Grid>
@@ -235,7 +235,7 @@ const GuardrailJudgeSection = ({ value, onChange, shadow = false, error = "", fi
               <Grid item xs={12}>
                 <Alert severity="info">
                   The judge reads the flagged text, which may be written by an attacker. It is told to treat it as data,
-                  only answers in a fixed form, and its calls are charged to the judge LLM, never to the app. It is
+                  only answers in a fixed form, and its calls are charged to the judge model provider, never to the app. It is
                   only asked about prompt-injection findings: segments with secrets, personal data, moderation or other
                   policy findings are never sent to it, and Studio chat is not judged. It does see an HTTP classifier's
                   "other" findings, so use it only with a classifier that detects prompt injection (such as Wolf

@@ -169,7 +169,7 @@ describe("AssetDetail", () => {
 
   it("says when an asset is outside the caller's visibility", async () => {
     renderDetail("/portal/catalog/llms/8");
-    expect(await screen.findByText("This LLM provider is not available to you")).toBeInTheDocument();
+    expect(await screen.findByText("This model provider is not available to you")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to browse" })).toHaveAttribute("href", "/portal/catalog/llms");
   });
 

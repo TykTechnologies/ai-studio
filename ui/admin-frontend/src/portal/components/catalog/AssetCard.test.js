@@ -30,7 +30,7 @@ describe("AssetCard primary action", () => {
     mockNavigate.mockClear();
   });
 
-  it("offers Build app for an LLM provider", () => {
+  it("offers Build app for a model provider", () => {
     renderCard({ type: "llm", id: "1", attributes: { ...base, name: "Acme OpenAI" } });
     fireEvent.click(screen.getByTestId("asset-card-build"));
     expect(mockNavigate).toHaveBeenCalledWith("/portal/app/new?llm=1");

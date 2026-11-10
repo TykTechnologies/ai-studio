@@ -86,7 +86,7 @@ const SummaryStep = () => {
             }
           }}
         >
-          Your app has been created. Please review the details below and copy the access information and credentials to interact with the LLM in your app.
+          Your app has been created. Please review the details below and copy the access information and credentials to interact with the model provider in your app.
         </Typography>
       </Box>
       
@@ -108,7 +108,7 @@ const SummaryStep = () => {
           >
             <Box sx={{ width: '25%', minWidth: '100px' }}>
               <Typography variant="bodyLargeBold" color="text.primary">
-                LLM provider
+                Model provider
               </Typography>
             </Box>
             <Box sx={{ width: '75%' }}>
@@ -320,7 +320,7 @@ const SummaryStep = () => {
           })}
         >
           <Typography variant="bodyLargeBold" color="text.primary">
-            LLM Access Details
+            Model Provider Access Details
           </Typography>
           
           <Box sx={{ mt: 2 }}>

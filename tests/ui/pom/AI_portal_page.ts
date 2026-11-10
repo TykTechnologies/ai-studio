@@ -53,7 +53,7 @@ export class AIPortalPage extends PageTemplate {
         // The portal sidebar's "Browse" section (the unified catalog, one entry per asset type).
         this.CataloguesMenuButton = this.page.getByRole('button', { name: 'Browse' });
         this.DatasourcesMenuButton = this.page.getByRole('link', { name: 'Data sources' });
-        this.LLMPrvidersMenuButton = this.page.getByRole('link', { name: 'LLM providers' });
+        this.LLMPrvidersMenuButton = this.page.getByRole('link', { name: 'Model providers' });
         // The overview's title-bar action (its empty state repeats the same button).
         this.CreateANewAppButton = this.page.getByRole('button', { name: 'Create app' }).first();
         this.ViewYourAppsButton = this.page.getByText('View your Apps and Credentials');
@@ -100,7 +100,7 @@ export class AIPortalPage extends PageTemplate {
         return this.RequestedAccess.getByTestId('requested-access-item').filter({ hasText: name });
     }
 
-    /** The picker's tab for an asset type ("LLM providers", "Tools", ...). */
+    /** The picker's tab for an asset type ("Model providers", "Tools", ...). */
     accessTab(typeLabel: string): Locator {
         return this.AccessPicker.getByRole('tab').filter({
             has: this.page.getByTestId('app-access-tab-label').getByText(typeLabel, { exact: true }),
@@ -115,7 +115,7 @@ export class AIPortalPage extends PageTemplate {
     }
 
     async addLlm(name: string) {
-        await this.addAccess('LLM providers', name);
+        await this.addAccess('Model providers', name);
     }
 
     async addDataSource(name: string) {

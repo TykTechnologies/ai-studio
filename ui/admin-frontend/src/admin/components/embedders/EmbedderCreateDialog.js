@@ -50,7 +50,7 @@ const EmbedderCreateDialog = ({ open, onClose, onCreated, minPrivacy = 0 }) => {
       <DialogContent>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           An embedder turns text into vectors. Once saved it can be reused by other data sources and managed under
-          LLM management → Embedders.
+          Model management → Embedders.
         </Typography>
         {saveError && (
           <Alert severity="error" sx={{ mb: 2 }}>

@@ -116,7 +116,7 @@ const AgentFormFields = ({
           ))}
         </Select>
         <Typography variant="bodySmallDefault" color="text.secondary" sx={{ mt: 1 }}>
-          The app provides LLMs, tools, and datasources for the agent
+          The app provides model providers, tools, and datasources for the agent
         </Typography>
       </FormControl>
 

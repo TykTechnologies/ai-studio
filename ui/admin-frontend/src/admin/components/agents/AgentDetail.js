@@ -451,7 +451,7 @@ const AgentDetail = () => {
                 <Grid container spacing={2}>
                   <Grid item xs={12} md={4}>
                     <Typography variant="bodyMedium" gutterBottom>
-                      LLMs ({agent.app?.llms?.length || 0})
+                      Model providers ({agent.app?.llms?.length || 0})
                     </Typography>
                     <List dense>
                       {agent.app?.llms?.map((llm) => (

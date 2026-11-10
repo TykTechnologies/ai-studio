@@ -53,7 +53,7 @@ describe("EmbedderList", () => {
     renderWith(["embedders:read"]);
     expect(await screen.findByText("Shared")).toBeInTheDocument();
     expect(screen.getByText("Prod OpenAI")).toBeInTheDocument();
-    expect(screen.getByText("LLM provider")).toBeInTheDocument();
+    expect(screen.getByText("Model provider")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Add embedder" })).not.toBeInTheDocument();
   });
 

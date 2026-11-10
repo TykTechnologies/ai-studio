@@ -88,7 +88,7 @@ const EmbedderFormFields = ({ draft, onChange, errors = {}, llms = [], vendors =
           disabled={locked}
           aria-label="Connection mode"
         >
-          <ToggleButton value={MODE_LINKED}>Use an LLM provider</ToggleButton>
+          <ToggleButton value={MODE_LINKED}>Use a model provider</ToggleButton>
           <ToggleButton value={MODE_STANDALONE}>Standalone</ToggleButton>
         </ToggleButtonGroup>
         <FormHelperText>
@@ -107,10 +107,10 @@ const EmbedderFormFields = ({ draft, onChange, errors = {}, llms = [], vendors =
       {draft.mode === MODE_LINKED ? (
         <Grid item xs={12} md={6}>
           <FormControl fullWidth required error={Boolean(errors.llm_id)} disabled={locked}>
-            <InputLabel id={`${idPrefix}-llm-label`}>LLM provider</InputLabel>
+            <InputLabel id={`${idPrefix}-llm-label`}>Model provider</InputLabel>
             <Select
               labelId={`${idPrefix}-llm-label`}
-              label="LLM provider"
+              label="Model provider"
               value={draft.llm_id ? String(draft.llm_id) : ""}
               onChange={set("llm_id")}
             >
@@ -123,7 +123,7 @@ const EmbedderFormFields = ({ draft, onChange, errors = {}, llms = [], vendors =
             <FormHelperText>
               {errors.llm_id ||
                 (embeddingLLMs.length === 0
-                  ? "No LLM provider uses a vendor that serves embeddings. Use a standalone embedder instead."
+                  ? "No model provider uses a vendor that serves embeddings. Use a standalone embedder instead."
                   : "Only providers whose vendor serves embeddings are listed.")}
             </FormHelperText>
           </FormControl>

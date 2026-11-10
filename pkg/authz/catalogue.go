@@ -51,7 +51,7 @@ func IsPluginResource(key string) bool {
 var Groups = []string{
 	"Analytics",
 	"Plugins",
-	"LLM management",
+	"Model management",
 	"Context management",
 	"Community",
 	"Access",
@@ -340,14 +340,14 @@ func init() {
 		Description: "Browse the marketplace and manage marketplace sources."})
 
 	// LLM management
-	Register(Resource{Key: "llms", Label: "LLM providers", Group: "LLM management", Actions: crudp,
+	Register(Resource{Key: "llms", Label: "Model providers", Group: "Model management", Actions: crudp,
 		Description: "Publish sets a provider active; only active providers are served by the gateway and offered in the portal."})
-	Register(Resource{Key: "model-prices", Label: "Model prices", Group: "LLM management", Actions: crud})
-	Register(Resource{Key: "model-routers", Label: "Model routers", Group: "LLM management", Actions: crudp,
+	Register(Resource{Key: "model-prices", Label: "Model prices", Group: "Model management", Actions: crud})
+	Register(Resource{Key: "model-routers", Label: "Model routers", Group: "Model management", Actions: crudp,
 		Description: "Publish sets a router active; only active routers are served."})
-	Register(Resource{Key: "semantic-routers", Label: "Semantic routers", Group: "LLM management", Actions: crudp,
+	Register(Resource{Key: "semantic-routers", Label: "Semantic routers", Group: "Model management", Actions: crudp,
 		Description: "Routers that pick a model from what the prompt says. Publish sets a router active; only active routers are served."})
-	Register(Resource{Key: "embedders", Label: "Embedders", Group: "LLM management", Actions: crud,
+	Register(Resource{Key: "embedders", Label: "Embedders", Group: "Model management", Actions: crud,
 		Description: "Reusable embedding configurations that data sources and semantic routers embed with. Creating one inline from those forms also needs this permission."})
 
 	// Context management

@@ -183,7 +183,7 @@ const Overview = () => {
                 boxSizing: 'border-box'
               }}>
               <BasicCard
-                primaryAction={addAction(P.LLMS_WRITE, 'Add LLM provider', '/admin/llms/new')}
+                primaryAction={addAction(P.LLMS_WRITE, 'Add model provider', '/admin/llms/new')}
                 prerequisite={needs("your vendor's API key, best stored as a secret.", [
                   { label: 'Store a key', to: '/admin/secrets', permission: P.SECRETS_READ },
                 ])}
@@ -342,7 +342,7 @@ const Overview = () => {
                   }}>
                   <IconBadge iconName="shield" />
                   <CardText variant="bodyXLargeMedium" sx={{ mb: 0 }}>
-                    Keep data safe with <BoldText>filters and privacy levels</BoldText>, ensuring it's used only with approved LLM providers.
+                    Keep data safe with <BoldText>filters and privacy levels</BoldText>, ensuring it's used only with approved model providers.
                   </CardText>
                 </Box>
               </BasicCard>
@@ -375,7 +375,7 @@ const Overview = () => {
                       ? { label: 'Add Apps', onClick: () => navigate('/admin/apps/new'), disabled: !hasLLMs }
                       : undefined
                   }
-                  prerequisite={needs('an LLM provider with a working API key.', [
+                  prerequisite={needs('a model provider with a working API key.', [
                     { label: 'Set up a provider', to: '/admin/llms', permission: P.LLMS_READ },
                   ])}
                   secondaryAction={{
@@ -413,7 +413,7 @@ const Overview = () => {
                       ? { label: 'Add Chats', onClick: () => navigate('/admin/chats/new'), disabled: !hasLLMs }
                       : undefined
                   }
-                  prerequisite={needs('an LLM provider with a working API key, and model call settings.', [
+                  prerequisite={needs('a model provider with a working API key, and model call settings.', [
                     { label: 'Set up a provider', to: '/admin/llms', permission: P.LLMS_READ },
                     { label: 'Set up call settings', to: '/admin/llm-settings', permission: P.LLM_SETTINGS_READ },
                   ])}
@@ -434,7 +434,7 @@ const Overview = () => {
                   }}>
                     <IconBadge iconName="message-lines" />
                     <CardText variant="bodyXLargeMedium" sx={{ mb: 0 }}>
-                      <BoldText>Chats</BoldText> provide an easy-to-use interface for everyone to interact with multiple LLM providers, curated data, and tools
+                      <BoldText>Chats</BoldText> provide an easy-to-use interface for everyone to interact with multiple model providers, curated data, and tools
                     </CardText>
                   </Box>
                 </BasicCard>

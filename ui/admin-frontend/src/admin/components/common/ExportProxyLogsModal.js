@@ -104,7 +104,7 @@ const ExportProxyLogsModal = ({
       case "app":
         return "Export logs for this application to a JSON file";
       case "llm":
-        return "Export logs for this LLM vendor to a JSON file";
+        return "Export logs for this model provider to a JSON file";
       default:
         return "Export logs to a JSON file";
     }

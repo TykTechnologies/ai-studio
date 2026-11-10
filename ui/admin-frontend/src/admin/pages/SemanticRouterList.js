@@ -192,7 +192,7 @@ const SemanticRouterList = () => {
           <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
             Semantic Routers pick a route for each request by classifying the prompt: keywords
             first, then similarity to example prompts, then an optional LLM judge, falling back to
-            a default route. Each route sends the request to an LLM and model, or to a Model Router.
+            a default route. Each route sends the request to a model provider and model, or to a Model Router.
             Clients call a router with the model written as <code>&lt;slug&gt;/auto</code>.
           </Typography>
         </Box>

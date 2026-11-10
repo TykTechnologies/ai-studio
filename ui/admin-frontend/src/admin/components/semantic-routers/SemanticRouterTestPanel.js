@@ -34,7 +34,7 @@ export const describeTarget = (target, { llms = [], modelRouters = [] } = {}) =>
     const name = nameById(modelRouters, target.model_router_id) || `#${target.model_router_id}`;
     return `${target.model} via model router ${name}`;
   }
-  const name = nameById(llms, target.llm_id) || `LLM #${target.llm_id}`;
+  const name = nameById(llms, target.llm_id) || `Model provider #${target.llm_id}`;
   return `${target.model} on ${name}`;
 };
 

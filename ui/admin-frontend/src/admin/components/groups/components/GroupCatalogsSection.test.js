@@ -124,13 +124,13 @@ describe('GroupCatalogsSection Component', () => {
     const pickers = screen.getAllByTestId('relationship-picker');
     expect(pickers).toHaveLength(3);
     expect(pickers.map((p) => p.getAttribute('aria-label'))).toEqual([
-      'LLM providers catalogs',
+      'Model provider catalogs',
       'Data sources catalogs',
       'Tools catalogs',
     ]);
     pickers.forEach((p) => expect(p).toHaveAttribute('data-variant', 'compact'));
     expect(pickers.map((p) => p.getAttribute('data-item-label'))).toEqual([
-      'LLM catalog',
+      'model provider catalog',
       'data catalog',
       'tool catalog',
     ]);

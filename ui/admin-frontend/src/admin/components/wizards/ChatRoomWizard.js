@@ -34,9 +34,9 @@ import { withBase } from "../../../runtimeConfig";
 
 const ChatRoomWizard = ({ open, onClose, fetchData }) => {
   const stepHelpText = {
-    0: "Configure the LLM vendor details. Select the vendor, set a name for the LLM, and specify the privacy level. For some vendors, you'll need to provide an API endpoint and key.",
-    1: "Set up call settings for the LLM. Choose a model preset and customize the system prompt that guides the AI's behavior.",
-    2: "Create a team and catalog for organizing your chat rooms. The team will contain the catalog, which in turn will contain the LLM provider.",
+    0: "Configure the model provider vendor details. Select the vendor, set a name for the model provider, and specify the privacy level. For some vendors, you'll need to provide an API endpoint and key.",
+    1: "Set up call settings for the model provider. Choose a model preset and customize the system prompt that guides the AI's behavior.",
+    2: "Create a team and catalog for organizing your chat rooms. The team will contain the catalog, which in turn will contain the model provider.",
     3: "Name your chat room. This is the name that users will see when accessing the chat.",
     4: "Review and confirm your chat room creation.",
   };
@@ -76,7 +76,7 @@ const ChatRoomWizard = ({ open, onClose, fetchData }) => {
   const [createdChatRoomId, setCreatedChatRoomId] = useState(null);
 
   const steps = [
-    "LLM Vendor Details",
+    "Model Provider Details",
     "Call Settings",
     "Team & Catalog Details",
     "Chat Room Details",

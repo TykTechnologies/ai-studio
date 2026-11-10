@@ -37,7 +37,7 @@ test.describe('admin navigation', () => {
         await adminMainPage.expectNavSelected('Overview');
         await adminMainPage.navigateToLLMProviders();
         await expect(page).toHaveURL(/\/admin\/llms$/);
-        await adminMainPage.expectNavSelected('LLM providers', 'LLM management');
+        await adminMainPage.expectNavSelected('Model providers', 'Model management');
         await adminMainPage.expectNavNotSelected('Overview');
     });
 });

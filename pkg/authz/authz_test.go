@@ -142,7 +142,7 @@ func TestPluginResources_ReplaceUnregisterAndUmbrella(t *testing.T) {
 	r, ok := ResourceByKey(key)
 	require.True(t, ok)
 	assert.Equal(t, "Assets v2", r.Label)
-	assert.Error(t, Replace(Resource{Key: "llms", Label: "x", Group: "LLM management", Actions: readOnly}))
+	assert.Error(t, Replace(Resource{Key: "llms", Label: "x", Group: "Model management", Actions: readOnly}))
 	assert.Error(t, Replace(Resource{Key: "not-a-plugin", Label: "x", Group: "Plugins", Actions: readOnly}), "dynamic needs the plugin prefix")
 	assert.Error(t, Replace(Resource{Key: key + ":sub", Label: "x", Group: "Plugins", Plugin: "plugin:other", Actions: readOnly}), "plugin must be the key prefix")
 

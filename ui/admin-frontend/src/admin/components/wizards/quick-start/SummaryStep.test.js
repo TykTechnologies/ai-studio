@@ -55,9 +55,9 @@ describe('SummaryStep', () => {
     useQuickStart.mockReturnValue(baseMockData);
     renderWithTheme(<SummaryStep />);
     expect(
-      screen.queryAllByText((content) => content.includes('Your app has been created. Please review the details below and copy the access information and credentials to interact with the LLM in your app.')).length
+      screen.queryAllByText((content) => content.includes('Your app has been created. Please review the details below and copy the access information and credentials to interact with the model provider in your app.')).length
     ).toBeGreaterThan(0);
-    expect(screen.getByText('LLM provider')).toBeInTheDocument();
+    expect(screen.getByText('Model provider')).toBeInTheDocument();
     expect(screen.getByText('openai')).toBeInTheDocument();
     expect(screen.getByText('Owner')).toBeInTheDocument();
     // The getOwnerName function is mocked to return 'Mock Owner'

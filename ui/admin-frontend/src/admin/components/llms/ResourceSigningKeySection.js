@@ -104,7 +104,7 @@ const ResourceSigningKeySection = ({ llmId }) => {
   return (
     <Section
       title="Native API resource IDs"
-      description="The key that signs the resource IDs this LLM's native API extensions hand out (for example batch or response IDs). The kid is the 8 characters after .t1k in an ID."
+      description="The key that signs the resource IDs this model provider's native API extensions hand out (for example batch or response IDs). The kid is the 8 characters after .t1k in an ID."
       actions={
         <Can permission={P.LLMS_WRITE}>
           <SecondaryOutlineButton onClick={openDialog} disabled={rotating}>

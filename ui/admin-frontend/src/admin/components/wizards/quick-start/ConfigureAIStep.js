@@ -173,7 +173,7 @@ const ConfigureAIStep = () => {
     } catch (error) {
       setSnackbar({
         open: true,
-        message: `Failed to ${createdLlmId ? 'update' : 'create'} LLM: ${error.message}`,
+        message: `Failed to ${createdLlmId ? 'update' : 'create'} model provider: ${error.message}`,
         severity: 'error'
       });
     } finally {
@@ -214,7 +214,7 @@ const ConfigureAIStep = () => {
             }
           }}
         >
-          Let's start building your AI infrastructure by setting up the Large Language Model provider you want your developers to access. Set a name for the LLM, select the LLM provider and specify the privacy level.
+          Let's start building your AI infrastructure by setting up the Large Language model provider you want your developers to access. Set a name for the model provider, select the model provider and specify the privacy level.
         </Typography>
       </Box>
       <Box sx={{
@@ -231,11 +231,11 @@ const ConfigureAIStep = () => {
             options={[
               {
                 value: 'existing',
-                label: 'Use existing LLM provider',
+                label: 'Use existing model provider',
               },
               {
                 value: 'new',
-                label: 'Add new LLM provider',
+                label: 'Add new model provider',
               }
             ]}
             value={llmType}
@@ -303,7 +303,7 @@ const ConfigureAIStep = () => {
 
             <Box sx={{ mb: 3 }}>
               <Typography variant="bodyLargeBold" color="text.primary" sx={{ mb: 1 }}>
-                LLM Provider*
+                Model Provider*
               </Typography>
               <CustomSelect
                 name="llmProvider"
@@ -411,7 +411,7 @@ const ConfigureAIStep = () => {
                   }
                 }}
               >
-                Privacy levels control LLM access based on data sensitivity. LLM providers with a lower privacy level can't access higher-security data or tools. Set the privacy level to limit the highest data sensitivity this LLM provider can access.
+                Privacy levels control model provider access based on data sensitivity. Model providers with a lower privacy level can't access higher-security data or tools. Set the privacy level to limit the highest data sensitivity this model provider can access.
               </Typography>
               <CustomSelect
                 name="privacyLevel"

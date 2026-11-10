@@ -52,7 +52,7 @@
       "items": [
         {
           "id": "catalog-llms",
-          "text": "LLM catalogs",
+          "text": "Model provider catalogs",
           "path": "/admin/catalogs/llms",
           "permission": "catalogues:read"
         },
@@ -79,12 +79,12 @@
     },
     {
       "id": "llm-management",
-      "text": "LLM management",
+      "text": "Model management",
       "icon": "microchip-ai",
       "items": [
         {
           "id": "llms",
-          "text": "LLM providers",
+          "text": "Model providers",
           "path": "/admin/llms",
           "permission": "llms:read"
         },
@@ -391,7 +391,7 @@
         },
         {
           "id": "browse-llms",
-          "text": "LLM providers",
+          "text": "Model providers",
           "path": "/portal/catalog/llms"
         },
         {

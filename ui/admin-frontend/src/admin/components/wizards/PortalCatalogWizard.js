@@ -40,7 +40,7 @@ const PortalCatalogWizard = ({ open, onClose, fetchData }) => {
   const [createdCatalogueId, setCreatedCatalogueId] = useState(null);
 
   const steps = [
-    "LLM Vendor Details",
+    "Model Provider Details",
     "Call Settings",
     "Team & Catalog Details",
     "Completion",

@@ -304,7 +304,7 @@ const LLMDetails = () => {
       await fetchLLMDetails();
     } catch (error) {
       console.error("Error toggling LLM active state", error);
-      setToggleError(`Failed to ${activating ? "activate" : "deactivate"} the LLM provider`);
+      setToggleError(`Failed to ${activating ? "activate" : "deactivate"} the model provider`);
     } finally {
       setToggling(false);
     }
@@ -415,18 +415,18 @@ const LLMDetails = () => {
   );
 
   if (loading) return <CircularProgress />;
-  if (!llm) return <Typography>LLM not found</Typography>;
+  if (!llm) return <Typography>Model provider not found</Typography>;
 
   return (
     <>
       <TitleBox top="var(--studio-header-height)">
-        <Typography variant="headingXLarge">LLM provider details</Typography>
+        <Typography variant="headingXLarge">Model provider details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate("/admin/llms")}
           color="inherit"
         >
-          Back to LLM providers
+          Back to model providers
         </SecondaryLinkButton>
       </TitleBox>
       <ContentBox>
@@ -563,7 +563,7 @@ const LLMDetails = () => {
           )}
         </Section>
 
-        <Section title="LLM Description">
+        <Section title="Model provider description">
           <Grid container spacing={2}>
             <Grid item xs={3}>
               <FieldLabel>Active:</FieldLabel>
@@ -646,12 +646,12 @@ const LLMDetails = () => {
           </Grid>
         </Section>
 
-        <UsedBySection resourcePath="llms" id={id} objectLabel="LLM provider" />
+        <UsedBySection resourcePath="llms" id={id} objectLabel="Model provider" />
 
         <Section title="Access Details">
           <Typography variant="body2" color="text.secondary" paragraph>
-            Some LLMs do not require an API Key for access, or have a default URL
-            (for example Anthropic and OpenAI). If you have an LLM provider that
+            Some model providers do not require an API Key for access, or have a default URL
+            (for example Anthropic and OpenAI). If you have a model provider that
             is not on the list, but provides an OpenAPI compatible API, you can
             use the compatible vendor setting and override the default URL.
           </Typography>
@@ -731,7 +731,7 @@ const LLMDetails = () => {
 
         <Section title="Model Configuration">
           <Typography variant="body2" color="text.secondary" paragraph>
-            The following model patterns are allowed for this LLM. These patterns
+            The following model patterns are allowed for this model provider. These patterns
             are used to validate model requests through the API Gateway.
           </Typography>
           <Grid container spacing={2}>
@@ -788,12 +788,12 @@ const LLMDetails = () => {
                 <Box data-testid="llm-failover-waterfall">
                   {llm.attributes.failover.targets.map((t, index) => (
                     <FieldValue key={index}>
-                      {index + 1}. {llmNames[t.llm_id] || `LLM #${t.llm_id}`} &rarr; {t.model}
+                      {index + 1}. {llmNames[t.llm_id] || `Model provider #${t.llm_id}`} &rarr; {t.model}
                     </FieldValue>
                   ))}
                   <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
-                    Tried in order when this LLM's upstream fails. Apps allowed to
-                    use this LLM inherit access to these fallbacks.
+                    Tried in order when this model provider's upstream fails. Apps allowed to
+                    use this model provider inherit access to these fallbacks.
                   </Typography>
                 </Box>
               ) : (
@@ -806,7 +806,7 @@ const LLMDetails = () => {
         <Section title="Portal Display Information">
           <Typography variant="body2" color="text.secondary" paragraph>
             The following settings will be used in the Portal UI that your
-            end-users / developers will see when browsing for LLMs to use.
+            end-users / developers will see when browsing for model providers to use.
           </Typography>
           <Grid container spacing={2}>
             <Grid item xs={3}>
@@ -816,7 +816,7 @@ const LLMDetails = () => {
               <Box sx={{ display: "flex", alignItems: "center" }}>
                 <img
                   src={llm.attributes.logo_url}
-                  alt="LLM Logo"
+                  alt="Model provider logo"
                   style={{
                     width: 50,
                     height: 50,
@@ -978,7 +978,7 @@ const LLMDetails = () => {
                 onClick={handleToggleActive}
                 disabled={toggling}
               >
-                {llm.attributes.active ? "Deactivate LLM provider" : "Activate LLM provider"}
+                {llm.attributes.active ? "Deactivate model provider" : "Activate model provider"}
               </PrimaryButton>
             </Can>
             <Can permission={P.LLMS_WRITE}>
@@ -987,7 +987,7 @@ const LLMDetails = () => {
                 startIcon={<EditIcon />}
                 onClick={() => navigate(`/admin/llms/edit/${id}`)}
               >
-                Edit LLM
+                Edit model provider
               </PrimaryButton>
             </Can>
           </Box>

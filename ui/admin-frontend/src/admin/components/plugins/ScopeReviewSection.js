@@ -29,8 +29,8 @@ const SCOPE_CATEGORIES = {
     color: 'primary',
   },
   'llms': {
-    label: 'LLM Management',
-    description: 'Access to LLM configurations and operations',
+    label: 'Model Management',
+    description: 'Access to model provider configurations and operations',
     color: 'success',
   },
   'tools': {
@@ -80,8 +80,8 @@ const SCOPE_CATEGORIES = {
   },
   // Object hook categories
   'llm': {
-    label: 'LLM Object Hooks',
-    description: 'Intercept and modify LLM create, update, and delete operations',
+    label: 'Model Provider Object Hooks',
+    description: 'Intercept and modify model provider create, update, and delete operations',
     color: 'success',
   },
   'datasource': {
@@ -113,8 +113,8 @@ export const SCOPE_DESCRIPTIONS = {
   'plugins.config': 'Modify plugin configurations',
 
   // LLM scopes
-  'llms.read': 'View LLM configurations and status',
-  'llms.write': 'Create, update, and delete LLM configurations',
+  'llms.read': 'View Model Provider configurations and status',
+  'llms.write': 'Create, update, and delete model provider configurations',
 
   // Tools scopes
   'tools.read': 'View tool and data source configurations',
@@ -140,18 +140,18 @@ export const SCOPE_DESCRIPTIONS = {
   // Governance reads
   'audit.read': 'Read the audit trail of individual resources (never request or response bodies)',
   'mcp-servers.read': 'View MCP servers (never upstream URLs or credentials)',
-  'routers.read': 'View model and semantic routers and the LLMs they route to',
+  'routers.read': 'View model and semantic routers and the model providers they route to',
   'apps.lifecycle': 'Suspend or reactivate applications and flag them for governance (cannot change what an application can access)',
   'metadata.read': 'Read governed metadata and its change history',
   'datasources.read': 'View data source configurations',
 
   // LLM object hooks
-  'llm.before_create': 'Hook called before creating a new LLM configuration',
-  'llm.after_create': 'Hook called after creating a new LLM configuration',
-  'llm.before_update': 'Hook called before updating an LLM configuration',
-  'llm.after_update': 'Hook called after updating an LLM configuration',
-  'llm.before_delete': 'Hook called before deleting an LLM configuration',
-  'llm.after_delete': 'Hook called after deleting an LLM configuration',
+  'llm.before_create': 'Hook called before creating a new model provider configuration',
+  'llm.after_create': 'Hook called after creating a new model provider configuration',
+  'llm.before_update': 'Hook called before updating a model provider configuration',
+  'llm.after_update': 'Hook called after updating a model provider configuration',
+  'llm.before_delete': 'Hook called before deleting a model provider configuration',
+  'llm.after_delete': 'Hook called after deleting a model provider configuration',
 
   // Datasource object hooks
   'datasource.before_create': 'Hook called before creating a new data source',

@@ -34,8 +34,8 @@ export class AdminCataloguesPage extends PageTemplate {
         this.CreateCatalogueButton = this.page.getByRole('button', { name: 'Create catalog' });
         this.UpdateCatalogueButton = this.page.getByRole('button', { name: 'Update catalog' });
         this.BackToCataloguesLink = this.page.getByRole('link', { name: 'Back to catalogs' });
-        this.LlmPicker = this.page.getByTestId('relationship-picker').filter({ has: this.page.getByRole('combobox', { name: 'Add LLM provider' }) });
-        this.AddLlmInput = this.page.getByRole('combobox', { name: 'Add LLM provider' });
+        this.LlmPicker = this.page.getByTestId('relationship-picker').filter({ has: this.page.getByRole('combobox', { name: 'Add model provider' }) });
+        this.AddLlmInput = this.page.getByRole('combobox', { name: 'Add model provider' });
         this.PickerCaption = this.page.getByTestId('relationship-picker-caption');
     }
 

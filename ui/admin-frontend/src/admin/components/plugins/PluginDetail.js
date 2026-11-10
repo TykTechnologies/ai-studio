@@ -184,7 +184,7 @@ const PluginDetail = () => {
     if (!llms || llms.length === 0) {
       return (
         <Typography variant="body2" color="textSecondary">
-          This plugin is not associated with any LLMs
+          This plugin is not associated with any model providers
         </Typography>
       );
     }
@@ -194,7 +194,7 @@ const PluginDetail = () => {
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>LLM Name</TableCell>
+              <TableCell>Model Provider Name</TableCell>
               <TableCell>Vendor</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Actions</TableCell>
@@ -228,7 +228,7 @@ const PluginDetail = () => {
                     size="small"
                     variant="outlined"
                   >
-                    View LLM
+                    View Model Provider
                   </Button>
                 </TableCell>
               </TableRow>
@@ -607,7 +607,7 @@ const PluginDetail = () => {
             <Card>
               <CardContent>
                 <Typography variant="h6" gutterBottom>
-                  Associated LLMs
+                  Associated Model Providers
                 </Typography>
                 <Divider sx={{ mb: 2 }} />
                 {renderLLMAssociations(plugin.llms)}

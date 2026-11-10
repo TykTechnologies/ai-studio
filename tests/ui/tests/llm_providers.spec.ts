@@ -2,7 +2,7 @@ import { test } from '@fixtures';
 import { expect } from '@playwright/test';
 import { config } from '../config';
 
-test('Add LLM provider', async ({ loginPage, adminLLMProvidersPage, adminMainPage }) => {
+test('Add model provider', async ({ loginPage, adminLLMProvidersPage, adminMainPage }) => {
     const LLMProviderName = 'Anthropic Test';
 
     await loginPage.goto();

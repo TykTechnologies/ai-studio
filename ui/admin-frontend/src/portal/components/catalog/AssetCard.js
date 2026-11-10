@@ -65,7 +65,7 @@ const Clamp = styled(Typography)({
 });
 
 /**
- * One card for every asset type in the portal (LLM provider, data source,
+ * One card for every asset type in the portal (Model provider, data source,
  * tool, plugin resource). The whole card opens the detail page (the providing
  * plugin's own page for a plugin resource whose access the plugin manages);
  * the primary action goes straight to the app builder with the asset

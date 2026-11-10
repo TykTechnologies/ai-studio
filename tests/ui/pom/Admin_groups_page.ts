@@ -15,7 +15,7 @@ interface GroupParams {
  *   available row has an "Add {name}" button and each current row a
  *   "Remove {name}" button;
  * - catalogs use the compact variant: chips carry the catalog name, the add
- *   control is the Autocomplete labelled "Add LLM catalog" / "Add data catalog"
+ *   control is the Autocomplete labelled "Add model provider catalog" / "Add data catalog"
  *   / "Add tool catalog", and removal is the chip's "Remove {name}" icon.
  * Changes only persist when the form or modal is saved.
  */
@@ -46,7 +46,7 @@ export class AdminGroupsPage extends PageTemplate {
         this.ManageTeamMembersSection = this.page.getByText('Manage team members', { exact: true });
         this.AddCatalogsSection = this.page.getByText('Add catalogs', { exact: true });
         this.AddUserSearchInput = this.page.getByRole('textbox', { name: 'Add user' });
-        this.AddLlmCatalogInput = this.page.getByRole('combobox', { name: 'Add LLM catalog' });
+        this.AddLlmCatalogInput = this.page.getByRole('combobox', { name: 'Add model provider catalog' });
         this.AddDataCatalogInput = this.page.getByRole('combobox', { name: 'Add data catalog' });
         this.AddToolCatalogInput = this.page.getByRole('combobox', { name: 'Add tool catalog' });
         this.ModalSaveButton = this.page.getByRole('button', { name: 'Save', exact: true });

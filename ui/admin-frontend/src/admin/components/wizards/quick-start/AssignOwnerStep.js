@@ -243,7 +243,7 @@ const AssignOwnerStep = () => {
             }
           }}
         >
-        Now let's choose who will own this app to directly access the LLM provider. You can assign yourself as the app owner or add a new user.
+        Now let's choose who will own this app to directly access the model provider. You can assign yourself as the app owner or add a new user.
         </Typography>
       </Box>
       <Box sx={{

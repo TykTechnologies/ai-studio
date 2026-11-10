@@ -204,14 +204,14 @@ const CatalogueForm = () => {
 
       setSnackbar({
         open: true,
-        message: "LLM providers updated successfully",
+        message: "Model providers updated successfully",
         severity: "success",
       });
     } catch (error) {
       console.error("Error updating catalog LLMs", error);
       setSnackbar({
         open: true,
-        message: "Error updating LLM providers",
+        message: "Error updating model providers",
         severity: "error",
       });
     }
@@ -232,7 +232,7 @@ const CatalogueForm = () => {
     <>
       <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">
-          {id ? "Edit LLM catalog" : "Add LLM catalog"}
+          {id ? "Edit model provider catalog" : "Add model provider catalog"}
         </Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
@@ -244,7 +244,7 @@ const CatalogueForm = () => {
         </SecondaryLinkButton>
       </TitleBox>
       <Box sx={{ p: 3 }}>
-        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of LLM providers and routers that you can assign to specific teams to manage access easily.</Typography>  
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of model providers and routers that you can assign to specific teams to manage access easily.</Typography>  
       </Box>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -260,8 +260,8 @@ const CatalogueForm = () => {
 
           <Box sx={{ mt: 3 }}>
             <RelationshipPicker
-              label="LLM providers in this catalog"
-              itemLabel="LLM provider"
+              label="Model providers in this catalog"
+              itemLabel="model provider"
               value={llms}
               onChange={setLLMs}
               options={availableLLMs}

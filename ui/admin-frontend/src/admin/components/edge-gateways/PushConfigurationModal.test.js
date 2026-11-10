@@ -119,7 +119,7 @@ describe("PushConfigurationModal", () => {
     // One block per namespace when pushing everything.
     expect(await screen.findByTestId("pending-changes-default")).toBeInTheDocument();
     expect(screen.getByText(/3 changes since the last push at/)).toBeInTheDocument();
-    expect(screen.getByText("LLM providers")).toBeInTheDocument();
+    expect(screen.getByText("Model providers")).toBeInTheDocument();
     expect(screen.getByText("Apps")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "OpenAI" })).toHaveAttribute("href", "/admin/llms/1");
     expect(screen.getByRole("link", { name: "Support bot" })).toHaveAttribute("href", "/admin/apps/7");

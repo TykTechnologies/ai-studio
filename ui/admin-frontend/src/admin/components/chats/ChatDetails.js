@@ -249,7 +249,7 @@ const ChatDetails = () => {
           </Grid>
 
           <Grid item xs={3}>
-            <FieldLabel>LLM:</FieldLabel>
+            <FieldLabel>Model provider:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
             <FieldValue>{llm ? llm.attributes.name : "Loading..."}</FieldValue>

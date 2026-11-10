@@ -84,8 +84,8 @@ const ManageGroupCatalogsModal = ({
           {isPortalEnabled && (
             <Box sx={{ mb: 3 }}>
               <RelationshipPicker
-                label="LLM providers catalogs"
-                itemLabel="LLM catalog"
+                label="Model provider catalogs"
+                itemLabel="model provider catalog"
                 idField="value"
                 value={selectedCatalogs}
                 onChange={setSelectedCatalogs}

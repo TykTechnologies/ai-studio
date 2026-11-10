@@ -96,7 +96,7 @@ describe("LLMForm Anthropic workspace pin", () => {
 
   it("is shown only for the Anthropic vendor, with help text about client headers", async () => {
     renderForm();
-    await screen.findByRole("button", { name: "Add LLM provider" });
+    await screen.findByRole("button", { name: "Add model provider" });
     expect(screen.queryByLabelText(WORKSPACE_LABEL)).not.toBeInTheDocument();
 
     await pickVendor(/OpenAI/);
@@ -112,7 +112,7 @@ describe("LLMForm Anthropic workspace pin", () => {
     fireEvent.change(await screen.findByLabelText(/^Name/), { target: { value: "Claude" } });
     await pickVendor(/Anthropic/);
     fireEvent.change(screen.getByLabelText(WORKSPACE_LABEL), { target: { value: "wrkspc_01AbC-9" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add LLM provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add model provider" }));
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith("/llms", expect.anything()));
     expect(sentAttributes("post").vendor_workspace_id).toBe("wrkspc_01AbC-9");
   });
@@ -122,7 +122,7 @@ describe("LLMForm Anthropic workspace pin", () => {
     fireEvent.change(await screen.findByLabelText(/^Name/), { target: { value: "Claude" } });
     await pickVendor(/Anthropic/);
     fireEvent.change(screen.getByLabelText(WORKSPACE_LABEL), { target: { value: "bad id!" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add LLM provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add model provider" }));
     await waitFor(() => expect(screen.getByTestId("llm-form-errors")).toHaveTextContent("workspace ID"));
     expect(apiClient.post).not.toHaveBeenCalled();
   });
@@ -139,7 +139,7 @@ describe("LLMForm Anthropic workspace pin", () => {
     await waitFor(() => expect(field).toHaveValue("wrkspc_01stored"));
 
     fireEvent.change(field, { target: { value: "" } });
-    fireEvent.click(screen.getByRole("button", { name: "Update LLM provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Update model provider" }));
     await waitFor(() => expect(apiClient.patch).toHaveBeenCalledWith("/llms/5", expect.anything()));
     expect(sentAttributes("patch").vendor_workspace_id).toBe("");
   });
@@ -155,7 +155,7 @@ describe("LLMForm Anthropic workspace pin", () => {
     fireEvent.change(await screen.findByLabelText(/^Name/), { target: { value: "Claude" } });
     await pickVendor(/Anthropic/);
     fireEvent.change(screen.getByLabelText(WORKSPACE_LABEL), { target: { value: "wrkspc_ok" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add LLM provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add model provider" }));
     expect(await screen.findAllByText(/vendor_workspace_id must be 1-128/)).not.toHaveLength(0);
     expect(mockNavigate).not.toHaveBeenCalled();
   });

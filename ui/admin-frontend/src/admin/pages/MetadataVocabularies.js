@@ -184,7 +184,7 @@ const MetadataVocabularies = () => {
         {available === false && (
           <EnterpriseFeatureBadge
             feature="Governed Metadata"
-            description="Define controlled vocabularies and metadata schemas for LLMs, tools and data sources with the Enterprise Edition."
+            description="Define controlled vocabularies and metadata schemas for model providers, tools and data sources with the Enterprise Edition."
           />
         )}
         {loading && available !== false && <CircularProgress />}

@@ -320,7 +320,7 @@ const ModelRouterDetails = () => {
                         <Table size="small">
                           <TableHead>
                             <TableRow>
-                              <TableCell>LLM</TableCell>
+                              <TableCell>Model provider</TableCell>
                               <TableCell>Vendor</TableCell>
                               {pool.selection_algorithm === "weighted" && (
                                 <TableCell>Weight</TableCell>
@@ -333,7 +333,7 @@ const ModelRouterDetails = () => {
                             {pool.vendors?.map((vendor, vIndex) => (
                               <TableRow key={vIndex}>
                                 <TableCell>
-                                  {vendor.llm?.name || `LLM #${vendor.llm_id}`}
+                                  {vendor.llm?.name || `Model provider #${vendor.llm_id}`}
                                 </TableCell>
                                 <TableCell>
                                   <Chip label={vendor.llm?.vendor || "unknown"} size="small" />

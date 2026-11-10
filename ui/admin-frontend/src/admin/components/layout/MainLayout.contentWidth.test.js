@@ -22,7 +22,7 @@ const renderLayout = () =>
     <MemoryRouter initialEntries={['/admin/llms']}>
       <Routes>
         <Route element={<MainLayout hideAppBar />}>
-          <Route path="/admin/llms" element={<div data-testid="page">LLM providers</div>} />
+          <Route path="/admin/llms" element={<div data-testid="page">Model providers</div>} />
         </Route>
       </Routes>
     </MemoryRouter>

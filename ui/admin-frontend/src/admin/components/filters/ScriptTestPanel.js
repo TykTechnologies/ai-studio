@@ -373,7 +373,7 @@ const ScriptTestPanel = ({ script, filterType, kind = "script", config = null, f
                 <MenuItem value="azure">Azure OpenAI</MenuItem>
               </Select>
               <FormHelperText>
-                LLM provider (available in script as input.vendor_name)
+                Model provider (available in script as input.vendor_name)
               </FormHelperText>
             </FormControl>
           </Grid>
