@@ -20,6 +20,9 @@
 #   PG_TEST_JOBS  go test runs at a time (default 4)
 #   PG_TEST_OUT   directory for logs and JSON (default $RUNNER_TEMP/pg-tests)
 #   FORK_PR=true  skip the enterprise suites (forks have only a stub)
+#
+# Docker is needed as well as the server: the failover tests start a
+# Postgres pair of their own (PGPAIR_REQUIRED is set below).
 set -uo pipefail
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -29,6 +32,11 @@ JOBS=${PG_TEST_JOBS:-4}
 OUT=${PG_TEST_OUT:-${RUNNER_TEMP:-/tmp}/pg-tests}
 TEE="$ROOT/scripts/gotest-json.py"
 mkdir -p "$OUT"
+
+# Tests that fail a database over start their own Postgres pair in Docker
+# (containers.StartPostgresPair), which skips when Docker is missing. Here a
+# skip would pass for a test that never ran, so a missing Docker fails them.
+export PGPAIR_REQUIRED=1
 
 # Suites: label | module dir | build tags | -run regexp | DSN variables | packages
 #
@@ -64,6 +72,10 @@ mgw-cluster|microgateway||||./tests/cluster/
 # one database (a schema per case). -short skips them in the unit jobs.
 fips-migration|.||TestCrossBuildMigration||./tests/fipsmigration/
 fips-migration-mgw|microgateway||TestCrossBuildMigration|MGW_TEST_POSTGRES_DSN|./internal/fipsmigration/
+# The failover rig's own tests: a primary and a hot standby in two
+# containers of their own (not the job's database), failed over and back
+# through the vendored gorm driver (pkg/testinfra/containers, PostgresPair).
+pgpair|.||TestPostgresPair||./pkg/testinfra/containers/
 # Agent Call Tracing: the store and capture staging in core, and the
 # enterprise assembler, correlation goldens, JSON v1 and content API
 # (purge). Their gates read DATABASE_URL or AGENT_TRACE_TEST_POSTGRES_DSN,
