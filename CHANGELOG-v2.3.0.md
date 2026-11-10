@@ -187,6 +187,7 @@ This changes what plugins and filter scripts see for Bedrock traffic. Read the [
 - **Approving a submission into catalogues needs catalogue write permission.**
 - **Secret fields stay masked in plugin config forms**, including the Redis passwords of advanced-llm-cache and rate-limiter.
 - **`pdftotext` runs only from the `PATH`, with a minimal environment.**
+- **The edge's cache of validated App keys holds hashes, not keys.** It is indexed by a keyed hash of each key (HMAC-SHA-256, with a key derived from the edge's `ENCRYPTION_KEY`) instead of the key itself, so an edge holds a key only while it handles a request that carries it.
 - **Earlier `-fips` packages were not FIPS builds.** Packages published under `-fips` names before this release were standard builds. 2.3's `-fips` packages are real FIPS builds, checked before release.
 - **Go 1.26.10.** Fixes reachable standard library vulnerabilities in `crypto/x509`, `crypto/tls`, `net/http`, `net/textproto` and `html/template`.
 
