@@ -189,6 +189,9 @@ func (h *BudgetSyncHandler) HandleBudgetSync(event eventbridge.Event) {
 		return
 	}
 
+	// h.mu is held from here to the end: lastSequenceNumber and warnedLower
+	// are only read and written under it (as in StreamStarted and
+	// GetLastSequenceNumber), so syncs are handled one at a time.
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
