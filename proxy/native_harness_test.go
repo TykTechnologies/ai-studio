@@ -49,6 +49,12 @@ type nativeVendorCall struct {
 }
 
 // fakeBatchAPI is an in-memory Anthropic Messages + Message Batches API.
+// fakeBatchCreatedAt is when every fake batch was created: two hours ago, so an
+// ended batch's results (kept 29 days from creation) are always still
+// downloadable. A fixed date here expires the fixtures once the calendar
+// passes it.
+var fakeBatchCreatedAt = time.Now().UTC().Truncate(time.Second).Add(-2 * time.Hour)
+
 type fakeBatchAPI struct {
 	mu      sync.Mutex
 	calls   []nativeVendorCall
@@ -127,11 +133,11 @@ func (f *fakeBatchAPI) addBatchLocked(id, status string) {
 	b := map[string]any{
 		"id": id, "type": "message_batch", "processing_status": status,
 		"request_counts": map[string]any{"processing": 0, "succeeded": 2, "errored": 0, "canceled": 0, "expired": 0},
-		"created_at":     "2026-10-12T10:00:00Z", "expires_at": "2026-10-13T10:00:00Z",
+		"created_at":     fakeBatchCreatedAt.Format(time.RFC3339), "expires_at": fakeBatchCreatedAt.Add(24 * time.Hour).Format(time.RFC3339),
 		"ended_at": nil, "cancel_initiated_at": nil, "archived_at": nil, "results_url": nil,
 	}
 	if status == "ended" {
-		b["ended_at"] = "2026-10-12T11:00:00Z"
+		b["ended_at"] = fakeBatchCreatedAt.Add(time.Hour).Format(time.RFC3339)
 		b["results_url"] = "https://api.anthropic.com/v1/messages/batches/" + id + "/results"
 	}
 	f.batches[id] = b

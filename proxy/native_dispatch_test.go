@@ -302,7 +302,7 @@ func TestNative_RetrieveUpdatesLedgerSnapshot(t *testing.T) {
 	assert.Equal(t, "ended", got.State)
 	require.NotNil(t, got.EndedAt)
 	require.NotNil(t, got.ResultsExpireAt)
-	assert.Equal(t, time.Date(2026, 11, 10, 10, 0, 0, 0, time.UTC), got.ResultsExpireAt.UTC())
+	assert.Equal(t, fakeBatchCreatedAt.Add(29*24*time.Hour), got.ResultsExpireAt.UTC())
 	assert.JSONEq(t, string(body), got.Snapshot)
 	assert.Equal(t, models.NativeAccountingPending, got.AccountingState, "a retrieve never settles accounting")
 }
