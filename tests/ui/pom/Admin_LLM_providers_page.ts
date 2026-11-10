@@ -53,7 +53,7 @@ export class AdminLLMProvidersPage extends PageTemplate {
     constructor(page: Page) {
         super(page);
         this.Table = new TableWrapper('table', this.page);
-        this.AddLLMButton = this.page.getByText('Add LLM provider').first();
+        this.AddLLMButton = this.page.getByText('Add model provider').first();
         this.ProviderNameInput = this.page.getByRole('textbox', { name: 'Name' });
         this.ShortDescriptionInput = this.page.getByRole('textbox', { name: 'Short Description' });
         this.LongDescriptionInput = this.page.getByRole('textbox', { name: 'Long Description' });
@@ -75,11 +75,11 @@ export class AdminLLMProvidersPage extends PageTemplate {
         this.ActiveCheckbox = this.page.getByRole('checkbox', { name: 'Active' });
         this.ActiveColumnHeader = this.page.getByRole('columnheader', { name: 'Active' });
         this.FiltersButton = this.page.getByRole('button', { name: 'Filters' });
-        this.SaveButton = this.page.getByRole('button', { name: 'Add LLM provider' });
+        this.SaveButton = this.page.getByRole('button', { name: 'Add model provider' });
         this.CancelButton = this.page.getByRole('button', { name: 'Cancel' });
-        this.EditProviderButton = this.page.getByRole('menuitem', { name: 'Edit LLM provider' });
-        this.DeactivateProviderButton = this.page.getByRole('menuitem', { name: 'Deactivate LLM provider' });
-        this.BackToLLMsLink = this.page.getByRole('link', { name: 'Back to LLM providers' });
+        this.EditProviderButton = this.page.getByRole('menuitem', { name: 'Edit model provider' });
+        this.DeactivateProviderButton = this.page.getByRole('menuitem', { name: 'Deactivate model provider' });
+        this.BackToLLMsLink = this.page.getByRole('link', { name: 'Back to model providers' });
     }
 
     async goto() {

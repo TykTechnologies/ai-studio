@@ -69,7 +69,7 @@ test('the push dialog lists what changed and the banner clears after the push', 
     // The edited provider is listed under its type, as updated, with a link.
     const llmGroup = dialog.getByTestId('pending-changes-group-llm');
     await expect(llmGroup).toBeVisible({ timeout: 20000 });
-    await expect(llmGroup.getByText('LLM providers')).toBeVisible();
+    await expect(llmGroup.getByText('Model providers')).toBeVisible();
     const row = llmGroup.locator('li').filter({ hasText: llm.attributes.name }).first();
     await expect(row).toBeVisible();
     await expect(row.getByText('updated')).toBeVisible();

@@ -46,7 +46,7 @@ export class AdminAppsPage extends PageTemplate {
         this.NameInput = this.page.getByRole('textbox', { name: 'Name' });
         this.DescriptionInput = this.page.getByRole('textbox', { name: 'Description' });
         this.UserDropDown = new DropDownWrapper('#mui-component-select-user_id', page); // Assuming specific ID, adjust if needed
-        this.AddLlmInput = this.page.getByRole('combobox', { name: 'Add LLM provider' });
+        this.AddLlmInput = this.page.getByRole('combobox', { name: 'Add model provider' });
         this.AddDataSourceInput = this.page.getByRole('combobox', { name: 'Add data source' });
         this.AddToolInput = this.page.getByRole('combobox', { name: 'Add tool' });
         // The budget field is a mode choice ("No limit"/"Default" vs "Fixed

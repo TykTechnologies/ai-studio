@@ -175,7 +175,7 @@ test.describe('Portal app builder', () => {
                 await expect(title).toBeVisible();
                 await expectTitleSpacedLikeMyApps(page, title, referenceGap);
                 await expect(page.getByTestId('requested-access-empty')).toBeVisible();
-                await expect(aiPortalPage.accessTab('LLM providers')).toHaveAttribute('aria-selected', 'true');
+                await expect(aiPortalPage.accessTab('Model providers')).toHaveAttribute('aria-selected', 'true');
                 await expect(aiPortalPage.CreateAppButton).toBeDisabled();
             });
 
@@ -187,11 +187,11 @@ test.describe('Portal app builder', () => {
                 await aiPortalPage.addTool(fixture.toolName);
                 await expect(page.getByText('Access requested (3)')).toBeVisible();
                 // The tab shows how many of its items were added.
-                await expect(aiPortalPage.accessTab('LLM providers')).toContainText('2');
+                await expect(aiPortalPage.accessTab('Model providers')).toContainText('2');
 
                 await aiPortalPage.removeRequested('OpenAI');
                 await expect(page.getByText('Access requested (2)')).toBeVisible();
-                await aiPortalPage.accessTab('LLM providers').click();
+                await aiPortalPage.accessTab('Model providers').click();
                 await expect(aiPortalPage.AccessOptions.getByRole('button', { name: 'Add OpenAI', exact: true })).toBeVisible();
                 await expect(aiPortalPage.AccessOptions.getByRole('button', { name: 'Remove Anthropic', exact: true })).toBeVisible();
             });
@@ -239,7 +239,7 @@ test.describe('Portal app builder', () => {
         await test.step('The provider is requested and its tab is open', async () => {
             await expect(aiPortalPage.requestedItem('Anthropic')).toBeVisible();
             await expect(page.getByText('Access requested (1)')).toBeVisible();
-            await expect(aiPortalPage.accessTab('LLM providers')).toHaveAttribute('aria-selected', 'true');
+            await expect(aiPortalPage.accessTab('Model providers')).toHaveAttribute('aria-selected', 'true');
             await expect(aiPortalPage.AccessOptions.getByRole('button', { name: 'Remove Anthropic', exact: true })).toBeVisible();
         });
 
