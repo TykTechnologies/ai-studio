@@ -1,6 +1,10 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
+)
 
 // ClusterNode is one running Studio replica. Each replica refreshes its row
 // every few seconds (pkg/cluster); a row whose LastSeen is older than the
@@ -54,4 +58,27 @@ type ClusterLease struct {
 	AcquiredAt time.Time `json:"acquired_at"`
 	RenewedAt  time.Time `json:"renewed_at"`
 	ExpiresAt  time.Time `json:"expires_at" gorm:"not null"`
+}
+
+// ClusterCounter is a named counter that only ever increases, drawn from the
+// database so every replica continues where the last one stopped, whatever
+// its own clock says (the budget sync sequence edges order syncs by).
+type ClusterCounter struct {
+	Name  string `json:"name" gorm:"primaryKey;size:64"`
+	Value int64  `json:"value" gorm:"not null"`
+}
+
+// NextClusterCounter returns the next value of the named counter: first
+// when it has never been drawn, one more than the previous value after
+// that. It is one statement, so concurrent replicas never get the same
+// value, on Postgres and SQLite alike.
+func NextClusterCounter(db *gorm.DB, name string, first int64) (int64, error) {
+	var value int64
+	err := db.Raw(`INSERT INTO cluster_counters (name, value) VALUES (?, ?)
+		ON CONFLICT (name) DO UPDATE SET value = cluster_counters.value + 1
+		RETURNING value`, name, first).Scan(&value).Error
+	if err != nil {
+		return 0, err
+	}
+	return value, nil
 }

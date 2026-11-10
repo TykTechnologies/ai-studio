@@ -572,6 +572,11 @@ TABLE chats
   column default_data_source_id bigint(int8) nullable=YES precision=64 scale=0
   column prompt_templates_json text(text) nullable=YES
   column render_images boolean(bool) nullable=NO default=false
+TABLE cluster_counters
+  constraint cluster_counters_pkey PRIMARY KEY (name)
+  index CREATE UNIQUE INDEX cluster_counters_pkey ON cluster_counters USING btree (name)
+  column name character varying(varchar) nullable=NO len=64
+  column value bigint(int8) nullable=NO precision=64 scale=0
 TABLE cluster_events
   constraint cluster_events_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX cluster_events_pkey ON cluster_events USING btree (id)

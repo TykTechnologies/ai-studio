@@ -540,6 +540,11 @@ TABLE chats
   constraint CONSTRAINT `fk_chats_llm_settings` FOREIGN KEY (`llm_settings_id`) REFERENCES `llm_settings`(`id`)
   constraint CONSTRAINT `fk_chats_llm` FOREIGN KEY (`llm_id`) REFERENCES `llms`(`id`)
   index CREATE INDEX `idx_chats_deleted_at` ON `chats`(`deleted_at`)
+TABLE cluster_counters
+  column `name` text
+  column `value` integer NOT NULL
+  constraint PRIMARY KEY (`name`)
+  autoindex origin=pk unique=1 (name)
 TABLE cluster_events
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `topic` text NOT NULL
