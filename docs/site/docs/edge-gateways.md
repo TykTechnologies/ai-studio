@@ -462,6 +462,7 @@ Edges send analytics and spend to the control plane in the analytics pulse, whic
 
 - Check that `PLUGINS_CONFIG_PATH` points at an existing pulse config; the startup path report flags it when it doesn't.
 - Check the edge logs for `Failed to send analytics pulse`.
+- From 2.3, AI Studio acknowledges a pulse only once it is stored, and stores each pulse once. An edge whose pulse is not acknowledged (the control plane went away, or could not write to its database) keeps that batch and sends it again, unchanged, with the next pulse, for up to `edge_retention_hours` (24 by default). If the first attempt was in fact stored, AI Studio recognises the repeat and does not store it again, so a control-plane failover does not double-count analytics or spend.
 - Edges built before 2026-09-27 kept sending the pulse over their first connection to the control plane. After any AI Studio restart that connection was closed, so no further analytics arrived until the edge was restarted, and a graceful edge shutdown dropped what the pulse had buffered. Upgrade the edge, or restart it after each AI Studio restart.
 
 ### Configuration Entries an Edge Cannot Store

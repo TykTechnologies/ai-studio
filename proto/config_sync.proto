@@ -252,6 +252,15 @@ message AnalyticsPulse {
   bool is_compressed = 10;        // Whether data is compressed
   uint32 total_records = 11;      // Total number of records in pulse
   uint64 data_size_bytes = 12;    // Uncompressed data size
+
+  // Identity of the batch, with edge_id and sequence_number: a random value
+  // the edge draws once per process, so the triple stays the same when a
+  // batch is sent again (an acknowledgement lost with its control plane)
+  // and never repeats after a restart, where sequence_number starts at 1
+  // again. The hub stores a batch that carries it at most once. Empty from
+  // edges that predate it, whose pulses are stored as before, and on
+  // capture-only pulses, whose events carry their own idempotency keys.
+  string boot_id = 17;
 }
 
 // AnalyticsPulseResponse acknowledges receipt of analytics pulse

@@ -29,7 +29,7 @@ func setupPulseTestDB(t *testing.T) *gorm.DB {
 	sqlDB.SetMaxOpenConns(1)
 
 	err = db.AutoMigrate(&models.LLMChatRecord{}, &models.ProxyLog{}, &models.EdgeInstance{},
-		&models.ComplianceEvent{}, &models.ToolCallRecord{})
+		&models.ComplianceEvent{}, &models.ToolCallRecord{}, &models.EdgeAnalyticsBatch{})
 	require.NoError(t, err)
 
 	return db

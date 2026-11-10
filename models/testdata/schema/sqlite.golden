@@ -695,6 +695,13 @@ TABLE datasources
   index CREATE INDEX `idx_datasources_embedder_id` ON `datasources`(`embedder_id`)
   index CREATE INDEX `idx_datasources_name` ON `datasources`(`name`)
   index CREATE INDEX `idx_ds_user_community` ON `datasources`(`user_id`,`community_submitted`)
+TABLE edge_analytics_batches
+  column `key` text
+  column `edge_id` text
+  column `applied_at` datetime NOT NULL
+  constraint PRIMARY KEY (`key`)
+  autoindex origin=pk unique=1 (key)
+  index CREATE INDEX `idx_edge_analytics_batches_applied_at` ON `edge_analytics_batches`(`applied_at`)
 TABLE edge_instances
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime
