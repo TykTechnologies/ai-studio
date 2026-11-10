@@ -39,6 +39,9 @@ const appliedSnapshotInfo = "applied-snapshot-v1"
 // snapshotSealer encrypts and decrypts stored snapshots.
 type snapshotSealer struct {
 	aead cipher.AEAD
+	// contactKey authenticates the time of the edge's last contact with a
+	// control plane (last_known_good.go).
+	contactKey []byte
 }
 
 func newSnapshotSealer(encryptionKey string) (*snapshotSealer, error) {
@@ -57,7 +60,11 @@ func newSnapshotSealer(encryptionKey string) (*snapshotSealer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("applied snapshot: %w", err)
 	}
-	return &snapshotSealer{aead: aead}, nil
+	contactKey, err := hkdf.Key(sha256.New, []byte(encryptionKey), nil, controlContactInfo, 32)
+	if err != nil {
+		return nil, fmt.Errorf("control contact: derive key: %w", err)
+	}
+	return &snapshotSealer{aead: aead, contactKey: contactKey}, nil
 }
 
 // appliedSnapshotAAD binds a row's columns to its ciphertext. Each field is
@@ -108,6 +115,15 @@ func (s *EdgeSyncService) storeAppliedSnapshot(tx *gorm.DB, raw *pb.Configuratio
 	plain, err := proto.MarshalOptions{Deterministic: true}.Marshal(raw)
 	if err != nil {
 		return fmt.Errorf("encode snapshot: %w", err)
+	}
+	// An edge starting from last-known-good applies the stored snapshot
+	// itself: the row already holds it (KeepStoredSnapshot). Anything else
+	// applied afterwards replaces the row as usual.
+	if restoring, ok := restoringSnapshots.Load(s.db.Config); ok {
+		restoringSnapshots.Delete(s.db.Config)
+		if restoring.([sha256.Size]byte) == sha256.Sum256(plain) {
+			return nil
+		}
 	}
 	row := &database.AppliedSnapshot{
 		ID:        database.AppliedSnapshotID,

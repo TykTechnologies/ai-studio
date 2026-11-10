@@ -506,6 +506,9 @@ type ControlPayload struct {
 type SyncState struct {
 	ID             uint      `gorm:"primaryKey"`
 	Topic          string    `gorm:"uniqueIndex;not null"` // e.g., "budget.sync"
+	// For the topic "control.contact" (the edge's last contact with a
+	// control plane) this is not a sequence: it holds the MAC that
+	// authenticates LastSyncAt (services.RecordControlContact).
 	SequenceNumber uint64    `gorm:"default:0"`
 	LastSyncAt     time.Time
 	CreatedAt      time.Time

@@ -62,6 +62,10 @@ type ServiceContainer struct {
 	// ControlLink, set in edge mode, reports the control endpoint the edge
 	// is on and whether its stream is open (for /ready).
 	ControlLink func() (endpoint string, connected bool)
+	// ConfigSource, set in edge mode, reports where the configuration the
+	// edge runs came from ("control" or "last_known_good") and when the
+	// edge last had contact with a control plane (zero if never).
+	ConfigSource func() (source string, lastControlContact time.Time)
 }
 
 // NewServiceContainer creates a new service container with essential dependencies only

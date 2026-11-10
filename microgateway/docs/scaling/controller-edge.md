@@ -574,7 +574,10 @@ An edge keeps two things locally. Neither is a set of JSON files.
   control (LLMs, Apps, model prices, filters, plugins and the rest) is written
   to the edge's database (`DATABASE_TYPE` / `DATABASE_DSN`: SQLite or
   PostgreSQL) and served from there. It is replaced on every configuration
-  push and on every reconnection.
+  push and on every reconnection. The snapshot itself is also kept, encrypted
+  with a key derived from `ENCRYPTION_KEY`, in the table `applied_snapshots`:
+  it is what an edge with `EDGE_START_FROM_LAST_KNOWN_GOOD=true` starts from
+  when control is unreachable (see Edge Failover below).
 - **Validated tokens, in memory.** App credentials are not part of the
   snapshot and are never written to the edge's disk. The first request with a
   token asks control to validate it; the answer is cached in memory for
@@ -597,9 +600,20 @@ While control is unreachable, a **running** edge:
    keeps expired entries usable for that long while control is unreachable.
 4. Receives the current configuration again when control returns.
 
-An edge that **starts or restarts** while control is unreachable exits: it does
-not start from the configuration left in its database. Run enough edges that a
-restart during a control outage does not remove needed capacity.
+An edge that **starts or restarts** while control is unreachable exits by
+default. Run enough edges that a restart during a control outage does not
+remove needed capacity, or set `EDGE_START_FROM_LAST_KNOWN_GOOD=true`: the edge
+then waits `EDGE_STARTUP_CONTROL_TIMEOUT` (default `30s`) for control and
+starts from the configuration snapshot it last applied, which it keeps
+encrypted in its database. It refuses, and exits as before, when it has no
+stored snapshot, when the snapshot is for another `EDGE_NAMESPACE` or does not
+decrypt with its `ENCRYPTION_KEY`, when it has been without control for longer
+than `EDGE_LAST_KNOWN_GOOD_MAX_AGE` (default `72h`), or when the snapshot's
+time is in the future by the edge's clock. An edge started this way serves
+what it last knew, so something removed or revoked on control since keeps
+working on it until it reconnects; tokens it has to ask control about still
+answer `503`, because the token cache is empty after a restart. It needs a
+database that survives the restart.
 
 ## Explicit Configuration Push System
 

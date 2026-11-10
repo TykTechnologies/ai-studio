@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
@@ -46,4 +47,32 @@ func TestReadinessReportsTheControlEndpoint(t *testing.T) {
 	code, body = ready(sc)
 	require.Equal(t, http.StatusOK, code, "an edge without a control plane is still ready")
 	assert.Equal(t, false, body["control_connected"])
+}
+
+// On an edge /ready also says where its configuration came from. An edge
+// serving its last-known-good configuration is ready.
+func TestReadinessReportsTheConfigSource(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db, err := gorm.Open(sqlite.Open("file::memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	ready := func(sc *services.ServiceContainer) (int, map[string]interface{}) {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/ready", nil)
+		ReadinessCheck(sc)(c)
+		var body map[string]interface{}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		return w.Code, body
+	}
+
+	sc := &services.ServiceContainer{DB: db}
+	_, body := ready(sc)
+	assert.NotContains(t, body, "config_source", "only an edge has a configuration source")
+
+	for _, source := range []string{"control", "last_known_good"} {
+		sc.ConfigSource = func() (string, time.Time) { return source, time.Now() }
+		code, body := ready(sc)
+		assert.Equal(t, http.StatusOK, code, source)
+		assert.Equal(t, source, body["config_source"])
+	}
 }

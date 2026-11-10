@@ -58,6 +58,13 @@ func ReadinessCheck(services *services.ServiceContainer) gin.HandlerFunc {
 			response["control_endpoint"] = endpoint
 			response["control_connected"] = connected
 		}
+		// ... and where its configuration came from: a control plane, or
+		// the snapshot it stored, when it started without one. Ready in
+		// both cases.
+		if services.ConfigSource != nil {
+			source, _ := services.ConfigSource()
+			response["config_source"] = source
+		}
 
 		c.JSON(http.StatusOK, response)
 	}

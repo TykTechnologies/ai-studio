@@ -151,6 +151,7 @@ This changes what plugins and filter scripts see for Bedrock traffic. Read the [
 AI Studio can run as two control planes in two sites over one replicated PostgreSQL, and edges keep working when either site is lost.
 
 - **Edges with several control planes.** `CONTROL_ENDPOINTS` gives an edge an ordered list of control planes, its own site first. When its connection fails, the edge tries the others straight away and backs off only once all have failed; a configuration push in flight completes on the control plane it arrives at, and keys created just before the loss validate through the other one. `EDGE_CONTROL_FAILBACK_INTERVAL` returns edges to their first control plane when it is back, without dropping requests. The endpoint in use is in the edge's log, `/ready` and the new metric `microgateway_control_connected`. `CONTROL_ENDPOINT` works as before. See [Several control planes](docs/site/docs/edge-gateways.md#several-control-planes).
+- **Edges can start without a control plane.** With `EDGE_START_FROM_LAST_KNOWN_GOOD=true`, an edge that restarts while no control plane answers starts from the configuration snapshot it last applied, which it keeps encrypted in its own database, instead of exiting. It serves, reports `config_source: last_known_good` on `/ready`, and takes the live configuration when it reconnects. Off by default: such an edge serves what it last knew until it reconnects. It needs a database that survives the restart. See [Starting without a control plane](docs/site/docs/edge-gateways.md#starting-without-a-control-plane).
 
 ### Other improvements
 
@@ -482,6 +483,9 @@ The Helm chart adds `config.logLevel` (AI Studio's `LOG_LEVEL`), and `config.plu
 | `CLUSTER_NODE_LABEL` | AI Studio | `studio` | Names a replica (for example its site) on the cluster status and in the Edge Gateways "Held by" column. At most 64 characters; an invalid value stops startup |
 | `CONTROL_ENDPOINTS` | edge | unset | Ordered, comma-separated list of control planes; `CONTROL_ENDPOINT` is a list of one (setting both is a start-up error) |
 | `EDGE_CONTROL_FAILBACK_INTERVAL` | edge | off | How often an edge that is not on its first control plane tries to return to it |
+| `EDGE_START_FROM_LAST_KNOWN_GOOD` | edge | `false` | Start from the stored configuration snapshot when no control plane answers at start-up |
+| `EDGE_STARTUP_CONTROL_TIMEOUT` | edge | `30s` | How long the edge keeps trying its control endpoints before it uses the stored snapshot |
+| `EDGE_LAST_KNOWN_GOOD_MAX_AGE` | edge | `72h` | The longest an edge may have been without a control plane and still start from the stored snapshot (`0`: no limit) |
 
 **Agent Call Tracing** (Enterprise): `AGENT_TRACING_*` settings, all off by default. The [agent tracing guide](docs/site/docs/agent-tracing.md) lists them. The content ceiling and default mode (`AGENT_TRACING_CONTENT_CEILING`, `AGENT_TRACING_CONTENT_DEFAULT_MODE`) can only be set in the environment; the console shows them read-only. An invalid content mode is read as `off`.
 
@@ -561,6 +565,7 @@ These plugins are released to the marketplace for 2.3.0. Versions marked † nee
 - **Keys that differ only in case** can still be read differently by a script filter and the upstream. Guardrails refuse such bodies.
 - **Dashboard-created MCP proxies don't set `stripAuthorizationData`**, so AI Studio-minted Tyk keys are forwarded to third-party upstreams. Gateway connections set it.
 - **Rate limiter concurrency slots can be held for up to ten minutes** by a request that ends without a response.
+- **A revocation does not reach an edge that is cut off from every control plane.** An edge started from last-known-good (`EDGE_START_FROM_LAST_KNOWN_GOOD`), like one running through an outage, serves the configuration it last knew: a removed LLM or App, or a key revoked meanwhile, keeps working there until the edge reconnects. `EDGE_LAST_KNOWN_GOOD_MAX_AGE` (72 h) bounds how long an edge may have been cut off and still start this way.
 
 ---
 

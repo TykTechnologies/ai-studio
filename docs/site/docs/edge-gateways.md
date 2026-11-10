@@ -375,6 +375,22 @@ All endpoints must be replicas of one AI Studio deployment (one database), with 
 
 The endpoint an edge is on is shown in its log (`Connected to control plane`, with `control_endpoint`), in the body of its `/ready` endpoint (`control_endpoint`, `control_connected`; the probe stays 200 while the edge has no control plane) and in the metric `microgateway_control_connected{endpoint="..."}`, which is 1 for the endpoint in use and 0 for the others.
 
+### Starting without a control plane
+
+By default an edge exits if no control plane accepts it at start-up. With `EDGE_START_FROM_LAST_KNOWN_GOOD=true` it can start from the configuration it last applied instead:
+
+| Edge setting | Default | Purpose |
+|---|---|---|
+| `EDGE_START_FROM_LAST_KNOWN_GOOD` | `false` | Start from the stored configuration snapshot when no control plane answers at start-up. |
+| `EDGE_STARTUP_CONTROL_TIMEOUT` | `30s` | How long the edge keeps trying its control endpoints first. |
+| `EDGE_LAST_KNOWN_GOOD_MAX_AGE` | `72h` | The longest the edge may have been without a control plane and still start this way. `0` means no limit. |
+
+- **What is stored.** Every edge keeps the snapshot it last applied in its own database (table `applied_snapshots`), encrypted with a key derived from its `ENCRYPTION_KEY`, whether or not this option is on. So the option can be turned on later, and it works at the next restart.
+- **What happens.** The edge waits `EDGE_STARTUP_CONTROL_TIMEOUT` for a control plane, then applies the stored snapshot exactly as it would one from AI Studio (LLMs, Apps, filters, plugins, and what an edge holds only in memory, such as trusted prompt templates and guardrail exceptions), starts serving, and keeps trying to connect. It logs a warning with the age of the snapshot. `/ready` answers 200 with `config_source: last_known_good`, `microgateway_config_source{source="last_known_good"}` is 1, and `microgateway_config_age_seconds` shows how long the edge has been without a control plane. On the first registration a control plane accepts, the edge applies the live configuration and reports `control` again; AI Studio shows it In Sync or Pending as usual.
+- **When it refuses.** The edge exits with the reason, as it does without the option, when no snapshot is stored (a new or lost database), when the snapshot is for another `EDGE_NAMESPACE`, when it does not decrypt with this `ENCRYPTION_KEY`, when the edge has been without a control plane for longer than `EDGE_LAST_KNOWN_GOOD_MAX_AGE`, or when the stored snapshot's time is in the future by the edge's clock (the clock was set back, so no age can be worked out: correct the clock, or let the edge connect to a control plane once). That age is counted from the edge's last contact with a control plane (a registration accepted or a heartbeat acknowledged), not from when the configuration last changed: an edge with a stable configuration that was connected an hour ago is not stale.
+- **What it means.** An edge started this way serves what it last knew. An LLM, App or filter removed in AI Studio since then, or a key revoked, keeps working on that edge until it reconnects. It is the same trade as `EDGE_TOKEN_CACHE_STALE_GRACE`, which is why both are off by default. Keys the edge has to ask AI Studio about still answer `503` (`credential_check_unavailable`): the token cache is empty after a restart. Budgets use the edge's own counters and stored budget blocks; heartbeats, analytics and plugin payloads queue as in any outage.
+- **What it needs.** A database that survives the restart. A container restart keeps an `emptyDir`; a rescheduled pod does not, so on Kubernetes use the StatefulSet form of the chart with persistence.
+
 ### The edge token is a hub-wide secret
 
 Every edge authenticates to AI Studio with the same token: `EDGE_AUTH_TOKEN` on the edge, matching `GRPC_AUTH_TOKEN` (or `GRPC_AUTH_TOKEN_NEXT` during a rotation) on AI Studio. The token is not bound to an edge or a namespace, so whoever holds it can:

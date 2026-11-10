@@ -202,6 +202,9 @@ Complete reference for all microgateway environment variables organized by funct
 | `CONTROL_ENDPOINT` | - | Control instance gRPC endpoint |
 | `CONTROL_ENDPOINTS` | - | Ordered, comma-separated list of control planes (`host:port`), the edge's own site first. The edge connects to the first that accepts it and moves to the next when its connection fails. Use this or `CONTROL_ENDPOINT`, not both |
 | `EDGE_CONTROL_FAILBACK_INTERVAL` | 0 (off) | With `CONTROL_ENDPOINTS`: how often an edge that is not on its first endpoint tries to return to it |
+| `EDGE_START_FROM_LAST_KNOWN_GOOD` | false | Let an edge that finds no control plane at start-up serve the configuration snapshot it last applied (stored encrypted in its database) instead of exiting. It then serves what it last knew: something removed or revoked on the control plane since keeps working until the edge reconnects. Needs a database that survives the restart |
+| `EDGE_STARTUP_CONTROL_TIMEOUT` | 30s | With `EDGE_START_FROM_LAST_KNOWN_GOOD`: how long the edge keeps trying its control endpoints at start-up before it uses the stored snapshot |
+| `EDGE_LAST_KNOWN_GOOD_MAX_AGE` | 72h | With `EDGE_START_FROM_LAST_KNOWN_GOOD`: the longest the edge may have been without a control plane (since its last accepted registration or acknowledged heartbeat) and still start from the stored snapshot; past it the edge exits. `0` means no limit |
 | `EDGE_ID` | - | Unique edge instance identifier |
 | `EDGE_NAMESPACE` | - | Edge namespace for configuration filtering |
 | `EDGE_AUTH_TOKEN` | - | Authentication token for control connection |
