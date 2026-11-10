@@ -387,7 +387,7 @@ AI Studio serves the control connection with TLS unless `GRPC_TLS_INSECURE=true`
 | Edge setting | Purpose |
 |---|---|
 | `EDGE_TLS_CA_PATH` | PEM file of the CA(s) that issued the control plane's certificate, for a private CA. Unset uses the system roots. |
-| `EDGE_TLS_SERVER_NAME` | The name the certificate is checked against, when it differs from the host in `EDGE_CONTROL_ENDPOINT` (an IP address, or a load balancer's internal name). |
+| `EDGE_TLS_SERVER_NAME` | The name the certificate is checked against, when it differs from the host in `CONTROL_ENDPOINT` (an IP address, or a load balancer's internal name). |
 | `EDGE_TLS_CERT_PATH`, `EDGE_TLS_KEY_PATH` | Client certificate for mutual TLS. |
 | `EDGE_SKIP_TLS_VERIFY` | Skips verification entirely. Development only. |
 
