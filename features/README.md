@@ -119,6 +119,19 @@ Each feature specification below provides detailed documentation on the individu
 - Records resolved to MCP servers on the token's connection and attributed to Apps by key hash or alias; no keys, bodies or IPs stored
 - Calls, error rates, p50/p95 latency, per-tool and per-App statistics for admins; MCP usage of their own Apps for portal users
 
+### [Multi-replica control plane](ClusterControlPlane.md)
+- Several AI Studio replicas serving one database, with edges connected to any of them
+- Durable configuration pushes (`push_operations`, `edge_push_commands`) with per-edge results
+- Fan-out events across replicas (`cluster_events`) and a leader lease for singleton jobs
+- Replica registry (`cluster_nodes`), schema-version checks and the cluster status feedback
+
+### [Active-active control planes and edge resilience](ActiveActive.md)
+- Two control-plane sites on one replicated PostgreSQL; either site can be lost
+- Studio follows a database failover without a restart
+- Edges fail over between control endpoints and can start from their last applied snapshot
+- Hashed credential sync to edges (full sync is Enterprise)
+- Builds on the multi-replica control plane
+
 ### [Budget Control](Budgeting.md)
 - Monthly spending caps for apps and LLMs
 - Real-time usage tracking and blocking

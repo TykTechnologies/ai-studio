@@ -1,0 +1,494 @@
+# Active-active control planes and edge resilience
+
+**Status:** approved, not built. Target: **2.3.0** (a priority addition
+during the release-candidate phase). This is the feature specification and
+the build plan; the work is tracked in bd under the epic "Active-active
+control planes and edge resilience". **Keep this file current:** whoever
+changes the design while building it updates this spec in the same PR.
+
+Two AI Studio control planes (CPs) run in two sites, both serving the UI,
+the API and edge gateways. Either site can be lost, including its
+PostgreSQL node, and the other carries on. Edges survive a control-plane
+outage, restart during one, and can validate credentials they have never
+seen.
+
+Out of scope: Studio's embedded gateway (not part of this topology), and any
+new data store. Everything here runs on what a deployment already has:
+PostgreSQL for the control planes, each edge's own database (SQLite or
+Postgres), and local files.
+
+## Requirements and where they stand today
+
+| # | Requirement | Today | After |
+|---|---|---|---|
+| R1 | A Postgres failure in one site is absorbed by the other, quickly | Studio handles only one writable database. Multi-host DSNs pass through to pgx untested; nothing detects a connection left on a demoted primary; startup exits if the first ping fails | Supported topology on Postgres streaming replication, with Studio following a failover without a restart (Phase 1) |
+| R2 | Key creation during a failure is queued | A database error is a 500 (`api/credential_handlers.go:29`). The only outbox in the code is for webhooks | Writes are held in the request across a failover and applied when the new primary is up (Phase 1). A durable journal for longer outages was considered and dropped (see Decisions) |
+| R3 | Keys created during a switchover are available to edges | Edges learn keys only by asking the CP they are connected to; one `CONTROL_ENDPOINT`, no failover between endpoints | Edges fail over between CPs; committed keys survive the switchover (synchronous replication) and reach edges by delta sync (Phases 2 and 4) |
+| R4 | An edge restarted during a CP outage starts from its last-known-good configuration | **It exits** (`microgateway/cmd/microgateway/main.go:185`), even with a full configuration in its database. Templates and guardrail exceptions are held in memory only | Opt-in start from the last applied snapshot (Phase 3) |
+| R5 | Option to sync the full credential list at start | Credentials are never synced. An unknown key during an outage is answered 503; a cached one lasts 5 minutes (`EDGE_TOKEN_CACHE_TTL`), plus `EDGE_TOKEN_CACHE_STALE_GRACE`, which is off by default | `EDGE_CREDENTIAL_SYNC=full` (Phase 4) |
+| R6 | Credentials hashed at rest on the edge | See below | Edges receive and store only keyed hashes (Phase 4); the hub's own copy is hardened (Phase 6) |
+
+### The at-rest finding, precisely
+
+- **Edge mode today stores no App credentials on disk.** Validated keys live
+  in an in-memory map keyed by the raw token
+  (`microgateway/internal/services/hybrid_gateway_service.go:44`). The
+  `token_cache` table exists but this path does not use it.
+- **The plaintext columns are elsewhere.** On the hub, `credentials.secret`
+  is plaintext and looked up by value (`grpc/control_server.go:1165`,
+  `models/credentials.go:15`). On a standalone microgateway,
+  `api_tokens.token` is plaintext
+  (`microgateway/internal/database/models.go:14`).
+- **So the concern becomes real the moment R5 is built naively.** The plan
+  makes R5 hash-only from the start. It also matters more for the hub once
+  its database is replicated to a second site.
+
+### What already exists and is reused
+
+`features/ClusterControlPlane.md` (2.3) already lets several Studio replicas
+share one Postgres: durable pushes that any replica delivers, the
+`cluster_events` log and bus relay, the leader lease, edge stream ownership,
+`GET /api/v1/cluster/status`. Active-active is that design stretched over
+two sites, plus a database that can move between them. No second
+coordination mechanism is added.
+
+## Topology
+
+```
+              Site A                                   Site B
+  ┌──────────────────────────────┐        ┌──────────────────────────────┐
+  │ Studio replica(s)  label: a  │        │ Studio replica(s)  label: b  │
+  │  UI/API :8080 · gRPC :50051  │        │  UI/API :8080 · gRPC :50051  │
+  └───────┬──────────────────────┘        └──────────────────────┬───────┘
+          │   multi-host DSN, target_session_attrs=read-write    │
+          ▼                                                      ▼
+  ┌───────────────┐   synchronous streaming replication   ┌───────────────┐
+  │ PostgreSQL    │◄─────────────────────────────────────►│ PostgreSQL    │
+  │ primary       │        automatic failover             │ hot standby   │
+  └───────────────┘     (needs a witness, see below)      └───────────────┘
+
+  Edges: CONTROL_ENDPOINTS=cp-a:50051,cp-b:50051  (own site first)
+         own database on a persistent volume
+```
+
+- **One logical database.** Both sites' Studio replicas write to whichever
+  Postgres node is primary. Multi-primary Postgres (BDR, bidirectional
+  logical replication) is **not supported**: Studio relies on sequences,
+  the database clock for leases, and advisory locks.
+- **Failover is the database layer's job**: a managed service with
+  cross-zone or cross-region HA, CloudNativePG, or Patroni. Studio's part is
+  to follow it.
+- **Two sites cannot fail over automatically and safely on their own.** A
+  third location must break ties (a managed service's control plane, a
+  Kubernetes API in a third zone, or a witness). Without one, the choice is
+  manual promotion or the risk of split brain. The documentation must say
+  this plainly: until an operator promotes the standby, writes fail with a
+  retryable 503 and are not queued.
+- **Synchronous replication between the sites** (`synchronous_commit=on`
+  with the other site as a synchronous standby) is the recommended setting.
+  With asynchronous replication, a key acknowledged just before a failover
+  can be lost: R3 cannot be met.
+- **Per-site labels.** `studio.Options.NodeLabel` exists but has no
+  environment variable; add `CLUSTER_NODE_LABEL` so the cluster status and
+  the Edge Gateways page show which site holds each edge.
+
+## Guarantees after this work
+
+1. With automatic database failover, losing either site (Studio, Postgres or
+   both) needs no operator action. Studio replicas in the surviving site
+   resume writing within seconds of the promotion, without a restart.
+2. API writes in flight during a failover are held and retried up to
+   `DATABASE_WRITE_RETRY_WINDOW`, then fail with a retryable 503. They are
+   never applied twice.
+3. A running edge keeps serving through any control-plane outage, moves to
+   the other CP on its own, and loses no configuration push (pushes are
+   already durable).
+4. With `EDGE_START_FROM_LAST_KNOWN_GOOD=true`, an edge with an intact
+   database starts and serves with no CP reachable.
+5. With `EDGE_CREDENTIAL_SYNC=full`, an edge validates every active key of
+   its namespace locally, CP or no CP, from hashes it cannot reverse.
+6. A key whose creation was committed is valid on every edge after a
+   switchover. A key creation held during a failover commits when the new
+   primary is up, and is valid on edges from then.
+
+Not guaranteed: revocation reaching an edge that cannot reach any CP (the
+price of 4 and 5, bounded by configurable maximum ages); a key being usable
+on edges before its creation has committed; writes surviving an outage
+longer than the retry window (they fail with a retryable 503).
+
+## Build plan
+
+Phases 0 to 4 and 6 (Phase 5 was dropped; the numbering is kept so
+references stay stable). 1 to 4 are independent enough to run in parallel
+once Phase 0's test rig exists. Each phase ends with its tests green on
+SQLite and Postgres and its documentation and changelog entries written.
+
+### Phase 0: test rig
+
+Nothing below can be verified without a database that actually fails over.
+
+- `pkg/testinfra/containers`: a two-node Postgres 16 pair (primary and
+  streaming hot standby) with helpers to stop the primary, promote the
+  standby, and bring the old primary back as a standby.
+- `dev/docker-compose.active-active.yml` and `make dev-aa`: two Postgres
+  nodes, two Studio replicas with site labels, a TCP proxy per CP that can
+  be cut, two edges with persistent volumes.
+- Extend the forwarder in `microgateway/tests/cluster` to give an edge two
+  CP endpoints.
+- CI: add the failover package to `scripts/ci-postgres-tests.sh` (the
+  "Go Postgres Tests" job).
+
+### Phase 1: Studio follows a database failover (R1, first half of R2)
+
+Files: `pkg/studio/database.go`, `startup/connectivity.go`,
+`config/config.go`, `pkg/pglisten`, `pkg/cluster/events.go`,
+`api/health_handlers.go`.
+
+1. **Multi-host DSN as a supported configuration.**
+   `DATABASE_URL=postgres://u:p@pg-a,pg-b/db?target_session_attrs=read-write`.
+   The vendored driver hands the DSN to pgx unchanged, so this needs tests
+   and documentation rather than code, for the pool and for the `pglisten`
+   connection (which parses the same DSN).
+2. **Leave a demoted primary.** A pooled connection to a node that was
+   demoted stays open and fails every write with SQLSTATE 25006. Detect
+   25006 (and `pg_is_in_recovery()` on a periodic check), then close the
+   pool's connections so they are re-dialled against the new primary. Give
+   the listener the same check: today a hot standby refusing `LISTEN` is
+   recorded as a channel failure, not a reason to reconnect
+   (`pglisten.go:532`).
+3. **Pool settings.** The main pool sets no limits today. Add
+   `DATABASE_MAX_OPEN_CONNS`, `DATABASE_MAX_IDLE_CONNS`,
+   `DATABASE_CONN_MAX_LIFETIME` (default 30 minutes, so connections also
+   drift back after a planned switchover) and a connect timeout.
+4. **Start-up waits for the database** up to `DATABASE_STARTUP_TIMEOUT`
+   (default 60 s) instead of exiting on the first failed ping, so a replica
+   that starts mid-failover joins when the primary appears.
+5. **Hold writes across the failover.** A wrapper at the gorm `ConnPool`
+   retries statements that fail before reaching a writable server
+   (connection refused, 25006, 57P01 to 57P03) until
+   `DATABASE_WRITE_RETRY_WINDOW` (default 15 s). Only statements outside an
+   explicit transaction are retried; a transaction that loses its
+   connection fails as now and the handler returns 503 with `Retry-After`
+   and code `database_unavailable` instead of 500. This covers key creation
+   during an automatic failover with no API change.
+6. **Event log after a failover.** If asynchronous replication lost recent
+   transactions, `cluster_events` ids can fall behind a replica's cursor
+   and new events would be skipped. Detect an id below the cursor (or a
+   changed system identifier/timeline) and reset the cursor, running the
+   same catch-up as a listener reconnect. Verify the leader lease and push
+   janitor against a new primary whose clock differs by a few seconds; the
+   lease is timed by the database clock.
+7. **Readiness says what works.** `/ready` keeps answering 200 while the
+   database answers at all, with `"database": "writable" | "read_only" |
+   "unreachable"` in the body, and `/ready?require=write` fails unless
+   writable. Add `aistudio_db_writable`, `aistudio_db_failovers_total` and
+   a cluster-status warning.
+8. **Budget sync sequence.** The leader's `budget.sync` sequence is
+   nanosecond wall-clock time (`grpc/budget_sync_service.go:462`), and edges
+   drop anything not above the last one they stored. A leader in the other
+   site with a slower clock is ignored until it catches up. Take the
+   sequence from the database (a sequence or the database clock).
+
+Tests: writes during promotion succeed within the window; a replica left on
+the demoted primary recovers without a restart; listener and event log
+resume; a replica started with no primary joins later; lease moves between
+sites; an edge accepts budget syncs from a new leader with a skewed clock.
+
+### Phase 2: edges fail over between control planes (R3)
+
+Files: `microgateway/internal/config/config.go`,
+`microgateway/internal/grpc/simple_client.go`.
+
+1. **`CONTROL_ENDPOINTS`**, an ordered comma-separated list;
+   `CONTROL_ENDPOINT` keeps working as a list of one. Per-endpoint TLS
+   server name follows the host unless `EDGE_TLS_SERVER_NAME` is set.
+2. **Failover.** On a failed dial, registration or stream, the reconnect
+   loop moves to the next endpoint before backing off; the backoff applies
+   per full pass over the list. `ValidateToken` and the analytics pulse use
+   the current connection as now.
+3. **Failback.** The edge stays where it is until that connection ends.
+   `EDGE_CONTROL_FAILBACK_INTERVAL` (default off) makes an edge that is not
+   on its first endpoint try it periodically; Studio's existing
+   `GRPC_MAX_CONNECTION_AGE` rebalances without it.
+4. **Idempotent analytics pulses.** A pulse whose acknowledgement is lost
+   when a CP dies is re-sent to the other CP, and the hub has no
+   de-duplication (`control_server.go:1250` only logs the sequence), so
+   spend is counted twice. Give each batch a stable ID (edge ID, process
+   boot ID, sequence) and have the hub record applied batch IDs with a
+   short retention, in the transaction that stores the batch.
+5. A single DNS name or global load balancer in front of both CPs keeps
+   working and stays documented as the alternative.
+
+Tests (`microgateway/tests/cluster`): CP A cut mid-push, the edge finishes
+on B; a key created on A before the cut validates through B; a re-sent
+pulse is stored once.
+
+### Phase 3: start from last-known-good (R4)
+
+Files: `microgateway/cmd/microgateway/main.go`,
+`microgateway/internal/services/edge_sync_service.go`,
+`microgateway/internal/database/models.go`, the microgateway Helm chart.
+
+1. **Persist the applied snapshot.** After a snapshot is applied, store its
+   protobuf in a new edge table `applied_snapshots` (one row: checksum,
+   version, namespace, applied_at, blob), encrypted with the edge's
+   `ENCRYPTION_KEY`, in the same transaction as the apply. Storing the
+   snapshot itself, not relying on the tables it produced, is what makes
+   the in-memory state (prompt templates, guardrail exceptions and
+   capabilities, tracing keys) recoverable.
+2. **Boot path.** `edgeClient.Start()` is fatal today and runs before the
+   services exist. Change it so that when
+   `EDGE_START_FROM_LAST_KNOWN_GOOD=true` and no CP in the list answers
+   within `EDGE_STARTUP_CONTROL_TIMEOUT` (default 30 s), the edge loads the
+   stored snapshot through the normal apply path (`onConfigChange`), starts
+   serving, and leaves the reconnect loop running. The first successful
+   registration applies the live snapshot as any reconnect does.
+3. **Refusals.** No stored snapshot, a snapshot for another namespace, one
+   that fails to decrypt, or one older than `EDGE_LAST_KNOWN_GOOD_MAX_AGE`
+   (default 72 h, `0` for no limit): exit as today, with the reason.
+4. **Default off.** Starting from stored configuration means a restarted
+   edge can serve something an administrator has since removed until it
+   reconnects. That is an operator's decision, as the stale grace is.
+5. **Visibility.** Log line and `/ready` body field `config_source:
+   control | last_known_good`, metrics `microgateway_config_source` and
+   `microgateway_config_age_seconds`. On reconnect the heartbeat reports
+   the checksum as usual, so the edge shows Pending or In Sync correctly.
+6. **Deployment.** The chart only persists the database when
+   `kind: StatefulSet` and `persistence.enabled`; a Deployment's `emptyDir`
+   survives a container restart but not a rescheduled pod. Document that
+   R4 needs the StatefulSet form, and have the chart warn when the flag is
+   set without it.
+
+Tests: restart with all CPs cut serves traffic, including a templated
+prompt and a guardrail exception; each refusal case; reconnect replaces the
+configuration; a snapshot applied partially (entries left out) restores to
+the same reported checksum.
+
+### Phase 4: full credential sync, hashed (R5, R6, rest of R3)
+
+Files: `proto/config_sync.proto`, `proto/common.proto`,
+`grpc/control_server.go`, `microgateway/internal/grpc/simple_client.go`,
+`microgateway/internal/services/hybrid_gateway_service.go`,
+`microgateway/internal/database/models.go`.
+
+1. **The hash.** `HMAC-SHA-256(key, token)` with a key derived by HKDF from
+   `MICROGATEWAY_ENCRYPTION_KEY` and a fixed label, the construction
+   `grpc/snapshot_secret_digests.go` already uses. Keys are 256-bit random
+   values, so a fast keyed hash is sufficient, FIPS-approved, and allows an
+   indexed lookup; a captured edge database yields nothing usable without
+   the key, and cannot be reversed with it.
+2. **New RPC `SyncCredentials`** (server stream, paged): for the edge's
+   namespace, every App credential as `{credential_id, key_id, secret_hash,
+   active, deleted, updated_at}` with its App (`AppConfig`, as
+   `ValidateToken` already returns for pull-on-miss), ending with a
+   watermark. A `since` watermark turns it into a delta, including
+   deactivations and soft-deleted rows. The hub re-reads a short overlap
+   window, as the event log does, so a row committed late is not missed;
+   upserts on the edge are idempotent. The plaintext secret never leaves
+   the hub. Unlicensed namespaces get nothing, as with `ValidateToken`.
+3. **Edge store.** New table `synced_credentials` (hash unique-indexed, App
+   ID, active, updated_at) and the watermark in `sync_states`. No plaintext
+   column.
+4. **Keeping it current.** Full sync at start and after every reconnect
+   (delta when a watermark exists); a delta on each heartbeat tick; and a
+   `DirDown` event `credential.changed` on create, activate, deactivate and
+   delete, which the cluster relay already carries to every replica's
+   edges, so a revocation lands in about a second while connected.
+5. **Validation order with `EDGE_CREDENTIAL_SYNC=full`.**
+   - Local hit, active: accept, no CP call.
+   - Local hit, inactive or deleted: reject.
+   - Miss, CP reachable: ask the CP (`ValidateToken`, as today), which
+     covers a key created in the last second.
+   - Miss, no CP: 503 `credential_check_unavailable`, as today. The edge
+     cannot know.
+   - `EDGE_CREDENTIAL_SYNC_MAX_AGE` (default 24 h, `0` for no limit): once
+     the last successful delta is older than this, the edge stops trusting
+     the local list and behaves as `on_demand`.
+6. **Default stays `on_demand`.** In that mode nothing changes, except that
+   the in-memory cache is keyed by the hash rather than the raw token.
+   `full` is an **Enterprise** option: a Community edge given
+   `EDGE_CREDENTIAL_SYNC=full` logs that and stays on demand, and a
+   Community hub answers the RPC as unavailable. The hashing itself
+   (items 1, 6 and 8) is in both editions.
+7. **Compatibility.** An old hub answers `Unimplemented`: the edge logs it
+   and stays on demand. An old edge never calls the RPC. Combined with
+   Phase 3, the synced list is what a restarted edge validates against.
+8. **Standalone microgateway.** `api_tokens.token` is plaintext there. Add
+   a hash column, look up by hash, and stop storing the token (migrating
+   existing rows on start). Small, and it closes the finding for every
+   mode.
+
+Tests: unknown-to-cache key accepted with every CP cut; revocation reaches
+an edge on another replica; a key created while the edge was offline
+arrives by delta on reconnect; max-age fallback; nothing reversible in the
+edge database (assert no column holds the token); old hub and old edge
+pairings.
+
+### Phase 5: dropped
+
+Read-only operation from the hot standby and a durable key-creation journal
+were planned for outages longer than the retry window (manual promotion).
+Dropped on 2026-11-10: with automatic failover the window is seconds and
+Phase 1 covers it. Not built: a read pool on the standby, 202 responses for
+key creation, an encrypted append-only journal file per replica under
+`data/`, and replay that is idempotent on the key ID. Its known limits were
+that the journal is lost with its replica, and that with no database node
+reachable a control plane cannot authenticate a caller at all.
+
+### Phase 6: hub hardening and non-database state
+
+1. **`credentials.secret` on the hub.** The hub must keep the secret
+   recoverable: the UI shows it again and Studio itself uses it as a bearer
+   token (`services/grpc/decision_call.go:101`). So: add `secret_hash`
+   (indexed; `ValidateToken` and `models/credentials.go:51` look up by it)
+   and encrypt `secret` with `TYK_AI_SECRET_KEY`, migrating existing rows
+   under the migration lock. Schema change: bump `models.SchemaVersion`,
+   decide `MinReaderSchemaVersion` (older code cannot read an encrypted
+   secret, so it rises), run `make schema-golden`.
+2. **State that is per replica and cannot be a shared volume across
+   sites.** Move branding assets into Postgres (two small files); keep log
+   exports per replica and say so. Require `CSRF_KEY` when more than one
+   replica is live (a random per-process key breaks forms across
+   replicas), and warn in cluster status when replicas disagree on it or
+   on the hash of `MICROGATEWAY_ENCRYPTION_KEY`.
+3. **Studio Helm chart.** The Deployment hardcodes `replicas: 1` and
+   ignores `replicaCount`, `podDisruptionBudget` and `autoscaling`. Honour
+   them, default to `RollingUpdate` when `replicaCount > 1`, add topology
+   spread, and document an external multi-host `DATABASE_URL`.
+   Microgateway chart: `controlEndpoints`, the new edge settings, and the
+   persistence warning from Phase 3.
+
+## New configuration
+
+| Variable | Where | Default | Purpose |
+|---|---|---|---|
+| `CLUSTER_NODE_LABEL` | Studio | `studio` | Site label on cluster status and the Edge Gateways page |
+| `DATABASE_MAX_OPEN_CONNS`, `DATABASE_MAX_IDLE_CONNS`, `DATABASE_CONN_MAX_LIFETIME` | Studio | unset, unset, `30m` | Pool limits |
+| `DATABASE_STARTUP_TIMEOUT` | Studio | `60s` | How long start-up waits for a database |
+| `DATABASE_WRITE_RETRY_WINDOW` | Studio | `15s` | How long a write is held for a writable primary |
+| `CONTROL_ENDPOINTS` | edge | unset | Ordered list of control planes |
+| `EDGE_CONTROL_FAILBACK_INTERVAL` | edge | off | Return to the first endpoint |
+| `EDGE_START_FROM_LAST_KNOWN_GOOD` | edge | `false` | Start without a control plane |
+| `EDGE_STARTUP_CONTROL_TIMEOUT` | edge | `30s` | Wait before using last-known-good |
+| `EDGE_LAST_KNOWN_GOOD_MAX_AGE` | edge | `72h` | Oldest snapshot an edge will start from |
+| `EDGE_CREDENTIAL_SYNC` | edge | `on_demand` | `full` syncs hashed credentials (Enterprise) |
+| `EDGE_CREDENTIAL_SYNC_MAX_AGE` | edge | `24h` | How long a synced list is trusted without a delta |
+
+Studio settings go in `config/config.go` (`loadFrom`), `.env.example` and
+`docs/site/docs/configuration.md`; edge settings in
+`microgateway/internal/config/config.go` (struct tags),
+`microgateway/docs/config/environment-variables.md` and
+`microgateway/docs/configuration-reference.md`.
+
+## Schema and protocol changes
+
+- **Studio:** `credentials.secret_hash`, encrypted `credentials.secret`,
+  applied analytics batch IDs, branding assets table. `SchemaVersion` bump
+  and `make schema-golden` for each.
+- **Edge:** `applied_snapshots`, `synced_credentials`, `api_tokens` hash
+  column. Regenerate the microgateway goldens.
+- **Proto (additive only):** `SyncCredentials` RPC and messages; a batch ID
+  on the analytics pulse. `protoc` 25.3 is installed locally.
+- **Upgrade order:** hub first, then edges, as for 2.3. Every edge feature
+  is off by default and degrades to today's behaviour against an older hub.
+
+## Documentation
+
+| File | Change |
+|---|---|
+| `docs/site/docs/deployment-active-active.md` (new; register in `docs/site/.vitepress/config.mjs`) | The topology, database requirements (synchronous replication, the witness), DSN examples, what must match on both sites, load balancer and DNS options, failover and failback runbooks, what is and is not guaranteed, monitoring |
+| `docs/site/docs/reference-architecture.md` | Failure table: the "edge starts while Studio is down" and "unknown token" rows gain the new options; the "PostgreSQL fails over" row describes Phase 1; add the topology under Topologies; checklist items. Fix the reconnect backoff, stated as 5 minutes at line 123 (the code caps at 30 s) |
+| `docs/site/docs/edge-gateways.md` | "Apps and Credentials": the `full` sync mode and its revocation trade-off; Connection Settings: `CONTROL_ENDPOINTS`; the compromise section: what an edge database now holds (hashes only) |
+| `docs/site/docs/configuration.md`, `microgateway/docs/config/environment-variables.md`, `microgateway/docs/configuration-reference.md`, `.env.example` | The variables above |
+| `docs/site/docs/deployment-helm-k8s.md`, `helm/README.md` | Studio replicas, StatefulSet edges for last-known-good |
+| `docs/site/docs/architecture.md` (line 94) | Says edges continue from their last-known snapshot; true only while running. Correct it and point at the new option |
+| `microgateway/docs/scaling/controller-edge.md` (lines 575-588) | Describes `tokens.json`/`apps.json` caches that do not exist; replace with the real mechanism |
+| `docs/site/docs/secrets.md`, `features/Secrets.md` | Credential hashing and hub encryption |
+| `features/ClusterControlPlane.md`, `features/Proxy.md` (line 190), `features/README.md` (index) | Cross-references; this spec added to the index |
+| `docs/site/docs/observability.md` | New metrics |
+
+## Changelog
+
+Entries go in `CHANGELOG-v2.3.0.md` (still marked Unreleased). Each PR adds
+its own entries, and the feature gets a line in "At a glance" and, for the
+credential migration, in "Before you upgrade":
+
+- **What's new:** "Active-active control planes", linking to the new page
+  (both editions, with full credential sync marked Enterprise): database failover without a restart;
+  edges with several control endpoints; start from last-known-good; full
+  credential sync.
+- **Security:** credentials reach edges as keyed hashes only; App
+  credentials encrypted at rest on the hub; standalone API tokens hashed.
+- **Fixes → Edges and control plane:** duplicate analytics after a lost
+  acknowledgement; budget sync ignored after a leader change with clock
+  skew; a replica left on a demoted primary; start-up exiting when the
+  database is briefly away.
+- **Upgrade notes:** Database (the credential migration is one-way: take a
+  backup; older Studio versions cannot read the migrated column); Edges
+  (upgrade the hub first; new options are off by default); API (a write
+  that cannot reach a writable database answers 503 `database_unavailable`
+  with `Retry-After`, where it used to answer 500).
+- **New configuration:** the table above.
+- **Known issues:** revocation while an edge is cut off; no write queue
+  beyond the retry window.
+
+## Acceptance scenarios
+
+Run on the Phase 0 rig, automated where marked (A) and in the dev stack
+otherwise.
+
+1. (A) Stop the primary Postgres under API load: writes resume within the
+   retry window, no 500s, no replica restarted.
+2. (A) Stop site A entirely (Studio and Postgres): edges move to B, a push
+   issued before the loss completes, the leader lease moves.
+3. (A) Create a key on A, cut A at once: the key validates on an edge
+   through B.
+4. (A) Cut every CP, restart an edge: it serves known keys from
+   last-known-good; with `full` sync, a key it had never served.
+5. (A) Revoke a key on B: an edge held by A rejects it within seconds.
+6. (A) Create a key while the primary is being replaced: the request waits,
+   answers 201 once, the key validates on an edge, and the audit trail
+   records it once. With no promotion inside the window: 503
+   `database_unavailable`, nothing written.
+7. Inspect an edge database after scenario 4: no token recoverable.
+8. Bring site A back as standby, then switch back: no duplicate analytics,
+   budgets consistent.
+
+## Risks
+
+- **Split brain is a deployment risk Studio cannot remove.** Mitigated by
+  documentation and by Studio refusing to treat a read-only node as a
+  primary.
+- **Landing in a release-candidate phase.** Every edge option is off by
+  default and Phase 1 changes behaviour only when the database fails, but
+  the credential migration (Phase 6.1) is one-way and changes the 2.3
+  upgrade notes. It ships in its own PR and needs a fresh upgrade test from
+  2.2.2 and from the current RC.
+- **Longer offline life for revoked keys** with Phases 3 and 4. Both are
+  opt-in and bounded by maximum ages.
+
+## Decisions (Martin, 2026-11-10)
+
+1. **A held or queued key does not need to work on edges before the
+   database is back.** No ID reservation, no distribution of uncommitted
+   Apps.
+2. **Phase 5 is dropped** (read-only operation and the journal).
+3. **Edition.** Resilience (Phases 1 to 3) and credential hashing are in
+   both editions. Full credential sync (`EDGE_CREDENTIAL_SYNC=full`) is
+   Enterprise.
+4. **Licensing.** One licence covers both control planes of an
+   active-active deployment; licences meter the data plane (namespaces),
+   not topology. No licence change. Both sites run the same
+   `TYK_AI_LICENSE`.
+5. **Release.** 2.3.0.
+6. **The embedded gateway is out of scope**, and no new data store is
+   added.
+
+## Not in this plan
+
+- **Analytics during a long outage.** Edges buffer 10,000 records in
+  memory. Shipping from the edge's own analytics table with a cursor would
+  make this durable with no new store.
+- **Per-edge credentials** (bd `midsommar-clean-jyx.86`): the edge token
+  and `MICROGATEWAY_ENCRYPTION_KEY` remain hub-wide secrets, and the
+  credential hash key is derived from the latter.

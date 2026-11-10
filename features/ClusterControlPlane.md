@@ -7,6 +7,10 @@ the contract for how configuration changes and configuration pushes reach
 every edge in that setup, what is guaranteed, and how every failure is
 reported. It is the design for PR 8 of the embedding work.
 
+Running replicas in two sites on a replicated PostgreSQL, and what edges do
+when a control plane is lost, is specified in
+[`ActiveActive.md`](ActiveActive.md), which builds on this document.
+
 ## Delivery status
 
 Built in three steps:
