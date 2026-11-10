@@ -236,6 +236,18 @@ Files: `microgateway/cmd/microgateway/main.go`,
    snapshot itself, not relying on the tables it produced, is what makes
    the in-memory state (prompt templates, guardrail exceptions and
    capabilities, tracing keys) recoverable.
+   **Built** (`microgateway/internal/services/applied_snapshot.go`): an
+   edge always stores it, whether or not it will start from it, so the
+   option of item 2 can be turned on later without a control plane. The
+   snapshot is stored as received (before entries the edge cannot store
+   are left out), with the checksum the edge reports in heartbeats, so
+   applying it again leaves out the same entries and reports the same
+   checksum. Encryption is AES-256-GCM with a random nonce under a key
+   derived by HKDF from `ENCRYPTION_KEY` (label `applied-snapshot-v1`),
+   and the row's other columns are authenticated with the snapshot: a row
+   whose namespace or time was edited does not open. The column is a BLOB
+   on SQLite and `bytea` on Postgres, tested at 16 MiB. An unchanged
+   snapshot (apply skipped) does not rewrite the row.
 2. **Boot path.** `edgeClient.Start()` is fatal today and runs before the
    services exist. Change it so that when
    `EDGE_START_FROM_LAST_KNOWN_GOOD=true` and no CP in the list answers

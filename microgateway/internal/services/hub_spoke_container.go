@@ -73,6 +73,14 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 	crypto := NewCryptoService(cfg.Security.EncryptionKey)
 	setAgentTracingKeyCrypto(crypto)
 
+	// An edge keeps the snapshot it last applied, encrypted, in its own
+	// database (features/ActiveActive.md, Phase 3).
+	if cfg.IsEdge() {
+		if err := PersistAppliedSnapshots(db, cfg.Security.EncryptionKey); err != nil {
+			return nil, err
+		}
+	}
+
 	// Always use database-backed auth since edge instances now sync to SQLite
 	authProvider := auth.NewTokenAuthProvider(db)
 

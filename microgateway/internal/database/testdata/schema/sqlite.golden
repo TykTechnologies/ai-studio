@@ -123,6 +123,14 @@ TABLE app_tools
   column `created_at` datetime
   constraint PRIMARY KEY (`app_id`,`tool_id`)
   autoindex origin=pk unique=1 (app_id, tool_id)
+TABLE applied_snapshots
+  column `id` integer
+  column `checksum` text
+  column `version` text
+  column `namespace` text
+  column `applied_at` datetime
+  column `snapshot` blob
+  constraint PRIMARY KEY (`id`)
 TABLE apps
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime

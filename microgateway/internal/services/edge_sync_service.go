@@ -175,7 +175,7 @@ func (s *EdgeSyncService) SyncConfigurationReport(raw *pb.ConfigurationSnapshot)
 	config, left := snapshotguard.Sanitize(raw)
 	skipped := append(append([]string(nil), raw.OmittedEntries...), snapshotguard.Strings(left)...)
 
-	if err := s.apply(config); err != nil {
+	if err := s.apply(config, func(tx *gorm.DB) error { return s.storeAppliedSnapshot(tx, raw, skipped) }); err != nil {
 		return nil, err
 	}
 	installAgentTracingKey(config.AgentTracingKeys)
@@ -197,7 +197,9 @@ func (s *EdgeSyncService) SyncConfigurationReport(raw *pb.ConfigurationSnapshot)
 }
 
 // apply writes a snapshot that the edge can store in one transaction.
-func (s *EdgeSyncService) apply(config *pb.ConfigurationSnapshot) error {
+// beforeCommit runs last in that transaction; its error rolls the whole
+// apply back.
+func (s *EdgeSyncService) apply(config *pb.ConfigurationSnapshot, beforeCommit func(tx *gorm.DB) error) error {
 	// Start transaction for atomic sync
 	tx := s.db.Begin()
 	if tx.Error != nil {
@@ -284,7 +286,12 @@ func (s *EdgeSyncService) apply(config *pb.ConfigurationSnapshot) error {
 		return fmt.Errorf("failed to restore grants of newer Apps: %w", err)
 	}
 
-	// 11. Commit transaction
+	// 11. Keep the snapshot itself with what it produced
+	if err := beforeCommit(tx); err != nil {
+		return fmt.Errorf("failed to store the applied snapshot: %w", err)
+	}
+
+	// 12. Commit transaction
 	if err := tx.Commit().Error; err != nil {
 		return fmt.Errorf("failed to commit sync transaction: %w", err)
 	}
