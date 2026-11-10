@@ -216,16 +216,40 @@ Files: `microgateway/internal/config/config.go`,
 `microgateway/internal/grpc/simple_client.go`.
 
 1. **`CONTROL_ENDPOINTS`**, an ordered comma-separated list;
-   `CONTROL_ENDPOINT` keeps working as a list of one. Per-endpoint TLS
-   server name follows the host unless `EDGE_TLS_SERVER_NAME` is set.
+   `CONTROL_ENDPOINT` keeps working as a list of one, and setting both is a
+   start-up error (as are an empty or repeated entry). Per-endpoint TLS
+   server name follows the host unless `EDGE_TLS_SERVER_NAME` is set; one
+   CA and client certificate serve every endpoint.
 2. **Failover.** On a failed dial, registration or stream, the reconnect
    loop moves to the next endpoint before backing off; the backoff applies
    per full pass over the list. `ValidateToken` and the analytics pulse use
-   the current connection as now.
+   the current connection as now. **Built** (`reconnectLoop`,
+   `tryEndpoints`):
+   - At start the edge tries each endpoint once, in order, and exits when
+     none accepts it (Phase 3 changes that).
+   - When a connection ends, that endpoint has failed once: the others are
+     tried at once, in list order after it (after a random wait of up to a
+     tenth of `EDGE_RECONNECT_INTERVAL`, so the edges of a lost control
+     plane do not arrive at the next in one instant). Only when all have
+     failed does the backoff start; each backoff is then followed by one
+     pass over the whole list from its first entry. An edge with one
+     endpoint behaves exactly as before.
+   - With several endpoints, one that does not answer at all is given 5 s
+     (`controlConnectTimeout`) instead of gRPC's 20 s connect timeout. A
+     connection that goes silent is noticed by the existing keepalive
+     (30 s, plus 5 s), not sooner.
 3. **Failback.** The edge stays where it is until that connection ends.
    `EDGE_CONTROL_FAILBACK_INTERVAL` (default off) makes an edge that is not
    on its first endpoint try it periodically; Studio's existing
-   `GRPC_MAX_CONNECTION_AGE` rebalances without it.
+   `GRPC_MAX_CONNECTION_AGE` rebalances without it. **Built**
+   (`tryFailback`): the probe is a registration on a new connection to the
+   first endpoint. When it is accepted the edge closes its stream, makes
+   the new connection current and opens the stream there; the old
+   connection stays open for 30 s so calls in flight on it finish. A
+   failed probe changes nothing.
+   The endpoint in use is reported in the edge's log, in `/ready`
+   (`control_endpoint`, `control_connected`) and as
+   `microgateway_control_connected{endpoint}`.
 4. **Idempotent analytics pulses.** A pulse whose acknowledgement is lost
    when a CP dies is re-sent to the other CP, and the hub has no
    de-duplication (`control_server.go:1250` only logs the sequence), so
@@ -390,8 +414,8 @@ reachable a control plane cannot authenticate a caller at all.
 | `DATABASE_MAX_OPEN_CONNS`, `DATABASE_MAX_IDLE_CONNS`, `DATABASE_CONN_MAX_LIFETIME` | Studio | unset, unset, `30m` | Pool limits |
 | `DATABASE_STARTUP_TIMEOUT` | Studio | `60s` | How long start-up waits for a database |
 | `DATABASE_WRITE_RETRY_WINDOW` | Studio | `15s` | How long a write is held for a writable primary |
-| `CONTROL_ENDPOINTS` | edge | unset | Ordered list of control planes |
-| `EDGE_CONTROL_FAILBACK_INTERVAL` | edge | off | Return to the first endpoint |
+| `CONTROL_ENDPOINTS` | edge | unset | Ordered list of control planes (`CONTROL_ENDPOINT` is a list of one; not both) |
+| `EDGE_CONTROL_FAILBACK_INTERVAL` | edge | off | How often an edge not on its first endpoint tries to return to it |
 | `EDGE_START_FROM_LAST_KNOWN_GOOD` | edge | `false` | Start without a control plane |
 | `EDGE_STARTUP_CONTROL_TIMEOUT` | edge | `30s` | Wait before using last-known-good |
 | `EDGE_LAST_KNOWN_GOOD_MAX_AGE` | edge | `72h` | Oldest snapshot an edge will start from |

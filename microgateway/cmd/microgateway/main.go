@@ -176,7 +176,7 @@ func main() {
 	var edgeClient *grpc.SimpleEdgeClient
 	if cfg.IsEdge() {
 		log.Debug().
-			Str("control_endpoint", cfg.HubSpoke.ControlEndpoint).
+			Strs("control_endpoints", cfg.HubSpoke.Endpoints()).
 			Str("edge_id", cfg.HubSpoke.EdgeID).
 			Msg("Connecting to control server before initializing services")
 
@@ -259,6 +259,13 @@ func main() {
 				})
 
 				grpcProvider.SetEdgeClient(edgeClient)
+
+				// /ready and microgateway_control_connected say which control
+				// endpoint the edge is on.
+				serviceContainer.ControlLink = func() (string, bool) {
+					link := edgeClient.ControlLink()
+					return link.Endpoint, link.Connected
+				}
 
 				// Heartbeats report the configuration applied to SQLite: a
 				// snapshot that failed, or was applied without entries the

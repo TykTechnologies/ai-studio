@@ -245,7 +245,7 @@ func (h *HubSpokeServiceContainer) initializeEdgeComponents(cfg *config.Config) 
 	}
 
 	log.Debug().
-		Str("control_endpoint", cfg.HubSpoke.ControlEndpoint).
+		Strs("control_endpoints", cfg.HubSpoke.Endpoints()).
 		Str("edge_namespace", cfg.HubSpoke.EdgeNamespace).
 		Msg("Edge instance components initialized")
 

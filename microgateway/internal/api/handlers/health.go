@@ -51,6 +51,14 @@ func ReadinessCheck(services *services.ServiceContainer) gin.HandlerFunc {
 			response["plugin_health"] = services.PluginManager.GetPluginHealthSummary()
 		}
 
+		// An edge says which control endpoint it is on. It is ready either
+		// way: an edge keeps serving through a control-plane outage.
+		if services.ControlLink != nil {
+			endpoint, connected := services.ControlLink()
+			response["control_endpoint"] = endpoint
+			response["control_connected"] = connected
+		}
+
 		c.JSON(http.StatusOK, response)
 	}
 }

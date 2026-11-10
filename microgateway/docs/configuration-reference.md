@@ -139,9 +139,11 @@ DATABASE_DSN="postgres://username:password@localhost:5432/microgateway?sslmode=r
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
 | `CONTROL_ENDPOINT` | string | - | Control instance gRPC endpoint |
+| `CONTROL_ENDPOINTS` | list | - | Ordered, comma-separated list of control planes (`host:port`), the edge's own site first. The edge connects to the first that accepts it; when its connection fails it tries the others at once, and backs off only after all have failed. Use this or `CONTROL_ENDPOINT`, not both |
+| `EDGE_CONTROL_FAILBACK_INTERVAL` | duration | `0` (off) | With `CONTROL_ENDPOINTS`: how often an edge that is not on its first endpoint tries to return to it. Off, it stays until its connection ends |
 | `EDGE_ID` | string | auto-generated | Unique identifier for this edge |
 | `EDGE_NAMESPACE` | string | `""` | Namespace for configuration filtering |
-| `EDGE_RECONNECT_INTERVAL` | duration | `5s` | First reconnection delay; doubles per failed attempt up to 30s (or this value, if longer) |
+| `EDGE_RECONNECT_INTERVAL` | duration | `5s` | First reconnection delay; doubles per failed attempt up to 30s (or this value, if longer). With `CONTROL_ENDPOINTS`, an attempt is one pass over the list |
 | `EDGE_HEARTBEAT_INTERVAL` | duration | `30s` | Heartbeat frequency to control |
 | `EDGE_SYNC_TIMEOUT` | duration | `10s` | Unused: the setting is accepted but nothing reads it |
 
@@ -154,7 +156,7 @@ DATABASE_DSN="postgres://username:password@localhost:5432/microgateway?sslmode=r
 | `EDGE_TLS_CERT_PATH` | string | - | Client certificate path |
 | `EDGE_TLS_KEY_PATH` | string | - | Client private key path |
 | `EDGE_TLS_CA_PATH` | string | - | CA certificate path (PEM) the control plane's certificate is checked against; unset uses the system roots |
-| `EDGE_TLS_SERVER_NAME` | string | - | Name the control plane's certificate is checked against, when it differs from the host in `CONTROL_ENDPOINT` |
+| `EDGE_TLS_SERVER_NAME` | string | - | Name the control plane's certificate is checked against, when it differs from the host of the control endpoint. Unset, each endpoint of `CONTROL_ENDPOINTS` is checked against its own host; set, the name applies to all of them |
 | `EDGE_SKIP_TLS_VERIFY` | bool | `false` | Skip TLS certificate verification |
 
 ### Namespace Configuration Examples
@@ -372,7 +374,7 @@ logging:
 - `GRPC_AUTH_TOKEN` (recommended)
 
 **Edge Mode:**
-- `CONTROL_ENDPOINT` (required)
+- `CONTROL_ENDPOINT` or `CONTROL_ENDPOINTS` (one of them is required)
 - `EDGE_ID` (recommended)
 - `EDGE_AUTH_TOKEN` (if control requires)
 

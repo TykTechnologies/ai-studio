@@ -146,6 +146,12 @@ Until now, only authentication plugins ran when clients reached a Bedrock LLM th
 
 This changes what plugins and filter scripts see for Bedrock traffic. Read the [Bedrock upgrade notes](#bedrock) before upgrading.
 
+### Active-active control planes and edge resilience
+
+AI Studio can run as two control planes in two sites over one replicated PostgreSQL, and edges keep working when either site is lost.
+
+- **Edges with several control planes.** `CONTROL_ENDPOINTS` gives an edge an ordered list of control planes, its own site first. When its connection fails, the edge tries the others straight away and backs off only once all have failed; a configuration push in flight completes on the control plane it arrives at, and keys created just before the loss validate through the other one. `EDGE_CONTROL_FAILBACK_INTERVAL` returns edges to their first control plane when it is back, without dropping requests. The endpoint in use is in the edge's log, `/ready` and the new metric `microgateway_control_connected`. `CONTROL_ENDPOINT` works as before. See [Several control planes](docs/site/docs/edge-gateways.md#several-control-planes).
+
 ### Other improvements
 
 - **Request ids you can trace.** Every gateway request gets its own id, returned in `X-Tyk-AI-Request-ID`. It stays the same across failover attempts and appears in request logs, compliance events and edge analytics. Your own `X-Request-ID` is kept and recorded alongside it, and you can search request logs by either.
@@ -472,6 +478,8 @@ The Helm chart adds `config.logLevel` (AI Studio's `LOG_LEVEL`), and `config.plu
 | Variable | Where | Default | Purpose |
 |---|---|---|---|
 | `CLUSTER_NODE_LABEL` | AI Studio | `studio` | Names a replica (for example its site) on the cluster status and in the Edge Gateways "Held by" column. At most 64 characters; an invalid value stops startup |
+| `CONTROL_ENDPOINTS` | edge | unset | Ordered, comma-separated list of control planes; `CONTROL_ENDPOINT` is a list of one (setting both is a start-up error) |
+| `EDGE_CONTROL_FAILBACK_INTERVAL` | edge | off | How often an edge that is not on its first control plane tries to return to it |
 
 **Agent Call Tracing** (Enterprise): `AGENT_TRACING_*` settings, all off by default. The [agent tracing guide](docs/site/docs/agent-tracing.md) lists them. The content ceiling and default mode (`AGENT_TRACING_CONTENT_CEILING`, `AGENT_TRACING_CONTENT_DEFAULT_MODE`) can only be set in the environment; the console shows them read-only. An invalid content mode is read as `off`.
 
