@@ -449,12 +449,6 @@ No new setting is required to run 2.3. Defaults that changed are listed in [Upgr
 | `PLUGIN_GRPC_MAX_MSG_BYTES` | `67108864` (64 MiB) | Largest message between the host and its plugins |
 | `DB_LOG_SQL_PARAMS` | `false` | Log SQL values (local debugging only) |
 
-**Several replicas** (AI Studio):
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `CLUSTER_NODE_LABEL` | `studio` | Names a replica (for example its site) on the cluster status and in the Edge Gateways "Held by" column. At most 64 characters; an invalid value stops startup |
-
 The Helm chart adds `config.logLevel` (AI Studio's `LOG_LEVEL`), and `config.pluginAllowedSources` (AI Studio) and `config.pluginsAllowedSources` (Microgateway chart) for the plugin sources below.
 
 **Plugin signatures** (Enterprise; an invalid value stops startup):
@@ -470,6 +464,12 @@ The Helm chart adds `config.logLevel` (AI Studio's `LOG_LEVEL`), and `config.plu
 | Variable (AI Studio / Microgateway) | Default | Purpose |
 |---|---|---|
 | `AI_STUDIO_PLUGIN_ALLOWED_SOURCES` / `PLUGINS_ALLOWED_SOURCES` | empty (all) | Plugin deployment types accepted: `oci`, `file`, `grpc` (comma-separated). An edge applies its own list to the plugins AI Studio pushes |
+
+**Active-active control planes and edge resilience** (all optional):
+
+| Variable | Where | Default | Purpose |
+|---|---|---|---|
+| `CLUSTER_NODE_LABEL` | AI Studio | `studio` | Names a replica (for example its site) on the cluster status and in the Edge Gateways "Held by" column. At most 64 characters; an invalid value stops startup |
 
 **Agent Call Tracing** (Enterprise): `AGENT_TRACING_*` settings, all off by default. The [agent tracing guide](docs/site/docs/agent-tracing.md) lists them. The content ceiling and default mode (`AGENT_TRACING_CONTENT_CEILING`, `AGENT_TRACING_CONTENT_DEFAULT_MODE`) can only be set in the environment; the console shows them read-only. An invalid content mode is read as `off`.
 
