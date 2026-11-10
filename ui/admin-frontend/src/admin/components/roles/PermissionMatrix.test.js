@@ -17,9 +17,9 @@ const catalogue = {
   actions: ['read', 'write', 'delete', 'execute'],
   grouped: [
     {
-      group: 'LLM management',
+      group: 'Model management',
       resources: [
-        { key: 'llms', label: 'LLM providers', group: 'LLM management', actions: ['read', 'write', 'delete'] },
+        { key: 'llms', label: 'Model providers', group: 'Model management', actions: ['read', 'write', 'delete'] },
       ],
     },
     {
@@ -40,7 +40,7 @@ describe('PermissionMatrix', () => {
 
   it('renders a table per group, omitting actions a resource does not offer', () => {
     render(<PermissionMatrix value={new Set()} onChange={() => {}} />);
-    expect(screen.getByText('LLM management')).toBeInTheDocument();
+    expect(screen.getByText('Model management')).toBeInTheDocument();
     expect(screen.getByText('Governance')).toBeInTheDocument();
     expect(screen.getByLabelText('llms:write')).toBeInTheDocument();
     expect(screen.queryByLabelText('llms:execute')).toBeNull();
@@ -66,7 +66,7 @@ describe('PermissionMatrix', () => {
   it('row "All" toggles every action and shows indeterminate for partial rows', () => {
     const onChange = jest.fn();
     render(<PermissionMatrix value={new Set(['llms:read'])} onChange={onChange} />);
-    const all = screen.getByLabelText('All LLM providers permissions');
+    const all = screen.getByLabelText('All Model providers permissions');
     expect(all).toHaveAttribute('data-indeterminate', 'true');
     fireEvent.click(all);
     expect([...onChange.mock.calls[0][0]].sort()).toEqual(['llms:delete', 'llms:read', 'llms:write']);
@@ -78,10 +78,10 @@ describe('PermissionMatrix', () => {
       actions: ['read', 'write', 'delete', 'execute', 'publish'],
       grouped: [
         {
-          group: 'LLM management',
+          group: 'Model management',
           resources: [
-            { key: 'llms', label: 'LLM providers', group: 'LLM management', actions: ['read', 'write', 'delete', 'publish'] },
-            { key: 'model-prices', label: 'Model prices', group: 'LLM management', actions: ['read', 'write', 'delete'] },
+            { key: 'llms', label: 'Model providers', group: 'Model management', actions: ['read', 'write', 'delete', 'publish'] },
+            { key: 'model-prices', label: 'Model prices', group: 'Model management', actions: ['read', 'write', 'delete'] },
           ],
         },
       ],
@@ -136,7 +136,7 @@ describe('PermissionMatrix', () => {
     render(<PermissionMatrix value={new Set(['audit:read'])} onChange={onChange} readOnly />);
     expect(screen.getByLabelText('audit:read')).toBeDisabled();
     fireEvent.change(screen.getByLabelText('Filter resources'), { target: { value: 'audit' } });
-    expect(screen.queryByText('LLM providers')).toBeNull();
+    expect(screen.queryByText('Model providers')).toBeNull();
     expect(screen.getByText('Audit trail')).toBeInTheDocument();
   });
 });

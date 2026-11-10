@@ -62,7 +62,7 @@ const useLLMs = ({
       return data;
     } catch (error) {
       console.error('Error fetching LLMs', error);
-      setError('Failed to load LLMs');
+      setError('Failed to load model providers');
       throw error;
     } finally {
       setLoading(false);

@@ -259,7 +259,7 @@ const PortalDashboard = () => {
           const n = (ids || []).length;
           if (n > 0) parts.push(`${n} ${n === 1 ? singular : plural}`);
         };
-        count(a.llm_ids, "LLM provider", "LLM providers");
+        count(a.llm_ids, "model provider", "model providers");
         count(a.datasource_ids, "data source", "data sources");
         count(a.tool_ids, "tool", "tools");
         return (
@@ -311,7 +311,7 @@ const PortalDashboard = () => {
             ) : apps.length === 0 ? (
               <EmptyStateWidget
                 title="Create your first app"
-                description="Pick the LLM providers, data sources and tools it needs and you get a key and secret to call them with. An administrator approves the credential before it works."
+                description="Pick the model providers, data sources and tools it needs and you get a key and secret to call them with. An administrator approves the credential before it works."
                 buttonText="Create app"
                 buttonIcon={<AddIcon />}
                 onButtonClick={() => navigate("/portal/app/new")}
@@ -329,7 +329,7 @@ const PortalDashboard = () => {
 
         <Section
           title="Build with"
-          description="LLM providers, data sources and tools your teams can use, newest first."
+          description="Model providers, data sources and tools your teams can use, newest first."
           actions={
             <SecondaryLinkButton component={RouterLink} to="/portal/catalog" endIcon={<ArrowForwardIcon />}>
               Browse all
@@ -341,7 +341,7 @@ const PortalDashboard = () => {
             <SearchInput
               value={query}
               onChange={setQuery}
-              placeholder="Search LLM providers, data sources and tools"
+              placeholder="Search model providers, data sources and tools"
             />
           </Box>
 

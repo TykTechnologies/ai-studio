@@ -38,13 +38,13 @@ describe("EmbedderFormFields", () => {
     expect(lastDraft.endpoint).toBe("https://api.openai.com/v1");
 
     fireEvent.change(screen.getByLabelText(/API key/), { target: { value: "sk-1" } });
-    fireEvent.click(screen.getByRole("button", { name: "Use an LLM provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use a model provider" }));
     expect(lastDraft).toMatchObject({ mode: MODE_LINKED, vendor: "", endpoint: "", api_key: "" });
   });
 
-  it("offers only LLM providers whose vendor embeds", () => {
+  it("offers only model providers whose vendor embeds", () => {
     render(<Harness initial={{ ...emptyDraft(), mode: MODE_LINKED }} />);
-    fireEvent.mouseDown(screen.getByRole("combobox", { name: "LLM provider" }));
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Model provider" }));
     const list = within(screen.getByRole("listbox"));
     expect(list.getByText(/Prod OpenAI/)).toBeInTheDocument();
     expect(list.queryByText(/Claude/)).not.toBeInTheDocument();
@@ -64,7 +64,7 @@ describe("EmbedderFormFields", () => {
     );
     expect(screen.getByText("Used by Handbook.")).toBeInTheDocument();
     expect(screen.getByTestId("embedder-model")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Use an LLM provider" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Use a model provider" })).toBeDisabled();
     expect(screen.getByLabelText(/API key/)).not.toBeDisabled();
   });
 });

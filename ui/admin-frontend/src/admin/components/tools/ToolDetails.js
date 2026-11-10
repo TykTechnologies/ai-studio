@@ -275,7 +275,7 @@ const ToolDetails = () => {
               <FieldLabel>Active:</FieldLabel>
             </Grid>
             <Grid item xs={9}>
-              {/* Same dot idiom as the LLM provider page. */}
+              {/* Same dot idiom as the model provider page. */}
               <FieldValue data-testid="tool-active">
                 <FiberManualRecordIcon
                   sx={{

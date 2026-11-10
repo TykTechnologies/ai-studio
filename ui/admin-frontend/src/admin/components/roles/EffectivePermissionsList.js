@@ -23,7 +23,7 @@ export const describeSources = (list) => {
 
 /**
  * Renders a permission list grouped by catalogue group and resource, e.g.
- * "LLM providers: read, write". A wildcard renders as a single line.
+ * "Model providers: read, write". A wildcard renders as a single line.
  * `sources` (permission -> [{role_name, via, group_name}]) is shown as a
  * tooltip on each action chip.
  */

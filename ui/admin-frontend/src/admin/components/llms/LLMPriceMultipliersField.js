@@ -76,7 +76,7 @@ const LLMPriceMultipliersField = ({ vendor, rows, onChange, rowErrors = {}, serv
     <Box data-testid="llm-price-multipliers">
       <Typography variant="subtitle1">Price multipliers</Typography>
       <Typography variant="body2" color="text.secondary" paragraph>
-        Overrides the vendor's price multiplier for usage billed at a service tier on this LLM, for
+        Overrides the vendor's price multiplier for usage billed at a service tier on this model provider, for
         negotiated pricing: 1 is list price, 0 is not billed, and Anthropic batch usage defaults to
         0.5. Tiers not listed keep the vendor rate. Applies to usage recorded after you save (not
         retroactive).

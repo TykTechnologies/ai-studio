@@ -51,7 +51,7 @@ func allowAll(NavItem) bool { return true }
 func TestAdminNavGroupOrder(t *testing.T) {
 	nav := filterNav(adminNav(navInputs{features: features(allFeatures()), enterprise: true}), allowAll)
 	assert.Equal(t, []string{
-		"Overview", "Analytics", "Access", "Catalogs", "Agent sessions", "LLM management",
+		"Overview", "Analytics", "Access", "Catalogs", "Agent sessions", "Model management",
 		"Context management", "Portal administration", "Community", "Governance",
 		"Settings", "Chat administration", "Plugins",
 	}, labels(nav))
@@ -141,8 +141,8 @@ func TestFilterNavByPermission(t *testing.T) {
 	nav := filterNav(adminNav(navInputs{features: features(allFeatures()), enterprise: true}), func(it NavItem) bool {
 		return it.Permission == "" || granted[it.Permission]
 	})
-	assert.Equal(t, []string{"Overview", "LLM management", "Portal administration"}, labels(nav))
-	assert.Equal(t, []string{"LLM providers"}, labels(find(nav, "llm-management").Items))
+	assert.Equal(t, []string{"Overview", "Model management", "Portal administration"}, labels(nav))
+	assert.Equal(t, []string{"Model providers"}, labels(find(nav, "llm-management").Items))
 	assert.Equal(t, []string{"Edge Gateways"}, labels(find(nav, "ai-portal").Items))
 
 	// A plugin section's own permission gates the whole section.
@@ -193,7 +193,7 @@ func TestPortalNav(t *testing.T) {
 		plugins:       plugins,
 	})
 	assert.Equal(t, []string{"Overview", "Apps", "Browse", "Community", "One page", "Two pages"}, labels(nav))
-	assert.Equal(t, []string{"All assets", "LLM providers", "Data sources", "Tools", "Sets"}, labels(find(nav, "browse").Items),
+	assert.Equal(t, []string{"All assets", "Model providers", "Data sources", "Tools", "Sets"}, labels(find(nav, "browse").Items),
 		"routers and MCP servers only with their features")
 	assert.Equal(t, "/portal/catalog/resources/5/my%20set", find(nav, "browse-resource-5-my set").Path)
 	assert.Equal(t, "/portal/plugins/one", find(nav, "one").Path, "a one-page section links to its page")
@@ -202,7 +202,7 @@ func TestPortalNav(t *testing.T) {
 	assert.Empty(t, find(nav, "t1").Permission, "portal pages are filtered by team, not admin permission")
 
 	all := portalNav(portalNavInputs{features: features(allFeatures())})
-	assert.Equal(t, []string{"All assets", "LLM providers", "Data sources", "Tools", "Model routers", "Semantic routers", "MCP servers"}, labels(find(all, "browse").Items))
+	assert.Equal(t, []string{"All assets", "Model providers", "Data sources", "Tools", "Model routers", "Semantic routers", "MCP servers"}, labels(find(all, "browse").Items))
 }
 
 func TestChatNav(t *testing.T) {

@@ -7,7 +7,7 @@ import {
 } from "../../utils/dependentsMessage";
 
 /**
- * Delete confirmation for a selection. Titles "Delete 3 LLM providers?" and,
+ * Delete confirmation for a selection. Titles "Delete 3 model providers?" and,
  * for up to MAX_DEPENDENT_LOOKUPS items, fetches each one's dependents and
  * states the aggregated consequence ("2 of them are used by 3 apps (…) and
  * 1 catalog (…). …"). Larger selections, and resources without a dependents
@@ -15,7 +15,7 @@ import {
  *
  * @param {boolean} open
  * @param {string|null} resourcePath - API collection, e.g. "llms"; null skips lookups
- * @param {string} objectLabel - singular noun, e.g. "LLM provider"
+ * @param {string} objectLabel - singular noun, e.g. "Model provider"
  * @param {string} [objectLabelPlural] - defaults to objectLabel + "s"
  * @param {Array<{id: string|number, name: string}>} items
  * @param {string} [consequence] - trailing sentence after the dependents list

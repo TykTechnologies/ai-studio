@@ -8,7 +8,7 @@ import { fetchDependents, groupsForDependents } from "../../utils/dependentsMess
 
 /**
  * "Used by" on an object's detail page (UX review M5 / F-07): one row per
- * non-empty dependent group (Apps, Catalogs, LLM providers, ...), each item a
+ * non-empty dependent group (Apps, Catalogs, model providers, ...), each item a
  * link to its admin page. Reads `/api/v1/<resourcePath>/<id>/dependents`,
  * the same endpoint the delete confirmation uses, so the two never disagree.
  *

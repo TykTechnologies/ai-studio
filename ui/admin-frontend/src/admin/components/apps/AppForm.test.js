@@ -121,7 +121,7 @@ const pickerItems = (itemLabel) =>
 
 const waitForLoaded = async () => {
   await screen.findByDisplayValue("Sales bot");
-  await waitFor(() => expect(pickerItems("LLM provider")).toEqual(["OpenAI"]));
+  await waitFor(() => expect(pickerItems("model provider")).toEqual(["OpenAI"]));
   await waitFor(() => expect(pickerItems("vector dbs")).toEqual(["Pinecone"]));
 };
 
@@ -160,17 +160,17 @@ describe("AppForm relationships and commit semantics", () => {
     renderForm();
     await waitForLoaded();
 
-    expect(picker("LLM provider")).toHaveAttribute("data-variant", "compact");
+    expect(picker("model provider")).toHaveAttribute("data-variant", "compact");
     expect(picker("data source")).toHaveAttribute("data-variant", "compact");
     expect(picker("tool")).toHaveAttribute("data-variant", "compact");
     expect(pickerItems("data source")).toEqual([]);
     expect(pickerItems("tool")).toEqual(["Time"]);
     // Every picker offers the full option list (the picker itself hides
     // what is already selected).
-    expect(within(picker("LLM provider")).getByTestId("relationship-picker-options-count")).toHaveTextContent("2");
+    expect(within(picker("model provider")).getByTestId("relationship-picker-options-count")).toHaveTextContent("2");
     expect(within(picker("tool")).getByTestId("relationship-picker-options-count")).toHaveTextContent("2");
     expect(within(picker("vector dbs")).getByTestId("relationship-picker-options-count")).toHaveTextContent("1");
-    expect(screen.queryByRole("combobox", { name: /LLM providers/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /Model providers/ })).not.toBeInTheDocument();
   });
 
   // Types an app credential does not unlock get no picker, unless the app
@@ -203,7 +203,7 @@ describe("AppForm relationships and commit semantics", () => {
     ]);
   });
 
-  // Model routers (Enterprise) are granted like LLM providers; the picker
+  // Model routers (Enterprise) are granted like model providers; the picker
   // only shows when there are routers or the app already holds one.
   it("binds model routers through model_router_ids", async () => {
     const withRouter = appPayload();
@@ -278,10 +278,10 @@ describe("AppForm relationships and commit semantics", () => {
     renderForm();
     await waitForLoaded();
 
-    fireEvent.click(within(picker("LLM provider")).getByTestId("relationship-picker-add"));
+    fireEvent.click(within(picker("model provider")).getByTestId("relationship-picker-add"));
     fireEvent.click(within(picker("data source")).getByTestId("relationship-picker-add"));
     fireEvent.click(within(picker("tool")).getByTestId("relationship-picker-remove"));
-    expect(pickerItems("LLM provider")).toEqual(["OpenAI", "Anthropic"]);
+    expect(pickerItems("model provider")).toEqual(["OpenAI", "Anthropic"]);
 
     fireEvent.click(screen.getByRole("button", { name: "Update app" }));
 
@@ -361,7 +361,7 @@ describe("AppForm relationships and commit semantics", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/admin/apps");
     expect(screen.getByTestId("registry-dirty")).toHaveTextContent("false");
 
-    fireEvent.click(within(picker("LLM provider")).getByTestId("relationship-picker-add"));
+    fireEvent.click(within(picker("model provider")).getByTestId("relationship-picker-add"));
     await waitFor(() => expect(screen.getByTestId("registry-dirty")).toHaveTextContent("true"));
 
     mockNavigate.mockClear();
@@ -373,7 +373,7 @@ describe("AppForm relationships and commit semantics", () => {
   it("starts clean on create and marks the form saved before redirecting", async () => {
     mockParams = {};
     renderForm({ withGuard: true });
-    await waitFor(() => expect(picker("LLM provider")).toBeTruthy());
+    await waitFor(() => expect(picker("model provider")).toBeTruthy());
     expect(screen.getByTestId("registry-dirty")).toHaveTextContent("false");
 
     fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: "New app" } });
@@ -499,7 +499,7 @@ describe("AppForm guardrail capability reset", () => {
     renderForm();
     await waitForLoaded();
     await capabilityLoaded();
-    fireEvent.click(within(picker("LLM provider")).getByTestId("relationship-picker-add"));
+    fireEvent.click(within(picker("model provider")).getByTestId("relationship-picker-add"));
     fireEvent.click(screen.getByRole("button", { name: "Update app" }));
     await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
     expect(screen.queryByText("Reset the guardrail capability?")).not.toBeInTheDocument();

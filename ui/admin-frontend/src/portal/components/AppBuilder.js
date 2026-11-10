@@ -48,9 +48,9 @@ const GROUP_KEYS = {
 };
 
 const ROUTER_HELPER =
-  "Called on the unified endpoint as <router>/<model>. The app reaches the router's LLM providers only through the router.";
+  "Called on the unified endpoint as <router>/<model>. The app reaches the router's model providers only through the router.";
 const SEMANTIC_ROUTER_HELPER =
-  "Called on the unified endpoint as <router>/auto; the router picks a route from the prompt. The app reaches the router's LLM providers only through it.";
+  "Called on the unified endpoint as <router>/auto; the router picks a route from the prompt. The app reaches the router's model providers only through it.";
 const TOOL_HELPER =
   "Served by AI Studio. Your app calls them over REST or MCP with its own credential.";
 const MCP_HELPER =
@@ -86,7 +86,7 @@ const buildGroups = ({ llms, modelRouters = [], semanticRouters = [], dataSource
         secondary: getVendorName(llm.attributes?.vendor) || llm.attributes?.vendor || "",
       })),
     ),
-    // Model routers sit in LLM catalogs and stand in for LLM providers.
+    // Model routers sit in LLM catalogs and stand in for model providers.
     coreGroup(
       CATALOG_TYPES.MODEL_ROUTER,
       ROUTER_HELPER,
@@ -533,7 +533,7 @@ const AppBuilder = () => {
                   sx={{ mt: 1.5 }}
                 >
                   Some combinations are refused to protect data: nothing on
-                  an app can be more sensitive than its LLM providers are
+                  an app can be more sensitive than its model providers are
                   cleared for.
                 </Typography>
               </Grid>

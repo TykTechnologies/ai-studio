@@ -245,7 +245,7 @@ describe("AppDetailView Main Ingress endpoint", () => {
     renderView();
 
     await waitFor(() => {
-      expect(screen.getByText("Per-LLM Endpoints")).toBeInTheDocument();
+      expect(screen.getByText("Per-Provider Endpoints")).toBeInTheDocument();
     });
     expect(
       screen.queryByRole("heading", { name: "Main Ingress" })
@@ -261,7 +261,7 @@ describe("AppDetailView Main Ingress endpoint", () => {
     renderView();
 
     await waitFor(() => {
-      expect(screen.getByText("Per-LLM Endpoints")).toBeInTheDocument();
+      expect(screen.getByText("Per-Provider Endpoints")).toBeInTheDocument();
     });
     expect(
       screen.queryByRole("heading", { name: "Main Ingress" })

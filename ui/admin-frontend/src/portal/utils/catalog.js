@@ -26,15 +26,15 @@ export const CATALOG_TYPES = {
   SEMANTIC_ROUTER: "semantic_router",
 };
 
-// Terminology from the September 2026 audit (M9): "LLM provider", "Data
+// Terminology from the September 2026 audit (M9): "Model provider", "Data
 // source", "Tool". Plugin resources take their type's own name.
 const TYPE_LABELS = {
-  [CATALOG_TYPES.LLM]: { singular: "LLM provider", plural: "LLM providers", slug: "llms", icon: "microchip-ai" },
+  [CATALOG_TYPES.LLM]: { singular: "Model provider", plural: "Model providers", slug: "llms", icon: "microchip-ai" },
   [CATALOG_TYPES.DATASOURCE]: { singular: "Data source", plural: "Data sources", slug: "datasources", icon: "layer-group" },
   [CATALOG_TYPES.TOOL]: { singular: "Tool", plural: "Tools", slug: "tools", icon: "screwdriver-wrench" },
   [CATALOG_TYPES.PLUGIN_RESOURCE]: { singular: "Resource", plural: "Resources", slug: "resources", icon: "puzzle-piece" },
   [CATALOG_TYPES.MCP_SERVER]: { singular: "MCP server", plural: "MCP servers", slug: "mcp-servers", icon: "server" },
-  // A model router lives in LLM catalogs and fronts LLM providers.
+  // A model router lives in LLM catalogs and fronts model providers.
   [CATALOG_TYPES.MODEL_ROUTER]: { singular: "Model router", plural: "Model routers", slug: "model-routers", icon: "route" },
   // A semantic router likewise lives in LLM catalogs; it picks a route by
   // classifying the prompt.
@@ -57,11 +57,8 @@ export const semanticRouterDetailApiPath = (id) => `/common/catalog/semantic-rou
 export const isRouterType = (type) =>
   type === CATALOG_TYPES.MODEL_ROUTER || type === CATALOG_TYPES.SEMANTIC_ROUTER;
 
-/** The singular label in running text ("LLM provider" keeps its capitals). */
-export const typeLabelLower = (type) => {
-  const label = typeLabel(type);
-  return label.startsWith("LLM") ? label : label.toLowerCase();
-};
+/** The singular label in running text ("model provider", "data source"). */
+export const typeLabelLower = (type) => typeLabel(type).toLowerCase();
 
 export const typeIcon = (type) => TYPE_LABELS[type]?.icon || "puzzle-piece";
 
@@ -209,7 +206,7 @@ export const buildActionLabel = (item) =>
 /**
  * Whether building an App is how a developer gets to use this item. The
  * server sets access_granted_via_app on every catalog item (always true for
- * LLM providers, data sources and tools); a missing field is treated as
+ * Model providers, data sources and tools); a missing field is treated as
  * granted so older fixtures and responses keep the primary action.
  */
 export const isAppGranted = (item) => attrs(item).access_granted_via_app !== false;
@@ -330,7 +327,7 @@ export const formatPerMillion = (value, currency = "USD") => {
 // --- endpoints ---------------------------------------------------------------
 
 /**
- * The OpenAI-compatible base URL for an LLM provider: `<proxyURL>/ai/<slug>/v1`.
+ * The OpenAI-compatible base URL for a model provider: `<proxyURL>/ai/<slug>/v1`.
  * proxyURL comes from /auth/config; the fallback mirrors AppDetailView so the
  * two pages never disagree about the host.
  */

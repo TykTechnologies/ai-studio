@@ -99,7 +99,7 @@ describe("FilterForm: second opinion", () => {
     renderEdit();
     await screen.findByText("Second opinion (LLM judge): Record only");
     fireEvent.click(screen.getByRole("button", { name: "Update filter" }));
-    expect(await screen.findByTestId("guardrail-judge-error")).toHaveTextContent("Choose the LLM");
+    expect(await screen.findByTestId("guardrail-judge-error")).toHaveTextContent("Choose the model provider");
     expect(apiClient.patch).not.toHaveBeenCalled();
   });
 });

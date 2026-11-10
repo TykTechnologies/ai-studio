@@ -66,7 +66,7 @@ const EmbedderList = () => {
         renderCell: (e) =>
           e.attributes.linked ? (
             <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-              <Chip size="small" label="LLM provider" variant="outlined" />
+              <Chip size="small" label="Model provider" variant="outlined" />
               {e.attributes.llm_name || `#${e.attributes.llm_id}`}
             </Box>
           ) : (
@@ -105,7 +105,7 @@ const EmbedderList = () => {
       <Box sx={{ p: 3 }}>
         <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
           Embedders turn text into vectors for data sources. Most are created from the data source form; this page is
-          where you review, fix and clean them up. An embedder either uses an LLM provider&apos;s connection or has its
+          where you review, fix and clean them up. An embedder either uses a model provider&apos;s connection or has its
           own. Its model cannot change while data sources use it, because their stored vectors came from that model.
         </Typography>
       </Box>

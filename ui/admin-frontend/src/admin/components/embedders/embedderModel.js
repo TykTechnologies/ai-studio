@@ -62,7 +62,7 @@ export const validateDraft = (d) => {
   if (!d.name.trim()) errors.name = "Name is required";
   if (!d.model.trim()) errors.model = "Model is required";
   if (d.mode === MODE_LINKED) {
-    if (!d.llm_id) errors.llm_id = "Pick the LLM provider to link to";
+    if (!d.llm_id) errors.llm_id = "Pick the model provider to link to";
   } else {
     if (!d.vendor) errors.vendor = "Pick the API compatibility";
     const score = Number(d.privacy_score);
@@ -81,7 +81,7 @@ export const endpointField = (vendor) =>
 
 /** One line describing where an embedder sends text. */
 export const describeEmbedder = (attrs = {}) => {
-  const via = attrs.linked ? attrs.llm_name || `LLM #${attrs.llm_id}` : attrs.vendor;
+  const via = attrs.linked ? attrs.llm_name || `Model provider #${attrs.llm_id}` : attrs.vendor;
   return [attrs.model, via].filter(Boolean).join(" · ");
 };
 

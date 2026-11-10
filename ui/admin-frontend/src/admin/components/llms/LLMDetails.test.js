@@ -91,26 +91,26 @@ describe("LLMDetails edit/activate affordances", () => {
 
   it("read-only: neither Edit LLM nor an activate/deactivate button", async () => {
     renderWith(["llms:read"]);
-    await screen.findByText("LLM provider details");
-    expect(screen.queryByRole("button", { name: /Edit LLM/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Deactivate LLM provider/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Activate LLM provider/ })).not.toBeInTheDocument();
+    await screen.findByText("Model provider details");
+    expect(screen.queryByRole("button", { name: /Edit model provider/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Deactivate model provider/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Activate model provider/ })).not.toBeInTheDocument();
   });
 
   it("write-only: Edit LLM but no activate/deactivate", async () => {
     renderWith(["llms:write"]);
-    await screen.findByText("LLM provider details");
-    expect(screen.getByRole("button", { name: /Edit LLM/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Deactivate LLM provider/ })).not.toBeInTheDocument();
+    await screen.findByText("Model provider details");
+    expect(screen.getByRole("button", { name: /Edit model provider/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Deactivate model provider/ })).not.toBeInTheDocument();
   });
 
   it("publish-only: a Deactivate button that calls the deactivate endpoint and refreshes, no Edit", async () => {
     renderWith(["llms:publish"]);
-    await screen.findByText("LLM provider details");
-    expect(screen.queryByRole("button", { name: /Edit LLM/ })).not.toBeInTheDocument();
+    await screen.findByText("Model provider details");
+    expect(screen.queryByRole("button", { name: /Edit model provider/ })).not.toBeInTheDocument();
 
     const fetchesBefore = apiClient.get.mock.calls.filter(([url]) => url === "/llms/7").length;
-    fireEvent.click(screen.getByRole("button", { name: "Deactivate LLM provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Deactivate model provider" }));
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith("/llms/7/deactivate"));
     await waitFor(() =>
       expect(apiClient.get.mock.calls.filter(([url]) => url === "/llms/7").length).toBeGreaterThan(fetchesBefore),
@@ -120,8 +120,8 @@ describe("LLMDetails edit/activate affordances", () => {
   it("publish-only: an inactive provider offers Activate", async () => {
     mockGets(false);
     renderWith(["llms:publish"]);
-    await screen.findByText("LLM provider details");
-    fireEvent.click(screen.getByRole("button", { name: "Activate LLM provider" }));
+    await screen.findByText("Model provider details");
+    fireEvent.click(screen.getByRole("button", { name: "Activate model provider" }));
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith("/llms/7/activate"));
   });
 });
@@ -195,7 +195,7 @@ describe("LLMDetails native API resource signing key", () => {
   it("shows no workspace row for other vendors", async () => {
     mockVendor("openai");
     renderWith(["llms:read"]);
-    await screen.findByText("LLM provider details");
+    await screen.findByText("Model provider details");
     expect(screen.queryByText("Workspace:")).not.toBeInTheDocument();
     expect(screen.queryByText("API key's default workspace")).not.toBeInTheDocument();
     expect(screen.queryByText("Price Multipliers:")).not.toBeInTheDocument();
@@ -204,7 +204,7 @@ describe("LLMDetails native API resource signing key", () => {
   it("does not fetch or show it for a vendor without native resource IDs", async () => {
     mockVendor("ollama");
     renderWith(["llms:read"]);
-    await screen.findByText("LLM provider details");
+    await screen.findByText("Model provider details");
     expect(screen.queryByText("Native API resource IDs")).not.toBeInTheDocument();
     expect(apiClient.get).not.toHaveBeenCalledWith("/llms/7/resource-signing-key");
   });

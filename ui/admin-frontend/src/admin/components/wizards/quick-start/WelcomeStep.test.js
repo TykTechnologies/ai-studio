@@ -94,7 +94,7 @@ describe('WelcomeStep Component', () => {
     expect(screen.getByText('Welcome to Tyk, User')).toBeInTheDocument();
     
     // Check that the descriptive text is rendered
-    expect(screen.getByText(/Empower your team to build AI Apps with direct access to LLM providers and data sources/)).toBeInTheDocument();
+    expect(screen.getByText(/Empower your team to build AI Apps with direct access to model providers and data sources/)).toBeInTheDocument();
     expect(screen.getByText(/which can be used for code editors, knowledge search, and task automation keeping centralized control, usage tracking, and security/)).toBeInTheDocument();
     
     // Check that the image is rendered

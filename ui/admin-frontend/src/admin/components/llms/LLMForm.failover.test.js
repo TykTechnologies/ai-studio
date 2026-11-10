@@ -93,7 +93,7 @@ describe("LLMForm failover", () => {
     renderForm();
     await screen.findByTestId("failover-model-0");
 
-    fireEvent.click(screen.getByRole("button", { name: /update llm|save|create/i }));
+    fireEvent.click(screen.getByRole("button", { name: /update model provider|save|create/i }));
 
     await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
     const [, payload] = apiClient.patch.mock.calls[0];
@@ -108,7 +108,7 @@ describe("LLMForm failover", () => {
     renderForm();
     await screen.findByTestId("failover-model-0");
 
-    fireEvent.click(screen.getByRole("button", { name: /update llm|save|create/i }));
+    fireEvent.click(screen.getByRole("button", { name: /update model provider|save|create/i }));
 
     expect(await screen.findByText(/is not in the allowed models of Backup/)).toBeInTheDocument();
     expect(apiClient.patch).not.toHaveBeenCalled();
@@ -120,7 +120,7 @@ describe("LLMForm failover", () => {
     await screen.findByTestId("failover-model-0");
 
     fireEvent.click(screen.getByRole("button", { name: "remove fallback" }));
-    fireEvent.click(screen.getByRole("button", { name: /update llm|save|create/i }));
+    fireEvent.click(screen.getByRole("button", { name: /update model provider|save|create/i }));
 
     await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
     const [, payload] = apiClient.patch.mock.calls[0];

@@ -34,7 +34,7 @@ const mono = { fontFamily: "monospace", fontSize: "0.75rem", wordBreak: "break-a
 const NO_EXCERPT = {
   not_scanned: "Not checked, so there is no match to show.",
   off: 'Excerpts are off: turn on "Show flagged text in compliance events" on the filter.',
-  bodies_not_logged: "Not recorded: this LLM does not log request bodies.",
+  bodies_not_logged: "Not recorded: this model provider does not log request bodies.",
   unavailable: "No excerpt available for this text.",
 };
 

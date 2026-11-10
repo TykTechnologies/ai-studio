@@ -29,7 +29,7 @@ import { StyledAccordion } from "../../styles/sharedStyles";
 export const DEFAULT_FAILOVER_STATUS_CODES = [408, 429, 500, 502, 503, 504];
 
 export const INHERITED_ACCESS_NOTE =
-  "Apps that are allowed to use this LLM will automatically be routed to these fallback LLMs when it fails, even if they have not been granted access to them directly. Budgets are still enforced on the fallback LLM.";
+  "Apps that are allowed to use this model provider will automatically be routed to these fallback model providers when it fails, even if they have not been granted access to them directly. Budgets are still enforced on the fallback model provider.";
 
 // modelAllowed mirrors the server rule: an empty pattern list allows every
 // model, and patterns match anywhere in the name (unanchored).
@@ -53,7 +53,7 @@ export const validateFailover = (failover, llmsById, current) => {
   const seen = new Set();
   targets.forEach((t, i) => {
     if (!t.llm_id) {
-      errors[i] = "Select an LLM";
+      errors[i] = "Select a model provider";
       return;
     }
     if (!t.model || !t.model.trim()) {
@@ -68,7 +68,7 @@ export const validateFailover = (failover, llmsById, current) => {
     seen.add(key);
     const target = llmsById[String(t.llm_id)];
     if (!target) {
-      errors[i] = "This LLM no longer exists";
+      errors[i] = "This model provider no longer exists";
       return;
     }
     if (!modelAllowed(target.allowed_models, t.model)) {
@@ -76,11 +76,11 @@ export const validateFailover = (failover, llmsById, current) => {
       return;
     }
     if (Number(target.privacy_score) < Number(current.privacy_score || 0)) {
-      errors[i] = `${target.name} has a lower privacy level (${target.privacy_score}) than this LLM (${current.privacy_score})`;
+      errors[i] = `${target.name} has a lower privacy level (${target.privacy_score}) than this model provider (${current.privacy_score})`;
       return;
     }
     if (target.namespace && target.namespace !== (current.namespace || "")) {
-      errors[i] = `${target.name} is in namespace "${target.namespace}", which this LLM cannot reach`;
+      errors[i] = `${target.name} is in namespace "${target.namespace}", which this model provider cannot reach`;
     }
   });
   if (targets.length > 10) {
@@ -148,9 +148,9 @@ const LLMFailoverSection = ({ value, onChange, llms, currentId, vendor, errors =
         Failover
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        When this LLM's upstream fails, requests are retried against these
-        fallbacks in order. Each fallback names another LLM and the model to
-        ask it for, which must be one of that LLM's allowed models. Failover
+        When this model provider's upstream fails, requests are retried against these
+        fallbacks in order. Each fallback names another model provider and the model to
+        ask it for, which must be one of that model provider's allowed models. Failover
         applies to the OpenAI-compatible chat endpoints and only before the
         first token of a streamed response has been sent.
       </Typography>
@@ -175,10 +175,10 @@ const LLMFailoverSection = ({ value, onChange, llms, currentId, vendor, errors =
             </Grid>
             <Grid item xs={12} sm={4}>
               <FormControl fullWidth error={Boolean(errors[index])}>
-                <InputLabel id={`failover-llm-${index}`}>Fallback LLM</InputLabel>
+                <InputLabel id={`failover-llm-${index}`}>Fallback model provider</InputLabel>
                 <Select
                   labelId={`failover-llm-${index}`}
-                  label="Fallback LLM"
+                  label="Fallback model provider"
                   value={t.llm_id ? String(t.llm_id) : ""}
                   inputProps={{ "data-testid": `failover-llm-select-${index}` }}
                   onChange={(e) => {
@@ -213,9 +213,9 @@ const LLMFailoverSection = ({ value, onChange, llms, currentId, vendor, errors =
                     helperText={
                       errors[index] ||
                       (allowsAll
-                        ? "This LLM allows any model"
+                        ? "This model provider allows any model"
                         : target
-                        ? "Must match one of the LLM's allowed models"
+                        ? "Must match one of the model provider's allowed models"
                         : "")
                     }
                     inputProps={{ ...params.inputProps, "data-testid": `failover-model-${index}` }}
@@ -256,7 +256,7 @@ const LLMFailoverSection = ({ value, onChange, llms, currentId, vendor, errors =
           <AddIcon />
         </IconButton>
         <Typography variant="body2" component="span" color="text.secondary">
-          {candidates.length === 0 ? "No other LLMs to fall back to" : "Add fallback"}
+          {candidates.length === 0 ? "No other model providers to fall back to" : "Add fallback"}
         </Typography>
       </Box>
 
@@ -337,7 +337,7 @@ const LLMFailoverSection = ({ value, onChange, llms, currentId, vendor, errors =
                 const { attempt_timeout_seconds, ...others } = triggers;
                 update(targets, n > 0 ? { ...others, attempt_timeout_seconds: n } : others);
               }}
-              helperText="How long to wait on each attempt before moving to the next fallback. Leave empty to use the gateway's LLM timeout."
+              helperText="How long to wait on each attempt before moving to the next fallback. Leave empty to use the gateway's upstream timeout."
               inputProps={{ min: 1 }}
             />
           </AccordionDetails>

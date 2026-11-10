@@ -25,7 +25,7 @@ describe("LLMFailoverSection with decision models", () => {
       vendor: "anthropic",
       llms: llms.filter((l) => l.vendor !== "openai"),
     });
-    expect(screen.getByText("No other LLMs to fall back to")).toBeInTheDocument();
+    expect(screen.getByText("No other model providers to fall back to")).toBeInTheDocument();
   });
 
   it("offers a decision-capable fallback to a System One primary", () => {

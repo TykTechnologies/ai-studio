@@ -308,8 +308,8 @@ describe('findSelectedItem', () => {
   const { findSelectedItem } = require('./utils');
   const items = [
     { id: 'overview', text: 'Overview', path: '/admin', exact: true },
-    { id: 'catalogs', text: 'Catalogs', subItems: [{ id: 'catalog-llms', text: 'LLM providers', path: '/admin/catalogs/llms' }] },
-    { id: 'llm-management', text: 'LLM management', subItems: [{ id: 'llms', text: 'LLM providers', path: '/admin/llms' }] },
+    { id: 'catalogs', text: 'Catalogs', subItems: [{ id: 'catalog-llms', text: 'Model providers', path: '/admin/catalogs/llms' }] },
+    { id: 'llm-management', text: 'Model management', subItems: [{ id: 'llms', text: 'Model providers', path: '/admin/llms' }] },
     { id: 'ai-portal', text: 'AI Portal', subItems: [{ id: 'portal-apps', text: 'Apps', path: '/admin/apps' }] },
     { id: 'chat', text: 'Chat', subItems: [{ id: 'room', text: 'Room', path: '/chat?continue_id=7' }] },
   ];

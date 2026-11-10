@@ -20,7 +20,7 @@ import SearchInput from "../../admin/components/common/SearchInput";
 
 /**
  * The App builder's access model: one group per asset type an App can be
- * granted (LLM providers, data sources, tools, MCP servers, and each plugin
+ * granted (Model providers, data sources, tools, MCP servers, and each plugin
  * resource type), and one selection map of group key -> selected ids.
  *
  *   group:     { key, label, itemLabel, icon, helperText?, options: [{ id, name, secondary? }] }

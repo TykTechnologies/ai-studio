@@ -50,7 +50,7 @@ describe("embedderModel", () => {
       vendor: "Pick the API compatibility",
     });
     expect(validateDraft({ ...emptyDraft(), mode: MODE_LINKED, name: "a", model: "m" })).toEqual({
-      llm_id: "Pick the LLM provider to link to",
+      llm_id: "Pick the model provider to link to",
     });
     expect(validateDraft({ ...emptyDraft(), name: "a", model: "m", vendor: "openai", privacy_score: 101 }))
       .toHaveProperty("privacy_score");

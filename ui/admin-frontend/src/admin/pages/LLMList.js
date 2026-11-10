@@ -41,7 +41,7 @@ const LLMList = () => {
       setError("");
     } catch (error) {
       console.error("Error fetching LLMs", error);
-      setError("Failed to load LLMs");
+      setError("Failed to load model providers");
     } finally {
       setLoading(false);
     }
@@ -54,8 +54,8 @@ const LLMList = () => {
   const bulk = useBulkActions({
     items: llms,
     resource: "llms",
-    singular: "LLM provider",
-    plural: "LLM providers",
+    singular: "Model provider",
+    plural: "Model providers",
     notify,
     refresh: fetchLLMs,
   });
@@ -63,11 +63,11 @@ const LLMList = () => {
   const handleDelete = async (id) => {
     try {
       await apiClient.delete(`/llms/${id}`);
-      notify("LLM provider deleted successfully");
+      notify("Model provider deleted successfully");
       fetchLLMs();
     } catch (error) {
       console.error("Error deleting LLM", error);
-      notify("Failed to delete LLM", "error");
+      notify("Failed to delete model provider", "error");
     }
   };
 
@@ -77,11 +77,11 @@ const LLMList = () => {
     const activating = !llm.attributes.active;
     try {
       await apiClient.post(`/llms/${llm.id}/${activating ? "activate" : "deactivate"}`);
-      notify(`LLM ${activating ? "activated" : "deactivated"} successfully`);
+      notify(`Model provider ${activating ? "activated" : "deactivated"} successfully`);
       fetchLLMs();
     } catch (error) {
       console.error("Error toggling LLM active state", error);
-      notify("Failed to update LLM active state", "error");
+      notify("Failed to update model provider active state", "error");
     }
   }, [fetchLLMs, notify]);
 
@@ -153,11 +153,11 @@ const LLMList = () => {
   const canManage = canWrite || canPublish;
 
   const rowActions = useMemo(() => [
-    { key: "edit", label: "Edit LLM provider", onClick: (llm) => navigate(`/admin/llms/edit/${llm.id}`), hidden: () => !canWrite },
-    { key: "delete", label: "Delete LLM provider", onClick: (llm) => setDeleteTarget(llm), hidden: () => !canWrite },
+    { key: "edit", label: "Edit model provider", onClick: (llm) => navigate(`/admin/llms/edit/${llm.id}`), hidden: () => !canWrite },
+    { key: "delete", label: "Delete model provider", onClick: (llm) => setDeleteTarget(llm), hidden: () => !canWrite },
     {
       key: "toggle",
-      label: (llm) => `${llm?.attributes?.active ? "Deactivate" : "Activate"} LLM provider`,
+      label: (llm) => `${llm?.attributes?.active ? "Deactivate" : "Activate"} model provider`,
       onClick: handleToggleActive,
       hidden: () => !canPublish,
     },
@@ -179,26 +179,26 @@ const LLMList = () => {
     <Box sx={{ p: 0 }}>
       <>
         <TitleBox top="var(--studio-header-height)">
-          <Typography variant="headingXLarge">LLM providers</Typography>
+          <Typography variant="headingXLarge">Model providers</Typography>
           <Can permission={P.LLMS_WRITE}>
             <PrimaryButton
               variant="contained"
               startIcon={<AddIcon />}
               onClick={handleAddLLM}
             >
-              Add LLM provider
+              Add model provider
             </PrimaryButton>
           </Can>
         </TitleBox>
         <Box sx={{ p: 3 }}>
-          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">LLM providers power AI chats and can be made available to developers in the portal and gateway when set to Active. To control access, each LLM provider must be part of a catalog to be used by specific teams.</Typography>
+          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Model providers power AI chats and can be made available to developers in the portal and gateway when set to Active. To control access, each model provider must be part of a catalog to be used by specific teams.</Typography>
         </Box>
         <Box sx={{ p: 3 }}>
           <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
           <DataTable
             {...tableProps}
-            ariaLabel="LLM providers"
-            searchPlaceholder="Search LLM providers by name..."
+            ariaLabel="Model providers"
+            searchPlaceholder="Search model providers by name..."
             columns={columns}
             data={llms}
             loading={loading}
@@ -209,9 +209,9 @@ const LLMList = () => {
             emptyState={
               !searchTerm ? (
                 <EmptyStateWidget
-                  title="Want to start working with your favourite LLM?"
-                  description="Click the button below to add a new LLM configuration to use in your chat room."
-                  buttonText="Add LLM provider"
+                  title="Want to start working with your favourite model provider?"
+                  description="Click the button below to add a new model provider configuration to use in your chat room."
+                  buttonText="Add model provider"
                   buttonIcon={<AddIcon />}
                   onButtonClick={canWrite ? handleAddLLM : undefined}
                 />
@@ -224,9 +224,9 @@ const LLMList = () => {
       <DeleteConfirmationDialog
         open={Boolean(deleteTarget)}
         resourcePath="llms"
-        objectLabel="LLM provider"
+        objectLabel="Model provider"
         item={deleteTarget ? { id: deleteTarget.id, name: deleteTarget.attributes?.name } : null}
-        consequence="Deleting it removes it from all of them; apps that only have this LLM provider will stop working."
+        consequence="Deleting it removes it from all of them; apps that only have this model provider will stop working."
         onConfirm={() => {
           const id = deleteTarget?.id;
           setDeleteTarget(null);
@@ -238,10 +238,10 @@ const LLMList = () => {
       <BulkDeleteConfirmationDialog
         open={bulk.deleteDialogOpen}
         resourcePath="llms"
-        objectLabel="LLM provider"
-        objectLabelPlural="LLM providers"
+        objectLabel="Model provider"
+        objectLabelPlural="Model providers"
         items={bulk.deleteDialogItems}
-        consequence="Deleting them removes them from all of those; apps that only have these LLM providers will stop working."
+        consequence="Deleting them removes them from all of those; apps that only have these model providers will stop working."
         onConfirm={bulk.confirmDelete}
         onCancel={bulk.cancelDelete}
       />

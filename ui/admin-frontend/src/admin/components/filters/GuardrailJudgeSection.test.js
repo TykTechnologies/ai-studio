@@ -73,9 +73,9 @@ describe("GuardrailJudgeSection (midsommar-clean-9u1j.13)", () => {
     fireEvent.click(within(await openSelect("guardrail-judge-mode")).getByText("Record only"));
     expect(onValue).toHaveBeenLastCalledWith({ mode: "record" });
     // Without an LLM the section says what is missing.
-    expect(screen.getByText("Choose the LLM that gives the second opinion")).toBeInTheDocument();
+    expect(screen.getByText("Choose the model provider that gives the second opinion")).toBeInTheDocument();
 
-    const llmSelect = screen.getByLabelText("Judge LLM");
+    const llmSelect = screen.getByLabelText("Judge model provider");
     fireEvent.mouseDown(llmSelect);
     const list = await screen.findByRole("listbox");
     // Chat-capable, active LLMs only.

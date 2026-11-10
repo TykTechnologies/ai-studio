@@ -13,7 +13,7 @@ describe('pendingChanges helpers', () => {
   const now = new Date('2026-09-14T13:20:00Z');
 
   it('names change types with the product words', () => {
-    expect(changeTypeLabel('llm')).toBe('LLM providers');
+    expect(changeTypeLabel('llm')).toBe('Model providers');
     expect(changeTypeLabel('datasource')).toBe('Data sources');
     expect(changeTypeLabel('model_price')).toBe('Model prices');
     expect(changeTypeLabel('semantic_router')).toBe('Semantic routers');
@@ -36,7 +36,7 @@ describe('pendingChanges helpers', () => {
       { type: 'mystery', id: 3, name: 'M' },
       { type: 'llm', id: 4, name: 'L2' },
     ]);
-    expect(groups.map((g) => g.label)).toEqual(['LLM providers', 'Tools', 'mystery']);
+    expect(groups.map((g) => g.label)).toEqual(['Model providers', 'Tools', 'mystery']);
     expect(groups[0].changes.map((c) => c.id)).toEqual([2, 4]);
   });
 

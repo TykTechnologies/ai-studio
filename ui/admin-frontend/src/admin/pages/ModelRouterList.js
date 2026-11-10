@@ -161,7 +161,7 @@ const ModelRouterList = () => {
         </TitleBox>
         <Box sx={{ p: 3 }}>
           <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
-            Model Routers enable intelligent request routing to LLM vendors based on model name patterns.
+            Model Routers enable intelligent request routing to model providers based on model name patterns.
             Configure pools with glob patterns (e.g., "claude-*", "gpt-4*") to route requests to multiple vendors
             with round-robin or weighted selection algorithms.
           </Typography>
@@ -183,7 +183,7 @@ const ModelRouterList = () => {
               !searchTerm ? (
                 <EmptyStateWidget
                   title="Create your first Model Router"
-                  description="Model Routers let you define pools of LLM vendors and route requests based on model name patterns. Great for load balancing and failover."
+                  description="Model Routers let you define pools of model providers and route requests based on model name patterns. Great for load balancing and failover."
                   buttonText="Add Router"
                   buttonIcon={<AddIcon />}
                   onButtonClick={canWrite ? handleAddRouter : undefined}

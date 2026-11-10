@@ -30,7 +30,7 @@ const portal = [
     icon: 'rectangle-history',
     items: [
       { id: 'browse-all', text: 'All assets', path: '/portal/catalog', exact: true },
-      { id: 'browse-llms', text: 'LLM providers', path: '/portal/catalog/llms' },
+      { id: 'browse-llms', text: 'Model providers', path: '/portal/catalog/llms' },
       { id: 'browse-datasources', text: 'Data sources', path: '/portal/catalog/datasources' },
       { id: 'browse-tools', text: 'Tools', path: '/portal/catalog/tools' },
       { id: 'browse-resource-7-agent', text: 'Agents', path: '/portal/catalog/resources/7/agent', pluginId: 7 },
@@ -48,7 +48,7 @@ const renderDrawer = (path = '/portal/dashboard') =>
     </ThemeProvider>
   );
 
-// The four-level "Catalogs → LLM providers → catalog name → cards" tree is
+// The four-level "Catalogs → Model providers → catalog name → cards" tree is
 // replaced by one Browse section (UX review D4): everything, then one entry
 // per asset type and per plugin resource type.
 describe('PortalDrawer', () => {
@@ -65,7 +65,7 @@ describe('PortalDrawer', () => {
     renderDrawer();
     expect(pubClient.get).toHaveBeenCalledWith('/common/nav');
     expect(await screen.findByRole('link', { name: 'All assets' })).toHaveAttribute('href', '/portal/catalog');
-    expect(screen.getByRole('link', { name: 'LLM providers' })).toHaveAttribute('href', '/portal/catalog/llms');
+    expect(screen.getByRole('link', { name: 'Model providers' })).toHaveAttribute('href', '/portal/catalog/llms');
     expect(screen.getByRole('link', { name: 'Data sources' })).toHaveAttribute('href', '/portal/catalog/datasources');
     expect(screen.getByRole('link', { name: 'Tools' })).toHaveAttribute('href', '/portal/catalog/tools');
     await waitFor(() =>
@@ -78,7 +78,7 @@ describe('PortalDrawer', () => {
 
   it('highlights the type entry on a detail page, not "All assets"', async () => {
     renderDrawer('/portal/catalog/llms/3');
-    const llms = await screen.findByRole('link', { name: 'LLM providers' });
+    const llms = await screen.findByRole('link', { name: 'Model providers' });
     expect(llms).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('link', { name: 'All assets' })).not.toHaveAttribute('aria-current');
   });

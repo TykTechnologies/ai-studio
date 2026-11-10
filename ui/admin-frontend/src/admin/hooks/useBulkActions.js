@@ -15,8 +15,8 @@ import { defaultRowLabel } from "../components/common/DataTable";
  * @param {Array} options.items - the rows currently on the page
  * @param {string} [options.rowKey="id"]
  * @param {string} options.resource - API collection, e.g. "llms"
- * @param {string} options.singular - noun, e.g. "LLM provider"
- * @param {string} options.plural - e.g. "LLM providers"
+ * @param {string} options.singular - noun, e.g. "Model provider"
+ * @param {string} options.plural - e.g. "Model providers"
  * @param {(item) => string} [options.nameOf]
  * @param {(message, severity) => void} [options.notify]
  * @param {() => void} [options.refresh]

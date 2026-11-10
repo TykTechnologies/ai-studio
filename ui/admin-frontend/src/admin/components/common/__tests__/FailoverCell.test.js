@@ -12,7 +12,7 @@ describe("formatFailover", () => {
 
   it("names the rung and the primary it failed over from", () => {
     expect(formatFailover({ failover_attempt: 1, failover_from_llm_id: 3 })).toBe(
-      "attempt 1 (from LLM #3)",
+      "attempt 1 (from model provider #3)",
     );
   });
 
@@ -24,7 +24,7 @@ describe("formatFailover", () => {
 describe("FailoverCell", () => {
   it("renders the fallback marker", () => {
     render(<FailoverCell attributes={{ failover_attempt: 1, failover_from_llm_id: 3 }} />);
-    expect(screen.getByTestId("proxy-log-failover")).toHaveTextContent("attempt 1 (from LLM #3)");
+    expect(screen.getByTestId("proxy-log-failover")).toHaveTextContent("attempt 1 (from model provider #3)");
   });
 
   it("renders a dash for the primary attempt", () => {

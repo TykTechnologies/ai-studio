@@ -150,7 +150,7 @@ describe("LLMForm price multipliers", () => {
 
   it("is offered for Anthropic and OpenAI, not for other vendors", async () => {
     renderForm();
-    await screen.findByRole("button", { name: "Add LLM provider" });
+    await screen.findByRole("button", { name: "Add model provider" });
     expect(screen.queryByRole("button", { name: /Add price override/ })).not.toBeInTheDocument();
     await pickVendor(/Ollama/);
     expect(screen.queryByRole("button", { name: /Add price override/ })).not.toBeInTheDocument();
@@ -171,7 +171,7 @@ describe("LLMForm price multipliers", () => {
     expect(screen.getByLabelText("Tier 1")).toHaveValue("flex");
     fireEvent.change(screen.getByLabelText("Tier 1"), { target: { value: "default" } });
     fireEvent.change(screen.getByLabelText("Multiplier 1"), { target: { value: "0.5" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add LLM provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add model provider" }));
     expect(await screen.findByText(/billed at list price and recorded as no tier/)).toBeInTheDocument();
     expect(apiClient.post).not.toHaveBeenCalled();
   });
@@ -180,7 +180,7 @@ describe("LLMForm price multipliers", () => {
     renderForm();
     fireEvent.change(await screen.findByLabelText(/^Name/), { target: { value: "Claude" } });
     await pickVendor(/Anthropic/);
-    fireEvent.click(screen.getByRole("button", { name: "Add LLM provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add model provider" }));
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith("/llms", expect.anything()));
     expect(sentAttributes("post").price_multipliers).toBeNull();
   });
@@ -192,7 +192,7 @@ describe("LLMForm price multipliers", () => {
     fireEvent.click(screen.getByRole("button", { name: /Add price override/ }));
     expect(screen.getByLabelText("Tier 1")).toHaveValue("batch");
     fireEvent.change(screen.getByLabelText("Multiplier 1"), { target: { value: "0.4" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add LLM provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add model provider" }));
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith("/llms", expect.anything()));
     expect(sentAttributes("post").price_multipliers).toEqual({ batch: 0.4 });
   });
@@ -203,7 +203,7 @@ describe("LLMForm price multipliers", () => {
     await pickVendor(/Anthropic/);
     fireEvent.click(screen.getByRole("button", { name: /Add price override/ }));
     fireEvent.change(screen.getByLabelText("Multiplier 1"), { target: { value: "12" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add LLM provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add model provider" }));
     await waitFor(() => expect(screen.getByTestId("llm-form-errors")).toHaveTextContent("price multipliers"));
     expect(screen.getByText(/between 0 and 10/)).toBeInTheDocument();
     expect(apiClient.post).not.toHaveBeenCalled();
@@ -221,12 +221,12 @@ describe("LLMForm price multipliers", () => {
     expect(screen.getByLabelText("Multiplier 1")).toHaveValue(0.4);
 
     fireEvent.click(screen.getByRole("button", { name: "Remove price override 2" }));
-    fireEvent.click(screen.getByRole("button", { name: "Update LLM provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Update model provider" }));
     await waitFor(() => expect(apiClient.patch).toHaveBeenCalledTimes(1));
     expect(sentAttributes("patch").price_multipliers).toEqual({ batch: 0.4 });
 
     fireEvent.click(screen.getByRole("button", { name: "Remove price override 1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Update LLM provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Update model provider" }));
     await waitFor(() => expect(apiClient.patch).toHaveBeenCalledTimes(2));
     expect(apiClient.patch.mock.calls[1][1].data.attributes.price_multipliers).toBeNull();
   });
@@ -240,7 +240,7 @@ describe("LLMForm price multipliers", () => {
     await pickVendor(/Anthropic/);
     fireEvent.click(screen.getByRole("button", { name: /Add price override/ }));
     fireEvent.change(screen.getByLabelText("Multiplier 1"), { target: { value: "0.4" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add LLM provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add model provider" }));
     expect(await screen.findAllByText(/price_multipliers: value for "batch" out of range/)).not.toHaveLength(0);
     expect(mockNavigate).not.toHaveBeenCalled();
   });

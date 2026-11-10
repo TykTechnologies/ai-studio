@@ -99,12 +99,12 @@ const CatalogueList = memo(() => {
       await apiClient.post(`/catalogues/${selectedCatalogue.id}/llms`, {
         data: { id: selectedLLM, type: "LLM" },
       });
-      notify("LLM added to catalog successfully");
+      notify("Model provider added to catalog successfully");
       setModalOpen(false);
       fetchCatalogues();
     } catch (error) {
       console.error("Error adding LLM to catalog", error);
-      notify("Failed to add LLM to catalog", "error");
+      notify("Failed to add model provider to catalog", "error");
     }
   };
 
@@ -113,12 +113,12 @@ const CatalogueList = memo(() => {
       await apiClient.delete(
         `/catalogues/${selectedCatalogue.id}/llms/${selectedLLM}`,
       );
-      notify("LLM removed from catalog successfully");
+      notify("Model provider removed from catalog successfully");
       setModalOpen(false);
       fetchCatalogues();
     } catch (error) {
       console.error("Error removing LLM from catalog", error);
-      notify("Failed to remove LLM from catalog", "error");
+      notify("Failed to remove model provider from catalog", "error");
     }
   };
 
@@ -176,7 +176,7 @@ const CatalogueList = memo(() => {
     { field: "name", headerName: "Name", sortable: true, renderCell: (catalogue) => catalogue.attributes.name },
     {
       field: "llms",
-      headerName: "LLM providers",
+      headerName: "Model providers",
       renderCell: (catalogue) => (
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
           {getLLMNames(catalogue).map((llmName, index) => (
@@ -195,8 +195,8 @@ const CatalogueList = memo(() => {
   const rowActions = [
     { key: "edit", label: "Edit catalog", onClick: (catalogue) => handleEdit(catalogue.id) },
     { key: "delete", label: "Delete catalog", onClick: (catalogue) => handleDelete(catalogue.id) },
-    { key: "add-llm", label: "Add LLM to catalog", onClick: (catalogue) => handleOpenModal("add", catalogue) },
-    { key: "remove-llm", label: "Remove LLM from catalog", onClick: (catalogue) => handleOpenModal("remove", catalogue) },
+    { key: "add-llm", label: "Add model provider to catalog", onClick: (catalogue) => handleOpenModal("add", catalogue) },
+    { key: "remove-llm", label: "Remove model provider from catalog", onClick: (catalogue) => handleOpenModal("remove", catalogue) },
   ];
 
   const bulkActions = useMemo(
@@ -212,7 +212,7 @@ const CatalogueList = memo(() => {
     <>
       <>
         <TitleBox top="var(--studio-header-height)">
-          <Typography variant="headingXLarge">LLM catalogs</Typography>
+          <Typography variant="headingXLarge">Model provider catalogs</Typography>
           <Can permission={P.CATALOGUES_WRITE}>
             <PrimaryButton
               variant="contained"
@@ -224,7 +224,7 @@ const CatalogueList = memo(() => {
           </Can>
         </TitleBox>
         <Box sx={{ p: 3 }}>
-          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of LLM providers that you can assign to specific teams to manage access easily.</Typography>
+          <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of model providers that you can assign to specific teams to manage access easily.</Typography>
         </Box>
         <ContentBox>
           <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
@@ -232,7 +232,7 @@ const CatalogueList = memo(() => {
             {(canWrite) => (
               <DataTable
                 {...tableProps}
-                ariaLabel="LLM catalogs"
+                ariaLabel="Model provider catalogs"
                 searchPlaceholder="Search catalogs by name..."
                 columns={columns}
                 data={catalogues}
@@ -261,17 +261,17 @@ const CatalogueList = memo(() => {
       <Dialog open={modalOpen} onClose={handleCloseModal}>
         <DialogTitle>
           {modalType === "add"
-            ? "Add LLM provider to catalog"
-            : "Remove LLM provider from catalog"}
+            ? "Add model provider to catalog"
+            : "Remove model provider from catalog"}
         </DialogTitle>
         <DialogContent>
           <FormControl fullWidth sx={{ mt: 2 }}>
-            <InputLabel id="llm-select-label">Select LLM</InputLabel>
+            <InputLabel id="llm-select-label">Select model provider</InputLabel>
             <Select
               labelId="llm-select-label"
               value={selectedLLM}
               onChange={(e) => setSelectedLLM(e.target.value)}
-              label="Select LLM"
+              label="Select model provider"
             >
               {modalType === "add"
                 ? availableLLMs.map((llm) => (
@@ -305,7 +305,7 @@ const CatalogueList = memo(() => {
         objectLabel="catalog"
         objectLabelPlural="catalogs"
         items={bulk.deleteDialogItems}
-        consequence="Teams assigned these catalogs lose access to the LLM providers in them."
+        consequence="Teams assigned these catalogs lose access to the model providers in them."
         onConfirm={bulk.confirmDelete}
         onCancel={bulk.cancelDelete}
       />

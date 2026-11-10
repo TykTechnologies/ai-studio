@@ -9,7 +9,7 @@ import usePermissionCatalogue from '../../hooks/usePermissionCatalogue';
  */
 const PermissionDeniedPanel = ({ required, title, description }) => {
   const navigate = useNavigate();
-  // Catalogue labels ("LLM providers: write") when loaded, static fallback otherwise.
+  // Catalogue labels ("Model providers: write") when loaded, static fallback otherwise.
   const { label } = usePermissionCatalogue();
   const perms = toArray(required);
   const labels = perms.map(label).filter(Boolean);

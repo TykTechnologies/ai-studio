@@ -236,7 +236,7 @@ export const validateDraft = (draft) => {
     const { target } = route;
     if (target.type === TARGET_MODEL_ROUTER ? !target.model_router_id : !target.llm_id) {
       errors[`route_${i}_target`] =
-        target.type === TARGET_MODEL_ROUTER ? "Pick a model router" : "Pick an LLM provider";
+        target.type === TARGET_MODEL_ROUTER ? "Pick a model router" : "Pick a model provider";
     }
     if (!target.model.trim()) {
       errors[`route_${i}_model`] =
@@ -259,7 +259,7 @@ export const validateDraft = (draft) => {
 
   const judge = draft.settings.judge;
   if (judge.enabled && (!judge.llm_id || !judge.model.trim())) {
-    errors.judge = "The judge needs an LLM and a model";
+    errors.judge = "The judge needs a model provider and a model";
   }
   return errors;
 };

@@ -2,7 +2,7 @@ import React from 'react';
 import { Alert, AlertTitle, Typography } from '@mui/material';
 
 const TITLES = {
-  llm_config: 'LLM Configuration Error',
+  llm_config: 'Model Provider Configuration Error',
   api: 'API Error',
   connection: 'Connection Error',
   auth: 'Authentication Error',

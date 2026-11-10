@@ -104,7 +104,7 @@ func adminNav(in navInputs) []NavItem {
 	// they open, so the menu never has two items called "Tools".
 	if f("feature_groups") && (f("feature_portal") || f("feature_chat")) {
 		out = append(out, group("catalogs", "Catalogs", "rectangle-history",
-			when(f("feature_portal"), page("catalog-llms", "LLM catalogs", "/admin/catalogs/llms", r("catalogues"))),
+			when(f("feature_portal"), page("catalog-llms", "Model provider catalogs", "/admin/catalogs/llms", r("catalogues"))),
 			[]NavItem{page("catalog-data", "Data catalogs", "/admin/catalogs/datasources", r("data-catalogues"))},
 			when(f("feature_chat"), page("catalog-tools", "Tool catalogs", "/admin/catalogs/tools", r("tool-catalogues"))),
 		))
@@ -117,9 +117,9 @@ func adminNav(in navInputs) []NavItem {
 	mcpServers := page("mcp-servers", "MCP servers", "/admin/mcp-servers", r("mcp-servers"))
 	mcpServers.Exact = true
 	out = append(out,
-		group("llm-management", "LLM management", "microchip-ai",
+		group("llm-management", "Model management", "microchip-ai",
 			[]NavItem{
-				page("llms", "LLM providers", "/admin/llms", r("llms")),
+				page("llms", "Model providers", "/admin/llms", r("llms")),
 				page("model-prices", "Model prices", "/admin/model-prices", r("model-prices")),
 				page("embedders", "Embedders", "/admin/embedders", r("embedders")),
 			},
@@ -294,7 +294,7 @@ func portalNav(in portalNavInputs) []NavItem {
 	browse := group("browse", "Browse", "rectangle-history",
 		[]NavItem{
 			allAssets,
-			{ID: "browse-llms", Text: "LLM providers", Path: "/portal/catalog/llms"},
+			{ID: "browse-llms", Text: "Model providers", Path: "/portal/catalog/llms"},
 			{ID: "browse-datasources", Text: "Data sources", Path: "/portal/catalog/datasources"},
 			{ID: "browse-tools", Text: "Tools", Path: "/portal/catalog/tools"},
 		},

@@ -300,14 +300,14 @@ const SemanticRouterDetails = () => {
                       {embedding?.model ? ` (${embedding.model})` : ""}
                     </>
                   ) : embedding?.llm_id ? (
-                    `${embedding.model} on ${nameOf(llms, embedding.llm_id, `LLM #${embedding.llm_id}`)}`
+                    `${embedding.model} on ${nameOf(llms, embedding.llm_id, `Model provider #${embedding.llm_id}`)}`
                   ) : (
                     "Off"
                   )}
                 </Fact>
                 <Fact label="LLM judge">
                   {judge.enabled
-                    ? `${judge.model_ref?.model} on ${nameOf(llms, judge.model_ref?.llm_id, `LLM #${judge.model_ref?.llm_id}`)}, ${(
+                    ? `${judge.model_ref?.model} on ${nameOf(llms, judge.model_ref?.llm_id, `Model provider #${judge.model_ref?.llm_id}`)}, ${(
                         JUDGE_WHEN_LABELS[judge.when] || JUDGE_WHEN_LABELS.low_confidence
                       ).toLowerCase()}`
                     : "Off"}

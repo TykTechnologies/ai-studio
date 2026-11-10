@@ -6,7 +6,7 @@
 // Display order of the groups in the preview; the product's names for each
 // change type and the admin page that shows one of them (when there is one).
 export const CHANGE_TYPES = [
-  { type: 'llm', label: 'LLM providers', path: (id) => `/admin/llms/${id}` },
+  { type: 'llm', label: 'Model providers', path: (id) => `/admin/llms/${id}` },
   { type: 'app', label: 'Apps', path: (id) => `/admin/apps/${id}` },
   { type: 'tool', label: 'Tools', path: (id) => `/admin/tools/${id}` },
   { type: 'datasource', label: 'Data sources', path: (id) => `/admin/datasources/${id}` },

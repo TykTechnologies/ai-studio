@@ -141,11 +141,11 @@ describe("CatalogBrowse", () => {
     await waitFor(() => expect(screen.getAllByTestId("asset-card")).toHaveLength(1));
     expect(lastParams()).toEqual({ type: "llm", catalog: "llm:2" });
     expect(cardNames()).toEqual(["Bedrock Claude"]);
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("LLM providers");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Model providers");
     // Type is fixed by the route, so cards do not repeat it, and the tab
     // counts come from the facets, not the page.
     expect(screen.queryAllByTestId("asset-type-chip")).toHaveLength(0);
-    expect(screen.getByRole("tab", { name: "LLM providers (2)" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Model providers (2)" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("pages through results with the shared pagination control", async () => {

@@ -134,7 +134,7 @@ const NamespaceSelector = ({
             <Checkbox checked={selectedNamespaces.includes(namespace.name)} />
             <ListItemText 
               primary={namespace.name}
-              secondary={`${namespace.edgeCount} edges, ${namespace.llmCount} LLMs`}
+              secondary={`${namespace.edgeCount} edges, ${namespace.llmCount} model providers`}
             />
           </MenuItem>
         ))}

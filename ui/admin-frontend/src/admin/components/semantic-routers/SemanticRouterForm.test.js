@@ -162,11 +162,11 @@ describe("SemanticRouterForm", () => {
     expect(screen.getByTestId("route-card-1")).toBeInTheDocument();
 
     const first = screen.getByTestId("route-card-0");
-    expect(within(first).getByRole("combobox", { name: "LLM provider" })).toBeInTheDocument();
+    expect(within(first).getByRole("combobox", { name: "Model provider" })).toBeInTheDocument();
     fireEvent.click(within(first).getByRole("button", { name: "Model Router" }));
     expect(within(first).getByRole("combobox", { name: "Model router" })).toBeInTheDocument();
     expect(within(first).getByLabelText(/Model alias/)).toBeInTheDocument();
-    expect(within(first).queryByRole("combobox", { name: "LLM provider" })).not.toBeInTheDocument();
+    expect(within(first).queryByRole("combobox", { name: "Model provider" })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Remove route 2" }));
     expect(screen.queryByTestId("route-card-1")).not.toBeInTheDocument();
@@ -183,7 +183,7 @@ describe("SemanticRouterForm", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     expect(await within(card).findByText('"auto" is reserved')).toBeInTheDocument();
-    expect(within(card).getByText("Pick an LLM provider")).toBeInTheDocument();
+    expect(within(card).getByText("Pick a model provider")).toBeInTheDocument();
     expect(within(card).getByText("Model is required")).toBeInTheDocument();
     expect(screen.getByText("Routes with examples need an embedder")).toBeInTheDocument();
     expect(apiClient.post).not.toHaveBeenCalled();
@@ -223,8 +223,8 @@ describe("SemanticRouterForm", () => {
     fireEvent.click(screen.getByText("Add Route"));
     const simple = screen.getByTestId("route-card-0");
     fireEvent.change(within(simple).getByLabelText(/^Route name/), { target: { value: "simple" } });
-    choose("LLM provider", "OpenAI (openai)", simple);
-    fireEvent.change(within(simple).getByLabelText(/^Model/), { target: { value: "gpt-4o-mini" } });
+    choose("Model provider", "OpenAI (openai)", simple);
+    fireEvent.change(within(simple).getByLabelText(/^Model(?! provider)/), { target: { value: "gpt-4o-mini" } });
     choose("Default route", "simple");
 
     // The embedding stage uses an embedder (picked, or created inline).

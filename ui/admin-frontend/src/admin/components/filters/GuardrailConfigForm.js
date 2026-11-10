@@ -1131,7 +1131,7 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
           <FormHelperText>
             Each compliance event names the flagged messages and tool results and the SHA-256 of the text the provider
             was sent. With this on it also records a short excerpt of that text, with credentials and personal data
-            masked. Never recorded for an LLM set not to log bodies.
+            masked. Never recorded for a model provider set not to log bodies.
           </FormHelperText>
           <FormControlLabel
             sx={{ mt: 1, display: "flex" }}

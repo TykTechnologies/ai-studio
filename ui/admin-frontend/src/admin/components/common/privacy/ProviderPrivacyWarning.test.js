@@ -5,7 +5,7 @@ import PrivacyLevelInput from "./PrivacyLevelInput";
 import ProviderPrivacyWarning from "./ProviderPrivacyWarning";
 
 // #503: on the admin tool and data source forms (and the reviewer's final
-// score), a privacy level above every active LLM provider is flagged, since
+// score), a privacy level above every active model provider is flagged, since
 // nothing could then use the resource.
 
 jest.mock("../../../utils/listAll", () => ({
@@ -22,7 +22,7 @@ describe("ProviderPrivacyWarning", () => {
     providers(llm("OpenAI", 50), llm("Claude", 40), llm("Off", 90, false));
     render(<ProviderPrivacyWarning score={60} />);
     const warning = await screen.findByTestId("provider-privacy-warning");
-    expect(warning).toHaveTextContent("No active LLM provider can use this");
+    expect(warning).toHaveTextContent("No active model provider can use this");
     expect(warning).toHaveTextContent("Internal · 50 (OpenAI)");
     expect(listAll).toHaveBeenCalledWith(expect.anything(), "/llms");
   });
@@ -41,7 +41,7 @@ describe("ProviderPrivacyWarning", () => {
   it("gives a neutral hint, not a warning, when there are no active providers", async () => {
     providers(llm("Off", 90, false));
     render(<ProviderPrivacyWarning score={100} />);
-    expect(await screen.findByTestId("provider-privacy-hint")).toHaveTextContent("no active LLM providers yet");
+    expect(await screen.findByTestId("provider-privacy-hint")).toHaveTextContent("no active model providers yet");
     expect(screen.queryByTestId("provider-privacy-warning")).not.toBeInTheDocument();
   });
 

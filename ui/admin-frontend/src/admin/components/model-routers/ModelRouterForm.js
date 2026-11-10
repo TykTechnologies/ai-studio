@@ -524,7 +524,7 @@ const ModelRouterForm = () => {
               value={router.slug}
               onChange={handleSlugChange}
               error={!!errors.slug}
-              helperText={errors.slug || "Clients call it on /v1/chat/completions with the model written as {slug}/<model>. Must not match an LLM's name."}
+              helperText={errors.slug || "Clients call it on /v1/chat/completions with the model written as {slug}/<model>. Must not match a model provider's name."}
               required
             />
           </Grid>
@@ -582,7 +582,7 @@ const ModelRouterForm = () => {
             <Divider sx={{ my: 2 }} />
           </Grid>
 
-          {/* Portal: published in LLM catalogues like an LLM provider, so
+          {/* Portal: published in LLM catalogues like a model provider, so
               teams holding those catalogues can add it to their Apps. */}
           <Grid item xs={12}>
             <Typography variant="h6" gutterBottom>
@@ -603,7 +603,7 @@ const ModelRouterForm = () => {
               options={catalogues}
               idField="id"
               getOptionLabel={(c) => c.name}
-              helperText="LLM catalogs. Teams holding one of them see the router in the portal and can add it to their Apps."
+              helperText="Model provider catalogs. Teams holding one of them see the router in the portal and can add it to their Apps."
             />
           </Grid>
 
@@ -670,7 +670,7 @@ const ModelRouterForm = () => {
             {router.pools.length === 0 && !errors.pools && (
               <Alert severity="info" sx={{ mb: 2 }}>
                 A router needs at least one pool. A pool matches incoming requests by model name
-                pattern and sends them to one or more LLM providers, trying them in priority order.
+                pattern and sends them to one or more model providers, trying them in priority order.
                 Add a pool to get started.
               </Alert>
             )}
@@ -793,13 +793,13 @@ const ModelRouterForm = () => {
                                   <InputLabel
                                     id={`modelrouterform-llm-${poolIndex}-${vendorIndex}-label`}
                                   >
-                                    LLM
+                                    Model provider
                                   </InputLabel>
                                   <Select
                                     labelId={`modelrouterform-llm-${poolIndex}-${vendorIndex}-label`}
                                     value={vendor.llm_id || ""}
                                     onChange={(e) => updateVendor(poolIndex, vendorIndex, "llm_id", e.target.value)}
-                                    label="LLM"
+                                    label="Model provider"
                                   >
                                     {availableLLMs.map((llm) => (
                                       <MenuItem key={llm.id} value={llm.id}>

@@ -10,7 +10,7 @@ import {
 import ProviderPrivacyWarning from "./ProviderPrivacyWarning";
 
 export const PRIVACY_RULE_HELPER =
-  "LLM providers can only be used with tools and data sources at or below their level.";
+  "Model providers can only be used with tools and data sources at or below their level.";
 
 /**
  * The one privacy control (UX review M4). A named level select and a 0–100
@@ -37,7 +37,7 @@ export default function PrivacyLevelInput({
   name = "privacy_score",
   levelSelectProps = {},
   // Tool and data source forms: warn when the level is above every active
-  // LLM provider (admin-side only; see ProviderPrivacyWarning).
+  // Model provider (admin-side only; see ProviderPrivacyWarning).
   checkProviders = false,
 }) {
   const level = privacyLevelForScore(value);

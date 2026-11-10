@@ -77,7 +77,7 @@ describe("LLMForm licence limit", () => {
       </ThemeProvider>
     );
     await screen.findByDisplayValue("Open AI");
-    fireEvent.click(screen.getByRole("button", { name: /update llm|save|create/i }));
+    fireEvent.click(screen.getByRole("button", { name: /update model provider|save|create/i }));
 
     expect(await screen.findByText(DETAIL)).toBeInTheDocument();
     expect(screen.queryByText("Failed to save LLM. Please try again.")).not.toBeInTheDocument();

@@ -3,7 +3,7 @@ import apiClient from "../../utils/apiClient";
 import { listAll } from "../../utils/listAll";
 
 /**
- * What the embedder fields choose from: LLM providers (for a linked
+ * What the embedder fields choose from: Model providers (for a linked
  * embedder) and the vendors that can embed. Either list comes back empty when
  * the caller may not read it; the fields still render.
  */

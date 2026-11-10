@@ -117,7 +117,7 @@ describe("PortalDashboard", () => {
     expect(within(rows[0]).getByRole("progressbar")).toHaveAttribute("aria-valuenow", "43");
     expect(within(rows[0]).getByTestId("last-access")).toHaveTextContent("3h ago");
     expect(rows[0]).toHaveTextContent("17 requests in 30 days");
-    expect(rows[0]).toHaveTextContent("1 LLM provider, 1 data source");
+    expect(rows[0]).toHaveTextContent("1 model provider, 1 data source");
 
     expect(within(rows[1]).getByTestId("app-status")).toHaveTextContent("Awaiting approval");
     expect(within(rows[1]).getByTestId("budget-cell")).toHaveTextContent("No limit");
@@ -130,7 +130,7 @@ describe("PortalDashboard", () => {
     renderDashboard();
     const counts = await screen.findByTestId("overview-counts");
     expect(pubClient.get).toHaveBeenCalledWith("/common/catalog", { params: { page_size: "6", sort: "newest" } });
-    expect(within(counts).getByRole("link", { name: /2\s*LLM providers/ })).toHaveAttribute("href", "/portal/catalog/llms");
+    expect(within(counts).getByRole("link", { name: /2\s*Model providers/ })).toHaveAttribute("href", "/portal/catalog/llms");
     expect(within(counts).getByRole("link", { name: /1\s*Data source/ })).toHaveAttribute("href", "/portal/catalog/datasources");
     expect(within(counts).queryByText(/Tools/)).not.toBeInTheDocument();
 
@@ -143,7 +143,7 @@ describe("PortalDashboard", () => {
   it("sends a search to the browse page", async () => {
     renderDashboard();
     await screen.findByTestId("overview-counts");
-    const input = screen.getByPlaceholderText("Search LLM providers, data sources and tools");
+    const input = screen.getByPlaceholderText("Search model providers, data sources and tools");
     fireEvent.change(input, { target: { value: "claude" } });
     fireEvent.submit(input.closest("form"));
     expect(screen.getByTestId("location")).toHaveTextContent("/portal/catalog?q=claude");

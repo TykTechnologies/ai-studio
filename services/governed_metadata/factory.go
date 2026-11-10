@@ -34,7 +34,7 @@ func IsEnterpriseAvailable() bool {
 // BuiltinObjectTypes lists the object types every edition knows about.
 func BuiltinObjectTypes() []ObjectTypeInfo {
 	return []ObjectTypeInfo{
-		{Slug: "llm", Label: "LLM", Source: "builtin"},
+		{Slug: "llm", Label: "Model provider", Source: "builtin"},
 		{Slug: "tool", Label: "Tool", Source: "builtin"},
 		{Slug: "datasource", Label: "Datasource", Source: "builtin"},
 		{Slug: "mcp_server", Label: "MCP server", Source: "builtin"},

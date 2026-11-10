@@ -322,7 +322,7 @@ const LLMForm = () => {
       console.error("Error fetching LLM", error);
       setSnackbar({
         open: true,
-        message: "Failed to fetch LLM details",
+        message: "Failed to fetch model provider details",
         severity: "error",
       });
     } finally {
@@ -522,8 +522,8 @@ const LLMForm = () => {
       navigate("/admin/llms", {
         state: {
           snackbar: metadataWarning
-            ? { message: `${id ? "LLM provider updated" : "LLM provider created"}, but ${metadataWarning}`, severity: "warning" }
-            : { message: id ? "LLM provider updated successfully" : "LLM provider created successfully", severity: "success" },
+            ? { message: `${id ? "Model provider updated" : "Model provider created"}, but ${metadataWarning}`, severity: "warning" }
+            : { message: id ? "Model provider updated successfully" : "Model provider created successfully", severity: "success" },
         },
       });
     } catch (error) {
@@ -557,7 +557,7 @@ const LLMForm = () => {
       }
       if (error.response?.status === 409 && error.response?.data?.errors?.[0]?.code === "QUOTA_EXCEEDED") {
         // The licence's LLM limit: the server says what to remove or whom to ask.
-        setSnackbar({ open: true, message: detail || "The licensed LLM limit has been reached.", severity: "error" });
+        setSnackbar({ open: true, message: detail || "The licensed model provider limit has been reached.", severity: "error" });
         return;
       }
       const slugConflict = slugConflictDetail(error);
@@ -571,7 +571,7 @@ const LLMForm = () => {
       console.error("Error saving LLM", error);
       setSnackbar({
         open: true,
-        message: "Failed to save LLM. Please try again.",
+        message: "Failed to save model provider. Please try again.",
         severity: "error",
       });
     }
@@ -587,22 +587,22 @@ const LLMForm = () => {
   return (
     <>
       <TitleBox top="var(--studio-header-height)">
-        <Typography variant="headingXLarge">{id ? "Edit LLM provider" : "Add LLM provider"}</Typography>
+        <Typography variant="headingXLarge">{id ? "Edit model provider" : "Add model provider"}</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
           to="/admin/llms"
           color="inherit"
         >
-          Back to LLM providers
+          Back to model providers
         </SecondaryLinkButton>
       </TitleBox>
       <Box sx={{ p: 3 }}>
-        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">LLM providers power AI assistants in chats and can be made available to developers in the portal and gateway when set to Active. To control access, each LLM provider must be part of a catalog to be used by specific teams.</Typography>  
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Model providers power AI assistants in chats and can be made available to developers in the portal and gateway when set to Active. To control access, each model provider must be part of a catalog to be used by specific teams.</Typography>  
       </Box>
       <ContentBox sx={{ pt: 0 }}>
         <Box component="form" onSubmit={handleSubmit} noValidate>
-          <SectionTitle>LLM Description</SectionTitle>
+          <SectionTitle>Model provider description</SectionTitle>
           <Grid container spacing={3}>
             <Grid item xs={12}>
               <TextField
@@ -613,7 +613,7 @@ const LLMForm = () => {
                 onChange={handleChange}
                 error={!!errors.name}
                 helperText={errors.name || (nameChanged ? 
-                  `Warning: Changing the LLM name will change the REST endpoint from /llm/rest/${generateSlug(originalName)}/ to /llm/rest/${generateSlug(llm.name)}/` : "")}
+                  `Warning: Changing the model provider name will change the REST endpoint from /llm/rest/${generateSlug(originalName)}/ to /llm/rest/${generateSlug(llm.name)}/` : "")}
                 required
                 FormHelperTextProps={{
                   sx: nameChanged ? { color: theme.palette.warning.main } : {}
@@ -694,7 +694,7 @@ const LLMForm = () => {
                 name="default_model"
                 value={llm.default_model}
                 onChange={handleChange}
-                helperText="Specify the default model to use for this LLM (e.g., gpt-4, claude-2)"
+                helperText="Specify the default model to use for this model provider (e.g., gpt-4, claude-2)"
               />
             </Grid>
           </Grid>
@@ -772,9 +772,9 @@ const LLMForm = () => {
               ) : (
                 <>
                   <Typography variant="body2" color="text.secondary" paragraph>
-                    Some LLMs do not require an API Key for access, or have a
-                    default URL (for example Anthropic and OpenAI). If enabling an
-                    LLM for the AI Gateway, the endpoint is required for proper
+                    Some model providers do not require an API Key for access, or have a
+                    default URL (for example Anthropic and OpenAI). If enabling a
+                    model provider for the AI Gateway, the endpoint is required for proper
                     functioning.
                   </Typography>
                   <Grid container spacing={3}>
@@ -822,7 +822,7 @@ const LLMForm = () => {
                           error={!!errors.vendor_workspace_id}
                           helperText={
                             errors.vendor_workspace_id ||
-                            "Optional. Pins every call for this LLM (gateway calls, batches and Chat sessions) to this workspace; client-supplied workspace headers are ignored. Leave empty to use the API key's default workspace."
+                            "Optional. Pins every call for this model provider (gateway calls, batches and Chat sessions) to this workspace; client-supplied workspace headers are ignored. Leave empty to use the API key's default workspace."
                           }
                         />
                       </Grid>
@@ -946,7 +946,7 @@ const LLMForm = () => {
             <AccordionDetails>
               <Typography variant="body2" color="text.secondary" paragraph>
                 The following settings will be used in the Portal UI that your
-                end-users / developers will see when browsing for LLMs to use.
+                end-users / developers will see when browsing for model providers to use.
               </Typography>
               <Grid container spacing={3}>
                 <Grid item xs={12}>
@@ -983,7 +983,7 @@ const LLMForm = () => {
                     label="Disable Request/Response Body Logging"
                   />
                   <Typography variant="caption" color="text.secondary" display="block">
-                    When enabled, request and response bodies will not be stored in proxy logs for this LLM provider.
+                    When enabled, request and response bodies will not be stored in proxy logs for this model provider.
                     Otherwise the log stores the request as it left the request filters (a redaction is logged
                     redacted), but a request a filter blocks is logged as it was sent.
                   </Typography>
@@ -992,7 +992,7 @@ const LLMForm = () => {
                   <AllowInternalHostSwitch
                     checked={llm.allow_internal_host}
                     onChange={(v) => setLLM((prev) => ({ ...prev, allow_internal_host: v }))}
-                    target="the LLM's endpoint (and its linked embedders)"
+                    target="the model provider's endpoint (and its linked embedders)"
                   />
                 </Grid>
               </Grid>
@@ -1000,7 +1000,7 @@ const LLMForm = () => {
           </StyledAccordion>
 
           <ResourceTracingSection
-            resourceLabel="LLM"
+            resourceLabel="Model provider"
             contentModeMax={llm.tracing_content_mode_max}
             onContentModeMaxChange={(v) => setLLM((prev) => ({ ...prev, tracing_content_mode_max: v }))}
             propagationOptOut={llm.tracing_propagation_opt_out}
@@ -1081,7 +1081,7 @@ const LLMForm = () => {
             </AccordionSummary>
             <AccordionDetails>
               <Typography variant="body2" color="textSecondary" paragraph>
-                Select plugins to attach to this LLM. Plugins are executed in the order they are selected.
+                Select plugins to attach to this model provider. Plugins are executed in the order they are selected.
                 Each plugin type (hook type) determines when the plugin is executed in the request lifecycle.
               </Typography>
               
@@ -1208,7 +1208,7 @@ const LLMForm = () => {
               Cancel
             </SecondaryOutlineButton>
             <PrimaryButton variant="contained" type="submit">
-              {id ? "Update LLM provider" : "Add LLM provider"}
+              {id ? "Update model provider" : "Add model provider"}
             </PrimaryButton>
           </Box>
         </Box>
@@ -1236,14 +1236,14 @@ const LLMForm = () => {
         <DialogTitle>Confirm Name Change</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            You are about to change the LLM name from "{originalName}" to "{llm.name}". 
+            You are about to change the model provider name from "{originalName}" to "{llm.name}". 
             This will change the following endpoints:
             <ul>
               <li>REST endpoint: /llm/rest/{generateSlug(originalName)}/ → /llm/rest/{generateSlug(llm.name)}/</li>
               <li>Stream endpoint: /llm/stream/{generateSlug(originalName)}/ → /llm/stream/{generateSlug(llm.name)}/</li>
               <li>AI endpoint: /ai/{generateSlug(originalName)}/v1 → /ai/{generateSlug(llm.name)}/v1</li>
             </ul>
-            This will affect existing integrations that reference this LLM.
+            This will affect existing integrations that reference this model provider.
             Are you sure you want to continue?
           </DialogContentText>
         </DialogContent>

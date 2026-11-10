@@ -19,13 +19,13 @@ const menuItems = [
     id: 'catalogs',
     text: 'Catalogs',
     subItems: [
-      { id: 'catalog-llms', text: 'LLM providers', path: '/admin/catalogs/llms' },
+      { id: 'catalog-llms', text: 'Model providers', path: '/admin/catalogs/llms' },
     ],
   },
   {
     id: 'llm-management',
-    text: 'LLM management',
-    subItems: [{ id: 'llms', text: 'LLM providers', path: '/admin/llms' }],
+    text: 'Model management',
+    subItems: [{ id: 'llms', text: 'Model providers', path: '/admin/llms' }],
   },
   {
     id: 'ai-portal',
@@ -77,13 +77,13 @@ describe('drawer highlighting follows the URL', () => {
     renderAt('/admin/catalogs/llms/2');
     expect(selectedIds()).toEqual(['catalogs', 'catalog-llms']);
     // The group with the match is opened, the other one is left closed.
-    expect(screen.getByRole('link', { name: 'LLM providers' })).toHaveAttribute('href', '/admin/catalogs/llms');
+    expect(screen.getByRole('link', { name: 'Model providers' })).toHaveAttribute('href', '/admin/catalogs/llms');
   });
 
   it('highlights the LLM management entry on /admin/llms/2', () => {
     renderAt('/admin/llms/2');
     expect(selectedIds()).toEqual(['llm-management', 'llms']);
-    expect(screen.getByRole('link', { name: 'LLM providers' })).toHaveAttribute('href', '/admin/llms');
+    expect(screen.getByRole('link', { name: 'Model providers' })).toHaveAttribute('href', '/admin/llms');
   });
 
   it('highlights nothing on a page without a menu entry', () => {

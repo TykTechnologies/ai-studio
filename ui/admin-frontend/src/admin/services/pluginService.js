@@ -124,7 +124,7 @@ class PluginService {
           // Include associated LLMs if present with full data
           llms: plugin.relationships?.llms?.data?.map(llm => ({
             id: llm.id,
-            name: llm.attributes?.name || 'Unknown LLM',
+            name: llm.attributes?.name || 'Unknown model provider',
             vendor: llm.attributes?.vendor || 'Unknown',
             isActive: llm.attributes?.active !== undefined ? llm.attributes.active : true,
           })) || [],
@@ -268,7 +268,7 @@ class PluginService {
       return [];
     } catch (error) {
       console.error('Error fetching plugins for LLM:', error);
-      throw new Error(error.response?.data?.message || 'Failed to fetch plugins for LLM');
+      throw new Error(error.response?.data?.message || 'Failed to fetch plugins for model provider');
     }
   }
 
@@ -292,7 +292,7 @@ class PluginService {
       return [];
     } catch (error) {
       console.error('Error updating LLM plugins:', error);
-      throw new Error(error.response?.data?.message || 'Failed to update LLM plugins');
+      throw new Error(error.response?.data?.message || 'Failed to update model provider plugins');
     }
   }
 

@@ -53,7 +53,7 @@ export { emptyForm, formToInput, connectionToForm, ProbePanel };
 
 /**
  * TykConnectionForm creates or edits a connection on its own page, like the
- * LLM provider and tool catalog forms. Tokens are never loaded back from the
+ * Model provider and tool catalog forms. Tokens are never loaded back from the
  * server; leaving the field empty keeps the stored token.
  */
 const TykConnectionForm = () => {
