@@ -295,6 +295,33 @@ func TestAppliedSnapshot_SixteenMegabytes(t *testing.T) {
 	})
 }
 
+// The columns are bound to the ciphertext unambiguously: values that run
+// into each other (a field that contains what would separate two fields)
+// give different bytes.
+func TestAppliedSnapshotAAD_IsUnambiguous(t *testing.T) {
+	at := time.Unix(1794354337, 0)
+	rows := []database.AppliedSnapshot{
+		{Checksum: "c", Version: "a\x00b", Namespace: "c", AppliedAt: at},
+		{Checksum: "c", Version: "a", Namespace: "b\x00c", AppliedAt: at},
+		{Checksum: "c", Version: "ab", Namespace: "c", AppliedAt: at},
+		{Checksum: "c", Version: "a", Namespace: "bc", AppliedAt: at},
+		{Checksum: "ca", Version: "", Namespace: "bc", AppliedAt: at},
+		{Checksum: "c", Version: "a", Namespace: "bc", AppliedAt: at.Add(time.Second)},
+	}
+	seen := map[string]int{}
+	for i := range rows {
+		aad := string(appliedSnapshotAAD(&rows[i]))
+		if j, dup := seen[aad]; dup {
+			t.Errorf("rows %d and %d are bound with the same bytes", j, i)
+		}
+		seen[aad] = i
+	}
+	// Sub-second precision does not count: databases keep different ones.
+	a := database.AppliedSnapshot{Checksum: "c", AppliedAt: at}
+	b := database.AppliedSnapshot{Checksum: "c", AppliedAt: at.Add(300 * time.Millisecond)}
+	assert.Equal(t, appliedSnapshotAAD(&a), appliedSnapshotAAD(&b))
+}
+
 func TestNewSnapshotSealer_NeedsAKey(t *testing.T) {
 	_, err := newSnapshotSealer("")
 	require.Error(t, err)

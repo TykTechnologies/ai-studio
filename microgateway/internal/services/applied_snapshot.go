@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/hkdf"
 	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"strconv"
@@ -59,11 +60,24 @@ func newSnapshotSealer(encryptionKey string) (*snapshotSealer, error) {
 	return &snapshotSealer{aead: aead}, nil
 }
 
-// appliedSnapshotAAD binds a row's columns to its ciphertext. The time is in
-// whole seconds: databases keep different precisions.
+// appliedSnapshotAAD binds a row's columns to its ciphertext. Each field is
+// written with its length in front, so no two different rows give the same
+// bytes whatever their values contain. The time is in whole seconds:
+// databases keep different precisions.
 func appliedSnapshotAAD(row *database.AppliedSnapshot) []byte {
-	return []byte(appliedSnapshotInfo + "\x00" + row.Checksum + "\x00" + row.Version + "\x00" + row.Namespace + "\x00" +
-		strconv.FormatInt(row.AppliedAt.UTC().Unix(), 10))
+	fields := []string{
+		appliedSnapshotInfo,
+		row.Checksum,
+		row.Version,
+		row.Namespace,
+		strconv.FormatInt(row.AppliedAt.UTC().Unix(), 10),
+	}
+	var aad []byte
+	for _, f := range fields {
+		aad = binary.BigEndian.AppendUint64(aad, uint64(len(f)))
+		aad = append(aad, f...)
+	}
+	return aad
 }
 
 // snapshotSealers holds, per database, the sealer its sync services store
@@ -128,7 +142,8 @@ var ErrNoStoredSnapshot = errors.New("no applied snapshot is stored")
 // LoadAppliedSnapshot reads the stored snapshot from db and decrypts it with
 // the key derived from encryptionKey. It fails with ErrNoStoredSnapshot when
 // there is none, and with an error when the row does not open under this key
-// (another ENCRYPTION_KEY, or a row changed in the database).
+// (another ENCRYPTION_KEY, or a row whose snapshot or other columns were
+// changed in the database).
 func LoadAppliedSnapshot(db *gorm.DB, encryptionKey string) (*StoredSnapshot, error) {
 	sealer, err := newSnapshotSealer(encryptionKey)
 	if err != nil {
@@ -143,7 +158,7 @@ func LoadAppliedSnapshot(db *gorm.DB, encryptionKey string) (*StoredSnapshot, er
 	}
 	plain, err := sealer.aead.Open(nil, nil, row.Snapshot, appliedSnapshotAAD(&row))
 	if err != nil {
-		return nil, fmt.Errorf("applied snapshot does not decrypt with this ENCRYPTION_KEY: %w", err)
+		return nil, fmt.Errorf("applied snapshot does not decrypt with this ENCRYPTION_KEY (it was stored with another key, or its row was changed in the database): %w", err)
 	}
 	snap := &pb.ConfigurationSnapshot{}
 	if err := proto.Unmarshal(plain, snap); err != nil {
