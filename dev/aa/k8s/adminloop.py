@@ -2,7 +2,7 @@
 
 For each Studio in STUDIOS, two threads with a user of their own (Studio keeps
 one session per user, so sharing one would log the other out):
-  write   create and delete a group, every WRITE_INTERVAL seconds
+  write   update a setting (the branding title: one UPDATE), every WRITE_INTERVAL seconds
   login   log in, every LOGIN_INTERVAL seconds
 Every request is one JSON line on stdout: time, site, kind, status, error code
 and duration. A request that gets no answer has status 0.
@@ -72,19 +72,11 @@ def write_loop(site, base, interval):
             logged_in = status == 200
         if logged_in:
             n += 1
-            name = "aa-load-%s-%d-%d" % (site, n, int(tick))
-            body = {"data": {"type": "group", "attributes": {"name": name, "members": [], "catalogues": [], "data_catalogues": [], "tool_catalogues": []}}}
-            status, raw = timed(site, "write-create", lambda: client.call("POST", "/api/v1/groups", body))
+            # One UPDATE in Studio's database, available in both editions.
+            body = {"app_title": "aa-load %s %d" % (site, n)}
+            status, _ = timed(site, "write", lambda: client.call("PUT", "/api/v1/branding/settings", body))
             if status == 401:
                 client, logged_in = Client(base), False
-            elif 200 <= status < 300:
-                try:
-                    gid = json.loads(raw)["data"]["id"]
-                    status, _ = timed(site, "write-delete", lambda: client.call("DELETE", "/api/v1/groups/%s" % gid))
-                    if status == 401:
-                        client, logged_in = Client(base), False
-                except Exception:
-                    pass
         time.sleep(max(0, interval - (time.time() - tick)))
 
 

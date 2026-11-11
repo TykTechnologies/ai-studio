@@ -10,6 +10,7 @@ kind: Deployment
 metadata: {name: mockllm, namespace: aa-load}
 spec:
   replicas: 1
+  strategy: {type: Recreate} # a second copy does not fit on the node
   selector: {matchLabels: {app: mockllm}}
   template:
     metadata: {labels: {app: mockllm}}
@@ -40,6 +41,7 @@ kind: Deployment
 metadata: {name: gwbench-short, namespace: aa-load}
 spec:
   replicas: 1
+  strategy: {type: Recreate} # a second copy does not fit on the node
   selector: {matchLabels: {app: gwbench, half: short}}
   template:
     metadata: {labels: {app: gwbench, half: short}}
@@ -86,6 +88,7 @@ kind: Deployment
 metadata: {name: gwbench-stream, namespace: aa-load}
 spec:
   replicas: 1
+  strategy: {type: Recreate} # a second copy does not fit on the node
   selector: {matchLabels: {app: gwbench, half: stream}}
   template:
     metadata: {labels: {app: gwbench, half: stream}}

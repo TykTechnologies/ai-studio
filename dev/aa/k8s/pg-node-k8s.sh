@@ -79,6 +79,9 @@ elif [ ! -s "$PGDATA/PG_VERSION" ] || [ ! -f "$PGDATA/standby.signal" ]; then
 	base_backup "$PRIMARY"
 fi
 
+# The kubelet applies the pod's fsGroup to the volume each time it is mounted
+# (group access, setgid), and PostgreSQL refuses a data directory like that.
+chmod 700 "$PGDATA"
 write_hba
 if [ -f "$PGDATA/standby.signal" ]; then
 	log "starting as a hot standby (primary: $PRIMARY)"

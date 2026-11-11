@@ -1,0 +1,26 @@
+name: aa-one-edge-ceiling
+title: "Active-active · request-rate ceiling of ONE edge on this cluster"
+description: >
+  S5 (short requests, 20 ms upstream, the suite's stop rule) with coarser
+  steps, sent to one edge directly instead of the Service in front of both.
+  It answers what one edge of this cluster sustains, which is what a
+  surviving edge has to carry after a site is lost, so the levels of the
+  failover runs can be read against it. File rates are 1.1 times the gateway
+  rate (the direct arm takes a tenth): 2,000 req/s upward in steps of 500.
+mode: open
+baseline: direct
+timeout: 30s
+overhead_slo_ms: 25
+open:
+  arrival: poisson
+  rate: {kind: steps, start: 2200, step: 550, max: 11000, hold: 30s}
+  warmup: 5s
+  max_in_flight: 20000
+  max_lag_ms: 2
+  stop: {max_error_rate: 0.02, max_p99_overhead_ms: 500, metric: total}
+cells:
+  - name: rest-20ms
+    body: {format: openai, model: mock-model, prompt_bytes: 1024, max_tokens: 16}
+    arms:
+      - {name: gateway, target: gateway, path: /llm/call/mock-20ms/v1/chat/completions, weight: 1}
+      - {name: direct, target: mock, path: "{mock:20ms}/v1/chat/completions", weight: 0.1}

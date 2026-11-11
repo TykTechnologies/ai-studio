@@ -71,7 +71,9 @@ cmd_apply() {
 	kubectl --context "$CTX" apply -f "$HERE/00-namespace.yaml"
 	k get secret aa-shared >/dev/null 2>&1 || die "run 'aa-k8s.sh secrets' first"
 	k create configmap aa-pg-node --from-file=pg-node-k8s.sh="$HERE/pg-node-k8s.sh" --dry-run=client -o yaml | k apply -f -
-	k create configmap aa-scenarios --from-file="$HERE/scenarios" --dry-run=client -o yaml | k apply -f -
+	# This stack's scenarios, and the benchmark's A/A calibration as it is.
+	k create configmap aa-scenarios --from-file="$HERE/scenarios" \
+		--from-file="$HERE/../../../benchmarks/gateway/scenarios/s0-aa-calibration.yaml" --dry-run=client -o yaml | k apply -f -
 	k create configmap aa-adminloop --from-file=adminloop.py="$HERE/adminloop.py" --dry-run=client -o yaml | k apply -f -
 	k create configmap aa-observer --from-file=observer.py="$HERE/observer.py" --from-file=observer-pg.sh="$HERE/observer-pg.sh" --dry-run=client -o yaml | k apply -f -
 	k apply -f "$HERE/50-observers.yaml"
@@ -203,7 +205,7 @@ cmd_fetch() {
 	done
 	echo "$rows" > "$out/proxy-log-rows.after"
 	local p; p=$(primary)
-	sql "$p" "SELECT response_code || ' ' || count(*) FROM proxy_logs GROUP BY 1 ORDER BY 1" midsommar > "$out/proxy-log-rows.by-code"
+	sql "$p" "SELECT response_code || ' ' || count(*) FROM proxy_logs GROUP BY response_code ORDER BY response_code" midsommar > "$out/proxy-log-rows.by-code"
 	python3 "$HERE/analytics-check.py" "$out"
 	stamp "results of $name in $out"
 }
