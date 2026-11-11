@@ -1670,10 +1670,18 @@ dev-aa-env:
 		done < dev/.env.secrets; \
 	fi
 
+# The stack's edition is kept in dev/.env as AA_EDITION, where every compose
+# command (these targets and dev/aa/aa.sh) reads it; EDITION there belongs to
+# the standard stack.
+define aa_set_edition
+{ grep -v "^AA_EDITION=" dev/.env || true; echo "AA_EDITION=$(1)"; } > dev/.env.merged && mv dev/.env.merged dev/.env
+endef
+
 # Start the two-site stack (Community Edition)
 dev-aa: dev-aa-env
 	@echo "🚀 Starting the two-site active-active stack (detached)..."
-	cd dev && EDITION=ce $(AA_COMPOSE) up --build -d --wait
+	@$(call aa_set_edition,ce)
+	cd dev && $(AA_COMPOSE) up --build -d --wait
 	@echo "✅ Started. UI http://localhost:3100, site-a API :8180, site-b API :8280."
 	@echo "   make dev-aa-status, then dev/aa/aa.sh to stop a site, promote, cut a control plane."
 
@@ -1688,17 +1696,16 @@ dev-aa-ent: ent-link dev-aa-env
 		exit 1; \
 	fi
 	@echo "🏢 Starting the two-site active-active stack, Enterprise (detached)..."
-	cd dev && EDITION=ent $(AA_COMPOSE) up --build -d --wait
+	@$(call aa_set_edition,ent)
+	cd dev && $(AA_COMPOSE) up --build -d --wait
 	@echo "✅ Started. UI http://localhost:3100, site-a API :8180, site-b API :8280."
 
 # Rebuild Studio and the microgateway from the working tree, in the edition
 # the stack was started in, and restart the replicas and edges on the new
 # binaries.
 dev-aa-rebuild:
-	@edition=$$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' midsommar-aa-studio-a 2>/dev/null | sed -n 's/^EDITION=//p'); \
-	if [ -z "$$edition" ]; then echo "❌ The two-site stack is not created: run make dev-aa (or dev-aa-ent) first."; exit 1; fi; \
-	echo "🔨 Rebuilding ($$edition)..."; \
-	cd dev && EDITION=$$edition $(AA_COMPOSE) run --rm build
+	@echo "🔨 Rebuilding ($$(sed -n 's/^AA_EDITION=//p' dev/.env | grep . || echo ce))..."
+	cd dev && $(AA_COMPOSE) run --rm build
 	@# The edges last: an edge that starts while no control plane answers exits.
 	cd dev && $(AA_COMPOSE) stop edge-a edge-b
 	cd dev && $(AA_COMPOSE) restart studio-a studio-b

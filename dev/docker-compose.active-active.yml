@@ -44,7 +44,7 @@ x-studio: &studio
   networks: [aa]
 
 x-studio-env: &studio-env
-  EDITION: ${EDITION:-ce}
+  EDITION: ${AA_EDITION:-ce} # set in dev/.env by make dev-aa / dev-aa-ent
   DATABASE_TYPE: postgres
   # One multi-host DSN on both sites: the driver settles on whichever node
   # accepts writes.
@@ -84,7 +84,7 @@ x-edge: &edge
   networks: [aa]
 
 x-edge-env: &edge-env
-  EDITION: ${EDITION:-ce}
+  EDITION: ${AA_EDITION:-ce} # set in dev/.env by make dev-aa / dev-aa-ent
   GATEWAY_MODE: edge
   EDGE_NAMESPACE: default
   # dev/.env.gateway names one control plane; here each edge lists two
@@ -140,10 +140,10 @@ services:
       context: ..
       dockerfile: dev/Dockerfile.studio
       args:
-        EDITION: ${EDITION:-ce}
+        EDITION: ${AA_EDITION:-ce}
     container_name: midsommar-aa-build
     environment:
-      EDITION: ${EDITION:-ce}
+      EDITION: ${AA_EDITION:-ce}
     command:
       - sh
       - -ec
