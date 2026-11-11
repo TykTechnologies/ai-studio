@@ -1,0 +1,26 @@
+name: aa-stream
+title: "Active-active · streams at a constant rate, through both edges"
+description: >
+  The streaming half of a failover-under-load run: S7's request (2 KB prompt,
+  300 ms to first token, 200 tokens at 50 tokens/s, about 4 s a stream) at a
+  constant Poisson rate, through the Service in front of both edges, with a
+  tenth as many sent straight to the mock. The file's rate is 1.1 times the
+  gateway rate wanted (377 streams/s at the MEDIAN level; --rate-scale 1.822
+  for MAX, 687). Run next to aa-short.yaml, from a load generator of its own.
+mode: open
+baseline: direct
+timeout: 60s
+overhead_slo_ms: 25
+open:
+  arrival: poisson
+  rate: {kind: constant, rps: 414.7, duration: RUN_DURATION}
+  warmup: 30s
+  report_window: 10s
+  max_in_flight: 30000
+  max_lag_ms: 5
+cells:
+  - name: stream-realistic
+    body: {format: openai, stream: true, model: mock-model, prompt_bytes: 2048, max_tokens: 200}
+    arms:
+      - {name: gateway, target: gateway, path: /llm/call/mock-realistic/v1/chat/completions, weight: 1}
+      - {name: direct, target: mock, path: "{mock:realistic}/v1/chat/completions", weight: 0.1}

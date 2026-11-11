@@ -1,0 +1,10 @@
+# One address for both edges, standing in for the load balancer a deployment
+# has in front of them: the load generator sends everything here, each edge
+# takes half, and when a site is lost the survivor takes all of it.
+# The selector matches the pods of both Helm releases (edge-a, edge-b).
+apiVersion: v1
+kind: Service
+metadata: {name: edges, namespace: aa-load}
+spec:
+  selector: {app.kubernetes.io/name: microgateway}
+  ports: [{name: http, port: 8080, targetPort: 8080}]

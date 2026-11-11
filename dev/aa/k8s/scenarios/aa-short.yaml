@@ -1,0 +1,28 @@
+name: aa-short
+title: "Active-active · short requests at a constant rate, through both edges"
+description: >
+  The short-request half of a failover-under-load run (bead
+  midsommar-clean-4x5y.29): S5's request (1 KB prompt, 20 ms upstream) at a
+  constant Poisson rate for the whole run, through the Service in front of
+  both edges, with a tenth as many requests sent straight to the mock as the
+  baseline arm. The rate is the total across both edges; the arms share it
+  10:1, so the file's rate is 1.1 times the gateway rate wanted
+  (6,000 req/s at the MEDIAN level; --rate-scale 1.425 for MAX, 8,551).
+  A fault is injected by dev/aa/k8s/aa-k8s.sh while this runs.
+mode: open
+baseline: direct
+timeout: 30s
+overhead_slo_ms: 25
+open:
+  arrival: poisson
+  rate: {kind: constant, rps: 6600, duration: RUN_DURATION}
+  warmup: 30s
+  report_window: 10s
+  max_in_flight: 30000
+  max_lag_ms: 2
+cells:
+  - name: rest-20ms
+    body: {format: openai, model: mock-model, prompt_bytes: 1024, max_tokens: 16}
+    arms:
+      - {name: gateway, target: gateway, path: /llm/call/mock-20ms/v1/chat/completions, weight: 1}
+      - {name: direct, target: mock, path: "{mock:20ms}/v1/chat/completions", weight: 0.1}

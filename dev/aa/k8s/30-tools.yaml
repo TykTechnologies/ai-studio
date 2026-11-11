@@ -1,0 +1,158 @@
+# The gateway benchmark's own tools (benchmarks/gateway), on the tools nodes:
+# its mock upstream and two load generators, one for short requests and one
+# for streams, because a gwbench process runs one rate and the two halves of a
+# run go side by side. The generators idle until aa-k8s.sh starts a run in
+# them with kubectl exec, and keep the results until they are copied out.
+# TOOLS_IMAGE is replaced by aa-k8s.sh.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: mockllm, namespace: aa-load}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: mockllm}}
+  template:
+    metadata: {labels: {app: mockllm, tools: heavy}}
+    spec:
+      nodeSelector: {aa-load/role: tools}
+      tolerations: [{key: aa-load, operator: Equal, value: tools, effect: NoSchedule}]
+      securityContext:
+        sysctls: [{name: net.ipv4.ip_local_port_range, value: "1024 65535"}]
+      containers:
+        - name: mockllm
+          image: TOOLS_IMAGE
+          command: ["mockllm", "-addr", ":9999"]
+          ports: [{name: http, containerPort: 9999}]
+          resources:
+            requests: {cpu: "3", memory: 2Gi}
+            limits: {cpu: "7", memory: 4Gi}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: mockllm, namespace: aa-load}
+spec:
+  selector: {app: mockllm}
+  ports: [{name: http, port: 9999, targetPort: http}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: gwbench-short, namespace: aa-load}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: gwbench, half: short}}
+  template:
+    metadata: {labels: {app: gwbench, half: short, tools: heavy}}
+    spec:
+      nodeSelector: {aa-load/role: tools}
+      tolerations: [{key: aa-load, operator: Equal, value: tools, effect: NoSchedule}]
+      # The short-request generator and the mock are the two heavy tools:
+      # keep them on different tools nodes.
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector: {matchLabels: {app: mockllm}}
+      securityContext:
+        sysctls: [{name: net.ipv4.ip_local_port_range, value: "1024 65535"}]
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: gwbench
+          image: TOOLS_IMAGE
+          command: ["sleep", "infinity"]
+          env:
+            - {name: GWBENCH_GATEWAY_URL, value: "http://edges:8080"}
+            - {name: GWBENCH_MOCK_URL, value: "http://mockllm:9999"}
+            - {name: GWBENCH_STUDIO_URL, value: "http://studio-a:8080"}
+            - {name: GWBENCH_STATE, value: /state/state.json}
+            - {name: GWBENCH_OUT, value: /bench/results}
+          resources:
+            requests: {cpu: "6", memory: 4Gi}
+            limits: {cpu: "7", memory: 8Gi}
+          volumeMounts:
+            - {name: state, mountPath: /state}
+            - {name: scenarios, mountPath: /bench/scenarios}
+            - {name: results, mountPath: /bench/results}
+      volumes:
+        - name: state
+          secret: {secretName: aa-gwbench-state, optional: true}
+        - name: scenarios
+          configMap: {name: aa-scenarios}
+        - name: results
+          emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: gwbench-stream, namespace: aa-load}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: gwbench, half: stream}}
+  template:
+    metadata: {labels: {app: gwbench, half: stream}}
+    spec:
+      nodeSelector: {aa-load/role: tools}
+      tolerations: [{key: aa-load, operator: Equal, value: tools, effect: NoSchedule}]
+      # Next to the mock, away from the short-request generator.
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector: {matchLabels: {app: gwbench, half: short}}
+      securityContext:
+        sysctls: [{name: net.ipv4.ip_local_port_range, value: "1024 65535"}]
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: gwbench
+          image: TOOLS_IMAGE
+          command: ["sleep", "infinity"]
+          env:
+            - {name: GWBENCH_GATEWAY_URL, value: "http://edges:8080"}
+            - {name: GWBENCH_MOCK_URL, value: "http://mockllm:9999"}
+            - {name: GWBENCH_STUDIO_URL, value: "http://studio-a:8080"}
+            - {name: GWBENCH_STATE, value: /state/state.json}
+            - {name: GWBENCH_OUT, value: /bench/results}
+          resources:
+            requests: {cpu: "4", memory: 4Gi}
+            limits: {cpu: "4", memory: 8Gi}
+          volumeMounts:
+            - {name: state, mountPath: /state}
+            - {name: scenarios, mountPath: /bench/scenarios}
+            - {name: results, mountPath: /bench/results}
+      volumes:
+        - name: state
+          secret: {secretName: aa-gwbench-state, optional: true}
+        - name: scenarios
+          configMap: {name: aa-scenarios}
+        - name: results
+          emptyDir: {}
+---
+# What gwbench does not do: admin API writes and logins through each Studio
+# during a fault. One small loop per Studio, at replicas 0 until a run.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: adminloop, namespace: aa-load}
+spec:
+  replicas: 0
+  selector: {matchLabels: {app: adminloop}}
+  template:
+    metadata: {labels: {app: adminloop}}
+    spec:
+      nodeSelector: {aa-load/role: tools}
+      tolerations: [{key: aa-load, operator: Equal, value: tools, effect: NoSchedule}]
+      terminationGracePeriodSeconds: 2
+      containers:
+        - name: loop
+          image: python:3.12-alpine
+          command: ["python3", "-u", "/scripts/adminloop.py"]
+          env:
+            - {name: STUDIOS, value: "a=http://studio-a:8080,b=http://studio-b:8080"}
+            - {name: ORIGIN, value: "http://studio.aa-load.test"}
+            - {name: WRITE_INTERVAL, value: "1"}
+            - {name: LOGIN_INTERVAL, value: "2"}
+            - name: PROBE_PASSWORD
+              valueFrom: {secretKeyRef: {name: aa-load, key: PROBE_PASSWORD}}
+          resources:
+            requests: {cpu: 100m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 128Mi}
+          volumeMounts: [{name: script, mountPath: /scripts}]
+      volumes:
+        - name: script
+          configMap: {name: aa-adminloop}

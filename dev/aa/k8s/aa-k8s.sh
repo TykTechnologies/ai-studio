@@ -7,9 +7,11 @@
 #   aa-k8s.sh apply                   namespace, PostgreSQL, Studio, control proxies, mock upstream
 #                                     (needs STUDIO_IMAGE and TOOLS_IMAGE; edges are the Helm chart, see README)
 #   aa-k8s.sh status                  pods, roles, replication, replicas, edges
-#   aa-k8s.sh users                   register the load's users and make the two writers administrators
-#   aa-k8s.sh load NAME [DURATION]    start a k6 run (EDGE_RPS, WRITE_RPS, LOGIN_RPS from the environment)
-#   aa-k8s.sh results NAME            that run's failed requests and summary
+#   aa-k8s.sh users                   register the test's own users; make the seeder and the two writers administrators
+#   aa-k8s.sh seed                    gwbench seed: LLMs on the mock, App and key, prices, push to both edges
+#   aa-k8s.sh run NAME [DURATION]     start one run: both gwbench halves and the admin loop
+#                                     (SHORT_SCALE / STREAM_SCALE: --rate-scale, 1 = MEDIAN; SHORT_SCENARIO=aa-ramp-short for the ramp)
+#   aa-k8s.sh fetch NAME              copy that run's results and the admin loop's log to results/NAME (gitignored)
 #
 #   aa-k8s.sh lose-cp a|b             fault 1: that site's Studio held at zero       undo: return-cp
 #   aa-k8s.sh lose-db                 fault 2: the primary's pod killed and held at zero, then promote
@@ -64,16 +66,18 @@ cmd_secrets() {
 }
 
 cmd_apply() {
-	: "${STUDIO_IMAGE:?set STUDIO_IMAGE to the Studio image in the stack registry}" "${TOOLS_IMAGE:?set TOOLS_IMAGE to the benchmark tools image (mockllm)}"
+	: "${STUDIO_IMAGE:?set STUDIO_IMAGE to the Studio image in the stack registry}" "${TOOLS_IMAGE:?set TOOLS_IMAGE to the benchmark tools image (gwbench, mockllm)}"
 	kubectl --context "$CTX" apply -f "$HERE/00-namespace.yaml"
 	k get secret aa-shared >/dev/null 2>&1 || die "run 'aa-k8s.sh secrets' first"
 	k create configmap aa-pg-node --from-file=pg-node-k8s.sh="$HERE/pg-node-k8s.sh" --dry-run=client -o yaml | k apply -f -
-	k create configmap aa-load-script --from-file=load.js="$HERE/load.js" --dry-run=client -o yaml | k apply -f -
+	k create configmap aa-scenarios --from-file="$HERE/scenarios" --dry-run=client -o yaml | k apply -f -
+	k create configmap aa-adminloop --from-file=adminloop.py="$HERE/adminloop.py" --dry-run=client -o yaml | k apply -f -
 	# The roles ConfigMap is the failover state: never reset it on a re-apply.
 	k get configmap aa-pg-roles >/dev/null 2>&1 || k apply -f "$HERE/05-pg-roles.yaml"
 	k apply -f "$HERE/10-postgres.yaml"
 	sed "s|STUDIO_IMAGE|$STUDIO_IMAGE|" "$HERE/20-studio.yaml" | k apply -f -
-	sed "s|TOOLS_IMAGE|$TOOLS_IMAGE|" "$HERE/30-mock-llm.yaml" | k apply -f -
+	k apply -f "$HERE/25-edges-service.yaml"
+	sed "s|TOOLS_IMAGE|$TOOLS_IMAGE|" "$HERE/30-tools.yaml" | k apply -f -
 }
 
 cmd_status() {
@@ -98,7 +102,7 @@ cmd_users() {
 	local pf=$!
 	trap 'kill $pf 2>/dev/null' RETURN
 	sleep 3
-	for u in aa-probe-write-a aa-probe-write-b aa-probe-login-a aa-probe-login-b; do
+	for u in aa-probe-seed aa-probe-write-a aa-probe-write-b aa-probe-login-a aa-probe-login-b; do
 		local jar token
 		jar=$(mktemp)
 		token=$(curl -s -D - -o /dev/null -c "$jar" -H "Origin: http://studio.aa-load.test" http://localhost:18180/csrf-token | tr -d '\r' | awk 'tolower($1)=="x-csrf-token:"{print $2}')
@@ -106,19 +110,52 @@ cmd_users() {
 			-H 'Content-Type: application/json' -d "{\"data\":{\"type\":\"user\",\"attributes\":{\"email\":\"$u@tyk.io\",\"name\":\"$u\",\"password\":\"$pw\",\"with_portal\":true,\"with_chat\":true}}}" http://localhost:18180/auth/register
 		rm -f "$jar"
 	done
-	sql "$p" "UPDATE users SET email_verified = true WHERE email LIKE 'aa-probe-%@tyk.io'; UPDATE users SET is_admin = true WHERE email LIKE 'aa-probe-write-%@tyk.io'" midsommar
+	sql "$p" "UPDATE users SET email_verified = true WHERE email LIKE 'aa-probe-%@tyk.io'; UPDATE users SET is_admin = true WHERE email LIKE 'aa-probe-write-%@tyk.io' OR email = 'aa-probe-seed@tyk.io'" midsommar
 }
 
-cmd_load() {
-	local name=${1:?run name} duration=${2:-10m}
-	sed -e "s|RUN_NAME|aa-load-$name|g" -e "s|RUN_DURATION|$duration|" -e "s|RUN_EDGE_RPS|${EDGE_RPS:-100}|" \
-		-e "s|RUN_WRITE_RPS|${WRITE_RPS:-1}|" -e "s|RUN_LOGIN_RPS|${LOGIN_RPS:-0.5}|" "$HERE/40-load.yaml" | k apply -f -
-	stamp "load run aa-load-$name started for $duration"
+cmd_seed() {
+	local pw
+	pw=$(k get secret aa-load -o jsonpath='{.data.PROBE_PASSWORD}' | base64 -d)
+	# In the short-request generator's pod: it reaches Studio, the mock and
+	# the edges by their Service names. The state file holds the App key.
+	k exec deploy/gwbench-short -- env GWBENCH_ADMIN_PASSWORD="$pw" gwbench seed -email aa-probe-seed@tyk.io \
+		-mock-upstream http://mockllm:9999 -min-edges 2 -state /tmp/state.json
+	k exec deploy/gwbench-short -- cat /tmp/state.json |
+		k create secret generic aa-gwbench-state --from-file=state.json=/dev/stdin --dry-run=client -o yaml | k apply -f -
+	k rollout restart deployment gwbench-short gwbench-stream
+	k rollout status deployment gwbench-short --timeout=120s
+	k rollout status deployment gwbench-stream --timeout=120s
 }
 
-cmd_results() {
-	local name=${1:?run name}
-	k logs "job/aa-load-$name" --tail=-1
+# start_half <short|stream> <run name> <scenario> <duration> <rate scale> <edge whose /metrics is sampled>
+start_half() {
+	k exec "deploy/gwbench-$1" -- sh -c "
+		sed 's/RUN_DURATION/$4/' /bench/scenarios/$3.yaml > /tmp/$2-$1.yaml &&
+		nohup gwbench run -no-analytics-check -rate-scale $5 -label '$2 ($3 x$5)' \
+			-metrics http://edge-$6-microgateway:8080/metrics /tmp/$2-$1.yaml > /bench/results/$2-$1.log 2>&1 &"
+}
+
+cmd_run() {
+	local name=${1:?run name} duration=${2:-12m}
+	k scale deployment adminloop --replicas=1 >/dev/null
+	k rollout status deployment adminloop --timeout=60s >/dev/null
+	# Two processes, because gwbench runs one rate at a time; the analytics
+	# check is done once for both afterwards (they share the App).
+	start_half short "$name" "${SHORT_SCENARIO:-aa-short}" "$duration" "${SHORT_SCALE:-1}" a
+	start_half stream "$name" aa-stream "$duration" "${STREAM_SCALE:-1}" b
+	stamp "run $name started for $duration (short x${SHORT_SCALE:-1}, stream x${STREAM_SCALE:-1})"
+}
+
+cmd_fetch() {
+	local name=${1:?run name} out="$HERE/results/${1}" half pod
+	mkdir -p "$out"
+	for half in short stream; do
+		pod=$(k get pod -l "app=gwbench,half=$half" -o jsonpath='{.items[0].metadata.name}')
+		kubectl --context "$CTX" cp "$NS/$pod:/bench/results" "$out/$half" >/dev/null
+	done
+	k logs deploy/adminloop --tail=-1 > "$out/adminloop.jsonl"
+	k scale deployment adminloop --replicas=0 >/dev/null
+	stamp "results of $name in $out"
 }
 
 cmd_lose_cp() { local s; s=$(site "${1:-}"); stamp "fault: studio-$s to zero"; k scale deployment "studio-$s" --replicas=0; }
@@ -218,8 +255,9 @@ secrets) cmd_secrets ;;
 apply) cmd_apply ;;
 status) cmd_status ;;
 users) cmd_users ;;
-load) cmd_load "${2:-}" "${3:-}" ;;
-results) cmd_results "${2:-}" ;;
+seed) cmd_seed ;;
+run) cmd_run "${2:-}" "${3:-}" ;;
+fetch) cmd_fetch "${2:-}" ;;
 lose-cp) cmd_lose_cp "${2:-}" ;;
 return-cp) cmd_return_cp "${2:-}" ;;
 lose-db) cmd_lose_db ;;
@@ -232,5 +270,5 @@ cut-cp) cmd_cp 0 "${2:-}" ;;
 restore-cp) cmd_cp 1 "${2:-}" ;;
 kill-edge) cmd_kill_edge "${2:-}" ;;
 teardown) cmd_teardown "${2:-}" ;;
-*) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+*) sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
