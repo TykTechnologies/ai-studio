@@ -327,3 +327,75 @@ func (r *pulseRecorder) RecordComplianceEvents(_ context.Context, es []*models.C
 	r.events += len(es)
 	r.mu.Unlock()
 }
+
+// pulseRows reads everything a pulse stores, with what differs by nature
+// between two stores of the same pulse (row ids, gorm's own timestamps)
+// cleared.
+func pulseRows(t *testing.T, db *gorm.DB) (logs []models.ProxyLog, records []models.LLMChatRecord, events []models.ComplianceEvent, calls []models.ToolCallRecord) {
+	t.Helper()
+	require.NoError(t, db.Order("request_id, response_code").Find(&logs).Error)
+	require.NoError(t, db.Order("cost").Find(&records).Error)
+	require.NoError(t, db.Order("filter_name").Find(&events).Error)
+	require.NoError(t, db.Order("name").Find(&calls).Error)
+	for i := range logs {
+		logs[i].Model = gorm.Model{}
+		logs[i].ID = 0
+		logs[i].TimeStamp = logs[i].TimeStamp.UTC()
+	}
+	for i := range records {
+		records[i].Model = gorm.Model{}
+		records[i].ID = 0
+		records[i].TimeStamp = records[i].TimeStamp.UTC()
+	}
+	for i := range events {
+		events[i].Model = gorm.Model{}
+		events[i].TimeStamp = events[i].TimeStamp.UTC()
+	}
+	for i := range calls {
+		calls[i].Model = gorm.Model{}
+		calls[i].ID = 0
+		calls[i].TimeStamp = calls[i].TimeStamp.UTC()
+	}
+	return
+}
+
+// The synchronous store of a pulse with a boot ID writes exactly the rows
+// the background writer writes for the same pulse without one: the same
+// proxy logs (the no-usage row included), chat records, compliance events
+// (marked for the App's owners the same way) and tool calls, field for
+// field.
+func TestSendAnalyticsPulse_SameRowsWithAndWithoutBatchID(t *testing.T) {
+	pulse := batchPulse("", 7)
+	pulse.ComplianceEvents[0].Metadata = `{"owner_visible":true,"rule":"pii"}`
+	pulse.AnalyticsEvents[0].RequestedModel = "gpt-4o-latest"
+	pulse.AnalyticsEvents[0].OnBehalfOf = "user@example.com"
+	pulse.AnalyticsEvents[1].ServiceTier = "batch"
+
+	// Without a boot ID: the background writer.
+	asyncDB := setupPulseTestDB(t)
+	a, _ := pulseReplicas(t, asyncDB)
+	_, err := a.SendAnalyticsPulse(context.Background(), proto.Clone(pulse).(*pb.AnalyticsPulse))
+	require.NoError(t, err)
+	want := onePulseStored
+	want.batches = 0
+	require.Eventually(t, func() bool { return countPulseStored(t, asyncDB) == want }, 5*time.Second, 20*time.Millisecond)
+	wantLogs, wantRecords, wantEvents, wantCalls := pulseRows(t, asyncDB)
+
+	// With one: the synchronous, at-most-once store.
+	syncDB := setupPulseTestDB(t)
+	b, _ := pulseReplicas(t, syncDB)
+	withID := proto.Clone(pulse).(*pb.AnalyticsPulse)
+	withID.BootId = "boot-1"
+	_, err = b.SendAnalyticsPulse(context.Background(), withID)
+	require.NoError(t, err)
+	gotLogs, gotRecords, gotEvents, gotCalls := pulseRows(t, syncDB)
+
+	require.Len(t, gotLogs, 3)
+	require.Len(t, gotRecords, 2)
+	assert.Equal(t, wantLogs, gotLogs, "proxy logs")
+	assert.Equal(t, wantRecords, gotRecords, "chat records")
+	assert.Equal(t, wantEvents, gotEvents, "compliance events")
+	assert.Equal(t, wantCalls, gotCalls, "tool calls")
+	require.Len(t, gotEvents, 1)
+	assert.True(t, gotEvents[0].OwnerVisible, "owner-visible events are marked on both paths")
+}
