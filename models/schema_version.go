@@ -124,7 +124,11 @@ const (
 	//     (midsommar-clean-zmwd.39).
 	// 38: cluster_counters (new table, additive): counters every replica
 	//     draws from; the budget sync sequence (midsommar-clean-4x5y.9).
-	SchemaVersion          = 38
+	// 39: cluster_nodes csrf_key_fp, csrf_key_set, secret_key_fp,
+	//     microgateway_key_fp and grpc_auth_token_fp (nullable, additive):
+	//     fingerprints of the secrets replicas must share, for the cluster
+	//     status to compare (midsommar-clean-4x5y.21).
+	SchemaVersion          = 39
 	MinReaderSchemaVersion = 26
 )
 

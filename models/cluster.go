@@ -33,6 +33,17 @@ type ClusterNode struct {
 	// existed, which means eligible. A pointer without a gorm default: a
 	// bool with default:true would turn an explicit false into true.
 	LeaderEligible *bool `json:"leader_eligible" gorm:"column:leader_eligible"`
+	// Fingerprints of the secrets every replica must share
+	// (pkg/cluster.Fingerprint: keyed and truncated, never the value), so
+	// the cluster status can say when replicas disagree. Nil when the
+	// replica does not use the setting, and on rows written before the
+	// columns existed. CSRFKeySet is false when the replica generated its
+	// CSRF key because CSRF_KEY is unset; its fingerprint is then nil.
+	CSRFKeyFP         *string `json:"-" gorm:"column:csrf_key_fp;size:32"`
+	CSRFKeySet        *bool   `json:"-" gorm:"column:csrf_key_set"`
+	SecretKeyFP       *string `json:"-" gorm:"column:secret_key_fp;size:32"`
+	MicrogatewayKeyFP *string `json:"-" gorm:"column:microgateway_key_fp;size:32"`
+	GRPCAuthTokenFP   *string `json:"-" gorm:"column:grpc_auth_token_fp;size:32"`
 }
 
 // CanLead reports whether the replica may take the leader lease.

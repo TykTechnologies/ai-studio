@@ -387,6 +387,17 @@ reachable a control plane cannot authenticate a caller at all.
    replica is live (a random per-process key breaks forms across
    replicas), and warn in cluster status when replicas disagree on it or
    on the hash of `MICROGATEWAY_ENCRYPTION_KEY`.
+
+   Shared secrets (built): each replica records in its `cluster_nodes` row
+   a fingerprint of `CSRF_KEY`, `TYK_AI_SECRET_KEY`,
+   `MICROGATEWAY_ENCRYPTION_KEY` and `GRPC_AUTH_TOKEN` (HMAC-SHA-256 with a
+   fixed label, truncated to 32 bits; never the value, never logged or
+   returned) and whether `CSRF_KEY` is set. The cluster status, and a WARN
+   on the replica that notices at start, name the setting and the replicas
+   when live replicas disagree, and when more than one replica runs without
+   `CSRF_KEY`. `CSRF_KEY` is required in that sense only: nothing refuses
+   to start, because a rolling rotation has replicas disagreeing for a
+   while. Details in `features/ClusterControlPlane.md` ("Shared secrets").
 3. **Studio Helm chart.** The Deployment hardcodes `replicas: 1` and
    ignores `replicaCount`, `podDisruptionBudget` and `autoscaling`. Honour
    them, default to `RollingUpdate` when `replicaCount > 1`, add topology

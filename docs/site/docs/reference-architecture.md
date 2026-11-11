@@ -160,7 +160,7 @@ From 2.3, several AI Studio replicas can serve one PostgreSQL database behind a 
 - **Work that must happen once** runs on one replica, the leader: budget aggregation and alerts, the budget sync to edges, marketplace sync and usage reports. If the leader stops, another replica takes over within about 30 seconds (at once on a clean shutdown). A replica restarted after a crash on the same host takes over from its dead predecessor at once (its process is gone), or 5 to 10 seconds after the crash when it is a new container in the same pod, and catches up on the leader's start-up work (marketplace sync, budget sync to edges) when it gets the lease. With SQLite, the one Studio process always leads. Scheduled plugin tasks have their own lease and move the same way.
 - **Upgrades** can roll one replica at a time: database migrations run under a lock, and a replica that stops hands its edges and pushes over to the others. Use a rolling update strategy (the Helm chart's `midsommar.strategy` defaults to `Recreate`, for the single instance it deploys).
 
-`GET /api/v1/cluster/status` (administrators) lists the live replicas, the edges each holds and which one is the leader, and warns about anything that needs attention.
+`GET /api/v1/cluster/status` (administrators) lists the live replicas, the edges each holds and which one is the leader, and warns about anything that needs attention, including replicas whose [shared secrets](#secrets-that-must-match) differ.
 
 What the deployment must provide:
 
@@ -189,8 +189,11 @@ Studio also writes a small amount to its working directory's `data/` folder: upl
 |---|---|---|
 | `GRPC_AUTH_TOKEN` (and `GRPC_AUTH_TOKEN_NEXT` during rotation) | `EDGE_AUTH_TOKEN` | Authenticates edges to the control server. Studio rejects all edges if neither is set. |
 | `MICROGATEWAY_ENCRYPTION_KEY` (exactly 32 characters) | `ENCRYPTION_KEY` | Encrypts provider API keys and other secrets inside configuration snapshots. |
-| `TYK_AI_LICENSE` | `TYK_AI_LICENSE` | Enterprise license. |
+| `TYK_AI_LICENSE` | `TYK_AI_LICENSE` | Enterprise license. The same license on every Studio replica and every edge. |
 | `TYK_AI_SECRET_KEY` | — | Encrypts secrets at rest in Studio's database. If it is unset, secrets are stored unencrypted. Back it up: losing it makes stored secrets unreadable. |
+| `CSRF_KEY` | — | Signs the CSRF tokens of the admin UI and portal. Required with more than one Studio replica: without it each replica generates its own key at start, and a form loaded from one replica is refused by another. |
+
+With several Studio replicas, every setting in the Studio column must have the same value on each replica, in every site. Each replica records a short keyed fingerprint (never the value) of `CSRF_KEY`, `TYK_AI_SECRET_KEY`, `MICROGATEWAY_ENCRYPTION_KEY` and `GRPC_AUTH_TOKEN` with its registration, and `GET /api/v1/cluster/status` warns, naming the setting and the replicas, when live replicas disagree or when more than one replica runs without `CSRF_KEY`. A replica that notices a disagreement when it starts logs the same warning. Replicas are never refused for it: during a rolling rotation they disagree for a while, and the warning goes when the last one has the new value.
 
 Rotate the edge token without downtime: set the new value as `GRPC_AUTH_TOKEN_NEXT` on Studio, roll the edges onto it, then promote it to `GRPC_AUTH_TOKEN`.
 

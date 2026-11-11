@@ -571,6 +571,11 @@ TABLE cluster_nodes
   column `pid_namespace` text
   column `label` text
   column `leader_eligible` numeric
+  column `csrf_key_fp` text
+  column `csrf_key_set` numeric
+  column `secret_key_fp` text
+  column `microgateway_key_fp` text
+  column `grpc_auth_token_fp` text
   constraint PRIMARY KEY (`node_id`)
   autoindex origin=pk unique=1 (node_id)
   index CREATE INDEX `idx_cluster_nodes_last_seen` ON `cluster_nodes`(`last_seen`)

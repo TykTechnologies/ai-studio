@@ -67,6 +67,9 @@ type NodeOptions struct {
 	// headless control plane). It is recorded for operators; the replica's
 	// own code decides whether it contends for the lease.
 	NeverLeads bool
+	// Secrets are the fingerprints of the shared secrets this replica uses
+	// (SharedSecrets.Fingerprints); nil records none.
+	Secrets *SecretFingerprints
 }
 
 // MaxLabelLength bounds NodeOptions.Label (the column's size).
@@ -100,6 +103,7 @@ type Node struct {
 	version  string
 	label    string
 	canLead  bool
+	secrets  SecretFingerprints
 	started  time.Time
 	interval time.Duration
 
@@ -133,6 +137,9 @@ func StartNode(db *gorm.DB, id, version string, opts ...NodeOptions) (*Node, err
 		interval: HeartbeatInterval,
 		stop:     make(chan struct{}),
 		done:     make(chan struct{}),
+	}
+	if o.Secrets != nil {
+		n.secrets = *o.Secrets
 	}
 	if err := n.beat(); err != nil {
 		return nil, fmt.Errorf("cluster: register node %s: %w", id, err)
@@ -181,13 +188,11 @@ func (n *Node) heartbeat() {
 }
 
 func (n *Node) beat() error {
-	return n.db.Model(&models.ClusterNode{}).Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "node_id"}},
-		DoUpdates: clause.Assignments(map[string]interface{}{
-			"last_seen": nowExpr(n.db), "hostname": n.proc.Hostname, "version": n.version,
-			"label": n.label, "leader_eligible": n.canLead,
-		}),
-	}).Create(map[string]interface{}{
+	update := map[string]interface{}{
+		"last_seen": nowExpr(n.db), "hostname": n.proc.Hostname, "version": n.version,
+		"label": n.label, "leader_eligible": n.canLead,
+	}
+	create := map[string]interface{}{
 		"node_id":         n.id,
 		"hostname":        n.proc.Hostname,
 		"version":         n.version,
@@ -198,7 +203,14 @@ func (n *Node) beat() error {
 		"pid":             n.proc.PID,
 		"boot_id":         n.proc.BootID,
 		"pid_namespace":   n.proc.PIDNamespace,
-	}).Error
+	}
+	for column, value := range n.secrets.columns() {
+		update[column], create[column] = value, value
+	}
+	return n.db.Model(&models.ClusterNode{}).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "node_id"}},
+		DoUpdates: clause.Assignments(update),
+	}).Create(create).Error
 }
 
 // prune deletes the rows of nodes silent for NodeRetention. Every node runs
