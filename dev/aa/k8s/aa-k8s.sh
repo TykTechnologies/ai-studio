@@ -301,10 +301,13 @@ cmd_return_site() {
 	local s; s=$(site "${1:-}")
 	stamp "site-$s returns"
 	cmd_rejoin "$s"
+	# The edge is started whatever Studio does: a slow Studio start must not
+	# leave the site without its edge (seen under load, when the rejoining
+	# standby held commits up for a minute).
 	k scale deployment "studio-$s" "cp-$s" --replicas=1
-	k rollout status deployment "studio-$s" --timeout=180s
 	k scale statefulset "edge-$s-microgateway" --replicas=1
-	k rollout status statefulset "edge-$s-microgateway" --timeout=180s
+	k rollout status deployment "studio-$s" --timeout=600s || stamp "studio-$s is not Ready after 600 s"
+	k rollout status statefulset "edge-$s-microgateway" --timeout=300s || stamp "edge-$s is not Ready after 300 s"
 }
 
 cmd_cp() { # 0|1 a|b|all
