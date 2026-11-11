@@ -8,10 +8,18 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
-// APIToken represents an API token for gateway access
+// APIToken represents an API token for gateway access. The token itself is
+// not stored (api_token_hash.go).
 type APIToken struct {
 	ID         uint           `gorm:"primaryKey"`
+	// Token is a redacted reference to the token (RedactedAPIToken), not
+	// the token: the column held the token before tokens were hashed and
+	// keeps its name, NOT NULL and unique index.
 	Token      string         `gorm:"uniqueIndex;not null"`
+	// TokenHash is the token's credential hash, by which it is looked up.
+	// NULL only in a row an older version wrote, until HashStoredAPITokens
+	// converts it at the next start.
+	TokenHash  string         `gorm:"size:67;uniqueIndex:idx_api_tokens_token_hash;default:null"`
 	Name       string         `gorm:"not null"`
 	AppID      uint           `gorm:"not null"`
 	App        *App           `gorm:"foreignKey:AppID"`
@@ -25,14 +33,6 @@ type APIToken struct {
 	
 	// Hub-and-Spoke Configuration
 	Namespace  string         `gorm:"default:'';index:idx_token_namespace"` // Empty = global, specific = filtered to edge
-}
-
-// TokenCache for persistent cache backing
-type TokenCache struct {
-	Token     string         `gorm:"primaryKey"`
-	CacheData JSON `gorm:"not null;type:json"`
-	ExpiresAt time.Time      `gorm:"not null;index"`
-	CreatedAt time.Time
 }
 
 // LLM represents an LLM configuration
@@ -440,7 +440,6 @@ const (
 
 // TableName methods to ensure consistent table naming
 func (APIToken) TableName() string     { return "api_tokens" }
-func (TokenCache) TableName() string   { return "token_cache" }
 func (LLM) TableName() string          { return "llms" }
 func (App) TableName() string          { return "apps" }
 func (Credential) TableName() string   { return "credentials" }

@@ -32,9 +32,14 @@ func NewTokenAuthProvider(db *gorm.DB) *TokenAuthProvider {
 
 // ValidateToken checks if a token is valid and returns authentication result
 func (p *TokenAuthProvider) ValidateToken(token string) (*AuthResult, error) {
-	// Query database directly (no caching for simplicity)
+	// Query database directly (no caching for simplicity). The token is not
+	// stored: the row is found by the token's hash.
+	query, tokenHash, err := database.APITokenByValue(p.db, token)
+	if err != nil {
+		return nil, fmt.Errorf("token validation failed: %w", err)
+	}
 	var apiToken database.APIToken
-	err := p.db.Where("token = ? AND is_active = ?", token, true).
+	err = query.Where("is_active = ?", true).
 		Preload("App").
 		First(&apiToken).Error
 
@@ -58,7 +63,7 @@ func (p *TokenAuthProvider) ValidateToken(token string) (*AuthResult, error) {
 	// elsewhere. Each of the three independent DB-lookup paths
 	// (TokenAuthProvider, DatabaseGatewayService, DatabaseProvider) verifies
 	// exactly once per request.
-	if !SecureTokenEquals(apiToken.Token, token) {
+	if !SecureTokenEquals(apiToken.TokenHash, tokenHash) {
 		return &AuthResult{
 			Valid: false,
 			Error: "Invalid token",
@@ -134,14 +139,17 @@ func (p *TokenAuthProvider) GenerateToken(appID uint, name string, scopes []stri
 		return "", fmt.Errorf("failed to marshal scopes: %w", err)
 	}
 
-	// Store in database
+	// Store its hash in the database, never the token: the caller gets the
+	// token now and it cannot be shown again.
 	apiToken := database.APIToken{
-		Token:     token,
 		Name:      name,
 		AppID:     appID,
 		Scopes:    scopesJSON,
 		IsActive:  true,
 		ExpiresAt: expiresAt,
+	}
+	if err := apiToken.SetToken(token); err != nil {
+		return "", fmt.Errorf("failed to store token: %w", err)
 	}
 
 	if err := p.db.Create(&apiToken).Error; err != nil {
@@ -153,8 +161,11 @@ func (p *TokenAuthProvider) GenerateToken(appID uint, name string, scopes []stri
 
 // RevokeToken deactivates an API token
 func (p *TokenAuthProvider) RevokeToken(token string) error {
-	result := p.db.Model(&database.APIToken{}).
-		Where("token = ?", token).
+	query, _, err := database.APITokenByValue(p.db, token)
+	if err != nil {
+		return fmt.Errorf("failed to revoke token: %w", err)
+	}
+	result := query.Model(&database.APIToken{}).
 		Update("is_active", false)
 
 	if result.Error != nil {
@@ -170,8 +181,12 @@ func (p *TokenAuthProvider) RevokeToken(token string) error {
 
 // GetTokenInfo returns information about a token without validating it
 func (p *TokenAuthProvider) GetTokenInfo(token string) (*TokenInfo, error) {
+	query, _, err := database.APITokenByValue(p.db, token)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get token info: %w", err)
+	}
 	var apiToken database.APIToken
-	err := p.db.Where("token = ?", token).
+	err = query.
 		Preload("App").
 		First(&apiToken).Error
 

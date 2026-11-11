@@ -178,14 +178,18 @@ func (p *DatabaseProvider) ListApps(namespace string, active bool) ([]database.A
 // GetToken retrieves and validates a token with namespace filtering
 func (p *DatabaseProvider) GetToken(token string) (*database.APIToken, error) {
 	var apiToken database.APIToken
-	
-	query := p.db.Where("token = ?", token)
-	
+
+	// The token is not stored: the row is found by the token's hash.
+	query, _, err := database.APITokenByValue(p.db, token)
+	if err != nil {
+		return nil, err
+	}
+
 	if p.namespace != "" {
 		query = query.Where("(namespace = '' OR namespace = ?)", p.namespace)
 	}
 	
-	err := query.Preload("App").First(&apiToken).Error
+	err = query.Preload("App").First(&apiToken).Error
 	return &apiToken, err
 }
 
@@ -198,7 +202,11 @@ func (p *DatabaseProvider) ValidateToken(token string) (*database.APIToken, erro
 
 	// Constant-time re-verification of the DB match. Defends against timing
 	// side channels and lax database collations accepting a near-miss token.
-	if !internalauth.SecureTokenEquals(apiToken.Token, token) {
+	tokenHash, err := database.HashAPIToken(token)
+	if err != nil {
+		return nil, err
+	}
+	if !internalauth.SecureTokenEquals(apiToken.TokenHash, tokenHash) {
 		return nil, fmt.Errorf("invalid token")
 	}
 

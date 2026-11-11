@@ -463,6 +463,24 @@ Files: `proto/config_sync.proto`, `proto/common.proto`,
    a hash column, look up by hash, and stop storing the token (migrating
    existing rows on start). Small, and it closes the finding for every
    mode.
+   **Built** (`microgateway/internal/database/api_token_hash.go`): new
+   column `api_tokens.token_hash` (unique index), the credential hash made
+   with the microgateway's `ENCRYPTION_KEY`. Every lookup (the gateway
+   service, the auth provider, the database provider, the repository and
+   the deprecated control mode's `ValidateToken`) goes by the hash; a
+   gateway that cannot hash a token checks none (no fall back to comparing
+   what is stored). The `token` column keeps its name, `NOT NULL` and
+   unique index, and holds a redacted reference (the start of the token
+   and part of its hash). A `BeforeCreate` hook hashes the token of any row
+   built with the token itself, so no path stores one. At start,
+   `HashStoredAPITokens` converts the rows an earlier version wrote; it is
+   idempotent and safe for two gateways on one database. The conversion is
+   one-way. Token listings (`mgw token list`, the management API) never
+   returned token values, so nothing changes there. The `token_cache`
+   table (never in the migrated schema, created only by early versions) is
+   dropped where present and its model removed. `Credential.SecretHash`
+   (bcrypt or PBKDF2, `HashSecret`) is a different mechanism and is left as
+   it is.
 
 Tests: unknown-to-cache key accepted with every CP cut; revocation reaches
 an edge on another replica; a key created while the edge was offline

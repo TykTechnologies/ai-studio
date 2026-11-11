@@ -76,6 +76,7 @@ TABLE analytics_events
 TABLE api_tokens
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `token` text NOT NULL
+  column `token_hash` text DEFAULT null
   column `name` text NOT NULL
   column `app_id` integer NOT NULL
   column `scopes` JSON
@@ -90,6 +91,7 @@ TABLE api_tokens
   index CREATE INDEX `idx_api_tokens_deleted_at` ON `api_tokens`(`deleted_at`)
   index CREATE INDEX `idx_token_active` ON `api_tokens`(`is_active`)
   index CREATE INDEX `idx_token_namespace` ON `api_tokens`(`namespace`)
+  index CREATE UNIQUE INDEX `idx_api_tokens_token_hash` ON `api_tokens`(`token_hash`)
   index CREATE UNIQUE INDEX `idx_api_tokens_token` ON `api_tokens`(`token`)
 TABLE app_datasources
   column `app_id` integer

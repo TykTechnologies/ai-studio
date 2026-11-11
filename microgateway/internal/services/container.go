@@ -77,6 +77,13 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 	crypto := NewCryptoService(cfg.Security.EncryptionKey)
 	setAgentTracingKeyCrypto(crypto)
 
+	// API tokens are stored and looked up as hashes made with
+	// ENCRYPTION_KEY. Rows written by a version that stored the tokens
+	// themselves are converted now, before anything looks one up.
+	if err := prepareAPITokenHashing(db, cfg.Security.EncryptionKey); err != nil {
+		return nil, err
+	}
+
 	// Initialize auth provider (no caching)
 	authProvider := auth.NewTokenAuthProvider(db)
 
