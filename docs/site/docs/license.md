@@ -48,6 +48,18 @@ The page shows:
 - the **licensed namespaces**, each with when it took its slot, its connected edge gateways, and, for an idle one, when its slot frees itself. **Release slot** frees a slot now, for a namespace with no connected edge gateway (`DELETE /api/v1/license/namespaces/{namespace}`); the freed slot goes to the next waiting namespace;
 - the **waiting namespaces** that have an edge gateway connected, in the order they will get a slot.
 
+## Upgrading from 2.2
+
+AI Studio 2.3 needs a license issued for 2.3. A 2.3 license names the product it covers and carries the limits above; a license issued for 2.2 or earlier has neither and is refused, even if it has not expired.
+
+- **Before you upgrade**, speak to your account manager for a 2.3 license, and take a database backup.
+- **Set the new license** as `TYK_AI_LICENSE` on every AI Studio replica (the same license on all of them) and on every Enterprise microgateway, edge or standalone.
+- **Without it**, AI Studio stops at start-up with `license validation failed at boot: license does not include the Tyk AI Studio SKU`, and an Enterprise microgateway stops with `Microgateway license validation failed at boot` and the same reason. AI Studio has migrated its database by then, so going back to 2.2 means restoring the backup.
+- **Keep your 2.2 license** until the upgrade is confirmed: you need it if you return to 2.2.
+- **Check the limits** on the [License page](#the-license-page) after the upgrade. Usage above a limit is not removed; new use is refused until it drops below the limit ([At a limit](#at-a-limit)).
+
+The 2.3.0 release notes (`CHANGELOG-v2.3.0.md`, "Before you upgrade" and "Upgrade notes") list everything else to check.
+
 ## App quota
 
 Administrators can limit how many Apps each user creates for themselves, through the AI Portal or a plugin. Apps an administrator creates in the admin area do not count against it; they count only against the licence's App limit.
