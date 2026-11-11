@@ -198,11 +198,13 @@ func (h *BudgetSyncHandler) HandleBudgetSync(event eventbridge.Event) {
 	// Check sequence number to prevent processing stale updates
 	if payload.SequenceNumber <= h.lastSequenceNumber {
 		// A repeat of the last sync is a duplicate delivery. A lower
-		// sequence means the control plane's sequence went backwards (a
-		// control plane older than 2.3 whose clock is behind the previous
-		// leader's, or an older one taking over from a 2.3 one): its budget
-		// figures and blocks are ignored until it passes the stored value,
-		// so say so, once per stream.
+		// sequence means the control plane's sequence went backwards: a
+		// leader older than 2.3, which sends its wall clock, whose clock is
+		// behind the previous leader's. (From 2.3 the sequence continues
+		// from the last one stored in the control plane's database, so its
+		// leaders do not go backwards.) The budget figures and blocks are
+		// ignored until the sequence passes the stored value, so say so,
+		// once per stream.
 		if payload.SequenceNumber < h.lastSequenceNumber && !h.warnedLower {
 			h.warnedLower = true
 			log.Warn().

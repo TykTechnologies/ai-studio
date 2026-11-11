@@ -19,11 +19,12 @@ import (
 )
 
 // The hub's budget.sync sequence against a real edge handler. The edge
-// holds a sequence from a hub before 2.3, the wall clock of a leader running
-// a minute ahead of this one: it applies the upgraded hub's first sync. A
-// second hub replica (a new leader, whatever its clock says) continues the
-// sequence, and the edge applies its first sync too. Edge and hub both on
-// SQLite, and both on Postgres (MGW_TEST_POSTGRES_DSN, DATABASE_URL).
+// holds a sequence from a hub before 2.3 (that leader's wall clock at its
+// last sync): it applies the upgraded hub's first sync. A second hub replica
+// (a new leader) continues the sequence, and the edge applies its first sync
+// too. Then a Studio from before the change takes over and sends its wall
+// clock again: the edge accepts that as well. Edge and hub both on SQLite,
+// and both on Postgres (MGW_TEST_POSTGRES_DSN, DATABASE_URL).
 func TestBudgetSyncSequence_UpgradedHubAndLeaderChangePostgres(t *testing.T) {
 	for _, kind := range []string{"sqlite", "postgres"} {
 		t.Run(kind, func(t *testing.T) {
@@ -54,7 +55,7 @@ func TestBudgetSyncSequence_UpgradedHubAndLeaderChangePostgres(t *testing.T) {
 			edgeApp := database.App{Name: "App 1", IsActive: true}
 			require.NoError(t, edge.Create(&edgeApp).Error)
 			require.Equal(t, app.ID, edgeApp.ID)
-			wallClock := uint64(now.Add(time.Minute).UnixNano())
+			wallClock := uint64(now.Add(-30 * time.Second).UnixNano())
 			require.NoError(t, edge.Create(&database.SyncState{Topic: BudgetSyncTopic, SequenceNumber: wallClock, LastSyncAt: now}).Error)
 			handler := NewBudgetSyncHandler(edge)
 			handler.ledger = NewBudgetLedger(edge)
@@ -84,7 +85,17 @@ func TestBudgetSyncSequence_UpgradedHubAndLeaderChangePostgres(t *testing.T) {
 			first := syncFrom("the upgraded hub", 250000)
 			spend(100000)
 			second := syncFrom("the next leader", 350000)
-			assert.Equal(t, first+1, second, "the next leader continues the sequence")
+			assert.Greater(t, second, first, "the next leader continues the sequence")
+			assert.Less(t, second, uint64(time.Now().Add(time.Second).UnixNano()), "sequences stay in the clock's range")
+
+			// An older Studio's sync (its wall clock) after the new ones.
+			old := uint64(time.Now().UnixNano())
+			require.NoError(t, eventbridge.PublishDown(bus, "control", BudgetSyncTopic, BudgetSyncPayload{
+				BlocksIncluded: true, ControlTimestamp: time.Now(), SequenceNumber: old,
+			}))
+			require.Eventually(t, func() bool { return handler.GetLastSequenceNumber() == old },
+				10*time.Second, 20*time.Millisecond, "the edge applies an older Studio's wall-clock sequence")
+			second = old
 
 			// The sequence the edge stored reads back as it was written.
 			assert.Equal(t, second, NewBudgetSyncHandler(edge).GetLastSequenceNumber())

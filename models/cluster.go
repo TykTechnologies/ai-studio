@@ -68,15 +68,21 @@ type ClusterCounter struct {
 	Value int64  `json:"value" gorm:"not null"`
 }
 
-// NextClusterCounter returns the next value of the named counter: first
-// when it has never been drawn, one more than the previous value after
-// that. It is one statement, so concurrent replicas never get the same
-// value, on Postgres and SQLite alike.
-func NextClusterCounter(db *gorm.DB, name string, first int64) (int64, error) {
+// NextClusterCounter returns the next value of the named counter: one more
+// than the stored value, or floor when that is higher (and floor when the
+// counter has never been drawn). The value is always above every value
+// returned before, and never below floor. It is one statement, so replicas
+// drawing at the same moment never get the same value, on Postgres and
+// SQLite alike.
+func NextClusterCounter(db *gorm.DB, name string, floor int64) (int64, error) {
+	greatest := "MAX" // SQLite's two-argument MAX is the scalar maximum
+	if db.Dialector.Name() == "postgres" {
+		greatest = "GREATEST"
+	}
 	var value int64
 	err := db.Raw(`INSERT INTO cluster_counters (name, value) VALUES (?, ?)
-		ON CONFLICT (name) DO UPDATE SET value = cluster_counters.value + 1
-		RETURNING value`, name, first).Scan(&value).Error
+		ON CONFLICT (name) DO UPDATE SET value = `+greatest+`(cluster_counters.value + 1, excluded.value)
+		RETURNING value`, name, floor).Scan(&value).Error
 	if err != nil {
 		return 0, err
 	}

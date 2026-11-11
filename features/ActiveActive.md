@@ -183,11 +183,24 @@ Files: `pkg/studio/database.go`, `startup/connectivity.go`,
    "unreachable"` in the body, and `/ready?require=write` fails unless
    writable. Add `aistudio_db_writable`, `aistudio_db_failovers_total` and
    a cluster-status warning.
-8. **Budget sync sequence.** The leader's `budget.sync` sequence is
-   nanosecond wall-clock time (`grpc/budget_sync_service.go:462`), and edges
-   drop anything not above the last one they stored. A leader in the other
-   site with a slower clock is ignored until it catches up. Take the
-   sequence from the database (a sequence or the database clock).
+8. **Budget sync sequence** (built). The leader's `budget.sync` sequence
+   was nanosecond wall-clock time, and edges drop anything not above the
+   last one they stored, so a leader in the other site with a slower clock
+   was ignored until it caught up. The sequence is now a counter in the
+   database with the leader's clock as its floor: `max(stored + 1, now)`,
+   one statement on the `budget.sync` row of the new table
+   `cluster_counters` (`models.NextClusterCounter`). The stored value makes
+   it increase from one leader to the next whatever their clocks; the floor
+   keeps values in the clock's range, so edges and Studios of older
+   versions mix with it (rolling upgrade, rollback) and a counter set back
+   by a failover that lost commits recovers at once. This replaces the
+   earlier wording here ("a sequence or the database clock"): a row works
+   the same on SQLite and Postgres, and a pure counter would have needed a
+   base above every wall-clock value, which older versions could never
+   follow. An edge that receives a lower sequence logs it at WARN once per
+   stream. Not covered: a leader older than 2.3 with a slower clock, and
+   the first sync after an upgrade when the last older leader's clock ran
+   ahead (ignored once, for as long as the difference).
 
 Tests: writes during promotion succeed within the window; a replica left on
 the demoted primary recovers without a restart; listener and event log

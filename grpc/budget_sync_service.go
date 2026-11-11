@@ -400,7 +400,7 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 		return
 	}
 
-	sequence, err := s.nextSequence()
+	sequence, err := s.nextSequence(now)
 	if err != nil {
 		// Without a sequence edges cannot order the sync: send nothing
 		// this cycle, as when publishing fails.
@@ -479,27 +479,28 @@ func (s *BudgetSyncService) llmBudgets(now time.Time) (map[uint32]AppBudgetData,
 // drawn from.
 const budgetSyncSequenceName = "budget.sync"
 
-// budgetSyncSequenceBase is below every sequence drawn from the database
-// and above every sequence Studio sent before 2.3, which were wall-clock
-// nanoseconds since 1970: those reach 2^62 in the year 2116. An edge that
-// stored a wall-clock sequence therefore accepts the first sync of an
-// upgraded hub. It stays below 2^63 because edges store the sequence in a
-// signed 64-bit column.
-const budgetSyncSequenceBase = int64(1) << 62
-
 // nextSequence returns the next budget.sync sequence number. Edges persist
-// the highest sequence they have seen and drop anything that is not above
-// it, so the sequence must keep increasing across restarts and from one
-// leader to the next. It is a counter in the database: the leader's wall
-// clock, which it used to be, made edges ignore a new leader whose clock
-// was behind the previous one's (the other site) until it caught up.
-func (s *BudgetSyncService) nextSequence() (uint64, error) {
-	value, err := models.NextClusterCounter(s.db, budgetSyncSequenceName, budgetSyncSequenceBase+1)
+// the highest sequence they have applied and drop anything that is not
+// above it, so the sequence must keep increasing across restarts and from
+// one leader to the next.
+//
+// It is a counter in the database with this replica's clock (nanoseconds)
+// as its floor: max(stored + 1, now). The stored value makes it increase
+// from one leader to the next whatever their clocks say: it used to be the
+// leader's clock alone, so edges ignored a new leader whose clock was
+// behind the previous one's (the other site) until it caught up. The floor
+// keeps the values in the range of the clock, as every version sent them:
+// an edge holding a sequence from an older Studio accepts these, an older
+// Studio that takes over (a rolling upgrade, a rollback) is accepted in
+// turn, and a counter set back by a failover that lost its last commits is
+// above the lost values at once.
+func (s *BudgetSyncService) nextSequence(now time.Time) (uint64, error) {
+	value, err := models.NextClusterCounter(s.db, budgetSyncSequenceName, now.UnixNano())
 	if err != nil {
 		return 0, err
 	}
-	if value <= budgetSyncSequenceBase {
-		return 0, fmt.Errorf("budget sync sequence %d in cluster_counters is not above %d", value, budgetSyncSequenceBase)
+	if value <= 0 {
+		return 0, fmt.Errorf("budget sync sequence %d in cluster_counters is not positive", value)
 	}
 	return uint64(value), nil
 }

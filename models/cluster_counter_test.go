@@ -13,17 +13,24 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
-// A counter starts at the given first value, then goes up by one per draw,
-// with no value handed out twice to replicas drawing at the same moment.
+// A counter starts at the floor, then goes up by one per draw or to the
+// floor when that is higher, with no value handed out twice to replicas
+// drawing at the same moment.
 func checkClusterCounter(t *testing.T, db *gorm.DB, name string) {
 	t.Helper()
-	const first = int64(1)<<62 + 1
+	const first = int64(1_800_000_000_000_000_000)
 	v, err := NextClusterCounter(db, name, first)
 	require.NoError(t, err)
 	assert.Equal(t, first, v)
-	v, err = NextClusterCounter(db, name, 7) // first only matters once
+	v, err = NextClusterCounter(db, name, 7) // a floor below the stored value
 	require.NoError(t, err)
 	assert.Equal(t, first+1, v)
+	v, err = NextClusterCounter(db, name, first+1) // a floor equal to the stored value
+	require.NoError(t, err)
+	assert.Equal(t, first+2, v, "always above the previous value")
+	v, err = NextClusterCounter(db, name, first+100) // a floor above it
+	require.NoError(t, err)
+	assert.Equal(t, first+100, v)
 
 	other, err := NextClusterCounter(db, name+".other", 1)
 	require.NoError(t, err)
@@ -52,7 +59,7 @@ func checkClusterCounter(t *testing.T, db *gorm.DB, name string) {
 	require.Len(t, got, workers*draws)
 	sort.Slice(got, func(i, j int) bool { return got[i] < got[j] })
 	for i, v := range got {
-		assert.Equal(t, first+2+int64(i), v)
+		assert.Equal(t, first+101+int64(i), v)
 	}
 }
 

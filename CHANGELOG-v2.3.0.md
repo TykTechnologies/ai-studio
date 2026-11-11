@@ -245,7 +245,7 @@ This changes what plugins and filter scripts see for Bedrock traffic. Read the [
 - **A push could wait forever** if it lost an edge's ready report.
 - **Heartbeats report the configuration an edge applied**, not just the last one it received, so a failed sync shows as not in sync.
 - **"Database is locked" errors on SQLite** under concurrent writes. SQLite now runs in WAL mode.
-- **Edges ignored budget syncs after the leader changed** to a replica whose clock was behind the previous leader's, new budget blocks included, until that clock caught up. The sync's sequence number now comes from the database instead of the leader's clock, and an edge that receives a lower sequence logs a warning.
+- **Edges ignored budget syncs after the leader changed** to a replica whose clock was behind the previous leader's, new budget blocks included, until that clock caught up. The sync's sequence number now continues from the last one stored in the database, whatever the new leader's clock says, and an edge that receives a lower sequence logs a warning.
 
 ### Console and management API
 - **A partial `PATCH` wiped the fields it left out.** For example, renaming a group removed its members, and a secret could lose its name and break every reference to it. Every `PATCH` now changes only the fields you send.
@@ -380,7 +380,6 @@ After the upgrade:
 - **An LLM or tool that needs a filter or plugin from another namespace** is left out on that namespace's edges. Move the filter or plugin to the global namespace or the LLM's namespace.
 - **Edge errors now reach AI Studio's request logs.** Policy blocks and errors on edges appear as request log rows with no spend, so request counts include them.
 - **The request id header is `X-Tyk-AI-Request-ID`.** Edges no longer overwrite `X-Request-ID`.
-- **Budget sync sequence numbers are higher than any an older AI Studio sends.** Edges of any version accept them. An edge that has applied one ignores the budget syncs (spend figures and blocks) of an AI Studio older than 2.3, so after rolling AI Studio back, delete the `budget.sync` row from each edge's `sync_states` table and restart the edge. A 2.3 edge logs `Ignoring budget syncs from the control plane` when this happens.
 
 ### Native APIs and OpenAI
 
