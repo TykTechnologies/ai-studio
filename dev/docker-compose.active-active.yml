@@ -2,7 +2,7 @@
 #
 # Two control planes ("site-a", "site-b") over one replicated PostgreSQL, and
 # two edges that know both control planes: the topology of
-# docs/site/docs/deployment-active-active.md, small enough to break by hand.
+# features/ActiveActive.md, small enough to break by hand.
 # See the "Active-active stack" section of dev/README.md.
 #
 # Usage (from the project root):
@@ -18,9 +18,9 @@
 #   8180   site-a Studio API          8280   site-b Studio API
 #   50151  site-a control gRPC        50251  site-b control gRPC   (cuttable proxies)
 #   8181   edge-a gateway             8281   edge-b gateway
-#   55441  pg-a                       55442  pg-b
+#   55441  pg-a                       55442  pg-b    (127.0.0.1 only, password)
 #
-# Nothing here fails over by itself. dev/aa/*.sh play the failover manager.
+# Nothing here fails over by itself. dev/aa/aa.sh plays the failover manager.
 
 name: midsommar-aa
 
@@ -60,7 +60,7 @@ x-studio-env: &studio-env
   GRPC_TLS_INSECURE: "true"
   # Chat sessions must work whichever replica a request lands on.
   QUEUE_TYPE: postgres
-  # Identical on both sites (see the active-active page): the secrets below
+  # Identical on both sites (features/ActiveActive.md): the secrets below
   # come from dev/.env, the same file for both replicas, with these fallbacks.
   GRPC_AUTH_TOKEN: ${GRPC_AUTH_TOKEN:-ad115047f87092ae29e1270b6323ea71}
   TYK_AI_SECRET_KEY: ${TYK_AI_SECRET_KEY:-ad115047f87092ae29e1270b6323ea71}
@@ -101,6 +101,8 @@ x-edge-env: &edge-env
   DATABASE_DSN: file:/edge-data/edge.db?mode=rwc
   LLM_UPSTREAM_BLOCK_INTERNAL: "false"
 
+# The nodes trust the stack's own network and nothing else; the host ports
+# are bound to loopback and ask for the password (dev/aa/pg-node.sh).
 x-pg: &pg
   image: postgres:16-alpine
   user: postgres
@@ -119,7 +121,7 @@ services:
     <<: *pg
     container_name: midsommar-aa-pg-a
     environment: {AA_NODE: pg-a, AA_PEER: pg-b, AA_INITIAL_ROLE: primary, POSTGRES_DB: midsommar}
-    ports: ["55441:5432"]
+    ports: ["127.0.0.1:55441:5432"]
     volumes:
       - ./aa:/aa:ro
       - pg_a:/var/lib/postgresql/data
@@ -128,7 +130,7 @@ services:
     <<: *pg
     container_name: midsommar-aa-pg-b
     environment: {AA_NODE: pg-b, AA_PEER: pg-a, AA_INITIAL_ROLE: standby, POSTGRES_DB: midsommar}
-    ports: ["55442:5432"]
+    ports: ["127.0.0.1:55442:5432"]
     volumes:
       - ./aa:/aa:ro
       - pg_b:/var/lib/postgresql/data
@@ -182,7 +184,7 @@ services:
       - studio_a_data:/app/data
 
   # The address edges use for site A's control plane. Stopping this proxy
-  # cuts the gRPC path and nothing else (dev/aa/aa-cp.sh).
+  # cuts the gRPC path and nothing else (aa.sh cut-cp).
   cp-a:
     image: alpine/socat:1.8.0.3
     container_name: midsommar-aa-cp-a

@@ -7,20 +7,49 @@
 #   AA_NODE          this node's name (pg-a, pg-b); also its application_name
 #   AA_PEER          the other node's host name
 #   AA_INITIAL_ROLE  primary | standby: what an EMPTY data directory becomes
-#   AA_REBUILD_FROM  set by aa-rejoin.sh on a one-off run: wipe the data
+#   AA_REBUILD_FROM  set by "aa.sh rejoin" on a one-off run: wipe the data
 #                    directory, copy it from that host and exit
 #
 # A data directory that already exists is started as it is: a standby if it
 # holds standby.signal, a primary otherwise. Roles therefore survive
 # "make dev-aa-down" and a restart of the stack.
+#
+# Who may connect (pg_hba.conf, rewritten at every start by write_hba):
+# containers on the stack's own network without a password, which is how the
+# replicas, the other node and aa.sh reach it; a connection through the
+# published host port (bound to 127.0.0.1 in the compose file) needs the
+# password; everything else is refused.
 set -eu
 
 : "${AA_NODE:?}" "${AA_PEER:?}" "${AA_INITIAL_ROLE:?}"
 PGUSER=${POSTGRES_USER:-postgres}
 PGDB=${POSTGRES_DB:-midsommar}
+PGPASS=${POSTGRES_PASSWORD:-postgres}
 export PGUSER
 
 log() { echo "[$AA_NODE] $*"; }
+
+# write_hba replaces this stack's lines in pg_hba.conf. It runs at every
+# start, so a volume created by an earlier version of this script (which
+# trusted every address) is corrected, and a copy taken from the other node
+# gets this node's own lines.
+write_hba() {
+	# A connection through the published port arrives from the network's
+	# gateway address, which is inside "samenet": it is matched first and
+	# must authenticate.
+	gateway=$(ip route | awk '/^default/ { print $3; exit }')
+	[ -n "$gateway" ] || { log "cannot find the network gateway; refusing to write a pg_hba.conf that trusts it"; exit 1; }
+	sed -i -e '/^# aa-begin/,/^# aa-end/d' \
+		-e '/^host all all all trust$/d' -e '/^host replication all all trust$/d' "$PGDATA/pg_hba.conf"
+	cat >>"$PGDATA/pg_hba.conf" <<CONF
+# aa-begin (rewritten by pg-node.sh at every start; do not edit)
+host all all $gateway/32 scram-sha-256
+host replication all $gateway/32 reject
+host all all samenet trust
+host replication all samenet trust
+# aa-end
+CONF
+}
 
 base_backup() { # $1: host to copy from
 	log "waiting for $1 to accept connections as a primary"
@@ -40,6 +69,7 @@ CONF
 
 if [ -n "${AA_REBUILD_FROM:-}" ]; then
 	base_backup "$AA_REBUILD_FROM"
+	write_hba
 	log "rebuilt as a standby of $AA_REBUILD_FROM"
 	exit 0
 fi
@@ -47,7 +77,8 @@ fi
 if [ ! -s "$PGDATA/PG_VERSION" ]; then
 	if [ "$AA_INITIAL_ROLE" = primary ]; then
 		log "initialising as the primary"
-		initdb -D "$PGDATA" -U "$PGUSER" --auth=trust -E UTF8 >/dev/null
+		printf '%s\n' "$PGPASS" >/tmp/pwfile
+		initdb -D "$PGDATA" -U "$PGUSER" --auth=trust --pwfile=/tmp/pwfile -E UTF8 >/dev/null
 		cat >>"$PGDATA/postgresql.conf" <<CONF
 listen_addresses = '*'
 max_connections = 200
@@ -57,14 +88,9 @@ max_wal_senders = 10
 wal_keep_size = '512MB'
 include_if_exists = 'aa.conf'
 CONF
-		# A development stack on a private compose network.
-		cat >>"$PGDATA/pg_hba.conf" <<CONF
-host all all all trust
-host replication all all trust
-CONF
-		# Synchronous replication, as the active-active page recommends.
-		# aa-site.sh and aa-promote.sh clear it when the standby goes
-		# away, as a failover manager would.
+		# Synchronous replication, as features/ActiveActive.md
+		# recommends. "aa.sh stop-site" and "aa.sh promote" clear it
+		# when the standby goes away, as a failover manager would.
 		echo "synchronous_standby_names = '*'" >"$PGDATA/aa.conf"
 		pg_ctl -D "$PGDATA" -w -o "-c listen_addresses='' -c synchronous_standby_names=''" start >/dev/null
 		createdb "$PGDB"
@@ -74,6 +100,7 @@ CONF
 	fi
 fi
 
+write_hba
 if [ -f "$PGDATA/standby.signal" ]; then
 	log "starting as a hot standby"
 else

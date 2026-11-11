@@ -271,6 +271,15 @@ make dev-aa-clean      # stop and remove its volumes
   `DATABASE_URL` (`pg-a,pg-b`, `target_session_attrs=read-write`) and write
   to whichever node is the primary. `pg-b` starts as a synchronous hot
   standby of `pg-a`.
+- **The databases are not open to the network.** `pg-a` and `pg-b` are
+  published on `127.0.0.1` only (55441, 55442) and ask for the password
+  there (`postgres` / `postgres`, as in the standard stack); only containers
+  on the stack's own network connect without one. A stack created before
+  this was tightened is corrected the next time its PostgreSQL containers
+  start (`make dev-aa-down && make dev-aa`), except that its `postgres` user
+  has no password yet, so the host ports refuse every login until you set
+  one (`docker exec midsommar-aa-pg-a psql -U postgres -c "ALTER USER postgres PASSWORD 'postgres'"`
+  on the primary) or start over with `make dev-aa-clean`.
 - **The same secrets on both sites**: `TYK_AI_SECRET_KEY`,
   `MICROGATEWAY_ENCRYPTION_KEY`, `GRPC_AUTH_TOKEN`, `CSRF_KEY` and
   `TYK_AI_LICENSE` come from `dev/.env` (with `dev/.env.secrets` merged in, as
@@ -327,7 +336,7 @@ both can run at the same time and `make dev-clean` does not touch it.
 | 8180 / 8280 | site-a / site-b Studio API |
 | 50151 / 50251 | site-a / site-b control gRPC (the cuttable proxies) |
 | 8181 / 8281 | edge-a / edge-b gateway |
-| 55441 / 55442 | pg-a / pg-b |
+| 55441 / 55442 | pg-a / pg-b (bound to 127.0.0.1) |
 
 If the standard stack was started with `FRONTEND_PORT=3100`, the two UIs
 collide: use another port there.
