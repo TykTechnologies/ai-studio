@@ -147,22 +147,44 @@ Files: `pkg/studio/database.go`, `startup/connectivity.go`,
 `config/config.go`, `pkg/pglisten`, `pkg/cluster/events.go`,
 `api/health_handlers.go`.
 
-1. **Multi-host DSN as a supported configuration.**
-   `DATABASE_URL=postgres://u:p@pg-a,pg-b/db?target_session_attrs=read-write`.
-   The vendored driver hands the DSN to pgx unchanged, so this needs tests
-   and documentation rather than code, for the pool and for the `pglisten`
-   connection (which parses the same DSN).
-2. **Leave a demoted primary.** A pooled connection to a node that was
-   demoted stays open and fails every write with SQLSTATE 25006. Detect
-   25006 (and `pg_is_in_recovery()` on a periodic check), then close the
-   pool's connections so they are re-dialled against the new primary. Give
-   the listener the same check: today a hot standby refusing `LISTEN` is
-   recorded as a channel failure, not a reason to reconnect
-   (`pglisten.go:532`).
-3. **Pool settings.** The main pool sets no limits today. Add
-   `DATABASE_MAX_OPEN_CONNS`, `DATABASE_MAX_IDLE_CONNS`,
+1. **Multi-host DSN as a supported configuration** (built).
+   `DATABASE_URL=postgres://u:p@pg-a,pg-b/db?target_session_attrs=read-write`
+   for the pool and for the `pglisten` connection (which parses the same
+   DSN). Tested on the Phase 0 pair (`pkg/studio/failover_pair_test.go`).
+2. **Leave a demoted primary** (built). A pooled connection to a node that
+   was demoted stays open and fails every write with SQLSTATE 25006.
+   Studio now opens the Postgres pool itself (`pkg/studio/database_postgres.go`,
+   `stdlib.OpenDB`; the gorm dialector is given the pool) so it can retire
+   connections: a `dbstate.Tracker` (`pkg/dbstate`) probes the server every
+   5 s (`pg_is_in_recovery() OR transaction_read_only`, the latter because
+   a demoted primary that keeps running is not in recovery) and is told of
+   every statement refused with 25006 (a gorm callback). While the server
+   is not writable it raises a generation number; each connection is
+   stamped with the generation it was dialled under and the driver's
+   reset-session hook discards one with an older stamp when it would next
+   be reused, so it is dialled again, to the writable node. database/sql
+   has no "close every connection", and this also catches connections that
+   were in use at the time. The first refusal while the database counted
+   as writable acts at once; after that the probe does, once per period,
+   so a server that stays read-only is not redialled for every statement.
+   The tracker's `Status()` (`writable` / `read_only` / `unreachable`, time
+   of the last change, failover count) is the accessor items 5 and 7 use;
+   `dbstate.For(db)` finds it, and is nil (writable) for SQLite and for a
+   pool a host opened itself. A failover is counted when the writable
+   server's address changes, or its timeline after an outage (one address
+   in front of both nodes).
+   The listener checks its server every `pglisten.RoleCheckInterval` (5 s,
+   also its keep-alive now) and reconnects when it is read-only, running
+   its reconnect hooks as after any reconnect; a hot standby refusing
+   `LISTEN` (25006) is a reason to reconnect, no longer a channel failure.
+   Reconnects that keep reaching a read-only server back off to the
+   reconnect ceiling.
+3. **Pool settings** (built). `DATABASE_MAX_OPEN_CONNS`,
+   `DATABASE_MAX_IDLE_CONNS` (unset: database/sql's defaults),
    `DATABASE_CONN_MAX_LIFETIME` (default 30 minutes, so connections also
-   drift back after a planned switchover) and a connect timeout.
+   drift back after a planned switchover) and `DATABASE_CONNECT_TIMEOUT`
+   (default 10 s, applied when the DSN sets no `connect_timeout`). Logged
+   at debug at start. All inert for SQLite.
 4. **Start-up waits for the database** up to `DATABASE_STARTUP_TIMEOUT`
    (default 60 s) instead of exiting on the first failed ping, so a replica
    that starts mid-failover joins when the primary appears.
@@ -487,6 +509,7 @@ reachable a control plane cannot authenticate a caller at all.
 |---|---|---|---|
 | `CLUSTER_NODE_LABEL` | Studio | `studio` | Site label on cluster status and the Edge Gateways page |
 | `DATABASE_MAX_OPEN_CONNS`, `DATABASE_MAX_IDLE_CONNS`, `DATABASE_CONN_MAX_LIFETIME` | Studio | unset, unset, `30m` | Pool limits |
+| `DATABASE_CONNECT_TIMEOUT` | Studio | `10s` | One connection attempt, unless the DSN sets `connect_timeout` |
 | `DATABASE_STARTUP_TIMEOUT` | Studio | `60s` | How long start-up waits for a database |
 | `DATABASE_WRITE_RETRY_WINDOW` | Studio | `15s` | How long a write is held for a writable primary |
 | `CONTROL_ENDPOINTS` | edge | unset | Ordered list of control planes (`CONTROL_ENDPOINT` is a list of one; not both) |

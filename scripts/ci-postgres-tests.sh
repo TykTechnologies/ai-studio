@@ -76,6 +76,10 @@ fips-migration-mgw|microgateway||TestCrossBuildMigration|MGW_TEST_POSTGRES_DSN|.
 # containers of their own (not the job's database), failed over and back
 # through the vendored gorm driver (pkg/testinfra/containers, PostgresPair).
 pgpair|.||TestPostgresPair||./pkg/testinfra/containers/
+# Studio across a database failover, on pairs of its own: the pool on a
+# multi-host DSN follows a promoted standby and leaves a demoted primary,
+# and the LISTEN connection and cluster events move with it.
+failover|.||TestFailover_||./pkg/studio/
 # Agent Call Tracing: the store and capture staging in core, and the
 # enterprise assembler, correlation goldens, JSON v1 and content API
 # (purge). Their gates read DATABASE_URL or AGENT_TRACE_TEST_POSTGRES_DSN,

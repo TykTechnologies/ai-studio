@@ -256,6 +256,7 @@ AI Studio can run as two control planes in two sites over one replicated Postgre
 - **Heartbeats report the configuration an edge applied**, not just the last one it received, so a failed sync shows as not in sync.
 - **"Database is locked" errors on SQLite** under concurrent writes. SQLite now runs in WAL mode.
 - **Edges ignored budget syncs after the leader changed** to a replica whose clock was behind the previous leader's, new budget blocks included, until that clock caught up. The sync's sequence number now continues from the last one stored in the database, whatever the new leader's clock says, and an edge that receives a lower sequence logs a warning.
+- **A replica left on a demoted Postgres primary kept failing every write** (`read-only transaction`) until it was restarted. AI Studio now notices from the first refused write, or within 5 seconds when idle, and reconnects, to the new primary when `DATABASE_URL` names both hosts with `target_session_attrs=read-write`. Its LISTEN/NOTIFY connection does the same, and no longer settles on a hot standby.
 
 ### Console and management API
 - **A partial `PATCH` wiped the fields it left out.** For example, renaming a group removed its members, and a secret could lose its name and break every reference to it. Every `PATCH` now changes only the fields you send.
@@ -483,6 +484,10 @@ The Helm chart adds `config.logLevel` (AI Studio's `LOG_LEVEL`), and `config.plu
 | Variable | Where | Default | Purpose |
 |---|---|---|---|
 | `CLUSTER_NODE_LABEL` | AI Studio | `studio` | Names a replica (for example its site) on the cluster status and in the Edge Gateways "Held by" column. At most 64 characters; an invalid value stops startup |
+| `DATABASE_MAX_OPEN_CONNS` | AI Studio | no limit | Most Postgres connections a replica opens |
+| `DATABASE_MAX_IDLE_CONNS` | AI Studio | `2` | Idle Postgres connections kept open |
+| `DATABASE_CONN_MAX_LIFETIME` | AI Studio | `30m` | Close and replace connections of this age, so they also move after a planned switchover (`0`: never) |
+| `DATABASE_CONNECT_TIMEOUT` | AI Studio | `10s` | Time for one connection attempt, unless `DATABASE_URL` sets `connect_timeout` |
 | `CONTROL_ENDPOINTS` | edge | unset | Ordered, comma-separated list of control planes; `CONTROL_ENDPOINT` is a list of one (setting both is a start-up error) |
 | `EDGE_CONTROL_FAILBACK_INTERVAL` | edge | off | How often an edge that is not on its first control plane tries to return to it |
 | `EDGE_START_FROM_LAST_KNOWN_GOOD` | edge | `false` | Start from the stored configuration snapshot when no control plane answers at start-up |
