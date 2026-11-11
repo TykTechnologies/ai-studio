@@ -1,0 +1,10 @@
+# Which PostgreSQL node is the primary: the failover state of the stack.
+# aa-k8s.sh applies this once and from then on only "promote" changes it;
+# a re-apply must never reset it.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aa-pg-roles
+  namespace: aa-load
+data:
+  primary: pg-a

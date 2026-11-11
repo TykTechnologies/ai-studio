@@ -1,0 +1,29 @@
+# The upstream every seeded LLM points at: the benchmark's mockllm
+# (benchmarks/gateway/cmd/mockllm, from benchmarks/gateway/docker/Dockerfile.tools).
+# It runs on the load node, outside both sites, so that losing a site never
+# takes the upstream away. TOOLS_IMAGE is replaced by aa-k8s.sh.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: mockllm, namespace: aa-load}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: mockllm}}
+  template:
+    metadata: {labels: {app: mockllm}}
+    spec:
+      nodeSelector: {aa-role: load}
+      containers:
+        - name: mockllm
+          image: TOOLS_IMAGE
+          command: ["mockllm", "-addr", ":9999"]
+          ports: [{name: http, containerPort: 9999}]
+          resources:
+            requests: {cpu: "1", memory: 256Mi}
+            limits: {cpu: "1", memory: 256Mi}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: mockllm, namespace: aa-load}
+spec:
+  selector: {app: mockllm}
+  ports: [{name: http, port: 9999, targetPort: http}]

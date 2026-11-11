@@ -1,0 +1,198 @@
+# Two Studio replicas, one per zone, on one multi-host DATABASE_URL, each
+# behind a cuttable gRPC proxy. ClusterIP only: reach them with
+# kubectl port-forward. STUDIO_IMAGE is replaced by aa-k8s.sh.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: studio-a, namespace: aa-load}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: studio, site: a}}
+  template:
+    metadata: {labels: {app: studio, site: a}}
+    spec:
+      nodeSelector: {topology.kubernetes.io/zone: eu-west-3a, aa-role: site}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: studio
+          image: STUDIO_IMAGE
+          env:
+            - {name: CLUSTER_NODE_LABEL, value: site-a}
+            - {name: DATABASE_TYPE, value: postgres}
+            - name: DATABASE_URL
+              valueFrom: {secretKeyRef: {name: aa-shared, key: DATABASE_URL}}
+            - {name: GATEWAY_MODE, value: control}
+            - {name: GRPC_PORT, value: "50051"}
+            - {name: GRPC_TLS_INSECURE, value: "true"}
+            - {name: QUEUE_TYPE, value: postgres}
+            # http inside the cluster: DEVMODE keeps the session cookie usable
+            # without TLS and trusts SITE_URL as the CSRF origin.
+            - {name: DEVMODE, value: "true"}
+            - {name: SITE_URL, value: "http://studio.aa-load.test"}
+            - {name: ALLOW_REGISTRATIONS, value: "true"}
+            - {name: DOCS_DISABLED, value: "true"}
+            - {name: LOG_LEVEL, value: info}
+            # The mock upstream has a private address.
+            - {name: LLM_UPSTREAM_BLOCK_INTERNAL, value: "false"}
+            - {name: ALLOW_INTERNAL_NETWORK_ACCESS, value: "true"}
+          envFrom:
+            # TYK_AI_SECRET_KEY, MICROGATEWAY_ENCRYPTION_KEY, GRPC_AUTH_TOKEN,
+            # CSRF_KEY (and TYK_AI_LICENSE for an Enterprise pass): identical
+            # on both sites because both read the one Secret.
+            - secretRef: {name: aa-studio}
+          ports:
+            - {name: http, containerPort: 8080}
+            - {name: grpc, containerPort: 50051}
+          startupProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 3
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /ready, port: http}
+            periodSeconds: 3
+          resources:
+            requests: {cpu: "1", memory: 1Gi}
+            limits: {cpu: "1", memory: 1Gi}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: studio-a, namespace: aa-load}
+spec:
+  selector: {app: studio, site: a}
+  ports:
+    - {name: http, port: 8080, targetPort: http}
+---
+# The address edges use for site a's control plane. Scaling this proxy to
+# zero cuts the gRPC path, established streams included, and nothing else
+# (a Service selector change would leave open connections alive).
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: cp-a, namespace: aa-load}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: cp, site: a}}
+  template:
+    metadata: {labels: {app: cp, site: a}}
+    spec:
+      nodeSelector: {topology.kubernetes.io/zone: eu-west-3a, aa-role: site}
+      terminationGracePeriodSeconds: 1
+      containers:
+        - name: socat
+          image: alpine/socat:1.8.0.3
+          args: ["TCP-LISTEN:50051,fork,reuseaddr", "TCP:studio-a-grpc:50051"]
+          ports: [{name: grpc, containerPort: 50051}]
+          resources:
+            requests: {cpu: 100m, memory: 32Mi}
+            limits: {cpu: 500m, memory: 64Mi}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: studio-a-grpc, namespace: aa-load}
+spec:
+  selector: {app: studio, site: a}
+  ports: [{name: grpc, port: 50051, targetPort: grpc}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: cp-a, namespace: aa-load}
+spec:
+  selector: {app: cp, site: a}
+  ports: [{name: grpc, port: 50051, targetPort: grpc}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: studio-b, namespace: aa-load}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: studio, site: b}}
+  template:
+    metadata: {labels: {app: studio, site: b}}
+    spec:
+      nodeSelector: {topology.kubernetes.io/zone: eu-west-3b, aa-role: site}
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: studio
+          image: STUDIO_IMAGE
+          env:
+            - {name: CLUSTER_NODE_LABEL, value: site-b}
+            - {name: DATABASE_TYPE, value: postgres}
+            - name: DATABASE_URL
+              valueFrom: {secretKeyRef: {name: aa-shared, key: DATABASE_URL}}
+            - {name: GATEWAY_MODE, value: control}
+            - {name: GRPC_PORT, value: "50051"}
+            - {name: GRPC_TLS_INSECURE, value: "true"}
+            - {name: QUEUE_TYPE, value: postgres}
+            # http inside the cluster: DEVMODE keeps the session cookie usable
+            # without TLS and trusts SITE_URL as the CSRF origin.
+            - {name: DEVMODE, value: "true"}
+            - {name: SITE_URL, value: "http://studio.aa-load.test"}
+            - {name: ALLOW_REGISTRATIONS, value: "true"}
+            - {name: DOCS_DISABLED, value: "true"}
+            - {name: LOG_LEVEL, value: info}
+            # The mock upstream has a private address.
+            - {name: LLM_UPSTREAM_BLOCK_INTERNAL, value: "false"}
+            - {name: ALLOW_INTERNAL_NETWORK_ACCESS, value: "true"}
+          envFrom:
+            # TYK_AI_SECRET_KEY, MICROGATEWAY_ENCRYPTION_KEY, GRPC_AUTH_TOKEN,
+            # CSRF_KEY (and TYK_AI_LICENSE for an Enterprise pass): identical
+            # on both sites because both read the one Secret.
+            - secretRef: {name: aa-studio}
+          ports:
+            - {name: http, containerPort: 8080}
+            - {name: grpc, containerPort: 50051}
+          startupProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 3
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: {path: /ready, port: http}
+            periodSeconds: 3
+          resources:
+            requests: {cpu: "1", memory: 1Gi}
+            limits: {cpu: "1", memory: 1Gi}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: studio-b, namespace: aa-load}
+spec:
+  selector: {app: studio, site: b}
+  ports:
+    - {name: http, port: 8080, targetPort: http}
+---
+# The address edges use for site b's control plane. Scaling this proxy to
+# zero cuts the gRPC path, established streams included, and nothing else
+# (a Service selector change would leave open connections alive).
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: cp-b, namespace: aa-load}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: cp, site: b}}
+  template:
+    metadata: {labels: {app: cp, site: b}}
+    spec:
+      nodeSelector: {topology.kubernetes.io/zone: eu-west-3b, aa-role: site}
+      terminationGracePeriodSeconds: 1
+      containers:
+        - name: socat
+          image: alpine/socat:1.8.0.3
+          args: ["TCP-LISTEN:50051,fork,reuseaddr", "TCP:studio-b-grpc:50051"]
+          ports: [{name: grpc, containerPort: 50051}]
+          resources:
+            requests: {cpu: 100m, memory: 32Mi}
+            limits: {cpu: 500m, memory: 64Mi}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: studio-b-grpc, namespace: aa-load}
+spec:
+  selector: {app: studio, site: b}
+  ports: [{name: grpc, port: 50051, targetPort: grpc}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: cp-b, namespace: aa-load}
+spec:
+  selector: {app: cp, site: b}
+  ports: [{name: grpc, port: 50051, targetPort: grpc}]
