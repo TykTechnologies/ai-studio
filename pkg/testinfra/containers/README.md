@@ -441,6 +441,104 @@ vault, err := containers.NewVaultContainer(ctx, cfg)
 err := vault.EnableKVEngine(ctx, "custom-secrets")
 ```
 
+### PostgreSQL Pair (primary and hot standby, with failover)
+
+Two PostgreSQL 16 nodes, a primary and a streaming hot standby, that a test
+fails over by hand: the rig behind the active-active tests
+(`features/ActiveActive.md`). The pair never fails over by itself; the test
+plays the failover manager and the code under test has to follow. A node
+keeps its host and port for the life of the pair, so one multi-host DSN stays
+valid across any number of failovers.
+
+```go
+import "github.com/TykTechnologies/midsommar/v2/pkg/testinfra/containers"
+
+func TestWritesResumeAfterFailover(t *testing.T) {
+    // Skipped under -short and without Docker; closed when the test ends.
+    pair := containers.StartPostgresPair(t, &containers.PostgresPairConfig{Synchronous: true})
+
+    // postgres://postgres:postgres@host:p1,host:p2/studio?target_session_attrs=read-write&...
+    db, err := gorm.Open(postgres.Open(pair.DSN()), &gorm.Config{}) // the vendored gorm
+    if err != nil {
+        t.Fatal(err)
+    }
+    // ... write through db ...
+
+    if err := pair.Failover(ctx); err != nil { // stop pg-a as a crash would, promote pg-b
+        t.Fatal(err)
+    }
+    // ... the same db writes again once its pool has re-dialled ...
+
+    if err := pair.RejoinOldPrimary(ctx); err != nil { // pg-a comes back as pg-b's standby
+        t.Fatal(err)
+    }
+}
+```
+
+Starting a pair takes about 5 s; a failover well under a second; a rejoin
+about a second.
+
+**Configuration options** (all optional):
+```go
+cfg := &containers.PostgresPairConfig{
+    Version:        "16-alpine",     // postgres image tag
+    User:           "postgres",      // superuser; authentication is "trust"
+    Password:       "postgres",      // only put in the DSNs
+    Database:       "studio",        // created on the primary
+    Synchronous:    true,            // synchronous standby (default: asynchronous)
+    ConnectTimeout: 2 * time.Second, // connect_timeout in the DSNs
+}
+pair, err := containers.NewPostgresPair(ctx, cfg) // or StartPostgresPair(t, cfg)
+defer pair.Close(ctx)
+```
+
+**Failure helpers:**
+
+| Helper | What happens |
+|--------|--------------|
+| `pair.StopPrimary(ctx)` | The primary stops at once (`pg_ctl stop -m immediate`). Nothing is promoted: no writable node until `Promote`. |
+| `pair.Promote(ctx)` | The standby is promoted and becomes `pair.Primary()`. The old primary must be stopped or demoted. |
+| `pair.Failover(ctx)` | `StopPrimary` then `Promote`. |
+| `pair.DemotePrimary(ctx)` | The primary role moves to the standby while the old primary **keeps running and keeps its connections**: writes on them fail with SQLSTATE 25006 and `SHOW transaction_read_only` is `on`. `pg_is_in_recovery()` stays false there (PostgreSQL cannot demote without a restart); `pair.Standby().DSN()` reaches a node that is in recovery. |
+| `pair.RejoinOldPrimary(ctx)` | The former primary, stopped or demoted, is rebuilt from the current one and streams from it as the new standby. |
+| `pair.Switchover(ctx)` | A planned move: clean shutdown, promote, rejoin. Twice is a fail-over and fail-back. |
+| `pair.DetachStandby(ctx)` | Stops the replication stream (asynchronous pairs only), so later commits are lost by a `Failover`. A sequence is logged 32 values ahead: lose at least 33 rows to see an id repeat. |
+| `pair.SetSynchronous(ctx, on)` | Turns synchronous replication on or off on the current primary. |
+| `node.Stop(ctx, "fast")`, `node.Start(ctx)` | Stop or start one node's server whatever its role. |
+
+**Connections and inspection:**
+```go
+pair.DSN()             // both nodes, target_session_attrs=read-write
+pair.Primary().DSN()   // one node, whatever its role (also pair.Standby(), pair.A(), pair.B())
+node.Addr()            // "host:port"
+node.SQL(ctx, "SELECT count(*) FROM apps") // psql on the node itself, not through the code under test
+node.InRecovery(ctx)   // pg_is_in_recovery()
+node.Logs(ctx)         // the server log
+```
+
+**A different clock per node.** Two containers share the host's clock, so the
+rig fakes it where Studio reads it. After `pair.EnableClockOffset(ctx)`,
+`now()` (and `transaction_timestamp()`, `statement_timestamp()`,
+`clock_timestamp()`) in the pair's database add the offset of the node that
+runs the statement:
+
+```go
+if err := pair.EnableClockOffset(ctx); err != nil { ... }      // before the code under test connects
+if err := pair.B().SetClockOffset(ctx, 5*time.Second); err != nil { ... } // pg-b runs 5 s ahead
+// "SELECT now()" and "now() + make_interval(...)" are 5 s ahead once pg-b is the primary.
+```
+
+The offset belongs to the node and survives promotion and rejoining. It works
+through the database's default `search_path`, so a test that sets its own
+(a schema per test) must use `containers.ClockSearchPath("my_schema")` as the
+value. `CURRENT_TIMESTAMP` and calls qualified with `pg_catalog.` are not
+affected.
+
+**In CI.** These tests need Docker. `StartPostgresPair` skips when there is
+none, except when `PGPAIR_REQUIRED` is set, as `scripts/ci-postgres-tests.sh`
+does for the Go Postgres Tests job: there a missing Docker fails the test.
+The rig's own tests are `postgres_pair_test.go` in this package.
+
 ## Suite Fixtures (TestMain Pattern)
 
 For better performance, share containers across tests in a suite:
