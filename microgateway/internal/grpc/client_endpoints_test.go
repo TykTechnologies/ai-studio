@@ -402,6 +402,18 @@ func TestControlEndpoints_FailbackReturnsToTheFirst(t *testing.T) {
 	time.Sleep(350 * time.Millisecond)
 	assert.Equal(t, registrations, a.registrations.Load(), "an edge on its first endpoint does not probe it")
 	assert.EqualValues(t, 1, a.streams.Load())
+
+	// The stream the failback ended asks for a reconnection as any ended
+	// stream does. That request can arrive after the move is complete (it
+	// did, under load: the edge then dropped its new connection and
+	// connected again). It must find the edge connected and do nothing.
+	client.attemptReconnection()
+	time.Sleep(100 * time.Millisecond)
+	link := client.ControlLink()
+	assert.True(t, link.Connected)
+	assert.Equal(t, addrA, link.Endpoint)
+	assert.EqualValues(t, 1, a.streams.Load(), "a late reconnection request replaced the stream the failback opened")
+	assert.Equal(t, registrations, a.registrations.Load())
 }
 
 // Without the failback interval the edge stays where it is after the first

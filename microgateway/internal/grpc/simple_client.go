@@ -1236,6 +1236,14 @@ func (c *SimpleEdgeClient) attemptReconnection() {
 		return // Already attempting reconnection
 	}
 	defer c.reconnecting.Store(false)
+	// The stream whose end asked for this may have been replaced since: a
+	// failback ends the stream itself and opens the next one while it holds
+	// the guard, and the ended stream's request to reconnect can arrive
+	// after the guard is free again. Reconnecting then would drop a
+	// connection that is fine.
+	if c.connected.Load() {
+		return
+	}
 	c.reconnectLoop()
 }
 
