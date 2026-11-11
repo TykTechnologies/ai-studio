@@ -51,18 +51,21 @@ func TestOpenDatabaseSQLiteNotRegistered(t *testing.T) {
 	}
 }
 
-// The tracker's probe may have to dial every host in turn.
-func TestProbeTimeoutCoversEveryHost(t *testing.T) {
-	c, err := pgx.ParseConfig("postgres://u:p@pg-a:5432,pg-b:5432/db?target_session_attrs=read-write&connect_timeout=10")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := probeTimeout(c); got != 23*time.Second {
-		t.Errorf("two hosts at 10s = %s, want 23s", got)
-	}
-	c, _ = pgx.ParseConfig("postgres://u:p@pg-a:5432/db")
+// The tracker's probe may have to dial every host in turn, twice each when
+// sslmode allows a TLS and a plain attempt.
+func TestProbeTimeoutCoversEveryAttempt(t *testing.T) {
+	c, err := pgx.ParseConfig("postgres://u:p@pg-a:5432,pg-b:5432/db?target_session_attrs=read-write&connect_timeout=10&sslmode=disable")
+	require.NoError(t, err)
+	assert.Equal(t, 23*time.Second, probeTimeout(c), "two hosts, one attempt each")
+	assert.Equal(t, 2, hostCount(c))
+
+	c, err = pgx.ParseConfig("postgres://u:p@pg-a:5432,pg-b:5432/db?target_session_attrs=read-write&connect_timeout=10&sslmode=prefer")
+	require.NoError(t, err)
+	assert.Equal(t, 43*time.Second, probeTimeout(c), "two hosts, a TLS and a plain attempt each")
+	assert.Equal(t, 2, hostCount(c), "still two servers")
+
+	c, err = pgx.ParseConfig("postgres://u:p@pg-a:5432/db")
+	require.NoError(t, err)
 	c.ConnectTimeout = 0
-	if got := probeTimeout(c); got != dbstate.DefaultProbeTimeout {
-		t.Errorf("no connect timeout = %s, want the default %s", got, dbstate.DefaultProbeTimeout)
-	}
+	assert.Equal(t, dbstate.DefaultProbeTimeout, probeTimeout(c))
 }

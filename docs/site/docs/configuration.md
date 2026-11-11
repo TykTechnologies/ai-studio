@@ -111,6 +111,8 @@ The pool is tuned with these variables (Postgres only; SQLite ignores them):
 | `DATABASE_CONN_MAX_LIFETIME` | `30m` | Connections older than this are closed and replaced, so after a planned switchover they also move to the new primary on their own. `0` never closes them. |
 | `DATABASE_CONNECT_TIMEOUT` | `10s` | Time allowed for one connection attempt, unless `DATABASE_URL` sets `connect_timeout` itself. With several hosts it is how long an unreachable one delays reaching the next. |
 
+**What an unreachable first host costs.** Hosts are tried in the order `DATABASE_URL` lists them. A host that refuses the connection (its Postgres is stopped) costs nothing. A host that does not answer at all (its machine or site is down, or a firewall drops the packets) costs the full connect timeout for every *new* connection, twice when `sslmode` allows both a TLS and a plain attempt (the default, `prefer`), before the next host is tried: 20 seconds with the defaults. Connections that are already open are not affected, but requests that need a new one wait that long. For a multi-host URL set a lower timeout, for example `DATABASE_CONNECT_TIMEOUT=3s` (or `connect_timeout=3` in the URL), and set `sslmode` to `require` or `disable` rather than leaving it at `prefer`; once the failed site is not coming back soon, put the surviving host first.
+
 At start Studio logs the pool's settings at `debug` (`Database pool: 2 host(s), target_session_attrs=read-write, …`).
 
 ### Behind PgBouncer

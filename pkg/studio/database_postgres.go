@@ -129,17 +129,20 @@ func openPostgres(conf *config.AppConf, dsn string) (gorm.Dialector, *sql.DB, er
 	return postgres.New(postgres.Config{DSN: dsn, Conn: pool}), pool, nil
 }
 
-// probeTimeout is how long one probe of the tracker may take: it may have
-// to dial, and with several hosts pgx tries each in turn for up to the
-// connect timeout, so the bound covers an attempt at every host and the
-// query after it. A shorter bound would report a database that answers on
-// its second host as unreachable whenever the first does not answer at all.
+// probeTimeout is how long one probe of the tracker may take. A probe may
+// have to dial, and pgx tries the connection string's hosts in order,
+// waiting up to the connect timeout at each attempt (two per host when
+// sslmode allows both a TLS and a plain connection). So the bound covers
+// every attempt, and the query after them: with a shorter one, a first host
+// that does not answer at all (a site that is down hard) would have the
+// tracker report a database that is writable on its second host as
+// unreachable.
 func probeTimeout(c *pgx.ConnConfig) time.Duration {
-	perHost := c.ConnectTimeout
-	if perHost <= 0 {
+	perAttempt := c.ConnectTimeout
+	if perAttempt <= 0 {
 		return dbstate.DefaultProbeTimeout
 	}
-	return time.Duration(hostCount(c))*perHost + 3*time.Second
+	return time.Duration(1+len(c.Fallbacks))*perAttempt + 3*time.Second
 }
 
 // hostCount is how many servers the connection string names. pgx lists a

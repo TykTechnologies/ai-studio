@@ -3,8 +3,8 @@ package studio
 import (
 	"database/sql"
 	"fmt"
-	"reflect"
 	"net/url"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"

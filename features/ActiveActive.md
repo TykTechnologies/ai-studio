@@ -156,10 +156,14 @@ Files: `pkg/studio/database.go`, `startup/connectivity.go`,
    Studio now opens the Postgres pool itself (`pkg/studio/database_postgres.go`,
    `stdlib.OpenDB`; the gorm dialector is given the pool) so it can retire
    connections: a `dbstate.Tracker` (`pkg/dbstate`) probes the server every
-   5 s, each probe bounded by a connection attempt at every host plus 3 s
-   so an unreachable first host does not make the database look
-   unreachable (`pg_is_in_recovery() OR transaction_read_only`, the latter because
-   a demoted primary that keeps running is not in recovery) and is told of
+   5 s. A probe may have to dial, so it is bounded by the time a dial can
+   legitimately take, the connect timeout for every attempt pgx makes (each
+   host, twice with `sslmode=prefer`) plus 3 s for the query, not by a
+   short fixed time: a first host that does not answer at all must not
+   make a database that is writable on its second host look unreachable
+   (it reads `pg_is_in_recovery() OR transaction_read_only`, the latter
+   because a demoted primary that keeps running is not in recovery) and is
+   told of
    every statement refused with 25006 (a gorm callback). While the server
    is not writable it raises a generation number; each connection is
    stamped with the generation it was dialled under and the driver's
@@ -169,6 +173,13 @@ Files: `pkg/studio/database.go`, `startup/connectivity.go`,
    were in use at the time. The first refusal while the database counted
    as writable acts at once; after that the probe does, once per period,
    so a server that stays read-only is not redialled for every statement.
+   Known behaviour, for items 5 and 7: a 25006 from one connection that
+   was held across a failover (in a long transaction, say) and is used
+   after everything else has moved flips the state to `read_only` and
+   retires the good connections too, until the probe it brings forward
+   answers, milliseconds later. It errs on the safe side. And the state
+   can lag the truth by up to one period in the other direction: an idle
+   replica on a demoted primary still says `writable` until the next probe.
    The tracker's `Status()` (`writable` / `read_only` / `unreachable`, time
    of the last change, failover count) is the accessor items 5 and 7 use;
    `dbstate.For(db)` finds it, and is nil (writable) for SQLite and for a
@@ -219,8 +230,7 @@ Files: `pkg/studio/database.go`, `startup/connectivity.go`,
    `cluster_counters` (`models.NextClusterCounter`). The stored value makes
    it increase from one leader to the next whatever their clocks; the floor
    keeps values in the clock's range, so edges and Studios of older
-   versions mix with it (rolling upgrade, rollback) and a counter set back
-   by a failover that lost commits recovers at once. This replaces the
+   versions mix with it (rolling upgrade, rollback). This replaces the
    earlier wording here ("a sequence or the database clock"): a row works
    the same on SQLite and Postgres, and a pure counter would have needed a
    base above every wall-clock value, which older versions could never
@@ -228,6 +238,14 @@ Files: `pkg/studio/database.go`, `startup/connectivity.go`,
    stream. Not covered: a leader older than 2.3 with a slower clock, and
    the first sync after an upgrade when the last older leader's clock ran
    ahead (ignored once, for as long as the difference).
+   Lost commits (asynchronous replication only): when a failover loses the
+   counter's last draws, the new leader's next value is above the lost ones
+   at once if its clock has passed them, which it has unless it is behind
+   the old leader's clock by more than the time since the last lost draw.
+   If it is that far behind, it continues from the last replicated value
+   and edges ignore budget syncs until its clock passes the highest lost
+   value: at most the difference between the two clocks. Synchronous
+   replication, the recommended setting, loses no draw.
 
 Tests: writes during promotion succeed within the window; a replica left on
 the demoted primary recovers without a restart; listener and event log
