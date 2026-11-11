@@ -550,6 +550,53 @@ func TestControlEndpoints_TLSNameFollowsTheEndpoint(t *testing.T) {
 		require.Error(t, client.Start())
 	})
 
+	t.Run("a failover checks the next endpoint against its own host", func(t *testing.T) {
+		// The second endpoint is B reached as "localhost", a name its
+		// certificate (127.0.0.1 only) does not carry: the edge must not
+		// carry A's name over, and must not accept B there.
+		_, portB, err := net.SplitHostPort(addrB)
+		require.NoError(t, err)
+		wrongB := net.JoinHostPort("localhost", portB)
+		before := b.registrations.Load()
+		client := endpointsClient(t, 50*time.Millisecond, withTLS(""), endpointA, wrongB)
+		require.NoError(t, client.Start())
+		waitLink(t, client, endpointA)
+		a.dropStreams(t)
+		// It cannot land on B under the wrong name; it comes back to A.
+		require.Eventually(t, func() bool { return a.streams.Load() >= 2 && client.ControlLink().Connected }, 10*time.Second, 10*time.Millisecond)
+		assert.Equal(t, endpointA, client.ControlLink().Endpoint)
+		assert.Equal(t, before, b.registrations.Load(), "B was accepted under a name its certificate does not carry")
+	})
+
+	t.Run("EDGE_TLS_SERVER_NAME overrides the host across a failover", func(t *testing.T) {
+		// Two sites whose certificates both carry one shared name and not
+		// the addresses the edge dials them by.
+		sharedCA, shared := siteCerts(t, []string{"cp.internal"}, []string{"cp.internal"})
+		c, d := newSiteControl("c", nil), newSiteControl("d", nil)
+		addrC, _ := c.serve(t, "127.0.0.1:0", grpc.Creds(credentials.NewServerTLSFromCert(&shared[0])))
+		addrD, _ := d.serve(t, "127.0.0.1:0", grpc.Creds(credentials.NewServerTLSFromCert(&shared[1])))
+		tlsWith := func(name string) func(*config.HubSpokeConfig) {
+			return func(hs *config.HubSpokeConfig) {
+				hs.AllowInsecure = false
+				hs.ClientTLSEnabled = true
+				hs.ClientTLSCAPath = sharedCA
+				hs.ClientTLSServerName = name
+			}
+		}
+
+		// Without the override neither is accepted by address.
+		require.Error(t, endpointsClient(t, 50*time.Millisecond, tlsWith(""), addrC, addrD).Start())
+
+		client := endpointsClient(t, 50*time.Millisecond, tlsWith("cp.internal"), addrC, addrD)
+		require.NoError(t, client.Start())
+		waitLink(t, client, addrC)
+		c.reject.Store(true)
+		c.dropStreams(t)
+		waitLink(t, client, addrD) // the name applies to the endpoint it failed over to
+		// A name neither certificate carries is refused on both.
+		require.Error(t, endpointsClient(t, 50*time.Millisecond, tlsWith("other.internal"), addrC, addrD).Start())
+	})
+
 	t.Run("EDGE_TLS_SERVER_NAME applies to every endpoint", func(t *testing.T) {
 		// With the name fixed to "localhost", A is accepted by address and
 		// B, whose certificate does not carry that name, is not.
