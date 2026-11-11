@@ -245,3 +245,29 @@ func TestPulseSnapshotHalve(t *testing.T) {
 	assert.Equal(t, 1, single.size())
 	assert.True(t, none.empty())
 }
+
+// What the edge gives up is counted by reason, for the metric an operator
+// reads after an outage, and the log line says why pulses were failing: an
+// unreachable control plane and one that answers but cannot store are
+// different incidents although the edge keeps records the same way.
+func TestAnalyticsPulse_DroppedRecordsAreCountedAndTheReasonIsNamed(t *testing.T) {
+	before := PulseDroppedRecords()
+	hub := &fakeSyncClient{failures: 100}
+	p := newRetryPlugin(hub, PulsePluginConfig{MaxBufferSize: 10, MaxRetries: 0})
+	bufferEvents(p, "req", 25, 1)
+
+	p.sendPulse() // takes 10, fails, holds them; 15 are buffered: 15 over the cap
+
+	after := PulseDroppedRecords()
+	assert.EqualValues(t, 15, after["over_cap"]-before["over_cap"])
+	assert.EqualValues(t, 0, after["expired"]-before["expired"])
+	assert.Equal(t, 10, p.totalBufferedLocked())
+	assert.Contains(t, after, "oversized")
+
+	assert.Equal(t, "the edge has no connection to a control plane", pulseFailureReason(errNotConnected))
+	assert.Contains(t, pulseFailureReason(status.Error(codes.Unavailable, "analytics pulse not stored; retry")), "answered but could not store")
+	assert.Equal(t, "the control plane could not be reached", pulseFailureReason(status.Error(codes.Unavailable, "connection refused")))
+	assert.Contains(t, pulseFailureReason(status.Error(codes.DeadlineExceeded, "context deadline exceeded")), "did not answer")
+	assert.Contains(t, pulseFailureReason(context.DeadlineExceeded), "did not answer")
+	assert.Equal(t, "the control plane refused or failed the call", pulseFailureReason(status.Error(codes.Internal, "boom")))
+}

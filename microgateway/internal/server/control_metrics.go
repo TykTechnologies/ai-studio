@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
+	"github.com/TykTechnologies/midsommar/microgateway/internal/plugins"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/rs/zerolog/log"
@@ -84,6 +85,39 @@ func controlLinkValues(endpoints []string, link func() (string, bool)) map[strin
 		if connected && e == current {
 			values[e] = 1
 		}
+	}
+	return values
+}
+
+// registerPulseDropMetric exports, on an edge, the analytics records its
+// pulse gave up: microgateway_analytics_pulse_dropped_records_total{reason}.
+// The control plane's analytics, and the spend it computes from them, are
+// short by these.
+//
+//   - reason="over_cap": discarded, oldest first, to keep what the edge
+//     holds for the control plane within max_buffer_size while pulses fail
+//     (no control plane reachable, or one that answers but cannot store).
+//     This is the number to look at after an outage.
+//   - reason="expired": held for longer than edge_retention_hours.
+//   - reason="oversized": one record larger than a pulse may be.
+func registerPulseDropMetric(cfg *config.Config) {
+	if !cfg.IsEdge() {
+		return
+	}
+	if err := metrics.RegisterLabelledCounterFunc(
+		"microgateway_analytics_pulse_dropped_records_total",
+		"Analytics records this edge's pulse gave up, by reason (over_cap: beyond max_buffer_size while pulses failed; expired: older than edge_retention_hours; oversized: one record too large for a pulse). The control plane's analytics are short by these.",
+		"reason",
+		func() map[string]float64 { return pulseDropValues(plugins.PulseDroppedRecords()) },
+	); err != nil {
+		log.Warn().Err(err).Msg("Failed to register analytics pulse drop metric")
+	}
+}
+
+func pulseDropValues(counts map[string]uint64) map[string]float64 {
+	values := make(map[string]float64, len(counts))
+	for reason, n := range counts {
+		values[reason] = float64(n)
 	}
 	return values
 }

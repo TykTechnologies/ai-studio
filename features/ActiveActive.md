@@ -355,7 +355,11 @@ Files: `microgateway/internal/config/config.go`,
      sequence number, the newer half goes back to the front of the buffer,
      and nothing is discarded, because the control plane is reachable. One
      record too large by itself is dropped with an error. What the edge
-     drops while no control plane answers is unchanged here (bead .36).
+     drops while no control plane answers is unchanged here (bead .36); it
+     is counted (`microgateway_analytics_pulse_dropped_records_total`,
+     reasons `over_cap`, `expired`, `oversized`) and its log line names
+     why pulses were failing: no connection, a control plane that answered
+     but could not store, or one that did not answer in time.
 5. A single DNS name or global load balancer in front of both CPs keeps
    working and stays documented as the alternative.
 

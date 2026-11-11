@@ -38,3 +38,11 @@ func TestConfigSourceMetricValues(t *testing.T) {
 	assert.Zero(t, configAgeSeconds(source("control", time.Time{}), now), "never had a control plane")
 	assert.Zero(t, configAgeSeconds(source("control", now.Add(time.Minute)), now), "a clock that stepped back does not give a negative age")
 }
+
+// Every reason a pulse drops records for is a series from the start, at 0,
+// so an alert on the counter does not wait for the first loss to exist.
+func TestPulseDropMetricValues(t *testing.T) {
+	assert.Equal(t,
+		map[string]float64{"over_cap": 12, "expired": 0, "oversized": 1},
+		pulseDropValues(map[string]uint64{"over_cap": 12, "expired": 0, "oversized": 1}))
+}

@@ -894,12 +894,63 @@ func (p *AnalyticsPulsePlugin) holdSnapshotLocked(snap pulseSnapshot, seq uint64
 		p.held = nil
 	}
 
+	pulseDroppedOverCap.Add(uint64(dropped))
+	pulseDroppedExpired.Add(uint64(expired))
 	if expired > 0 || dropped > 0 {
 		log.Warn().
 			Int("expired", expired).
 			Int("dropped_over_cap", dropped).
 			Int("buffered", p.totalBufferedLocked()).
-			Msg("Analytics records discarded while the control server is unreachable")
+			Int("max_buffer_size", p.config.MaxBufferSize).
+			Str("pulses_fail_because", pulseFailureReason(p.lastError)).
+			AnErr("last_error", p.lastError).
+			Msg("Analytics records discarded: pulses are failing and the edge keeps at most max_buffer_size records for the next one")
+	}
+}
+
+// Records the pulse gave up, by reason, since the process started
+// (microgateway_analytics_pulse_dropped_records_total). They are lost to the
+// control plane: its analytics, and the spend it computes from them, are
+// that much short.
+var (
+	// pulseDroppedOverCap: discarded, oldest first, to keep the held batch
+	// and the buffers within max_buffer_size while pulses fail.
+	pulseDroppedOverCap atomic.Uint64
+	// pulseDroppedExpired: held for longer than edge_retention_hours.
+	pulseDroppedExpired atomic.Uint64
+	// pulseDroppedOversized: one record larger than a pulse may be.
+	pulseDroppedOversized atomic.Uint64
+)
+
+// PulseDroppedRecords returns how many records the analytics pulse has
+// given up since the process started, by reason: "over_cap", "expired",
+// "oversized".
+func PulseDroppedRecords() map[string]uint64 {
+	return map[string]uint64{
+		"over_cap":  pulseDroppedOverCap.Load(),
+		"expired":   pulseDroppedExpired.Load(),
+		"oversized": pulseDroppedOversized.Load(),
+	}
+}
+
+// pulseFailureReason says, for the log, why a pulse failed: the edge keeps
+// records the same way in each case, but an operator reading "discarded"
+// needs to know whether the control plane was away or answered and could
+// not store.
+func pulseFailureReason(err error) string {
+	switch {
+	case err == nil:
+		return "unknown"
+	case errors.Is(err, errNotConnected):
+		return "the edge has no connection to a control plane"
+	case status.Code(err) == codes.Unavailable && strings.Contains(err.Error(), "not stored"):
+		return "the control plane answered but could not store the pulse (its database is unavailable)"
+	case status.Code(err) == codes.Unavailable:
+		return "the control plane could not be reached"
+	case status.Code(err) == codes.DeadlineExceeded || errors.Is(err, context.DeadlineExceeded):
+		return "the control plane did not answer within timeout_seconds"
+	default:
+		return "the control plane refused or failed the call"
 	}
 }
 
@@ -1033,6 +1084,7 @@ func (p *AnalyticsPulsePlugin) splitTooLarge(snap pulseSnapshot, sequenceNum uin
 	first, second := snap.halve()
 	if second.empty() {
 		p.oversizedDropped.Add(uint64(first.size()))
+		pulseDroppedOversized.Add(uint64(first.size()))
 		log.Error().
 			Uint64("sequence", sequenceNum).
 			Int("message_bytes", size).
