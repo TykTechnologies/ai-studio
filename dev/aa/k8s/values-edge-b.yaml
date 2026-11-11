@@ -1,0 +1,41 @@
+# Values for helm/charts/microgateway: the edge of site b in the load-test
+# stack (release name edge-b). The edge gets its whole node, as the
+# gateway benchmark's edge does; everything else is the benchmark's edge
+# configuration plus the active-active settings.
+kind: StatefulSet
+replicaCount: 1
+image:
+  repository: MICROGATEWAY_REPOSITORY
+  tag: MICROGATEWAY_TAG
+persistence:
+  enabled: true
+  storageClass: gp3
+  size: 2Gi
+nodeSelector:
+  aa-load/role: edge
+  aa-load/site: b
+tolerations:
+  - {key: aa-load, operator: Equal, value: edge, effect: NoSchedule}
+resources:
+  # The node is a c7i.xlarge (4 vCPU, 8 GiB). The limit is the whole machine,
+  # so GOMAXPROCS is 4 as in the benchmark; the request leaves room for the
+  # node's daemons or the pod would not schedule.
+  requests: {cpu: 3500m, memory: 6Gi}
+  limits: {cpu: "4", memory: 6Gi}
+config:
+  controlEndpoints: ["cp-b:50051", "cp-a:50051"]   # own site first
+  controlFailbackInterval: ""
+  startFromLastKnownGood: true
+  edgeNamespace: default
+  heartbeatInterval: "5s"
+  # The image's working directory is not the chart's: name the volume.
+  databaseDsn: "file:/opt/tyk-microgateway/data/edge.db?mode=rwc"
+  # The mock upstream has a cluster-internal address.
+  blockInternalUpstreams: false
+secrets:
+  existingSecret: aa-edge   # EDGE_AUTH_TOKEN, ENCRYPTION_KEY; created by aa-k8s.sh secrets
+extraEnv:
+  - {name: GATEWAY_SERVER_TIMING, value: "true"}
+analyticsPulse:   # as benchmarks/gateway/compose/analytics-pulse.yaml
+  includeRequestResponseData: false
+  excludedVendors: []

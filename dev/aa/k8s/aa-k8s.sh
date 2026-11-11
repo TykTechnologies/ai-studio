@@ -6,6 +6,7 @@
 #   aa-k8s.sh secrets                 create the Secrets with throwaway random values (once)
 #   aa-k8s.sh apply                   namespace, PostgreSQL, Studio, control proxies, mock upstream
 #                                     (needs STUDIO_IMAGE and TOOLS_IMAGE; edges are the Helm chart, see README)
+#   aa-k8s.sh render-edges            helm template of the two edges into rendered/ (needs MICROGATEWAY_IMAGE)
 #   aa-k8s.sh status                  pods, roles, replication, replicas, edges
 #   aa-k8s.sh users                   register the test's own users; make the seeder and the two writers administrators
 #   aa-k8s.sh seed                    gwbench seed: LLMs on the mock, App and key, prices, push to both edges
@@ -76,10 +77,28 @@ cmd_apply() {
 	k get configmap aa-pg-roles >/dev/null 2>&1 || k apply -f "$HERE/05-pg-roles.yaml"
 	k apply -f "$HERE/10-postgres.yaml"
 	sed "s|STUDIO_IMAGE|$STUDIO_IMAGE|" "$HERE/20-studio.yaml" | k apply -f -
+	# The edges, if they have been rendered (aa-k8s.sh render-edges).
+	if [ -f "$HERE/rendered/edge-a.yaml" ] && [ "${AA_HUB_ONLY:-}" != 1 ]; then
+		k apply -f "$HERE/rendered/edge-a.yaml" -f "$HERE/rendered/edge-b.yaml"
+	fi
 	# AA_HUB_ONLY=1: the hub side alone (the edge and tools nodes may not be up yet).
 	[ "${AA_HUB_ONLY:-}" = 1 ] && return 0
 	k apply -f "$HERE/25-edges-service.yaml"
 	sed "s|TOOLS_IMAGE|$TOOLS_IMAGE|" "$HERE/30-tools.yaml" | k apply -f -
+}
+
+# helm template with the local alpine/helm image; nothing touches the cluster.
+# AA_CHART_DIR: the chart to render (default helm/charts/microgateway).
+cmd_render_edges() {
+	: "${MICROGATEWAY_IMAGE:?set MICROGATEWAY_IMAGE to repository:tag of the microgateway image}"
+	local chart=${AA_CHART_DIR:-$HERE/../../../helm/charts/microgateway} s
+	mkdir -p "$HERE/rendered"
+	for s in a b; do
+		sed -e "s|MICROGATEWAY_REPOSITORY|${MICROGATEWAY_IMAGE%:*}|" -e "s|MICROGATEWAY_TAG|${MICROGATEWAY_IMAGE##*:}|" "$HERE/values-edge-$s.yaml" > "$HERE/rendered/values-edge-$s.yaml"
+		docker run --rm -v "$(cd "$chart" && pwd):/chart:ro" -v "$HERE/rendered/values-edge-$s.yaml:/values.yaml:ro" alpine/helm:3.16.2 \
+			template "edge-$s" /chart --namespace "$NS" -f /values.yaml > "$HERE/rendered/edge-$s.yaml"
+		echo "rendered/edge-$s.yaml: $(grep -c '^kind:' "$HERE/rendered/edge-$s.yaml") objects"
+	done
 }
 
 cmd_status() {
@@ -134,7 +153,7 @@ start_half() {
 	k exec "deploy/gwbench-$1" -- sh -c "
 		sed 's/RUN_DURATION/$4/' /bench/scenarios/$3.yaml > /tmp/$2-$1.yaml &&
 		nohup gwbench run -no-analytics-check -rate-scale $5 -label '$2 ($3 x$5)' \
-			-metrics http://edge-$6-microgateway:8080/metrics /tmp/$2-$1.yaml > /bench/results/$2-$1.log 2>&1 &"
+			-metrics http://edge-$6:8080/metrics /tmp/$2-$1.yaml > /bench/results/$2-$1.log 2>&1 &"
 }
 
 cmd_run() {
@@ -301,6 +320,7 @@ cmd_teardown() {
 case "${1:-}" in
 secrets) cmd_secrets ;;
 apply) cmd_apply ;;
+render-edges) cmd_render_edges ;;
 status) cmd_status ;;
 users) cmd_users ;;
 seed) cmd_seed ;;
@@ -318,5 +338,5 @@ cut-cp) cmd_cp 0 "${2:-}" ;;
 restore-cp) cmd_cp 1 "${2:-}" ;;
 kill-edge) cmd_kill_edge "${2:-}" ;;
 teardown) cmd_teardown "${2:-}" ;;
-*) sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+*) sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

@@ -2,9 +2,25 @@
 # has in front of them: the load generator sends everything here, each edge
 # takes half, and when a site is lost the survivor takes all of it.
 # The selector matches the pods of both Helm releases (edge-a, edge-b).
+# The chart's own Services do too (its selector is the app label alone), so
+# one edge is addressed through edge-a / edge-b below, never through them.
 apiVersion: v1
 kind: Service
 metadata: {name: edges, namespace: aa-load}
 spec:
-  selector: {app.kubernetes.io/name: microgateway}
+  selector: {app: microgateway}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: edge-a, namespace: aa-load}
+spec:
+  selector: {app: microgateway, app.kubernetes.io/instance: edge-a}
+  ports: [{name: http, port: 8080, targetPort: 8080}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: edge-b, namespace: aa-load}
+spec:
+  selector: {app: microgateway, app.kubernetes.io/instance: edge-b}
   ports: [{name: http, port: 8080, targetPort: 8080}]
