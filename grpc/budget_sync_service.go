@@ -492,8 +492,16 @@ const budgetSyncSequenceName = "budget.sync"
 // keeps the values in the range of the clock, as every version sent them:
 // an edge holding a sequence from an older Studio accepts these, an older
 // Studio that takes over (a rolling upgrade, a rollback) is accepted in
-// turn, and a counter set back by a failover that lost its last commits is
-// above the lost values at once.
+// turn.
+//
+// A counter set back by a failover that lost its last commits (asynchronous
+// replication) is above the lost values at once only when the new leader's
+// clock has already passed them: the lost values were the old leader's
+// clock, so that is the case unless the new leader's clock is behind the
+// old one's by more than the time since the last lost draw. If it is, the
+// new leader continues from the last replicated value, below the lost ones,
+// and edges ignore its syncs until its clock passes the highest lost value:
+// at most the difference between the two clocks.
 func (s *BudgetSyncService) nextSequence(now time.Time) (uint64, error) {
 	value, err := models.NextClusterCounter(s.db, budgetSyncSequenceName, now.UnixNano())
 	if err != nil {
