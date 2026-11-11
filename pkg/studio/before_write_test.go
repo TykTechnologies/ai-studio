@@ -61,6 +61,36 @@ func TestNewRefusesADatabaseItCannotRead_Postgres(t *testing.T) {
 	})
 }
 
+// The same refusal on the two databases an upgrade starts from, had a newer
+// build left its mark on them: a 2.2-shaped one and one from before App
+// keys were converted. Neither is migrated, and no key is rewritten.
+func TestNewRefusesAnUnreadableDatabaseBeforeMigratingIt_Postgres(t *testing.T) {
+	for name, seed := range map[string]func(t *testing.T, opts Options){
+		"a 2.2-shaped database": func(t *testing.T, opts Options) {
+			seed222Database(t, opts.DB)
+			require.NoError(t, opts.DB.AutoMigrate(&models.StudioSchema{}))
+			require.NoError(t, opts.DB.Create(&models.StudioSchema{ID: 1, Version: models.SchemaVersion + 1, MinReaderVersion: models.SchemaVersion + 1, WrittenBy: "9.9.9"}).Error)
+		},
+		"a database from before App keys were converted": func(t *testing.T, opts Options) {
+			require.NoError(t, models.InitModels(opts.DB))
+			require.NoError(t, opts.DB.Exec("DROP INDEX idx_credentials_secret_hash").Error)
+			require.NoError(t, opts.DB.Exec("ALTER TABLE credentials DROP COLUMN secret_hash").Error)
+			require.NoError(t, opts.DB.Create(&models.StudioSchema{ID: 1, Version: models.SchemaVersion + 1, MinReaderVersion: models.SchemaVersion + 1, WrittenBy: "9.9.9"}).Error)
+			legacyKeys(t, opts.DB, 5)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			forEachStudioDatabase(t, func(t *testing.T, opts Options) {
+				seed(t, opts)
+				before := databaseFingerprint(t, opts.DB)
+				_, err := New(opts)
+				require.ErrorIs(t, err, ErrSchemaTooNew)
+				assert.Equal(t, before, databaseFingerprint(t, opts.DB), "the database is untouched")
+			})
+		})
+	}
+}
+
 // Newer but readable, equal and older databases start as before; the newer
 // one keeps its record (with RecordSchemaVersion's warning).
 func TestNewStartsOnDatabasesItCanRead_Postgres(t *testing.T) {
