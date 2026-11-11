@@ -36,7 +36,17 @@ type LeadershipOptions struct {
 	// node registry before this replica takes the lease from it (default
 	// two HeartbeatIntervals). See predecessorGone.
 	PredecessorSilence time.Duration
+	// ClockAllowance is how far the database's clock may differ after a
+	// failover from what it was before (default 30 s): the new primary is
+	// another machine. Only a lease that expired longer ago than this, by
+	// the database's clock, is taken on that clock's word; see acquire.
+	ClockAllowance time.Duration
 }
+
+// DefaultLeaseClockAllowance is the difference between the clocks of two
+// database servers that a failover between them may bring without two
+// replicas ever leading at once.
+const DefaultLeaseClockAllowance = 30 * time.Second
 
 func (o LeadershipOptions) withDefaults() LeadershipOptions {
 	if o.TTL <= 0 {
@@ -48,16 +58,37 @@ func (o LeadershipOptions) withDefaults() LeadershipOptions {
 	if o.PredecessorSilence <= 0 {
 		o.PredecessorSilence = 2 * HeartbeatInterval
 	}
+	if o.ClockAllowance <= 0 {
+		o.ClockAllowance = DefaultLeaseClockAllowance
+	}
 	return o
 }
 
 // Leadership keeps this replica's claim on a named lease. The lease is
-// taken and renewed with conditional writes against the database's clock,
-// so at most one replica holds it. A replica believes it leads only until
-// its last successful renewal plus the TTL minus one renewal period, by its
-// own monotonic clock: it stops believing before the database would let
-// another replica take over, even if it cannot reach the database to find
-// out.
+// taken and renewed with conditional writes, so at most one replica holds
+// it. A replica believes it leads only until its last successful renewal
+// plus the TTL minus one renewal period, by its own monotonic clock: it
+// stops believing before another replica may take over, even if it cannot
+// reach the database to find out.
+//
+// When another replica may take a lease its holder stopped renewing is
+// decided by that replica's own monotonic clock too, not by the database's:
+// it takes the lease once it has watched the same renewal sit unchanged for
+// longer than the holder believes in it (see acquire). The database's clock
+// is not one clock: after a failover it is another machine's, seconds ahead
+// or behind, and a lease judged by it would be taken from a live holder
+// (clock ahead) or left without one for longer than the TTL (clock behind).
+//
+// Why two replicas never both believe they hold it: the holder's belief
+// runs from the moment it started its last successful renewal write, for
+// believeFor; the taker's wait runs from the moment it first read that
+// renewal, which is after the write committed and so after the holder
+// started it, for takeAfter, which is longer. Each is measured on its own
+// machine's monotonic clock. The wait therefore ends after the belief
+// unless the two clocks' rates differ by more than the difference between
+// takeAfter and believeFor (a twentieth of a renewal period: 2.4% with the
+// defaults); oscillators differ by parts per million. No wall clock and no
+// database clock is in the argument.
 //
 // With SQLite, which one process serves, that process leads from Start to
 // Stop whatever the lease row says: a restart after a crash must not wait
@@ -82,6 +113,16 @@ type Leadership struct {
 	// waitingFor is the earlier process whose silence this replica last
 	// said it waits for (tick goroutine only; logs it once).
 	waitingFor string
+	// watched is the renewal of another holder this replica last saw, and
+	// watchedSince when it first saw it (tick goroutine only). time.Since
+	// on it uses the monotonic clock.
+	watched      string
+	watchedSince time.Time
+	// silentSeen is the registration (holder and last refresh) of a
+	// holder in another pid namespace this replica last saw, and
+	// silentSince when it first saw it (tick goroutine only).
+	silentSeen  string
+	silentSince time.Time
 
 	mu sync.Mutex
 	// renewedAt is when the last successful renewal started (zero: not
@@ -276,10 +317,24 @@ func (l *Leadership) tick() time.Duration {
 }
 
 // acquire renews the lease if this node holds it, or takes it if it is
-// free or expired, in one conditional write. On SQLite it takes it
-// whoever holds it. On Postgres, when another replica holds it, it takes
-// it over if that replica is this one's dead predecessor; retry is how
-// soon to look again when that may soon be known.
+// free, each in one conditional write. On SQLite it takes it whoever holds
+// it. On Postgres the lease of another replica is free for the taking when:
+//
+//   - nobody holds it: it was never taken, or its holder released it (Stop);
+//   - it expired more than ClockAllowance ago by the database's clock: no
+//     clock difference a failover brings explains that, so its holder
+//     stopped long ago (a cluster starting after everything was down);
+//   - this replica has watched the same renewal (holder and renewal time)
+//     for longer than a holder believes in one (takeAfter), by its own
+//     monotonic clock. A live holder renews every Renew, which changes what
+//     is watched and starts the wait again; one that cannot reach the
+//     database stopped believing before the wait ends. This holds whatever
+//     the database's clock says, and whichever server answers;
+//   - its holder is this replica's dead predecessor on this host
+//     (predecessorGone).
+//
+// retry is how soon to look again when the answer may change sooner than
+// the next renewal period.
 func (l *Leadership) acquire() (held bool, retry time.Duration, err error) {
 	for attempt := 0; ; attempt++ {
 		if !l.created {
@@ -295,13 +350,15 @@ func (l *Leadership) acquire() (held bool, retry time.Duration, err error) {
 		}
 		q := l.db.Model(&models.ClusterLease{}).Where("name = ?", l.name)
 		if !l.single {
-			q = q.Where("holder = ? OR expires_at <= ?", l.node, nowExpr(l.db))
+			// Renew, or take a lease nobody holds.
+			q = q.Where("holder = ? OR holder = ''", l.node)
 		}
 		res := q.Updates(l.claim())
 		if res.Error != nil {
 			return false, 0, fmt.Errorf("renew lease: %w", res.Error)
 		}
 		if res.RowsAffected == 1 {
+			l.watched = ""
 			return true, 0, nil
 		}
 		if l.single {
@@ -323,8 +380,61 @@ func (l *Leadership) acquire() (held bool, retry time.Duration, err error) {
 			}
 			return false, 0, nil
 		}
-		return l.takeOver(h)
+		held, retry, err := l.takeOver(h)
+		if held || err != nil {
+			return held, retry, err
+		}
+		if wait := l.takeUnrenewed(h); wait >= 0 {
+			// Not yet: look again when the wait is over, or sooner if the
+			// predecessor check asked for that.
+			if retry <= 0 || wait < retry {
+				retry = wait
+			}
+			return false, retry, nil
+		}
+		return l.takeFrom(h)
 	}
+}
+
+// takeAfter is how long this replica watches another holder's renewal
+// before it takes the lease: as long as the holder believes in that renewal
+// (it started the renewal before this replica could see it), and a twentieth
+// of a renewal period more for the difference between two machines' clock
+// rates.
+func (l *Leadership) takeAfter() time.Duration { return l.believeFor() + l.opts.Renew/20 }
+
+// takeUnrenewed reports how long to wait before h's lease may be taken as
+// no longer renewed (at least a millisecond), or -1 when it may be taken
+// now.
+func (l *Leadership) takeUnrenewed(h leaseHolder) time.Duration {
+	if h.ExpiredFor >= l.opts.ClockAllowance.Seconds() {
+		return -1
+	}
+	if h.Renewal != l.watched {
+		l.watched, l.watchedSince = h.Renewal, time.Now()
+	}
+	if wait := l.takeAfter() - time.Since(l.watchedSince); wait > 0 {
+		return max(wait, time.Millisecond)
+	}
+	return -1
+}
+
+// takeFrom takes the lease from h on the condition that it is still the
+// renewal that was read: a holder that renewed meanwhile keeps it, and of
+// two replicas taking it at once one succeeds.
+func (l *Leadership) takeFrom(h leaseHolder) (bool, time.Duration, error) {
+	res := l.db.Model(&models.ClusterLease{}).
+		Where("name = ? AND holder = ? AND renewed_at::text = ?", l.name, h.Holder, h.RenewedAt).
+		Updates(l.claim())
+	if res.Error != nil {
+		return false, 0, fmt.Errorf("take lease: %w", res.Error)
+	}
+	if res.RowsAffected != 1 {
+		return false, 0, nil
+	}
+	l.watched = ""
+	logger.Infof("Cluster lease %q: taken from %s, which stopped renewing it", l.name, h.Holder)
+	return true, 0, nil
 }
 
 // claim is the update that makes this node the holder for another TTL.
@@ -349,6 +459,15 @@ type leaseHolder struct {
 	// Silent is how long ago, in seconds by the database's clock, the
 	// holder last refreshed its registration.
 	Silent float64 `gorm:"column:silent"`
+	// RenewedAt is the lease's renewal time as the database prints it, and
+	// Renewal what identifies this renewal: the holder with that time.
+	RenewedAt string `gorm:"column:renewed"`
+	Renewal   string `gorm:"-"`
+	// Seen identifies the holder's last refresh of its registration.
+	Seen string `gorm:"column:seen"`
+	// ExpiredFor is how long ago, in seconds by the database's clock, the
+	// lease expired (negative: it has not).
+	ExpiredFor float64 `gorm:"column:expired_for"`
 }
 
 // holder reads the lease's holder and its registration in one statement
@@ -358,12 +477,16 @@ func (l *Leadership) holder() (leaseHolder, bool, error) {
 	res := l.db.Raw(`SELECT l.holder, n.node_id IS NOT NULL AS registered,
 		COALESCE(n.hostname, '') AS hostname, COALESCE(n.boot_id, '') AS boot_id,
 		COALESCE(n.pid_namespace, '') AS pid_namespace, COALESCE(n.pid, 0) AS pid,
-		COALESCE(EXTRACT(EPOCH FROM now() - n.last_seen), 0)::float8 AS silent
+		COALESCE(EXTRACT(EPOCH FROM now() - n.last_seen), 0)::float8 AS silent,
+		COALESCE(l.renewed_at::text, '') AS renewed,
+		l.holder || '@' || COALESCE(n.last_seen::text, '') AS seen,
+		EXTRACT(EPOCH FROM now() - l.expires_at)::float8 AS expired_for
 		FROM cluster_leases l LEFT JOIN cluster_nodes n ON n.node_id = l.holder
 		WHERE l.name = ?`, l.name).Scan(&h)
 	if res.Error != nil {
 		return h, false, res.Error
 	}
+	h.Renewal = h.Holder + "@" + h.RenewedAt
 	return h, res.RowsAffected > 0, nil
 }
 
@@ -386,6 +509,7 @@ func (l *Leadership) takeOver(h leaseHolder) (bool, time.Duration, error) {
 	if res.RowsAffected != 1 {
 		return false, 0, nil
 	}
+	l.watched = ""
 	logger.Infof("Cluster lease %q: taken over from %s, an earlier Studio process on this host that is gone (%s), without waiting for the lease to expire", l.name, h.Holder, why)
 	return true, 0, nil
 }
@@ -411,7 +535,11 @@ func (l *Leadership) takeOver(h leaseHolder) (bool, time.Duration, error) {
 //     given the same hostname. Silence tells them apart: a live replica
 //     refreshes its registration every HeartbeatInterval, so a holder
 //     silent for PredecessorSilence (two intervals by default) is gone.
-//     retry says when that will be the case.
+//     The silence must be this replica's own observation (it watched the
+//     registration go unrefreshed that long), unless the database's clock
+//     puts it beyond PredecessorSilence plus ClockAllowance: after a
+//     failover the database's clock may be ahead of the one that stamped
+//     the registration. retry says when that will be the case.
 func (l *Leadership) predecessorGone(h leaseHolder) (gone, bySilence bool, why string, retry time.Duration) {
 	me := l.proc
 	if !h.Registered || h.Holder == l.node || me.BootID == "" || h.BootID != me.BootID || h.Hostname != me.Hostname {
@@ -430,8 +558,22 @@ func (l *Leadership) predecessorGone(h leaseHolder) (gone, bySilence bool, why s
 		return false, false, "", 0
 	}
 	silent := time.Duration(h.Silent * float64(time.Second))
-	if silent >= l.opts.PredecessorSilence {
+	// Silence by the database's clock alone is evidence only when no clock
+	// difference a failover brings explains it. Short of that, this replica
+	// must itself have watched the holder's registration go unrefreshed
+	// for PredecessorSilence, by its own clock: after a failover to a
+	// server whose clock is ahead, a live replica looks silent until its
+	// next refresh.
+	if h.Seen != l.silentSeen {
+		l.silentSeen, l.silentSince = h.Seen, time.Now()
+	}
+	watched := time.Since(l.silentSince)
+	if silent >= l.opts.PredecessorSilence+l.opts.ClockAllowance || (silent >= l.opts.PredecessorSilence && watched >= l.opts.PredecessorSilence) {
 		return true, true, fmt.Sprintf("it ran in another pid namespace and has been silent for %s", silent.Round(time.Second)), 0
+	}
+	if silent >= l.opts.PredecessorSilence {
+		// Silent by the database's clock; not yet watched for long enough.
+		return false, false, "", l.opts.PredecessorSilence - watched + 100*time.Millisecond
 	}
 	if l.waitingFor != h.Holder {
 		l.waitingFor = h.Holder
@@ -441,8 +583,10 @@ func (l *Leadership) predecessorGone(h leaseHolder) (gone, bySilence bool, why s
 }
 
 func (l *Leadership) release() {
+	// Nobody holds it now: the next replica to look takes it at once. (The
+	// expiry in the past is what replicas of an earlier version go by.)
 	res := l.db.Model(&models.ClusterLease{}).Where("name = ? AND holder = ?", l.name, l.node).
-		Update("expires_at", sinceExpr(l.db, time.Second))
+		Updates(map[string]interface{}{"holder": "", "expires_at": sinceExpr(l.db, time.Second)})
 	if res.Error != nil {
 		logger.Warnf("Cluster lease %q: releasing it failed; another replica takes over when it expires: %v", l.name, res.Error)
 	}
