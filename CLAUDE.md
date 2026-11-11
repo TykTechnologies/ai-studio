@@ -403,8 +403,8 @@ The platform supports comprehensive white-labeling capabilities for administrato
 ### Overview
 - **Access**: Admin-only via `/admin/branding` page
 - **Scope**: System-wide customization (applies to all users)
-- **Storage**: Database for settings, filesystem for assets (`./data/branding`)
-- **Environment**: Configure storage path via `BRANDING_STORAGE_PATH`
+- **Storage**: Database for settings and for assets (`branding_assets`), so every replica serves them
+- **Environment**: `BRANDING_STORAGE_PATH` (`./data/branding`) is read once at start to import assets uploaded before 2.3
 
 ### Customizable Elements
 - **Logo**: Header logo (PNG/JPG/SVG, max 2MB) - served via `/api/v1/branding/logo`
@@ -414,7 +414,7 @@ The platform supports comprehensive white-labeling capabilities for administrato
 - **CSS**: Custom CSS overrides (admin-only, use with caution)
 
 ### Architecture
-- **Backend**: `models/branding_settings.go`, `services/branding_*.go`, `api/branding_handlers.go`
+- **Backend**: `models/branding_settings.go`, `models/branding_asset.go`, `services/branding_*.go`, `api/branding_handlers.go`
 - **Frontend**: Dynamic theme generation in `ui/admin-frontend/src/admin/theme.js`
 - **Admin UI**: Full management interface at `ui/admin-frontend/src/admin/pages/BrandingSettings.js`
 - **Integration**: Branding config included in `/auth/config` for frontend bootstrap
@@ -423,7 +423,7 @@ The platform supports comprehensive white-labeling capabilities for administrato
 - Runtime theme changes without rebuild
 - File validation and size limits
 - Reset to defaults functionality
-- Container volume mounting support
+- Assets served from the database by every replica (no volume needed)
 - Live preview for colors
 
 ### API Endpoints

@@ -166,7 +166,8 @@ What the deployment must provide:
 
 - **PostgreSQL.** Several replicas need PostgreSQL; SQLite is single-process.
 - **Session affinity for the UI.** Chat and agent conversations, and MCP connections over SSE, are held by the replica that started them. Route each browser session to one replica (sticky sessions on the load balancer).
-- **A shared `data/` volume**, if you use branding uploads or log exports: they are files on the replica that received them.
+- **Nothing shared for branding.** The logo and favicon are in the database: an upload through one replica is served by the others within a second or two.
+- **Log exports stay on the replica that made them.** Download an export through the replica that created it (session affinity does this), or give the replicas of one site a shared volume at `EXPORT_STORAGE_PATH`.
 - **Plugins from the marketplace or an OCI registry.** A plugin installed from a local file (`file://`) must exist at the same path on every replica.
 - **The same configuration and secrets** on every replica (the table below).
 
@@ -181,7 +182,9 @@ Two settings change on their own schedule rather than at once: team budget setti
 
 ### Persistent files
 
-Studio also writes a small amount to its working directory's `data/` folder: uploaded branding assets (`BRANDING_STORAGE_PATH`), log exports and the OCI plugin cache (`AI_STUDIO_OCI_CACHE_DIR`). Mount a persistent volume there so branding survives a restart. The OCI cache is also what enables the plugin marketplace: without `AI_STUDIO_OCI_CACHE_DIR`, the marketplace does not start.
+Studio also writes a small amount to its working directory's `data/` folder: log exports (`EXPORT_STORAGE_PATH`) and the OCI plugin cache (`AI_STUDIO_OCI_CACHE_DIR`). Log exports are per replica: an export is a file on the replica that made it, and is downloaded from that replica.
+
+From 2.3 the uploaded logo and favicon are stored in the database, not in `data/branding`, so they survive restarts and every replica serves them. When you upgrade an installation that has a custom logo or favicon, start the first 2.3 replica with the old `data/branding` volume (`BRANDING_STORAGE_PATH`) still mounted: it imports the files once. After that the directory is not used. The OCI cache is also what enables the plugin marketplace: without `AI_STUDIO_OCI_CACHE_DIR`, the marketplace does not start.
 
 ### Secrets that must match
 

@@ -128,7 +128,10 @@ const (
 	//     microgateway_key_fp and grpc_auth_token_fp (nullable, additive):
 	//     fingerprints of the secrets replicas must share, for the cluster
 	//     status to compare (midsommar-clean-4x5y.21).
-	SchemaVersion          = 39
+	// 40: branding_assets (new table, additive): the uploaded logo and
+	//     favicon, stored in the database so every replica serves them
+	//     (midsommar-clean-4x5y.20).
+	SchemaVersion          = 40
 	MinReaderSchemaVersion = 26
 )
 

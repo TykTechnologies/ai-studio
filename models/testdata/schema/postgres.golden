@@ -449,6 +449,16 @@ TABLE auth_codes
   column code_challenge_method character varying(varchar) nullable=YES len=50
   column used boolean(bool) nullable=YES default=false
   column app_id bigint(int8) nullable=YES precision=64 scale=0
+TABLE branding_assets
+  constraint branding_assets_pkey PRIMARY KEY (kind)
+  index CREATE UNIQUE INDEX branding_assets_pkey ON branding_assets USING btree (kind)
+  column kind character varying(varchar) nullable=NO len=16
+  column content_type character varying(varchar) nullable=NO len=64
+  column data bytea(bytea) nullable=NO
+  column hash character varying(varchar) nullable=NO len=64
+  column size bigint(int8) nullable=NO precision=64 scale=0
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
 TABLE branding_settings
   constraint branding_settings_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX branding_settings_pkey ON branding_settings USING btree (id)

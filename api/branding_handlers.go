@@ -3,9 +3,10 @@ package api
 import (
 	"io/fs"
 	"net/http"
-	"os"
-	"path/filepath"
+	"strings"
 
+	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
@@ -219,11 +220,13 @@ func (a *API) uploadLogo(c *gin.Context) {
 				}{{Title: "Bad Request", Detail: "Invalid file type. Allowed types: PNG, JPG, SVG"}},
 			})
 		} else {
+			// The cause (a database error) goes to the log, not the response.
+			logger.Errorf("Branding: could not save the logo: %v", err)
 			c.JSON(http.StatusInternalServerError, ErrorResponse{
 				Errors: []struct {
 					Title  string `json:"title"`
 					Detail string `json:"detail"`
-				}{{Title: "Internal Server Error", Detail: err.Error()}},
+				}{{Title: "Internal Server Error", Detail: "Failed to save the logo"}},
 			})
 		}
 		return
@@ -311,11 +314,13 @@ func (a *API) uploadFavicon(c *gin.Context) {
 				}{{Title: "Bad Request", Detail: "Invalid file type. Allowed types: ICO, PNG"}},
 			})
 		} else {
+			// The cause (a database error) goes to the log, not the response.
+			logger.Errorf("Branding: could not save the favicon: %v", err)
 			c.JSON(http.StatusInternalServerError, ErrorResponse{
 				Errors: []struct {
 					Title  string `json:"title"`
 					Detail string `json:"detail"`
-				}{{Title: "Internal Server Error", Detail: err.Error()}},
+				}{{Title: "Internal Server Error", Detail: "Failed to save the favicon"}},
 			})
 		}
 		return
@@ -374,11 +379,13 @@ func (a *API) resetBranding(c *gin.Context) {
 				}{{Title: "Forbidden", Detail: "Only admin users can reset branding settings"}},
 			})
 		} else {
+			// The cause (a database error) goes to the log, not the response.
+			logger.Errorf("Branding: could not reset the branding settings: %v", err)
 			c.JSON(http.StatusInternalServerError, ErrorResponse{
 				Errors: []struct {
 					Title  string `json:"title"`
 					Detail string `json:"detail"`
-				}{{Title: "Internal Server Error", Detail: err.Error()}},
+				}{{Title: "Internal Server Error", Detail: "Failed to reset the branding settings"}},
 			})
 		}
 		return
@@ -410,59 +417,71 @@ func (a *API) resetBranding(c *gin.Context) {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/branding/logo [get]
 func (a *API) serveLogo(c *gin.Context) {
-	logoPath, err := a.service.GetLogoFilePath()
+	asset, err := a.service.BrandingLogo()
+	a.serveBrandingAsset(c, asset, err, "logo", "logos/tyk-portal-logo.png", "image/png")
+}
+
+// serveBrandingAsset answers with the uploaded asset from the database, or
+// the embedded default when there is none. The uploaded asset carries its
+// hash as ETag and "Cache-Control: no-cache": browsers keep it and ask each
+// time whether it changed (304 when it did not), so a new upload shows at
+// once, from whichever replica answers.
+func (a *API) serveBrandingAsset(c *gin.Context, asset *models.BrandingAsset, err error, what, defaultFile, defaultType string) {
 	if err != nil {
+		// The cause (a database error) goes to the log, not to the caller:
+		// this endpoint is public.
+		logger.Errorf("Branding: could not read the %s: %v", what, err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: "Failed to get logo path: " + err.Error()}},
+			}{{Title: "Internal Server Error", Detail: "Failed to get the " + what}},
 		})
 		return
 	}
 
-	// If no custom logo, serve embedded default
-	if logoPath == "" {
-		// Serve embedded logo from static files
-		data, err := fs.ReadFile(a.frontend, "logos/tyk-portal-logo.png")
+	// If no custom asset, serve the embedded default
+	if asset == nil {
+		data, err := fs.ReadFile(a.frontend, defaultFile)
 		if err != nil {
 			c.JSON(http.StatusNotFound, ErrorResponse{
 				Errors: []struct {
 					Title  string `json:"title"`
 					Detail string `json:"detail"`
-				}{{Title: "Not Found", Detail: "Default logo not found"}},
+				}{{Title: "Not Found", Detail: "Default " + what + " not found"}},
 			})
 			return
 		}
-		c.Data(http.StatusOK, "image/png", data)
+		c.Data(http.StatusOK, defaultType, data)
 		return
 	}
 
-	// Serve custom logo
-	if _, err := os.Stat(logoPath); os.IsNotExist(err) {
-		c.JSON(http.StatusNotFound, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Not Found", Detail: "Logo file not found"}},
-		})
+	// An uploaded asset is served as what it was stored as, never sniffed,
+	// and as an inert document: an SVG logo opened directly (rather than
+	// shown in an <img>, where scripts never run) is sandboxed and may load
+	// nothing, so a script inside it does not run on Studio's origin.
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+
+	etag := `"` + asset.Hash + `"`
+	c.Header("ETag", etag)
+	c.Header("Cache-Control", "no-cache")
+	if match := c.GetHeader("If-None-Match"); match != "" && etagMatches(match, etag) {
+		c.Status(http.StatusNotModified)
 		return
 	}
+	c.Data(http.StatusOK, asset.ContentType, asset.Data)
+}
 
-	// Determine content type based on file extension
-	ext := filepath.Ext(logoPath)
-	contentType := "application/octet-stream"
-	switch ext {
-	case ".png":
-		contentType = "image/png"
-	case ".jpg", ".jpeg":
-		contentType = "image/jpeg"
-	case ".svg":
-		contentType = "image/svg+xml"
+// etagMatches reports whether an If-None-Match header names etag (or any).
+func etagMatches(header, etag string) bool {
+	for _, candidate := range strings.Split(header, ",") {
+		candidate = strings.TrimPrefix(strings.TrimSpace(candidate), "W/")
+		if candidate == etag || candidate == "*" {
+			return true
+		}
 	}
-
-	c.File(logoPath)
-	c.Header("Content-Type", contentType)
+	return false
 }
 
 // @Summary Get custom favicon
@@ -474,57 +493,8 @@ func (a *API) serveLogo(c *gin.Context) {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/branding/favicon [get]
 func (a *API) serveFavicon(c *gin.Context) {
-	faviconPath, err := a.service.GetFaviconFilePath()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Internal Server Error", Detail: "Failed to get favicon path: " + err.Error()}},
-		})
-		return
-	}
-
-	// If no custom favicon, serve embedded default
-	if faviconPath == "" {
-		// Serve embedded favicon from static files
-		data, err := fs.ReadFile(a.frontend, "sun.ico")
-		if err != nil {
-			c.JSON(http.StatusNotFound, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Not Found", Detail: "Default favicon not found"}},
-			})
-			return
-		}
-		c.Data(http.StatusOK, "image/x-icon", data)
-		return
-	}
-
-	// Serve custom favicon
-	if _, err := os.Stat(faviconPath); os.IsNotExist(err) {
-		c.JSON(http.StatusNotFound, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Not Found", Detail: "Favicon file not found"}},
-		})
-		return
-	}
-
-	// Determine content type based on file extension
-	ext := filepath.Ext(faviconPath)
-	contentType := "application/octet-stream"
-	switch ext {
-	case ".ico":
-		contentType = "image/x-icon"
-	case ".png":
-		contentType = "image/png"
-	}
-
-	c.File(faviconPath)
-	c.Header("Content-Type", contentType)
+	asset, err := a.service.BrandingFavicon()
+	a.serveBrandingAsset(c, asset, err, "favicon", "sun.ico", "image/x-icon")
 }
 
 // Request/Response models

@@ -37,6 +37,9 @@ import (
 
 type Service struct {
 	DB     *gorm.DB
+	// brandingAssets is this replica's copy of the uploaded logo and
+	// favicon (branding_assets.go).
+	brandingAssets brandingAssetCache
 	Budget budget.Service
 	// TeamBudget is the team (Group) budget feature (Enterprise). It takes
 	// part in every Budget check; see InitBudgets.

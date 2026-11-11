@@ -9,7 +9,7 @@ The branding customization system allows administrators to customize the visual 
 ### System-Wide Customization
 - **Scope**: All branding changes apply system-wide to all users
 - **Access**: Admin-only functionality
-- **Persistence**: Settings stored in database, assets stored on filesystem
+- **Persistence**: Settings and assets (logo, favicon) stored in the database, so every replica serves them
 - **Real-time**: Changes apply immediately on page refresh
 
 ### Customizable Elements
@@ -51,22 +51,23 @@ The branding customization system allows administrators to customize the visual 
 - **File**: `models/branding_settings.go`
 - **Pattern**: Singleton (ID=1)
 - **Fields**:
-  - `logo_path`: Path to custom logo file
-  - `favicon_path`: Path to custom favicon file
+  - `logo_path`: Name of the custom logo (`logo.png`, `logo.jpg`, `logo.svg`); empty means the default. It says a custom logo is set; the bytes are in `branding_assets`
+  - `favicon_path`: Name of the custom favicon (`favicon.ico`, `favicon.png`); empty means the default
   - `app_title`: Custom application title
   - `primary_color`: Hex color for primary theme
   - `secondary_color`: Hex color for secondary theme
   - `background_color`: Hex color for background
   - `custom_css`: Custom CSS rules
 
-#### File Storage
-- **File**: `services/branding_file_storage.go`
-- **Directory**: `./data/branding` (configurable via `BRANDING_STORAGE_PATH`)
-- **Features**:
-  - File validation (MIME type, size)
-  - Automatic directory creation
-  - Old file cleanup on replacement
-  - Container volume mounting support
+#### Asset Storage
+- **Files**: `models/branding_asset.go`, `services/branding_assets.go`
+- **Table**: `branding_assets`, one row per kind (`logo`, `favicon`): the bytes, the content type they are served with, their SHA-256 (`hash`, the ETag) and size. An upload replaces the row and sets the settings' `logo_path` / `favicon_path` in one transaction; reset deletes the rows and resets the settings in one transaction. Works the same on SQLite and Postgres.
+- **Why the database**: assets were files under `BRANDING_STORAGE_PATH` on the replica that received the upload. Replicas in one site could share a volume; two sites cannot sensibly, so the other site served no logo (see `ActiveActive.md`, Phase 6).
+- **Validation** (unchanged): the declared content type must be an allowed one and the declared size within the limit; in addition the bytes are read with the limit applied, so a file larger than it declares is refused too.
+- **Serving**: `GET /api/v1/branding/logo` and `/favicon` answer from the database through `Service.BrandingLogo` / `BrandingFavicon`, with `ETag: "<hash>"` and `Cache-Control: no-cache` (the browser keeps the asset and revalidates; `304` when unchanged). With no stored asset they serve the embedded default, without those headers. An uploaded asset is also sent with `X-Content-Type-Options: nosniff` and `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox`, so an SVG logo opened directly (not in an `<img>`, where scripts never run) cannot run script on Studio's origin. A failure to read the asset answers `500` with no cause; the cause is logged.
+- **In-process cache**: each replica keeps the two assets in memory (`brandingAssetCache` on the `Service`). An upload or reset clears the local copy and sends `replicas.SignalBranding`; other replicas clear theirs when it arrives (`pkg/studio` registers `InvalidateBrandingAssets`), so they serve the new asset within about a second. As a backstop for a lost signal, a copy older than 30 s is checked against the stored hash (one small query) before it is served. If the database cannot be read, a copy already held is served.
+- **Import of files from before 2.3**: at start (`Service.ImportBrandingFiles`, called by `studio.New` once the replica has joined the cluster), an asset is copied from `BRANDING_STORAGE_PATH` into the database when the settings name a custom one, the database has none, and the file is on this replica's disk. That makes it happen once, on the first replica that has the file, and never after a reset (the settings then name none). The insert does nothing if another replica got there first. Files are left in place and are not read again. A name is reduced to its base name, the extension must be one the asset can have, and the size limit applies.
+- **Legacy file code**: `services/branding_file_storage.go` (`BrandingFileStorage`, `GetLogoFilePath`, `GetFaviconFilePath`) is no longer used to store or serve; `GetBrandingStoragePath` / `SetBrandingStoragePath` locate the directory for the import.
 
 #### Business Logic
 - **File**: `services/branding_service.go`
@@ -137,9 +138,9 @@ The branding customization system allows administrators to customize the visual 
 
 ### Environment Variables
 
-- `BRANDING_STORAGE_PATH`: Directory for branding asset storage
+- `BRANDING_STORAGE_PATH`: Directory where versions before 2.3 stored the logo and favicon
   - Default: `./data/branding`
-  - Recommended: Mount as persistent volume in containerized deployments
+  - Read once at start to import those files into the database. Nothing is written there any more, and it needs no volume once the import has happened (the log says `Branding: imported the logo from ...`).
 
 ### Frontend Config
 
@@ -182,21 +183,9 @@ Branding settings are automatically included in the frontend config response at 
 
 ## Container Deployment
 
-For persistent branding across container restarts:
+The logo and favicon are in the database: they survive container restarts and are served by every replica, with no volume to mount.
 
-```yaml
-volumes:
-  - ./branding-data:/app/data/branding
-```
-
-Or via environment variable:
-
-```yaml
-environment:
-  - BRANDING_STORAGE_PATH=/custom/path/branding
-volumes:
-  - ./custom-branding:/custom/path/branding
-```
+Upgrading from a version before 2.3 with a custom logo or favicon: start the first 2.3 replica with the old branding volume still mounted (and `BRANDING_STORAGE_PATH` unchanged if you set it), so the files are imported. After that the volume can go.
 
 ## File Size Limits
 
@@ -219,12 +208,12 @@ Oversized files will be rejected with an appropriate error message.
 3. **CSS Injection**: Custom CSS is admin-only and injected via `dangerouslySetInnerHTML`
    - Only trusted administrators should have access
    - CSS can affect application behavior
-4. **Path Safety**: File storage uses validated paths to prevent directory traversal
+4. **Path Safety**: Uploads are not written to disk. The start-up import reads only a base file name inside `BRANDING_STORAGE_PATH`
 
 ## Performance
 
-- **Asset Caching**: Logo and favicon endpoints support browser caching
-- **File System Storage**: Fast file serving with minimal database queries
+- **Asset Caching**: Logo and favicon endpoints send an ETag and answer `304` to a browser that has the current asset
+- **In-memory copies**: each replica serves the assets from memory, checking the stored hash at most every 30 s
 - **Theme Generation**: Computed once per page load
 - **Custom CSS**: Minimal performance impact (loaded as inline style)
 
