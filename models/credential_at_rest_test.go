@@ -777,3 +777,44 @@ func TestDataKeySaltIsReadOncePerDatabase_Postgres(t *testing.T) {
 		assert.Equal(t, entriesAfterFirst, entries(), "the salt cache grew with use")
 	})
 }
+
+// A read that does not run the credential's hooks (SkipHooks, a Joins of an
+// App's credential) leaves the refused marker in Secret, never the stored
+// form, and saving such a struct keeps the stored secret and its hash.
+func TestCredentialReadWithoutHooksIsRefusedNotCiphertext(t *testing.T) {
+	t.Setenv("TYK_AI_SECRET_KEY", credentialTestKey)
+	db := setupTestDB(t)
+	cred, err := NewCredential()
+	require.NoError(t, err)
+	cred.Active = true
+	require.NoError(t, cred.Create(db))
+	user := User{Email: "nohooks@example.com", Name: "No Hooks"}
+	require.NoError(t, db.Create(&user).Error)
+	app := App{Name: "no-hooks", UserID: user.ID, CredentialID: cred.ID, IsActive: true}
+	require.NoError(t, db.Omit("Credential").Create(&app).Error)
+	before := readStored(t, db, cred.ID)
+	require.True(t, strings.HasPrefix(before.Secret, secrets.DataKeyPrefix))
+
+	var skipped Credential
+	require.NoError(t, db.Session(&gorm.Session{SkipHooks: true}).First(&skipped, cred.ID).Error)
+	assert.Equal(t, secrets.RefusedCredential, skipped.Secret)
+
+	var joined App
+	require.NoError(t, db.Joins("Credential").First(&joined, app.ID).Error)
+	assert.NotContains(t, joined.Credential.Secret, secrets.DataKeyPrefix)
+	assert.Contains(t, []string{secrets.RefusedCredential, cred.Secret}, joined.Credential.Secret)
+
+	// Saved for another reason, the row keeps its secret and hash.
+	require.NoError(t, skipped.Deactivate(db))
+	after := readStored(t, db, cred.ID)
+	assert.Equal(t, before.Secret, after.Secret)
+	assert.Equal(t, *before.SecretHash, *after.SecretHash)
+	var read Credential
+	require.NoError(t, read.Get(db, cred.ID))
+	assert.Equal(t, cred.Secret, read.Secret)
+	assert.False(t, read.Active)
+
+	// The same struct read again with hooks is opened.
+	require.NoError(t, skipped.Get(db, cred.ID))
+	assert.Equal(t, cred.Secret, skipped.Secret)
+}

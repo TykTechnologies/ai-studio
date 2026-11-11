@@ -99,7 +99,10 @@ func (credentialSecretSerializer) Value(_ context.Context, _ *schema.Field, dst 
 	return c.sealed, nil
 }
 
-// Scan puts the stored value in the struct for AfterFind to open.
+// Scan hands the stored value to AfterFind to open. Until AfterFind has run
+// the struct holds secrets.RefusedCredential, not the stored form: a read
+// that skips the hooks (a Joins of the credential, SkipHooks) must not
+// leave ciphertext where callers expect the key.
 func (credentialSecretSerializer) Scan(ctx context.Context, field *schema.Field, dst reflect.Value, dbValue interface{}) error {
 	var stored string
 	switch v := dbValue.(type) {
@@ -110,6 +113,13 @@ func (credentialSecretSerializer) Scan(ctx context.Context, field *schema.Field,
 		stored = string(v)
 	default:
 		return fmt.Errorf("credential secret: unsupported column value %T", dbValue)
+	}
+	if c := credentialOf(dst); c != nil {
+		c.stored = ""
+		if isEncrypted(stored) {
+			c.stored = stored
+			stored = secrets.RefusedCredential
+		}
 	}
 	field.ReflectValueOf(ctx, dst).SetString(stored)
 	return nil
@@ -205,15 +215,21 @@ func (c *Credential) BeforeSave(tx *gorm.DB) error {
 // AfterFind opens the secret that was read. One that cannot be opened (no
 // key, another key, a lost salt, another row's ciphertext) reads as
 // secrets.RefusedCredential, never as its stored form, which would be shown
-// and sent as the key. A read that left the secret column out has nothing
-// to open.
+// and sent as the key; so does one read without this hook (see the
+// serializer's Scan). A read that left the secret column out has nothing to
+// open.
 func (c *Credential) AfterFind(tx *gorm.DB) error {
 	c.sealed, c.sealedFor = "", ""
-	if !isEncrypted(c.Secret) {
+	stored := c.stored
+	switch {
+	case c.Secret == secrets.RefusedCredential && stored != "":
+		// What Scan set aside.
+	case isEncrypted(c.Secret):
+		stored = c.Secret
+	default:
 		c.stored = ""
 		return nil
 	}
-	stored := c.Secret
 	plain, ok := openCredentialSecret(tx, c.KeyID, stored)
 	if !ok {
 		logger.Errorf("Credential %d: the stored secret cannot be read (TYK_AI_SECRET_KEY unset or changed, or the database's data key salt is missing); it is refused until that is put right", c.ID)
@@ -268,7 +284,7 @@ func (c *Credential) GetBySecret(db *gorm.DB, secret string) error {
 	if err := db.Omit("secret").Where("secret_hash = ?", secrets.LookupHash(secret)).First(c).Error; err != nil {
 		return err
 	}
-	c.Secret = secret
+	c.Secret, c.stored = secret, ""
 	return nil
 }
 
