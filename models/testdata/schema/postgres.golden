@@ -657,12 +657,14 @@ TABLE credentials
   index CREATE UNIQUE INDEX credentials_pkey ON credentials USING btree (id)
   index CREATE INDEX idx_credentials_deleted_at ON credentials USING btree (deleted_at)
   index CREATE UNIQUE INDEX idx_credentials_key_id ON credentials USING btree (key_id)
+  index CREATE UNIQUE INDEX idx_credentials_secret_hash ON credentials USING btree (secret_hash)
   column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('credentials_id_seq'::regclass)
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES
   column deleted_at timestamp with time zone(timestamptz) nullable=YES
   column key_id text(text) nullable=YES
   column secret text(text) nullable=YES
+  column secret_hash character varying(varchar) nullable=YES len=80
   column active boolean(bool) nullable=YES default=false
 TABLE data_catalogue_data_sources
   constraint data_catalogue_data_sources_pkey PRIMARY KEY (data_catalogue_id, datasource_id)

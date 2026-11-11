@@ -1160,8 +1160,9 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 	}
 
 	// Query credential (secret) - tokens are global in AI Studio
+	// Found by the secret's lookup hash: the secret is encrypted at rest.
 	var credential models.Credential
-	err := s.db.Where("secret = ? AND active = ?", req.Token, true).
+	err := s.db.Where("secret_hash = ? AND active = ?", secrets.LookupHash(req.Token), true).
 		First(&credential).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {

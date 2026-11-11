@@ -623,9 +623,11 @@ TABLE credentials
   column `deleted_at` datetime
   column `key_id` text
   column `secret` text
+  column `secret_hash` text
   column `active` numeric DEFAULT false
   index CREATE INDEX `idx_credentials_deleted_at` ON `credentials`(`deleted_at`)
   index CREATE UNIQUE INDEX `idx_credentials_key_id` ON `credentials`(`key_id`)
+  index CREATE UNIQUE INDEX `idx_credentials_secret_hash` ON `credentials`(`secret_hash`)
 TABLE data_catalogue_data_sources
   column `data_catalogue_id` integer
   column `datasource_id` integer

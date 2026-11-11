@@ -616,14 +616,24 @@ reachable a control plane cannot authenticate a caller at all.
 
 ### Phase 6: hub hardening and non-database state
 
-1. **`credentials.secret` on the hub.** The hub must keep the secret
-   recoverable: the UI shows it again and Studio itself uses it as a bearer
-   token (`services/grpc/decision_call.go:101`). So: add `secret_hash`
-   (indexed; `ValidateToken` and `models/credentials.go:51` look up by it)
-   and encrypt `secret` with `TYK_AI_SECRET_KEY`, migrating existing rows
-   under the migration lock. Schema change: bump `models.SchemaVersion`,
-   decide `MinReaderSchemaVersion` (older code cannot read an encrypted
-   secret, so it rises), run `make schema-golden`.
+1. **`credentials.secret` on the hub** (built). The hub must keep the
+   secret recoverable: the UI shows it again and Studio itself uses it as a
+   bearer token (`services/grpc/decision_call.go`). So the secret is
+   encrypted with `TYK_AI_SECRET_KEY` (`$ENC/`, as LLM credentials are) and
+   found by `secret_hash` (unique; `ValidateToken` and
+   `Credential.GetBySecret` look up by it). The hash is the hub's own,
+   keyed with `TYK_AI_SECRET_KEY` (`secrets.LookupHash`: `pkg/credhash`'s
+   construction under that key, or a plain SHA-256 when no key of 14 bytes
+   is set), not the edge-facing one: that is computed from the decrypted
+   secret when credentials are sent (Phase 4), so rotating
+   `MICROGATEWAY_ENCRYPTION_KEY` needs no hub migration. Existing rows are
+   migrated at start under the migration lock, in batches, idempotently
+   (`models.MigrateCredentialsAtRest`). Schema 42; `MinReaderSchemaVersion`
+   rises to 42, because older code looks keys up by the plaintext secret
+   (every App key would be refused) and would show and send the ciphertext.
+   Changing `TYK_AI_SECRET_KEY` afterwards stops every App key validating
+   until the original is back. Details in `features/Secrets.md` ("App
+   credentials").
 2. **State that is per replica and cannot be a shared volume across
    sites.** Move branding assets into Postgres (two small files); keep log
    exports per replica and say so. Require `CSRF_KEY` when more than one

@@ -356,6 +356,15 @@ func New(opts Options) (_ *Studio, err error) {
 	} else if n > 0 {
 		logger.Infof("Encrypted the stored credentials of %d LLM(s)", n)
 	}
+	// App credentials written before they were hashed and encrypted at rest
+	// (or before TYK_AI_SECRET_KEY was set) are migrated now, under the
+	// migration lock: until a row has its lookup hash its key validates
+	// nowhere.
+	if res, err := models.MigrateCredentialsAtRest(s.db); err != nil {
+		return nil, fmt.Errorf("studio: hash and encrypt App credentials at rest: %w", err)
+	} else if res.Migrated > 0 || res.Skipped > 0 {
+		logger.Infof("App credentials at rest: migrated %d, left %d that could not be migrated (see the errors above)", res.Migrated, res.Skipped)
+	}
 	s.background.Add(1)
 	safe.Go("legacy secret re-encryption", func() {
 		defer s.background.Done()

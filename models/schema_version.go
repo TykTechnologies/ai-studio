@@ -134,8 +134,16 @@ const (
 	// 41: edge_analytics_batches (new table, additive): the analytics
 	//     batches stored from edges, so one sent again after a lost
 	//     acknowledgement is not stored twice (midsommar-clean-4x5y.11).
-	SchemaVersion          = 41
-	MinReaderSchemaVersion = 26
+	// 42: credentials.secret_hash (nullable, unique) and a data format
+	//     change: an App credential's secret is stored as $ENC/ when
+	//     TYK_AI_SECRET_KEY is set and is found by secret_hash, never by
+	//     its value (midsommar-clean-4x5y.15). Older code looks credentials
+	//     up by the plaintext secret, which is no longer there (every App
+	//     key would be refused), and would show and send the ciphertext as
+	//     the key, so the minimum reader is 42 and an older headless
+	//     replica refuses the database.
+	SchemaVersion          = 42
+	MinReaderSchemaVersion = 42
 )
 
 // studioSchemaRowID is the one row of studio_schema.

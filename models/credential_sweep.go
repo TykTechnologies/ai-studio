@@ -23,6 +23,7 @@ var encryptedColumns = []struct {
 	{"tyk_gateway_definitions", []string{"definition"}},
 	{"submissions", []string{"resource_payload"}},
 	{"mcp_credentials", []string{"tyk_key_plain_token"}},
+	{"credentials", []string{"secret"}},
 }
 
 // jsonColumns are the encryptedColumns that hold a JSON object whose
