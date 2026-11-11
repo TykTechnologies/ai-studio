@@ -1,8 +1,10 @@
 package studio
 
 import (
+	"database/sql"
 	"fmt"
 	"net/url"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -43,7 +45,7 @@ func RegisterDatabaseDriver(name string, open func(dsn string) gorm.Dialector) {
 // database with it rather than with gorm itself: Studio builds with its own
 // copy of gorm (third_party/gorm.io), which the host's gorm cannot stand in
 // for. The caller closes it after Stop, through DB().
-func OpenDatabase(conf *config.AppConf) (*gorm.DB, error) {
+func OpenDatabase(conf *config.AppConf) (db *gorm.DB, err error) {
 	databaseDriversMu.RLock()
 	open, ok := databaseDrivers[conf.DatabaseType]
 	databaseDriversMu.RUnlock()
@@ -65,11 +67,27 @@ func OpenDatabase(conf *config.AppConf) (*gorm.DB, error) {
 		}
 	}
 
-	db, err := gorm.Open(open(dsn), logger.GetGormConfig())
+	dialector := open(dsn)
+	if conf.DatabaseType == "postgres" && isBuiltinPostgres(open) {
+		// The pool is Studio's own, so it follows a database failover
+		// (database_postgres.go).
+		var pool *sql.DB
+		var err error
+		if dialector, pool, err = openPostgres(conf, dsn); err != nil {
+			return nil, err
+		}
+		defer func() {
+			if db == nil {
+				pool.Close() // also ends the tracker
+			}
+		}()
+	}
+
+	opened, err := gorm.Open(dialector, logger.GetGormConfig())
 	if err != nil {
 		return nil, err
 	}
-	sqlDB, err := db.DB()
+	sqlDB, err := opened.DB()
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +95,17 @@ func OpenDatabase(conf *config.AppConf) (*gorm.DB, error) {
 		sqlDB.Close()
 		return nil, err
 	}
-	return db, nil
+	if err := watchReadOnly(opened); err != nil {
+		sqlDB.Close()
+		return nil, err
+	}
+	return opened, nil
+}
+
+// isBuiltinPostgres reports whether open is the built-in Postgres driver (a
+// test or host may have registered another under the name).
+func isBuiltinPostgres(open func(string) gorm.Dialector) bool {
+	return reflect.ValueOf(open).Pointer() == reflect.ValueOf(postgres.Open).Pointer()
 }
 
 func registeredDatabaseTypes() string {

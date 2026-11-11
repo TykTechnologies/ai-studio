@@ -32,6 +32,22 @@ import (
 // when it is next used.
 var PingInterval = 90 * time.Second
 
+// RoleCheckInterval is how often a listener checks that the server behind
+// its connection still takes writes. A primary that was demoted keeps its
+// connections open, and NOTIFYs are sent on the new primary from then on:
+// without the check the listener would wait on a node where nothing is ever
+// notified. A read-only server is a reason to reconnect; with a multi-host
+// DSN and target_session_attrs=read-write the new connection is to the
+// writable node.
+var RoleCheckInterval = 5 * time.Second
+
+// errReadOnly is a connection to a server that does not take writes.
+var errReadOnly = errors.New("the server is read-only (a standby, or a demoted primary)")
+
+// readOnlySQLState is what a hot standby answers to LISTEN
+// (read_only_sql_transaction).
+const readOnlySQLState = "25006"
+
 // commandTimeout bounds one LISTEN, UNLISTEN or ping on the connection.
 const commandTimeout = 30 * time.Second
 
@@ -354,7 +370,7 @@ func (l *Listener) run(conn *pgx.Conn) {
 	reconnected := false
 	safe.Loop(l.name, l.stopCtx.Done(), func() {
 		if conn == nil {
-			if conn = l.reconnect(); conn == nil {
+			if conn = l.reconnect(0); conn == nil {
 				return
 			}
 			reconnected = true
@@ -374,6 +390,11 @@ func (l *Listener) run(conn *pgx.Conn) {
 func (l *Listener) own(connp **pgx.Conn, reconnected bool) {
 	conn := *connp
 	listened := map[string]bool{}
+	// readOnly counts consecutive connections that reached a read-only
+	// server: when no writable one can be reached (a single-host DSN to a
+	// standby, or mid-failover) the listener backs off rather than
+	// reconnecting every second.
+	readOnly := 0
 	for {
 		err := l.reconcile(conn, listened)
 		if err == nil && reconnected {
@@ -390,16 +411,24 @@ func (l *Listener) own(connp **pgx.Conn, reconnected bool) {
 			err = l.wait(conn)
 		}
 		if err == nil {
+			readOnly = 0
 			continue
 		}
 		if l.stopCtx.Err() != nil {
 			l.close(conn)
 			return
 		}
-		logger.Log.Warn().Err(err).Msg(l.name + " disconnected; notifications sent until it reconnects are lost")
+		if errors.Is(err, errReadOnly) {
+			if readOnly++; readOnly == 1 {
+				logger.Log.Warn().Err(err).Msg(l.name + " is connected to a server that does not take writes; reconnecting until a writable one answers (notifications are lost meanwhile)")
+			}
+		} else {
+			readOnly = 0
+			logger.Log.Warn().Err(err).Msg(l.name + " disconnected; notifications sent until it reconnects are lost")
+		}
 		l.setState(func() { l.connected = false })
 		l.close(conn)
-		conn = l.reconnect()
+		conn = l.reconnect(readOnly)
 		*connp = conn
 		if conn == nil {
 			return
@@ -434,6 +463,11 @@ func (l *Listener) reconcile(conn *pgx.Conn, listened map[string]bool) error {
 			if !serverRefused(conn, err) {
 				return err
 			}
+			if isReadOnly(err) {
+				// A hot standby refuses LISTEN: not this channel's
+				// failure but the wrong server. Reconnect.
+				return fmt.Errorf("%w: %v", errReadOnly, err)
+			}
 			failed[channel] = err
 			continue
 		}
@@ -463,7 +497,12 @@ func (l *Listener) reconcile(conn *pgx.Conn, listened map[string]bool) error {
 // listener stops or the connection fails (an error).
 func (l *Listener) wait(conn *pgx.Conn) error {
 	for {
-		ctx, cancel := context.WithTimeout(l.stopCtx, PingInterval)
+		// The role check doubles as the ping: both are a round trip.
+		interval := PingInterval
+		if RoleCheckInterval > 0 && RoleCheckInterval < interval {
+			interval = RoleCheckInterval
+		}
+		ctx, cancel := context.WithTimeout(l.stopCtx, interval)
 		l.stateMu.Lock()
 		if l.pending {
 			l.stateMu.Unlock()
@@ -492,16 +531,18 @@ func (l *Listener) wait(conn *pgx.Conn) error {
 			// Not our cancellation: the connection failed.
 			return err
 		case errors.Is(ctxErr, context.DeadlineExceeded):
-			// Quiet for PingInterval: make sure the connection is alive.
-			pctx, pcancel := context.WithTimeout(l.stopCtx, commandTimeout)
-			err := conn.Ping(pctx)
-			pcancel()
+			// Quiet for the interval: make sure the connection is alive
+			// and its server still takes writes.
+			readOnly, err := l.serverReadOnly(conn)
 			if err != nil {
 				if l.stopCtx.Err() != nil {
 					return errStopped
 				}
 				logger.Log.Warn().Err(err).Msg(l.name + " ping failed")
 				return err
+			}
+			if readOnly {
+				return errReadOnly
 			}
 		default:
 			// Woken by wake: the loop's next turn returns to reconcile.
@@ -529,6 +570,29 @@ func (l *Listener) exec(conn *pgx.Conn, sql string) error {
 	return err
 }
 
+// serverReadOnly asks the server whether it is in recovery or its sessions
+// are read-only (a demoted primary that keeps running), which is what
+// target_session_attrs=read-write checks when connecting.
+func (l *Listener) serverReadOnly(conn *pgx.Conn) (bool, error) {
+	ctx, cancel := context.WithTimeout(l.stopCtx, commandTimeout)
+	defer cancel()
+	results, err := conn.PgConn().Exec(ctx, "SELECT pg_is_in_recovery() OR current_setting('transaction_read_only') = 'on'").ReadAll()
+	if err != nil {
+		return false, err
+	}
+	if len(results) != 1 || len(results[0].Rows) != 1 || len(results[0].Rows[0]) != 1 {
+		return false, errors.New("unexpected answer to the role check")
+	}
+	return string(results[0].Rows[0][0]) == "t", nil
+}
+
+// isReadOnly reports whether err is the server refusing a statement because
+// it is read-only.
+func isReadOnly(err error) bool {
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == readOnlySQLState
+}
+
 // serverRefused reports whether err is the server rejecting a statement on
 // a connection that is still usable (a LISTEN on a hot standby, say),
 // rather than the connection failing.
@@ -538,9 +602,17 @@ func serverRefused(conn *pgx.Conn, err error) bool {
 }
 
 // reconnect connects again, backing off from ReconnectInterval up to
-// ReconnectCeiling. It returns nil once the listener is released.
-func (l *Listener) reconnect() *pgx.Conn {
+// ReconnectCeiling. It returns nil once the listener is released. backoff is
+// how many reconnects in a row reached a read-only server: the first wait
+// doubles with each.
+func (l *Listener) reconnect(backoff int) *pgx.Conn {
 	wait := l.opts.ReconnectInterval
+	for i := 1; i < backoff && wait < l.opts.ReconnectCeiling; i++ {
+		wait *= 2
+	}
+	if wait > l.opts.ReconnectCeiling {
+		wait = l.opts.ReconnectCeiling
+	}
 	for {
 		select {
 		case <-l.stopCtx.Done():

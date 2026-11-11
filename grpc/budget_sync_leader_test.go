@@ -174,9 +174,12 @@ func TestBudgetSyncService_SequenceAcrossLeaders_PostgresAndSQLite(t *testing.T)
 		assert.Greater(t, sequences[5], sequences[4])
 		assert.Equal(t, uint64(6), connected.applied)
 
-		// With a clock that is behind as well, the lost values are passed
-		// one sync at a time instead: edges miss at most as many syncs as
-		// values were lost.
+		// With a clock that is behind as well, the floor does not help:
+		// the leader continues from the stored value, and edges ignore its
+		// syncs until the sequence passes the lost values. Here they are
+		// two below, so two syncs; in production the lost values are the
+		// old leader's clock, and it takes until the new leader's clock
+		// passes them (at most the difference between the clocks).
 		require.NoError(t, db.Model(&models.ClusterCounter{}).Where("name = ?", budgetSyncSequenceName).
 			Update("value", gorm.Expr("value - 2")).Error)
 		for i := 0; i < 3; i++ {

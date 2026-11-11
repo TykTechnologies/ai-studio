@@ -87,6 +87,34 @@ With `DATABASE_TYPE=sqlite`, `DATABASE_URL` is a file path (default `midsommar.d
 ### Postgres connection string
 `DATABASE_URL` takes a `postgres://` URL or `key=value` pairs, with any option the pgx driver accepts. Without `sslmode`, Studio uses TLS when the server offers it and a plain connection when it does not (`prefer`); set `sslmode=require` or `verify-full` to insist on TLS. Every connection Studio makes, including the one it keeps open for LISTEN/NOTIFY, uses the same string.
 
+### Postgres with a standby (failover)
+`DATABASE_URL` may name several hosts. With `target_session_attrs=read-write`, Studio connects to the one that takes writes, whichever it is at the time:
+
+```
+DATABASE_URL=postgres://studio:secret@pg-a:5432,pg-b:5432/studio?target_session_attrs=read-write
+```
+
+Studio then follows a failover without a restart:
+
+*   **The primary is lost and the standby promoted.** Broken connections are dialled again and reach the promoted node. Statements in flight at that moment fail.
+*   **The primary is demoted but keeps running** (a switchover, or a failover manager fencing it). Its connections stay open and would fail every write with `read-only transaction` (SQLSTATE 25006). Studio notices from the first refused write, or within 5 seconds from a periodic check when it is idle, closes the pool's connections and dials them again. The connection it keeps for LISTEN/NOTIFY does the same.
+*   The log says `The database failed over: the writable server is now …`.
+
+A single name in front of the database (a virtual IP or a DNS record your failover manager moves) works too: the same check moves Studio's connections once the name points at the new primary. Without `target_session_attrs=read-write` a multi-host URL connects to the first host that answers, which may be the standby; always set it.
+
+The pool is tuned with these variables (Postgres only; SQLite ignores them):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `DATABASE_MAX_OPEN_CONNS` | no limit | Most connections a replica opens. Set it so that all replicas together stay under the server's `max_connections`. |
+| `DATABASE_MAX_IDLE_CONNS` | `2` | Idle connections kept open. |
+| `DATABASE_CONN_MAX_LIFETIME` | `30m` | Connections older than this are closed and replaced, so after a planned switchover they also move to the new primary on their own. `0` never closes them. |
+| `DATABASE_CONNECT_TIMEOUT` | `10s` | Time allowed for one connection attempt, unless `DATABASE_URL` sets `connect_timeout` itself. With several hosts it is how long an unreachable one delays reaching the next. |
+
+**What an unreachable first host costs.** Hosts are tried in the order `DATABASE_URL` lists them. A host that refuses the connection (its Postgres is stopped) costs nothing. A host that does not answer at all (its machine or site is down, or a firewall drops the packets) costs the full connect timeout for every *new* connection, twice when `sslmode` allows both a TLS and a plain attempt (the default, `prefer`), before the next host is tried: 20 seconds with the defaults. Connections that are already open are not affected, but requests that need a new one wait that long. For a multi-host URL set a lower timeout, for example `DATABASE_CONNECT_TIMEOUT=3s` (or `connect_timeout=3` in the URL), and set `sslmode` to `require` or `disable` rather than leaving it at `prefer`; once the failed site is not coming back soon, put the surviving host first.
+
+At start Studio logs the pool's settings at `debug` (`Database pool: 2 host(s), target_session_attrs=read-write, …`).
+
 ### Behind PgBouncer
 Studio works behind PgBouncer in transaction mode with these settings:
 

@@ -114,6 +114,20 @@ type AppConf struct {
 	// instance sharing its database to finish migrating before it gives up
 	// with an error.
 	MigrationLockTimeout time.Duration
+	// Postgres connection pool (inert for SQLite). DatabaseMaxOpenConns
+	// (DATABASE_MAX_OPEN_CONNS) and DatabaseMaxIdleConns
+	// (DATABASE_MAX_IDLE_CONNS) of 0 keep database/sql's defaults (no limit;
+	// 2 idle). DatabaseConnMaxLifetime (DATABASE_CONN_MAX_LIFETIME, default
+	// 30m when loaded from the environment; 0 is no limit) closes
+	// connections of that age, so they also move to the new primary after a
+	// planned switchover. DatabaseConnectTimeout (DATABASE_CONNECT_TIMEOUT,
+	// default 10s; 0 keeps the driver's) bounds each connection attempt
+	// when DATABASE_URL sets no connect_timeout of its own: with several
+	// hosts, the time an unreachable one costs before the next is tried.
+	DatabaseMaxOpenConns    int
+	DatabaseMaxIdleConns    int
+	DatabaseConnMaxLifetime time.Duration
+	DatabaseConnectTimeout  time.Duration
 	FilterSignupDomains   []string
 	EchoConversation      bool
 	ProxyOnly             bool
@@ -592,6 +606,10 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 			cfgLog.Warn().Msgf("Warning: Invalid MIGRATION_LOCK_TIMEOUT value: %s, using default 15m", v)
 		}
 	}
+	conf.DatabaseMaxOpenConns = parseNonNegativeInt(getenv, "DATABASE_MAX_OPEN_CONNS")
+	conf.DatabaseMaxIdleConns = parseNonNegativeInt(getenv, "DATABASE_MAX_IDLE_CONNS")
+	conf.DatabaseConnMaxLifetime = parseNonNegativeDuration(getenv, "DATABASE_CONN_MAX_LIFETIME", 30*time.Minute)
+	conf.DatabaseConnectTimeout = parseNonNegativeDuration(getenv, "DATABASE_CONNECT_TIMEOUT", 10*time.Second)
 
 	filterDomains := getenv("FILTER_SIGNUP_DOMAINS")
 	if filterDomains != "" {
@@ -1637,6 +1655,31 @@ func Get(envFile string) *AppConf {
 // This is primarily for testing purposes to ensure test isolation
 func ResetGlobalConfig() {
 	globalConfig.Store(nil)
+}
+
+// parseNonNegativeInt reads a whole number of 0 or more; unset or invalid is 0.
+func parseNonNegativeInt(getenv func(string) string, envVar string) int {
+	value := getenv(envVar)
+	if value == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(value)
+	if err != nil || n < 0 {
+		cfgLog.Warn().Msgf("Invalid %s value %q; using the default", envVar, value)
+		return 0
+	}
+	return n
+}
+
+// parseNonNegativeDuration reads a duration of 0 or more; unset or invalid
+// is def.
+func parseNonNegativeDuration(getenv func(string) string, envVar string, def time.Duration) time.Duration {
+	d := parseDurationWithDefault(getenv, envVar, def)
+	if d < 0 {
+		cfgLog.Warn().Msgf("Invalid duration for %s: %s, using default %s", envVar, d, def)
+		return def
+	}
+	return d
 }
 
 // parseDurationWithDefault parses a duration from an environment variable with a default fallback
