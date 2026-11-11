@@ -170,7 +170,8 @@ cmd_run() {
 	mkdir -p "$HERE/results/$name"
 	log_rows > "$HERE/results/$name/proxy-log-rows.before"
 	start_half short "$name" "${SHORT_SCENARIO:-aa-short}" "$duration" "${SHORT_SCALE:-1}" a
-	start_half stream "$name" aa-stream "$duration" "${STREAM_SCALE:-1}" b
+	# NO_STREAM=1: the short half alone (the ramp, with the stream generator at zero).
+	[ "${NO_STREAM:-}" = 1 ] || start_half stream "$name" aa-stream "$duration" "${STREAM_SCALE:-1}" b
 	stamp "run $name started for $duration (short x${SHORT_SCALE:-1}, stream x${STREAM_SCALE:-1})"
 }
 
@@ -187,11 +188,15 @@ cmd_fetch() {
 	local name=${1:?run name} out="$HERE/results/${1}" half pod
 	mkdir -p "$out"
 	for half in short stream; do
-		pod=$(k get pod -l "app=gwbench,half=$half" -o jsonpath='{.items[0].metadata.name}')
+		pod=$(k get pod -l "app=gwbench,half=$half" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) || continue
+		[ -n "$pod" ] && k exec "$pod" -- test -d "/bench/results/$name" 2>/dev/null || continue
 		# Every request is a line of results.jsonl (millions per run): compress first.
 		k exec "$pod" -- sh -c "cd /bench/results/$name && tar czf /tmp/results.tgz ."
 		kubectl --context "$CTX" cp "$NS/$pod:/tmp/results.tgz" "$out/$half.tgz" >/dev/null
 		mkdir -p "$out/$half" && tar xzf "$out/$half.tgz" -C "$out/$half"
+		# Note: the generators write to the node's own disk (about 1.5 GB a
+		# run) and nothing here clears it; a dozen runs put the node under disk
+		# pressure and the pod is evicted. Restart the generators between passes.
 	done
 	k logs deploy/adminloop --tail=-1 > "$out/adminloop.jsonl"
 	k scale deployment adminloop --replicas=0 >/dev/null

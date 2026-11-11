@@ -1,0 +1,26 @@
+name: aa-ramp-short-14k
+title: "Active-active · short requests ramped to 14,000 req/s, through both edges"
+description: >
+  The breaking-point run: S5's request and ramp shape, started at the MEDIAN
+  level and stepped past one edge's sustained capacity (8,551 req/s) to
+  beyond what both edges carry together. Unlike S5 it has no stop rule: the
+  point is to inject a fault while the system is saturated and then watch it
+  come back, so the ramp keeps going. File rates are 1.1 times the gateway
+  rate (the direct arm takes a tenth).
+mode: open
+baseline: direct
+timeout: 30s
+overhead_slo_ms: 25
+open:
+  arrival: poisson
+  rate: {kind: steps, start: 6600, step: 1100, max: 15400, hold: 60s}
+  warmup: 30s
+  report_window: 10s
+  max_in_flight: 60000
+  max_lag_ms: 2
+cells:
+  - name: rest-20ms
+    body: {format: openai, model: mock-model, prompt_bytes: 1024, max_tokens: 16}
+    arms:
+      - {name: gateway, target: gateway, path: /llm/call/mock-20ms/v1/chat/completions, weight: 1}
+      - {name: direct, target: mock, path: "{mock:20ms}/v1/chat/completions", weight: 0.1}
