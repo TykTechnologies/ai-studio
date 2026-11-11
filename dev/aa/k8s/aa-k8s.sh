@@ -76,6 +76,8 @@ cmd_apply() {
 	k get configmap aa-pg-roles >/dev/null 2>&1 || k apply -f "$HERE/05-pg-roles.yaml"
 	k apply -f "$HERE/10-postgres.yaml"
 	sed "s|STUDIO_IMAGE|$STUDIO_IMAGE|" "$HERE/20-studio.yaml" | k apply -f -
+	# AA_HUB_ONLY=1: the hub side alone (the edge and tools nodes may not be up yet).
+	[ "${AA_HUB_ONLY:-}" = 1 ] && return 0
 	k apply -f "$HERE/25-edges-service.yaml"
 	sed "s|TOOLS_IMAGE|$TOOLS_IMAGE|" "$HERE/30-tools.yaml" | k apply -f -
 }
