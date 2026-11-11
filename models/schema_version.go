@@ -122,9 +122,9 @@ const (
 	// 37: quota_locks.marked_at (nullable, additive): when the namespace
 	//     sweep last ran, so control-plane downtime never counts as idle
 	//     (midsommar-clean-zmwd.39).
-	// 39: cluster_counters (new table, additive): counters every replica
+	// 38: cluster_counters (new table, additive): counters every replica
 	//     draws from; the budget sync sequence (midsommar-clean-4x5y.9).
-	SchemaVersion          = 39
+	SchemaVersion          = 38
 	MinReaderSchemaVersion = 26
 )
 
