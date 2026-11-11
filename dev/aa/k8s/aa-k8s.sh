@@ -143,9 +143,20 @@ cmd_run() {
 	k rollout status deployment adminloop --timeout=60s >/dev/null
 	# Two processes, because gwbench runs one rate at a time; the analytics
 	# check is done once for both afterwards (they share the App).
+	mkdir -p "$HERE/results/$name"
+	log_rows > "$HERE/results/$name/proxy-log-rows.before"
 	start_half short "$name" "${SHORT_SCENARIO:-aa-short}" "$duration" "${SHORT_SCALE:-1}" a
 	start_half stream "$name" aa-stream "$duration" "${STREAM_SCALE:-1}" b
 	stamp "run $name started for $duration (short x${SHORT_SCALE:-1}, stream x${STREAM_SCALE:-1})"
+}
+
+# Rows in Studio's proxy log, in all and by response code. gwbench's own
+# completeness check is off (two generators share the App), so a run compares
+# this before and after with what both generators' requests were answered.
+log_rows() {
+	local p
+	p=$(primary) || die "no primary"
+	sql "$p" "SELECT count(*) FROM proxy_logs" midsommar
 }
 
 cmd_fetch() {
@@ -160,6 +171,19 @@ cmd_fetch() {
 	done
 	k logs deploy/adminloop --tail=-1 > "$out/adminloop.jsonl"
 	k scale deployment adminloop --replicas=0 >/dev/null
+	# Analytics reach Studio on the edges' pulse: wait until the count has
+	# stood still for 30 s (5 minutes at most), then compare.
+	local rows last=-1 still=0 i
+	for i in $(seq 1 60); do
+		rows=$(log_rows)
+		if [ "$rows" = "$last" ]; then still=$((still + 5)); else still=0; fi
+		[ "$still" -ge 30 ] && break
+		last=$rows; sleep 5
+	done
+	echo "$rows" > "$out/proxy-log-rows.after"
+	local p; p=$(primary)
+	sql "$p" "SELECT response_code || ' ' || count(*) FROM proxy_logs GROUP BY 1 ORDER BY 1" midsommar > "$out/proxy-log-rows.by-code"
+	python3 "$HERE/analytics-check.py" "$out"
 	stamp "results of $name in $out"
 }
 
@@ -172,11 +196,12 @@ cmd_promote() {
 		[ "$(role "$s")" = standby ] || continue
 		o=$(other "$s")
 		[ "$(role "$o")" = stopped ] || die "pg-$o is $(role "$o"): it must be stopped first (lose-db, lose-site), or use switchover"
-		k exec "pg-$s-0" -c postgres -- sh -c "sed -i '/^synchronous_standby_names/d' \"\$PGDATA/aa.conf\""
-		k exec "pg-$s-0" -c postgres -- sh -c 'pg_ctl -D "$PGDATA" -w promote' >/dev/null
-		wait_sql "$s" 'SELECT NOT pg_is_in_recovery()' "leave recovery"
-		name_primary "$s"
+		# One exec: the promoted node starts without a standby, and pg_ctl -w
+		# returns once it has left recovery.
+		k exec "pg-$s-0" -c postgres -- sh -c 'sed -i "/^synchronous_standby_names/d" "$PGDATA/aa.conf"; pg_ctl -D "$PGDATA" -w promote >/dev/null; psql -U postgres -d postgres -qAtc "SELECT NOT pg_is_in_recovery()"' | grep -qx t ||
+			die "pg-$s did not leave recovery"
 		stamp "pg-$s is the primary"
+		name_primary "$s"
 		return
 	done
 	die "no running standby to promote"
@@ -185,11 +210,23 @@ cmd_promote() {
 cmd_lose_db() {
 	local p
 	p=$(primary) || die "no primary"
-	stamp "fault: pg-$p killed and held at zero"
-	k scale statefulset "pg-$p" --replicas=0
-	k delete pod "pg-$p-0" --grace-period=0 --force >/dev/null 2>&1 || true
-	k wait --for=delete "pod/pg-$p-0" --timeout=60s >/dev/null 2>&1 || true
+	kill_primary "$p"
 	cmd_promote
+}
+
+# kill_primary <site>: the primary's pod is killed at once and held at zero,
+# then PROMOTE_DELAY seconds pass before anything is promoted. The delay
+# stands in for a failover manager noticing a dead primary (default 10;
+# 0 shows the floor, which is this script's own overhead). It is counted
+# from the kill, so the time without a primary is the delay plus the promote.
+kill_primary() {
+	local t0
+	stamp "fault: pg-$1 killed and held at zero (PROMOTE_DELAY=${PROMOTE_DELAY:-10}s)"
+	t0=$(date +%s.%N)
+	k scale statefulset "pg-$1" --replicas=0 >/dev/null
+	k delete pod "pg-$1-0" --grace-period=0 --force >/dev/null 2>&1 || true
+	while [ "$(role "$1")" != stopped ]; do sleep 0.2; done
+	python3 -c "import time; time.sleep(max(0, ${PROMOTE_DELAY:-10} - (time.time() - $t0)))"
 }
 
 cmd_rejoin() {
@@ -225,9 +262,15 @@ cmd_lose_site() {
 	if [ "$(role "$s")" = standby ] && [ "$(role "$o")" = primary ]; then set_sync "$o" off; fi
 	local was; was=$(role "$s")
 	k scale deployment "studio-$s" "cp-$s" --replicas=0
-	k scale statefulset "edge-$s-microgateway" "pg-$s" --replicas=0
-	k delete pod "pg-$s-0" "edge-$s-microgateway-0" --grace-period=0 --force >/dev/null 2>&1 || true
-	if [ "$was" = primary ]; then k wait --for=delete "pod/pg-$s-0" --timeout=60s >/dev/null 2>&1 || true; cmd_promote; fi
+	k scale statefulset "edge-$s-microgateway" --replicas=0
+	k delete pod "edge-$s-microgateway-0" --grace-period=0 --force >/dev/null 2>&1 || true
+	if [ "$was" = primary ]; then
+		kill_primary "$s"
+		cmd_promote
+	else
+		k scale statefulset "pg-$s" --replicas=0
+		k delete pod "pg-$s-0" --grace-period=0 --force >/dev/null 2>&1 || true
+	fi
 }
 
 cmd_return_site() {
