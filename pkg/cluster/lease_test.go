@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/logger"
@@ -510,4 +512,70 @@ func TestLeadership_LongExpiredLeaseIsTakenAtOnce_Postgres(t *testing.T) {
 	b.Start()
 	t.Cleanup(b.Stop)
 	assert.True(t, b.IsLeader())
+}
+
+// readOnlyReplicaDB is a replica's pool on a server that answers reads and
+// refuses writes (SQLSTATE 25006): what a pool still connected to a demoted
+// primary has until it is moved to the new one.
+func (c *testCluster) readOnlyReplicaDB(replica string) *gorm.DB {
+	u, err := url.Parse(c.dsn(replica))
+	require.NoError(c.t, err)
+	q := u.Query()
+	q.Set("options", "-c default_transaction_read_only=on")
+	u.RawQuery = q.Encode()
+	db, err := gorm.Open(postgres.Open(u.String()), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(c.t, err)
+	c.t.Cleanup(func() {
+		if sqlDB, err := db.DB(); err == nil {
+			sqlDB.Close()
+		}
+	})
+	return db
+}
+
+// A replica whose pool is still on a demoted primary could read the lease
+// there: the old holder's last renewal, which nobody renews on that server
+// any more. It never gets as far as acting on it. Every tick begins with a
+// write (renew, or take a lease nobody holds), the demoted server refuses
+// it, and the tick ends there with an error: the replica does not come to
+// believe it leads on the word of a server that is no longer the primary.
+// It leads only once a write succeeds, when its pool has moved to the new
+// primary.
+func TestLeadership_TakerOnAReadOnlyServerDoesNotLead_Postgres(t *testing.T) {
+	c := leaseCluster(t)
+	opts := LeadershipOptions{TTL: 2 * time.Second, Renew: 200 * time.Millisecond}
+	a := NewLeadership(c.replicaDB("a"), LeaderLease, "a", opts)
+	a.Start()
+	t.Cleanup(a.Stop)
+	require.True(t, a.IsLeader())
+
+	// b ran before the demotion (the lease row is known to exist) and its
+	// connections are now on the demoted server. Its ticks are made by hand
+	// here, to see what each one does.
+	b := NewLeadership(c.readOnlyReplicaDB("b"), LeaderLease, "b", opts)
+	b.created = true
+
+	// a is gone; its last renewal stays in the row.
+	cutOff(t, a)
+
+	// Well past the time a taker waits, tick after tick: each is refused at
+	// its first statement and b never believes it leads.
+	until := time.Now().Add(b.takeAfter() + 500*time.Millisecond)
+	for ticks := 0; time.Now().Before(until) || ticks < 3; ticks++ {
+		held, _, err := b.acquire()
+		require.Error(t, err, "a tick's first statement is a write, which a demoted primary refuses")
+		assert.Contains(t, err.Error(), "25006", "read_only_sql_transaction")
+		require.False(t, held)
+		require.False(t, b.IsLeader())
+		time.Sleep(opts.Renew)
+	}
+	var holder string
+	require.NoError(t, c.admin.Raw(`SELECT holder FROM "`+c.schema+`".cluster_leases WHERE name = ?`, LeaderLease).Scan(&holder).Error)
+	assert.Equal(t, "a", holder, "the row is as the old holder left it")
+
+	// The same replica on a server that takes writes does take it.
+	w := NewLeadership(c.replicaDB("b"), LeaderLease, "b", opts)
+	w.Start()
+	t.Cleanup(w.Stop)
+	require.Eventually(t, w.IsLeader, 3*opts.TTL, 20*time.Millisecond)
 }

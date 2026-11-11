@@ -168,3 +168,50 @@ func TestGapLongerThanRetentionIsReported_Postgres(t *testing.T) {
 	publish(t, a, "x", "1")
 	require.Eventually(t, func() bool { return got.Load() == 1 }, 5*time.Second, 20*time.Millisecond)
 }
+
+// The read after a failover looks further back than an ordinary one: over
+// the time since the last read plus two windows, on a clock that may be
+// behind the one that stamped the rows. An event this replica handled
+// before the failover, old enough to be outside an ordinary read's window,
+// is inside that look-back; it must not be handled again. What is
+// remembered about handled rows is kept for three windows for that.
+func TestEventHandledBeforeAFailoverIsNotHandledAgain_Postgres(t *testing.T) {
+	c := newTestCluster(t)
+	a := c.startReplica("a", LogOptions{PollInterval: 50 * time.Millisecond})
+
+	var ahead atomic.Int64
+	b := &replica{name: "b", db: c.replicaDB("b"), counts: map[int64]int{}}
+	b.log = NewLog(b.db, "b", LogOptions{PollInterval: 50 * time.Millisecond, Window: time.Second, Retention: time.Hour})
+	b.log.opts.ListenerDSN = c.dsn("b")
+	b.log.now = func() time.Time { return time.Now().Add(time.Duration(ahead.Load())) }
+	b.log.Subscribe("*", func(ev Event) {
+		b.mu.Lock()
+		b.got = append(b.got, ev)
+		b.counts[ev.ID]++
+		b.mu.Unlock()
+	})
+	require.NoError(t, b.log.Start(context.Background()))
+	t.Cleanup(b.log.Stop)
+
+	publish(t, a, "before", "1")
+	b.waitFor(t, 1, 5*time.Second)
+
+	// 2.3 s later, with b reading all the while: the event is outside the
+	// window (1 s) and past two windows since it was handled.
+	time.Sleep(2300 * time.Millisecond)
+	// The failover: b was away for 0.9 s by its reckoning (equally: the new
+	// primary's clock is that much behind), so it looks back 0.9 s plus two
+	// windows, 2.9 s, which reaches the event.
+	ahead.Store(int64(900 * time.Millisecond))
+	b.log.checkHead.Store(true)
+	b.log.poke()
+	time.Sleep(500 * time.Millisecond)
+
+	b.assertNoDuplicates(t)
+	assert.Len(t, b.received(), 1, "handled once")
+
+	// And it still delivers what is new.
+	publish(t, a, "after", "2")
+	b.waitFor(t, 2, 5*time.Second)
+	b.assertNoDuplicates(t)
+}

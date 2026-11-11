@@ -529,8 +529,9 @@ func (l *Log) read() {
 // time this replica was away plus the window, twice (the new primary's clock
 // may differ from the old one's, by up to a window), instead of the window
 // alone; rows are told apart by what they are, not by their id (seenEvent),
-// so an event that took a lost one's id is delivered and nothing already
-// handled is delivered again. It returns how far back to look.
+// so an event that took a lost one's id is delivered, and nothing already
+// handled is delivered again as long as the two servers' clocks are within
+// a window of each other (forgetOld). It returns how far back to look.
 func (l *Log) afterFailover(away time.Duration) (window time.Duration, ok bool) {
 	var head struct{ Max int64 }
 	if err := l.db.Model(&models.ClusterEvent{}).Select("COALESCE(MAX(id), 0) AS max").Scan(&head).Error; err != nil {
@@ -653,12 +654,24 @@ func (l *Log) call(h Handler, ev Event) {
 	h(ev)
 }
 
-// forgetOld drops ids handled long enough ago that the window can no longer
-// return them. Local time is fine here: a row is handled after it commits,
-// so once twice the window has passed locally it is outside the window by
-// the database's clock too.
+// forgetOld drops what is remembered about rows handled long enough ago
+// that no read can return them again: three windows.
+//
+// An ordinary read looks back one window by the database's clock. A row is
+// handled after it was created, and time passes equally on both clocks, so
+// a row handled more than a window ago by this replica's clock was created
+// more than a window ago by the database's: local time is fine here, and no
+// agreement between the two clocks is assumed.
+//
+// The read after a failover (afterFailover) looks back over the time since
+// the last successful read plus two windows, on the new primary's clock.
+// What was forgotten at that last read was handled more than three windows
+// before it, so it is outside that look-back unless the new primary's clock
+// is more than a window behind the old one's. Up to that difference nothing
+// handled is delivered again; beyond it a handler can see again an event it
+// handled that much earlier, which delivery at least once allows.
 func (l *Log) forgetOld() {
-	cutoff := time.Now().Add(-2 * l.opts.Window)
+	cutoff := time.Now().Add(-3 * l.opts.Window)
 	for id, e := range l.seen {
 		if e.at.Before(cutoff) && id <= l.cursor {
 			delete(l.seen, id)
