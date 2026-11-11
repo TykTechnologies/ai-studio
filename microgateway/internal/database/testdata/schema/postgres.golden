@@ -129,6 +129,15 @@ TABLE app_tools
   column app_id bigint(int8) nullable=NO precision=64 scale=0
   column tool_id bigint(int8) nullable=NO precision=64 scale=0
   column created_at timestamp with time zone(timestamptz) nullable=YES
+TABLE applied_snapshots
+  constraint applied_snapshots_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX applied_snapshots_pkey ON applied_snapshots USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0
+  column checksum character varying(varchar) nullable=YES len=64
+  column version character varying(varchar) nullable=YES len=255
+  column namespace character varying(varchar) nullable=YES len=255
+  column applied_at timestamp with time zone(timestamptz) nullable=YES
+  column snapshot bytea(bytea) nullable=YES
 TABLE apps
   constraint apps_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX apps_pkey ON apps USING btree (id)

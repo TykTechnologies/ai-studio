@@ -381,6 +381,7 @@ After the upgrade:
 - **An LLM or tool that needs a filter or plugin from another namespace** is left out on that namespace's edges. Move the filter or plugin to the global namespace or the LLM's namespace.
 - **Edge errors now reach AI Studio's request logs.** Policy blocks and errors on edges appear as request log rows with no spend, so request counts include them.
 - **The request id header is `X-Tyk-AI-Request-ID`.** Edges no longer overwrite `X-Request-ID`.
+- **Edges keep their last applied configuration snapshot in their own database**, in a new table `applied_snapshots` (one row, replaced on every applied configuration). It is encrypted with a key derived from the edge's `ENCRYPTION_KEY` and can be as large as a snapshot (up to `GRPC_MAX_MESSAGE_SIZE`, 16 MB by default), so allow for that on the edge's volume.
 
 ### Native APIs and OpenAI
 

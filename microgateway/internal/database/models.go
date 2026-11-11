@@ -512,6 +512,32 @@ type SyncState struct {
 	UpdatedAt      time.Time
 }
 
+// AppliedSnapshotID is the ID of the one row of applied_snapshots.
+const AppliedSnapshotID = 1
+
+// AppliedSnapshot is the configuration snapshot an edge last applied: the
+// snapshot itself, not only the tables it produced, because part of an
+// edge's configuration lives in memory only (prompt templates, guardrail
+// exceptions and capabilities, tracing keys) and is rebuilt by applying a
+// snapshot. The table holds one row (AppliedSnapshotID), replaced in the
+// transaction that applies a snapshot, so it always matches the tables.
+// See features/ActiveActive.md, Phase 3.
+type AppliedSnapshot struct {
+	ID uint `gorm:"primaryKey;autoIncrement:false"`
+	// Checksum is what the edge reports to the hub in heartbeats for this
+	// configuration: the hub's checksum, or one of its own when entries
+	// were left out.
+	Checksum  string `gorm:"size:64"`
+	Version   string `gorm:"size:255"`
+	Namespace string `gorm:"size:255"`
+	AppliedAt time.Time
+	// Snapshot is the ConfigurationSnapshot protobuf as received, encrypted
+	// with a key derived from ENCRYPTION_KEY (AES-256-GCM, random nonce
+	// prepended). Up to GRPC_MAX_MESSAGE_SIZE (16 MB by default): a BLOB on
+	// SQLite, bytea on Postgres.
+	Snapshot []byte
+}
+
 // BudgetBlock is an App the control plane says this gateway must refuse on
 // budget grounds (Enterprise): its Studio budget is 0, or its team has spent
 // a hard-blocking team budget. The budget sync replaces the whole table each
@@ -735,6 +761,7 @@ func (EdgeInstance) TableName() string      { return "edge_instances" }
 func (PluginKV) TableName() string          { return "plugin_kv" }
 func (ControlPayload) TableName() string    { return "control_payloads" }
 func (SyncState) TableName() string         { return "sync_states" }
+func (AppliedSnapshot) TableName() string   { return "applied_snapshots" }
 func (ModelRouter) TableName() string       { return "model_routers" }
 func (ModelPool) TableName() string         { return "model_pools" }
 func (PoolVendor) TableName() string        { return "pool_vendors" }
