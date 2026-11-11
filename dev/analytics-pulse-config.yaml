@@ -18,8 +18,8 @@ data_collection_plugins:
       # How often to send analytics batches to control plane
       interval_seconds: 10
 
-      # Not used (kept so that existing files load): a pulse is bounded by
-      # max_buffer_size below.
+      # Unused: the setting is accepted but nothing reads it (a pulse is
+      # bounded by max_buffer_size below).
       max_batch_size: 1000
 
       # Records buffered in memory. A full buffer is sent at once, so this is

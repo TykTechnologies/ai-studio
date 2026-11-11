@@ -221,7 +221,7 @@ secrets:
 # Analytics pulse plugin configuration
 analyticsPulse:
   intervalSeconds: 10
-  maxBatchSize: 1000
+  maxBatchSize: 1000   # Unused: accepted, but nothing reads it (maxBufferSize bounds a pulse)
   maxBufferSize: 10000
   compressionEnabled: true
   includeProxySummaries: true

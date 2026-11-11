@@ -99,6 +99,8 @@ type AnalyticsPulsePlugin struct {
 // PulsePluginConfig holds configuration for the analytics pulse plugin
 type PulsePluginConfig struct {
 	IntervalSeconds             int      `json:"interval_seconds"`
+	// MaxBatchSize is unused: the setting is accepted but nothing reads it
+	// (a pulse is bounded by MaxBufferSize, see batchRecords).
 	MaxBatchSize                int      `json:"max_batch_size"`
 	MaxBufferSize               int      `json:"max_buffer_size"`
 	CompressionEnabled          bool     `json:"compression_enabled"`
