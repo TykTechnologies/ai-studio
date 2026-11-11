@@ -7,10 +7,12 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/dbstate"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pglisten"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -98,6 +100,32 @@ type LogStats struct {
 	ListenerReconnects uint64
 	ReadErrors         uint64
 	LastError          string
+	// CursorResets counts the times the log found the table behind its
+	// cursor (the newest events were lost when the database failed over to
+	// a server that had not received them) and moved the cursor back;
+	// LastCursorReset is when it last did.
+	CursorResets    uint64
+	LastCursorReset time.Time
+	// Gaps counts the times this replica could not read the log for longer
+	// than its retention, so events were pruned before it saw them, and
+	// told its gap handlers (OnGap) to rebuild from the database; LastGap
+	// is when it last did.
+	Gaps    uint64
+	LastGap time.Time
+}
+
+// seenEvent is a row the reader has handled: when (local clock), and enough
+// of the row to tell it from another row that later gets the same id. After
+// a failover that lost the newest rows, the new primary hands their ids out
+// again.
+type seenEvent struct {
+	at      time.Time
+	created int64 // created_at, Unix microseconds
+	origin  string
+}
+
+func (e seenEvent) is(created time.Time, origin string) bool {
+	return e.created == created.UnixMicro() && e.origin == origin
 }
 
 // Log is the cluster event log: events every other replica must see, kept
@@ -119,7 +147,22 @@ type Log struct {
 
 	// reader state, touched only by the reader goroutine (and Start)
 	cursor int64
-	seen   map[int64]time.Time // id -> when it was handled (local clock)
+	seen   map[int64]seenEvent // id -> the row handled under it
+	// lastGoodRead is when the last read succeeded (wall clock, so that
+	// time a suspended machine spent asleep counts).
+	lastGoodRead time.Time
+	// failovers is the database tracker's failover count at the last read.
+	failovers int64
+	// checkHead asks the next read to compare the table with the cursor:
+	// set when the listener reconnected, which is what a failover looks
+	// like from here (so is a read that works again after failing, which
+	// read checks for itself).
+	checkHead atomic.Bool
+	// now is time.Now, replaced in tests.
+	now func() time.Time
+
+	gapMu       sync.Mutex
+	gapHandlers []func(time.Duration)
 
 	statsMu sync.Mutex
 	stats   LogStats
@@ -147,7 +190,8 @@ func NewLog(db *gorm.DB, node string, opts LogOptions) *Log {
 		opts:     opts.withDefaults(),
 		enabled:  db.Dialector.Name() == "postgres",
 		handlers: map[string][]*handlerEntry{},
-		seen:     map[int64]time.Time{},
+		seen:     map[int64]seenEvent{},
+		now:      time.Now,
 		wake:     make(chan struct{}, 1),
 		stop:     make(chan struct{}),
 		done:     make(chan struct{}),
@@ -215,14 +259,17 @@ func (l *Log) start(ctx context.Context) (err error) {
 		return fmt.Errorf("cluster event log: %w", err)
 	}
 	l.cursor = head.Max
-	var recent []int64
-	if err := l.db.WithContext(ctx).Model(&models.ClusterEvent{}).Where("created_at > ?", sinceExpr(l.db, l.opts.Window)).Pluck("id", &recent).Error; err != nil {
+	var recent []eventKey
+	if err := l.db.WithContext(ctx).Model(&models.ClusterEvent{}).Select("id, created_at, origin").
+		Where("created_at > ?", sinceExpr(l.db, l.opts.Window)).Find(&recent).Error; err != nil {
 		return fmt.Errorf("cluster event log: %w", err)
 	}
-	now := time.Now()
-	for _, id := range recent {
-		l.seen[id] = now
+	now := l.now()
+	for _, k := range recent {
+		l.seen[k.ID] = seenEvent{at: now, created: k.CreatedAt.UnixMicro(), origin: k.Origin}
 	}
+	l.lastGoodRead = now.Round(0)
+	l.failovers = dbstate.For(l.db).Status().Failovers
 	l.setStats(func(s *LogStats) { s.Cursor = l.cursor })
 
 	dsn := l.opts.ListenerDSN
@@ -237,6 +284,7 @@ func (l *Log) start(ctx context.Context) (err error) {
 			func() {
 				l.setStats(func(s *LogStats) { s.ListenerReconnects++ })
 				logger.Info("Cluster event listener reconnected; reading the event log to catch up")
+				l.checkHead.Store(true)
 				l.poke()
 			})
 		l.statsMu.Lock()
@@ -328,6 +376,19 @@ func (l *Log) PublishBatch(ctx context.Context, topic string, payloads [][]byte)
 	return nil
 }
 
+// OnGap registers fn to be called (on the log's reader goroutine, so it must
+// be quick: hand long work to a goroutine) when this replica could not read
+// the log for longer than its retention. Events published meanwhile were
+// pruned before it saw them, so what it holds in memory may be behind the
+// database in ways no event will repair: fn must rebuild from the database,
+// as a restart would. away is how long it could not read. It may be called
+// before or after Start.
+func (l *Log) OnGap(fn func(away time.Duration)) {
+	l.gapMu.Lock()
+	l.gapHandlers = append(l.gapHandlers, fn)
+	l.gapMu.Unlock()
+}
+
 // Enabled reports whether this database carries the log (Postgres). On
 // other databases Publish does nothing and no event is delivered.
 func (l *Log) Enabled() bool { return l.enabled }
@@ -398,7 +459,28 @@ func (l *Log) read() {
 	if time.Now().Before(l.backoffUntil) {
 		return
 	}
-	if !l.readStragglers() {
+	// How long this replica has not read the log. Usually a poll interval;
+	// after an outage, the outage.
+	now := l.now().Round(0)
+	away := now.Sub(l.lastGoodRead)
+	if away < 0 {
+		away = 0
+	}
+	window := l.opts.Window
+	// After a failover the table may not be the one the cursor was counted
+	// on: look at it before reading on (see afterFailover).
+	failovers := dbstate.For(l.db).Status().Failovers
+	if l.checkHead.Swap(false) || failovers != l.failovers || l.failing() {
+		wider, ok := l.afterFailover(away)
+		if !ok {
+			// Look again on the next read.
+			l.checkHead.Store(true)
+			return
+		}
+		window = wider
+	}
+	l.failovers = failovers
+	if !l.readStragglers(window) {
 		return
 	}
 	for {
@@ -423,24 +505,103 @@ func (l *Log) read() {
 	}
 	l.forgetOld()
 	l.setStats(func(s *LogStats) { s.Cursor = l.cursor; s.LastRead = time.Now() })
+	// Measured to the end of this read: one that itself took longer than
+	// the retention (a database that hung, then answered) is a gap too.
+	done := l.now().Round(0)
+	since := done.Sub(l.lastGoodRead)
+	l.lastGoodRead = done
+	if since > l.opts.Retention {
+		l.gap(since)
+	}
+}
+
+// afterFailover runs when the database may have failed over since the last
+// read: the listener reconnected, reads work again after failing, or the
+// database tracker counted a failover. With asynchronous replication the new
+// primary may not have received the newest events, and it then hands their
+// ids out again: to new events, which a reader that kept its cursor would
+// never see (ids at or below the cursor are only looked at within the
+// window, and not at all when the reader has already handled a row with
+// that id).
+//
+// If the newest id in the table is below the cursor, the cursor moves back
+// to it. In every case the next straggler read looks back over the whole
+// time this replica was away plus the window, twice (the new primary's clock
+// may differ from the old one's, by up to a window), instead of the window
+// alone; rows are told apart by what they are, not by their id (seenEvent),
+// so an event that took a lost one's id is delivered and nothing already
+// handled is delivered again. It returns how far back to look.
+func (l *Log) afterFailover(away time.Duration) (window time.Duration, ok bool) {
+	var head struct{ Max int64 }
+	if err := l.db.Model(&models.ClusterEvent{}).Select("COALESCE(MAX(id), 0) AS max").Scan(&head).Error; err != nil {
+		l.readFailed(err)
+		return 0, false
+	}
+	if head.Max < l.cursor {
+		logger.Warnf("Cluster event log: the newest event in the database (%d) is older than the last one this replica read (%d): the database failed over to a server that had not received the newest events. Reading on from %d; events lost with them were lost for every replica.",
+			head.Max, l.cursor, head.Max)
+		l.cursor = head.Max
+		// Rows above the new cursor are gone: what is remembered about
+		// their ids describes rows that no longer exist.
+		for id := range l.seen {
+			if id > head.Max {
+				delete(l.seen, id)
+			}
+		}
+		l.setStats(func(s *LogStats) {
+			s.CursorResets++
+			s.LastCursorReset = time.Now()
+			s.Cursor = l.cursor
+		})
+	}
+	window = away + 2*l.opts.Window
+	if window > l.opts.Retention {
+		window = l.opts.Retention
+	}
+	return window, true
+}
+
+// gap tells the gap handlers that this replica was away from the log for
+// longer than its retention.
+func (l *Log) gap(away time.Duration) {
+	logger.Warnf("Cluster event log: this replica could not read the event log for %s, longer than events are kept (%s): changes other replicas made meanwhile are reloaded from the database",
+		away.Round(time.Second), l.opts.Retention)
+	l.setStats(func(s *LogStats) {
+		s.Gaps++
+		s.LastGap = time.Now()
+	})
+	l.gapMu.Lock()
+	handlers := append([]func(time.Duration){}, l.gapHandlers...)
+	l.gapMu.Unlock()
+	for _, fn := range handlers {
+		safe.Call("cluster event log gap handler", func() { fn(away) })
+	}
+}
+
+// eventKey is what tells one row of the log from another.
+type eventKey struct {
+	ID        int64
+	CreatedAt time.Time
+	Origin    string
 }
 
 // readStragglers handles rows at or below the cursor that were not visible
-// when the cursor passed them. It reads ids only, then the rows it has not
-// seen, so a busy window costs little.
-func (l *Log) readStragglers() bool {
-	var ids []int64
-	err := l.db.Model(&models.ClusterEvent{}).
-		Where("id <= ? AND created_at > ? AND origin <> ?", l.cursor, sinceExpr(l.db, l.opts.Window), l.node).
-		Order("id").Pluck("id", &ids).Error
+// when the cursor passed them, looking back window. It reads what
+// identifies each row only, then the rows it has not handled, so a busy
+// window costs little.
+func (l *Log) readStragglers(window time.Duration) bool {
+	var keys []eventKey
+	err := l.db.Model(&models.ClusterEvent{}).Select("id, created_at, origin").
+		Where("id <= ? AND created_at > ? AND origin <> ?", l.cursor, sinceExpr(l.db, window), l.node).
+		Order("id").Find(&keys).Error
 	if err != nil {
 		l.readFailed(err)
 		return false
 	}
 	var missing []int64
-	for _, id := range ids {
-		if _, ok := l.seen[id]; !ok {
-			missing = append(missing, id)
+	for _, k := range keys {
+		if seen, ok := l.seen[k.ID]; !ok || !seen.is(k.CreatedAt, k.Origin) {
+			missing = append(missing, k.ID)
 		}
 	}
 	if len(missing) == 0 {
@@ -458,10 +619,10 @@ func (l *Log) readStragglers() bool {
 
 func (l *Log) handle(rows []models.ClusterEvent) {
 	for _, row := range rows {
-		if _, ok := l.seen[row.ID]; ok {
+		if seen, ok := l.seen[row.ID]; ok && seen.is(row.CreatedAt, row.Origin) {
 			continue
 		}
-		l.seen[row.ID] = time.Now()
+		l.seen[row.ID] = seenEvent{at: time.Now(), created: row.CreatedAt.UnixMicro(), origin: row.Origin}
 		if row.ID > l.cursor {
 			l.cursor = row.ID
 		}
@@ -498,8 +659,8 @@ func (l *Log) call(h Handler, ev Event) {
 // the database's clock too.
 func (l *Log) forgetOld() {
 	cutoff := time.Now().Add(-2 * l.opts.Window)
-	for id, at := range l.seen {
-		if at.Before(cutoff) && id <= l.cursor {
+	for id, e := range l.seen {
+		if e.at.Before(cutoff) && id <= l.cursor {
 			delete(l.seen, id)
 		}
 	}
@@ -536,6 +697,13 @@ func (l *Log) readSucceeded() {
 	if recovered {
 		logger.Info("Cluster event log: reading events works again")
 	}
+}
+
+// failing reports whether the last read failed.
+func (l *Log) failing() bool {
+	l.statsMu.Lock()
+	defer l.statsMu.Unlock()
+	return l.stats.LastError != ""
 }
 
 func (l *Log) setStats(f func(*LogStats)) {

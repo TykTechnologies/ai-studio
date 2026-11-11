@@ -161,6 +161,14 @@ func Snapshot(ctx context.Context, db *gorm.DB, self string, log *Log, relay *Re
 		if st.EventLog.LastError != "" {
 			st.Warnings = append(st.Warnings, "Reading the cluster event log fails: "+st.EventLog.LastError)
 		}
+		if st.EventLog.CursorResets > 0 {
+			st.Warnings = append(st.Warnings, fmt.Sprintf("The database failed over to a server that had not received the newest cluster events (%d time(s) since this replica started, last at %s): changes made in the moments before that failover were lost in the database. Check that replication to the standby is synchronous.",
+				st.EventLog.CursorResets, st.EventLog.LastCursorReset.UTC().Format(time.RFC3339)))
+		}
+		if st.EventLog.Gaps > 0 {
+			st.Warnings = append(st.Warnings, fmt.Sprintf("This replica could not read the cluster event log for longer than events are kept (%d time(s) since it started, last at %s); it reloaded its state from the database each time.",
+				st.EventLog.Gaps, st.EventLog.LastGap.UTC().Format(time.RFC3339)))
+		}
 		if st.Relay.Dropped > 0 {
 			st.Warnings = append(st.Warnings, fmt.Sprintf("%d event(s) could not be relayed to the other replicas since this replica started (see its log).", st.Relay.Dropped))
 		}
