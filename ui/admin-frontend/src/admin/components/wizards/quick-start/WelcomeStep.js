@@ -78,7 +78,7 @@ const WelcomeStep = () => {
           }
         }}
       >
-        Empower your team to build AI Apps with direct access to LLM providers and data sources,
+        Empower your team to build AI Apps with direct access to model providers and data sources,
       </Typography>
       
       <Typography

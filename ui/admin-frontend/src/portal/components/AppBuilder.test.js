@@ -133,8 +133,8 @@ describe("AppBuilder access picker, name default and commit semantics", () => {
     expect(screen.getByRole("textbox", { name: /App Name/ })).toHaveValue("");
     expect(screen.getByRole("textbox", { name: /App Name/ })).toBeRequired();
     // Prompts has nothing an app credential unlocks, so it has no tab.
-    expect(tabNames()).toEqual(["LLM providers", "Data sources", "Tools", "MCP servers", "Vector DBs", "Agents"]);
-    expect(tab("LLM providers")).toHaveAttribute("aria-selected", "true");
+    expect(tabNames()).toEqual(["Model providers", "Data sources", "Tools", "MCP servers", "Vector DBs", "Agents"]);
+    expect(tab("Model providers")).toHaveAttribute("aria-selected", "true");
     expect(options()).toEqual(["Add OpenAI", "Add Anthropic"]);
     expect(screen.getByTestId("requested-access-empty")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create App" })).toBeDisabled();
@@ -144,7 +144,7 @@ describe("AppBuilder access picker, name default and commit semantics", () => {
     renderBuilder({ path: "/portal/apps/new?llm=2" });
     await waitFor(() => expect(requested("llm")).toEqual(["Anthropic"]));
     await waitFor(() => expect(screen.getByTestId("registry-dirty")).toHaveTextContent("false"));
-    expect(tab("LLM providers")).toHaveTextContent("1");
+    expect(tab("Model providers")).toHaveTextContent("1");
     expect(options()).toEqual(["Add OpenAI", "Remove Anthropic"]);
 
     fireEvent.change(screen.getByRole("textbox", { name: /App Name/ }), { target: { value: "Support bot" } });
@@ -263,14 +263,14 @@ describe("AppBuilder access picker, name default and commit semantics", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
-  // A model router stands in for LLM providers: an app of routers alone is
+  // A model router stands in for model providers: an app of routers alone is
   // valid, and only routers an app credential unlocks are offered.
-  it("offers app-granted model routers next to LLM providers and submits a router-only app", async () => {
+  it("offers app-granted model routers next to model providers and submits a router-only app", async () => {
     catalogRouters = modelRouters;
     renderBuilder({ path: "/portal/apps/new?model_router=21" });
     await waitFor(() => expect(requested("model_router")).toEqual(["Prod router"]));
     expect(pubClient.get).toHaveBeenCalledWith("/common/catalog", { params: { type: "model_router", page_size: 100 } });
-    expect(tabNames().slice(0, 2)).toEqual(["LLM providers", "Model routers"]);
+    expect(tabNames().slice(0, 2)).toEqual(["Model providers", "Model routers"]);
     expect(tab("Model routers")).toHaveAttribute("aria-selected", "true");
     expect(options()).toEqual(["Remove Prod router"]);
     await waitFor(() => expect(screen.getByTestId("registry-dirty")).toHaveTextContent("false"));
@@ -308,7 +308,7 @@ describe("AppBuilder access picker, name default and commit semantics", () => {
     renderBuilder({ path: "/portal/apps/new?semantic_router=31" });
     await waitFor(() => expect(requested("semantic_router")).toEqual(["Smart router"]));
     expect(pubClient.get).toHaveBeenCalledWith("/common/catalog", { params: { type: "semantic_router", page_size: 100 } });
-    expect(tabNames().slice(0, 3)).toEqual(["LLM providers", "Model routers", "Semantic routers"]);
+    expect(tabNames().slice(0, 3)).toEqual(["Model providers", "Model routers", "Semantic routers"]);
     expect(tab("Semantic routers")).toHaveAttribute("aria-selected", "true");
 
     fireEvent.change(screen.getByRole("textbox", { name: /App Name/ }), { target: { value: "Smart bot" } });

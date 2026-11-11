@@ -11,12 +11,12 @@ jest.mock('../../hooks/usePermissionCatalogue');
 const catalogue = {
   loading: false,
   actions: ['read', 'write', 'delete', 'execute'],
-  byKey: new Map([['llms', { key: 'llms', label: 'LLM providers' }]]),
+  byKey: new Map([['llms', { key: 'llms', label: 'Model providers' }]]),
   grouped: [
     {
-      group: 'LLM management',
+      group: 'Model management',
       resources: [
-        { key: 'llms', label: 'LLM providers', group: 'LLM management', actions: ['read', 'write', 'delete'] },
+        { key: 'llms', label: 'Model providers', group: 'Model management', actions: ['read', 'write', 'delete'] },
       ],
     },
   ],
@@ -39,8 +39,8 @@ describe('EffectivePermissionsList', () => {
 
   it('groups permissions by resource and renders an action chip each', () => {
     render(<EffectivePermissionsList permissions={['llms:read', 'llms:write']} />);
-    expect(screen.getByText('LLM management')).toBeInTheDocument();
-    expect(screen.getByText('LLM providers')).toBeInTheDocument();
+    expect(screen.getByText('Model management')).toBeInTheDocument();
+    expect(screen.getByText('Model providers')).toBeInTheDocument();
     expect(screen.getByText('read')).toBeInTheDocument();
     expect(screen.getByText('write')).toBeInTheDocument();
   });

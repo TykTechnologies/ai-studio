@@ -64,7 +64,7 @@ describe('CredentialSetupNotice', () => {
 
   test('names each empty secret and links to it, falling back to the secrets list', async () => {
     render(<CredentialSetupNotice llms={seeded} />);
-    expect(screen.getByTestId('quickstart-credential-notice')).toHaveTextContent('Add your LLM provider keys first');
+    expect(screen.getByTestId('quickstart-credential-notice')).toHaveTextContent('Add your model provider keys first');
 
     const openai = screen.getByRole('link', { name: 'OPENAI_KEY' });
     await waitFor(() => expect(openai).toHaveAttribute('href', '/admin/secrets/edit/11'));

@@ -117,7 +117,7 @@ const Groups = () => {
       </TitleBox>
       <Box sx={{ p: 3 }}>
         <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
-          Teams help you organize users and easily manage their access to LLM providers, data sources, and tools through catalogs. Linking teams to specific catalogs ensures they access only AI and data relevant to them.{' '}
+          Teams help you organize users and easily manage their access to model providers, data sources, and tools through catalogs. Linking teams to specific catalogs ensures they access only AI and data relevant to them.{' '}
           <LearnMoreLink onClick={createDocsLinkHandler(getDocsLink, 'teams')} />
         </Typography>
         <Box sx={{ mt: 2 }}>

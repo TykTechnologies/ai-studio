@@ -613,13 +613,13 @@ const AppDetailView = () => {
             </Box>
           </Grid>
           <Grid item xs={3}>
-            <FieldLabel>LLMs:</FieldLabel>
+            <FieldLabel>Model providers:</FieldLabel>
           </Grid>
           <Grid item xs={9}>
             <Box display="flex" flexWrap="wrap" gap={1}>
               {appLLMs.length > 0 ? appLLMs.map((llm) => (
                 <Chip key={llm.id} label={llm.attributes.name} />
-              )) : <Typography variant="body2">No LLM providers associated.</Typography>}
+              )) : <Typography variant="body2">No model providers associated.</Typography>}
             </Box>
           </Grid>
           <Grid item xs={3}>
@@ -806,7 +806,7 @@ const AppDetailView = () => {
       </Paper>
 
       <Paper sx={{ p: 3 }}>
-        <SectionTitle>LLM Access Details</SectionTitle>
+        <SectionTitle>Model Provider Access Details</SectionTitle>
 
         {/* Three shapes of endpoint are on offer and they are easy to confuse, so
             say up-front what each one is for before listing any URLs. */}
@@ -814,9 +814,9 @@ const AppDetailView = () => {
           Every endpoint below is authenticated with this app&apos;s credential and
           enforces the same policies, budgets and filters. They differ in how you
           choose the model:{" "}
-          <strong>Main Ingress</strong> is one URL covering every LLM in this app and
-          picks the LLM from the request body, while the{" "}
-          <strong>per-LLM endpoints</strong> pin one LLM into the URL itself.
+          <strong>Main Ingress</strong> is one URL covering every model provider in this app and
+          picks the model provider from the request body, while the{" "}
+          <strong>per-provider endpoints</strong> pin one model provider into the URL itself.
         </Typography>
 
         {/* Main Ingress: the gateway's unified OpenAI-compatible ingress. It is
@@ -832,12 +832,12 @@ const AppDetailView = () => {
                   size="small"
                   color="primary"
                   variant="outlined"
-                  label="One endpoint, all LLMs"
+                  label="One endpoint, all model providers"
                 />
               </Box>
               <Typography variant="body2" color="text.secondary" mb={2}>
-                A single OpenAI-compatible endpoint that fronts every LLM this app
-                can access. The LLM is selected per request from the{" "}
+                A single OpenAI-compatible endpoint that fronts every model provider this app
+                can access. The model provider is selected per request from the{" "}
                 <code>model</code> field, so a client can switch model or vendor
                 without changing its base URL or credential.
               </Typography>
@@ -863,7 +863,7 @@ const AppDetailView = () => {
               <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
                 <FieldLabel sx={{ minWidth: "130px" }}>MAIN INGRESS:</FieldLabel>
                 <Box>
-                  <Tooltip title="OpenAI-compatible ingress for every LLM in this app. The vendor prefix in the model field selects which LLM handles the request.">
+                  <Tooltip title="OpenAI-compatible ingress for every model provider in this app. The vendor prefix in the model field selects which model provider handles the request.">
                     <HelpOutlineIcon sx={{ color: "text.secondary", mr: 1 }} />
                   </Tooltip>
                 </Box>
@@ -929,14 +929,14 @@ const AppDetailView = () => {
                   <Typography component="li" variant="body2">
                     <strong>Models must be namespaced.</strong> Send{" "}
                     <code>&lt;llm-slug&gt;/&lt;model&gt;</code> rather than a bare model
-                    name — the prefix picks the LLM. A bare name is rejected with{" "}
+                    name — the prefix picks the model provider. A bare name is rejected with{" "}
                     <strong>400</strong>. See the prefixes for this app below.
                   </Typography>
                   <Typography component="li" variant="body2">
                     <strong>OpenAI format only.</strong> Requests and responses use the
                     OpenAI Chat Completions schema whatever the upstream vendor is. To
                     use a vendor&apos;s own SDK and native parameters, use that
-                    LLM&apos;s vendor-native endpoint below instead.
+                    model provider&apos;s vendor-native endpoint below instead.
                   </Typography>
                   <Typography component="li" variant="body2">
                     Streaming and non-streaming are both handled automatically from{" "}
@@ -990,9 +990,9 @@ const AppDetailView = () => {
                 color="text.secondary"
                 sx={{ display: "block", mt: 1 }}
               >
-                Any model the administrator has allowed on an LLM works with that
-                LLM&apos;s prefix — the names above are examples using each
-                LLM&apos;s default model.
+                Any model the administrator has allowed on a model provider works with that
+                model provider&apos;s prefix — the names above are examples using each
+                model provider&apos;s default model.
               </Typography>
             </CardContent>
           </Card>
@@ -1007,7 +1007,7 @@ const AppDetailView = () => {
                 Model Routers
               </Typography>
               <Typography variant="body2" color="text.secondary" mb={2}>
-                A model router picks an LLM for each request from the model
+                A model router picks a model provider for each request from the model
                 name. Call it on the Main Ingress
                 {unifiedRouterPath ? (
                   <>
@@ -1016,7 +1016,7 @@ const AppDetailView = () => {
                 ) : null}{" "}
                 with the model written as{" "}
                 <code>&lt;router-slug&gt;/&lt;model&gt;</code>. This app reaches
-                the router&apos;s LLMs only through the router.
+                the router&apos;s model providers only through the router.
               </Typography>
               {!unifiedRouterPath && (
                 <Alert severity="warning" sx={{ mb: 2 }}>
@@ -1075,7 +1075,7 @@ const AppDetailView = () => {
                 ) : null}{" "}
                 with the model written as{" "}
                 <code>&lt;router-slug&gt;/auto</code>. This app reaches the
-                router&apos;s LLMs only through the router.
+                router&apos;s model providers only through the router.
               </Typography>
               {!unifiedRouterPath && (
                 <Alert severity="warning" sx={{ mb: 2 }}>
@@ -1121,7 +1121,7 @@ const AppDetailView = () => {
 
         {appLLMs.length > 0 && (
           <Typography variant="subtitle1" sx={{ fontWeight: "bold", mb: 2 }}>
-            Per-LLM Endpoints
+            Per-Provider Endpoints
           </Typography>
         )}
         {appLLMs.map((llm) => (
@@ -1155,7 +1155,7 @@ const AppDetailView = () => {
               <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
                 <FieldLabel sx={{ minWidth: "100px" }}>VENDOR API:</FieldLabel>
                 <Box>
-                  <Tooltip title="Pass-through to the vendor's native API for this LLM. Automatically detects streaming vs non-streaming requests. Use with your vendor's native SDK.">
+                  <Tooltip title="Pass-through to the vendor's native API for this model provider. Automatically detects streaming vs non-streaming requests. Use with your vendor's native SDK.">
                     <HelpOutlineIcon sx={{ color: "text.secondary", mr: 1 }} />
                   </Tooltip>
                 </Box>
@@ -1200,12 +1200,12 @@ const AppDetailView = () => {
                 OpenAI-Compatible Endpoint
               </Typography>
               <Typography variant="body2" sx={{ mb: 2 }}>
-                Speaks the OpenAI Chat Completions API but is pinned to this one LLM:
-                the URL names the LLM, so the <code>model</code> field takes a plain
+                Speaks the OpenAI Chat Completions API but is pinned to this one model provider:
+                the URL names the model provider, so the <code>model</code> field takes a plain
                 vendor model name (or is omitted, falling back to the default model
                 the administrator configured).{" "}
                 <strong>Use this when</strong> a client should only ever reach this
-                LLM, or when a tool cannot send a namespaced{" "}
+                model provider, or when a tool cannot send a namespaced{" "}
                 <code>&lt;llm-slug&gt;/&lt;model&gt;</code> model string as the Main
                 Ingress requires.
               </Typography>

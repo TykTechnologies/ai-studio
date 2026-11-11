@@ -162,7 +162,7 @@ const AppListView = () => {
       {apps.length === 0 ? (
         <StyledPaper sx={{ p: 4, textAlign: "center" }}>
           <Typography variant="h6" gutterBottom>
-            Apps provide access to LLMs and Data sources via the AI Gateway
+            Apps provide access to model providers and Data sources via the AI Gateway
           </Typography>
           <Typography variant="body1" paragraph>
             Create your first app to get started.
@@ -183,7 +183,7 @@ const AppListView = () => {
                 <StyledTableHeaderCell>Description</StyledTableHeaderCell>
                 <StyledTableHeaderCell>Status</StyledTableHeaderCell>
                 <StyledTableHeaderCell>Data sources</StyledTableHeaderCell>
-                <StyledTableHeaderCell>LLM providers</StyledTableHeaderCell>
+                <StyledTableHeaderCell>Model providers</StyledTableHeaderCell>
                 <StyledTableHeaderCell>Tools</StyledTableHeaderCell>
                 <StyledTableHeaderCell>Actions</StyledTableHeaderCell>
               </TableRow>

@@ -29,7 +29,7 @@ describe("UsedBySection", () => {
 
   it("shows a loading state while the dependents load", () => {
     apiClient.get.mockReturnValue(new Promise(() => {}));
-    renderWith(<UsedBySection resourcePath="llms" id="3" objectLabel="LLM provider" />);
+    renderWith(<UsedBySection resourcePath="llms" id="3" objectLabel="Model provider" />);
     expect(screen.getByText("Used by")).toBeInTheDocument();
     expect(screen.getByTestId("used-by-loading")).toBeInTheDocument();
     expect(apiClient.get).toHaveBeenCalledWith("/llms/3/dependents");
@@ -45,7 +45,7 @@ describe("UsedBySection", () => {
         total: 4,
       }),
     );
-    renderWith(<UsedBySection resourcePath="llms" id="3" objectLabel="LLM provider" />);
+    renderWith(<UsedBySection resourcePath="llms" id="3" objectLabel="Model provider" />);
     const groups = await screen.findByTestId("used-by-groups");
     expect(within(groups).getByText("Apps (2):")).toBeInTheDocument();
     expect(within(groups).getByText("Catalogs (1):")).toBeInTheDocument();

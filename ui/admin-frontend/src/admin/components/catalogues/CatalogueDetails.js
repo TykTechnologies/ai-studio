@@ -98,7 +98,7 @@ const CatalogueDetails = () => {
       setLLMs(response.data.data || []);
     } catch (error) {
       console.error("Error fetching catalog LLMs", error);
-      setError("Failed to load LLMs for this catalog");
+      setError("Failed to load model providers for this catalog");
     }
   };
 
@@ -109,7 +109,7 @@ const CatalogueDetails = () => {
   return (
     <>
       <TitleBox top="var(--studio-header-height)">
-        <Typography variant="headingXLarge">LLM catalog details</Typography>
+        <Typography variant="headingXLarge">Model provider catalog details</Typography>
         <SecondaryLinkButton
           startIcon={<ArrowBackIcon />}
           component={Link}
@@ -141,7 +141,7 @@ const CatalogueDetails = () => {
           </Grid>
         </Section>
 
-        <Section title="LLM providers in this catalog">
+        <Section title="Model providers in this catalog">
           <List>
             {llms.length > 0 ? (
               llms.map((llm) => (
@@ -157,7 +157,7 @@ const CatalogueDetails = () => {
               ))
             ) : (
               <ListItem>
-                <ListItemText primary="No LLM providers in this catalog" />
+                <ListItemText primary="No model providers in this catalog" />
               </ListItem>
             )}
           </List>

@@ -74,7 +74,7 @@ describe("LLMForm slug conflict", () => {
       </ThemeProvider>
     );
     const name = await screen.findByDisplayValue("Open AI");
-    fireEvent.click(screen.getByRole("button", { name: /update llm|save|create/i }));
+    fireEvent.click(screen.getByRole("button", { name: /update model provider|save|create/i }));
 
     await waitFor(() => expect(name).toHaveAttribute("aria-invalid", "true"));
     expect(screen.getAllByText(DETAIL).length).toBeGreaterThan(0);

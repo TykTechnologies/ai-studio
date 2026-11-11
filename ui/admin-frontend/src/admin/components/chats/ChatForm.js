@@ -289,7 +289,7 @@ const ChatForm = () => {
     if (!chat.name.trim()) newErrors.name = "Name is required";
     if (!chat.llm_settings_id)
       newErrors.llm_settings_id = "LLM Settings is required";
-    if (!chat.llm_id) newErrors.llm_id = "LLM is required";
+    if (!chat.llm_id) newErrors.llm_id = "Model provider is required";
     if (chat.rag_n && (isNaN(chat.rag_n) || chat.rag_n < 0)) {
       newErrors.rag_n = "RAG N must be a non-negative number";
     }
@@ -391,7 +391,7 @@ const ChatForm = () => {
         </SecondaryLinkButton>
       </TitleBox>
       <Box sx={{ p: 3 }}>
-        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Chats are customized interfaces that allow users to have one-on-one conversations with specific LLM providers, tools, and data based on their needs. Access is tailored to the user's group, ensuring relevant and secure interactions.</Typography>  
+        <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Chats are customized interfaces that allow users to have one-on-one conversations with specific model providers, tools, and data based on their needs. Access is tailored to the user's group, ensuring relevant and secure interactions.</Typography>  
       </Box>
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
@@ -446,7 +446,7 @@ const ChatForm = () => {
             </Grid>
             <Grid item xs={12}>
               <FormControl fullWidth required error={!!errors.llm_id}>
-                <InputLabel id="chatform-llm-label">LLM</InputLabel>
+                <InputLabel id="chatform-llm-label">Model provider</InputLabel>
                 <Select
                   labelId="chatform-llm-label"
                   name="llm_id"

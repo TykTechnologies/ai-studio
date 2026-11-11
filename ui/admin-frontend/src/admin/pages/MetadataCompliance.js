@@ -150,7 +150,7 @@ const MetadataCompliance = () => {
         {available === false && (
           <EnterpriseFeatureBadge
             feature="Governed Metadata"
-            description="See which LLMs, tools and data sources are missing required governance metadata with the Enterprise Edition."
+            description="See which model providers, tools and data sources are missing required governance metadata with the Enterprise Edition."
           />
         )}
         {available && (

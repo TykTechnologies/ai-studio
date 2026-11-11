@@ -73,16 +73,16 @@ describe("LLMList permission gating (llms:publish vs llms:write)", () => {
     renderWith(["llms:publish"]);
     await screen.findByText("Prod OpenAI");
 
-    expect(screen.queryByRole("button", { name: /Add LLM provider/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Add model provider/ })).not.toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: /Actions/ })).toBeInTheDocument();
 
     const menu = await openRowMenu("Prod OpenAI");
-    expect(within(menu).getByRole("menuitem", { name: "Deactivate LLM provider" })).toBeInTheDocument();
-    expect(within(menu).queryByRole("menuitem", { name: /Edit LLM provider/ })).not.toBeInTheDocument();
-    expect(within(menu).queryByRole("menuitem", { name: /Delete LLM provider/ })).not.toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "Deactivate model provider" })).toBeInTheDocument();
+    expect(within(menu).queryByRole("menuitem", { name: /Edit model provider/ })).not.toBeInTheDocument();
+    expect(within(menu).queryByRole("menuitem", { name: /Delete model provider/ })).not.toBeInTheDocument();
 
     // The toggle goes through the publish-gated endpoint, not PATCH /llms/:id.
-    fireEvent.click(within(menu).getByRole("menuitem", { name: "Deactivate LLM provider" }));
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Deactivate model provider" }));
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith("/llms/1/deactivate"));
     expect(apiClient.patch).not.toHaveBeenCalled();
 
@@ -97,7 +97,7 @@ describe("LLMList permission gating (llms:publish vs llms:write)", () => {
   it("publish-only: activating an inactive provider posts to /activate", async () => {
     renderWith(["llms:publish"]);
     const menu = await openRowMenu("Staging Claude");
-    fireEvent.click(within(menu).getByRole("menuitem", { name: "Activate LLM provider" }));
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Activate model provider" }));
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith("/llms/2/activate"));
   });
 
@@ -105,12 +105,12 @@ describe("LLMList permission gating (llms:publish vs llms:write)", () => {
     renderWith(["llms:write"]);
     await screen.findByText("Prod OpenAI");
 
-    expect(screen.getByRole("button", { name: /Add LLM provider/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Add model provider/ })).toBeInTheDocument();
     const menu = await openRowMenu("Prod OpenAI");
-    expect(within(menu).getByRole("menuitem", { name: "Edit LLM provider" })).toBeInTheDocument();
-    expect(within(menu).getByRole("menuitem", { name: "Delete LLM provider" })).toBeInTheDocument();
-    expect(within(menu).queryByRole("menuitem", { name: /Deactivate LLM provider/ })).not.toBeInTheDocument();
-    expect(within(menu).queryByRole("menuitem", { name: /Activate LLM provider/ })).not.toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "Edit model provider" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "Delete model provider" })).toBeInTheDocument();
+    expect(within(menu).queryByRole("menuitem", { name: /Deactivate model provider/ })).not.toBeInTheDocument();
+    expect(within(menu).queryByRole("menuitem", { name: /Activate model provider/ })).not.toBeInTheDocument();
 
     fireEvent.keyDown(menu, { key: "Escape" });
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Prod OpenAI" }));
@@ -124,7 +124,7 @@ describe("LLMList permission gating (llms:publish vs llms:write)", () => {
     await screen.findByText("Prod OpenAI");
     expect(screen.queryByRole("columnheader", { name: /Actions/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: "Select Prod OpenAI" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Add LLM provider/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Add model provider/ })).not.toBeInTheDocument();
   });
 });
 

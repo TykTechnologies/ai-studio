@@ -374,8 +374,8 @@ const PluginDetailModal = ({ open, plugin, installed = [], canUpgrade = false, o
 function getScopeDescription(scope) {
   const descriptions = {
     'llms.proxy': 'Access to call LLM services via the proxy',
-    'llms.read': 'Read LLM configurations',
-    'llms.write': 'Modify LLM configurations',
+    'llms.read': 'Read model provider configurations',
+    'llms.write': 'Modify model provider configurations',
     'tools.call': 'Execute tool operations',
     'tools.read': 'Read tool configurations',
     'datasources.query': 'Query datasources',

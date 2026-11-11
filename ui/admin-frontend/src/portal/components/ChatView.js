@@ -82,8 +82,8 @@ const ChatView = () => {
       error.includes('openai')) {
       return {
         type: 'llm_config',
-        title: 'LLM Configuration Error',
-        message: 'Unable to generate response due to LLM configuration',
+        title: 'Model Provider Configuration Error',
+        message: 'Unable to generate response due to model provider configuration',
         details: error
       };
     }

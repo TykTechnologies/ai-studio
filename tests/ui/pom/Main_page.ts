@@ -33,8 +33,8 @@ export class MainPage {
         this.PortalTab = this.page.getByTestId('portal-tab');
         this.AdminTab = this.page.getByTestId('admin-tab');
         this.AnalyticsLink = this.page.getByRole('link', { name: 'Analytics' });
-        this.LlmManagementButton = this.page.getByRole('button', { name: 'LLM management' });
-        this.LlmProvidersLink = this.page.getByRole('link', { name: 'LLM providers' });
+        this.LlmManagementButton = this.page.getByRole('button', { name: 'Model management' });
+        this.LlmProvidersLink = this.page.getByRole('link', { name: 'Model providers' });
         this.ModelPricesLink = this.page.getByRole('link', { name: 'Model prices' });
         this.ContextManagementButton = this.page.getByRole('button', { name: 'Context management' });
         this.DataSourcesLink = this.page.getByRole('link', { name: 'Data sources' });

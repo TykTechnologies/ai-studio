@@ -173,7 +173,7 @@ export const ResourceTracingSection = ({ contentModeMax, onContentModeMaxChange,
               />
               <Typography variant="caption" color="text.secondary" display="block">
                 By default the gateway sends a traceparent header upstream so the provider's own traces line up with
-                Studio's. Turn this on to stop sending it to this LLM.
+                Studio's. Turn this on to stop sending it to this model provider.
               </Typography>
             </Grid>
           )}

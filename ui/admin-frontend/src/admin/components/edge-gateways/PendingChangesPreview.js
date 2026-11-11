@@ -28,7 +28,7 @@ const Dot = () => (
 
 /**
  * The list of changes for one namespace: a summary line, then the changes
- * grouped by type ("LLM providers", "Apps", ...), each as
+ * grouped by type ("Model providers", "Apps", ...), each as
  * "name - updated - 5 minutes ago" linking to the object's admin page where
  * one exists.
  */

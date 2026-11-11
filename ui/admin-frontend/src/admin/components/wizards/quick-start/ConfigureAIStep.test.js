@@ -245,7 +245,7 @@ describe('ConfigureAIStep Component', () => {
     
     // Check that the component renders with the correct title and fields
     expect(screen.getByText('Name*')).toBeInTheDocument();
-    expect(screen.getByText('LLM Provider*')).toBeInTheDocument();
+    expect(screen.getByText('Model Provider*')).toBeInTheDocument();
     expect(screen.getByText('API Endpoint')).toBeInTheDocument();
     expect(screen.getByText('API Key')).toBeInTheDocument();
     expect(screen.getByText('Privacy Level')).toBeInTheDocument();
@@ -303,7 +303,7 @@ describe('ConfigureAIStep Component', () => {
     // Form should still be invalid (no provider selected)
     expect(continueButton).toBeDisabled();
     
-    // Select LLM provider that requires access details
+    // Select model provider that requires access details
     const providerSelect = screen.getAllByTestId('mock-custom-select')[0];
     fireEvent.change(providerSelect, { target: { value: 'openai' } });
     
@@ -588,8 +588,8 @@ describe('ConfigureAIStep Component', () => {
     expect(screen.getByTestId('radio-selection-group')).toBeInTheDocument();
     expect(screen.getByTestId('radio-existing')).toBeChecked();
     expect(screen.getByTestId('radio-new')).toBeInTheDocument();
-    expect(screen.getByText('Use existing LLM provider')).toBeInTheDocument();
-    expect(screen.getByText('Add new LLM provider')).toBeInTheDocument();
+    expect(screen.getByText('Use existing model provider')).toBeInTheDocument();
+    expect(screen.getByText('Add new model provider')).toBeInTheDocument();
     
     // By default, the "existing" option should be selected
     expect(screen.getByTestId('radio-existing')).toBeChecked();
@@ -677,13 +677,13 @@ describe('ConfigureAIStep Component', () => {
     const llmSelect = screen.getByTestId('mock-custom-select');
     fireEvent.change(llmSelect, { target: { value: 'llm-1' } });
     
-    // Then switch to "Add new LLM provider"
+    // Then switch to "Add new model provider"
     const newLlmRadio = screen.getByTestId('radio-new');
     fireEvent.click(newLlmRadio);
     
     // New form fields should be visible
     expect(screen.getByText('Name*')).toBeInTheDocument();
-    expect(screen.getByText('LLM Provider*')).toBeInTheDocument();
+    expect(screen.getByText('Model Provider*')).toBeInTheDocument();
     
     // Form should be reset (Continue button should be disabled)
     const continueButton = screen.getByRole('button', { name: /continue/i });
@@ -708,7 +708,7 @@ describe('ConfigureAIStep Component', () => {
     
     // Form fields for new LLM should be visible
     expect(screen.getByText('Name*')).toBeInTheDocument();
-    expect(screen.getByText('LLM Provider*')).toBeInTheDocument();
+    expect(screen.getByText('Model Provider*')).toBeInTheDocument();
     
     // Switch back to "existing" mode
     const existingLlmRadio = screen.getByTestId('radio-existing');
@@ -732,6 +732,6 @@ describe('ConfigureAIStep Component', () => {
     
     // New LLM form should be shown directly
     expect(screen.getByText('Name*')).toBeInTheDocument();
-    expect(screen.getByText('LLM Provider*')).toBeInTheDocument();
+    expect(screen.getByText('Model Provider*')).toBeInTheDocument();
   });
 });

@@ -87,7 +87,7 @@ const CredentialSetupNotice = ({ llms, sx }) => {
 
   return (
     <Alert severity="warning" sx={sx} data-testid="quickstart-credential-notice">
-      <AlertTitle>Add your LLM provider keys first</AlertTitle>
+      <AlertTitle>Add your model provider keys first</AlertTitle>
       <Typography variant="bodyMediumDefault" component="p" sx={{ mb: 1 }}>
         {broken.length === 1 ? 'This provider is' : 'These providers are'} active but cannot make calls yet, so the first
         request through {broken.length === 1 ? 'it' : 'them'} will fail:

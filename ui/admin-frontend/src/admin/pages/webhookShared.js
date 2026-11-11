@@ -80,7 +80,7 @@ export const EnterpriseUpsell = () => (
         Enterprise Feature
       </Typography>
       <Typography>
-        Webhooks are an Enterprise Edition feature that push AI Studio events (LLM, app, user,
+        Webhooks are an Enterprise Edition feature that push AI Studio events (model provider, app, user,
         tool and datasource changes and more) to your own systems:
       </Typography>
       <ul>

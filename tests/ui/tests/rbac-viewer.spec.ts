@@ -71,13 +71,13 @@ test('Viewer-derived role is read-only in the administration UI', async ({
     await expect(page).toHaveURL(/\/admin/);
     await adminMainPage.dismissQuickStartModal();
     await adminMainPage.navigateToLLMProviders();
-    await expect(adminRolesPage.pageTitle('LLM providers')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Add LLM provider' })).toHaveCount(0);
+    await expect(adminRolesPage.pageTitle('Model providers')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add model provider' })).toHaveCount(0);
 
     // A create form reached by URL shows the denial panel, not a blank page.
     await adminRolesPage.gotoAdminPath('/admin/llms/new');
     await expect(page.getByTestId('permission-denied-panel')).toBeVisible();
-    await expect(page.getByTestId('permission-denied-panel')).toContainText(/LLM providers: write|Llms: write/);
+    await expect(page.getByTestId('permission-denied-panel')).toContainText(/Model providers: write|Llms: write/);
 
     // Navigation shows only what the role can read: Viewer reads roles but
     // never identity providers.

@@ -12,7 +12,7 @@ const AssetTypeChip = ({ item, type, label, size = "small", sx = {} }) => {
   const resolvedType = type || item?.type;
   const surfaces = {
     [CATALOG_TYPES.LLM]: theme.palette.background.surfaceBrandDefaultDashboard,
-    // A model router fronts LLM providers, so it shares their colour.
+    // A model router fronts model providers, so it shares their colour.
     [CATALOG_TYPES.MODEL_ROUTER]: theme.palette.background.surfaceBrandDefaultDashboard,
     [CATALOG_TYPES.SEMANTIC_ROUTER]: theme.palette.background.surfaceBrandDefaultDashboard,
     [CATALOG_TYPES.DATASOURCE]: theme.palette.background.surfaceInformativeDefault,

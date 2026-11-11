@@ -236,7 +236,7 @@ const RouteCard = ({
             onChange={(_, value) => value && onUpdateTarget(index, { type: value })}
             aria-label={`Target type for route ${index + 1}`}
           >
-            <ToggleButton value={TARGET_LLM}>LLM</ToggleButton>
+            <ToggleButton value={TARGET_LLM}>Model provider</ToggleButton>
             <ToggleButton value={TARGET_MODEL_ROUTER}>Model Router</ToggleButton>
           </ToggleButtonGroup>
         </Grid>
@@ -271,7 +271,7 @@ const RouteCard = ({
             <Grid item xs={12} md={6}>
               <RowSelect
                 id={`semanticrouterform-route-${index}-llm`}
-                label="LLM provider"
+                label="Model provider"
                 size="small"
                 value={route.target.llm_id}
                 onChange={(value) => onUpdateTarget(index, { llm_id: value })}
@@ -657,7 +657,7 @@ const SemanticRouterForm = () => {
               value={router.slug}
               onChange={handleSlugChange}
               error={!!errors.slug}
-              helperText={errors.slug || `Clients call it on /v1/chat/completions with the model ${slugHint}/auto. Must not match an LLM's or model router's slug.`}
+              helperText={errors.slug || `Clients call it on /v1/chat/completions with the model ${slugHint}/auto. Must not match a model provider's or model router's slug.`}
               required
             />
           </Grid>
@@ -720,7 +720,7 @@ const SemanticRouterForm = () => {
             )}
             {router.routes.length === 0 && !errors.routes && (
               <Alert severity="info" sx={{ mb: 2 }}>
-                A semantic router needs at least one route. A route names a target (an LLM and
+                A semantic router needs at least one route. A route names a target (a model provider and
                 model, or a model router) and describes the prompts that belong to it with keywords
                 and example prompts. Add a route to get started.
               </Alert>
@@ -882,7 +882,7 @@ const SemanticRouterForm = () => {
               <Grid item xs={12} md={4}>
                 <RowSelect
                   id="semanticrouterform-judge-llm"
-                  label="Judge LLM"
+                  label="Judge model provider"
                   value={router.settings.judge.llm_id}
                   onChange={(value) => updateSetting("judge", "llm_id", value)}
                   rows={llms}
@@ -957,7 +957,7 @@ const SemanticRouterForm = () => {
             <Divider sx={{ my: 2 }} />
           </Grid>
 
-          {/* Portal: published in LLM catalogues like an LLM provider, so
+          {/* Portal: published in LLM catalogues like a model provider, so
               teams holding those catalogues can add it to their Apps. */}
           <Grid item xs={12}>
             <Typography variant="h6" gutterBottom>
@@ -978,7 +978,7 @@ const SemanticRouterForm = () => {
               options={catalogues}
               idField="id"
               getOptionLabel={(c) => c.name}
-              helperText="LLM catalogs. Teams holding one of them see the router in the portal and can add it to their Apps."
+              helperText="Model provider catalogs. Teams holding one of them see the router in the portal and can add it to their Apps."
             />
           </Grid>
 

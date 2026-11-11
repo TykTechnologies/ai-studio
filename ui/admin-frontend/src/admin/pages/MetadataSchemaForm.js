@@ -288,7 +288,7 @@ const MetadataSchemaForm = () => {
                 </FormControl>
                 {schema.enforcement === "enforce" && (
                   <Typography variant="caption" color="warning.main">
-                    Creating or editing LLMs, tools and data sources will fail until required fields are valid. Check the
+                    Creating or editing model providers, tools and data sources will fail until required fields are valid. Check the
                     compliance report before switching this on.
                   </Typography>
                 )}

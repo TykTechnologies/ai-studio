@@ -745,7 +745,7 @@ const Dashboard = () => {
                   <>
                     {renderBudgetTable(
                       budgetUsageData.filter(item => item.entity_type === "LLM"),
-                      "LLM Costs"
+                      "Model Provider Costs"
                     )}
                     {renderBudgetTable(
                       budgetUsageData

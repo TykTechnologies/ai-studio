@@ -5,7 +5,7 @@ import { getFeatureFlags } from "../../../utils/featureUtils";
 
 export const CATALOG_ROWS = [
     {
-      label: "LLM providers",
+      label: "Model providers",
       itemsKey: "catalogues",
     },
     {
@@ -110,7 +110,7 @@ export const getCatalogTypes = (features, catalogues, dataCatalogues, toolCatalo
   
   return [
     {
-      label: "LLM providers",
+      label: "Model providers",
       items: catalogues,
       show: isPortalEnabled,
       variant: "llm"

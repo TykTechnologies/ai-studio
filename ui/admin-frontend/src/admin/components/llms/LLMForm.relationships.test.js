@@ -137,7 +137,7 @@ describe("LLMForm filters picker and commit semantics", () => {
     fireEvent.click(within(filterPicker()).getByTestId("relationship-picker-add"));
     expect(filterItems()).toEqual(["PII", "Redact"]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Update LLM provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Update model provider" }));
 
     await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
     const [url, body] = apiClient.patch.mock.calls[0];
@@ -169,7 +169,7 @@ describe("LLMForm filters picker and commit semantics", () => {
     expect(rows()).toEqual(["1.Redact", "2.PII"]);
     expect(filterItems()).toEqual(["Redact", "PII"]);
 
-    fireEvent.click(screen.getByRole("button", { name: "Update LLM provider" }));
+    fireEvent.click(screen.getByRole("button", { name: "Update model provider" }));
 
     await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
     const [, body] = apiClient.patch.mock.calls[0];

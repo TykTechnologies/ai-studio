@@ -14,7 +14,7 @@ export function formatFailover(attributes) {
   if (from === undefined || from === null) {
     return `attempt ${attempt}`;
   }
-  return `attempt ${attempt} (from LLM #${from})`;
+  return `attempt ${attempt} (from model provider #${from})`;
 }
 
 // FailoverCell renders formatFailover for a proxy-log row's attributes.

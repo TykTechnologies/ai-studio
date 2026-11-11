@@ -96,7 +96,7 @@ const defaultStart = () =>
 const defaultEnd = () => new Date().toISOString().split("T")[0];
 
 /**
- * Per-model drill-down from the LLM provider details page: usage of one model
+ * Per-model drill-down from the model provider details page: usage of one model
  * over time, and every app that called it in the period with the time each app
  * last did so. Answers "who is using model X?" so the owner can be contacted.
  */
@@ -201,7 +201,7 @@ const LLMModelDetails = () => {
   const backToProvider = () => navigate(`/admin/llms/${id}`);
 
   if (loading) return <CircularProgress />;
-  if (!llm) return <Typography>LLM not found</Typography>;
+  if (!llm) return <Typography>Model provider not found</Typography>;
   if (!model) {
     return (
       <>

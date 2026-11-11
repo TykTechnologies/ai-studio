@@ -10,7 +10,7 @@ import apiClient from "./apiClient";
 export const DEPENDENT_GROUPS = [
   { key: "apps", singular: "app", plural: "apps", label: "Apps", path: "apps" },
   { key: "catalogues", singular: "catalog", plural: "catalogs", label: "Catalogs", path: "catalogs/llms" },
-  { key: "llms", singular: "LLM provider", plural: "LLM providers", label: "LLM providers", path: "llms" },
+  { key: "llms", singular: "model provider", plural: "model providers", label: "Model providers", path: "llms" },
   { key: "tools", singular: "tool", plural: "tools", label: "Tools", path: "tools" },
   { key: "datasources", singular: "data source", plural: "data sources", label: "Data sources", path: "datasources" },
   { key: "agents", singular: "agent", plural: "agents", label: "Agents", path: "agents" },
@@ -96,7 +96,7 @@ export const fetchDependents = async (resourcePath, id) => {
 /**
  * Builds the consequence sentence shown in the delete confirmation.
  * @param {object|null} dependents - attributes from the dependents endpoint
- * @param {string} objectLabel - lower-case noun, e.g. "LLM", "tool"
+ * @param {string} objectLabel - lower-case noun, e.g. "model provider", "tool"
  * @param {string} [consequence] - what happens to the dependents on delete
  */
 export const buildDependentsMessage = (

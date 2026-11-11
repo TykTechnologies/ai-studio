@@ -17,7 +17,7 @@ const AppGuardrails = ({ appId }) => {
   return (
     <Section
       title="Guardrails"
-      description="How the guardrail filters on this app's LLMs treat its traffic."
+      description="How the guardrail filters on this app's model providers treat its traffic."
       data-testid="app-guardrails"
     >
       {!isEnterprise && (

@@ -29,10 +29,10 @@ const manifest = {
     { id: 'overview', text: 'Overview', icon: 'house', path: '/admin', exact: true },
     {
       id: 'llm-management',
-      text: 'LLM management',
+      text: 'Model management',
       icon: 'microchip-ai',
       items: [
-        { id: 'llms', text: 'LLM providers', path: '/admin/llms', permission: 'llms:read' },
+        { id: 'llms', text: 'Model providers', path: '/admin/llms', permission: 'llms:read' },
         { id: 'model-prices', text: 'Model prices', path: '/admin/model-prices', permission: 'model-prices:read' },
       ],
     },
@@ -78,17 +78,17 @@ describe('admin Drawer', () => {
     renderDrawer();
     await screen.findByText('Asset Catalog');
     expect(pubClient.get).toHaveBeenCalledWith('/common/nav');
-    expect(topLevelLabels()).toEqual(['Overview', 'LLM management', 'Asset Catalog']);
+    expect(topLevelLabels()).toEqual(['Overview', 'Model management', 'Asset Catalog']);
     expect(screen.getByTestId('icon-microchip-ai')).toBeInTheDocument();
-    await expandGroup('LLM management');
-    expect(screen.getByText('LLM providers').closest('a')).toHaveAttribute('href', '/admin/llms');
+    await expandGroup('Model management');
+    expect(screen.getByText('Model providers').closest('a')).toHaveAttribute('href', '/admin/llms');
   });
 
   it('hides an entry whose permission was revoked before the reload lands', async () => {
     mockGranted = new Set(['llms:read', 'plugins:execute']);
     renderDrawer();
-    await expandGroup('LLM management');
-    await screen.findByText('LLM providers');
+    await expandGroup('Model management');
+    await screen.findByText('Model providers');
     expect(screen.queryByText('Model prices')).not.toBeInTheDocument();
   });
 

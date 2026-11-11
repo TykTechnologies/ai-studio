@@ -11,7 +11,7 @@
  *   Confidential 51–75   sensitive (financials, strategies)
  *   Restricted   76–100  personal or regulated data (PII, customer records)
  *
- * The comparison rule stays numeric: an LLM provider may only be used with
+ * The comparison rule stays numeric: a model provider may only be used with
  * tools and data sources whose level is at or below its own.
  */
 export const PRIVACY_MIN = 0;

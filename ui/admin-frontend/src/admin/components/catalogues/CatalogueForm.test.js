@@ -72,13 +72,13 @@ describe("CatalogueForm", () => {
       target: { value: "Support team" },
     });
 
-    expect(screen.getByText("No LLM providers selected")).toBeInTheDocument();
+    expect(screen.getByText("No model providers selected")).toBeInTheDocument();
     expect(screen.getByTestId("relationship-picker-caption")).toHaveTextContent(
       "Changes apply when you save this form."
     );
 
     // Pick a provider from the Autocomplete; it becomes a chip immediately.
-    const addInput = screen.getByRole("combobox", { name: "Add LLM provider" });
+    const addInput = screen.getByRole("combobox", { name: "Add model provider" });
     fireEvent.focus(addInput);
     fireEvent.mouseDown(addInput);
     fireEvent.click(await screen.findByRole("option", { name: "OpenAI" }));
@@ -104,12 +104,12 @@ describe("CatalogueForm", () => {
       target: { value: "Support team" },
     });
 
-    const addInput = screen.getByRole("combobox", { name: "Add LLM provider" });
+    const addInput = screen.getByRole("combobox", { name: "Add model provider" });
     fireEvent.focus(addInput);
     fireEvent.mouseDown(addInput);
     fireEvent.click(await screen.findByRole("option", { name: "OpenAI" }));
     fireEvent.click(screen.getByLabelText("Remove OpenAI"));
-    expect(screen.getByText("No LLM providers selected")).toBeInTheDocument();
+    expect(screen.getByText("No model providers selected")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /create catalog/i }));
 
@@ -141,7 +141,7 @@ describe("CatalogueForm", () => {
       );
 
     const pickOpenAI = async () => {
-      const addInput = screen.getByRole("combobox", { name: "Add LLM provider" });
+      const addInput = screen.getByRole("combobox", { name: "Add model provider" });
       fireEvent.focus(addInput);
       fireEvent.mouseDown(addInput);
       fireEvent.click(await screen.findByRole("option", { name: "OpenAI" }));

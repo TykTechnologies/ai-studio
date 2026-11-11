@@ -110,7 +110,7 @@ const MetadataSchemas = () => {
         {available === false && (
           <EnterpriseFeatureBadge
             feature="Governed Metadata"
-            description="Define required ownership, lifecycle, risk and classification metadata for LLMs, tools and data sources with the Enterprise Edition."
+            description="Define required ownership, lifecycle, risk and classification metadata for model providers, tools and data sources with the Enterprise Edition."
           />
         )}
         {loading && available !== false && <CircularProgress />}

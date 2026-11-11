@@ -123,7 +123,7 @@ const FinalStep = () => {
             }}>
               <IconBadge iconName="shield" />
               <Typography variant="bodyXLargeMedium" sx={{ mb: 0 }}>
-                Keep data safe with <BoldText>filters and privacy levels</BoldText>, ensure is used only by approved LLM providers
+                Keep data safe with <BoldText>filters and privacy levels</BoldText>, ensure is used only by approved model providers
               </Typography>
             </Box>
           </BasicCard>

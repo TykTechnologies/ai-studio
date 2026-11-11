@@ -463,7 +463,7 @@ const ModelRouterSections = ({ item }) => {
       </Section>
       <Section
         title="Routes to"
-        description="The LLM providers a request through this router may end up at. An app granted the router reaches them only through it."
+        description="The model providers a request through this router may end up at. An app granted the router reaches them only through it."
       >
         {llms.length > 0 ? (
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }} data-testid="router-llms">
@@ -478,7 +478,7 @@ const ModelRouterSections = ({ item }) => {
           </Box>
         ) : (
           <Typography variant="bodyMediumDefault" color="text.defaultSubdued">
-            No LLM providers are listed for this router.
+            No model providers are listed for this router.
           </Typography>
         )}
       </Section>
@@ -563,7 +563,7 @@ const SemanticRouterSections = ({ item }) => {
       </Section>
       <Section
         title="Routes to"
-        description="The LLM providers a request through this router may end up at. An app granted the router reaches them only through it."
+        description="The model providers a request through this router may end up at. An app granted the router reaches them only through it."
       >
         {llms.length > 0 ? (
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }} data-testid="router-llms">
@@ -578,7 +578,7 @@ const SemanticRouterSections = ({ item }) => {
           </Box>
         ) : (
           <Typography variant="bodyMediumDefault" color="text.defaultSubdued">
-            No LLM providers are listed for this router.
+            No model providers are listed for this router.
           </Typography>
         )}
       </Section>

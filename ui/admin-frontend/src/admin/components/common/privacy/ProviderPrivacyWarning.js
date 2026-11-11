@@ -5,7 +5,7 @@ import { listAll } from "../../../utils/listAll";
 import { formatPrivacyLevel, normalizePrivacyScore } from "./privacyLevels";
 
 /**
- * The highest privacy level among the instance's active LLM providers, from
+ * The highest privacy level among the instance's active model providers, from
  * one bounded listing: { loading, highest: { score, name } | null }.
  * highest is null when there are no active providers (or they could not be
  * read).
@@ -37,7 +37,7 @@ const useProviderPrivacyCeiling = () => {
 
 /**
  * What a privacy level means against the providers that exist (#503). A tool
- * or data source can only be used with an LLM provider whose level is at or
+ * or data source can only be used with a model provider whose level is at or
  * above its own, so a level above every active provider makes it unusable
  * until a provider is raised. Admin-side only: contributors are not shown
  * provider levels.
@@ -55,7 +55,7 @@ const ProviderPrivacyWarning = ({ score, sx }) => {
   if (!highest) {
     return (
       <Alert severity="info" sx={sx} data-testid="provider-privacy-hint">
-        There are no active LLM providers yet. Tools and data sources can only be used with providers at or above
+        There are no active model providers yet. Tools and data sources can only be used with providers at or above
         their privacy level, so set your providers' levels with this in mind.
       </Alert>
     );
@@ -64,7 +64,7 @@ const ProviderPrivacyWarning = ({ score, sx }) => {
   if (value > highest.score) {
     return (
       <Alert severity="warning" sx={sx} data-testid="provider-privacy-warning">
-        No active LLM provider can use this. The highest provider privacy level is{" "}
+        No active model provider can use this. The highest provider privacy level is{" "}
         <strong>{formatPrivacyLevel(highest.score)}</strong> ({highest.name}). Lower this level, or raise a provider's
         level.
       </Alert>

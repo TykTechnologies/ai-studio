@@ -342,7 +342,7 @@ const FilterForm = () => {
                   label="Is this a Response Filter?"
                 />
                 <FormHelperText sx={{ ml: 4, mt: 0 }}>
-                  On an LLM, a response filter runs on the model's response and can only block it; a streaming response
+                  On a model provider, a response filter runs on the model's response and can only block it; a streaming response
                   is interrupted when blocked. On a tool, it runs on the tool's output, which a script may rewrite and a
                   guardrail can block or log. Request filters run on what is sent to the LLM or the tool.
                 </FormHelperText>

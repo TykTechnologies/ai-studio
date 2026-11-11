@@ -183,8 +183,8 @@ const LLMPluginConfigSection = ({
   return (
     <Box>
       <Typography variant="body2" color="textSecondary" paragraph>
-        Configure plugin settings specific to this LLM. These values will override
-        the base plugin configuration when this plugin executes for this LLM.
+        Configure plugin settings specific to this model provider. These values will override
+        the base plugin configuration when this plugin executes for this model provider.
         Leave empty to use the base configuration.
       </Typography>
 
@@ -258,12 +258,12 @@ const LLMPluginConfigSection = ({
       {showJsonEditor && (
         <TextField
           fullWidth
-          label="LLM Plugin Configuration Override (JSON)"
+          label="Model provider plugin configuration override (JSON)"
           value={configJson}
           onChange={handleJsonChange}
           multiline
           rows={6}
-          helperText="JSON object with configuration overrides for this LLM"
+          helperText="JSON object with configuration overrides for this model provider"
           sx={{ fontFamily: 'monospace' }}
         />
       )}

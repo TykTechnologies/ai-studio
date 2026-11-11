@@ -202,12 +202,12 @@ describe('Overview Component', () => {
 
   test('hides create actions the role cannot perform', () => {
     // A read-only role: keeps the docs links, loses every "Add …" button
-    // and the Quick start wizard (which creates an LLM provider).
+    // and the Quick start wizard (which creates a model provider).
     mockCan.mockImplementation((perm) => perm.endsWith(':read'));
     renderWithProviders(<Overview />);
 
     expect(screen.queryByText('Quick start')).not.toBeInTheDocument();
-    expect(screen.queryByText('Add LLM provider')).not.toBeInTheDocument();
+    expect(screen.queryByText('Add model provider')).not.toBeInTheDocument();
     expect(screen.queryByText('Add Data source')).not.toBeInTheDocument();
     expect(screen.queryByText('Add Tool')).not.toBeInTheDocument();
     expect(screen.queryByText('Add user')).not.toBeInTheDocument();
@@ -220,7 +220,7 @@ describe('Overview Component', () => {
     renderWithProviders(<Overview />);
 
     expect(screen.getByText('Add user')).toBeInTheDocument();
-    expect(screen.queryByText('Add LLM provider')).not.toBeInTheDocument();
+    expect(screen.queryByText('Add model provider')).not.toBeInTheDocument();
     expect(screen.queryByText('Quick start')).not.toBeInTheDocument();
   });
 
@@ -232,7 +232,7 @@ describe('Overview Component', () => {
     expect(screen.getByText('Govern AI')).toBeInTheDocument();
     
     // Check for the cards by their primary action buttons
-    expect(screen.getByText('Add LLM provider')).toBeInTheDocument();
+    expect(screen.getByText('Add model provider')).toBeInTheDocument();
     expect(screen.getByText('Add Data source')).toBeInTheDocument();
     expect(screen.getByText('Add Tool')).toBeInTheDocument();
     expect(screen.getByText('Add user')).toBeInTheDocument();
@@ -322,10 +322,10 @@ describe('Overview Component', () => {
     expect(addAppsButton).toBeDisabled();
   });
 
-  test('navigates to correct route when Add LLM provider button is clicked', () => {
+  test('navigates to correct route when Add model provider button is clicked', () => {
     renderWithProviders(<Overview />);
     
-    fireEvent.click(screen.getByText('Add LLM provider'));
+    fireEvent.click(screen.getByText('Add model provider'));
     expect(mockNavigate).toHaveBeenCalledWith('/admin/llms/new');
   });
 

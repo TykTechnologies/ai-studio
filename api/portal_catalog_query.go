@@ -60,7 +60,7 @@ var catalogVendorNames = map[string]string{
 }
 
 var catalogTypeNames = map[string]string{
-	CatalogItemLLM:            "LLM provider",
+	CatalogItemLLM:            "Model provider",
 	CatalogItemDatasource:     "data source",
 	CatalogItemTool:           "tool",
 	CatalogItemPluginResource: "resource",

@@ -162,7 +162,7 @@ const CatalogBrowse = ({ type: routeType = "" }) => {
       return (
         <EmptyStateWidget
           title="Nothing to build with yet"
-          description="None of your teams has a catalog with an active LLM provider, data source or tool in it. Ask an administrator to add you to a team or publish something to one of your catalogs."
+          description="None of your teams has a catalog with an active model provider, data source or tool in it. Ask an administrator to add you to a team or publish something to one of your catalogs."
         />
       );
     }

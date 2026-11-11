@@ -54,7 +54,7 @@ jest.mock('../utils/groupDetailConfig', () => {
       const types = [];
       if (!features || features.llm !== false) {
         types.push({
-          label: 'LLM providers',
+          label: 'Model providers',
           variant: 'llm',
           items: catalogues || [],
           show: true
@@ -144,7 +144,7 @@ describe('GroupCatalogsDisplay Component', () => {
     
     const catalogTypeLabels = screen.getAllByTestId('catalog-type-label');
     expect(catalogTypeLabels).toHaveLength(3);
-    expect(catalogTypeLabels[0]).toHaveTextContent('LLM providers');
+    expect(catalogTypeLabels[0]).toHaveTextContent('Model providers');
     expect(catalogTypeLabels[1]).toHaveTextContent('Data sources');
     expect(catalogTypeLabels[2]).toHaveTextContent('Tools');
     
@@ -233,7 +233,7 @@ describe('GroupCatalogsDisplay Component', () => {
     expect(catalogTypeLabels[0]).toHaveTextContent('Data sources');
     expect(catalogTypeLabels[1]).toHaveTextContent('Tools');
     
-    expect(screen.queryByText('LLM providers')).not.toBeInTheDocument();
+    expect(screen.queryByText('Model providers')).not.toBeInTheDocument();
   });
 
   test('uses custom title when provided', () => {

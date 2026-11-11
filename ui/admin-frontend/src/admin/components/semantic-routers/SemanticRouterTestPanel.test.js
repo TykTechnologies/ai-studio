@@ -113,6 +113,6 @@ describe("SemanticRouterTestPanel", () => {
     expect(describeTarget({ type: "model_router", model_router_id: 4, model: "cheap" }, { modelRouters })).toBe(
       "cheap via model router Cheap pool",
     );
-    expect(describeTarget({ type: "llm", llm_id: 9, model: "gpt-4o" }, { llms })).toBe("gpt-4o on LLM #9");
+    expect(describeTarget({ type: "llm", llm_id: 9, model: "gpt-4o" }, { llms })).toBe("gpt-4o on Model provider #9");
   });
 });

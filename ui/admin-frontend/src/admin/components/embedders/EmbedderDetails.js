@@ -53,7 +53,7 @@ const EmbedderDetails = () => {
             Back
           </SecondaryLinkButton>
           <Typography variant="headingXLarge">{a.name}</Typography>
-          <Chip size="small" variant="outlined" label={a.linked ? "Uses an LLM provider" : "Standalone"} />
+          <Chip size="small" variant="outlined" label={a.linked ? "Uses a model provider" : "Standalone"} />
         </Box>
         <Can permission={P.EMBEDDERS_WRITE}>
           <PrimaryButton variant="contained" startIcon={<EditIcon />} onClick={() => navigate(`/admin/embedders/edit/${id}`)}>
@@ -69,8 +69,8 @@ const EmbedderDetails = () => {
                 <Fact label="Model">{a.model || "Not set"}</Fact>
                 <Fact label="Privacy level">{a.privacy_score}</Fact>
                 {a.linked ? (
-                  <Fact label="LLM provider">
-                    <Link to={`/admin/llms/${a.llm_id}`}>{a.llm_name || `LLM #${a.llm_id}`}</Link> ({getEmbedderName(a.vendor)})
+                  <Fact label="Model provider">
+                    <Link to={`/admin/llms/${a.llm_id}`}>{a.llm_name || `Model provider #${a.llm_id}`}</Link> ({getEmbedderName(a.vendor)})
                   </Fact>
                 ) : (
                   <>
