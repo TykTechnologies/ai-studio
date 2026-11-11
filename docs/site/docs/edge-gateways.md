@@ -349,6 +349,32 @@ The paths and the response envelope are unchanged, and every attribute 2.2 retur
 
 ## Connection Settings
 
+### Several control planes
+
+An edge can be given more than one control plane, for example one per site when AI Studio runs in two sites over one replicated database:
+
+```bash
+# Ordered: the edge's own site first
+CONTROL_ENDPOINTS=cp-a.example.com:50051,cp-b.example.com:50051
+```
+
+| Edge setting | Default | Purpose |
+|---|---|---|
+| `CONTROL_ENDPOINTS` | unset | Ordered, comma-separated list of control planes (`host:port`). `CONTROL_ENDPOINT` still works and is a list of one; setting both stops the edge at start-up with an error. |
+| `EDGE_CONTROL_FAILBACK_INTERVAL` | off | How often an edge that is not on its first endpoint tries to return to it. |
+
+How an edge uses the list:
+
+- **At start** it tries each endpoint once, in order, and takes the first that accepts its registration. If none does, it exits, as an edge with one endpoint does.
+- **Failover.** When the connection to its control plane fails (the dial, the registration or the stream), the edge tries the other endpoints straight away, in list order after the one it was on. Only when every endpoint has failed does it back off (`EDGE_RECONNECT_INTERVAL`, doubling to at most 30 seconds), and it then tries the whole list, from the first endpoint, once per backoff. An endpoint that does not answer at all is given 5 seconds before the edge moves on.
+- **While it fails over** the edge keeps serving, as in any control-plane outage. Token validation, the analytics pulse and plugin payloads use the new connection as soon as it is up. A configuration push in flight is delivered again by the control plane the edge arrives at.
+- **Failback.** An edge stays on the control plane it moved to until that connection ends. To have edges return to their first endpoint on their own, set `EDGE_CONTROL_FAILBACK_INTERVAL` (for example `5m`): an edge that is not on its first endpoint then tries it at that interval and moves when it accepts a registration. Requests are not dropped by the move: calls in flight finish on the old connection, which stays open for 30 seconds. Alternatively, AI Studio's `GRPC_MAX_CONNECTION_AGE` ends every edge connection on a schedule, and an edge whose connection ends tries the endpoints after the one it was on first.
+- **A lost network is noticed by the keepalive** (see below): an edge whose control plane disappears without closing the connection moves on after about 35 seconds. Token validation does not wait for that; each call has its own 5 second limit.
+
+All endpoints must be replicas of one AI Studio deployment (one database), with the same `GRPC_AUTH_TOKEN` and `MICROGATEWAY_ENCRYPTION_KEY`. A single DNS name or load balancer in front of several control planes keeps working as before, with `CONTROL_ENDPOINT`; the list is for when the edge itself should choose.
+
+The endpoint an edge is on is shown in its log (`Connected to control plane`, with `control_endpoint`), in the body of its `/ready` endpoint (`control_endpoint`, `control_connected`; the probe stays 200 while the edge has no control plane) and in the metric `microgateway_control_connected{endpoint="..."}`, which is 1 for the endpoint in use and 0 for the others.
+
 ### The edge token is a hub-wide secret
 
 Every edge authenticates to AI Studio with the same token: `EDGE_AUTH_TOKEN` on the edge, matching `GRPC_AUTH_TOKEN` (or `GRPC_AUTH_TOKEN_NEXT` during a rotation) on AI Studio. The token is not bound to an edge or a namespace, so whoever holds it can:
@@ -387,11 +413,11 @@ AI Studio serves the control connection with TLS unless `GRPC_TLS_INSECURE=true`
 | Edge setting | Purpose |
 |---|---|
 | `EDGE_TLS_CA_PATH` | PEM file of the CA(s) that issued the control plane's certificate, for a private CA. Unset uses the system roots. |
-| `EDGE_TLS_SERVER_NAME` | The name the certificate is checked against, when it differs from the host in `CONTROL_ENDPOINT` (an IP address, or a load balancer's internal name). |
+| `EDGE_TLS_SERVER_NAME` | The name the certificate is checked against, when it differs from the host of the control endpoint (an IP address, or a load balancer's internal name). With `CONTROL_ENDPOINTS`, each endpoint's certificate is checked against that endpoint's own host; setting this name applies it to every endpoint. |
 | `EDGE_TLS_CERT_PATH`, `EDGE_TLS_KEY_PATH` | Client certificate for mutual TLS. |
 | `EDGE_SKIP_TLS_VERIFY` | Skips verification entirely. Development only. |
 
-The edge requires TLS 1.2 or later. An unreadable `EDGE_TLS_CA_PATH`, or one with no PEM certificates, stops the connection with an error naming the setting. Edges before 2026-10-01 checked that `EDGE_TLS_CA_PATH` existed but did not use it, so a certificate from a private CA only worked with `EDGE_SKIP_TLS_VERIFY`.
+The CA and the client certificate are the same for every endpoint of `CONTROL_ENDPOINTS`. The edge requires TLS 1.2 or later. An unreadable `EDGE_TLS_CA_PATH`, or one with no PEM certificates, stops the connection with an error naming the setting. Edges before 2026-10-01 checked that `EDGE_TLS_CA_PATH` existed but did not use it, so a certificate from a private CA only worked with `EDGE_SKIP_TLS_VERIFY`.
 
 ### Keepalive and message sizes
 
@@ -411,6 +437,7 @@ Edges ping the control plane every 30 seconds, also while no stream is open, and
 - Verify the edge gateway is running and healthy
 - Check edge gateway logs for connection errors
 - Ensure firewall rules allow gRPC traffic (default port 50051)
+- An edge with several control planes (`CONTROL_ENDPOINTS`) shows as connected on whichever replica holds its stream; see [Several control planes](#several-control-planes).
 - After a control plane restart or outage, edges reconnect on their own, retrying with exponential backoff: `EDGE_RECONNECT_INTERVAL` (default 5 seconds) doubling to at most 30 seconds (up to 2.2, and until the fix of 2026-09-30, at most 5 minutes, so an edge could come back minutes after the control plane). Edges older than the fix of 2026-09-24 stopped retrying after the first failed attempt and needed a restart once the outage lasted longer than about 5 seconds.
 
 ### Edge Analytics Missing in AI Studio

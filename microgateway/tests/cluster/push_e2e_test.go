@@ -231,11 +231,25 @@ func (f *forwarder) route(target string) {
 	f.mu.Unlock()
 }
 
-// setDown refuses new connections until route is called.
+// setDown refuses new connections until route or setUp is called.
 func (f *forwarder) setDown() {
 	f.mu.Lock()
 	f.down = true
 	f.mu.Unlock()
+}
+
+// setUp accepts new connections again, to the same target.
+func (f *forwarder) setUp() {
+	f.mu.Lock()
+	f.down = false
+	f.mu.Unlock()
+}
+
+// fail is the loss of what the forwarder leads to (a site's control plane):
+// its connections drop and new ones are refused, until setUp.
+func (f *forwarder) fail() {
+	f.setDown()
+	f.cut()
 }
 
 // edge is a real microgateway edge: the edge client, the reload handler and
@@ -245,6 +259,8 @@ type edge struct {
 	db     *gorm.DB
 	client *edgegrpc.SimpleEdgeClient
 	fwd    *forwarder
+	// fwdMore are the forwarders of the edge's further control planes.
+	fwdMore []*forwarder
 }
 
 func startEdge(t *testing.T, id, namespace string, fwd *forwarder) *edge {
@@ -258,6 +274,12 @@ type edgeOptions struct {
 	// connected, as cmd/microgateway does (it sets it once its services
 	// are up); zero sets it before the client starts.
 	handlerAfter time.Duration
+	// more are further control planes, after fwd, in CONTROL_ENDPOINTS
+	// order: an edge given two sites. Each has a forwarder of its own, so
+	// either site can be cut.
+	more []*forwarder
+	// failback is EDGE_CONTROL_FAILBACK_INTERVAL.
+	failback time.Duration
 }
 
 func startEdgeWith(t *testing.T, id, namespace string, fwd *forwarder, opts edgeOptions) *edge {
@@ -278,6 +300,14 @@ func startEdgeWith(t *testing.T, id, namespace string, fwd *forwarder, opts edge
 		ClientTLSEnabled:  false,
 		AllowInsecure:     true,
 	}}
+	if len(opts.more) > 0 {
+		cfg.HubSpoke.ControlEndpoint = ""
+		cfg.HubSpoke.ControlEndpoints = []string{fwd.addr()}
+		for _, f := range opts.more {
+			cfg.HubSpoke.ControlEndpoints = append(cfg.HubSpoke.ControlEndpoints, f.addr())
+		}
+		cfg.HubSpoke.ControlFailbackInterval = opts.failback
+	}
 	client := edgegrpc.NewSimpleEdgeClient(cfg, "e2e", "hash", "now")
 	syncService := services.NewEdgeSyncService(db, namespace)
 	client.SetOnConfigChange(func(snap *pb.ConfigurationSnapshot) {
@@ -296,7 +326,7 @@ func startEdgeWith(t *testing.T, id, namespace string, fwd *forwarder, opts edge
 	if opts.handlerAfter > 0 {
 		time.AfterFunc(opts.handlerAfter, func() { client.SetReloadHandler(handler) })
 	}
-	return &edge{id: id, db: db, client: client, fwd: fwd}
+	return &edge{id: id, db: db, client: client, fwd: fwd, fwdMore: opts.more}
 }
 
 // hasLLM reports whether the edge's own database holds the LLM.

@@ -59,6 +59,9 @@ type ServiceContainer struct {
 	// Edge identity (populated in edge mode)
 	EdgeID        string
 	EdgeNamespace string
+	// ControlLink, set in edge mode, reports the control endpoint the edge
+	// is on and whether its stream is open (for /ready).
+	ControlLink func() (endpoint string, connected bool)
 }
 
 // NewServiceContainer creates a new service container with essential dependencies only

@@ -218,6 +218,18 @@ type HubSpokeConfig struct {
 	
 	// Edge Instance Configuration (for edge mode)
 	ControlEndpoint    string        `env:"CONTROL_ENDPOINT" envDefault:""`
+	// ControlEndpoints is an ordered list of control planes (host:port),
+	// the edge's own site first. The edge connects to the first that
+	// accepts it and moves down the list (and round again) when the one it
+	// is on fails. CONTROL_ENDPOINT is a list of one; setting both is a
+	// start-up error. Read the list through Endpoints.
+	ControlEndpoints []string `env:"CONTROL_ENDPOINTS" envSeparator:","`
+	// ControlFailbackInterval, when positive, makes an edge that is not on
+	// its first endpoint try that endpoint this often and move back when it
+	// accepts a registration. Off by default (0): the edge stays where it
+	// is until that connection ends (Studio's GRPC_MAX_CONNECTION_AGE ends
+	// connections on a schedule, which also rebalances edges).
+	ControlFailbackInterval time.Duration `env:"EDGE_CONTROL_FAILBACK_INTERVAL" envDefault:"0"`
 	EdgeID            string        `env:"EDGE_ID" envDefault:""`
 	EdgeNamespace     string        `env:"EDGE_NAMESPACE" envDefault:""`
 	ReconnectInterval time.Duration `env:"EDGE_RECONNECT_INTERVAL" envDefault:"5s"`
@@ -232,7 +244,8 @@ type HubSpokeConfig struct {
 	ClientTLSKeyPath  string        `env:"EDGE_TLS_KEY_PATH"`
 	ClientTLSCAPath   string        `env:"EDGE_TLS_CA_PATH"`
 	// ClientTLSServerName is the name the control plane's certificate is
-	// checked against, when it differs from CONTROL_ENDPOINT's host.
+	// checked against, when it differs from the host of the control endpoint
+	// in use. Set, it applies to every endpoint of CONTROL_ENDPOINTS.
 	ClientTLSServerName string      `env:"EDGE_TLS_SERVER_NAME"`
 	SkipTLSVerify     bool          `env:"EDGE_SKIP_TLS_VERIFY" envDefault:"false"`
 	AllowInsecure     bool          `env:"EDGE_ALLOW_INSECURE" envDefault:"false"` // Security: Explicit opt-in for development
@@ -254,6 +267,48 @@ type HubSpokeConfig struct {
 	// gRPC message size limits (bytes). Default 16MB.
 	// Increase if config snapshots exceed the limit (many plugins, LLMs, tools, apps).
 	MaxMessageSize int `env:"GRPC_MAX_MESSAGE_SIZE" envDefault:"16777216"` // 16MB
+}
+
+// Endpoints returns the control planes of an edge in the order it tries
+// them: CONTROL_ENDPOINTS, or CONTROL_ENDPOINT as a list of one. Entries are
+// trimmed. Empty when neither is set.
+func (h HubSpokeConfig) Endpoints() []string {
+	if len(h.ControlEndpoints) == 0 {
+		if e := strings.TrimSpace(h.ControlEndpoint); e != "" {
+			return []string{e}
+		}
+		return nil
+	}
+	out := make([]string, 0, len(h.ControlEndpoints))
+	for _, e := range h.ControlEndpoints {
+		out = append(out, strings.TrimSpace(e))
+	}
+	return out
+}
+
+// validateEndpoints checks an edge's control endpoints.
+func (h HubSpokeConfig) validateEndpoints() error {
+	if len(h.ControlEndpoints) > 0 && strings.TrimSpace(h.ControlEndpoint) != "" {
+		return fmt.Errorf("set CONTROL_ENDPOINTS or CONTROL_ENDPOINT, not both")
+	}
+	endpoints := h.Endpoints()
+	if len(endpoints) == 0 {
+		return fmt.Errorf("control endpoint is required for edge mode")
+	}
+	seen := make(map[string]bool, len(endpoints))
+	for _, e := range endpoints {
+		if e == "" {
+			return fmt.Errorf("CONTROL_ENDPOINTS has an empty entry")
+		}
+		if seen[e] {
+			return fmt.Errorf("CONTROL_ENDPOINTS lists %s twice", e)
+		}
+		seen[e] = true
+	}
+	if h.ControlFailbackInterval < 0 {
+		return fmt.Errorf("EDGE_CONTROL_FAILBACK_INTERVAL must not be negative: %s", h.ControlFailbackInterval)
+	}
+	return nil
 }
 
 // IsTLSVerificationDisabled reports whether the hub-spoke client will use TLS
@@ -588,8 +643,8 @@ func (c *Config) validateHubSpokeConfig() error {
 	
 	// Validate edge mode specific settings
 	if c.HubSpoke.Mode == "edge" {
-		if c.HubSpoke.ControlEndpoint == "" {
-			return fmt.Errorf("control endpoint is required for edge mode")
+		if err := c.HubSpoke.validateEndpoints(); err != nil {
+			return err
 		}
 		if c.HubSpoke.EdgeID == "" {
 			return fmt.Errorf("edge ID is required for edge mode")

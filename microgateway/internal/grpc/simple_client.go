@@ -18,6 +18,7 @@ import (
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
@@ -36,11 +37,22 @@ type SimpleEdgeClient struct {
 	conn        *grpc.ClientConn
 	client      pb.ConfigurationSyncServiceClient
 	configCache *pb.ConfigurationSnapshot
-	// connMu guards conn and client. A reconnect replaces both while token
-	// validation, the analytics pulse and the payload queue use them from
-	// other goroutines, so they are only read and written through
-	// connection and setConnection.
+	// connMu guards conn, client and connEndpoint. A reconnect replaces
+	// them while token validation, the analytics pulse and the payload queue
+	// use them from other goroutines, so they are only read and written
+	// through connection and setConnection.
 	connMu sync.RWMutex
+	// connEndpoint is the control endpoint conn was dialled to.
+	connEndpoint string
+
+	// endpoints are the control planes this edge may use, in the order it
+	// prefers them (config.HubSpokeConfig.Endpoints: CONTROL_ENDPOINTS, or
+	// CONTROL_ENDPOINT as a list of one). endpointIdx is the one it is on,
+	// or tried last. See reconnectLoop for how it moves between them and
+	// failbackWorker for how it returns to the first.
+	endpoints    []string
+	endpointIdx  atomic.Int32
+	failbackOnce sync.Once
 
 	// Config checksum tracking for sync status; guarded by configMu with
 	// configCache (see setLoadedConfig).
@@ -71,6 +83,10 @@ type SimpleEdgeClient struct {
 	// serialSendStream: gRPC allows one Send at a time per stream.
 	streamMu     sync.RWMutex
 	stream       pb.ConfigurationSyncService_SubscribeToChangesClient
+	// streamDone is closed when the receive loop of the current stream has
+	// ended and cleaned up after itself (guarded by streamMu). A failback
+	// waits for it before it opens the stream on the first endpoint.
+	streamDone   chan struct{}
 	streamCtx    context.Context
 	streamCancel context.CancelFunc
 
@@ -98,8 +114,11 @@ type SimpleEdgeClient struct {
 	// Reconnection handling
 	// reconnecting guards attemptReconnection: a stream that drops again
 	// right after a reconnect starts a second attempt while the first is
-	// still unwinding, so the check and set must be one atomic step.
-	// reconnectAttempts is only touched by the goroutine holding it.
+	// still unwinding, so the check and set must be one atomic step. A
+	// failback (tryFailback) holds it too, so the two never replace the
+	// connection at the same time.
+	// reconnectAttempts is only touched by the goroutine holding it; it
+	// counts passes over the endpoint list.
 	reconnecting      atomic.Bool
 	reconnectAttempts int
 	maxReconnects     int
@@ -137,15 +156,43 @@ func NewSimpleEdgeClient(cfg *config.Config, version, buildHash, buildTime strin
 	if cfg != nil && cfg.HubSpoke.ReconnectInterval > 0 {
 		client.reconnectInterval = cfg.HubSpoke.ReconnectInterval
 	}
+	if cfg != nil {
+		client.endpoints = cfg.HubSpoke.Endpoints()
+	}
 
 	log.Debug().Msg("Event bridge bus initialized for edge client")
 	return client
 }
 
-// Start connects to the control server and gets initial configuration
+// Start connects to the control server and gets initial configuration. With
+// several control endpoints it tries each once, in order, and returns the
+// last error when none accepts the edge.
 func (c *SimpleEdgeClient) Start() error {
+	c.startFailback()
+	if len(c.endpoints) == 0 {
+		return c.startOn(0)
+	}
+	var err error
+	for idx := range c.endpoints {
+		if err = c.startOn(idx); err == nil {
+			return nil
+		}
+		if idx < len(c.endpoints)-1 {
+			log.Warn().Err(err).
+				Str("control_endpoint", c.endpoints[idx]).
+				Str("next_endpoint", c.endpoints[idx+1]).
+				Msg("Control endpoint did not accept this edge, trying the next one")
+		}
+	}
+	return err
+}
+
+// startOn makes the first connection, to the endpoint at idx.
+func (c *SimpleEdgeClient) startOn(idx int) error {
+	c.endpointIdx.Store(int32(idx))
+	endpoint := c.currentEndpoint()
 	log.Debug().
-		Str("control_endpoint", c.config.HubSpoke.ControlEndpoint).
+		Str("control_endpoint", endpoint).
 		Str("edge_id", c.config.HubSpoke.EdgeID).
 		Msg("Connecting to control server")
 
@@ -154,8 +201,12 @@ func (c *SimpleEdgeClient) Start() error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to control server: %w", err)
 	}
+	if err := c.awaitReady(conn); err != nil {
+		conn.Close()
+		return fmt.Errorf("failed to connect to control server: %w", err)
+	}
 
-	c.setConnection(conn)
+	c.setConnection(conn, endpoint)
 
 	// Wire the control payload queue's gRPC client if set
 	if c.controlPayloadQueue != nil {
@@ -175,13 +226,76 @@ func (c *SimpleEdgeClient) Start() error {
 	}
 
 	log.Debug().Msg("Successfully connected to control server with streaming")
+	c.logConnected(endpoint)
 	return nil
 }
 
-// registerWithControl registers this edge with the control server
-func (c *SimpleEdgeClient) registerWithControl() error {
-	ctx := context.Background()
+// logConnected says which control endpoint the edge is now on. With one
+// endpoint that is known, and stays at debug level.
+func (c *SimpleEdgeClient) logConnected(endpoint string) {
+	if len(c.endpoints) < 2 {
+		log.Debug().Str("control_endpoint", endpoint).Msg("Connected to control plane")
+		return
+	}
+	log.Info().
+		Str("control_endpoint", endpoint).
+		Int("endpoint_position", int(c.endpointIdx.Load())+1).
+		Int("endpoint_count", len(c.endpoints)).
+		Msg("Connected to control plane")
+}
 
+// currentEndpoint is the control endpoint the client is on or tried last;
+// empty when none is configured.
+func (c *SimpleEdgeClient) currentEndpoint() string {
+	idx := int(c.endpointIdx.Load())
+	if idx < 0 || idx >= len(c.endpoints) {
+		return ""
+	}
+	return c.endpoints[idx]
+}
+
+// ControlLink is an edge's connection to the control plane, for /ready and
+// metrics.
+type ControlLink struct {
+	// Endpoint is the control endpoint the edge is connected to, or, while
+	// it is not connected, the one it tried last.
+	Endpoint string
+	// Connected is true while the stream to Endpoint is open.
+	Connected bool
+	// Endpoints are the configured control endpoints, in order.
+	Endpoints []string
+}
+
+// ControlLink reports which control endpoint the edge is on and whether its
+// stream is open.
+func (c *SimpleEdgeClient) ControlLink() ControlLink {
+	link := ControlLink{Endpoints: append([]string(nil), c.endpoints...), Connected: c.connected.Load()}
+	c.connMu.RLock()
+	link.Endpoint = c.connEndpoint
+	c.connMu.RUnlock()
+	if link.Endpoint == "" {
+		link.Endpoint = c.currentEndpoint()
+	}
+	return link
+}
+
+// registerWithControl registers this edge with the control server on the
+// current connection and applies the configuration it answers with.
+func (c *SimpleEdgeClient) registerWithControl() error {
+	client := c.GetGRPCClient()
+	if client == nil {
+		return fmt.Errorf("not connected to control server")
+	}
+	resp, err := c.registerOn(context.Background(), client)
+	if err != nil {
+		return err
+	}
+	c.applyRegistration(resp)
+	return nil
+}
+
+// registerOn registers this edge through client.
+func (c *SimpleEdgeClient) registerOn(ctx context.Context, client pb.ConfigurationSyncServiceClient) (*pb.EdgeRegistrationResponse, error) {
 	// Create registration request
 	req := &pb.EdgeRegistrationRequest{
 		EdgeId:        c.config.HubSpoke.EdgeID,
@@ -201,20 +315,20 @@ func (c *SimpleEdgeClient) registerWithControl() error {
 	}
 
 	// Register with control (with authentication)
-	client := c.GetGRPCClient()
-	if client == nil {
-		return fmt.Errorf("not connected to control server")
-	}
 	authCtx := c.createAuthContext(ctx)
 	resp, err := client.RegisterEdge(authCtx, req)
 	if err != nil {
-		return fmt.Errorf("registration failed: %w", err)
+		return nil, fmt.Errorf("registration failed: %w", err)
 	}
 
 	if !resp.Success {
-		return fmt.Errorf("registration rejected: %s", resp.Message)
+		return nil, fmt.Errorf("registration rejected: %s", resp.Message)
 	}
+	return resp, nil
+}
 
+// applyRegistration takes the configuration a registration answered with.
+func (c *SimpleEdgeClient) applyRegistration(resp *pb.EdgeRegistrationResponse) {
 	// Store initial configuration if provided
 	if resp.InitialConfig != nil {
 		log.Debug().
@@ -235,8 +349,6 @@ func (c *SimpleEdgeClient) registerWithControl() error {
 	log.Debug().
 		Str("session_id", resp.SessionId).
 		Msg("Successfully registered with control server")
-
-	return nil
 }
 
 // SetOnConfigChange sets the callback for configuration changes
@@ -437,17 +549,19 @@ func (c *SimpleEdgeClient) connection() (*grpc.ClientConn, pb.ConfigurationSyncS
 	return c.conn, c.client
 }
 
-// setConnection makes conn the current connection, with a new client on it;
-// nil clears both.
-func (c *SimpleEdgeClient) setConnection(conn *grpc.ClientConn) {
+// setConnection makes conn, dialled to endpoint, the current connection, with
+// a new client on it; nil clears them.
+func (c *SimpleEdgeClient) setConnection(conn *grpc.ClientConn, endpoint string) {
 	c.connMu.Lock()
 	defer c.connMu.Unlock()
 	c.conn = conn
 	if conn == nil {
 		c.client = nil
+		c.connEndpoint = ""
 		return
 	}
 	c.client = pb.NewConfigurationSyncServiceClient(conn)
+	c.connEndpoint = endpoint
 }
 
 // GetEdgeID returns the edge ID
@@ -529,6 +643,10 @@ func (c *SimpleEdgeClient) establishStream() error {
 	if h, ok := c.budgetSyncHandler.(interface{ StreamStarted() }); ok {
 		h.StreamStarted()
 	}
+	done := make(chan struct{})
+	c.streamMu.Lock()
+	c.streamDone = done
+	c.streamMu.Unlock()
 
 	// Setup event bridge for this connection
 	c.setupEventBridge()
@@ -556,6 +674,7 @@ func (c *SimpleEdgeClient) establishStream() error {
 
 	if err := c.send(regMsg); err != nil {
 		cancel()
+		close(done) // no receive loop will run for this stream
 		return fmt.Errorf("failed to send stream registration: %w", err)
 	}
 
@@ -572,7 +691,10 @@ func (c *SimpleEdgeClient) establishStream() error {
 	c.connected.Store(true)
 
 	// Start message handling goroutines
-	go c.handleIncomingMessages()
+	go func() {
+		defer close(done)
+		c.handleIncomingMessages()
+	}()
 
 	// Start heartbeat worker for this stream. It gets the stream's context
 	// rather than reading c.streamCtx, which the next reconnect replaces:
@@ -1113,8 +1235,30 @@ func (c *SimpleEdgeClient) attemptReconnection() {
 	if !c.reconnecting.CompareAndSwap(false, true) {
 		return // Already attempting reconnection
 	}
-	c.reconnectAttempts = 0
 	defer c.reconnecting.Store(false)
+	// The stream whose end asked for this may have been replaced since: a
+	// failback ends the stream itself and opens the next one while it holds
+	// the guard, and the ended stream's request to reconnect can arrive
+	// after the guard is free again. Reconnecting then would drop a
+	// connection that is fine.
+	if c.connected.Load() {
+		return
+	}
+	c.reconnectLoop()
+}
+
+// reconnectLoop reconnects until it succeeds or the client stops. The caller
+// holds c.reconnecting.
+//
+// With one control endpoint it waits out a backoff (doubling from
+// EDGE_RECONNECT_INTERVAL, jittered, capped at 30 s) before every attempt.
+// With several, the connection that just ended counts as that endpoint's
+// failure: the others are tried at once, in list order after it, and only
+// when all of them have failed does the backoff begin. From then on each
+// backoff is followed by one pass over the whole list from its first entry,
+// so the backoff applies per pass, not per endpoint.
+func (c *SimpleEdgeClient) reconnectLoop() {
+	c.reconnectAttempts = 0
 
 	log.Debug().Msg("Starting automatic reconnection to control server with exponential backoff")
 
@@ -1123,6 +1267,20 @@ func (c *SimpleEdgeClient) attemptReconnection() {
 	maxDelay := reconnectBackoffCap(baseDelay)
 	backoffMultiplier := 2.0
 	jitterFactor := 0.1
+
+	if others := len(c.endpoints) - 1; others > 0 {
+		// A short random wait first: when a control plane goes down, every
+		// edge it held arrives at the next one, and should not in the same
+		// instant.
+		select {
+		case <-time.After(time.Duration(rand.Float64() * jitterFactor * float64(baseDelay))):
+		case <-c.stopCh:
+			return
+		}
+		if c.tryEndpoints(int(c.endpointIdx.Load())+1, others) {
+			return
+		}
+	}
 
 	for {
 		c.reconnectAttempts++
@@ -1161,10 +1319,13 @@ func (c *SimpleEdgeClient) attemptReconnection() {
 			return
 		}
 
-		// Attempt to re-establish connection and stream
-		if err := c.reconnectWithRetry(); err != nil {
+		// Attempt to re-establish connection and stream: one pass over the
+		// endpoints, from the first.
+		if !c.tryEndpoints(0, max(len(c.endpoints), 1)) {
+			if c.stopping() {
+				return
+			}
 			log.Error().
-				Err(err).
 				Int("attempt", c.reconnectAttempts).
 				Dur("next_retry_in", c.calculateBackoffDelay(baseDelay, maxDelay, backoffMultiplier, jitterFactor, c.reconnectAttempts+1)).
 				Msg("Failed to reconnect, will retry with exponential backoff")
@@ -1180,6 +1341,30 @@ func (c *SimpleEdgeClient) attemptReconnection() {
 		c.reconnectAttempts = 0
 		return
 	}
+}
+
+// tryEndpoints tries count endpoints in list order, starting at index start
+// (wrapping round), and reports whether one accepted the edge. It stops
+// early when the client is stopped.
+func (c *SimpleEdgeClient) tryEndpoints(start, count int) bool {
+	n := max(len(c.endpoints), 1)
+	for k := 0; k < count; k++ {
+		if c.stopping() {
+			return false
+		}
+		idx := (start + k) % n
+		c.endpointIdx.Store(int32(idx))
+		if err := c.reconnectWithRetry(); err != nil {
+			log.Error().
+				Err(err).
+				Str("control_endpoint", c.currentEndpoint()).
+				Int("attempt", c.reconnectAttempts).
+				Msg("Failed to reconnect to control endpoint")
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 // maxReconnectBackoff caps the reconnect backoff (before jitter). The
@@ -1237,21 +1422,26 @@ func (c *SimpleEdgeClient) calculateBackoffDelay(baseDelay, maxDelay time.Durati
 func (c *SimpleEdgeClient) reconnectWithRetry() error {
 	// First, try to close the existing broken connection
 	if old, _ := c.connection(); old != nil {
-		c.setConnection(nil)
+		c.setConnection(nil, "")
 		if err := old.Close(); err != nil {
 			log.Debug().Err(err).Msg("Error closing broken connection during reconnect")
 		}
 	}
 
-	// Re-establish gRPC connection
+	// Re-establish gRPC connection, to the endpoint the loop is on
+	endpoint := c.currentEndpoint()
 	conn, err := c.dialWithKeepalive()
 	if err != nil {
+		return fmt.Errorf("failed to re-establish gRPC connection: %w", err)
+	}
+	if err := c.awaitReady(conn); err != nil {
+		conn.Close()
 		return fmt.Errorf("failed to re-establish gRPC connection: %w", err)
 	}
 
 	// Everything that talks to control (token validation, the analytics
 	// pulse, the payload queue) picks the new client up from here.
-	c.setConnection(conn)
+	c.setConnection(conn, endpoint)
 
 	// Re-wire the control payload queue's gRPC client if set
 	if c.controlPayloadQueue != nil {
@@ -1260,24 +1450,199 @@ func (c *SimpleEdgeClient) reconnectWithRetry() error {
 
 	// Test connectivity by registering with control
 	if err := c.registerWithControl(); err != nil {
-		c.setConnection(nil)
+		c.setConnection(nil, "")
 		conn.Close()
 		return fmt.Errorf("failed to re-register with control: %w", err)
 	}
 
 	// Re-establish stream
 	if err := c.establishStream(); err != nil {
-		c.setConnection(nil)
+		c.setConnection(nil, "")
 		conn.Close()
 		return fmt.Errorf("failed to re-establish stream: %w", err)
 	}
 
 	log.Debug().Msg("Successfully reconnected to control server")
+	c.logConnected(endpoint)
 	return nil
 }
 
-// dialWithKeepalive creates a gRPC connection with proper keepalive settings
+// controlConnectTimeout bounds how long an edge with several control
+// endpoints waits for a connection to one of them before it tries the next.
+// Without it an endpoint that does not answer at all (a site whose network
+// is gone, rather than one that refuses the connection) holds the edge for
+// gRPC's own connect timeout of 20 s on every pass. An edge with a single
+// endpoint has nowhere else to go and keeps gRPC's behaviour.
+const controlConnectTimeout = 5 * time.Second
+
+// awaitReady waits, on an edge with several control endpoints, until conn is
+// connected, and fails when it is not within controlConnectTimeout.
+func (c *SimpleEdgeClient) awaitReady(conn *grpc.ClientConn) error {
+	if len(c.endpoints) < 2 {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), controlConnectTimeout)
+	defer cancel()
+	conn.Connect()
+	for {
+		state := conn.GetState()
+		if state == connectivity.Ready {
+			return nil
+		}
+		if state == connectivity.TransientFailure || state == connectivity.Shutdown {
+			return fmt.Errorf("control endpoint %s is not reachable", conn.Target())
+		}
+		if !conn.WaitForStateChange(ctx, state) {
+			return fmt.Errorf("control endpoint %s did not answer within %s", conn.Target(), controlConnectTimeout)
+		}
+	}
+}
+
+// failbackDrain is how long the connection an edge moved away from is kept
+// open after a failback, so the calls in flight on it (token validations,
+// an analytics pulse, a payload batch) finish instead of failing.
+const failbackDrain = 30 * time.Second
+
+// failbackProbeTimeout bounds the registration with which a failback asks
+// the first endpoint whether it is back.
+const failbackProbeTimeout = 10 * time.Second
+
+// startFailback starts the failback worker, once, when
+// EDGE_CONTROL_FAILBACK_INTERVAL is set and there is an endpoint to return
+// to.
+func (c *SimpleEdgeClient) startFailback() {
+	if c.config == nil || c.config.HubSpoke.ControlFailbackInterval <= 0 || len(c.endpoints) < 2 {
+		return
+	}
+	c.failbackOnce.Do(func() { go c.failbackWorker(c.config.HubSpoke.ControlFailbackInterval) })
+}
+
+// failbackWorker tries, every interval, to return an edge that is not on
+// its first control endpoint to it.
+func (c *SimpleEdgeClient) failbackWorker(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			c.tryFailback()
+		case <-c.stopCh:
+			return
+		}
+	}
+}
+
+// tryFailback moves the edge to its first control endpoint if it is
+// connected to another one and the first accepts a registration. Requests
+// are not dropped: token validation and the other calls keep using the
+// connection the edge is leaving until the new one is registered, and that
+// connection stays open for failbackDrain so calls in flight on it finish.
+// Only the stream is briefly closed, as in any reconnect.
+func (c *SimpleEdgeClient) tryFailback() {
+	if c.endpointIdx.Load() == 0 || !c.connected.Load() || c.stopping() {
+		return
+	}
+	if !c.reconnecting.CompareAndSwap(false, true) {
+		return // a reconnect is under way; it starts from the first endpoint anyway
+	}
+	defer func() {
+		c.reconnecting.Store(false)
+		// A stream that ended while the failback held the guard found it
+		// taken and did not start a reconnection: start it now.
+		if !c.connected.Load() && !c.stopping() {
+			go c.attemptReconnection()
+		}
+	}()
+	if c.endpointIdx.Load() == 0 || !c.connected.Load() {
+		return
+	}
+
+	first := c.endpoints[0]
+	from := c.currentEndpoint()
+	conn, err := c.dial(first)
+	if err != nil {
+		log.Debug().Err(err).Str("control_endpoint", first).Msg("Failback: cannot dial the first control endpoint")
+		return
+	}
+	if err := c.awaitReady(conn); err != nil {
+		conn.Close()
+		log.Debug().Err(err).Str("control_endpoint", first).Msg("Failback: the first control endpoint is not reachable yet")
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), failbackProbeTimeout)
+	resp, err := c.registerOn(ctx, pb.NewConfigurationSyncServiceClient(conn))
+	cancel()
+	if err != nil {
+		conn.Close()
+		log.Debug().Err(err).Str("control_endpoint", first).Msg("Failback: the first control endpoint did not accept a registration yet")
+		return
+	}
+
+	// The first endpoint is back. End the stream to the current one and
+	// wait for its receive loop to finish (it clears the state the new
+	// stream is about to set); it finds the reconnect guard held and
+	// leaves the reconnecting to us.
+	log.Info().Str("from", from).Str("control_endpoint", first).Msg("First control endpoint is back, moving to it")
+	old, _ := c.connection()
+	c.streamMu.RLock()
+	done := c.streamDone
+	c.streamMu.RUnlock()
+	if c.streamCancel != nil {
+		c.streamCancel()
+	}
+	if done != nil {
+		select {
+		case <-done:
+		case <-c.stopCh:
+			conn.Close()
+			return
+		}
+	}
+
+	c.endpointIdx.Store(0)
+	c.setConnection(conn, first)
+	if c.controlPayloadQueue != nil {
+		c.controlPayloadQueue.SetGRPCClient(c.GetGRPCClient(), c.createAuthContext)
+	}
+	c.applyRegistration(resp)
+	if err := c.establishStream(); err != nil {
+		// The first endpoint went away again. Reconnect as after any lost
+		// stream, starting with the other endpoints.
+		log.Warn().Err(err).Str("control_endpoint", first).Msg("Failback: could not open a stream on the first control endpoint, reconnecting")
+		c.setConnection(nil, "")
+		conn.Close()
+		if old != nil {
+			old.Close()
+		}
+		c.reconnectLoop()
+		return
+	}
+	c.logConnected(first)
+
+	if old != nil {
+		go func() {
+			select {
+			case <-time.After(failbackDrain):
+			case <-c.stopCh:
+			}
+			old.Close()
+		}()
+	}
+}
+
+// dialWithKeepalive dials the control endpoint the client is on.
 func (c *SimpleEdgeClient) dialWithKeepalive() (*grpc.ClientConn, error) {
+	return c.dial(c.currentEndpoint())
+}
+
+// dial creates a gRPC connection to endpoint with proper keepalive settings.
+// With TLS, the certificate is checked against endpoint's host unless
+// EDGE_TLS_SERVER_NAME names another; the CA and the client certificate are
+// the same for every endpoint.
+func (c *SimpleEdgeClient) dial(endpoint string) (*grpc.ClientConn, error) {
+	if endpoint == "" {
+		return nil, fmt.Errorf("no control endpoint configured (CONTROL_ENDPOINTS or CONTROL_ENDPOINT)")
+	}
 	// Configure keepalive settings for reliable bidirectional streaming
 	keepaliveParams := keepalive.ClientParameters{
 		Time:                30 * time.Second, // Send pings every 30 seconds if no activity
@@ -1322,7 +1687,7 @@ func (c *SimpleEdgeClient) dialWithKeepalive() (*grpc.ClientConn, error) {
 	}
 
 	// Dial with keepalive settings
-	conn, err := grpc.Dial(c.config.HubSpoke.ControlEndpoint, opts...)
+	conn, err := grpc.Dial(endpoint, opts...)
 	if err != nil {
 		return nil, err
 	}

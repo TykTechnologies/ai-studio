@@ -40,3 +40,26 @@ func RegisterFileSize(metricName, help, path string) error {
 		return float64(fi.Size())
 	}))
 }
+
+// RegisterLabelledGaugeFunc exports fn as a gauge with one label, read at
+// scrape time: one series per key of the map fn returns, the key as the
+// label's value.
+func RegisterLabelledGaugeFunc(metricName, help, label string, fn func() map[string]float64) error {
+	return Register(&labelledGaugeFunc{
+		desc: prometheus.NewDesc(metricName, help, []string{label}, nil),
+		fn:   fn,
+	})
+}
+
+type labelledGaugeFunc struct {
+	desc *prometheus.Desc
+	fn   func() map[string]float64
+}
+
+func (g *labelledGaugeFunc) Describe(ch chan<- *prometheus.Desc) { ch <- g.desc }
+
+func (g *labelledGaugeFunc) Collect(ch chan<- prometheus.Metric) {
+	for value, v := range g.fn() {
+		ch <- prometheus.MustNewConstMetric(g.desc, prometheus.GaugeValue, v, value)
+	}
+}

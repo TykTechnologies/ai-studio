@@ -200,10 +200,12 @@ Complete reference for all microgateway environment variables organized by funct
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CONTROL_ENDPOINT` | - | Control instance gRPC endpoint |
+| `CONTROL_ENDPOINTS` | - | Ordered, comma-separated list of control planes (`host:port`), the edge's own site first. The edge connects to the first that accepts it and moves to the next when its connection fails. Use this or `CONTROL_ENDPOINT`, not both |
+| `EDGE_CONTROL_FAILBACK_INTERVAL` | 0 (off) | With `CONTROL_ENDPOINTS`: how often an edge that is not on its first endpoint tries to return to it |
 | `EDGE_ID` | - | Unique edge instance identifier |
 | `EDGE_NAMESPACE` | - | Edge namespace for configuration filtering |
 | `EDGE_AUTH_TOKEN` | - | Authentication token for control connection |
-| `EDGE_RECONNECT_INTERVAL` | 5s | Reconnection interval |
+| `EDGE_RECONNECT_INTERVAL` | 5s | First reconnection delay; doubles up to 30s. With `CONTROL_ENDPOINTS` it applies once per pass over the list, after every endpoint has failed |
 | `EDGE_HEARTBEAT_INTERVAL` | 30s | Heartbeat interval |
 | `EDGE_SYNC_TIMEOUT` | 10s | Unused: the setting is accepted but nothing reads it |
 
@@ -214,7 +216,7 @@ Complete reference for all microgateway environment variables organized by funct
 | `EDGE_TLS_CERT_PATH` | - | Client certificate path |
 | `EDGE_TLS_KEY_PATH` | - | Client key path |
 | `EDGE_TLS_CA_PATH` | - | CA certificate path (PEM) the control plane's certificate is checked against; unset uses the system roots |
-| `EDGE_TLS_SERVER_NAME` | - | Name the control plane's certificate is checked against, when it differs from the host in `CONTROL_ENDPOINT` |
+| `EDGE_TLS_SERVER_NAME` | - | Name the control plane's certificate is checked against, when it differs from the host of the control endpoint. Unset, each endpoint of `CONTROL_ENDPOINTS` is checked against its own host; set, the name applies to all of them |
 | `EDGE_SKIP_TLS_VERIFY` | false | Skip TLS certificate verification |
 
 ## Plugin Configuration

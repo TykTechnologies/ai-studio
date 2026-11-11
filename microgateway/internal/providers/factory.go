@@ -60,7 +60,7 @@ func (f *ProviderFactory) createDatabaseProvider() (ConfigurationProvider, error
 // createGRPCProvider creates a gRPC-backed configuration provider for edge instances
 func (f *ProviderFactory) createGRPCProvider() (ConfigurationProvider, error) {
 	log.Debug().
-		Str("control_endpoint", f.config.HubSpoke.ControlEndpoint).
+		Strs("control_endpoints", f.config.HubSpoke.Endpoints()).
 		Str("edge_namespace", f.config.HubSpoke.EdgeNamespace).
 		Msg("Creating gRPC configuration provider")
 	
