@@ -652,6 +652,11 @@ TABLE data_catalogues
   column `long_description` text
   column `icon` text
   index CREATE INDEX `idx_data_catalogues_deleted_at` ON `data_catalogues`(`deleted_at`)
+TABLE data_key_salts
+  column `id` integer
+  column `salt` blob NOT NULL
+  column `created_at` datetime
+  constraint PRIMARY KEY (`id`)
 TABLE datasource_filestores
   column `datasource_id` integer
   column `file_store_id` integer

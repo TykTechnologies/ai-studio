@@ -3,6 +3,7 @@ package models
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
@@ -27,9 +28,12 @@ type CredentialMigration struct {
 // MigrateCredentialsAtRest brings every credential row (soft-deleted ones
 // included) to the form the Credential hooks write: secret_hash set to the
 // current secrets.LookupHash of the secret and, when TYK_AI_SECRET_KEY is
-// set, the secret encrypted. Rows from before the change have a plaintext
-// secret and no hash; rows written while no key was set have a plaintext
-// secret and an unkeyed hash.
+// set, the secret sealed under the database's data key in the form this
+// process writes. It converts rows from before the change (a plaintext
+// secret, no hash), rows written while no key was set (plaintext, unkeyed
+// hash), rows in the "$ENC/" form an earlier revision of this change wrote
+// on development stacks, and, in a FIPS-mode process, rows whose data key
+// was derived with scrypt.
 //
 // It is one-way: once it has run, code from before the change finds no
 // credential by its secret and would show and send the ciphertext, which is
@@ -39,22 +43,25 @@ type CredentialMigration struct {
 // form are read, in batches by id, and each is written on its own with a
 // compare-and-set on the secret that was read, so a second run, a run
 // after an interruption, another replica's run and a key saved meanwhile
-// through the API are all safe. Call it under the migration lock.
+// through the API are all safe. It derives one key however many rows there
+// are (a row in the "$ENC/" form costs a derivation of its own to read).
+// Call it under the migration lock, after EnsureDataKeySalt.
 func MigrateCredentialsAtRest(db *gorm.DB) (CredentialMigration, error) {
 	var res CredentialMigration
 	db = db.Session(&gorm.Session{NewDB: true})
-	prefix := secrets.LookupHashPrefix()
+	hashPrefix := secrets.LookupHashPrefix()
 	encrypting := secrets.EncryptionKeyConfigured()
 
 	pending := "(secret_hash IS NULL OR secret_hash NOT LIKE ?)"
-	args := []any{prefix + "%"}
+	args := []any{hashPrefix + "%"}
 	if encrypting {
 		pending = "(" + pending + " OR secret NOT LIKE ?)"
-		args = append(args, encryptedPrefix+"%")
+		args = append(args, secrets.DataKeyCurrentPrefix()+"%")
 	}
 
 	type row struct {
 		ID         uint
+		KeyID      string
 		Secret     string
 		SecretHash *string
 		Active     bool
@@ -63,7 +70,7 @@ func MigrateCredentialsAtRest(db *gorm.DB) (CredentialMigration, error) {
 	var lastID uint
 	for {
 		var batch []row
-		err := db.Table("credentials").Select("id", "secret", "secret_hash", "active", "deleted_at").
+		err := db.Table("credentials").Select("id", "key_id", "secret", "secret_hash", "active", "deleted_at").
 			Where("id > ? AND secret <> '' AND "+pending, append([]any{lastID}, args...)...).
 			Order("id").Limit(credentialMigrationBatch).Find(&batch).Error
 		if err != nil {
@@ -74,15 +81,17 @@ func MigrateCredentialsAtRest(db *gorm.DB) (CredentialMigration, error) {
 		}
 		for _, r := range batch {
 			lastID = r.ID
-			plain := secrets.DecryptValue(r.Secret)
-			if isEncrypted(plain) {
-				logger.Errorf("Credential %d: the stored secret does not decrypt with TYK_AI_SECRET_KEY (unset or changed); it is left as it is and validates nowhere", r.ID)
+			plain, ok := openCredentialSecret(db, r.KeyID, r.Secret)
+			if !ok {
+				logger.Errorf("Credential %d: the stored secret cannot be read (TYK_AI_SECRET_KEY unset or changed, or the database's data key salt is missing); it is left as it is and validates nowhere", r.ID)
 				res.Skipped++
 				continue
 			}
 			stored := r.Secret
-			if !isEncrypted(stored) {
-				stored = secrets.EncryptValue(plain) // plain again when no key is set
+			if !encrypting || !strings.HasPrefix(stored, secrets.DataKeyCurrentPrefix()) {
+				if stored, err = sealCredentialSecret(db, r.KeyID, plain); err != nil {
+					return res, fmt.Errorf("encrypt credential %d: %w", r.ID, err)
+				}
 			}
 			hash := secrets.LookupHash(plain)
 			done, err := setCredentialAtRest(db, r.ID, r.Secret, stored, hash)

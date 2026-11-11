@@ -360,6 +360,13 @@ func New(opts Options) (_ *Studio, err error) {
 	// (or before TYK_AI_SECRET_KEY was set) are migrated now, under the
 	// migration lock: until a row has its lookup hash its key validates
 	// nowhere.
+	if secrets.EncryptionKeyConfigured() {
+		// The database's salt for the key App credentials are encrypted
+		// under: created once, here, under the migration lock.
+		if _, err := models.EnsureDataKeySalt(s.db); err != nil {
+			return nil, fmt.Errorf("studio: %w", err)
+		}
+	}
 	if res, err := models.MigrateCredentialsAtRest(s.db); err != nil {
 		return nil, fmt.Errorf("studio: hash and encrypt App credentials at rest: %w", err)
 	} else if res.Migrated > 0 || res.Skipped > 0 {

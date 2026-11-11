@@ -619,20 +619,31 @@ reachable a control plane cannot authenticate a caller at all.
 1. **`credentials.secret` on the hub** (built). The hub must keep the
    secret recoverable: the UI shows it again and Studio itself uses it as a
    bearer token (`services/grpc/decision_call.go`). So the secret is
-   encrypted with `TYK_AI_SECRET_KEY` (`$ENC/`, as LLM credentials are) and
-   found by `secret_hash` (unique; `ValidateToken` and
-   `Credential.GetBySecret` look up by it). The hash is the hub's own,
-   keyed with `TYK_AI_SECRET_KEY` (`secrets.LookupHash`: `pkg/credhash`'s
+   encrypted and found by `secret_hash` (unique; `ValidateToken` and
+   `Credential.GetBySecret` look up by it, without reading the secret).
+   Deviation from the first plan, which was to encrypt it "as LLM
+   credentials are" (`secrets.EncryptValue`): that derives a key per
+   value, about 100 ms each, and does not scale to App keys (80 minutes to
+   migrate 50,000; 0.1 s of CPU per uncached key a hub validates). Instead
+   the secret is sealed under ONE data key per process, derived from
+   `TYK_AI_SECRET_KEY` and a random per-database salt (new table
+   `data_key_salts`, one row, not secret, created once under the migration
+   lock, never regenerated: Studio refuses to start if it is missing while
+   sealed credentials exist), with AES-256-GCM, a random nonce and the
+   credential's `key_id` as additional data; stored as `$DK1/...`
+   (`secrets/datakey.go`). The hash is the hub's own, keyed with
+   `TYK_AI_SECRET_KEY` (`secrets.LookupHash`: `pkg/credhash`'s
    construction under that key, or a plain SHA-256 when no key of 14 bytes
    is set), not the edge-facing one: that is computed from the decrypted
    secret when credentials are sent (Phase 4), so rotating
    `MICROGATEWAY_ENCRYPTION_KEY` needs no hub migration. Existing rows are
    migrated at start under the migration lock, in batches, idempotently
-   (`models.MigrateCredentialsAtRest`). Schema 42; `MinReaderSchemaVersion`
-   rises to 42, because older code looks keys up by the plaintext secret
-   (every App key would be refused) and would show and send the ciphertext.
-   Changing `TYK_AI_SECRET_KEY` afterwards stops every App key validating
-   until the original is back. Details in `features/Secrets.md` ("App
+   (`models.MigrateCredentialsAtRest`; 50,000 rows in 12 s on SQLite and
+   86 s on Postgres). Schema 42; `MinReaderSchemaVersion` rises to 42,
+   because older code looks keys up by the plaintext secret (every App key
+   would be refused) and would show and send the ciphertext. Changing
+   `TYK_AI_SECRET_KEY` afterwards, or losing the salt, stops every App key
+   validating until it is back. Details in `features/Secrets.md` ("App
    credentials").
 2. **State that is per replica and cannot be a shared volume across
    sites.** Move branding assets into Postgres (two small files); keep log

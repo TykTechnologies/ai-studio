@@ -7,11 +7,13 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -25,6 +27,14 @@ type storedCredential struct {
 	SecretHash *string
 }
 
+// openStored opens a stored secret as the credential keyID's.
+func openStored(t *testing.T, db *gorm.DB, keyID, stored string) string {
+	t.Helper()
+	plain, ok := openCredentialSecret(db, keyID, stored)
+	require.True(t, ok, "the stored secret does not open")
+	return plain
+}
+
 func readStored(t *testing.T, db *gorm.DB, id uint) storedCredential {
 	t.Helper()
 	var row storedCredential
@@ -33,8 +43,8 @@ func readStored(t *testing.T, db *gorm.DB, id uint) storedCredential {
 }
 
 // forEachCredentialDB runs body on SQLite and, with DATABASE_URL, on
-// Postgres (the credentials table is emptied first: the database is shared
-// with the package's other Postgres tests).
+// Postgres in a schema of its own (these tests count rows and remove the
+// database's salt, which must not touch what other tests left behind).
 func forEachCredentialDB(t *testing.T, body func(t *testing.T, db *gorm.DB)) {
 	t.Run("sqlite", func(t *testing.T) {
 		db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "c.db")), &gorm.Config{})
@@ -43,13 +53,30 @@ func forEachCredentialDB(t *testing.T, body func(t *testing.T, db *gorm.DB)) {
 		body(t, db)
 	})
 	t.Run("postgres", func(t *testing.T) {
-		db := setupPostgreSQLTestDB(t)
-		clean := func() {
-			db.Exec("DELETE FROM apps WHERE name LIKE 'at-rest-%'")
-			db.Exec("DELETE FROM credentials WHERE key_id LIKE 'at-rest-%'")
+		base := os.Getenv("DATABASE_URL")
+		if !strings.HasPrefix(base, "postgres") {
+			t.Skip("DATABASE_URL is not a Postgres URL")
 		}
-		clean()
-		t.Cleanup(clean)
+		admin, err := gorm.Open(postgres.Open(base), &gorm.Config{})
+		require.NoError(t, err)
+		schema := fmt.Sprintf("credential_at_rest_%d", time.Now().UnixNano())
+		require.NoError(t, admin.Exec("CREATE SCHEMA "+schema).Error)
+		sep := "?"
+		if strings.Contains(base, "?") {
+			sep = "&"
+		}
+		db, err := gorm.Open(postgres.Open(base+sep+"search_path="+schema), &gorm.Config{})
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			if pool, err := db.DB(); err == nil {
+				pool.Close()
+			}
+			admin.Exec("DROP SCHEMA " + schema + " CASCADE")
+			if pool, err := admin.DB(); err == nil {
+				pool.Close()
+			}
+		})
+		require.NoError(t, InitModels(db))
 		body(t, db)
 	})
 }
@@ -72,7 +99,7 @@ func TestCredentialAtRest_Postgres(t *testing.T) {
 		assert.Equal(t, plain, cred.Secret, "the caller keeps the plaintext")
 
 		row := readStored(t, db, cred.ID)
-		assert.True(t, strings.HasPrefix(row.Secret, "$ENC/"), "stored encrypted: %q", row.Secret)
+		assert.True(t, strings.HasPrefix(row.Secret, secrets.DataKeyPrefix), "stored encrypted: %q", row.Secret)
 		assert.NotContains(t, row.Secret, plain)
 		require.NotNil(t, row.SecretHash)
 		assert.True(t, strings.HasPrefix(*row.SecretHash, secrets.LookupHashKeyedPrefix))
@@ -108,7 +135,7 @@ func TestCredentialAtRest_Postgres(t *testing.T) {
 		loaded.Description = "changed"
 		require.NoError(t, db.Save(&loaded).Error)
 		assert.Equal(t, plain, loaded.Credential.Secret)
-		assert.True(t, strings.HasPrefix(readStored(t, db, cred.ID).Secret, "$ENC/"))
+		assert.True(t, strings.HasPrefix(readStored(t, db, cred.ID).Secret, secrets.DataKeyPrefix))
 
 		// Activation and deactivation keep the secret and its hash.
 		require.NoError(t, byID.Deactivate(db))
@@ -153,7 +180,7 @@ func TestCredentialAtRest_NoKey(t *testing.T) {
 	short := &Credential{KeyID: "short", Secret: "another-app-key"}
 	require.NoError(t, short.Create(db))
 	row = readStored(t, db, short.ID)
-	assert.True(t, strings.HasPrefix(row.Secret, "$ENC/"))
+	assert.True(t, strings.HasPrefix(row.Secret, secrets.DataKeyPrefix))
 	assert.True(t, strings.HasPrefix(*row.SecretHash, secrets.LookupHashPlainPrefix))
 	require.NoError(t, (&Credential{}).GetBySecret(db, "another-app-key"))
 }
@@ -211,7 +238,7 @@ func insertLegacy(t *testing.T, db *gorm.DB, keyIDs ...string) map[string]uint {
 func plaintextSecrets(t *testing.T, db *gorm.DB, like string) int64 {
 	t.Helper()
 	var n int64
-	require.NoError(t, db.Table("credentials").Where("key_id LIKE ? AND secret NOT LIKE ?", like, "$ENC/%").Count(&n).Error)
+	require.NoError(t, db.Table("credentials").Where("key_id LIKE ? AND secret NOT LIKE ?", like, secrets.DataKeyPrefix+"%").Count(&n).Error)
 	return n
 }
 
@@ -240,7 +267,9 @@ func TestMigrateCredentialsAtRest_Postgres(t *testing.T) {
 		// An interrupted run: four rows done, the rest not.
 		for _, k := range keys[:4] {
 			plain := "legacy-secret-of-" + k
-			done, err := setCredentialAtRest(db, ids[k], plain, secrets.EncryptValue(plain), secrets.LookupHash(plain))
+			sealed, err := sealCredentialSecret(db, k, plain)
+			require.NoError(t, err)
+			done, err := setCredentialAtRest(db, ids[k], plain, sealed, secrets.LookupHash(plain))
 			require.NoError(t, err)
 			require.True(t, done)
 		}
@@ -262,7 +291,7 @@ func TestMigrateCredentialsAtRest_Postgres(t *testing.T) {
 			assert.True(t, c.Active)
 		}
 		deleted := readStored(t, db, ids[keys[9]])
-		assert.True(t, strings.HasPrefix(deleted.Secret, "$ENC/"))
+		assert.True(t, strings.HasPrefix(deleted.Secret, secrets.DataKeyPrefix))
 		require.NotNil(t, deleted.SecretHash)
 
 		// A second start is a no-op.
@@ -310,7 +339,7 @@ func TestMigrateCredentialsAtRest_KeySetLaterAndDuplicates(t *testing.T) {
 	assert.Equal(t, 2, res.Migrated)
 	assert.Equal(t, 1, res.Skipped, "the duplicate is still a duplicate")
 	row := readStored(t, db, cred.ID)
-	assert.True(t, strings.HasPrefix(row.Secret, "$ENC/"))
+	assert.True(t, strings.HasPrefix(row.Secret, secrets.DataKeyPrefix))
 	assert.True(t, strings.HasPrefix(*row.SecretHash, secrets.LookupHashKeyedPrefix))
 	require.NoError(t, (&Credential{}).GetBySecret(db, "app-key-one"))
 	require.NoError(t, (&Credential{}).GetBySecret(db, "shared-secret"))
@@ -406,7 +435,7 @@ func TestCredentialFailedSaveThenRetry(t *testing.T) {
 	require.NoError(t, cred.Create(db))
 	assert.Equal(t, "the-key-being-saved", cred.Secret)
 	row := readStored(t, db, cred.ID)
-	assert.Equal(t, "the-key-being-saved", secrets.DecryptValue(row.Secret), "stored once encrypted, not twice")
+	assert.Equal(t, "the-key-being-saved", openStored(t, db, "retry", row.Secret), "stored once encrypted, not twice")
 	require.NoError(t, (&Credential{}).GetBySecret(db, "the-key-being-saved"))
 
 	// Update fails, then succeeds.
@@ -414,13 +443,13 @@ func TestCredentialFailedSaveThenRetry(t *testing.T) {
 	cred.Secret = "a-regenerated-key"
 	require.Error(t, cred.Update(db))
 	assert.Equal(t, "a-regenerated-key", cred.Secret, "a failed update leaves the plaintext in the struct")
-	assert.Equal(t, "the-key-being-saved", secrets.DecryptValue(readStored(t, db, cred.ID).Secret), "nothing was written")
+	assert.Equal(t, "the-key-being-saved", openStored(t, db, "retry", readStored(t, db, cred.ID).Secret), "nothing was written")
 	require.NoError(t, db.Callback().Update().Remove(failName))
 	require.NoError(t, cred.Update(db))
 	assert.Equal(t, "a-regenerated-key", cred.Secret)
 	require.NoError(t, (&Credential{}).GetBySecret(db, "a-regenerated-key"))
 	assert.ErrorIs(t, (&Credential{}).GetBySecret(db, "the-key-being-saved"), gorm.ErrRecordNotFound)
-	assert.Equal(t, "a-regenerated-key", secrets.DecryptValue(readStored(t, db, cred.ID).Secret))
+	assert.Equal(t, "a-regenerated-key", openStored(t, db, "retry", readStored(t, db, cred.ID).Secret))
 
 	// A struct holding the stored form is saved as that key, not as its
 	// ciphertext.
@@ -430,7 +459,7 @@ func TestCredentialFailedSaveThenRetry(t *testing.T) {
 	held.Secret = raw.Secret
 	require.NoError(t, held.Update(db))
 	after := readStored(t, db, cred.ID)
-	assert.Equal(t, "a-regenerated-key", secrets.DecryptValue(after.Secret))
+	assert.Equal(t, "a-regenerated-key", openStored(t, db, "retry", after.Secret))
 	assert.Equal(t, *raw.SecretHash, *after.SecretHash)
 	require.NoError(t, (&Credential{}).GetBySecret(db, "a-regenerated-key"))
 }
@@ -477,7 +506,7 @@ func TestMigrateCredentialsAtRest_DuplicateKeepsTheRowThatValidated(t *testing.T
 			require.NotNil(t, won.SecretHash)
 			assert.Nil(t, lost.SecretHash)
 			for _, row := range []storedCredential{won, lost} {
-				assert.True(t, strings.HasPrefix(row.Secret, "$ENC/"), "both secrets are encrypted")
+				assert.True(t, strings.HasPrefix(row.Secret, secrets.DataKeyPrefix), "both secrets are encrypted")
 			}
 			var found Credential
 			if err := found.GetBySecret(db.Unscoped(), "one-shared-secret"); assert.NoError(t, err) {
@@ -492,4 +521,213 @@ func TestMigrateCredentialsAtRest_DuplicateKeepsTheRowThatValidated(t *testing.T
 			assert.Nil(t, readStored(t, db, ids[loser]).SecretHash)
 		})
 	}
+}
+
+// The work on N credentials derives a key a constant number of times, not
+// N: creating them, reading them one by one and as a list, looking each up
+// by its secret, and migrating N more from before the change. With
+// secrets.EncryptValue it was one derivation (about 100 ms at production
+// cost) per credential written, and per credential read beyond a small
+// cache.
+func TestCredentialWorkDerivesOneKey_Postgres(t *testing.T) {
+	forEachCredentialDB(t, func(t *testing.T, db *gorm.DB) {
+		t.Setenv("TYK_AI_SECRET_KEY", credentialTestKey+"-"+t.Name()) // a key no other test has derived for
+		const n = 300
+		before := secrets.KeyDerivations()
+
+		var created []*Credential
+		for i := 0; i < n; i++ {
+			c := &Credential{KeyID: keyID(t, fmt.Sprintf("n-%03d", i)), Secret: fmt.Sprintf("secret-%s-%03d", t.Name(), i), Active: true}
+			require.NoError(t, c.Create(db))
+			created = append(created, c)
+		}
+		for _, c := range created {
+			var byID, bySecret Credential
+			require.NoError(t, byID.Get(db, c.ID))
+			require.Equal(t, c.Secret, byID.Secret)
+			require.NoError(t, bySecret.GetBySecret(db, c.Secret))
+			require.Equal(t, c.ID, bySecret.ID)
+		}
+		var list Credentials
+		require.NoError(t, db.Where("key_id LIKE ?", keyID(t, "")+"%").Find(&list).Error)
+		require.Len(t, list, n)
+
+		var legacy []string
+		for i := 0; i < n; i++ {
+			legacy = append(legacy, keyID(t, fmt.Sprintf("legacy-%03d", i)))
+		}
+		insertLegacy(t, db, legacy...)
+		res, err := MigrateCredentialsAtRest(db)
+		require.NoError(t, err)
+		require.Equal(t, n, res.Migrated)
+		require.NoError(t, (&Credential{}).GetBySecret(db, "legacy-secret-of-"+legacy[n-1]))
+
+		assert.LessOrEqual(t, secrets.KeyDerivations()-before, uint64(1),
+			"creating, reading, looking up and migrating %d credentials derived more than the one data key", 2*n)
+	})
+}
+
+// A lookup by the secret compares hashes and does not read the secret
+// column: it answers for a row whose stored secret is unreadable, hands
+// back the secret it was given, and derives nothing.
+func TestGetBySecretDoesNotReadTheSecret(t *testing.T) {
+	t.Setenv("TYK_AI_SECRET_KEY", credentialTestKey)
+	db := setupTestDB(t)
+	cred := &Credential{KeyID: "lookup", Secret: "the-key-looked-up", Active: true}
+	require.NoError(t, cred.Create(db))
+	require.NoError(t, db.Exec("UPDATE credentials SET secret = ? WHERE id = ?", secrets.DataKeyCurrentPrefix()+"bm90LWEtY2lwaGVydGV4dA==", cred.ID).Error)
+
+	var statements []string
+	require.NoError(t, db.Callback().Query().After("gorm:query").Register("test:statements", func(tx *gorm.DB) {
+		statements = append(statements, tx.Statement.SQL.String())
+	}))
+	t.Cleanup(func() { _ = db.Callback().Query().Remove("test:statements") })
+
+	before := secrets.KeyDerivations()
+	var found Credential
+	require.NoError(t, found.GetBySecret(db, "the-key-looked-up"))
+	assert.Equal(t, cred.ID, found.ID)
+	assert.True(t, found.Active)
+	assert.Equal(t, "the-key-looked-up", found.Secret, "the caller's secret is the row's")
+	assert.Equal(t, before, secrets.KeyDerivations())
+	require.NotEmpty(t, statements)
+	for _, sql := range statements {
+		assert.NotRegexp(t, "[`\"]secret[`\"]", sql, "the secret column is not selected")
+	}
+
+	// Read whole, the same row is refused: its stored secret does not open.
+	var whole Credential
+	require.NoError(t, whole.Get(db, cred.ID))
+	assert.Equal(t, secrets.RefusedCredential, whole.Secret)
+}
+
+// A stored secret is bound to its row: copied into another credential's
+// row it does not open there.
+func TestCredentialCiphertextIsBoundToItsRow(t *testing.T) {
+	t.Setenv("TYK_AI_SECRET_KEY", credentialTestKey)
+	db := setupTestDB(t)
+	a := &Credential{KeyID: "row-a", Secret: "secret-of-a", Active: true}
+	b := &Credential{KeyID: "row-b", Secret: "secret-of-b", Active: true}
+	require.NoError(t, a.Create(db))
+	require.NoError(t, b.Create(db))
+	require.NoError(t, db.Exec("UPDATE credentials SET secret = (SELECT secret FROM credentials WHERE id = ?) WHERE id = ?", a.ID, b.ID).Error)
+
+	var readA, readB Credential
+	require.NoError(t, readA.Get(db, a.ID))
+	require.NoError(t, readB.Get(db, b.ID))
+	assert.Equal(t, "secret-of-a", readA.Secret)
+	assert.Equal(t, secrets.RefusedCredential, readB.Secret, "a's ciphertext does not open as b's")
+}
+
+// The database's salt is created once and never replaced. Every handle on
+// the database reads the same one. If it is missing while credentials
+// sealed under it exist, nothing generates a new one: the credentials read
+// as refused, saving fails, and EnsureDataKeySalt (start-up) reports what
+// was lost.
+func TestDataKeySalt_Postgres(t *testing.T) {
+	forEachCredentialDB(t, func(t *testing.T, db *gorm.DB) {
+		t.Setenv("TYK_AI_SECRET_KEY", credentialTestKey)
+		salt, err := EnsureDataKeySalt(db)
+		require.NoError(t, err)
+		require.Len(t, salt, secrets.DataKeySaltLength)
+		again, err := EnsureDataKeySalt(db)
+		require.NoError(t, err)
+		assert.Equal(t, salt, again, "created once")
+		dataKeySalts.Delete(db.Config) // a new process
+		fromDB, err := EnsureDataKeySalt(db)
+		require.NoError(t, err)
+		assert.Equal(t, salt, fromDB, "every replica reads the stored one")
+		var rows int64
+		require.NoError(t, db.Model(&DataKeySalt{}).Count(&rows).Error)
+		assert.Equal(t, int64(1), rows)
+
+		cred := &Credential{KeyID: keyID(t, "salted"), Secret: "sealed-under-the-salt-" + t.Name(), Active: true}
+		require.NoError(t, cred.Create(db))
+
+		// The salt is lost (a table restored without it, say).
+		require.NoError(t, db.Exec("DELETE FROM data_key_salts").Error)
+		dataKeySalts.Delete(db.Config)
+
+		_, err = EnsureDataKeySalt(db)
+		assert.ErrorIs(t, err, ErrDataKeySaltLost)
+		assert.Contains(t, err.Error(), "data_key_salts")
+		var read Credential
+		require.NoError(t, read.Get(db, cred.ID))
+		assert.Equal(t, secrets.RefusedCredential, read.Secret)
+		assert.ErrorIs(t, (&Credential{KeyID: keyID(t, "new"), Secret: "cannot-be-sealed-" + t.Name()}).Create(db), ErrDataKeySaltLost,
+			"a new credential is not encrypted under a salt made up on the spot")
+		require.NoError(t, db.Model(&DataKeySalt{}).Count(&rows).Error)
+		assert.Zero(t, rows, "no new salt was generated")
+
+		// The row comes back (from the backup): everything reads again.
+		require.NoError(t, db.Create(&DataKeySalt{ID: dataKeySaltRowID, Salt: salt}).Error)
+		require.NoError(t, read.Get(db, cred.ID))
+		assert.Equal(t, cred.Secret, read.Secret)
+	})
+}
+
+// Rows an earlier revision of this change wrote with secrets.EncryptValue
+// ("$ENC/", on development stacks only) are converted to the data-key form
+// like rows from before the change, and keep validating.
+func TestMigrateCredentialsAtRest_ConvertsEncValueRows(t *testing.T) {
+	t.Setenv("TYK_AI_SECRET_KEY", credentialTestKey)
+	db := setupTestDB(t)
+	ids := insertLegacy(t, db, "enc-form")
+	plain := "legacy-secret-of-enc-form"
+	require.NoError(t, db.Exec("UPDATE credentials SET secret = ?, secret_hash = ? WHERE id = ?",
+		secrets.EncryptValue(plain), secrets.LookupHash(plain), ids["enc-form"]).Error)
+
+	var read Credential
+	require.NoError(t, read.Get(db, ids["enc-form"]))
+	assert.Equal(t, plain, read.Secret, "readable before it is converted")
+
+	res, err := MigrateCredentialsAtRest(db)
+	require.NoError(t, err)
+	assert.Equal(t, CredentialMigration{Migrated: 1}, res)
+	row := readStored(t, db, ids["enc-form"])
+	assert.True(t, strings.HasPrefix(row.Secret, secrets.DataKeyCurrentPrefix()), "%q", row.Secret)
+	require.NoError(t, read.GetBySecret(db, plain))
+	require.NoError(t, read.Get(db, ids["enc-form"]))
+	assert.Equal(t, plain, read.Secret)
+
+	res, err = MigrateCredentialsAtRest(db)
+	require.NoError(t, err)
+	assert.Equal(t, CredentialMigration{}, res)
+}
+
+// A FIPS-mode Studio that starts on a database a standard build wrote reads
+// the scrypt-derived form, and its migration seals every credential again
+// under a PBKDF2-derived data key, with the same salt.
+func TestMigrateCredentialsAtRest_FIPSProcessConvertsScryptForm(t *testing.T) {
+	if strings.HasPrefix(secrets.DataKeyCurrentPrefix(), secrets.DataKeyPrefix+"p") {
+		t.Skip("this process is in FIPS mode and cannot write the scrypt form to start from (secrets.TestDataKeyFormsAcrossFIPSAndStandardBuilds covers reading it)")
+	}
+	t.Setenv("TYK_AI_SECRET_KEY", credentialTestKey)
+	db := setupTestDB(t)
+	cred, err := NewCredential()
+	require.NoError(t, err)
+	require.NoError(t, cred.Create(db))
+	standard := readStored(t, db, cred.ID)
+	require.True(t, strings.HasPrefix(standard.Secret, secrets.DataKeyPrefix+"s:"), "%q", standard.Secret)
+
+	secrets.ForceFIPSModeForTest(t)
+	require.True(t, strings.HasPrefix(secrets.DataKeyCurrentPrefix(), secrets.DataKeyPrefix+"p"))
+
+	var read Credential
+	require.NoError(t, read.Get(db, cred.ID))
+	assert.Equal(t, cred.Secret, read.Secret, "the scrypt form is readable in FIPS mode")
+
+	res, err := MigrateCredentialsAtRest(db)
+	require.NoError(t, err)
+	assert.Equal(t, CredentialMigration{Migrated: 1}, res)
+	row := readStored(t, db, cred.ID)
+	assert.True(t, strings.HasPrefix(row.Secret, secrets.DataKeyCurrentPrefix()), "%q", row.Secret)
+	assert.Equal(t, *standard.SecretHash, *row.SecretHash, "the lookup hash does not change")
+	require.NoError(t, read.GetBySecret(db, cred.Secret))
+	require.NoError(t, read.Get(db, cred.ID))
+	assert.Equal(t, cred.Secret, read.Secret)
+
+	res, err = MigrateCredentialsAtRest(db)
+	require.NoError(t, err)
+	assert.Equal(t, CredentialMigration{}, res)
 }

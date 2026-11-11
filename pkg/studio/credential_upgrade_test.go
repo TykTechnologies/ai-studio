@@ -46,7 +46,7 @@ func assertCredentialsAtRest(t *testing.T, db *gorm.DB, keys map[uint]string) {
 	require.NoError(t, db.Table("credentials").Select("id", "secret", "secret_hash").Scan(&rows).Error)
 	require.Len(t, rows, len(keys))
 	for _, r := range rows {
-		assert.True(t, strings.HasPrefix(r.Secret, "$ENC/"), "credential %d is stored in plaintext", r.ID)
+		assert.True(t, strings.HasPrefix(r.Secret, secrets.DataKeyCurrentPrefix()), "credential %d is not encrypted under the data key: %q", r.ID, r.Secret)
 		assert.NotEqual(t, keys[r.ID], r.Secret)
 		require.NotNil(t, r.SecretHash, "credential %d has no lookup hash", r.ID)
 		assert.True(t, strings.HasPrefix(*r.SecretHash, secrets.LookupHashKeyedPrefix))

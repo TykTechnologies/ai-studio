@@ -692,6 +692,12 @@ TABLE data_catalogues
   column short_description text(text) nullable=YES
   column long_description text(text) nullable=YES
   column icon text(text) nullable=YES
+TABLE data_key_salts
+  constraint data_key_salts_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX data_key_salts_pkey ON data_key_salts USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0
+  column salt bytea(bytea) nullable=NO
+  column created_at timestamp with time zone(timestamptz) nullable=YES
 TABLE datasource_filestores
   constraint datasource_filestores_pkey PRIMARY KEY (datasource_id, file_store_id)
   constraint fk_datasource_filestores_datasource FOREIGN KEY (datasource_id) REFERENCES datasources(id)

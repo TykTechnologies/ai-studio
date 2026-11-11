@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
@@ -18,41 +20,58 @@ import (
 
 // Credential is an App's gateway key.
 //
-// At rest (midsommar-clean-4x5y.15): the secret is stored as
-// secrets.EncryptValue output ($ENC/) when TYK_AI_SECRET_KEY is set, and as
-// written without it, as LLM credentials are; and it is found by
+// At rest (midsommar-clean-4x5y.15): the secret is stored encrypted when
+// TYK_AI_SECRET_KEY is set (as written without it), and it is found by
 // secret_hash (secrets.LookupHash), never by its value.
 //
-// Secret always holds the plaintext in memory. A gorm serializer on the
-// field (credentialSecretSerializer) encrypts it as it is written and
-// decrypts it as it is read, for a credential on its own or as an App's
-// association, so every reader sees the plaintext: the hub has to be able
-// to show the key again and uses it as a bearer token itself. The struct is
-// never changed to its stored form, so a save that fails (a database error
-// during a failover) leaves nothing to undo and can be retried as it is.
-// BeforeSave sets the lookup hash. A column or map update of the secret
-// would bypass that; there is none, and TestCredentialSecretIsOnlySavedWhole
-// keeps it that way.
+// It is encrypted under the database's data key (secrets.SealWithDataKey:
+// one key derived once per process from TYK_AI_SECRET_KEY and the
+// database's salt, then AES-256-GCM per value, bound to the credential's
+// key_id), not with secrets.EncryptValue: that derives a key per value,
+// about 100 ms each, which is fine for the handful of LLM credentials and
+// would stall a hub with thousands of App keys. Sealing or opening one here
+// costs microseconds.
+//
+// Secret holds the plaintext in memory: the hub has to be able to show the
+// key again and uses it as a bearer token itself. BeforeSave computes the
+// lookup hash and the sealed form, which the field's serializer writes, and
+// AfterFind opens what was read, for a credential on its own or as an App's
+// association. A save never puts the stored form in Secret, so one that
+// fails (a database error during a failover) can be retried as it is.
+// Lookups by the secret (GetBySecret, the control server's ValidateToken)
+// compare hashes and do not read the secret column at all. A column or map
+// update of the secret would bypass the hooks; there is none, and
+// TestCredentialSecretIsOnlySavedWhole keeps it that way.
 type Credential struct {
 	gorm.Model
 	ID     uint   `json:"id" gorm:"primaryKey"`
 	KeyID  string `json:"key_id" gorm:"uniqueIndex"`
 	Secret string `json:"secret" gorm:"serializer:credential_secret"`
-	// SecretHash is what the credential is looked up by (GetBySecret,
-	// the control server's ValidateToken). Null on a row no current Studio
-	// has migrated yet; such a row is found by nothing.
+	// SecretHash is what the credential is looked up by. Null on a row no
+	// current Studio has migrated yet; such a row is found by nothing.
 	SecretHash *string `json:"-" gorm:"column:secret_hash;size:80;uniqueIndex"`
 	Active     bool    `json:"active" gorm:"default:false"`
 
 	// stored is the secret as it is in the database, kept while Secret
-	// holds secrets.RefusedCredential (it did not decrypt), so that saving
-	// the row for another reason does not overwrite a secret that the
-	// right key would still read.
+	// holds secrets.RefusedCredential (it could not be opened), so that
+	// saving the row for another reason does not overwrite a secret that
+	// the right key would still read.
 	stored string
+	// sealed is what BeforeSave prepared for the serializer to write, for
+	// the secret and key_id in sealedFor.
+	sealed, sealedFor string
 }
 
-// isEncrypted reports whether v is secrets.EncryptValue output.
-func isEncrypted(v string) bool { return strings.HasPrefix(v, encryptedPrefix) }
+// isEncrypted reports whether v is a secret in a stored, encrypted form:
+// sealed under the data key, or secrets.EncryptValue output (which this
+// change wrote on development stacks before it used the data key).
+func isEncrypted(v string) bool {
+	return secrets.IsDataKeyValue(v) || strings.HasPrefix(v, encryptedPrefix)
+}
+
+// credentialAAD binds a sealed secret to its row: a ciphertext copied into
+// another credential's row does not open there.
+func credentialAAD(keyID string) string { return "credential\x00" + keyID }
 
 const credentialSecretSerializerName = "credential_secret"
 
@@ -60,32 +79,27 @@ func init() {
 	schema.RegisterSerializer(credentialSecretSerializerName, credentialSecretSerializer{})
 }
 
-// credentialSecretSerializer stores Credential.Secret encrypted and reads it
-// back as plaintext, without ever putting the stored form in the struct.
+// credentialSecretSerializer writes the stored form BeforeSave prepared, so
+// that the struct's Secret is never replaced by it. Reading is left to
+// AfterFind, which has the database (for its salt) and the whole row.
 type credentialSecretSerializer struct{}
 
 // Value is the secret as it is stored.
 func (credentialSecretSerializer) Value(_ context.Context, _ *schema.Field, dst reflect.Value, fieldValue interface{}) (interface{}, error) {
 	plain, _ := fieldValue.(string)
-	switch {
-	case plain == "":
+	if plain == "" {
 		return "", nil
-	case plain == secrets.RefusedCredential:
-		// Not readable with this key: keep what is stored.
-		if c := credentialOf(dst); c != nil && c.stored != "" {
-			return c.stored, nil
-		}
-		return plain, nil
-	case isEncrypted(plain):
-		// Already in stored form (a caller holding a raw row): as it is.
-		return plain, nil
 	}
-	return secrets.EncryptValue(plain), nil // plain again when no key is set
+	c := credentialOf(dst)
+	if c == nil || c.sealedFor != plain+"\x00"+c.KeyID {
+		// Written by something that did not run BeforeSave: refuse rather
+		// than store a secret in plaintext or without its hash.
+		return nil, errors.New("a credential's secret can only be saved with the whole credential (its hooks hash and encrypt it)")
+	}
+	return c.sealed, nil
 }
 
-// Scan reads a stored secret into the struct as plaintext. One that does
-// not decrypt (no key, another key) reads as secrets.RefusedCredential,
-// never as its ciphertext, which would be shown and sent as the key.
+// Scan puts the stored value in the struct for AfterFind to open.
 func (credentialSecretSerializer) Scan(ctx context.Context, field *schema.Field, dst reflect.Value, dbValue interface{}) error {
 	var stored string
 	switch v := dbValue.(type) {
@@ -97,22 +111,11 @@ func (credentialSecretSerializer) Scan(ctx context.Context, field *schema.Field,
 	default:
 		return fmt.Errorf("credential secret: unsupported column value %T", dbValue)
 	}
-	plain, kept := stored, ""
-	if isEncrypted(stored) {
-		if plain = secrets.DecryptValue(stored); isEncrypted(plain) {
-			logger.Errorf("A credential's stored secret does not decrypt with TYK_AI_SECRET_KEY (unset or changed); it is refused until the key is set again")
-			plain, kept = secrets.RefusedCredential, stored
-		}
-	}
-	field.ReflectValueOf(ctx, dst).SetString(plain)
-	if c := credentialOf(dst); c != nil {
-		c.stored = kept
-	}
+	field.ReflectValueOf(ctx, dst).SetString(stored)
 	return nil
 }
 
-// credentialOf is the Credential a serializer call is for, when dst is one
-// (it is: the serializer is used on no other model).
+// credentialOf is the Credential a serializer call is for.
 func credentialOf(dst reflect.Value) *Credential {
 	if dst.Kind() == reflect.Struct && dst.CanAddr() {
 		if c, ok := dst.Addr().Interface().(*Credential); ok {
@@ -122,8 +125,46 @@ func credentialOf(dst reflect.Value) *Credential {
 	return nil
 }
 
-// BeforeSave sets the lookup hash of the secret being saved. It leaves
-// Secret alone.
+var plaintextCredentialWarning sync.Once
+
+// sealCredentialSecret is plain as it is stored for the credential keyID:
+// sealed under the database's data key, or plain itself when no
+// TYK_AI_SECRET_KEY is set (with secrets' own warning, as for every value
+// stored unencrypted).
+func sealCredentialSecret(tx *gorm.DB, keyID, plain string) (string, error) {
+	if !secrets.EncryptionKeyConfigured() {
+		plaintextCredentialWarning.Do(func() {
+			logger.Errorf("SECURITY WARNING: TYK_AI_SECRET_KEY is not set: App credentials are stored as plaintext. This warning is logged once per process.")
+		})
+		return plain, nil
+	}
+	salt, err := EnsureDataKeySalt(tx)
+	if err != nil {
+		return "", err
+	}
+	return secrets.SealWithDataKey(salt, plain, credentialAAD(keyID))
+}
+
+// openCredentialSecret is the plaintext of a stored secret, and whether it
+// could be opened.
+func openCredentialSecret(tx *gorm.DB, keyID, stored string) (string, bool) {
+	switch {
+	case secrets.IsDataKeyValue(stored):
+		salt, err := loadDataKeySalt(tx)
+		if err != nil || salt == nil {
+			return "", false
+		}
+		plain, err := secrets.OpenWithDataKey(salt, stored, credentialAAD(keyID))
+		return plain, err == nil
+	case strings.HasPrefix(stored, encryptedPrefix):
+		plain := secrets.DecryptValue(stored)
+		return plain, !strings.HasPrefix(plain, encryptedPrefix)
+	}
+	return stored, true
+}
+
+// BeforeSave computes the lookup hash and the stored form of the secret
+// being saved. It leaves Secret alone.
 func (c *Credential) BeforeSave(tx *gorm.DB) error {
 	if reflect.Indirect(reflect.ValueOf(tx.Statement.Dest)).Kind() == reflect.Map {
 		// A column or map update (Update("active", ...)) does not write
@@ -132,19 +173,54 @@ func (c *Credential) BeforeSave(tx *gorm.DB) error {
 	}
 	plain := c.Secret
 	if isEncrypted(plain) {
-		// A caller holding the stored form: hash what it decrypts to.
-		plain = secrets.DecryptValue(plain)
+		// A caller holding the stored form: save what it opens to.
+		opened, ok := openCredentialSecret(tx, c.KeyID, plain)
+		if !ok {
+			// Not readable here: written back as it is, hash untouched.
+			c.sealed, c.sealedFor = plain, plain+"\x00"+c.KeyID
+			return nil
+		}
+		plain = opened
 	}
 	switch {
 	case plain == "":
 		c.SecretHash = nil
-	case plain == secrets.RefusedCredential || isEncrypted(plain):
+		c.sealed, c.sealedFor = "", ""
+	case plain == secrets.RefusedCredential && c.stored != "":
 		// Not readable with this key: the stored secret is kept, and so
 		// is its hash.
+		c.sealed, c.sealedFor = c.stored, c.Secret+"\x00"+c.KeyID
 	default:
+		sealed, err := sealCredentialSecret(tx, c.KeyID, plain)
+		if err != nil {
+			return fmt.Errorf("encrypt the credential's secret: %w", err)
+		}
 		hash := secrets.LookupHash(plain)
 		c.SecretHash = &hash
+		c.sealed, c.sealedFor = sealed, c.Secret+"\x00"+c.KeyID
 	}
+	return nil
+}
+
+// AfterFind opens the secret that was read. One that cannot be opened (no
+// key, another key, a lost salt, another row's ciphertext) reads as
+// secrets.RefusedCredential, never as its stored form, which would be shown
+// and sent as the key. A read that left the secret column out has nothing
+// to open.
+func (c *Credential) AfterFind(tx *gorm.DB) error {
+	c.sealed, c.sealedFor = "", ""
+	if !isEncrypted(c.Secret) {
+		c.stored = ""
+		return nil
+	}
+	stored := c.Secret
+	plain, ok := openCredentialSecret(tx, c.KeyID, stored)
+	if !ok {
+		logger.Errorf("Credential %d: the stored secret cannot be read (TYK_AI_SECRET_KEY unset or changed, or the database's data key salt is missing); it is refused until that is put right", c.ID)
+		c.Secret, c.stored = secrets.RefusedCredential, stored
+		return nil
+	}
+	c.Secret, c.stored = plain, ""
 	return nil
 }
 
@@ -181,11 +257,19 @@ func (c *Credential) GetByKeyID(db *gorm.DB, keyID string) error {
 
 // GetBySecret finds the credential with this secret, by its lookup hash.
 // An empty secret finds nothing.
+//
+// The row is found by comparing hashes, and its secret column is not read:
+// the caller's secret is the row's (that is what the hash matching means),
+// so nothing is decrypted to answer "whose key is this".
 func (c *Credential) GetBySecret(db *gorm.DB, secret string) error {
 	if secret == "" {
 		return gorm.ErrRecordNotFound
 	}
-	return db.Where("secret_hash = ?", secrets.LookupHash(secret)).First(c).Error
+	if err := db.Omit("secret").Where("secret_hash = ?", secrets.LookupHash(secret)).First(c).Error; err != nil {
+		return err
+	}
+	c.Secret = secret
+	return nil
 }
 
 func (c *Credential) Update(db *gorm.DB) error {
