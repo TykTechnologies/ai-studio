@@ -156,7 +156,9 @@ Files: `pkg/studio/database.go`, `startup/connectivity.go`,
    Studio now opens the Postgres pool itself (`pkg/studio/database_postgres.go`,
    `stdlib.OpenDB`; the gorm dialector is given the pool) so it can retire
    connections: a `dbstate.Tracker` (`pkg/dbstate`) probes the server every
-   5 s (`pg_is_in_recovery() OR transaction_read_only`, the latter because
+   5 s, each probe bounded by a connection attempt at every host plus 3 s
+   so an unreachable first host does not make the database look
+   unreachable (`pg_is_in_recovery() OR transaction_read_only`, the latter because
    a demoted primary that keeps running is not in recovery) and is told of
    every statement refused with 25006 (a gorm callback). While the server
    is not writable it raises a generation number; each connection is

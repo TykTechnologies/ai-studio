@@ -106,7 +106,7 @@ func openPostgres(conf *config.AppConf, dsn string) (gorm.Dialector, *sql.DB, er
 		pool.SetConnMaxLifetime(conf.DatabaseConnMaxLifetime)
 	}
 	logger.Debugf("Database pool: %d host(s), target_session_attrs=%s, max_open_conns=%s, max_idle_conns=%s, conn_max_lifetime=%s, connect_timeout=%s",
-		1+len(connConfig.Fallbacks), targetSessionAttrs(dsn),
+		hostCount(connConfig), targetSessionAttrs(dsn),
 		orDefault(conf.DatabaseMaxOpenConns, "unlimited"), orDefault(conf.DatabaseMaxIdleConns, "2 (default)"),
 		durationOr(conf.DatabaseConnMaxLifetime, "unlimited"), durationOr(connConfig.ConnectTimeout, "none"))
 
@@ -120,13 +120,37 @@ func openPostgres(conf *config.AppConf, dsn string) (gorm.Dialector, *sql.DB, er
 		// a changed address counts as a failover.
 		_ = pool.QueryRowContext(ctx, "SELECT timeline_id FROM pg_control_checkpoint()").Scan(&p.Timeline)
 		return p, nil
-	}, 0)
+	}, dbstate.Options{ProbeTimeout: probeTimeout(connConfig)})
 	tracker.Store(started)
 	dbstate.Register(pool, started)
 
 	// The DSN stays on the dialector: the LISTEN connection is opened from
 	// it (pglisten.DSN).
 	return postgres.New(postgres.Config{DSN: dsn, Conn: pool}), pool, nil
+}
+
+// probeTimeout is how long one probe of the tracker may take: it may have
+// to dial, and with several hosts pgx tries each in turn for up to the
+// connect timeout, so the bound covers an attempt at every host and the
+// query after it. A shorter bound would report a database that answers on
+// its second host as unreachable whenever the first does not answer at all.
+func probeTimeout(c *pgx.ConnConfig) time.Duration {
+	perHost := c.ConnectTimeout
+	if perHost <= 0 {
+		return dbstate.DefaultProbeTimeout
+	}
+	return time.Duration(hostCount(c))*perHost + 3*time.Second
+}
+
+// hostCount is how many servers the connection string names. pgx lists a
+// host twice among its fallbacks when sslmode allows both a TLS and a plain
+// attempt; that is one server.
+func hostCount(c *pgx.ConnConfig) int {
+	hosts := map[string]bool{fmt.Sprintf("%s:%d", c.Host, c.Port): true}
+	for _, f := range c.Fallbacks {
+		hosts[fmt.Sprintf("%s:%d", f.Host, f.Port)] = true
+	}
+	return len(hosts)
 }
 
 // watchReadOnly reports every statement the server refuses as read-only to

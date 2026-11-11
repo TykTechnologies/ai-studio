@@ -61,7 +61,7 @@ func TestNilTrackerIsWritable(t *testing.T) {
 // server is not writable, and what counts as a failover.
 func TestTrackerStatesAndFailovers(t *testing.T) {
 	srv := &fakeServer{probe: Probe{Server: "pg-a:5432", Timeline: 1}}
-	tr := Start(srv.Probe, 10*time.Millisecond)
+	tr := Start(srv.Probe, Options{Interval: 10 * time.Millisecond})
 	defer tr.Stop()
 
 	st := tr.Status()
@@ -117,7 +117,7 @@ func TestTrackerStatesAndFailovers(t *testing.T) {
 // the probes.
 func TestReportReadOnly(t *testing.T) {
 	srv := &fakeServer{probe: Probe{Server: "pg-a:5432"}}
-	tr := Start(srv.Probe, time.Hour)
+	tr := Start(srv.Probe, Options{Interval: time.Hour})
 	defer tr.Stop()
 	require.Equal(t, 1, srv.probes())
 
@@ -147,7 +147,7 @@ func TestIsReadOnlyError(t *testing.T) {
 // The tracker ends, and is forgotten, when its pool is closed.
 func TestTrackerEndsWithItsPool(t *testing.T) {
 	srv := &fakeServer{probe: Probe{Server: "pg-a:5432"}}
-	tr := Start(srv.Probe, 5*time.Millisecond)
+	tr := Start(srv.Probe, Options{Interval: 5 * time.Millisecond})
 	pool := &sql.DB{}
 	Register(pool, tr)
 	_, ok := trackers.Load(pool)
@@ -157,4 +157,51 @@ func TestTrackerEndsWithItsPool(t *testing.T) {
 	require.Eventually(t, func() bool { _, ok := trackers.Load(pool); return !ok }, time.Second, 5*time.Millisecond)
 	tr.Stop() // returns: the loop has ended
 	assert.Equal(t, Writable, tr.Status().State, "a closed pool is not an unreachable database")
+}
+
+// A probe may have to dial, and with several hosts the first may not answer
+// at all: the probe is given the time its caller says that takes, so a slow
+// answer is still an answer, and only a probe that outlasts its bound makes
+// the database unreachable.
+func TestProbeTimeout(t *testing.T) {
+	var deadlines []time.Duration
+	var mu sync.Mutex
+	delay := 150 * time.Millisecond
+	slow := func(ctx context.Context) (Probe, error) {
+		if d, ok := ctx.Deadline(); ok {
+			mu.Lock()
+			deadlines = append(deadlines, time.Until(d))
+			mu.Unlock()
+		}
+		select {
+		case <-time.After(delay):
+			return Probe{Server: "pg-b:5432"}, nil
+		case <-ctx.Done():
+			return Probe{}, ctx.Err()
+		}
+	}
+
+	// The first host costs 150 ms before the second answers: inside the
+	// bound, so the database is writable.
+	tr := Start(slow, Options{Interval: time.Hour, ProbeTimeout: 2 * time.Second})
+	assert.Equal(t, Writable, tr.Status().State)
+	tr.Stop()
+	mu.Lock()
+	require.Len(t, deadlines, 1)
+	assert.Greater(t, deadlines[0], time.Second, "the probe gets the configured bound")
+	mu.Unlock()
+
+	// A bound shorter than the answer takes: unreachable.
+	tr = Start(slow, Options{Interval: time.Hour, ProbeTimeout: 20 * time.Millisecond})
+	assert.Equal(t, Unreachable, tr.Status().State)
+	tr.Stop()
+
+	// Unset: the default, which is long enough to dial.
+	deadlines = nil
+	tr = Start(slow, Options{Interval: time.Hour})
+	tr.Stop()
+	mu.Lock()
+	require.Len(t, deadlines, 1)
+	assert.Greater(t, deadlines[0], DefaultProbeTimeout-time.Second)
+	mu.Unlock()
 }

@@ -52,8 +52,22 @@ const ReadOnlySQLState = "25006"
 // DefaultCheckInterval is how often a Tracker probes the server.
 const DefaultCheckInterval = 5 * time.Second
 
-// probeTimeout bounds one probe, connection included.
-const probeTimeout = 3 * time.Second
+// DefaultProbeTimeout bounds one probe when Options name no other bound. A
+// probe may have to dial: its bound must cover a connection attempt to
+// every host in the connection string (pkg/studio passes that), or an
+// unreachable first host would make a database that answers on the second
+// look unreachable.
+const DefaultProbeTimeout = 30 * time.Second
+
+// Options configure a Tracker.
+type Options struct {
+	// Interval is how often the server is probed (DefaultCheckInterval
+	// when not positive).
+	Interval time.Duration
+	// ProbeTimeout bounds one probe, connecting included
+	// (DefaultProbeTimeout when not positive).
+	ProbeTimeout time.Duration
+}
 
 // Status is a Tracker's view of the database.
 type Status struct {
@@ -82,8 +96,9 @@ type ProbeFunc func(ctx context.Context) (Probe, error)
 
 // Tracker follows one database.
 type Tracker struct {
-	probe    ProbeFunc
-	interval time.Duration
+	probe        ProbeFunc
+	interval     time.Duration
+	probeTimeout time.Duration
 
 	generation atomic.Uint64
 
@@ -105,15 +120,18 @@ type Tracker struct {
 	done     chan struct{}
 }
 
-// Start returns a Tracker that probes every interval (DefaultCheckInterval
-// when it is not positive) until Stop, or until the probe reports that the
-// database was closed. The first probe has run when it returns.
-func Start(probe ProbeFunc, interval time.Duration) *Tracker {
-	if interval <= 0 {
-		interval = DefaultCheckInterval
+// Start returns a Tracker that probes every opts.Interval until Stop, or
+// until the probe reports that the database was closed. The first probe has
+// run when it returns.
+func Start(probe ProbeFunc, opts Options) *Tracker {
+	if opts.Interval <= 0 {
+		opts.Interval = DefaultCheckInterval
+	}
+	if opts.ProbeTimeout <= 0 {
+		opts.ProbeTimeout = DefaultProbeTimeout
 	}
 	t := &Tracker{
-		probe: probe, interval: interval,
+		probe: probe, interval: opts.Interval, probeTimeout: opts.ProbeTimeout,
 		state: Writable, since: time.Now(),
 		kick: make(chan struct{}, 1), stop: make(chan struct{}), done: make(chan struct{}),
 	}
@@ -210,7 +228,7 @@ func (t *Tracker) loop() {
 
 // check probes once and reports whether the database was closed.
 func (t *Tracker) check() (closed bool) {
-	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), t.probeTimeout)
 	p, err := t.probe(ctx)
 	cancel()
 	if err != nil && (errors.Is(err, sql.ErrConnDone) || strings.Contains(err.Error(), "sql: database is closed")) {
