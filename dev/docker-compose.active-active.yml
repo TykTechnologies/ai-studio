@@ -1,0 +1,290 @@
+# Tyk AI Studio - Two-site active-active development stack
+#
+# Two control planes ("site-a", "site-b") over one replicated PostgreSQL, and
+# two edges that know both control planes: the topology of
+# features/ActiveActive.md, small enough to break by hand.
+# See the "Active-active stack" section of dev/README.md.
+#
+# Usage (from the project root):
+#   make dev-aa            start (detached)       make dev-aa-ent   Enterprise
+#   make dev-aa-status     roles and cluster status
+#   make dev-aa-down       stop, keep the data    make dev-aa-clean  remove it
+#
+# It is a compose project of its own (midsommar-aa) with its own network,
+# volumes and host ports, so it does not touch the standard dev stack:
+#
+#   3100   UI (React dev server, through the sticky front proxy)
+#   8100   API through the front proxy (either site)
+#   8180   site-a Studio API          8280   site-b Studio API
+#   50151  site-a control gRPC        50251  site-b control gRPC   (cuttable proxies)
+#   8181   edge-a gateway             8281   edge-b gateway
+#   55441  pg-a                       55442  pg-b    (127.0.0.1 only, password)
+#
+# Nothing here fails over by itself. dev/aa/aa.sh plays the failover manager.
+
+name: midsommar-aa
+
+x-studio: &studio
+  image: midsommar-aa-build
+  working_dir: /app
+  command: ["/aa-bin/studio", "-env=/app/dev/.env"]
+  depends_on:
+    build:
+      condition: service_completed_successfully
+    pg-a:
+      condition: service_started
+    pg-b:
+      condition: service_started
+  healthcheck:
+    test: ["CMD", "wget", "-q", "-O-", "http://localhost:8080/health"]
+    interval: 5s
+    timeout: 5s
+    retries: 60
+    start_period: 20s
+  networks: [aa]
+
+x-studio-env: &studio-env
+  EDITION: ${AA_EDITION:-ce} # set in dev/.env by make dev-aa / dev-aa-ent
+  DATABASE_TYPE: postgres
+  # One multi-host DSN on both sites: the driver settles on whichever node
+  # accepts writes.
+  DATABASE_URL: postgres://postgres:postgres@pg-a:5432,pg-b:5432/midsommar?sslmode=disable&target_session_attrs=read-write&connect_timeout=3
+  DEVMODE: "true"
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  LOG_FORMAT: text
+  SITE_URL: http://localhost:3100
+  PROXY_URL: http://localhost:9090
+  DOCS_DISABLED: "true"
+  GATEWAY_MODE: control
+  GRPC_PORT: "50051"
+  GRPC_TLS_INSECURE: "true"
+  # Chat sessions must work whichever replica a request lands on.
+  QUEUE_TYPE: postgres
+  # Identical on both sites (features/ActiveActive.md): the secrets below
+  # come from dev/.env, the same file for both replicas, with these fallbacks.
+  GRPC_AUTH_TOKEN: ${GRPC_AUTH_TOKEN:-ad115047f87092ae29e1270b6323ea71}
+  TYK_AI_SECRET_KEY: ${TYK_AI_SECRET_KEY:-ad115047f87092ae29e1270b6323ea71}
+  MICROGATEWAY_ENCRYPTION_KEY: ${MICROGATEWAY_ENCRYPTION_KEY:-ad115047f87092ae29e1270b6323ea71}
+  CSRF_KEY: ${CSRF_KEY:-dev-aa-csrf-key-not-for-production}
+  TYK_AI_LICENSE: ${TYK_AI_LICENSE:-}
+  ALLOW_INTERNAL_NETWORK_ACCESS: "true"
+  LLM_UPSTREAM_BLOCK_INTERNAL: "false"
+
+x-edge: &edge
+  image: midsommar-aa-build
+  working_dir: /app
+  command: ["/aa-bin/microgateway", "-env=/app/dev/.env.gateway"]
+  depends_on:
+    build:
+      condition: service_completed_successfully
+    studio-a:
+      condition: service_healthy
+    studio-b:
+      condition: service_healthy
+  networks: [aa]
+
+x-edge-env: &edge-env
+  EDITION: ${AA_EDITION:-ce} # set in dev/.env by make dev-aa / dev-aa-ent
+  GATEWAY_MODE: edge
+  EDGE_NAMESPACE: default
+  # dev/.env.gateway names one control plane; here each edge lists two
+  # (CONTROL_ENDPOINTS below), and setting both is a start-up error.
+  CONTROL_ENDPOINT: ""
+  EDGE_AUTH_TOKEN: ${GRPC_AUTH_TOKEN:-ad115047f87092ae29e1270b6323ea71}
+  ENCRYPTION_KEY: ${MICROGATEWAY_ENCRYPTION_KEY:-ad115047f87092ae29e1270b6323ea71}
+  EDGE_TLS_ENABLED: "false"
+  EDGE_ALLOW_INSECURE: "true"
+  EDGE_RECONNECT_INTERVAL: 2s
+  TYK_AI_LICENSE: ${TYK_AI_LICENSE:-}
+  # The edge's own database, on a volume: what last-known-good starts from.
+  DATABASE_TYPE: sqlite
+  DATABASE_DSN: file:/edge-data/edge.db?mode=rwc
+  LLM_UPSTREAM_BLOCK_INTERNAL: "false"
+
+# The nodes trust the stack's own network and nothing else; the host ports
+# are bound to loopback and ask for the password (dev/aa/pg-node.sh).
+x-pg: &pg
+  image: postgres:16-alpine
+  user: postgres
+  entrypoint: ["/aa/pg-node.sh"]
+  stop_grace_period: 20s
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U postgres -q"]
+    interval: 3s
+    timeout: 3s
+    retries: 40
+  networks: [aa]
+
+services:
+  # --- PostgreSQL: a primary and a synchronous hot standby -----------------
+  pg-a:
+    <<: *pg
+    container_name: midsommar-aa-pg-a
+    environment: {AA_NODE: pg-a, AA_PEER: pg-b, AA_INITIAL_ROLE: primary, POSTGRES_DB: midsommar}
+    ports: ["127.0.0.1:55441:5432"]
+    volumes:
+      - ./aa:/aa:ro
+      - pg_a:/var/lib/postgresql/data
+
+  pg-b:
+    <<: *pg
+    container_name: midsommar-aa-pg-b
+    environment: {AA_NODE: pg-b, AA_PEER: pg-a, AA_INITIAL_ROLE: standby, POSTGRES_DB: midsommar}
+    ports: ["127.0.0.1:55442:5432"]
+    volumes:
+      - ./aa:/aa:ro
+      - pg_b:/var/lib/postgresql/data
+
+  # --- One build for both sites and both edges -----------------------------
+  build:
+    image: midsommar-aa-build
+    build:
+      context: ..
+      dockerfile: dev/Dockerfile.studio
+      args:
+        EDITION: ${AA_EDITION:-ce}
+    container_name: midsommar-aa-build
+    environment:
+      EDITION: ${AA_EDITION:-ce}
+    command:
+      - sh
+      - -ec
+      - |
+        mkdir -p /app/ui/admin-frontend/build /app/docs/site/dist
+        [ -n "$$(ls -A /app/ui/admin-frontend/build)" ] || touch /app/ui/admin-frontend/build/.gitkeep
+        [ -n "$$(ls -A /app/docs/site/dist)" ] || touch /app/docs/site/dist/.gitkeep
+        if [ "$$EDITION" = ent ] && [ -d /app/enterprise ]; then
+          echo "Building Studio and microgateway (Enterprise)..."
+          GOWORK=/app/enterprise.work go build -tags enterprise -o /aa-bin/studio .
+          (cd microgateway && go build -tags enterprise -o /aa-bin/microgateway ./cmd/microgateway)
+        else
+          echo "Building Studio and microgateway (Community)..."
+          go build -o /aa-bin/studio .
+          (cd microgateway && go build -o /aa-bin/microgateway ./cmd/microgateway)
+        fi
+    volumes:
+      - ..:/app
+      - /app/ui/admin-frontend/node_modules
+      - aa_bin:/aa-bin
+      - go_cache:/root/go/pkg/mod
+      - go_build_cache:/root/.cache/go-build
+    networks: [aa]
+
+  # --- Site A --------------------------------------------------------------
+  studio-a:
+    <<: *studio
+    container_name: midsommar-aa-studio-a
+    environment:
+      <<: *studio-env
+      CLUSTER_NODE_LABEL: site-a
+    ports: ["8180:8080"]
+    volumes:
+      - ..:/app
+      - aa_bin:/aa-bin:ro
+      - studio_a_data:/app/data
+
+  # The address edges use for site A's control plane. Stopping this proxy
+  # cuts the gRPC path and nothing else (aa.sh cut-cp).
+  cp-a:
+    image: alpine/socat:1.8.0.3
+    container_name: midsommar-aa-cp-a
+    command: ["TCP-LISTEN:50051,fork,reuseaddr", "TCP:studio-a:50051"]
+    ports: ["50151:50051"]
+    networks: [aa]
+
+  edge-a:
+    <<: *edge
+    container_name: midsommar-aa-edge-a
+    environment:
+      <<: *edge-env
+      EDGE_ID: edge-site-a
+      CONTROL_ENDPOINTS: cp-a:50051,cp-b:50051
+    ports: ["8181:8080"]
+    volumes:
+      - ..:/app
+      - aa_bin:/aa-bin:ro
+      - edge_a_data:/edge-data
+
+  # --- Site B --------------------------------------------------------------
+  studio-b:
+    <<: *studio
+    container_name: midsommar-aa-studio-b
+    environment:
+      <<: *studio-env
+      CLUSTER_NODE_LABEL: site-b
+    ports: ["8280:8080"]
+    volumes:
+      - ..:/app
+      - aa_bin:/aa-bin:ro
+      - studio_b_data:/app/data
+
+  cp-b:
+    image: alpine/socat:1.8.0.3
+    container_name: midsommar-aa-cp-b
+    command: ["TCP-LISTEN:50051,fork,reuseaddr", "TCP:studio-b:50051"]
+    ports: ["50251:50051"]
+    networks: [aa]
+
+  edge-b:
+    <<: *edge
+    container_name: midsommar-aa-edge-b
+    environment:
+      <<: *edge-env
+      EDGE_ID: edge-site-b
+      CONTROL_ENDPOINTS: cp-b:50051,cp-a:50051
+    ports: ["8281:8080"]
+    volumes:
+      - ..:/app
+      - aa_bin:/aa-bin:ro
+      - edge_b_data:/edge-data
+
+  # --- In front of both sites ----------------------------------------------
+  # Sticky by client address: a browser session stays on one replica and
+  # moves to the other only when its replica stops answering.
+  front:
+    image: nginx:1.27-alpine
+    container_name: midsommar-aa-front
+    volumes:
+      - ./aa/front.conf:/etc/nginx/conf.d/default.conf:ro
+    ports: ["8100:8080"]
+    # nginx resolves both replicas' names when it starts, so they must
+    # exist first (on a first start they wait for the build).
+    depends_on:
+      studio-a:
+        condition: service_started
+      studio-b:
+        condition: service_started
+    restart: on-failure
+    networks: [aa]
+
+  frontend:
+    image: node:20-alpine
+    container_name: midsommar-aa-frontend
+    working_dir: /app/ui/admin-frontend
+    command: sh -c "npm install --ignore-scripts && npm start"
+    volumes:
+      - ../ui/admin-frontend:/app/ui/admin-frontend
+      - /app/ui/admin-frontend/node_modules
+    ports: ["3100:3000"]
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      PROXY_TARGET: http://front:8080
+      REACT_APP_API_URL: http://localhost:8100
+      WDS_SOCKET_PORT: "3100"
+    depends_on: [front]
+    networks: [aa]
+
+volumes:
+  pg_a: {name: midsommar-aa-pg-a}
+  pg_b: {name: midsommar-aa-pg-b}
+  aa_bin: {name: midsommar-aa-bin}
+  studio_a_data: {name: midsommar-aa-studio-a-data}
+  studio_b_data: {name: midsommar-aa-studio-b-data}
+  edge_a_data: {name: midsommar-aa-edge-a-data}
+  edge_b_data: {name: midsommar-aa-edge-b-data}
+  go_cache: {name: midsommar-aa-go-cache}
+  go_build_cache: {name: midsommar-aa-go-build-cache}
+
+networks:
+  aa:
+    name: midsommar-aa-network

@@ -1511,6 +1511,14 @@ dev-help:
 	@echo "  make dev-start-full-ent Start enterprise full (detached, no plugin builds)"
 	@echo "  make dev-start-full-ent-plugins Enterprise full + plugins (detached)"
 	@echo ""
+	@echo "Two-site active-active stack (own ports and volumes, detached):"
+	@echo "  make dev-aa           Two control planes, primary + standby Postgres, two edges"
+	@echo "  make dev-aa-ent       The same, Enterprise Edition"
+	@echo "  make dev-aa-status    Roles, replication, replicas, edges"
+	@echo "  make dev-aa-rebuild   Rebuild and restart on the new binaries"
+	@echo "  make dev-aa-down      Stop (keeps data); dev-aa-clean removes it"
+	@echo "  dev/aa/aa.sh          Stop a site, promote, rejoin, cut a control plane"
+	@echo ""
 	@echo "Management:"
 	@echo "  make dev-down         Stop all containers"
 	@echo "  make dev-logs         View all logs"
@@ -1626,6 +1634,95 @@ dev-start-full-ent: ent-link
 # Start full enterprise environment with the plugin builder (detached)
 dev-start-full-ent-plugins: PLUGIN_PROFILE = --profile plugins
 dev-start-full-ent-plugins: dev-start-full-ent
+
+# ============================================================================
+# Two-site active-active stack (features/ActiveActive.md)
+# ============================================================================
+# Two control planes over a PostgreSQL primary and hot standby, two edges that
+# know both control planes, and dev/aa/aa.sh to break and mend it. A compose
+# project of its own (midsommar-aa): own network, volumes and host ports, so
+# it can run next to the standard dev stack. Always detached. See the
+# "Active-active stack" section of dev/README.md.
+
+AA_COMPOSE = docker compose -f docker-compose.active-active.yml
+
+.PHONY: dev-aa dev-aa-ent dev-aa-env dev-aa-rebuild dev-aa-status dev-aa-down dev-aa-clean
+
+# Env files and secrets, as for the other dev targets: dev/.env.secrets wins
+# over dev/.env.
+dev-aa-env:
+	@if [ ! -f dev/.env ]; then \
+		cp dev/.env.dev dev/.env; \
+		echo "📝 Created dev/.env from template"; \
+	fi
+	@if [ ! -f dev/.env.gateway ]; then \
+		cp dev/.env.gateway.dev dev/.env.gateway; \
+		echo "📝 Created dev/.env.gateway from template"; \
+	fi
+	@if [ -f dev/.env.secrets ]; then \
+		echo "🔐 Merging dev/.env.secrets into dev/.env"; \
+		while IFS= read -r line || [ -n "$$line" ]; do \
+			key=$$(echo "$$line" | cut -d= -f1); \
+			if [ -n "$$key" ] && [ "$${key#\#}" = "$$key" ]; then \
+				{ grep -v "^$$key=" dev/.env || true; echo "$$line"; } > dev/.env.merged; \
+				mv dev/.env.merged dev/.env; \
+			fi; \
+		done < dev/.env.secrets; \
+	fi
+
+# The stack's edition is kept in dev/.env as AA_EDITION, where every compose
+# command (these targets and dev/aa/aa.sh) reads it; EDITION there belongs to
+# the standard stack.
+define aa_set_edition
+{ grep -v "^AA_EDITION=" dev/.env || true; echo "AA_EDITION=$(1)"; } > dev/.env.merged && mv dev/.env.merged dev/.env
+endef
+
+# Start the two-site stack (Community Edition)
+dev-aa: dev-aa-env
+	@echo "🚀 Starting the two-site active-active stack (detached)..."
+	@$(call aa_set_edition,ce)
+	cd dev && $(AA_COMPOSE) up --build -d --wait
+	@echo "✅ Started. UI http://localhost:3100, site-a API :8180, site-b API :8280."
+	@echo "   make dev-aa-status, then dev/aa/aa.sh to stop a site, promote, cut a control plane."
+
+# Start the two-site stack (Enterprise Edition)
+dev-aa-ent: ent-link dev-aa-env
+	@if [ ! -d "enterprise/.git" ] && [ ! -f "enterprise/.git" ]; then \
+		echo "❌ ERROR: Enterprise submodule not initialized. Run: make init-enterprise"; \
+		exit 1; \
+	fi
+	@if ! grep -q "^TYK_AI_LICENSE=." dev/.env; then \
+		echo "❌ ERROR: TYK_AI_LICENSE is not set. Put it in dev/.env.secrets."; \
+		exit 1; \
+	fi
+	@echo "🏢 Starting the two-site active-active stack, Enterprise (detached)..."
+	@$(call aa_set_edition,ent)
+	cd dev && $(AA_COMPOSE) up --build -d --wait
+	@echo "✅ Started. UI http://localhost:3100, site-a API :8180, site-b API :8280."
+
+# Rebuild Studio and the microgateway from the working tree, in the edition
+# the stack was started in, and restart the replicas and edges on the new
+# binaries.
+dev-aa-rebuild:
+	@echo "🔨 Rebuilding ($$(sed -n 's/^AA_EDITION=//p' dev/.env | grep . || echo ce))..."
+	cd dev && $(AA_COMPOSE) run --rm build
+	@# The edges last: an edge that starts while no control plane answers exits.
+	cd dev && $(AA_COMPOSE) stop edge-a edge-b
+	cd dev && $(AA_COMPOSE) restart studio-a studio-b
+	cd dev && $(AA_COMPOSE) up -d --no-deps --wait studio-a studio-b
+	cd dev && $(AA_COMPOSE) up -d --no-deps edge-a edge-b
+
+# Roles, replication, replicas and edges
+dev-aa-status:
+	@dev/aa/aa.sh status
+
+# Stop the two-site stack; data and roles are kept
+dev-aa-down:
+	cd dev && $(AA_COMPOSE) down
+
+# Stop it and remove its volumes (databases, edge data, build cache)
+dev-aa-clean:
+	cd dev && $(AA_COMPOSE) down -v
 
 # ============================================================================
 # Non-blocking Log Commands (for automation/Claude Code)
