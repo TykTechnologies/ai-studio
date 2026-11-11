@@ -56,6 +56,10 @@ type AnalyticsPulsePlugin struct {
 	// number, as it used to be, those records were stored twice. Guarded by
 	// bufferMutex; nil while the pulse that took it is in flight.
 	held *heldPulse
+	// returned holds the newer part of a batch that was too large for one
+	// message, to be sent as the next batch, ahead of the buffers
+	// (putBackLocked). Guarded by bufferMutex.
+	returned pulseSnapshot
 
 	// bootID is drawn once per process and sent with every pulse: sequence
 	// numbers start at 1 again after a restart, and the boot ID keeps the
@@ -612,7 +616,7 @@ func (s *pulseSnapshot) size() int {
 // and the batch held for a retry. Caller holds bufferMutex.
 func (p *AnalyticsPulsePlugin) totalBufferedLocked() int {
 	n := len(p.analyticsBuffer) + len(p.budgetBuffer) + len(p.proxyBuffer) +
-		len(p.complianceBuffer) + len(p.toolCallBuffer)
+		len(p.complianceBuffer) + len(p.toolCallBuffer) + p.returned.size()
 	if p.held != nil {
 		n += p.held.snap.size()
 	}
@@ -673,6 +677,13 @@ func (p *AnalyticsPulsePlugin) batchRecords() int {
 // each kind in proportion to what is buffered of it, so that no kind waits
 // behind another. Caller holds bufferMutex.
 func (p *AnalyticsPulsePlugin) takeBatchLocked(max int) pulseSnapshot {
+	// Records returned from a batch that was split come first, as a batch
+	// of their own: they are the oldest, and at most a batch.
+	if !p.returned.empty() {
+		r := p.returned
+		p.returned = pulseSnapshot{}
+		return r
+	}
 	total := len(p.analyticsBuffer) + len(p.budgetBuffer) + len(p.proxyBuffer) + len(p.complianceBuffer) + len(p.toolCallBuffer)
 	if max <= 0 || total <= max {
 		return p.takeSnapshotLocked()
@@ -740,24 +751,47 @@ func (s pulseSnapshot) halve() (first, second pulseSnapshot) {
 	return first, second
 }
 
-// putBackLocked returns records taken for a pulse to the front of the
-// buffers: they are older than anything buffered since. Caller holds
-// bufferMutex.
+// putBackLocked returns records taken for a pulse: they are older than
+// anything buffered since, so they are the next batch. They wait in
+// p.returned, apart from the buffers: putting them back in front of the
+// buffers would copy the whole backlog at every split. What is already
+// waiting there is newer than s (it was split off before), so s goes in
+// front of it; both are at most a batch. Caller holds bufferMutex.
 func (p *AnalyticsPulsePlugin) putBackLocked(s pulseSnapshot) {
 	if s.empty() {
 		return
 	}
 	// Analytics events and their metadata are paired by index.
-	meta := s.metadata
-	for len(meta) < len(s.analytics) {
-		meta = append(meta, AnalyticsMetadata{})
+	for len(s.metadata) < len(s.analytics) {
+		s.metadata = append(s.metadata, AnalyticsMetadata{})
 	}
-	p.analyticsBuffer = append(append(make([]database.AnalyticsEvent, 0, len(s.analytics)+len(p.analyticsBuffer)), s.analytics...), p.analyticsBuffer...)
-	p.analyticsMetadata = append(append(make([]AnalyticsMetadata, 0, len(meta)+len(p.analyticsMetadata)), meta...), p.analyticsMetadata...)
-	p.budgetBuffer = append(append(make([]BudgetUsageBuffer, 0, len(s.budget)+len(p.budgetBuffer)), s.budget...), p.budgetBuffer...)
-	p.proxyBuffer = append(append(make([]ProxyLogBuffer, 0, len(s.proxy)+len(p.proxyBuffer)), s.proxy...), p.proxyBuffer...)
-	p.complianceBuffer = append(append(make([]ComplianceEventBuffer, 0, len(s.compliance)+len(p.complianceBuffer)), s.compliance...), p.complianceBuffer...)
-	p.toolCallBuffer = append(append(make([]ToolCallBuffer, 0, len(s.toolCalls)+len(p.toolCallBuffer)), s.toolCalls...), p.toolCallBuffer...)
+	r := p.returned
+	p.returned = pulseSnapshot{
+		analytics:  append(s.analytics[:len(s.analytics):len(s.analytics)], r.analytics...),
+		metadata:   append(s.metadata[:len(s.metadata):len(s.metadata)], r.metadata...),
+		budget:     append(s.budget[:len(s.budget):len(s.budget)], r.budget...),
+		proxy:      append(s.proxy[:len(s.proxy):len(s.proxy)], r.proxy...),
+		compliance: append(s.compliance[:len(s.compliance):len(s.compliance)], r.compliance...),
+		toolCalls:  append(s.toolCalls[:len(s.toolCalls):len(s.toolCalls)], r.toolCalls...),
+	}
+}
+
+// unreturnLocked moves the records waiting in p.returned to the front of
+// the buffers. It copies the buffers, so it is for the rare paths that
+// treat everything buffered as one (a failed pulse applying the cap), not
+// for the split of a batch. Caller holds bufferMutex.
+func (p *AnalyticsPulsePlugin) unreturnLocked() {
+	r := p.returned
+	if r.empty() {
+		return
+	}
+	p.returned = pulseSnapshot{}
+	p.analyticsBuffer = append(r.analytics[:len(r.analytics):len(r.analytics)], p.analyticsBuffer...)
+	p.analyticsMetadata = append(r.metadata[:len(r.metadata):len(r.metadata)], p.analyticsMetadata...)
+	p.budgetBuffer = append(r.budget[:len(r.budget):len(r.budget)], p.budgetBuffer...)
+	p.proxyBuffer = append(r.proxy[:len(r.proxy):len(r.proxy)], p.proxyBuffer...)
+	p.complianceBuffer = append(r.compliance[:len(r.compliance):len(r.compliance)], p.complianceBuffer...)
+	p.toolCallBuffer = append(r.toolCalls[:len(r.toolCalls):len(r.toolCalls)], p.toolCallBuffer...)
 }
 
 // takeSnapshotLocked moves everything buffered into a snapshot. Caller holds bufferMutex.
@@ -810,6 +844,9 @@ func (p *AnalyticsPulsePlugin) nextBatchLocked() (snap pulseSnapshot, seq uint64
 // batch once by its sequence number, can tell a repeat from new data.
 // Caller holds bufferMutex.
 func (p *AnalyticsPulsePlugin) holdSnapshotLocked(snap pulseSnapshot, seq uint64, now time.Time) {
+	// The cap is applied to everything waiting, oldest first: the records
+	// returned from a split batch belong in front of the buffers for that.
+	p.unreturnLocked()
 	cutoff := now.Add(-time.Duration(p.config.EdgeRetentionHours) * time.Hour)
 	fresh := func(ts time.Time) bool { return p.config.EdgeRetentionHours <= 0 || !ts.Before(cutoff) }
 
