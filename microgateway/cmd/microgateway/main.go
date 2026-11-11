@@ -26,6 +26,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/pathcheck"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -174,6 +175,10 @@ func main() {
 
 	// Initialize edge client FIRST if in edge mode (before creating services)
 	var edgeClient *grpc.SimpleEdgeClient
+	// lastKnownGood is set when no control plane answered and the edge
+	// starts from the snapshot stored in its database instead
+	// (EDGE_START_FROM_LAST_KNOWN_GOOD).
+	var lastKnownGood *services.LastKnownGood
 	if cfg.IsEdge() {
 		log.Debug().
 			Strs("control_endpoints", cfg.HubSpoke.Endpoints()).
@@ -181,12 +186,10 @@ func main() {
 			Msg("Connecting to control server before initializing services")
 
 		edgeClient = grpc.NewSimpleEdgeClient(cfg, Version, BuildHash, BuildTime)
-
-		if err := edgeClient.Start(); err != nil {
-			log.Fatal().Err(err).Msg("Failed to connect to control server - edge cannot start without configuration")
+		lastKnownGood = mustStartEdgeClient(edgeClient, db)
+		if lastKnownGood == nil {
+			log.Debug().Msg("Successfully connected to control server")
 		}
-
-		log.Debug().Msg("Successfully connected to control server")
 	}
 
 	// Initialize hub-spoke service container based on gateway mode
@@ -266,6 +269,10 @@ func main() {
 					link := edgeClient.ControlLink()
 					return link.Endpoint, link.Connected
 				}
+				// ... and /ready, microgateway_config_source and
+				// microgateway_config_age_seconds where its configuration
+				// came from and when it last had a control plane.
+				serviceContainer.ConfigSource = edgeClient.ConfigSource
 
 				// Heartbeats report the configuration applied to SQLite: a
 				// snapshot that failed, or was applied without entries the
@@ -334,6 +341,13 @@ func main() {
 				edgeReloadHandler.SetPluginReconciler(func() error {
 					return serviceContainer.PluginManager.ReconcilePlugins(context.Background())
 				})
+
+				// An edge that started from last-known-good keeps looking for
+				// a control plane now that it can apply what one sends. The
+				// first registration brings the live configuration.
+				if lastKnownGood != nil {
+					edgeClient.StartReconnecting()
+				}
 				log.Debug().Msg("Edge reload handler created - gateway reloader will be set after server creation")
 
 				// Create and connect budget sync handler for multi-edge budget synchronization
@@ -750,4 +764,23 @@ func applyEdgeReferencePolicy(cfg *config.Config) {
 	if cfg.IsEdge() {
 		secrets.DisableEnvRefs()
 	}
+}
+
+// mustStartEdgeClient connects the edge to a control plane, or, with
+// EDGE_START_FROM_LAST_KNOWN_GOOD and no control plane answering, returns
+// the stored snapshot the edge will serve (nil when connected). When neither
+// is possible the edge cannot run: it logs the reason and exits non-zero.
+func mustStartEdgeClient(edgeClient *grpc.SimpleEdgeClient, db *gorm.DB) *services.LastKnownGood {
+	// Each contact with a control plane is recorded, so that a later start
+	// without one knows how long the edge has been on its own.
+	edgeClient.SetControlContactHook(func(at time.Time) {
+		if err := services.RecordControlContact(db, at); err != nil {
+			log.Warn().Err(err).Msg("Could not record the contact with the control plane")
+		}
+	})
+	lastKnownGood, err := edgeClient.StartWithLastKnownGood(db)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to connect to control server - edge cannot start without configuration")
+	}
+	return lastKnownGood
 }

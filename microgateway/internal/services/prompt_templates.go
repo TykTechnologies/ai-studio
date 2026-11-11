@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails/templates"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
@@ -43,6 +44,7 @@ func (s *edgeTemplateSource) Matched(t *templates.Template) {
 // and logged: its App's requests are then scored whole.
 func installPromptTemplates(cfgs []*pb.PromptTemplateConfig) {
 	if len(cfgs) == 0 {
+		installedTemplates.Store(nil)
 		scripting.SetPromptTemplateSource(nil)
 		return
 	}
@@ -68,10 +70,26 @@ func installPromptTemplates(cfgs []*pb.PromptTemplateConfig) {
 		src.byApp[uint(c.AppId)] = append(src.byApp[uint(c.AppId)], t)
 	}
 	if len(src.byApp) == 0 {
+		installedTemplates.Store(nil)
 		scripting.SetPromptTemplateSource(nil)
 		return
 	}
+	installedTemplates.Store(src)
 	scripting.SetPromptTemplateSource(src)
+}
+
+// installedTemplates is the template source of the snapshot last applied.
+var installedTemplates atomic.Pointer[edgeTemplateSource]
+
+// InstalledPromptTemplates returns how many trusted prompt templates this
+// edge holds for an App, from the snapshot it last applied. It exists for
+// tests, which have no other way to see this in-memory configuration (the
+// last-known-good tests assert it is rebuilt); nothing at run time calls it.
+func InstalledPromptTemplates(appID uint) int {
+	if src := installedTemplates.Load(); src != nil {
+		return len(src.byApp[appID])
+	}
+	return 0
 }
 
 // PromptTemplateMatches holds the IDs of the templates that matched since

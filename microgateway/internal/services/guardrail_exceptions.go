@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
@@ -68,10 +69,28 @@ func installGuardrailExceptions(cfgs []*pb.GuardrailExceptionConfig) {
 		})
 	}
 	if len(src.byApp) == 0 {
+		installedExceptions.Store(nil)
 		scripting.SetExceptionSource(nil)
 		return
 	}
+	installedExceptions.Store(src)
 	scripting.SetExceptionSource(src)
+}
+
+// installedExceptions is the exception source of the snapshot last applied.
+var installedExceptions atomic.Pointer[edgeExceptionSource]
+
+// InstalledGuardrailExceptions returns how many guardrail exceptions this
+// edge holds for an App, from the snapshot it last applied. It exists for
+// tests, which have no other way to see this in-memory configuration (the
+// last-known-good tests assert it is rebuilt); nothing at run time calls it.
+func InstalledGuardrailExceptions(appID uint) int {
+	if src := installedExceptions.Load(); src != nil {
+		if app := src.byApp[appID]; app != nil {
+			return len(app.Exceptions)
+		}
+	}
+	return 0
 }
 
 // GuardrailExceptionHits holds the IDs of the guardrail exceptions that

@@ -230,6 +230,21 @@ type HubSpokeConfig struct {
 	// is until that connection ends (Studio's GRPC_MAX_CONNECTION_AGE ends
 	// connections on a schedule, which also rebalances edges).
 	ControlFailbackInterval time.Duration `env:"EDGE_CONTROL_FAILBACK_INTERVAL" envDefault:"0"`
+
+	// StartFromLastKnownGood lets an edge that finds no control plane at
+	// start-up serve the configuration snapshot it last applied (kept,
+	// encrypted, in its own database) instead of exiting. Off by default:
+	// such an edge can serve something an administrator has removed since,
+	// until it reconnects. The same trade as EDGE_TOKEN_CACHE_STALE_GRACE.
+	StartFromLastKnownGood bool `env:"EDGE_START_FROM_LAST_KNOWN_GOOD" envDefault:"false"`
+	// StartupControlTimeout is how long an edge with
+	// StartFromLastKnownGood keeps trying its control endpoints at start-up
+	// before it falls back to the stored snapshot.
+	StartupControlTimeout time.Duration `env:"EDGE_STARTUP_CONTROL_TIMEOUT" envDefault:"30s"`
+	// LastKnownGoodMaxAge is the longest an edge may have been without a
+	// control plane and still start from its stored snapshot; past it the
+	// edge exits as it does without the option. 0 means no limit.
+	LastKnownGoodMaxAge time.Duration `env:"EDGE_LAST_KNOWN_GOOD_MAX_AGE" envDefault:"72h"`
 	EdgeID            string        `env:"EDGE_ID" envDefault:""`
 	EdgeNamespace     string        `env:"EDGE_NAMESPACE" envDefault:""`
 	ReconnectInterval time.Duration `env:"EDGE_RECONNECT_INTERVAL" envDefault:"5s"`
@@ -307,6 +322,12 @@ func (h HubSpokeConfig) validateEndpoints() error {
 	}
 	if h.ControlFailbackInterval < 0 {
 		return fmt.Errorf("EDGE_CONTROL_FAILBACK_INTERVAL must not be negative: %s", h.ControlFailbackInterval)
+	}
+	if h.StartupControlTimeout < 0 {
+		return fmt.Errorf("EDGE_STARTUP_CONTROL_TIMEOUT must not be negative: %s", h.StartupControlTimeout)
+	}
+	if h.LastKnownGoodMaxAge < 0 {
+		return fmt.Errorf("EDGE_LAST_KNOWN_GOOD_MAX_AGE must not be negative (0 means no limit): %s", h.LastKnownGoodMaxAge)
 	}
 	return nil
 }

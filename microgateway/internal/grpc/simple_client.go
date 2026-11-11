@@ -54,6 +54,21 @@ type SimpleEdgeClient struct {
 	endpointIdx  atomic.Int32
 	failbackOnce sync.Once
 
+	// Last-known-good (last_known_good.go). lastKnownGood is set while the
+	// edge serves the snapshot stored in its own database because no
+	// control plane answered at start-up, and cleared when a control plane
+	// sends a configuration. lastContact is the time (Unix nanoseconds) of
+	// the last registration a control plane accepted or heartbeat it
+	// acknowledged; onContact, when set, is told of each.
+	lastKnownGood   atomic.Bool
+	lastContact     atomic.Int64
+	onContact       atomic.Pointer[func(time.Time)]
+	// startupDeadline and startupMinAttempt are set while StartWithin runs
+	// (main goroutine only): a registration then has until the deadline,
+	// and at least startupMinAttempt, to be answered.
+	startupDeadline   time.Time
+	startupMinAttempt time.Duration
+
 	// Config checksum tracking for sync status; guarded by configMu with
 	// configCache (see setLoadedConfig).
 	configMu       sync.RWMutex
@@ -286,7 +301,19 @@ func (c *SimpleEdgeClient) registerWithControl() error {
 	if client == nil {
 		return fmt.Errorf("not connected to control server")
 	}
-	resp, err := c.registerOn(context.Background(), client)
+	ctx := context.Background()
+	if !c.startupDeadline.IsZero() {
+		// StartWithin: a control plane that accepts the connection and then
+		// does not answer must not hold the start-up past its limit.
+		limit := time.Until(c.startupDeadline)
+		if limit < c.startupMinAttempt {
+			limit = c.startupMinAttempt
+		}
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, limit)
+		defer cancel()
+	}
+	resp, err := c.registerOn(ctx, client)
 	if err != nil {
 		return err
 	}
@@ -324,6 +351,7 @@ func (c *SimpleEdgeClient) registerOn(ctx context.Context, client pb.Configurati
 	if !resp.Success {
 		return nil, fmt.Errorf("registration rejected: %s", resp.Message)
 	}
+	c.controlContact()
 	return resp, nil
 }
 
@@ -378,6 +406,8 @@ func (c *SimpleEdgeClient) setLoadedConfig(snap *pb.ConfigurationSnapshot) {
 	c.configCache = snap
 	c.loadedChecksum = snap.Checksum
 	c.loadedVersion = snap.Version
+	// Every caller but UseLastKnownGood has it from a control plane.
+	c.lastKnownGood.Store(false)
 }
 
 // SetAppliedConfigSource makes heartbeats report the configuration the edge
@@ -956,6 +986,10 @@ func (c *SimpleEdgeClient) handleHeartbeatResponse(resp *pb.HeartbeatResponse) e
 		Bool("request_full_sync", resp.RequestFullSync).
 		Bool("shutdown_requested", resp.ShutdownRequested).
 		Msg("Received heartbeat response")
+
+	if resp.Acknowledged {
+		c.controlContact()
+	}
 
 	// Log sync status warning if out of sync
 	if resp.ExpectedChecksum != "" && !resp.IsInSync {

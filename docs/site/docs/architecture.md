@@ -91,7 +91,7 @@ Edition features are controlled by **Go build tags**. Community and enterprise-s
 2. **Snapshots are checksummed** (SHA-256). Microgateways report their loaded checksum in heartbeats. When checksums mismatch, the admin UI shows the gateway as "Pending" or "Stale".
 3. **On configuration change**, an admin pushes a reload signal. This can target all gateways or a specific namespace. Each gateway then pulls the latest snapshot.
 4. **Namespaces** control what gets loaded onto each gateway. LLMs, Apps, Filters, and Plugins can all be namespaced.
-5. **If the hub is unreachable**, running gateways continue operating from the configuration they have loaded and reconnect in the background. A gateway that starts or restarts while the hub is unreachable exits: it does not start from the copy of the configuration in its local database (SQLite or PostgreSQL). See the failure table in the [reference architecture](./reference-architecture.md).
+5. **If the hub is unreachable**, running gateways continue operating from the configuration they have loaded and reconnect in the background. A gateway that starts or restarts while the hub is unreachable exits by default. With `EDGE_START_FROM_LAST_KNOWN_GOOD=true` it starts from the configuration snapshot it last applied, which it keeps encrypted in its local database (SQLite or PostgreSQL), and takes the live configuration when it reconnects; see [Starting without a control plane](./edge-gateways.md#starting-without-a-control-plane). See the failure table in the [reference architecture](./reference-architecture.md).
 
 ### What Gets Synced to Gateways
 

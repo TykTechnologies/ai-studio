@@ -295,9 +295,48 @@ Files: `microgateway/cmd/microgateway/main.go`,
    stored snapshot through the normal apply path (`onConfigChange`), starts
    serving, and leaves the reconnect loop running. The first successful
    registration applies the live snapshot as any reconnect does.
+   **Built** (`SimpleEdgeClient.StartWithLastKnownGood`,
+   `microgateway/internal/grpc/last_known_good.go`): with the option off
+   the start is `Start()` as before, one attempt. With it on, the edge
+   repeats the start with the reconnect backoff until the timeout (the
+   last attempt is made when it runs out; a control plane that accepts the
+   connection and does not answer is bounded too), then loads the stored
+   snapshot. Applying it goes through the same sync as a snapshot from a
+   control plane; the stored row is not rewritten by that
+   (`services.KeepStoredSnapshot`), so restoring does not make the
+   snapshot look newly received. The reconnect loop starts once the edge
+   can apply what a control plane sends.
 3. **Refusals.** No stored snapshot, a snapshot for another namespace, one
    that fails to decrypt, or one older than `EDGE_LAST_KNOWN_GOOD_MAX_AGE`
-   (default 72 h, `0` for no limit): exit as today, with the reason.
+   (default 72 h, `0` for no limit): exit as today, with the reason. Added
+   while building: a snapshot whose `applied_at` is more than five minutes
+   in the future by the edge's clock (the clock was set back) is refused
+   too, since no age can be trusted; the remedy is to correct the clock or
+   let the edge connect to a control plane once.
+   **What "older" is measured from** (changed while building, see the
+   epic's notes): the edge's last contact with a control plane, not the
+   time the snapshot was applied. A snapshot is only re-applied, and its
+   row rewritten, when the configuration changes, so by `applied_at` an
+   edge whose configuration had been stable for more than three days
+   would refuse to start although it was in sync a minute before the
+   outage. What the limit is there to bound is how long nobody could
+   change or revoke anything on the edge. So the edge records each
+   contact (a registration accepted, a heartbeat acknowledged) in
+   `sync_states` (topic `control.contact`, written at most once a minute;
+   no schema change), and the age is `now - max(applied_at, last
+   contact)`. `applied_at` stays in the row, authenticated, and in the
+   warning the edge logs.
+   The contact time is authenticated as `applied_at` is, because it
+   decides whether a configuration that may have been revoked is served:
+   the row's `sequence_number` holds 63 bits of
+   `HMAC-SHA256(k, topic || 0x00 || unix seconds)` with
+   `k = HKDF-SHA256(ENCRYPTION_KEY, "control-contact-v1")`. A row without a
+   valid tag (edited in the database, or written under another key) counts
+   as no contact, and the age falls back to `applied_at`. A contact more
+   than five minutes ahead of the edge's clock (the clock was set back) is
+   ignored the same way and logged; within that tolerance the age is zero,
+   never negative; a snapshot whose `applied_at` is itself in the future is
+   refused, since no age can be worked out.
 4. **Default off.** Starting from stored configuration means a restarted
    edge can serve something an administrator has since removed until it
    reconnects. That is an operator's decision, as the stale grace is.
@@ -305,6 +344,11 @@ Files: `microgateway/cmd/microgateway/main.go`,
    control | last_known_good`, metrics `microgateway_config_source` and
    `microgateway_config_age_seconds`. On reconnect the heartbeat reports
    the checksum as usual, so the edge shows Pending or In Sync correctly.
+   **Built:** `microgateway_config_source{source}` is 1 for the source in
+   use and 0 for the other; `microgateway_config_age_seconds` is the time
+   since the last contact with a control plane (a few seconds while
+   connected, growing through an outage): the quantity the max age is
+   compared with.
 6. **Deployment.** The chart only persists the database when
    `kind: StatefulSet` and `persistence.enabled`; a Deployment's `emptyDir`
    survives a container restart but not a rescheduled pod. Document that
@@ -449,7 +493,7 @@ reachable a control plane cannot authenticate a caller at all.
 | `EDGE_CONTROL_FAILBACK_INTERVAL` | edge | off | How often an edge not on its first endpoint tries to return to it |
 | `EDGE_START_FROM_LAST_KNOWN_GOOD` | edge | `false` | Start without a control plane |
 | `EDGE_STARTUP_CONTROL_TIMEOUT` | edge | `30s` | Wait before using last-known-good |
-| `EDGE_LAST_KNOWN_GOOD_MAX_AGE` | edge | `72h` | Oldest snapshot an edge will start from |
+| `EDGE_LAST_KNOWN_GOOD_MAX_AGE` | edge | `72h` | Longest an edge may have been without a control plane and still start from its stored snapshot |
 | `EDGE_CREDENTIAL_SYNC` | edge | `on_demand` | `full` syncs hashed credentials (Enterprise) |
 | `EDGE_CREDENTIAL_SYNC_MAX_AGE` | edge | `24h` | How long a synced list is trusted without a delta |
 

@@ -93,3 +93,29 @@ func TestValidateChecksEndpointsOnlyInEdgeMode(t *testing.T) {
 		ControlEndpoint: "cp:50051", ControlEndpoints: []string{"cp-a:50051"}}
 	require.NoError(t, standalone.Validate(), "a standalone gateway does not read the control endpoints")
 }
+
+// The last-known-good settings: off by default, 30 s and 72 h.
+func TestLastKnownGoodSettings(t *testing.T) {
+	var hs HubSpokeConfig
+	require.NoError(t, env.Parse(&hs))
+	assert.False(t, hs.StartFromLastKnownGood, "off by default")
+	assert.Equal(t, 30*time.Second, hs.StartupControlTimeout)
+	assert.Equal(t, 72*time.Hour, hs.LastKnownGoodMaxAge)
+
+	t.Setenv("EDGE_START_FROM_LAST_KNOWN_GOOD", "true")
+	t.Setenv("EDGE_STARTUP_CONTROL_TIMEOUT", "10s")
+	t.Setenv("EDGE_LAST_KNOWN_GOOD_MAX_AGE", "0")
+	hs = HubSpokeConfig{}
+	require.NoError(t, env.Parse(&hs))
+	assert.True(t, hs.StartFromLastKnownGood)
+	assert.Equal(t, 10*time.Second, hs.StartupControlTimeout)
+	assert.Zero(t, hs.LastKnownGoodMaxAge, "0 means no limit")
+
+	base := HubSpokeConfig{ControlEndpoint: "cp:50051"}
+	neg := base
+	neg.StartupControlTimeout = -time.Second
+	require.ErrorContains(t, neg.validateEndpoints(), "EDGE_STARTUP_CONTROL_TIMEOUT must not be negative")
+	neg = base
+	neg.LastKnownGoodMaxAge = -time.Hour
+	require.ErrorContains(t, neg.validateEndpoints(), "EDGE_LAST_KNOWN_GOOD_MAX_AGE must not be negative")
+}
