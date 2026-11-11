@@ -3,6 +3,7 @@ package models
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
@@ -17,9 +18,9 @@ type CredentialMigration struct {
 	// Migrated rows now have their lookup hash and, with an encryption
 	// key, an encrypted secret.
 	Migrated int
-	// Skipped rows were left as they were: the secret does not decrypt
-	// with the configured key, or another credential has the same secret.
-	// They are logged, and found by nothing until that is put right.
+	// Skipped rows cannot be found by their secret: the secret does not
+	// decrypt with the configured key, or another credential has the same
+	// secret and keeps its hash. They are logged.
 	Skipped int
 }
 
@@ -56,11 +57,13 @@ func MigrateCredentialsAtRest(db *gorm.DB) (CredentialMigration, error) {
 		ID         uint
 		Secret     string
 		SecretHash *string
+		Active     bool
+		DeletedAt  *time.Time
 	}
 	var lastID uint
 	for {
 		var batch []row
-		err := db.Table("credentials").Select("id", "secret", "secret_hash").
+		err := db.Table("credentials").Select("id", "secret", "secret_hash", "active", "deleted_at").
 			Where("id > ? AND secret <> '' AND "+pending, append([]any{lastID}, args...)...).
 			Order("id").Limit(credentialMigrationBatch).Find(&batch).Error
 		if err != nil {
@@ -81,11 +84,20 @@ func MigrateCredentialsAtRest(db *gorm.DB) (CredentialMigration, error) {
 			if !isEncrypted(stored) {
 				stored = secrets.EncryptValue(plain) // plain again when no key is set
 			}
-			done, err := setCredentialAtRest(db, r.ID, r.Secret, stored, secrets.LookupHash(plain))
-			switch {
-			case errors.Is(err, errDuplicateCredentialSecret):
-				logger.Errorf("Credential %d has the same secret as another credential; it is left without a lookup hash and validates nowhere. Regenerate one of the two keys.", r.ID)
+			hash := secrets.LookupHash(plain)
+			done, err := setCredentialAtRest(db, r.ID, r.Secret, stored, hash)
+			if errors.Is(err, errDuplicateCredentialSecret) {
+				// Two rows with one secret: only one can be found by it.
+				usable := r.Active && r.DeletedAt == nil
+				loser, lerr := settleDuplicateSecret(db, r.ID, usable, r.Secret, stored, hash)
+				if lerr != nil {
+					return res, fmt.Errorf("migrate credential %d: %w", r.ID, lerr)
+				}
+				logger.Errorf("Credentials %d and another have the same secret; credential %d is left without a lookup hash and validates nowhere. Regenerate its key.", r.ID, loser)
 				res.Skipped++
+				continue
+			}
+			switch {
 			case err != nil:
 				return res, fmt.Errorf("migrate credential %d: %w", r.ID, err)
 			case done:
@@ -96,6 +108,39 @@ func MigrateCredentialsAtRest(db *gorm.DB) (CredentialMigration, error) {
 }
 
 var errDuplicateCredentialSecret = errors.New("another credential has this secret")
+
+// settleDuplicateSecret decides which of two rows with one secret keeps its
+// lookup hash, and returns the id of the one that does not. Before secrets
+// were hashed, a key shared by two rows validated as the first row, by id,
+// that was live (not soft-deleted) and active: that row keeps validating.
+// So the row being migrated takes the hash from its holder only when it is
+// usable and the holder is not; otherwise the holder, which has the lower
+// id in a migration by id, keeps it. The loser's secret is still brought to
+// its stored form, without a hash.
+func settleDuplicateSecret(db *gorm.DB, id uint, usable bool, read, stored, hash string) (loser uint, err error) {
+	var holder struct {
+		ID        uint
+		Active    bool
+		DeletedAt *time.Time
+	}
+	if err := db.Table("credentials").Select("id", "active", "deleted_at").Where("secret_hash = ? AND id <> ?", hash, id).Take(&holder).Error; err != nil {
+		return 0, err
+	}
+	holderUsable := holder.Active && holder.DeletedAt == nil
+	if !usable || holderUsable {
+		err := db.Table("credentials").Where("id = ? AND secret = ?", id, read).
+			UpdateColumns(map[string]any{"secret": stored, "secret_hash": nil}).Error
+		return id, err
+	}
+	return holder.ID, db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Table("credentials").Where("id = ? AND secret_hash = ?", holder.ID, hash).
+			UpdateColumn("secret_hash", nil).Error; err != nil {
+			return err
+		}
+		return tx.Table("credentials").Where("id = ? AND secret = ?", id, read).
+			UpdateColumns(map[string]any{"secret": stored, "secret_hash": hash}).Error
+	})
+}
 
 // setCredentialAtRest writes one row's stored secret and hash, provided the
 // row still holds the secret that was read. Two rows with one secret cannot

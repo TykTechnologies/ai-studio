@@ -330,9 +330,8 @@ func TestCredentialAtRestRaisesMinimumReader(t *testing.T) {
 // the hooks) and the migration: a column or map update would store a
 // plaintext secret, or leave the lookup hash behind.
 func TestCredentialSecretIsOnlySavedWhole(t *testing.T) {
-	allowed := map[string]string{
-		"models/credential_at_rest.go": `UpdateColumns(map[string]any{"secret": stored, "secret_hash": hash})`,
-	}
+	// The migration is the one place that writes the columns directly.
+	allowed := map[string]bool{"models/credential_at_rest.go": true}
 	columnUpdate := regexp.MustCompile(`\.(Update|UpdateColumn)\(\s*"(secret|secret_hash)"`)
 	mapUpdate := regexp.MustCompile(`\.(Updates|UpdateColumns)\(.*"(secret|secret_hash)"\s*:`)
 	rawSQL := regexp.MustCompile(`(?i)(UPDATE\s+credentials\s+SET|INSERT\s+INTO\s+credentials)`)
@@ -369,7 +368,7 @@ func TestCredentialSecretIsOnlySavedWhole(t *testing.T) {
 			if !columnUpdate.MatchString(line) && !mapUpdate.MatchString(line) && !rawSQL.MatchString(line) {
 				continue
 			}
-			if want, ok := allowed[filepath.ToSlash(rel)]; ok && strings.Contains(line, want) {
+			if allowed[filepath.ToSlash(rel)] {
 				continue
 			}
 			found = append(found, fmt.Sprintf("%s:%d: %s", rel, i+1, strings.TrimSpace(line)))
@@ -378,4 +377,119 @@ func TestCredentialSecretIsOnlySavedWhole(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Empty(t, found, "these write a credential's secret without its hooks:\n%s", strings.Join(found, "\n"))
+}
+
+// A save that fails (a database error, as during a failover) must leave the
+// caller's struct as it was, so that saving it again stores the same key:
+// the secret is never put in its stored form in the struct, and a struct
+// that does hold a stored form (a caller that read the raw row) is hashed
+// by what it decrypts to, not encrypted a second time.
+func TestCredentialFailedSaveThenRetry(t *testing.T) {
+	t.Setenv("TYK_AI_SECRET_KEY", credentialTestKey)
+	db := setupTestDB(t)
+
+	failing := db.Session(&gorm.Session{})
+	const failName = "test:fail_credential_write"
+	fail := func(tx *gorm.DB) { _ = tx.AddError(fmt.Errorf("the database is unavailable")) }
+	require.NoError(t, failing.Callback().Create().Before("gorm:create").Register(failName, fail))
+	require.NoError(t, failing.Callback().Update().Before("gorm:update").Register(failName, fail))
+	working := func() {
+		require.NoError(t, db.Callback().Create().Remove(failName))
+		require.NoError(t, db.Callback().Update().Remove(failName))
+	}
+
+	// Create fails, then succeeds with the same struct.
+	cred := &Credential{KeyID: "retry", Secret: "the-key-being-saved", Active: true}
+	require.Error(t, cred.Create(failing))
+	assert.Equal(t, "the-key-being-saved", cred.Secret, "a failed create leaves the plaintext in the struct")
+	working()
+	require.NoError(t, cred.Create(db))
+	assert.Equal(t, "the-key-being-saved", cred.Secret)
+	row := readStored(t, db, cred.ID)
+	assert.Equal(t, "the-key-being-saved", secrets.DecryptValue(row.Secret), "stored once encrypted, not twice")
+	require.NoError(t, (&Credential{}).GetBySecret(db, "the-key-being-saved"))
+
+	// Update fails, then succeeds.
+	require.NoError(t, db.Callback().Update().Before("gorm:update").Register(failName, fail))
+	cred.Secret = "a-regenerated-key"
+	require.Error(t, cred.Update(db))
+	assert.Equal(t, "a-regenerated-key", cred.Secret, "a failed update leaves the plaintext in the struct")
+	assert.Equal(t, "the-key-being-saved", secrets.DecryptValue(readStored(t, db, cred.ID).Secret), "nothing was written")
+	require.NoError(t, db.Callback().Update().Remove(failName))
+	require.NoError(t, cred.Update(db))
+	assert.Equal(t, "a-regenerated-key", cred.Secret)
+	require.NoError(t, (&Credential{}).GetBySecret(db, "a-regenerated-key"))
+	assert.ErrorIs(t, (&Credential{}).GetBySecret(db, "the-key-being-saved"), gorm.ErrRecordNotFound)
+	assert.Equal(t, "a-regenerated-key", secrets.DecryptValue(readStored(t, db, cred.ID).Secret))
+
+	// A struct holding the stored form is saved as that key, not as its
+	// ciphertext.
+	raw := readStored(t, db, cred.ID)
+	held := &Credential{KeyID: "retry"}
+	require.NoError(t, held.Get(db, cred.ID))
+	held.Secret = raw.Secret
+	require.NoError(t, held.Update(db))
+	after := readStored(t, db, cred.ID)
+	assert.Equal(t, "a-regenerated-key", secrets.DecryptValue(after.Secret))
+	assert.Equal(t, *raw.SecretHash, *after.SecretHash)
+	require.NoError(t, (&Credential{}).GetBySecret(db, "a-regenerated-key"))
+}
+
+// Of two rows with one secret, the one that validated before the change
+// keeps doing so: the first by id among the live, active ones, as the
+// control server's lookup found it (it skipped inactive and soft-deleted
+// rows). The other is left without a hash.
+func TestMigrateCredentialsAtRest_DuplicateKeepsTheRowThatValidated(t *testing.T) {
+	t.Setenv("TYK_AI_SECRET_KEY", credentialTestKey)
+	for _, tc := range []struct {
+		name          string
+		first, second string // "active", "inactive" or "deleted"
+		winner        string
+	}{
+		{"both active: the lower id", "active", "active", "first"},
+		{"the lower id is inactive", "inactive", "active", "second"},
+		{"the lower id is soft-deleted", "deleted", "active", "second"},
+		{"the higher id is inactive", "active", "inactive", "first"},
+		{"neither validated: the lower id", "inactive", "deleted", "first"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db := setupTestDB(t)
+			ids := insertLegacy(t, db, "first", "second")
+			require.NoError(t, db.Exec("UPDATE credentials SET secret = 'one-shared-secret'").Error)
+			for key, state := range map[string]string{"first": tc.first, "second": tc.second} {
+				switch state {
+				case "inactive":
+					require.NoError(t, db.Exec("UPDATE credentials SET active = ? WHERE id = ?", false, ids[key]).Error)
+				case "deleted":
+					require.NoError(t, db.Exec("UPDATE credentials SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?", ids[key]).Error)
+				}
+			}
+
+			res, err := MigrateCredentialsAtRest(db)
+			require.NoError(t, err)
+			assert.Equal(t, CredentialMigration{Migrated: 1, Skipped: 1}, res)
+
+			loser := "second"
+			if tc.winner == "second" {
+				loser = "first"
+			}
+			won, lost := readStored(t, db, ids[tc.winner]), readStored(t, db, ids[loser])
+			require.NotNil(t, won.SecretHash)
+			assert.Nil(t, lost.SecretHash)
+			for _, row := range []storedCredential{won, lost} {
+				assert.True(t, strings.HasPrefix(row.Secret, "$ENC/"), "both secrets are encrypted")
+			}
+			var found Credential
+			if err := found.GetBySecret(db.Unscoped(), "one-shared-secret"); assert.NoError(t, err) {
+				assert.Equal(t, ids[tc.winner], found.ID)
+			}
+
+			// The next start comes to the same answer.
+			res, err = MigrateCredentialsAtRest(db)
+			require.NoError(t, err)
+			assert.Equal(t, CredentialMigration{Skipped: 1}, res)
+			assert.NotNil(t, readStored(t, db, ids[tc.winner]).SecretHash)
+			assert.Nil(t, readStored(t, db, ids[loser]).SecretHash)
+		})
+	}
 }
