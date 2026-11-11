@@ -156,8 +156,9 @@ cmd_seed() {
 start_half() {
 	k exec "deploy/gwbench-$1" -- sh -c "
 		sed 's/RUN_DURATION/$4/' /bench/scenarios/$3.yaml > /tmp/$2-$1.yaml &&
-		nohup gwbench run -no-analytics-check -rate-scale $5 -label '$2 ($3 x$5)' \
-			-metrics http://edge-$6:8080/metrics /tmp/$2-$1.yaml > /bench/results/$2-$1.log 2>&1 &"
+		mkdir -p /bench/results/$2 &&
+		nohup gwbench run -no-analytics-check -rate-scale $5 -label '$2 ($3 x$5)' -out /bench/results/$2 \
+			-metrics http://edge-$6:8080/metrics /tmp/$2-$1.yaml > /bench/results/$2/$1.log 2>&1 &"
 }
 
 cmd_run() {
@@ -188,7 +189,7 @@ cmd_fetch() {
 	for half in short stream; do
 		pod=$(k get pod -l "app=gwbench,half=$half" -o jsonpath='{.items[0].metadata.name}')
 		# Every request is a line of results.jsonl (millions per run): compress first.
-		k exec "$pod" -- sh -c 'cd /bench/results && tar czf /tmp/results.tgz .'
+		k exec "$pod" -- sh -c "cd /bench/results/$name && tar czf /tmp/results.tgz ."
 		kubectl --context "$CTX" cp "$NS/$pod:/tmp/results.tgz" "$out/$half.tgz" >/dev/null
 		mkdir -p "$out/$half" && tar xzf "$out/$half.tgz" -C "$out/$half"
 	done
