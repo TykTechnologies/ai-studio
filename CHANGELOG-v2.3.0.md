@@ -465,6 +465,12 @@ The Helm chart adds `config.logLevel` (AI Studio's `LOG_LEVEL`), and `config.plu
 |---|---|---|
 | `AI_STUDIO_PLUGIN_ALLOWED_SOURCES` / `PLUGINS_ALLOWED_SOURCES` | empty (all) | Plugin deployment types accepted: `oci`, `file`, `grpc` (comma-separated). An edge applies its own list to the plugins AI Studio pushes |
 
+**Active-active control planes and edge resilience** (all optional):
+
+| Variable | Where | Default | Purpose |
+|---|---|---|---|
+| `CLUSTER_NODE_LABEL` | AI Studio | `studio` | Names a replica (for example its site) on the cluster status and in the Edge Gateways "Held by" column. At most 64 characters; an invalid value stops startup |
+
 **Agent Call Tracing** (Enterprise): `AGENT_TRACING_*` settings, all off by default. The [agent tracing guide](docs/site/docs/agent-tracing.md) lists them. The content ceiling and default mode (`AGENT_TRACING_CONTENT_CEILING`, `AGENT_TRACING_CONTENT_DEFAULT_MODE`) can only be set in the environment; the console shows them read-only. An invalid content mode is read as `off`.
 
 **FIPS 140-3:** a FIPS build starts in FIPS mode. `GODEBUG=fips140=off` turns it off, and `GODEBUG=fips140=only` refuses every non-approved algorithm (for testing). `make build-fips` builds FIPS binaries from source.
