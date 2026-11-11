@@ -1,6 +1,7 @@
 package pushes
 
 import (
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -40,6 +42,10 @@ func TestDBClockObserve(t *testing.T) {
 	var fresh dbClock
 	assert.True(t, fresh.pending(1), "a failover the database tracker counted is looked at too")
 }
+
+// measured is how exactly a move matches the step: the step is measured
+// with two readings of the database's clock, each good to a round trip.
+const measured = 250 * time.Millisecond
 
 // pushClockDB is a Postgres schema with one push sent by node-b and still
 // open, and the two replicas' coordinators as started.
@@ -98,22 +104,39 @@ func failOverToClockAhead(t *testing.T, db *gorm.DB, d time.Duration, server str
 }
 
 // A failover to a server whose clock is 30 s ahead, with a push in flight:
-// the replica that sent it looks dead (its registration is 30 s old by the
-// new clock). For one liveness window its command is not requeued as a dead
-// replica's; the new server is recorded.
-func TestClockAheadAfterFailoverDoesNotRequeueLiveReplicasCommands(t *testing.T) {
+// the replica that sent it looks dead (its registration is 30 s old), and
+// the push is 30 s nearer its deadline and its answer timeout. Nothing is
+// requeued, retried or expired for that: the open push's times are moved by
+// the step, once, whichever replica's janitor runs first and however many
+// run.
+func TestClockAheadAfterFailoverMovesOpenPushesOnce(t *testing.T) {
 	pushClockDB(t, func(t *testing.T, db *gorm.DB, a, b *replica, op string) {
 		before := command(t, db, op, "edge-1")
-		failOverToClockAhead(t, db, 15*time.Second, "10.0.0.2:5432/2", a, b)
+		beforeOp := operation(t, db, op)
+
+		failOverToClockAhead(t, db, 30*time.Second, "10.0.0.2:5432/2", a, b)
+		require.WithinDuration(t, before.DeadlineAt.Add(-30*time.Second), command(t, db, op, "edge-1").DeadlineAt, time.Millisecond)
 
 		a.c.janitor()
 		b.c.janitor()
+		a.c.janitor()
 
 		after := command(t, db, op, "edge-1")
 		assert.Equal(t, models.PushCommandSent, after.Status, "not requeued although node-b looked dead: %s", after.Message)
 		assert.Equal(t, before.Attempts, after.Attempts)
-		assert.Equal(t, []models.ClusterCounter{{Name: "push-clock:10.0.0.2:5432/2", Value: clockMarkerSeen}}, clockMarkers(t, db))
+		assert.WithinDuration(t, before.DeadlineAt, after.DeadlineAt, measured, "moved by the step, once")
+		require.NotNil(t, after.SentAt)
+		assert.WithinDuration(t, *before.SentAt, *after.SentAt, measured)
+		assert.WithinDuration(t, beforeOp.DeadlineAt, operation(t, db, op).DeadlineAt, measured)
+
+		assert.Equal(t, []models.ClusterCounter{{Name: "push-clock:10.0.0.2:5432/2", Value: clockMarkerDecided}}, clockMarkers(t, db),
+			"one marker, the new server's, decided; the old server's is gone")
 		assert.False(t, a.c.clock.pending(0))
+		assert.False(t, b.c.clock.pending(0))
+
+		// The push completes as if nothing had happened.
+		respond(b.c, op, "edge-1", pb.ReloadPhase_READY, "")
+		assert.Equal(t, models.PushCommandSucceeded, command(t, db, op, "edge-1").Status)
 	})
 }
 
@@ -131,5 +154,135 @@ func TestClockStepOnTheSameServerMovesNothing(t *testing.T) {
 		assert.WithinDuration(t, before.DeadlineAt.Add(-30*time.Second), after.DeadlineAt, time.Millisecond)
 		assert.Equal(t, models.PushCommandSent, after.Status, "node-b's command is not requeued while registrations may be stale: %s", after.Message)
 		assert.False(t, a.c.clock.pending(0))
+	})
+}
+
+// When the server cannot be identified the janitor judges nothing by time
+// that round, and looks again on the next.
+func TestClockStepWaitsUntilTheServerIsKnown(t *testing.T) {
+	pushClockDB(t, func(t *testing.T, db *gorm.DB, a, b *replica, op string) {
+		// Two minutes left; the new clock is three ahead: past the deadline.
+		require.NoError(t, db.Exec(`UPDATE edge_push_commands SET deadline_at = now() + interval '2 minutes'`).Error)
+		before := command(t, db, op, "edge-1")
+		failOverToClockAhead(t, db, 3*time.Minute, "10.0.0.2:5432/2", a, b)
+		a.c.clock.identify = func(*gorm.DB) (string, error) { return "", errors.New("connection refused") }
+
+		a.c.janitor()
+		assert.Equal(t, models.PushCommandSent, command(t, db, op, "edge-1").Status, "not expired on a clock nobody has looked at")
+		assert.True(t, a.c.clock.pending(0))
+
+		a.c.clock.identify = func(*gorm.DB) (string, error) { return "10.0.0.2:5432/2", nil }
+		a.c.janitor()
+		after := command(t, db, op, "edge-1")
+		assert.Equal(t, models.PushCommandSent, after.Status)
+		assert.WithinDuration(t, before.DeadlineAt, after.DeadlineAt, measured)
+	})
+}
+
+// A step backwards (the new server's clock is behind) moves nothing: the
+// push only takes longer to time out, which loses nothing. The failover is
+// still marked as decided.
+func TestClockBehindAfterFailoverMovesNothing(t *testing.T) {
+	pushClockDB(t, func(t *testing.T, db *gorm.DB, a, b *replica, op string) {
+		before := command(t, db, op, "edge-1")
+		failOverToClockAhead(t, db, -30*time.Second, "10.0.0.2:5432/2", a, b)
+
+		a.c.janitor()
+		b.c.janitor()
+
+		after := command(t, db, op, "edge-1")
+		assert.WithinDuration(t, before.DeadlineAt.Add(30*time.Second), after.DeadlineAt, time.Millisecond, "30 s later by the new clock, and left so")
+		assert.Equal(t, models.PushCommandSent, after.Status)
+		assert.Equal(t, []models.ClusterCounter{{Name: "push-clock:10.0.0.2:5432/2", Value: clockMarkerDecided}}, clockMarkers(t, db))
+	})
+}
+
+// A step larger than two servers' clocks differ by is not acted on: a push
+// that times out early is retried or reported, one moved wrongly is
+// neither. The grace for replicas that look dead still holds.
+func TestClockStepBeyondTheCeilingMovesNothing(t *testing.T) {
+	pushClockDB(t, func(t *testing.T, db *gorm.DB, a, b *replica, op string) {
+		require.NoError(t, db.Exec(`UPDATE edge_push_commands SET deadline_at = now() + interval '1 hour'`).Error)
+		before := command(t, db, op, "edge-1")
+		failOverToClockAhead(t, db, clockStepMax+time.Second, "10.0.0.2:5432/2", a, b)
+
+		a.c.janitor()
+		b.c.janitor()
+
+		after := command(t, db, op, "edge-1")
+		assert.WithinDuration(t, before.DeadlineAt.Add(-clockStepMax-time.Second), after.DeadlineAt, time.Millisecond, "not moved")
+		assert.NotContains(t, after.Message, "stopped", "node-b's command is not requeued as a dead replica's")
+		assert.Equal(t, []models.ClusterCounter{{Name: "push-clock:10.0.0.2:5432/2", Value: clockMarkerDecided}}, clockMarkers(t, db))
+	})
+}
+
+// A replica that started during the failover has no measurement of the
+// step. When it is the first to see the new server it records the marker
+// and decides nothing, so that a replica that did measure still moves the
+// open pushes, once.
+func TestReplicaWithoutAMeasurementLeavesTheMoveToOneThatHasIt(t *testing.T) {
+	pushClockDB(t, func(t *testing.T, db *gorm.DB, a, b *replica, op string) {
+		before := command(t, db, op, "edge-1")
+		failOverToClockAhead(t, db, 30*time.Second, "10.0.0.2:5432/2", a, b)
+
+		// Started after the failover: the new server is the only one it knows.
+		restarted := newReplica(t, db, "node-c", Options{})
+		restarted.c.clock.identify = func(*gorm.DB) (string, error) { return "10.0.0.2:5432/2", nil }
+		restarted.c.startClock()
+		restarted.c.janitor()
+		assert.Equal(t, []models.ClusterCounter{
+			{Name: "push-clock:10.0.0.1:5432/1", Value: clockMarkerSeen},
+			{Name: "push-clock:10.0.0.2:5432/2", Value: clockMarkerSeen},
+		}, clockMarkers(t, db), "recorded, not decided")
+		assert.WithinDuration(t, before.DeadlineAt.Add(-30*time.Second), command(t, db, op, "edge-1").DeadlineAt, time.Millisecond)
+
+		// One that was running when it happened, and never had the old
+		// server's marker in hand either (a replica that could not identify
+		// the server at start), decides nothing.
+		unknown := newReplica(t, db, "node-d", Options{})
+		unknown.c.clock.identify = func(*gorm.DB) (string, error) { return "", errors.New("permission denied") }
+		unknown.c.startClock()
+		unknown.c.clock.identify = func(*gorm.DB) (string, error) { return "10.0.0.2:5432/2", nil }
+		unknown.c.clock.mu.Lock()
+		unknown.c.clock.step = 30 * time.Second
+		unknown.c.clock.mu.Unlock()
+		unknown.c.janitor()
+		assert.WithinDuration(t, before.DeadlineAt.Add(-30*time.Second), command(t, db, op, "edge-1").DeadlineAt, time.Millisecond)
+
+		a.c.janitor()
+		b.c.janitor()
+		restarted.c.janitor()
+		after := command(t, db, op, "edge-1")
+		assert.WithinDuration(t, before.DeadlineAt, after.DeadlineAt, measured, "moved once, by a replica that measured the step")
+		assert.Equal(t, models.PushCommandSent, after.Status, after.Message)
+	})
+}
+
+// Two failovers while one push is open: each is its own step and moves the
+// push once, however many janitors run and in whatever order; the marker of
+// the server before is gone each time.
+func TestSecondFailoverMovesOpenPushesOnceMore(t *testing.T) {
+	pushClockDB(t, func(t *testing.T, db *gorm.DB, a, b *replica, op string) {
+		before := command(t, db, op, "edge-1")
+
+		failOverToClockAhead(t, db, 30*time.Second, "10.0.0.2:5432/2", a, b)
+		a.c.janitor()
+		// The second failover comes before node-b's janitor has looked at
+		// the first: back to the first server, whose clock is 10 s ahead of
+		// the second's. node-b measured both steps and node-a only this one.
+		failOverToClockAhead(t, db, 10*time.Second, "10.0.0.1:5432/3", a, b)
+		b.c.janitor()
+		a.c.janitor()
+		b.c.janitor()
+
+		after := command(t, db, op, "edge-1")
+		assert.Equal(t, models.PushCommandSent, after.Status, after.Message)
+		// node-a moved it by 30 s; node-b, deciding the second failover, by
+		// what it had not yet acted on: 40 s. One move too many by 30 s is
+		// what a replica that slept through a whole failover costs; it errs
+		// late, never early.
+		moved := after.DeadlineAt.Sub(before.DeadlineAt.Add(-40 * time.Second))
+		assert.Contains(t, []time.Duration{40 * time.Second, 70 * time.Second}, moved.Round(time.Second))
+		assert.Equal(t, []models.ClusterCounter{{Name: "push-clock:10.0.0.1:5432/3", Value: clockMarkerDecided}}, clockMarkers(t, db))
 	})
 }

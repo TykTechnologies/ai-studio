@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/cluster"
 	"github.com/TykTechnologies/midsommar/v2/pkg/dbstate"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -29,17 +30,34 @@ import (
 //
 //   - for one liveness window it does not requeue the commands of replicas
 //     that look dead: their registrations were stamped by the old clock;
-//   - it notes which database server the pushes' times are now on, in a
-//     marker row (clockMarker), and says in its log what it saw.
+//   - if the database server changed too (a failover, not a correction of
+//     one server's clock) and the step is forward, the times of the pushes
+//     still open are moved forward by the step, so that none times out
+//     sooner than it would have (moveOpenPushes). A step backwards moves
+//     nothing: late is safe. That is done once per failover for the whole
+//     cluster, by a replica that measured the step, under the marker row of
+//     the new server (clockMarker).
 
 // clockStepMin is the smallest change of the database's clock against this
 // replica's that counts as a step: below it, a difference is the round trip
 // of the reading or drift.
 const clockStepMin = time.Second
 
-// clockMarkerSeen is the value of a clock marker row: the pushes' times are
-// known to be on this server's clock.
-const clockMarkerSeen = 1
+// clockStepMax is the largest step open pushes are moved by. A larger one
+// is not a difference between two servers' clocks, or not one to trust: the
+// pushes are left as they are (a push that times out early is retried or
+// reported; one moved wrongly is neither).
+const clockStepMax = 5 * time.Minute
+
+// Values of a clock marker row.
+const (
+	// clockMarkerSeen: the pushes' times are known to be on this server's
+	// clock, or nobody who measured the step to it has looked yet.
+	clockMarkerSeen = 1
+	// clockMarkerDecided: a replica that measured the step to this server
+	// has decided about the open pushes (moved them, or left them).
+	clockMarkerDecided = 2
+)
 
 // dbClock is a coordinator's view of the database's clock.
 type dbClock struct {
@@ -186,7 +204,15 @@ func (c *Coordinator) startClock() {
 // happened; when not, the janitor leaves time-based decisions for its next
 // round.
 //
-// The new server's marker is recorded by whichever replica looks first.
+// If the server did not change, nothing is moved. If it did, the new
+// server's marker is recorded (by whichever replica looks first, measured
+// or not), and a replica that measured the step decides about the open
+// pushes, once: the one whose update of the marker from seen to decided
+// succeeds. A replica without a measurement (it started during or after
+// the failover, or its readings around it were too slow to use) records
+// the marker and decides nothing, so a replica that did measure still can.
+// If no replica measured, nothing is moved and open pushes may time out
+// early by the difference between the two servers' clocks.
 func (c *Coordinator) adoptClock() bool {
 	failovers := dbstate.For(c.db).Status().Failovers
 	server, err := c.clock.serverOf(c.db)
@@ -212,6 +238,9 @@ func (c *Coordinator) adoptClock() bool {
 		return done()
 	}
 
+	// measured: this replica read the old server's clock and the new one's.
+	measured := known != "" && step != 0
+	moved, decided := false, false
 	err = c.db.Transaction(func(tx *gorm.DB) error {
 		marker := clockMarker(server)
 		res := tx.Exec("INSERT INTO cluster_counters (name, value) VALUES (?, ?) ON CONFLICT (name) DO NOTHING", marker, clockMarkerSeen)
@@ -220,16 +249,60 @@ func (c *Coordinator) adoptClock() bool {
 		}
 		if res.RowsAffected == 1 {
 			// The markers of earlier servers have done their work.
-			return tx.Exec("DELETE FROM cluster_counters WHERE name LIKE ? AND name <> ?", clockMarkerPrefix+"%", marker).Error
+			if err := tx.Exec("DELETE FROM cluster_counters WHERE name LIKE ? AND name <> ?", clockMarkerPrefix+"%", marker).Error; err != nil {
+				return err
+			}
 		}
-		return nil
+		if !measured {
+			return nil
+		}
+		res = tx.Exec("UPDATE cluster_counters SET value = ? WHERE name = ? AND value = ?", clockMarkerDecided, marker, clockMarkerSeen)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected != 1 {
+			return nil // another replica decided
+		}
+		decided = true
+		if step < clockStepMin || step > clockStepMax {
+			return nil
+		}
+		moved = true
+		return moveOpenPushes(tx, step)
 	})
 	if err != nil {
-		logger.Warnf("Edge pushes: could not record the new database server; retrying: %v", err)
+		logger.Warnf("Edge pushes: could not move open pushes to the new database server's clock; retrying: %v", err)
 		return false
 	}
-	if step != 0 {
-		logger.Warnf("Edge pushes: the database failed over to %s, whose clock differs by %s from the previous server's; open pushes keep their times and may time out that much early or late", server, step.Round(time.Millisecond))
+	switch {
+	case moved:
+		logger.Warnf("Edge pushes: the database failed over to %s, whose clock is %s ahead of the previous server's; the times of open pushes were moved forward by that much, so none times out early", server, step.Round(time.Millisecond))
+	case decided && step > clockStepMax:
+		logger.Errorf("Edge pushes: the database failed over to %s and its clock is %s ahead of the previous server's, more than the %s open pushes are moved by; they keep their times and may time out early. Check the database servers' clocks.", server, step.Round(time.Second), clockStepMax)
+	case decided && step < 0:
+		logger.Warnf("Edge pushes: the database failed over to %s, whose clock is %s behind the previous server's; open pushes keep their times and may take that much longer to time out", server, (-step).Round(time.Millisecond))
+	case !measured:
+		logger.Infof("Edge pushes: the database server is now %s; this replica did not measure a difference between the servers' clocks", server)
 	}
 	return done()
+}
+
+// moveOpenPushes moves forward by step every time the janitor and the
+// dispatcher compare with the database's clock, on the pushes that are
+// still open:
+//
+//   - edge_push_commands in pending, claimed or sent: deadline_at (the
+//     deadline), claim_expires_at (a claim that was never sent), sent_at
+//     and phase_at (the answer timeout);
+//   - push_operations in progress: deadline_at.
+//
+// Finished commands and operations, and the times that are only records
+// (created_at, updated_at, completed_at, the history), are left alone.
+func moveOpenPushes(tx *gorm.DB, step time.Duration) error {
+	by := gorm.Expr("make_interval(secs => ?)", step.Seconds())
+	if err := tx.Exec(`UPDATE edge_push_commands SET deadline_at = deadline_at + ?, claim_expires_at = claim_expires_at + ?,
+		sent_at = sent_at + ?, phase_at = phase_at + ? WHERE status IN ?`, by, by, by, by, pushCommandOpen).Error; err != nil {
+		return err
+	}
+	return tx.Exec(`UPDATE push_operations SET deadline_at = deadline_at + ? WHERE status = ?`, by, models.PushOperationInProgress).Error
 }
