@@ -42,6 +42,14 @@ import (
 // compare hashes and do not read the secret column at all. A column or map
 // update of the secret would bypass the hooks; there is none, and
 // TestCredentialSecretIsOnlySavedWhole keeps it that way.
+//
+// Reading depends on AfterFind, because opening a secret needs the
+// database's salt: load a Credential only in ways that run its hooks (Find,
+// First, Take, Preload). A Joins of the association, a session with
+// SkipHooks, or Raw(...).Scan into a Credential does not run them; such a
+// read gets secrets.RefusedCredential in Secret, not the key and not the
+// stored form. There is none, and TestCredentialIsOnlyReadThroughItsHooks
+// keeps it that way.
 type Credential struct {
 	gorm.Model
 	ID     uint   `json:"id" gorm:"primaryKey"`

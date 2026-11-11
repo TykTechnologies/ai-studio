@@ -410,6 +410,90 @@ func TestCredentialSecretIsOnlySavedWhole(t *testing.T) {
 	assert.Empty(t, found, "these write a credential's secret without its hooks:\n%s", strings.Join(found, "\n"))
 }
 
+// The read-side twin of TestCredentialSecretIsOnlySavedWhole. A credential's
+// secret is opened by its AfterFind hook, which needs the database (for the
+// salt). Nothing loads a Credential in a way that does not run it: a Joins
+// of the association (gorm fills joined structs without their hooks), a
+// session with SkipHooks, or SQL that reads the credentials table itself
+// (Raw(...).Scan, Table("credentials")). Such a read gets the refused
+// marker, not the key (TestCredentialReadWithoutHooksIsRefusedNotCiphertext);
+// this test fails when one is written, so that it is noticed. The migration
+// and the salt check read the table directly on purpose, into structs of
+// their own.
+func TestCredentialIsOnlyReadThroughItsHooks(t *testing.T) {
+	allowed := map[string]bool{
+		"models/credential_at_rest.go": true, // the migration
+		"models/data_key_salt.go":      true, // counts sealed rows
+	}
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`\.(Joins|InnerJoins)\(\s*"[A-Za-z.]*Credential"`),
+		regexp.MustCompile(`SkipHooks\s*:\s*true|\.SkipHooks\s*=\s*true`),
+		regexp.MustCompile(`(?i)\b(FROM|JOIN)\s+["` + "`" + `]?credentials\b`),
+		regexp.MustCompile(`\.Table\(\s*"credentials"`),
+	}
+	comment := regexp.MustCompile(`^\s*//`)
+
+	root, err := filepath.Abs("..")
+	require.NoError(t, err)
+	var found []string
+	err = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			if d != nil && d.IsDir() {
+				return filepath.SkipDir
+			}
+			return err
+		}
+		rel, _ := filepath.Rel(root, path)
+		if d.IsDir() {
+			if rel != "." && strings.HasPrefix(d.Name(), ".") {
+				return filepath.SkipDir
+			}
+			switch rel {
+			case "third_party", "microgateway", "community", "node_modules", "ui", "docs", "data", "oci-cache", "examples", "benchmarks", "proto":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || allowed[filepath.ToSlash(rel)] {
+			return nil
+		}
+		src, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for i, line := range strings.Split(string(src), "\n") {
+			if comment.MatchString(line) {
+				continue
+			}
+			for _, p := range patterns {
+				if p.MatchString(line) {
+					found = append(found, fmt.Sprintf("%s:%d: %s", rel, i+1, strings.TrimSpace(line)))
+					break
+				}
+			}
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	assert.Empty(t, found, "these may load a credential without its AfterFind hook, which opens the secret:\n%s", strings.Join(found, "\n"))
+
+	// The patterns catch what they are meant to.
+	for _, line := range []string{
+		`db.Joins("Credential").First(&app, id)`,
+		`db.InnerJoins("App.Credential").Find(&tokens)`,
+		`db.Session(&gorm.Session{SkipHooks: true}).First(&c, id)`,
+		`db.Raw("SELECT * FROM credentials WHERE id = ?", id).Scan(&c)`,
+		"db.Raw(`select c.* from apps a join credentials c on c.id = a.credential_id`).Scan(&c)",
+		`db.Table("credentials").Where("id = ?", id).Scan(&c)`,
+	} {
+		matched := false
+		for _, p := range patterns {
+			matched = matched || p.MatchString(line)
+		}
+		assert.True(t, matched, "not caught: %s", line)
+	}
+}
+
 // A save that fails (a database error, as during a failover) must leave the
 // caller's struct as it was, so that saving it again stores the same key:
 // the secret is never put in its stored form in the struct, and a struct
