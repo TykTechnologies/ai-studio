@@ -216,6 +216,21 @@ Files: `pkg/studio/database.go`, `startup/connectivity.go`,
    same catch-up as a listener reconnect. Verify the leader lease and push
    janitor against a new primary whose clock differs by a few seconds; the
    lease is timed by the database clock.
+   As built (details and the reasoning in `features/ClusterControlPlane.md`):
+   events are told apart by content, so one that takes a lost event's id is
+   delivered; a cursor ahead of the table is moved back and counted; a
+   replica away from the log for longer than its retention reloads from
+   the database. The lease is no longer timed by the database clock:
+   another replica takes it after watching one renewal go unrenewed, on its
+   own clock, for as long as the holder believes in it, so there are never
+   two leaders whatever the new primary's clock says (within 30 s), and a
+   dead holder's lease is taken at most one TTL plus a clock-rate margin
+   after its last renewal (30.5 s with the defaults). Open pushes are
+   moved forward by the step when the new primary's clock is ahead (once
+   per failover, between 1 s and 5 minutes), and replicas that only look
+   dead by the new clock keep their commands. Known behaviour: for up to
+   5 s after a failover to a server whose clock is ahead, live replicas can
+   show as stopped in the cluster status.
 7. **Readiness says what works.** `/ready` keeps answering 200 while the
    database answers at all, with `"database": "writable" | "read_only" |
    "unreachable"` in the body, and `/ready?require=write` fails unless
