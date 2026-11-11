@@ -123,53 +123,13 @@ func main() {
 	}
 	applyEdgeReferencePolicy(cfg)
 
-	// Connect to database
-	dbConfig := database.DatabaseConfig{
-		Type:            cfg.Database.Type,
-		DSN:             cfg.Database.DSN,
-		MaxOpenConns:    cfg.Database.MaxOpenConns,
-		MaxIdleConns:    cfg.Database.MaxIdleConns,
-		ConnMaxLifetime: cfg.Database.ConnMaxLifetime,
-		AutoMigrate:     cfg.Database.AutoMigrate,
-		LogLevel:        cfg.Database.LogLevel,
-	}
-
-	db, err := database.Connect(dbConfig)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to connect to database")
-	}
+	// The license first, then the database (licenseThenDatabase).
+	licensingService, db := licenseThenDatabase(cfg, *migrate, licensing.NewService)
 	defer func() {
 		if err := database.Close(db); err != nil {
 			log.Error().Err(err).Msg("Failed to close database connection")
 		}
 	}()
-
-	// Run migrations if requested or auto-migrate is enabled
-	if *migrate || cfg.Database.AutoMigrate {
-		log.Info().Msg("Running database migrations...")
-		if err := database.Migrate(db); err != nil {
-			log.Fatal().Err(err).Msg("Failed to run migrations")
-		}
-		if *migrate {
-			log.Info().Msg("Migrations completed successfully")
-			os.Exit(0)
-		}
-	}
-
-	// Check database health
-	if err := database.IsHealthy(db); err != nil {
-		log.Fatal().Err(err).Msg("Database health check failed")
-	}
-
-	// Initialize and start licensing service (ENT: validates license, CE: no-op)
-	licensingConfig := licensing.Config{
-		LicenseKey:          os.Getenv("TYK_AI_LICENSE"),
-		ValidityCheckPeriod: 24 * time.Hour, // Re-validate every 24 hours
-	}
-	licensingService := licensing.NewService(licensingConfig)
-	if err := licensingService.Start(); err != nil {
-		log.Fatal().Err(err).Msg("License validation failed")
-	}
 	defer licensingService.Stop()
 	log.Debug().Msg("Licensing service initialized")
 
@@ -426,7 +386,7 @@ func main() {
 
 	// Background writes (analytics, budget usage) get their own connection so
 	// they never hold the connections request-path reads need.
-	writeDB, err := database.OpenWriter(dbConfig, db)
+	writeDB, err := database.OpenWriter(databaseConfig(cfg), db)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to open database writer")
 	}
@@ -764,6 +724,69 @@ func applyEdgeReferencePolicy(cfg *config.Config) {
 	if cfg.IsEdge() {
 		secrets.DisableEnvRefs()
 	}
+}
+
+// databaseConfig is the database part of the configuration as the database
+// package takes it.
+func databaseConfig(cfg *config.Config) database.DatabaseConfig {
+	return database.DatabaseConfig{
+		Type:            cfg.Database.Type,
+		DSN:             cfg.Database.DSN,
+		MaxOpenConns:    cfg.Database.MaxOpenConns,
+		MaxIdleConns:    cfg.Database.MaxIdleConns,
+		ConnMaxLifetime: cfg.Database.ConnMaxLifetime,
+		AutoMigrate:     cfg.Database.AutoMigrate,
+		LogLevel:        cfg.Database.LogLevel,
+	}
+}
+
+// licenseThenDatabase is the start of the microgateway in the order that
+// matters: the license is validated before the database is opened.
+//
+// Starting on a database changes it: the migration adds what this version
+// needs, and since 2.3 a standalone gateway's first start replaces the API
+// tokens it stored with their hashes, which an earlier version cannot use.
+// A microgateway that will not run (Enterprise, with a license that is
+// missing, expired or not valid for it) must exit before any of that, so
+// the database is still the one the previous version left and that version
+// can be started on it again. Validating a license needs no database.
+//
+// It exits the process when the license is refused, when the database
+// cannot be opened or migrated, and, with migrateOnly, after the migration.
+// newLicensing is licensing.NewService (Community: nothing to validate).
+func licenseThenDatabase(cfg *config.Config, migrateOnly bool, newLicensing func(licensing.Config) licensing.Service) (licensing.Service, *gorm.DB) {
+	// Initialize and start licensing service (ENT: validates license, CE: no-op)
+	licensingService := newLicensing(licensing.Config{
+		LicenseKey:          os.Getenv("TYK_AI_LICENSE"),
+		ValidityCheckPeriod: 24 * time.Hour, // Re-validate every 24 hours
+	})
+	if err := licensingService.Start(); err != nil {
+		log.Fatal().Err(err).Msg("License validation failed; the database was not opened")
+	}
+
+	// Connect to database
+	db, err := database.Connect(databaseConfig(cfg))
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to connect to database")
+	}
+
+	// Run migrations if requested or auto-migrate is enabled
+	if migrateOnly || cfg.Database.AutoMigrate {
+		log.Info().Msg("Running database migrations...")
+		if err := database.Migrate(db); err != nil {
+			log.Fatal().Err(err).Msg("Failed to run migrations")
+		}
+		if migrateOnly {
+			log.Info().Msg("Migrations completed successfully")
+			os.Exit(0)
+		}
+	}
+
+	// Check database health
+	if err := database.IsHealthy(db); err != nil {
+		log.Fatal().Err(err).Msg("Database health check failed")
+	}
+	return licensingService, db
 }
 
 // mustStartEdgeClient connects the edge to a control plane, or, with

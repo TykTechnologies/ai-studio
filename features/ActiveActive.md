@@ -518,6 +518,11 @@ Files: `proto/config_sync.proto`, `proto/common.proto`,
    dropped where present and its model removed. `Credential.SecretHash`
    (bcrypt or PBKDF2, `HashSecret`) is a different mechanism and is left as
    it is.
+   Because the conversion is one-way, the microgateway validates its
+   license before it opens its database (`licenseThenDatabase` in
+   `microgateway/cmd/microgateway/main.go`; it used to migrate first): an
+   Enterprise microgateway that will not run has not migrated the database
+   or converted the tokens, and `-migrate` alone needs the license too.
 
 Tests: unknown-to-cache key accepted with every CP cut; revocation reaches
 an edge on another replica; a key created while the edge was offline
