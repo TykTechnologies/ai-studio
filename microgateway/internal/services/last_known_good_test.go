@@ -44,7 +44,7 @@ func clearInstalled(t *testing.T) {
 
 func setContact(t *testing.T, db *gorm.DB, at time.Time) {
 	t.Helper()
-	controlContactWrites.Delete(db.Config)
+	controlContactWrites.Delete(dbKey(db))
 	require.NoError(t, RecordControlContact(db, at))
 }
 
@@ -58,7 +58,7 @@ func TestRecordControlContact(t *testing.T) {
 		var unkeyed int64
 		require.NoError(t, db.Model(&database.SyncState{}).Where("topic = ?", controlContactTopic).Count(&unkeyed).Error)
 		require.Zero(t, unkeyed)
-		controlContactWrites.Delete(db.Config)
+		controlContactWrites.Delete(dbKey(db))
 
 		persistingSync(t, db, "")
 		_, ok, err := LastControlContact(db)
@@ -210,7 +210,7 @@ func TestLastKnownGood_RestoresConfigurationAndKeepsTheRow(t *testing.T) {
 	// Second run, no control plane: a new handle on the same database.
 	db2 := open()
 	require.NoError(t, PersistAppliedSnapshots(db2, snapshotTestKey))
-	t.Cleanup(func() { snapshotSealers.Delete(db2.Config) })
+	t.Cleanup(func() { snapshotSealers.Delete(dbKey(db2)) })
 	lkg, err := LoadLastKnownGood(db2, snapshotTestKey, "", 72*time.Hour, time.Now())
 	require.NoError(t, err)
 	KeepStoredSnapshot(db2, lkg)
@@ -264,7 +264,7 @@ func TestKeepStoredSnapshot_OnlyForTheStoredSnapshot(t *testing.T) {
 
 	// And the mark is spent: the first snapshot, applied later by a control
 	// plane (a rollback), is stored again.
-	appliedSnapshots.Delete(appliedKey{config: db.Config, namespace: ""})
+	appliedSnapshots.Delete(appliedKey{db: dbKey(db), namespace: ""})
 	require.NoError(t, s.SyncConfiguration(lkg.Snapshot))
 	stored, err = LoadAppliedSnapshot(db, snapshotTestKey)
 	require.NoError(t, err)

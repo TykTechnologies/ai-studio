@@ -68,7 +68,7 @@ const controlContactWriteInterval = time.Minute
 
 // controlContactWrites holds, per database, when the contact time was last
 // written (Unix nanoseconds).
-var controlContactWrites sync.Map // *gorm.Config -> *contactWrite
+var controlContactWrites sync.Map // dbKey -> *contactWrite
 
 type contactWrite struct {
 	mu   sync.Mutex
@@ -81,12 +81,12 @@ type contactWrite struct {
 // the database at most once per controlContactWriteInterval; a failed write
 // is retried at the next contact.
 func RecordControlContact(db *gorm.DB, now time.Time) error {
-	sealer, ok := snapshotSealers.Load(db.Config)
+	sealer, ok := sealerOf(db, "the time of the last control contact")
 	if !ok {
 		return nil
 	}
 	now = now.UTC().Truncate(time.Second)
-	v, _ := controlContactWrites.LoadOrStore(db.Config, &contactWrite{})
+	v, _ := controlContactWrites.LoadOrStore(dbKey(db), &contactWrite{})
 	w := v.(*contactWrite)
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -98,7 +98,7 @@ func RecordControlContact(db *gorm.DB, now time.Time) error {
 	row := &database.SyncState{
 		Topic:          controlContactTopic,
 		LastSyncAt:     now,
-		SequenceNumber: controlContactTag(sealer.(*snapshotSealer).contactKey, now),
+		SequenceNumber: controlContactTag(sealer.contactKey, now),
 	}
 	err := db.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "topic"}},
@@ -116,11 +116,11 @@ func RecordControlContact(db *gorm.DB, now time.Time) error {
 // one, or when what is recorded does not carry a valid tag under the key of
 // the database's snapshot store.
 func LastControlContact(db *gorm.DB) (at time.Time, ok bool, err error) {
-	sealer, registered := snapshotSealers.Load(db.Config)
+	sealer, registered := sealerOf(db, "the time of the last control contact (read)")
 	if !registered {
 		return time.Time{}, false, nil
 	}
-	return lastControlContact(db, sealer.(*snapshotSealer).contactKey)
+	return lastControlContact(db, sealer.contactKey)
 }
 
 func lastControlContact(db *gorm.DB, key []byte) (at time.Time, ok bool, err error) {
@@ -234,13 +234,13 @@ func LoadLastKnownGood(db *gorm.DB, encryptionKey, namespace string, maxAge time
 // snapshot the edge is starting from. Applying that snapshot again puts the
 // tables and the in-memory configuration back; the stored row already holds
 // it and is left as it is, with the time it was first applied.
-var restoringSnapshots sync.Map // *gorm.Config -> [sha256.Size]byte
+var restoringSnapshots sync.Map // dbKey -> [sha256.Size]byte
 
 // KeepStoredSnapshot tells the sync services on db that lkg is about to be
 // applied again, from the database rather than from a control plane, so the
 // stored row is not rewritten by it.
 func KeepStoredSnapshot(db *gorm.DB, lkg *LastKnownGood) {
 	if fp, ok := snapshotFingerprint(lkg.Snapshot); ok {
-		restoringSnapshots.Store(db.Config, fp)
+		restoringSnapshots.Store(dbKey(db), fp)
 	}
 }

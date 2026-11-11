@@ -65,7 +65,7 @@ type reportedConfig struct {
 // attempted; a sync that failed leaves the previous values (empty when none
 // has succeeded yet).
 func (s *EdgeSyncService) ReportedConfig() (checksum, version string, ok bool) {
-	v, ok := reportedConfigs.Load(appliedKey{config: s.db.Config, namespace: s.namespace})
+	v, ok := reportedConfigs.Load(appliedKey{db: dbKey(s.db), namespace: s.namespace})
 	if !ok {
 		return "", "", false
 	}
@@ -74,11 +74,11 @@ func (s *EdgeSyncService) ReportedConfig() (checksum, version string, ok bool) {
 }
 
 func (s *EdgeSyncService) recordSyncAttempt() {
-	reportedConfigs.LoadOrStore(appliedKey{config: s.db.Config, namespace: s.namespace}, reportedConfig{})
+	reportedConfigs.LoadOrStore(appliedKey{db: dbKey(s.db), namespace: s.namespace}, reportedConfig{})
 }
 
 func (s *EdgeSyncService) recordAppliedConfig(config *pb.ConfigurationSnapshot, skipped []string) {
-	reportedConfigs.Store(appliedKey{config: s.db.Config, namespace: s.namespace}, reportedConfig{
+	reportedConfigs.Store(appliedKey{db: dbKey(s.db), namespace: s.namespace}, reportedConfig{
 		checksum: appliedChecksum(config.Checksum, skipped),
 		version:  config.Version,
 	})
@@ -106,7 +106,7 @@ func snapshotFingerprint(config *pb.ConfigurationSnapshot) (sum [sha256.Size]byt
 }
 
 type appliedKey struct {
-	config    *gorm.Config // shared by every session of one database
+	db        any // dbKey: shared by every session and transaction of one database
 	namespace string
 }
 
@@ -164,7 +164,7 @@ func (s *EdgeSyncService) SyncConfigurationReport(raw *pb.ConfigurationSnapshot)
 		Int("app_count", len(raw.Apps)).
 		Msg("Starting configuration sync to local SQLite")
 
-	key := appliedKey{config: s.db.Config, namespace: s.namespace}
+	key := appliedKey{db: dbKey(s.db), namespace: s.namespace}
 	fingerprint, fingerprinted := snapshotFingerprint(raw)
 	if applied, ok := appliedSnapshots.Load(key); ok && fingerprinted && applied.(appliedSnapshot).fingerprint == fingerprint {
 		log.Debug().Str("version", raw.Version).Msg("Configuration snapshot already applied, skipping")
