@@ -42,6 +42,9 @@ const (
 	// that recalculated also delivers it to itself (Deliver), since its
 	// budget sync is not the code that changed the data.
 	SignalSpendRecalculated = "spend_recalculated"
+	// SignalBranding: the logo or favicon was uploaded or reset; replicas
+	// drop the copies they hold in memory.
+	SignalBranding = "branding"
 )
 
 // Backend is the cluster behind the package (pkg/studio provides it).

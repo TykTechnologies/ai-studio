@@ -137,118 +137,35 @@ func (s *Service) UpdateCustomCSS(css string, isAdmin bool) (*models.BrandingSet
 	return settings, nil
 }
 
-// UploadLogo handles logo file upload
+// UploadLogo handles logo file upload. The logo is stored in the database
+// (see branding_assets.go).
 func (s *Service) UploadLogo(file multipart.File, header *multipart.FileHeader, isAdmin bool) (*models.BrandingSettings, error) {
 	if !isAdmin {
 		return nil, ErrUnauthorized
 	}
-
-	// Get file storage
-	storage, err := NewBrandingFileStorage(GetBrandingStoragePath())
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize file storage: %w", err)
-	}
-
-	// Save file
-	filename, err := storage.SaveLogo(file, header)
-	if err != nil {
-		return nil, fmt.Errorf("failed to save logo: %w", err)
-	}
-
-	// Get current settings
-	settings, err := s.GetBrandingSettings()
-	if err != nil {
-		return nil, err
-	}
-
-	// Update logo path
-	settings.LogoPath = filename
-
-	// Save settings
-	if err := settings.Update(s.DB); err != nil {
-		return nil, fmt.Errorf("failed to update logo path: %w", err)
-	}
-
-	return settings, nil
+	return s.uploadBrandingAsset(brandingLogo, file, header, "logo")
 }
 
-// UploadFavicon handles favicon file upload
+// UploadFavicon handles favicon file upload. The favicon is stored in the
+// database (see branding_assets.go).
 func (s *Service) UploadFavicon(file multipart.File, header *multipart.FileHeader, isAdmin bool) (*models.BrandingSettings, error) {
 	if !isAdmin {
 		return nil, ErrUnauthorized
 	}
-
-	// Get file storage
-	storage, err := NewBrandingFileStorage(GetBrandingStoragePath())
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize file storage: %w", err)
-	}
-
-	// Save file
-	filename, err := storage.SaveFavicon(file, header)
-	if err != nil {
-		return nil, fmt.Errorf("failed to save favicon: %w", err)
-	}
-
-	// Get current settings
-	settings, err := s.GetBrandingSettings()
-	if err != nil {
-		return nil, err
-	}
-
-	// Update favicon path
-	settings.FaviconPath = filename
-
-	// Save settings
-	if err := settings.Update(s.DB); err != nil {
-		return nil, fmt.Errorf("failed to update favicon path: %w", err)
-	}
-
-	return settings, nil
+	return s.uploadBrandingAsset(brandingFavicon, file, header, "favicon")
 }
 
-// ResetBrandingToDefaults resets all branding settings to defaults
+// ResetBrandingToDefaults resets all branding settings to defaults and
+// removes the uploaded logo and favicon.
 func (s *Service) ResetBrandingToDefaults(isAdmin bool) (*models.BrandingSettings, error) {
 	if !isAdmin {
 		return nil, ErrUnauthorized
 	}
-
-	// Get current settings to check for files to delete
-	settings, err := s.GetBrandingSettings()
-	if err != nil {
-		return nil, err
-	}
-
-	// Get file storage
-	storage, err := NewBrandingFileStorage(GetBrandingStoragePath())
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize file storage: %w", err)
-	}
-
-	// Delete custom logo and favicon if they exist
-	if settings.HasCustomLogo() {
-		if err := storage.DeleteLogo(settings.LogoPath); err != nil {
-			// Log error but continue with reset
-			fmt.Printf("Warning: failed to delete logo file: %v\n", err)
-		}
-	}
-
-	if settings.HasCustomFavicon() {
-		if err := storage.DeleteFavicon(settings.FaviconPath); err != nil {
-			// Log error but continue with reset
-			fmt.Printf("Warning: failed to delete favicon file: %v\n", err)
-		}
-	}
-
-	// Reset to defaults
-	if err := settings.ResetToDefaults(s.DB); err != nil {
-		return nil, fmt.Errorf("failed to reset settings: %w", err)
-	}
-
-	return settings, nil
+	return s.resetBranding()
 }
 
-// GetLogoFilePath returns the full file path to the logo
+// GetLogoFilePath returns the full file path of a logo uploaded before
+// assets were stored in the database (what ImportBrandingFiles reads).
 func (s *Service) GetLogoFilePath() (string, error) {
 	settings, err := s.GetBrandingSettings()
 	if err != nil {
@@ -267,7 +184,8 @@ func (s *Service) GetLogoFilePath() (string, error) {
 	return storage.GetFilePath(settings.LogoPath), nil
 }
 
-// GetFaviconFilePath returns the full file path to the favicon
+// GetFaviconFilePath returns the full file path of a favicon uploaded
+// before assets were stored in the database.
 func (s *Service) GetFaviconFilePath() (string, error) {
 	settings, err := s.GetBrandingSettings()
 	if err != nil {

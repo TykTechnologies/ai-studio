@@ -286,10 +286,13 @@ func (s *Studio) watchRelayedChanges(bus eventbridge.Bus) {
 	})
 	removeSignal := replicas.OnSignal(replicas.SignalBudgets, rc.clearBudgets.trigger)
 	removeRecalc := replicas.OnSignal(replicas.SignalSpendRecalculated, rc.clearBudgets.trigger)
+	// Another replica stored or removed the logo or favicon.
+	removeBranding := replicas.OnSignal(replicas.SignalBranding, service.InvalidateBrandingAssets)
 	rc.unsubscribe = func() {
 		bus.Unsubscribe(sub)
 		removeSignal()
 		removeRecalc()
+		removeBranding()
 	}
 	s.relayed = rc
 }

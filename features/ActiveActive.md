@@ -422,6 +422,14 @@ reachable a control plane cannot authenticate a caller at all.
    `CSRF_KEY`. `CSRF_KEY` is required in that sense only: nothing refuses
    to start, because a rolling rotation has replicas disagreeing for a
    while. Details in `features/ClusterControlPlane.md` ("Shared secrets").
+
+   Branding assets (built): the logo and favicon are rows in the new table
+   `branding_assets`, on SQLite as on Postgres, served by every replica with
+   an ETag from a copy in memory that the replica signal `branding` (and a
+   30 s hash check) keeps current. Files from earlier versions under
+   `BRANDING_STORAGE_PATH` are imported once at start and left in place.
+   Log exports stay files on the replica that made them. Details in
+   `features/Branding.md` ("Asset Storage").
 3. **Studio Helm chart.** The Deployment hardcodes `replicas: 1` and
    ignores `replicaCount`, `podDisruptionBudget` and `autoscaling`. Honour
    them, default to `RollingUpdate` when `replicaCount > 1`, add topology

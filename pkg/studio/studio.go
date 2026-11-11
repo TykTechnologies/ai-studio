@@ -389,12 +389,6 @@ func New(opts Options) (_ *Studio, err error) {
 	}
 	logger.Info("Licensing service initialized")
 
-	if _, err := services.NewBrandingFileStorage(conf.BrandingStoragePath); err != nil {
-		logger.Warnf("Failed to initialize branding storage: %v", err)
-	} else {
-		logger.Infof("Branding storage initialized at: %s", conf.BrandingStoragePath)
-	}
-
 	var ociConfig *ociplugins.OCIConfig
 	if conf.OCIPlugins.IsEnabled() {
 		ociConfig = conf.OCIPlugins.ToOCILibConfig()
@@ -504,6 +498,11 @@ func New(opts Options) (_ *Studio, err error) {
 	})
 	s.leadership.Start()
 	s.connectReplicas()
+
+	// The logo and favicon are in the database; one uploaded before that
+	// (a file under BRANDING_STORAGE_PATH on this replica) is imported, and
+	// the other replicas are told.
+	service.ImportBrandingFiles(conf.BrandingStoragePath)
 
 	// Agent Call Tracing (Enterprise): the start gate sets the gateway's
 	// capture flag before the proxy serves its first request.

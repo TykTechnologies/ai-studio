@@ -427,6 +427,16 @@ TABLE auth_codes
   column `app_id` integer
   index CREATE INDEX `idx_auth_codes_deleted_at` ON `auth_codes`(`deleted_at`)
   index CREATE UNIQUE INDEX `idx_auth_codes_code` ON `auth_codes`(`code`)
+TABLE branding_assets
+  column `kind` text
+  column `content_type` text NOT NULL
+  column `data` blob NOT NULL
+  column `hash` text NOT NULL
+  column `size` integer NOT NULL
+  column `created_at` datetime
+  column `updated_at` datetime
+  constraint PRIMARY KEY (`kind`)
+  autoindex origin=pk unique=1 (kind)
 TABLE branding_settings
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime
