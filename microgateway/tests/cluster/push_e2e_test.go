@@ -115,13 +115,19 @@ type replica struct {
 	stopOnce sync.Once
 }
 
-func startReplica(t *testing.T, sdb studioDB, id string) *replica {
+// startReplica starts a Studio replica's control server; configure, when
+// given, changes its settings first.
+func startReplica(t *testing.T, sdb studioDB, id string, configure ...func(*studiogrpc.Config)) *replica {
 	t.Helper()
 	t.Setenv("MICROGATEWAY_ENCRYPTION_KEY", encryptionKey)
 	db := sdb.open(t)
 	node, err := cluster.StartNode(db, id, "e2e")
 	require.NoError(t, err)
-	server, err := studiogrpc.NewControlServer(&studiogrpc.Config{AuthToken: authToken, MaxConcurrentStreams: 100, NodeID: id}, db)
+	cfg := &studiogrpc.Config{AuthToken: authToken, MaxConcurrentStreams: 100, NodeID: id}
+	for _, fn := range configure {
+		fn(cfg)
+	}
+	server, err := studiogrpc.NewControlServer(cfg, db)
 	require.NoError(t, err)
 	c := pushes.New(db, id, server, pushes.Options{PollInterval: 50 * time.Millisecond, JanitorInterval: 100 * time.Millisecond, Deadline: time.Minute})
 	server.SetPushDelivery(c)

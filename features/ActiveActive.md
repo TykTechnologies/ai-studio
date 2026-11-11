@@ -342,6 +342,20 @@ Files: `microgateway/internal/config/config.go`,
      handler that cannot store a batch once keep the previous path.
      Capture-only pulses carry no boot ID: capture events have their own
      idempotency keys.
+   - *Pulse size* (found by the load test, bead .37). A batch used to be
+     everything buffered, so the backlog after failed pulses (a database
+     switchover on the control plane's side is enough) went as one message:
+     19 MB in the test, above the control plane's 16 MB gRPC limit, refused
+     four times and then discarded as if the control plane were unreachable
+     (4% of the run's analytics). A batch is now at most `max_buffer_size`
+     records and 8 MB; a backlog goes as several batches, each with its own
+     sequence number. A batch whose message is still too large (stored
+     bodies, or a control plane with a lower `GRPC_MAX_MESSAGE_SIZE`: it
+     answers `ResourceExhausted`) is split: the older half keeps the
+     sequence number, the newer half goes back to the front of the buffer,
+     and nothing is discarded, because the control plane is reachable. One
+     record too large by itself is dropped with an error. What the edge
+     drops while no control plane answers is unchanged here (bead .36).
 5. A single DNS name or global load balancer in front of both CPs keeps
    working and stays documented as the alternative.
 
