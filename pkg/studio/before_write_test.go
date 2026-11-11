@@ -5,6 +5,7 @@ package studio
 import (
 	"errors"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -252,4 +253,47 @@ func TestLicenseIsValidatedBeforeMigrationsAndStartedAfter(t *testing.T) {
 	defer stopStudio(t, s)
 	assert.False(t, atValidate, "validated before anything is migrated")
 	assert.True(t, atStart, "background work started after the migrations")
+}
+
+// lifecycleLicense counts what New does with the licensing service.
+type lifecycleLicense struct {
+	refusedLicense
+	validated, started, stopped *atomic.Int32
+}
+
+func (l lifecycleLicense) Revalidate() error { l.validated.Add(1); return nil }
+func (l lifecycleLicense) Start() error      { l.started.Add(1); return nil }
+func (l lifecycleLicense) Stop()             { l.stopped.Add(1) }
+func (lifecycleLicense) IsValid() bool       { return true }
+
+// When New fails after licensing has started (here: a node label the
+// cluster registry refuses, which is checked after the migrations), the
+// service is stopped again: its periodic checks and telemetry do not
+// outlive the failed start. And when New fails before it started (a refused
+// license), it is stopped without ever having been started.
+func TestLicensingIsStoppedWhenNewFails(t *testing.T) {
+	prev := newLicensingService
+	t.Cleanup(func() { newLicensingService = prev })
+	var validated, started, stopped atomic.Int32
+	newLicensingService = func(licensing.Config, *gorm.DB) licensing.Service {
+		return lifecycleLicense{validated: &validated, started: &started, stopped: &stopped}
+	}
+
+	opts := newTestOptions(t)
+	opts.NodeLabel = strings.Repeat("x", 65)
+	_, err := New(opts)
+	require.ErrorContains(t, err, "label")
+	assert.Equal(t, int32(1), validated.Load())
+	assert.Equal(t, int32(1), started.Load(), "the failure came after licensing started")
+	assert.Equal(t, int32(1), stopped.Load(), "and it was stopped")
+
+	// A start that succeeds, then Stop: started once, stopped once.
+	validated.Store(0)
+	started.Store(0)
+	stopped.Store(0)
+	s, err := New(newTestOptions(t))
+	require.NoError(t, err)
+	stopStudio(t, s)
+	assert.Equal(t, int32(1), started.Load())
+	assert.Equal(t, int32(1), stopped.Load())
 }
