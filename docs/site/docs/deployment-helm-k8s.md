@@ -428,6 +428,40 @@ rescheduling:
 The chart prints a warning after `helm install` or `helm upgrade` when
 `startFromLastKnownGood` is set without StatefulSet persistence. It still installs: an `emptyDir` does cover container restarts.
 
+**Sizing the edge's volume.** What fills it is the edge's own copy of the
+analytics: one row per request, kept for `config.analyticsRetentionDays`
+(`ANALYTICS_RETENTION_DAYS`; the chart sets 90 days, an edge without the
+setting keeps 7). Configuration, the stored snapshot and budget state are
+small beside it. Measured under load: about 2 GB per 5 to 6 million
+requests, so roughly 400 bytes per request.
+
+    volume size ≈ 400 bytes × requests per second × 86,400 × retention days
+
+| Requests per second | 1 day | 7 days | 90 days |
+|---|---|---|---|
+| 1 | 35 MB | 240 MB | 3 GB |
+| 10 | 350 MB | 2.4 GB | 31 GB |
+| 100 | 3.5 GB | 24 GB | 310 GB |
+| 1,000 | 35 GB | 240 GB | 3 TB |
+
+The default `persistence.size` of 2Gi with the chart's 90 days holds about
+0.7 requests per second sustained; in a load test at 3,000 to 6,000
+requests per second it was full in 30 to 45 minutes. AI Studio has these
+records too (the analytics pulse sends them), so on an edge that reports to
+AI Studio a short retention loses nothing there: set
+`config.analyticsRetentionDays` to what the edge's own use needs, often `"1"`,
+and size the volume from the table.
+
+**When the volume is full** the edge keeps serving, and says so: `/ready`
+stays 200 with `"database_full": true` and what is no longer stored,
+`microgateway_database_full` is 1, and the log has one error per kind of
+write. What stops: its own analytics rows are dropped, **a configuration
+push cannot be applied** (the edge keeps the configuration it had and
+reports that one, so AI Studio shows it as not in sync and the push as
+failed), and the last control contact and budget blocks are no longer
+stored for a restart. See
+[the microgateway's database guide](https://github.com/TykTechnologies/ai-studio/blob/main/microgateway/docs/config/database.md#when-the-database-is-full).
+
 **Several control planes.** For an active-active AI Studio, give the edge both
 sites, its own first, and decide whether it may start without either:
 

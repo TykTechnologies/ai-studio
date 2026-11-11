@@ -214,6 +214,7 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 	if cfg.Observability.EnableMetrics {
 		metricsHandler = metrics.Init()
 		registerDatabaseMetrics(cfg, serviceContainer)
+		registerStorageFullMetrics()
 		registerControlLinkMetric(cfg, serviceContainer)
 		registerConfigSourceMetrics(cfg, serviceContainer)
 		registerPulseDropMetric(cfg)

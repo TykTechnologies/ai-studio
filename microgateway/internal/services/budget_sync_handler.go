@@ -174,7 +174,8 @@ func (h *BudgetSyncHandler) persistSequenceNumber(seqNum uint64) {
 		"updated_at":      now,
 	}).FirstOrCreate(&state).Error
 
-	if err != nil {
+	// A full database is reported once (NoteWrite), not at every sync.
+	if database.NoteWrite(database.WriteBudgetSyncPosition, err) != nil && !database.IsStorageFull(err) {
 		log.Error().Err(err).Uint64("sequence", seqNum).Msg("Failed to persist budget sync sequence number")
 	}
 }
@@ -229,9 +230,15 @@ func (h *BudgetSyncHandler) HandleBudgetSync(event eventbridge.Event) {
 		// The set is sent every sync; only a change (or a write that
 		// failed last time) is written.
 		if h.budgetBlocks().Replace(blocks) || h.blocksUnsaved {
-			if err := persistBudgetBlocks(h.db, blocks); err != nil {
+			if err := database.NoteWrite(database.WriteBudgetBlocks, persistBudgetBlocks(h.db, blocks)); err != nil {
+				// The blocks are enforced from memory all the same; what is
+				// lost is that a restart would start from the old set. A
+				// full database is reported once (NoteWrite), not at every
+				// sync.
+				if !database.IsStorageFull(err) {
+					log.Error().Err(err).Msg("Failed to persist budget blocks")
+				}
 				h.blocksUnsaved = true
-				log.Error().Err(err).Msg("Failed to persist budget blocks")
 			} else {
 				h.blocksUnsaved = false
 			}
@@ -244,9 +251,11 @@ func (h *BudgetSyncHandler) HandleBudgetSync(event eventbridge.Event) {
 			llmBlocks[uint(llmID)] = reason
 		}
 		if h.llmBudgetBlocks().Replace(llmBlocks) || h.llmBlocksUnsaved {
-			if err := persistLLMBudgetBlocks(h.db, llmBlocks); err != nil {
+			if err := database.NoteWrite(database.WriteBudgetBlocks, persistLLMBudgetBlocks(h.db, llmBlocks)); err != nil {
+				if !database.IsStorageFull(err) {
+					log.Error().Err(err).Msg("Failed to persist LLM budget blocks")
+				}
 				h.llmBlocksUnsaved = true
-				log.Error().Err(err).Msg("Failed to persist LLM budget blocks")
 			} else {
 				h.llmBlocksUnsaved = false
 			}

@@ -801,7 +801,9 @@ func mustStartEdgeClient(edgeClient *grpc.SimpleEdgeClient, db *gorm.DB) *servic
 	// Each contact with a control plane is recorded, so that a later start
 	// without one knows how long the edge has been on its own.
 	edgeClient.SetControlContactHook(func(at time.Time) {
-		if err := services.RecordControlContact(db, at); err != nil {
+		// A database with no room left is reported once where the write
+		// is made (database.NoteWrite), not at every heartbeat.
+		if err := services.RecordControlContact(db, at); err != nil && !database.IsStorageFull(err) {
 			log.Warn().Err(err).Msg("Could not record the contact with the control plane")
 		}
 	})
