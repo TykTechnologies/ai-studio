@@ -245,6 +245,7 @@ This changes what plugins and filter scripts see for Bedrock traffic. Read the [
 - **A push could wait forever** if it lost an edge's ready report.
 - **Heartbeats report the configuration an edge applied**, not just the last one it received, so a failed sync shows as not in sync.
 - **"Database is locked" errors on SQLite** under concurrent writes. SQLite now runs in WAL mode.
+- **Edges ignored budget syncs after the leader changed** to a replica whose clock was behind the previous leader's, new budget blocks included, until that clock caught up. The sync's sequence number now continues from the last one stored in the database, whatever the new leader's clock says, and an edge that receives a lower sequence logs a warning.
 
 ### Console and management API
 - **A partial `PATCH` wiped the fields it left out.** For example, renaming a group removed its members, and a secret could lose its name and break every reference to it. Every `PATCH` now changes only the fields you send.

@@ -30,7 +30,7 @@ func forEachBudgetSyncDB(t *testing.T, fn func(t *testing.T, db *gorm.DB)) {
 	t.Run("sqlite", func(t *testing.T) { fn(t, setupBudgetSyncTestDB(t)) })
 	t.Run("postgres", func(t *testing.T) {
 		db := budgetSyncPostgresDB(t)
-		require.NoError(t, db.AutoMigrate(&models.LLMChatRecord{}, &models.App{}))
+		require.NoError(t, db.AutoMigrate(&models.LLMChatRecord{}, &models.App{}, &models.ClusterCounter{}))
 		fn(t, db)
 	})
 }

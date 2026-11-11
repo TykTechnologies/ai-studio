@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"sync/atomic"
 	"time"
@@ -99,14 +100,13 @@ type EdgeBudgetSource interface {
 // BudgetSyncService aggregates budget usage from llm_chat_records
 // and publishes updates to edge gateways via the event bridge.
 type BudgetSyncService struct {
-	db             *gorm.DB
-	eventBus       eventbridge.Bus
-	syncInterval   time.Duration
-	sequenceNumber uint64
-	ctx            context.Context
-	cancel         context.CancelFunc
-	done           chan struct{}
-	budgetSource   atomic.Value // EdgeBudgetSource
+	db           *gorm.DB
+	eventBus     eventbridge.Bus
+	syncInterval time.Duration
+	ctx          context.Context
+	cancel       context.CancelFunc
+	done         chan struct{}
+	budgetSource atomic.Value // EdgeBudgetSource
 	// usage keeps each App's spend for its budget period between cycles;
 	// published is the latest cycle's figures, for other readers.
 	usage     *budgetUsageTracker
@@ -122,6 +122,8 @@ type BudgetSyncService struct {
 	// next cycle re-sums spend from scratch and tells edges they may lower.
 	recalculated atomic.Bool
 	stopRecalc   func()
+	// now is this replica's clock; nil means time.Now (tests skew it).
+	now func() time.Time
 }
 
 // SetEdgeBudgetSource makes every sync carry budget blocks and analyse
@@ -262,6 +264,9 @@ func calculateBudgetPeriod(budgetStartDate *time.Time, now time.Time) (time.Time
 // and publishes the aggregated values to all edges.
 func (s *BudgetSyncService) aggregateAndPublish() {
 	now := time.Now()
+	if s.now != nil {
+		now = s.now()
+	}
 
 	// Default calendar period for legacy compatibility
 	calendarPeriodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
@@ -395,6 +400,17 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 		return
 	}
 
+	sequence, err := s.nextSequence(now)
+	if err != nil {
+		// Without a sequence edges cannot order the sync: send nothing
+		// this cycle, as when publishing fails.
+		logger.Log.Error().Err(err).Msg("Failed to draw the budget sync sequence; no budget sync sent this cycle")
+		if recalculated {
+			s.recalculated.Store(true) // tell edges at the next cycle
+		}
+		return
+	}
+
 	payload := BudgetSyncPayload{
 		Blocks:            blocks,
 		BlocksIncluded:    blocksIncluded,
@@ -406,7 +422,7 @@ func (s *BudgetSyncService) aggregateAndPublish() {
 		PeriodStart:       calendarPeriodStart, // Legacy field
 		PeriodEnd:         calendarPeriodEnd,   // Legacy field
 		ControlTimestamp:  now,
-		SequenceNumber:    s.nextSequence(),
+		SequenceNumber:    sequence,
 		SpendRecalculated: recalculated,
 	}
 
@@ -459,23 +475,34 @@ func (s *BudgetSyncService) llmBudgets(now time.Time) (map[uint32]AppBudgetData,
 	return usages, blocks, nil
 }
 
-// nextSequence returns a sequence number above both the previous one and
-// the current time in nanoseconds. Edges persist the highest sequence they
-// have seen and drop anything lower, so a counter that restarted from zero
-// with Studio made edges ignore every sync after a Studio restart (and a
-// second Studio node's syncs). Seeding from the clock keeps it increasing
-// across restarts and nodes.
-func (s *BudgetSyncService) nextSequence() uint64 {
-	for {
-		prev := atomic.LoadUint64(&s.sequenceNumber)
-		next := uint64(time.Now().UnixNano())
-		if next <= prev {
-			next = prev + 1
-		}
-		if atomic.CompareAndSwapUint64(&s.sequenceNumber, prev, next) {
-			return next
-		}
+// budgetSyncSequenceName is the cluster counter budget.sync sequences are
+// drawn from.
+const budgetSyncSequenceName = "budget.sync"
+
+// nextSequence returns the next budget.sync sequence number. Edges persist
+// the highest sequence they have applied and drop anything that is not
+// above it, so the sequence must keep increasing across restarts and from
+// one leader to the next.
+//
+// It is a counter in the database with this replica's clock (nanoseconds)
+// as its floor: max(stored + 1, now). The stored value makes it increase
+// from one leader to the next whatever their clocks say: it used to be the
+// leader's clock alone, so edges ignored a new leader whose clock was
+// behind the previous one's (the other site) until it caught up. The floor
+// keeps the values in the range of the clock, as every version sent them:
+// an edge holding a sequence from an older Studio accepts these, an older
+// Studio that takes over (a rolling upgrade, a rollback) is accepted in
+// turn, and a counter set back by a failover that lost its last commits is
+// above the lost values at once.
+func (s *BudgetSyncService) nextSequence(now time.Time) (uint64, error) {
+	value, err := models.NextClusterCounter(s.db, budgetSyncSequenceName, now.UnixNano())
+	if err != nil {
+		return 0, err
 	}
+	if value <= 0 {
+		return 0, fmt.Errorf("budget sync sequence %d in cluster_counters is not positive", value)
+	}
+	return uint64(value), nil
 }
 
 // GetSyncInterval returns the configured sync interval (for testing)

@@ -20,7 +20,7 @@ func setupBudgetSyncTestDB(t *testing.T) *gorm.DB {
 	require.NoError(t, err)
 
 	// Migrate both LLMChatRecord and App tables (App is needed for BudgetStartDate lookup)
-	err = db.AutoMigrate(&models.LLMChatRecord{}, &models.App{})
+	err = db.AutoMigrate(&models.LLMChatRecord{}, &models.App{}, &models.ClusterCounter{})
 	require.NoError(t, err)
 
 	return db

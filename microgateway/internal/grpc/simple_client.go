@@ -524,6 +524,11 @@ func (c *SimpleEdgeClient) establishStream() error {
 	}
 
 	c.setStream(stream)
+	// A new stream may be to another control plane: let the budget sync
+	// handler report a sequence that went backwards once more.
+	if h, ok := c.budgetSyncHandler.(interface{ StreamStarted() }); ok {
+		h.StreamStarted()
+	}
 
 	// Setup event bridge for this connection
 	c.setupEventBridge()
