@@ -54,7 +54,7 @@ AI Studio 2.3 needs a license issued for 2.3. A 2.3 license names the product it
 
 - **Before you upgrade**, speak to your account manager for a 2.3 license, and take a database backup.
 - **Set the new license** as `TYK_AI_LICENSE` on every AI Studio replica (the same license on all of them) and on every Enterprise microgateway, edge or standalone.
-- **Without it**, AI Studio stops at start-up with `license validation failed at boot: license does not include the Tyk AI Studio SKU`, and an Enterprise microgateway stops with `Microgateway license validation failed at boot` and the same reason. AI Studio has migrated its database by then, so going back to 2.2 means restoring the backup.
+- **Without it**, AI Studio stops at start-up with `license validation failed at boot: license does not include the Tyk AI Studio SKU`, and an Enterprise microgateway stops with `Microgateway license validation failed at boot` and the same reason.
 - **Keep your 2.2 license** until the upgrade is confirmed: you need it if you return to 2.2.
 - **Check the limits** on the [License page](#the-license-page) after the upgrade. Usage above a limit is not removed; new use is refused until it drops below the limit ([At a limit](#at-a-limit)).
 

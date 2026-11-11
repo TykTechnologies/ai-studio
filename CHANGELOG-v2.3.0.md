@@ -29,7 +29,7 @@ AI Studio 2.3 is built for teams running AI agents. You can now **see what your 
 6. **Upgrade the shipped plugins** to their 2.3.0 versions, and rebuild your own request-path plugins on the 2.3 SDK. [Details](#plugins) and [Plugin releases](#plugin-releases).
 7. **Existing guardrails start scanning tool results** (Enterprise), and remote guardrail providers start receiving tool output. [Details](#guardrails).
 8. **Upgrade edges together with AI Studio.** Several features and credential changes need both on 2.3. [Details](#edges).
-9. **Take a database backup**, before the first 2.3 start: AI Studio migrates the database before it checks the license, so even a start that is refused changes it. Restoring the backup is the only way to roll back. An older AI Studio still starts on a database 2.3 has migrated, but its LLMs with literal keys then fail. [Details](#database).
+9. **Take a database backup** before the first 2.3 start. Restoring it is the only way to roll back. An older AI Studio still starts on a database 2.3 has migrated, but its LLMs with literal keys then fail. [Details](#database).
 10. **Set `TYK_AI_SECRET_KEY`** if you use SSO, and so that LLM credentials are encrypted at rest. [Details](#credentials-and-secrets).
 11. **Using the quickstart?** Replace its placeholder secrets before the first start. [Details](#other-changes-in-behaviour).
 
@@ -301,7 +301,7 @@ AI Studio can run as two control planes in two sites over one replicated Postgre
 
 - **2.3 needs a license issued for 2.3.** A 2.3 license names the product it covers and carries the limits of your deployment. A license issued for 2.2 or earlier has neither and is refused, even if it has not expired. Speak to your account manager for a new one before you upgrade.
 - **Set it everywhere a license is read**: `TYK_AI_LICENSE` on every AI Studio replica (the same license on all of them) and on every Enterprise microgateway, edge or standalone.
-- **What you see without it.** AI Studio stops at start-up with `license validation failed at boot: license does not include the Tyk AI Studio SKU`. An Enterprise microgateway stops with `Microgateway license validation failed at boot` and the same reason. AI Studio has migrated its database by then, so going back to 2.2 means restoring your backup ([Database](#database)).
+- **What you see without it.** AI Studio stops at start-up with `license validation failed at boot: license does not include the Tyk AI Studio SKU`. An Enterprise microgateway stops with `Microgateway license validation failed at boot` and the same reason.
 - **Keep your 2.2 license** until the upgrade is confirmed. You need it if you restore the backup and return to 2.2.
 - **Check the limits.** The license limits edge namespaces, users with admin access, users with portal access, Apps and LLMs. If you already use more than a limit allows, nothing is removed, but new ones are refused (HTTP `409`, `QUOTA_EXCEEDED`) until usage is below the limit. Owners see the limits and current usage under **Admin > Settings > License**. See [License and Quotas](docs/site/docs/license.md).
 - **Community Edition** needs no license, and none of this applies to it.
