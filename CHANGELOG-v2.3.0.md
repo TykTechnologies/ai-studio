@@ -196,6 +196,7 @@ AI Studio can run as two control planes in two sites over one replicated Postgre
 - **Approving a submission into catalogues needs catalogue write permission.**
 - **Secret fields stay masked in plugin config forms**, including the Redis passwords of advanced-llm-cache and rate-limiter.
 - **`pdftotext` runs only from the `PATH`, with a minimal environment.**
+- **Standalone microgateways no longer store API tokens.** `api_tokens` holds a keyed hash of each token (HMAC-SHA-256, with a key derived from `ENCRYPTION_KEY`) and tokens are checked by it, so a copy of the database or a backup contains no usable token. Existing tokens are converted on the first start and keep working. Token listings never showed token values and still do not. See [Upgrade notes](#credentials-and-secrets).
 - **The edge's cache of validated App keys holds hashes, not keys.** It is indexed by a keyed hash of each key (HMAC-SHA-256, with a key derived from the edge's `ENCRYPTION_KEY`) instead of the key itself, so an edge holds a key only while it handles a request that carries it.
 - **Earlier `-fips` packages were not FIPS builds.** Packages published under `-fips` names before this release were standard builds. 2.3's `-fips` packages are real FIPS builds, checked before release.
 - **Go 1.26.10.** Fixes reachable standard library vulnerabilities in `crypto/x509`, `crypto/tls`, `net/http`, `net/textproto` and `html/template`.
@@ -320,6 +321,10 @@ AI Studio can run as two control planes in two sites over one replicated Postgre
   - Without `TYK_AI_SECRET_KEY`, values stay as written and AI Studio logs a security warning. Setting the key later encrypts them at the next start.
   - If the key changes or goes missing, everything encrypted with it becomes unreadable: stored LLM credentials and the values in the secret store (so `$SECRET/` references fail too), as well as other encrypted settings. Calls that need them fail. Restore the key, or re-enter the LLM credentials and the secret values. `$ENV/` references are unaffected.
 - **SSO needs `TYK_AI_SECRET_KEY`.** Without it, every SSO login is refused, and AI Studio warns at startup.
+- **Standalone microgateway API tokens are hashed at rest, one way.** The first 2.3 microgateway to start on a database replaces every stored API token with a keyed hash (made with `ENCRYPTION_KEY`) and a redacted reference. Existing tokens keep working, and nothing that lists tokens changes (listings never included token values).
+  - The tokens can no longer be read from the database. A version before 2.3 accepts none of them afterwards: upgrade every microgateway that shares the database together, and take a backup first if you may need to go back.
+  - Changing `ENCRYPTION_KEY` now invalidates every API token.
+  - The unused `token_cache` table, where present, is dropped.
 - **SQL logs no longer contain values.** Set `DB_LOG_SQL_PARAMS=true` only for local debugging, never in production.
 - **The quickstart needs your own secrets.** Replace the `__REPLACE_WITH_…__` placeholders in its env files before the first start. Otherwise AI Studio refuses to start, naming the setting that still holds a placeholder (`TYK_AI_SECRET_KEY`, `MICROGATEWAY_ENCRYPTION_KEY` or `GRPC_AUTH_TOKEN`), and the Microgateway stops with a key-length error. If your deployment uses values copied from an earlier quickstart or documentation sample, replace them with values you generate.
 

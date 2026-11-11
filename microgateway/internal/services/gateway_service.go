@@ -196,8 +196,13 @@ func (s *DatabaseGatewayService) GetLLMStats(llmID uint) (map[string]interface{}
 
 // ValidateAPIToken validates an API token and returns token information
 func (s *DatabaseGatewayService) ValidateAPIToken(token string) (*TokenValidationResult, error) {
+	// The token is not stored: the row is found by the token's hash.
+	query, tokenHash, err := database.APITokenByValue(s.db, token)
+	if err != nil {
+		return nil, fmt.Errorf("token validation failed: %w", err)
+	}
 	var apiToken database.APIToken
-	err := s.db.Where("token = ? AND is_active = ?", token, true).
+	err = query.Where("is_active = ?", true).
 		Preload("App").
 		First(&apiToken).Error
 
@@ -215,7 +220,7 @@ func (s *DatabaseGatewayService) ValidateAPIToken(token string) (*TokenValidatio
 	// above) — it is an alternative implementation of
 	// GatewayServiceInterface, not a layer over providers.DatabaseProvider.
 	// A request served by this path is verified exactly once, here.
-	if !internalauth.SecureTokenEquals(apiToken.Token, token) {
+	if !internalauth.SecureTokenEquals(apiToken.TokenHash, tokenHash) {
 		return nil, fmt.Errorf("invalid or expired token")
 	}
 

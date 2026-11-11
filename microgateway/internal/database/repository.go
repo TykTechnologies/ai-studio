@@ -189,15 +189,21 @@ func (r *Repository) DeleteCredential(id uint) error {
 
 // APIToken repository methods
 
-// CreateAPIToken creates a new API token
+// CreateAPIToken creates a new API token. The token in token.Token is
+// hashed, not stored (APIToken.BeforeCreate); on return token.Token holds
+// its redacted reference.
 func (r *Repository) CreateAPIToken(token *APIToken) error {
 	return r.db.Create(token).Error
 }
 
-// GetAPIToken retrieves an API token by token value
+// GetAPIToken retrieves an API token by token value (looked up by its hash)
 func (r *Repository) GetAPIToken(token string) (*APIToken, error) {
+	query, _, err := APITokenByValue(r.db, token)
+	if err != nil {
+		return nil, err
+	}
 	var apiToken APIToken
-	err := r.db.Where("token = ? AND is_active = ?", token, true).
+	err = query.Where("is_active = ?", true).
 		Preload("App").First(&apiToken).Error
 	if err != nil {
 		return nil, err
@@ -219,7 +225,11 @@ func (r *Repository) UpdateAPITokenLastUsed(id uint) error {
 
 // RevokeAPIToken deactivates an API token
 func (r *Repository) RevokeAPIToken(token string) error {
-	return r.db.Model(&APIToken{}).Where("token = ?", token).Update("is_active", false).Error
+	query, _, err := APITokenByValue(r.db, token)
+	if err != nil {
+		return err
+	}
+	return query.Model(&APIToken{}).Update("is_active", false).Error
 }
 
 // BudgetUsage repository methods

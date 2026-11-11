@@ -693,8 +693,14 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 		Msg("Control server: on-demand token validation request")
 
 	// Query token with namespace filtering
+	// The token is not stored: the row is found by the token's hash.
 	var apiToken database.APIToken
-	tokenQuery := s.db.Where("token = ? AND is_active = ?", req.Token, true).Preload("App")
+	tokenQuery, _, err := database.APITokenByValue(s.db, req.Token)
+	if err != nil {
+		log.Error().Err(err).Msg("Control server: token validation is not possible")
+		return nil, status.Error(codes.Internal, "token validation failed")
+	}
+	tokenQuery = tokenQuery.Where("is_active = ?", true).Preload("App")
 	
 	// Apply namespace filtering - token must be global or match edge namespace
 	if req.EdgeNamespace == "" {
@@ -705,7 +711,7 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 		tokenQuery = tokenQuery.Where("(namespace = '' OR namespace = ?)", req.EdgeNamespace)
 	}
 	
-	err := tokenQuery.First(&apiToken).Error
+	err = tokenQuery.First(&apiToken).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			log.Info().

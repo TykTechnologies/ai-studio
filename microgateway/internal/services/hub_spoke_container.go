@@ -82,6 +82,13 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 		}
 	}
 
+	// API tokens are stored and looked up as hashes made with
+	// ENCRYPTION_KEY. Rows written by a version that stored the tokens
+	// themselves are converted now, before anything looks one up.
+	if err := prepareAPITokenHashing(db, cfg.Security.EncryptionKey); err != nil {
+		return nil, err
+	}
+
 	// Always use database-backed auth since edge instances now sync to SQLite
 	authProvider := auth.NewTokenAuthProvider(db)
 

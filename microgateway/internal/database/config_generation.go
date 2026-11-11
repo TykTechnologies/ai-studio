@@ -32,7 +32,6 @@ var runtimeTables = map[string]bool{
 	"edge_instances":   true,
 	"control_payloads": true,
 	"sync_states":      true,
-	"token_cache":      true,
 	// access_tokens is not listed: only the config sync writes it, and the
 	// OAuth lookup caches whether the table has any rows.
 }

@@ -99,13 +99,21 @@ func TestTokenAuthProvider_GenerateToken(t *testing.T) {
 		assert.NotEmpty(t, token)
 		assert.Len(t, token, 64) // 32 bytes hex encoded
 
-		// Verify token exists in database
+		// Verify token exists in database: by its hash, never as itself
+		query, hash, err := database.APITokenByValue(db, token)
+		require.NoError(t, err)
 		var dbToken database.APIToken
-		err = db.Where("token = ?", token).First(&dbToken).Error
+		err = query.First(&dbToken).Error
 		assert.NoError(t, err)
 		assert.Equal(t, "Test Token", dbToken.Name)
 		assert.Equal(t, app.ID, dbToken.AppID)
 		assert.True(t, dbToken.IsActive)
+		assert.Equal(t, hash, dbToken.TokenHash)
+		assert.NotEqual(t, token, dbToken.Token, "the token itself is not stored")
+		assert.NotContains(t, dbToken.Token, token[8:])
+		var plain int64
+		require.NoError(t, db.Model(&database.APIToken{}).Where("token = ?", token).Count(&plain).Error)
+		assert.Zero(t, plain)
 	})
 
 	t.Run("InvalidApp", func(t *testing.T) {
@@ -283,7 +291,9 @@ func TestTokenAuthProvider_CleanupExpiredTokens(t *testing.T) {
 
 		// Verify expired token was removed
 		var count int64
-		db.Model(&database.APIToken{}).Where("token = ?", "expired-token").Count(&count)
+		expired, _, err := database.APITokenByValue(db, "expired-token")
+		require.NoError(t, err)
+		expired.Model(&database.APIToken{}).Count(&count)
 		assert.Equal(t, int64(0), count)
 
 		// Verify active token still exists

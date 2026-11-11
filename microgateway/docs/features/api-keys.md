@@ -133,6 +133,16 @@ mgw token validate abc123def456
 mgw token revoke abc123def456
 ```
 
+### How Tokens Are Stored
+A token is shown once, when it is created: save it then. From 2.3 the gateway does not store API tokens. The `api_tokens` table holds a keyed hash of each token (HMAC-SHA-256 under a key derived from `ENCRYPTION_KEY`) in `token_hash`, and tokens are checked by that hash. The `token` column, which held the token before 2.3, holds a redacted reference such as `5f2b1c9e...redacted:1a2b3c4d5e6f7a8b` (the first characters of the token and part of its hash), which identifies a token without being usable as one.
+
+- `mgw token list` and `GET /api/v1/tokens` never returned token values, and still do not: they list names, scopes, state and dates.
+- `mgw token info`, `validate` and `revoke` take the token itself, as before; the gateway hashes it to find the row.
+- A copy of the database, or a backup of it, no longer contains usable tokens.
+- Tokens are hashed with `ENCRYPTION_KEY`. Changing that key invalidates every API token: create new ones. Gateways that share a database must share the key, as they already must for encrypted secrets.
+
+**Upgrading.** The first 2.3 gateway to start on a database converts the tokens an earlier version stored: each is replaced by its hash and its redacted reference. Existing tokens keep working. The conversion cannot be undone: a version before 2.3 compares tokens as stored and accepts none of them afterwards, so upgrade every gateway that shares the database together, and take a backup first if you may need to go back.
+
 ## Using Tokens
 
 ### Gateway Requests
