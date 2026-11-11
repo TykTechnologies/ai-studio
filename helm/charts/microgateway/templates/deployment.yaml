@@ -136,9 +136,11 @@ spec:
         {{- end }}
 {{- if and .Values.persistence.enabled (eq (.Values.kind | default "Deployment") "StatefulSet") }}
   volumeClaimTemplates:
-    # The edge's SQLite is rebuilt from the hub on every start, so this is not
-    # required for correctness — it only preserves analytics buffered but not
-    # yet shipped in a pulse, plus local budget counters, across a restart.
+    # Without config.startFromLastKnownGood the edge's SQLite is rebuilt from
+    # the hub on every start, and this only preserves analytics buffered but
+    # not yet shipped in a pulse, plus local budget counters, across a
+    # restart. With it, this is what lets a rescheduled pod start while no
+    # control plane answers: the stored configuration snapshot lives here.
     - metadata:
         name: data
       spec:

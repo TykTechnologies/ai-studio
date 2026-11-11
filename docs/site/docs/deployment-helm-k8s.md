@@ -408,6 +408,51 @@ Pod names change when a Deployment rolls, which leaves behind stale edge
 registrations; AI Studio reaps these automatically. Use `kind: StatefulSet` if
 you would rather have stable per-replica identities.
 
+**When to use the StatefulSet form.** A Deployment keeps the edge's database on
+an `emptyDir`: it survives a container restart, but a rescheduled pod (a node
+drain, an eviction, a rollout) starts with an empty one. That is fine while the
+database is only a cache of what AI Studio sends. Use `kind: StatefulSet` with
+`persistence.enabled: true` when the edge must keep something across a
+rescheduling:
+
+- **Starting without a control plane** (`config.startFromLastKnownGood`). The
+  configuration snapshot the edge starts from is in its database. Without a
+  persistent volume a rescheduled pod has none and crash-loops until a control
+  plane answers, exactly as without the setting.
+- **A stable edge identity.** The edge ID is the pod name. A StatefulSet pod
+  keeps its name (`<release>-microgateway-0`, `-1`, ...) across restarts and
+  rescheduling, so the edge keeps its row, its history and its sync state in
+  AI Studio; a Deployment pod gets a new name, and so a new edge, every time.
+- **Buffered analytics and budget counters** that should survive a restart.
+
+The chart prints a warning after `helm install` or `helm upgrade` when
+`startFromLastKnownGood` is set without StatefulSet persistence. It still installs: an `emptyDir` does cover container restarts.
+
+**Several control planes.** For an active-active AI Studio, give the edge both
+sites, its own first, and decide whether it may start without either:
+
+```yaml
+microgateway:
+  kind: StatefulSet
+  persistence:
+    enabled: true
+  config:
+    controlEndpoints:
+      - studio.site-a.example.com:50051
+      - studio.site-b.example.com:50051
+    controlFailbackInterval: "5m"     # optional: return to the first when it is back
+    startFromLastKnownGood: true      # optional: start from the stored configuration
+    # startupControlTimeout: "30s"
+    # lastKnownGoodMaxAge: "72h"
+```
+
+`controlEndpoints` replaces `controlEndpoint` when it is not empty. Keep
+`probes.startup` (`periodSeconds` x `failureThreshold`, 150 s by default) above
+`startupControlTimeout`: with `startFromLastKnownGood` the edge spends that
+long looking for a control plane before it starts from its stored
+configuration. See [Several control planes](./edge-gateways.md#several-control-planes)
+and [Starting without a control plane](./edge-gateways.md#starting-without-a-control-plane).
+
 **Separate edges per region.** Deploy separate Helm releases and override
 `edgeNamespace` per instance. Each edge receives only the configuration assigned
 to its namespace:
@@ -452,8 +497,9 @@ microgateway:
         matchLabels:
           app: microgateway
 
-  # Keeps analytics buffered between pulses across a restart. Optional: the edge
-  # rebuilds its configuration from the hub on every start regardless.
+  # Keeps analytics buffered between pulses across a restart. Optional while
+  # the edge rebuilds its configuration from the hub on every start; required
+  # for config.startFromLastKnownGood to cover a rescheduled pod (see "When to use the StatefulSet form").
   kind: StatefulSet
   persistence:
     enabled: true

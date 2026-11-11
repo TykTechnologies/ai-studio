@@ -425,6 +425,14 @@ Files: `microgateway/cmd/microgateway/main.go`,
    survives a container restart but not a rescheduled pod. Document that
    R4 needs the StatefulSet form, and have the chart warn when the flag is
    set without it.
+   As built (microgateway chart): `config.startFromLastKnownGood`,
+   `startupControlTimeout` and `lastKnownGoodMaxAge`, with
+   `config.controlEndpoints` and `controlFailbackInterval` for Phase 2; the
+   warning is printed after install or upgrade (`templates/NOTES.txt`) and
+   the chart still installs, since an `emptyDir` does cover a container
+   restart. Checked on EKS: an edge pod deleted with no control plane
+   reachable came back Ready from the snapshot on its volume claim. The
+   credential sync values follow with Phase 4.
 
 Tests: restart with all CPs cut serves traffic, including a templated
 prompt and a guardrail exception; each refusal case; reconnect replaces the
