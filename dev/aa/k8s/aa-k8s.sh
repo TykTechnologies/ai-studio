@@ -262,6 +262,11 @@ cmd_rejoin() {
 	# its data directory from pg-$o.
 	k scale statefulset "pg-$s" --replicas=1
 	wait_sql "$o" "SELECT count(*) = 1 FROM pg_stat_replication WHERE state = 'streaming'" "see pg-$s streaming"
+	# Synchronous only once the standby has caught up: a commit waits for a
+	# synchronous standby to have everything before it, so switching it on
+	# while the standby is still replaying its backlog holds every commit
+	# (seen under load: single INSERTs took a minute).
+	wait_sql "$o" "SELECT count(*) = 1 FROM pg_stat_replication WHERE pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn) < 8 * 1024 * 1024" "see pg-$s caught up"
 	set_sync "$o" on
 	wait_sql "$o" "SELECT count(*) = 1 FROM pg_stat_replication WHERE sync_state = 'sync'" "get a synchronous standby"
 	stamp "pg-$s is the synchronous standby of pg-$o"
