@@ -299,7 +299,11 @@ events, and it hands their ids out again, to new events.
   replication). In each of those cases the next read looks back over the
   time the replica could not read plus twice the window (the new primary's
   clock may differ from the old one's), capped at the retention, instead
-  of the window alone. Nothing handled is delivered twice. Events that were
+  of the window alone. What the reader remembers about handled rows is
+  kept for three windows, so nothing handled is delivered again as long as
+  the two servers' clocks are within a window (30 s) of each other; beyond
+  that a handler can see again an event it handled that much before the
+  failover (delivery is at least once, as always). Events that were
   lost with the transactions are lost for every replica: so were the
   changes they announced.
 - **A gap longer than the retention.** A replica that could not read the
@@ -403,7 +407,10 @@ once). A replica believes it leads only until its last renewal plus the TTL
 minus one renewal period, by its monotonic clock, so it stops acting before
 another replica can take over, even without the database.
 `pkg/replicas.IsLeader` is the check for code that does not hold the lease
-itself.
+itself. Every tick begins with a write (renew, or take a lease nobody
+holds), so a replica whose pool is still on a demoted primary is refused
+there (SQLSTATE 25006) and never acts on what that server's copy of the
+row says.
 
 **Whose clock decides a takeover** (2.3). Until 2.3 another replica took
 the lease when `expires_at` had passed by the database's clock. That clock
