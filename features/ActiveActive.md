@@ -733,7 +733,12 @@ credential migration, in "Before you upgrade":
   skew; a replica left on a demoted primary; start-up exiting when the
   database is briefly away.
 - **Upgrade notes:** Database (the credential migration is one-way: take a
-  backup; older Studio versions cannot read the migrated column); Edges
+  backup; older Studio versions cannot read the migrated column. An older
+  headless control plane refuses the database with the schema-version
+  message. An older full Studio, 2.2.x or a 2.3 release candidate, does
+  not check: it starts, refuses every App key and shows the ciphertext as
+  the key, so every older replica is stopped first. Rolling back means
+  restoring the backup taken before the upgrade); Edges
   (upgrade the hub first; new options are off by default); API (a write
   that cannot reach a writable database answers 503 `database_unavailable`
   with `Retry-After`, where it used to answer 500).
