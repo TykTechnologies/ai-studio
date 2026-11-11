@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/pkg/cluster"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/replicas"
@@ -50,6 +51,16 @@ func nodeLabel(label, def string) string {
 func (c *clusterParts) joinCluster(ctx context.Context, db *gorm.DB, nodeID, version string, node cluster.NodeOptions) (err error) {
 	if c.clusterNode, err = cluster.StartNode(db, nodeID, version, node); err != nil {
 		return fmt.Errorf("studio: %w", err)
+	}
+	// Say at start, on the replica that notices, what the cluster status
+	// also reports: replicas that disagree on a shared secret. Never fatal:
+	// a rolling rotation has replicas disagreeing for a while.
+	if warnings, err := cluster.SharedSecretWarnings(db); err != nil {
+		logger.Warnf("Could not compare this replica's shared secrets with the other replicas': %v", err)
+	} else {
+		for _, w := range warnings {
+			logger.Warnf("Cluster: %s", w)
+		}
 	}
 	c.clusterLog = cluster.NewLog(db, nodeID, cluster.LogOptions{})
 	if err := c.clusterLog.Start(ctx); err != nil {

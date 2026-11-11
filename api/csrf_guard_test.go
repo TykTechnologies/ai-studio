@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/csrf"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // The CSRF middleware is disabled wholesale under TestMode, so nothing in the
@@ -339,4 +340,35 @@ func TestCSRFGuard_SiteURLPortIsTrusted(t *testing.T) {
 	}
 	r.ServeHTTP(w, req)
 	assert.Equal(t, http.StatusForbidden, w.Code, "an untrusted port is still rejected")
+}
+
+// csrfReplica is a router protected with the key a replica derives from
+// its CSRF_KEY (generated when empty), as studioCSRF does.
+func csrfReplica(t *testing.T, csrfKeySetting string) *gin.Engine {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	key, err := csrfKey(csrfKeySetting)
+	require.NoError(t, err)
+	r := gin.New()
+	r.Use(csrfGuard(csrf.Protect(key, csrf.Secure(false), csrf.Path("/"))))
+	r.POST("/thing", func(c *gin.Context) { c.Status(http.StatusCreated) })
+	r.GET("/token", func(c *gin.Context) {
+		c.Header("X-CSRF-Token", csrf.Token(c.Request))
+		c.Status(http.StatusOK)
+	})
+	return r
+}
+
+// Behind a load balancer the replica that receives a form is not always the
+// one that issued its token. With the same CSRF_KEY on both, the token is
+// accepted; without CSRF_KEY each replica generates its own key and refuses
+// the other's tokens (the cluster status warns about that).
+func TestCSRFTokenAcrossReplicas(t *testing.T) {
+	token, cookies := csrfTokenDance(t, csrfReplica(t, "the-same-on-every-replica"))
+	w := tokenisedWrite(csrfReplica(t, "the-same-on-every-replica"), token, cookies, "POST", "/thing", nil)
+	assert.Equal(t, http.StatusCreated, w.Code, "a token issued by one replica is accepted by the other")
+
+	token, cookies = csrfTokenDance(t, csrfReplica(t, ""))
+	w = tokenisedWrite(csrfReplica(t, ""), token, cookies, "POST", "/thing", nil)
+	assert.Equal(t, http.StatusForbidden, w.Code, "generated keys differ per replica")
 }

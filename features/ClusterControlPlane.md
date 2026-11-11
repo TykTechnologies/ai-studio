@@ -395,6 +395,40 @@ their label, `leader_eligible`, edge counts and the leader, this replica's
 event log and relay counters, the push backlog (pending, in flight, held by
 stopped replicas), and warnings.
 
+**Shared secrets** (`pkg/cluster/secrets.go`). Replicas must share
+`CSRF_KEY`, `TYK_AI_SECRET_KEY`, `MICROGATEWAY_ENCRYPTION_KEY` and
+`GRPC_AUTH_TOKEN`, and a mismatch shows up far from its cause (a form
+refused by another replica, an edge that cannot decrypt, a secret that reads
+as garbage). Each replica writes a fingerprint of each to its
+`cluster_nodes` row (`csrf_key_fp`, `secret_key_fp`, `microgateway_key_fp`,
+`grpc_auth_token_fp`; nullable) with every refresh, and `csrf_key_set`
+(false when `CSRF_KEY` is unset and the key is generated). The fingerprint
+is `cluster.Fingerprint`: HMAC-SHA-256 keyed with a fixed label that
+includes the setting's name, over the value, truncated to 32 bits. It is
+not the value or a plain hash of it (a table of hashes of likely keys does
+not match, and one value in two settings gives two fingerprints), and 32
+bits are enough to tell two values apart while saying as little as possible
+about either. Someone who can read the table and knows the derivation can
+still test a guess against it, as with any deterministic fingerprint: the
+keys must be long and random regardless. That adds no stronger oracle
+than the database already has: it holds ciphertexts made with these keys,
+which confirm a guessed key with certainty, while a match on a 32-bit
+fingerprint is not proof for a high-entropy key. Fingerprints are compared only;
+they are never logged and never returned by the API (`json:"-"`, and the
+status has no field for them).
+
+What is recorded: the secret key always (empty or not); the edge key and
+token when set; the CSRF fields only by a replica that issues Studio's own
+CSRF tokens (not a headless control plane, not a host that passes
+`Options.CSRF`). A NULL column (a replica from before the columns existed, or a setting
+the replica does not use) is left out of the comparison. The status warns,
+naming the setting and each replica as `label (node id)`, when the live
+replicas' fingerprints of a setting differ, and when more than one live
+replica issues CSRF tokens and any of them has no `CSRF_KEY`. A replica
+logs the same warnings at WARN when it joins (`joinCluster`). Nothing
+refuses to start: a rolling rotation (for example with
+`GRPC_AUTH_TOKEN_NEXT`) has replicas disagreeing for a while.
+
 The edges list, detail and namespace listings name each edge's owning
 replica: `owner_node_id`, `owner_label` and `owner_live` (the owner's
 registration is fresh), looked up with one query per page

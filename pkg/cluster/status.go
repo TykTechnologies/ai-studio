@@ -151,6 +151,7 @@ func Snapshot(ctx context.Context, db *gorm.DB, self string, log *Log, relay *Re
 	}
 
 	// What needs attention.
+	st.Warnings = append(st.Warnings, secretWarnings(live)...)
 	if st.Database == "postgres" {
 		if log != nil && !st.EventLog.Enabled {
 			st.Warnings = append(st.Warnings, "The cluster event log is not running on this replica: other replicas' changes do not reach it.")

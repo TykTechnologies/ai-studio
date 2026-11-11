@@ -481,6 +481,14 @@ func New(opts Options) (_ *Studio, err error) {
 	}
 	if err := s.joinCluster(backgroundCtx, s.db, nodeID, opts.Version, cluster.NodeOptions{
 		Label: nodeLabel(opts.NodeLabel, DefaultNodeLabel),
+		Secrets: cluster.SharedSecrets{
+			// A host's own CSRF protection is the host's to keep consistent.
+			OwnCSRF:                   opts.CSRF == nil,
+			CSRFKey:                   conf.CSRFKey,
+			SecretKey:                 conf.SecretKey,
+			MicrogatewayEncryptionKey: conf.MicrogatewayEncryptionKey,
+			GRPCAuthToken:             conf.GRPCAuthToken,
+		}.Fingerprints(),
 	}); err != nil {
 		return nil, err
 	}
