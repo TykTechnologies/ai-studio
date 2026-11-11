@@ -228,6 +228,8 @@ dev/
 ├── docker-compose.full.yml     # Adds: gateway, plugins
 ├── docker-compose.ent.yml      # Enterprise: studio, frontend config
 ├── docker-compose.full-ent.yml # Enterprise: gateway, plugins config
+├── docker-compose.active-active.yml # Two-site stack (make dev-aa), separate project
+├── aa/                         # Two-site stack: aa.sh, PostgreSQL entrypoint, front proxy
 ├── Dockerfile.studio           # Development container
 ├── .env.dev                    # AI Studio env template
 ├── .env.gateway.dev            # Microgateway env template
@@ -236,6 +238,99 @@ dev/
     ├── .air.studio.toml        # Air config for Studio
     └── .air.gateway.toml       # Air config for Gateway
 ```
+
+## Active-active stack (two sites)
+
+A second, separate stack for working on and demonstrating active-active
+control planes (`features/ActiveActive.md`): two Studio replicas in two
+"sites" over one replicated PostgreSQL, and two edges that know both control
+planes. It is small enough to break by hand.
+
+```bash
+make dev-aa            # start it (Community Edition), detached
+make dev-aa-ent        # the same, Enterprise Edition (licence from dev/.env.secrets)
+make dev-aa-status     # roles, replication, replicas, edges
+make dev-aa-rebuild    # rebuild (same edition) from the working tree, restart replicas and edges
+make dev-aa-down       # stop; databases and roles are kept
+make dev-aa-clean      # stop and remove its volumes
+```
+
+```
+              site-a                                   site-b
+   studio-a (label site-a) :8180           studio-b (label site-b) :8280
+   cp-a  gRPC proxy        :50151          cp-b  gRPC proxy        :50251
+   pg-a  PostgreSQL        :55441  <────►  pg-b  PostgreSQL        :55442
+         primary              synchronous        hot standby
+   edge-a :8181  CONTROL_ENDPOINTS=cp-a,cp-b
+   edge-b :8281  CONTROL_ENDPOINTS=cp-b,cp-a
+
+   front (sticky proxy over both replicas) :8100     UI (React dev server) :3100
+```
+
+- **One database, two nodes.** Both replicas use the same multi-host
+  `DATABASE_URL` (`pg-a,pg-b`, `target_session_attrs=read-write`) and write
+  to whichever node is the primary. `pg-b` starts as a synchronous hot
+  standby of `pg-a`.
+- **The same secrets on both sites**: `TYK_AI_SECRET_KEY`,
+  `MICROGATEWAY_ENCRYPTION_KEY`, `GRPC_AUTH_TOKEN`, `CSRF_KEY` and
+  `TYK_AI_LICENSE` come from `dev/.env` (with `dev/.env.secrets` merged in, as
+  for the other targets) for both replicas. Nothing secret is in the compose
+  file. `QUEUE_TYPE=postgres`, so chat works across replicas.
+- **One build.** The `build` service compiles Studio and the microgateway
+  once into a volume; replicas and edges run those binaries. There is no hot
+  reload here: run `make dev-aa-rebuild` after changing Go code.
+- **Edges keep their own database on a volume** and list their own site's
+  control plane first.
+- **A database of its own.** The stack starts empty: register a user in the
+  UI (the first one is not an administrator automatically; promote it with
+  `UPDATE users SET is_admin = true, email_verified = true WHERE email = ...`
+  on the primary, e.g. `docker exec midsommar-aa-pg-a psql -U postgres -d midsommar`).
+
+### Breaking it: `dev/aa/aa.sh`
+
+Nothing in this stack fails over by itself. `dev/aa/aa.sh` plays the failover
+manager (Patroni, CloudNativePG, a managed database), one step at a time:
+
+| Command | What it does |
+|---|---|
+| `aa.sh status` | Each site's PostgreSQL role, Studio and control endpoint; replication; the replicas in `cluster_nodes` with their labels; which replica holds each edge |
+| `aa.sh stop-site a\|b` | Stops that site's Studio, control endpoint and PostgreSQL node. If it held the standby, replication on the primary becomes asynchronous so commits do not wait for it |
+| `aa.sh promote` | Promotes the standby (the primary's site must be stopped): the database failover. Until this is run, writes fail |
+| `aa.sh rejoin a\|b` | Brings a stopped site back after a failover: its PostgreSQL node is rebuilt as the synchronous standby of the current primary, then Studio and the control endpoint start |
+| `aa.sh start-site a\|b` | Starts a stopped site as it was, when no failover happened in between. Refuses if the other node was promoted meanwhile (that would be a split brain; use `rejoin`) |
+| `aa.sh switchover` | Planned move of the primary role to the standby, with both sites up |
+| `aa.sh cut-cp a\|b` / `restore-cp a\|b` | Cuts or restores the gRPC path from edges to that site's control plane; Studio itself keeps running |
+
+Every command is undone by another one; none needs `make dev-aa-clean`. A
+typical run:
+
+```bash
+make dev-aa && make dev-aa-status
+dev/aa/aa.sh stop-site a     # site A is lost: Studio, control plane and the primary
+dev/aa/aa.sh promote         # the standby in site B takes over
+make dev-aa-status           # both edges are held by site-b
+dev/aa/aa.sh rejoin a        # site A returns; pg-a is now the standby
+dev/aa/aa.sh switchover      # and the primary role moves back to site A
+```
+
+### Ports and volumes
+
+The stack is a compose project of its own (`midsommar-aa`), with its own
+network, container names (`midsommar-aa-*`) and volumes
+(`midsommar-aa-*`), and it uses none of the standard stack's host ports, so
+both can run at the same time and `make dev-clean` does not touch it.
+
+| Port | Service |
+|------|---------|
+| 3100 | UI (React dev server, through the front proxy) |
+| 8100 | API through the sticky front proxy (either site) |
+| 8180 / 8280 | site-a / site-b Studio API |
+| 50151 / 50251 | site-a / site-b control gRPC (the cuttable proxies) |
+| 8181 / 8281 | edge-a / edge-b gateway |
+| 55441 / 55442 | pg-a / pg-b |
+
+If the standard stack was started with `FRONTEND_PORT=3100`, the two UIs
+collide: use another port there.
 
 ## Plugin Development
 
