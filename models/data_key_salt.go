@@ -35,9 +35,20 @@ const dataKeySaltRowID = 1
 var ErrDataKeySaltLost = errors.New("the database's data key salt (table data_key_salts) is missing, but App credentials encrypted with it exist: they cannot be read without it. Restore the data_key_salts row from the backup the credentials came from; a new salt is never generated in its place")
 
 // dataKeySalts caches each database's salt for the life of the process: it
-// never changes. Keyed by the *gorm.Config every session and transaction of
-// one opened database shares.
-var dataKeySalts sync.Map // *gorm.Config -> []byte
+// never changes. Keyed by the connection pool, which is what every session
+// and transaction of one opened database has in common (a session has its
+// own copy of the gorm.Config).
+var dataKeySalts sync.Map // *sql.DB -> []byte
+
+// dataKeySaltCacheKey is db's key in dataKeySalts, or nil when db has no
+// connection pool to tell it by (the salt is then read every time).
+func dataKeySaltCacheKey(db *gorm.DB) any {
+	pool, err := db.DB()
+	if err != nil || pool == nil {
+		return nil
+	}
+	return pool
+}
 
 // EnsureDataKeySalt creates the database's salt if it has none and returns
 // it. Call it under the migration lock, before credentials are migrated. It
@@ -83,8 +94,11 @@ func EnsureDataKeySalt(db *gorm.DB) ([]byte, error) {
 // loadDataKeySalt returns the database's salt, from the cache or the
 // database, or nil when it has none (no row, or no table).
 func loadDataKeySalt(db *gorm.DB) ([]byte, error) {
-	if salt, ok := dataKeySalts.Load(db.Config); ok {
-		return salt.([]byte), nil
+	key := dataKeySaltCacheKey(db)
+	if key != nil {
+		if salt, ok := dataKeySalts.Load(key); ok {
+			return salt.([]byte), nil
+		}
 	}
 	db = db.Session(&gorm.Session{NewDB: true})
 	if !db.Migrator().HasTable(&DataKeySalt{}) {
@@ -97,6 +111,8 @@ func loadDataKeySalt(db *gorm.DB) ([]byte, error) {
 	if len(rows) == 0 || len(rows[0].Salt) == 0 {
 		return nil, nil
 	}
-	dataKeySalts.Store(db.Config, rows[0].Salt)
+	if key != nil {
+		dataKeySalts.Store(key, rows[0].Salt)
+	}
 	return rows[0].Salt, nil
 }

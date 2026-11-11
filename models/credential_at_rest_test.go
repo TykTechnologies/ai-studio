@@ -1,11 +1,13 @@
 package models
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -633,7 +635,7 @@ func TestDataKeySalt_Postgres(t *testing.T) {
 		again, err := EnsureDataKeySalt(db)
 		require.NoError(t, err)
 		assert.Equal(t, salt, again, "created once")
-		dataKeySalts.Delete(db.Config) // a new process
+		dataKeySalts.Delete(dataKeySaltCacheKey(db)) // a new process
 		fromDB, err := EnsureDataKeySalt(db)
 		require.NoError(t, err)
 		assert.Equal(t, salt, fromDB, "every replica reads the stored one")
@@ -646,7 +648,7 @@ func TestDataKeySalt_Postgres(t *testing.T) {
 
 		// The salt is lost (a table restored without it, say).
 		require.NoError(t, db.Exec("DELETE FROM data_key_salts").Error)
-		dataKeySalts.Delete(db.Config)
+		dataKeySalts.Delete(dataKeySaltCacheKey(db))
 
 		_, err = EnsureDataKeySalt(db)
 		assert.ErrorIs(t, err, ErrDataKeySaltLost)
@@ -730,4 +732,48 @@ func TestMigrateCredentialsAtRest_FIPSProcessConvertsScryptForm(t *testing.T) {
 	res, err = MigrateCredentialsAtRest(db)
 	require.NoError(t, err)
 	assert.Equal(t, CredentialMigration{}, res)
+}
+
+// The salt is read from the database once per process, whatever session or
+// transaction of the opened database a credential is read or saved through
+// (each has its own copy of the gorm.Config, so the cache cannot be keyed
+// by that), and the cache holds one entry per database, not one per use.
+func TestDataKeySaltIsReadOncePerDatabase_Postgres(t *testing.T) {
+	forEachCredentialDB(t, func(t *testing.T, db *gorm.DB) {
+		t.Setenv("TYK_AI_SECRET_KEY", credentialTestKey)
+		var saltReads atomic.Int64
+		require.NoError(t, db.Callback().Query().Before("gorm:query").Register("test:count_salt_reads", func(tx *gorm.DB) {
+			if tx.Statement.Table == "data_key_salts" {
+				saltReads.Add(1)
+			}
+		}))
+		entries := func() (n int) {
+			dataKeySalts.Range(func(_, _ any) bool { n++; return true })
+			return n
+		}
+
+		first := &Credential{KeyID: keyID(t, "first"), Secret: "secret-" + t.Name(), Active: true}
+		require.NoError(t, first.Create(db))
+		readsAfterFirst, entriesAfterFirst := saltReads.Load(), entries()
+		require.LessOrEqual(t, readsAfterFirst, int64(2), "found missing, created and read back")
+
+		for i := 0; i < 50; i++ {
+			session := db.WithContext(context.Background())
+			c := &Credential{KeyID: keyID(t, fmt.Sprintf("s-%02d", i)), Secret: fmt.Sprintf("secret-%s-%02d", t.Name(), i), Active: true}
+			require.NoError(t, c.Create(session))
+			var read Credential
+			require.NoError(t, read.Get(db.Session(&gorm.Session{}), c.ID))
+			require.Equal(t, c.Secret, read.Secret)
+			require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+				var inTx Credential
+				if err := inTx.Get(tx, c.ID); err != nil {
+					return err
+				}
+				require.Equal(t, c.Secret, inTx.Secret)
+				return inTx.Deactivate(tx)
+			}))
+		}
+		assert.Equal(t, readsAfterFirst, saltReads.Load(), "the salt was read again")
+		assert.Equal(t, entriesAfterFirst, entries(), "the salt cache grew with use")
+	})
 }

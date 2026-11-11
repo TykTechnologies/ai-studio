@@ -638,8 +638,8 @@ reachable a control plane cannot authenticate a caller at all.
    secret when credentials are sent (Phase 4), so rotating
    `MICROGATEWAY_ENCRYPTION_KEY` needs no hub migration. Existing rows are
    migrated at start under the migration lock, in batches, idempotently
-   (`models.MigrateCredentialsAtRest`; 50,000 rows in 12 s on SQLite and
-   86 s on Postgres). Schema 42; `MinReaderSchemaVersion` rises to 42,
+   (`models.MigrateCredentialsAtRest`; 50,000 rows in 7 s on SQLite and
+   34 s on Postgres). Schema 42; `MinReaderSchemaVersion` rises to 42,
    because older code looks keys up by the plaintext secret (every App key
    would be refused) and would show and send the ciphertext. Changing
    `TYK_AI_SECRET_KEY` afterwards, or losing the salt, stops every App key
