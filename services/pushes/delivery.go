@@ -13,6 +13,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/cluster"
+	"github.com/TykTechnologies/midsommar/v2/pkg/dbstate"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -421,11 +422,26 @@ func (c *Coordinator) janitor() bool {
 		return false
 	}
 	now := c.now()
+	// The database's clock stepped, or the database failed over: before
+	// any time is compared, move open pushes to the new server's clock if
+	// that is what happened (clock.go). If that cannot be found out now,
+	// nothing is judged by time this round.
+	if c.db.Dialector.Name() == "postgres" && c.clock.pending(dbstate.For(c.db).Status().Failovers) {
+		if !c.adoptClock() {
+			return true
+		}
+		now = c.now()
+	}
 
 	// Replicas that stopped (crashed, or lost the database) while holding
-	// commands: their commands go back to pending.
+	// commands: their commands go back to pending. Not right after the
+	// database's clock stepped: until every live replica has refreshed its
+	// registration, the stamps are the old clock's and live replicas look
+	// dead.
 	live, err := cluster.LiveNodes(c.db)
-	if err != nil {
+	if c.clock.inGrace() {
+		// Nothing to do this round.
+	} else if err != nil {
 		logger.Warnf("Edge pushes: janitor could not list live replicas: %v", err)
 	} else {
 		liveSet := map[string]bool{}
