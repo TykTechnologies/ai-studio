@@ -598,6 +598,65 @@ Files: `proto/config_sync.proto`, `proto/common.proto`,
    window, as the event log does, so a row committed late is not missed;
    upserts on the edge are idempotent. The plaintext secret never leaves
    the hub. Unlicensed namespaces get nothing, as with `ValidateToken`.
+   **Built** (hub side; midsommar-clean-4x5y.16). The proto, the
+   registration hook, what a handler reads from the control server and the
+   row reader are in core (`proto/config_sync.proto`, `pkg/credsync`,
+   `grpc/credential_sync.go`); the handler is in the Enterprise module
+   (`features/credential_sync`, which imports `pkg/credsync` and not the
+   control server), so a Community hub answers `Unimplemented`. It runs behind the control server's stream
+   authentication (the edge token) and reads only the database, so every
+   replica serves it. As built, and where it differs from the sketch above:
+   - **Pages** of 500 credentials (`PageSize`), each with the Apps its
+     credentials belong to, read and sent one page at a time. The request
+     names the hash construction the edge expects (`hash_version`, `v1`);
+     another is refused with `FailedPrecondition`.
+   - **Namespace**: the registered edge's, not the one the request names.
+     A full stream carries every credential of an App that namespace may
+     serve (global or its own), inactive credentials and inactive Apps
+     included, and nothing else; an unlicensed namespace gets one empty
+     full page, so the edge drops what it held.
+   - **Watermark**: `(unix seconds << 28) | tag`, opaque to the edge. The
+     seconds are the earlier of the database's clock and the replica's
+     when the stream started; the tag is 28 bits of a hash of the
+     replica's node ID and the number of database failovers it has seen.
+     A delta reads what changed (the credential's or its App's
+     `updated_at` or `deleted_at`) since the watermark's time minus an
+     overlap of 60 s, which assumes replica and database clocks within
+     30 s of each other and a transaction that commits within 30 s of
+     stamping its rows.
+   - **A delta is only continued by the replica that issued the
+     watermark, on the database it issued it for.** A watermark with
+     another tag (another replica, a restart, a database failover since)
+     gets a full stream. So an edge that fails over to the other control
+     plane starts there with a full stream.
+   - **Periodic full stream**: a chain of deltas becomes a full stream at
+     least every 15 minutes (`FullInterval`, at a moment that differs per
+     edge), which removes whatever a delta could not see (a change that
+     moved no timestamp, a row removed outright, a clock or commit outside
+     the allowance).
+   - **Tombstones**: in a delta, a changed credential the edge must not
+     hold (deleted, its App deleted or moved to another namespace) is sent
+     as its id and `deleted`, with no key id, hash, App or time. Deltas are
+     read without regard to namespace for that, so an edge also receives
+     tombstones for credentials of other namespaces.
+   - **How long a revoked key can still be accepted by an edge in `full`
+     mode**: about a second while connected (the `credential.changed`
+     event, item 4); otherwise until its next delta (one heartbeat tick);
+     at most 15 minutes plus one delta interval if a delta missed the
+     change; and up to `EDGE_CREDENTIAL_SYNC_MAX_AGE` (24 h by default) on
+     an edge that reaches no control plane.
+   - **Cost**, measured with 50,000 credentials, each the key of its own
+     App with one LLM (development machine, Postgres 16): a full stream is
+     101 pages and 8 MB on the wire and takes about 4 s (3 to 4 s on
+     SQLite), holding under 10 MB of heap whatever the number of
+     credentials; an unchanged delta is one 16-byte page in 20 to 50 ms. As a steady cost
+     the periodic full stream is about 5 s of one hub core and 8 MB per
+     edge every 15 minutes: for 100 edges, about half a core and 1 MB/s on
+     average, spread over the interval. Ten edges taking theirs at the
+     same moment took 12 s.
+   - Every path that changes `credentials.active` or `apps.is_active`
+     moves `updated_at` (a whole-struct save, or gorm `Update`); none uses
+     `UpdateColumn`.
 3. **Edge store.** New table `synced_credentials` (hash unique-indexed, App
    ID, active, updated_at) and the watermark in `sync_states`. No plaintext
    column.
@@ -878,6 +937,14 @@ otherwise.
   2.2.2 and from the current RC.
 - **Longer offline life for revoked keys** with Phases 3 and 4. Both are
   opt-in and bounded by maximum ages.
+- **What `SyncCredentials` gives the holder of the edge token.** The edge
+  token is already a hub-wide secret (it can claim any namespace's
+  configuration). With credential sync it also yields, for a licensed
+  namespace, the hash of every App key (`pkg/credhash` under
+  `MICROGATEWAY_ENCRYPTION_KEY`: not a key, and not reversible) with its
+  key id and App. A tombstone carries nothing but a credential's numeric
+  id, so the credentials of other namespaces are visible only as ids that
+  changed.
 
 ## Decisions (Martin, 2026-11-10)
 
