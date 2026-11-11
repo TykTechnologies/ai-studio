@@ -131,7 +131,10 @@ const (
 	// 40: branding_assets (new table, additive): the uploaded logo and
 	//     favicon, stored in the database so every replica serves them
 	//     (midsommar-clean-4x5y.20).
-	SchemaVersion          = 40
+	// 41: edge_analytics_batches (new table, additive): the analytics
+	//     batches stored from edges, so one sent again after a lost
+	//     acknowledgement is not stored twice (midsommar-clean-4x5y.11).
+	SchemaVersion          = 41
 	MinReaderSchemaVersion = 26
 )
 

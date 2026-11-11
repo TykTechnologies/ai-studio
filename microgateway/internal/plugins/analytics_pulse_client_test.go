@@ -64,8 +64,14 @@ func TestAnalyticsPulse_SendsThroughCurrentClient(t *testing.T) {
 	bufferAnalytics(t, p, "after-reconnect")
 	p.sendPulse()
 
-	require.Equal(t, 1, fresh.callCount(), "the pulse must use the new connection")
-	assert.Len(t, fresh.pulses[0].AnalyticsEvents, 2, "the record the failed pulse kept is sent too")
+	// The batch the failed pulse kept goes first, as it was, and what arrived
+	// since follows as a batch of its own: both on the new connection.
+	require.Equal(t, 2, fresh.callCount(), "the pulses must use the new connection")
+	require.Len(t, fresh.pulses[0].AnalyticsEvents, 1, "the record the failed pulse kept is sent again, on its own")
+	assert.Equal(t, "before-reconnect", fresh.pulses[0].AnalyticsEvents[0].RequestId)
+	assert.Equal(t, closed.pulses[0].SequenceNumber, fresh.pulses[0].SequenceNumber, "under the sequence number it was first sent with")
+	require.Len(t, fresh.pulses[1].AnalyticsEvents, 1)
+	assert.Equal(t, "after-reconnect", fresh.pulses[1].AnalyticsEvents[0].RequestId)
 }
 
 // While the edge is disconnected there is no client; the pulse fails like
@@ -79,10 +85,12 @@ func TestAnalyticsPulse_NoConnectionKeepsData(t *testing.T) {
 	p.sendPulse()
 
 	p.bufferMutex.RLock()
-	kept := len(p.analyticsBuffer)
+	kept := p.totalBufferedLocked()
+	held := p.heldSizeLocked()
 	lastErr := p.lastError
 	p.bufferMutex.RUnlock()
 	assert.Equal(t, 1, kept)
+	assert.Equal(t, 1, held, "the undelivered batch is held for the next pulse")
 	assert.ErrorIs(t, lastErr, errNotConnected)
 }
 

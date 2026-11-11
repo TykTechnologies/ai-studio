@@ -298,6 +298,35 @@ Files: `microgateway/internal/config/config.go`,
    spend is counted twice. Give each batch a stable ID (edge ID, process
    boot ID, sequence) and have the hub record applied batch IDs with a
    short retention, in the transaction that stores the batch.
+   **Built:**
+   - *Proto:* `AnalyticsPulse.boot_id` (field 17), a random value the edge
+     draws once per process. The batch is identified by
+     `(edge_id, boot_id, sequence_number)`.
+   - *Edge:* a pulse that is not acknowledged is no longer merged back into
+     the buffers. It is held as it is and sent again first, under the same
+     sequence number; what arrived meanwhile follows as the next batch. A
+     held batch can lose records (retention, the buffer cap) but never
+     gains any, so a repeat is always a subset of what was first sent.
+   - *Hub:* the analytics handler writes in the background, so "the
+     transaction that stores the batch" did not exist. A pulse with a boot
+     ID now takes a synchronous path (`analytics.RecordEdgeBatch`,
+     implemented by the database handler and passed through by `Tee`): one
+     transaction inserts the batch key into `edge_analytics_batches`
+     (`ON CONFLICT DO NOTHING`; no row inserted means a repeat, which is
+     acknowledged without storing anything) and writes the pulse's proxy
+     logs, chat records, compliance events and tool calls. The edge is
+     answered after the commit, so an acknowledged batch is stored, and a
+     batch that could not be stored is answered `Unavailable` and sent
+     again. A row the database refuses on its own is left out and logged,
+     as the background writer does, so one bad record cannot block an
+     edge's analytics.
+   - Keys are pruned after 48 hours (twice the edge's default
+     `edge_retention_hours`), by whichever replica stores a batch, at most
+     hourly.
+   - A pulse without a boot ID (an older edge) and a host's own analytics
+     handler that cannot store a batch once keep the previous path.
+     Capture-only pulses carry no boot ID: capture events have their own
+     idempotency keys.
 5. A single DNS name or global load balancer in front of both CPs keeps
    working and stays documented as the alternative.
 

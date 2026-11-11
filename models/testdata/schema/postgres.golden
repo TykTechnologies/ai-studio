@@ -737,6 +737,13 @@ TABLE datasources
   column submission_id bigint(int8) nullable=YES precision=64 scale=0
   column metadata json(json) nullable=YES
   column allow_internal_host boolean(bool) nullable=NO default=false
+TABLE edge_analytics_batches
+  constraint edge_analytics_batches_pkey PRIMARY KEY (key)
+  index CREATE UNIQUE INDEX edge_analytics_batches_pkey ON edge_analytics_batches USING btree (key)
+  index CREATE INDEX idx_edge_analytics_batches_applied_at ON edge_analytics_batches USING btree (applied_at)
+  column key character varying(varchar) nullable=NO len=64
+  column edge_id character varying(varchar) nullable=YES len=255
+  column applied_at timestamp with time zone(timestamptz) nullable=NO
 TABLE edge_instances
   constraint edge_instances_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX edge_instances_pkey ON edge_instances USING btree (id)

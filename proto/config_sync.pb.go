@@ -1608,6 +1608,14 @@ type AnalyticsPulse struct {
 	IsCompressed  bool   `protobuf:"varint,10,opt,name=is_compressed,json=isCompressed,proto3" json:"is_compressed,omitempty"`      // Whether data is compressed
 	TotalRecords  uint32 `protobuf:"varint,11,opt,name=total_records,json=totalRecords,proto3" json:"total_records,omitempty"`      // Total number of records in pulse
 	DataSizeBytes uint64 `protobuf:"varint,12,opt,name=data_size_bytes,json=dataSizeBytes,proto3" json:"data_size_bytes,omitempty"` // Uncompressed data size
+	// Identity of the batch, with edge_id and sequence_number: a random value
+	// the edge draws once per process, so the triple stays the same when a
+	// batch is sent again (an acknowledgement lost with its control plane)
+	// and never repeats after a restart, where sequence_number starts at 1
+	// again. The hub stores a batch that carries it at most once. Empty from
+	// edges that predate it, whose pulses are stored as before, and on
+	// capture-only pulses, whose events carry their own idempotency keys.
+	BootId        string `protobuf:"bytes,17,opt,name=boot_id,json=bootId,proto3" json:"boot_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1752,6 +1760,13 @@ func (x *AnalyticsPulse) GetDataSizeBytes() uint64 {
 		return x.DataSizeBytes
 	}
 	return 0
+}
+
+func (x *AnalyticsPulse) GetBootId() string {
+	if x != nil {
+		return x.BootId
+	}
+	return ""
 }
 
 // AnalyticsPulseResponse acknowledges receipt of analytics pulse
@@ -4567,7 +4582,7 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x15config_version_before\x18\x06 \x01(\tR\x13configVersionBefore\x120\n" +
 	"\x14config_version_after\x18\a \x01(\tR\x12configVersionAfter\x128\n" +
 	"\ttimestamp\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12'\n" +
-	"\x0fskipped_entries\x18\t \x03(\tR\x0eskippedEntries\"\xe7\a\n" +
+	"\x0fskipped_entries\x18\t \x03(\tR\x0eskippedEntries\"\x80\b\n" +
 	"\x0eAnalyticsPulse\x12\x17\n" +
 	"\aedge_id\x18\x01 \x01(\tR\x06edgeId\x12%\n" +
 	"\x0eedge_namespace\x18\x02 \x01(\tR\redgeNamespace\x12C\n" +
@@ -4586,7 +4601,8 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\ris_compressed\x18\n" +
 	" \x01(\bR\fisCompressed\x12#\n" +
 	"\rtotal_records\x18\v \x01(\rR\ftotalRecords\x12&\n" +
-	"\x0fdata_size_bytes\x18\f \x01(\x04R\rdataSizeBytes\x1aA\n" +
+	"\x0fdata_size_bytes\x18\f \x01(\x04R\rdataSizeBytes\x12\x17\n" +
+	"\aboot_id\x18\x11 \x01(\tR\x06bootId\x1aA\n" +
 	"\x13CaptureDroppedEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\x04R\x05value:\x028\x01\"\xac\x02\n" +

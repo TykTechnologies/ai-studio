@@ -15,6 +15,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -43,6 +44,20 @@ type AnalyticsPulsePlugin struct {
 	complianceBuffer   []ComplianceEventBuffer
 	toolCallBuffer     []ToolCallBuffer
 	bufferMutex        sync.RWMutex
+	// held is the batch of a pulse that was not delivered, kept apart from
+	// the buffers so it is sent again as the same batch: the same records
+	// (less any that expired or were trimmed) under the same sequence
+	// number. The hub stores a batch once by (edge ID, boot ID, sequence
+	// number), so if it did store the first attempt and only its answer was
+	// lost, the repeat is recognised. Merged with newer records under a new
+	// number, as it used to be, those records were stored twice. Guarded by
+	// bufferMutex; nil while the pulse that took it is in flight.
+	held *heldPulse
+
+	// bootID is drawn once per process and sent with every pulse: sequence
+	// numbers start at 1 again after a restart, and the boot ID keeps the
+	// batches of two runs apart.
+	bootID string
 
 	// Pulse management
 	// timerMu guards pulseTimer: the timer's own callback, a buffer-full
@@ -186,6 +201,7 @@ func NewAnalyticsPulsePlugin(
 		ctx:            ctx,
 		cancel:         cancel,
 		sequenceNumber: 1,
+		bootID:         uuid.NewString(),
 		lastPulseTime:  time.Now(),
 		retryInterval:  time.Duration(pluginConfig.RetryIntervalSecs) * time.Second,
 	}
@@ -557,7 +573,8 @@ func (p *AnalyticsPulsePlugin) flushFullBuffer() {
 
 // pulseSnapshot is one pulse's worth of buffered data, taken out of the
 // buffers under the lock so it can be sent without holding them. If the send
-// fails it is put back in front of whatever arrived in the meantime.
+// fails it is held (heldPulse) and sent again before whatever arrived in the
+// meantime.
 type pulseSnapshot struct {
 	analytics  []database.AnalyticsEvent
 	metadata   []AnalyticsMetadata
@@ -572,10 +589,25 @@ func (s *pulseSnapshot) empty() bool {
 		len(s.compliance) == 0 && len(s.toolCalls) == 0
 }
 
-// totalBufferedLocked counts every record waiting for a pulse. Caller holds bufferMutex.
+// heldPulse is an undelivered batch and the sequence number it was sent under.
+type heldPulse struct {
+	snap pulseSnapshot
+	seq  uint64
+}
+
+func (s *pulseSnapshot) size() int {
+	return len(s.analytics) + len(s.budget) + len(s.proxy) + len(s.compliance) + len(s.toolCalls)
+}
+
+// totalBufferedLocked counts every record waiting for a pulse: the buffers
+// and the batch held for a retry. Caller holds bufferMutex.
 func (p *AnalyticsPulsePlugin) totalBufferedLocked() int {
-	return len(p.analyticsBuffer) + len(p.budgetBuffer) + len(p.proxyBuffer) +
+	n := len(p.analyticsBuffer) + len(p.budgetBuffer) + len(p.proxyBuffer) +
 		len(p.complianceBuffer) + len(p.toolCallBuffer)
+	if p.held != nil {
+		n += p.held.snap.size()
+	}
+	return n
 }
 
 // retryWait is the pause between attempts of one pulse, and the backoff after
@@ -591,6 +623,15 @@ func (p *AnalyticsPulsePlugin) retryWait() time.Duration {
 // interval ago. Caller holds bufferMutex (lastError is written under it).
 func (p *AnalyticsPulsePlugin) inBackoffLocked(now time.Time) bool {
 	return p.lastError != nil && now.Sub(p.lastErrorTime) < p.retryWait()
+}
+
+// heldSizeLocked is the number of records in the batch held for a retry.
+// Caller holds bufferMutex.
+func (p *AnalyticsPulsePlugin) heldSizeLocked() int {
+	if p.held == nil {
+		return 0
+	}
+	return p.held.snap.size()
 }
 
 // stopping reports whether the plugin has been told to shut down.
@@ -620,69 +661,82 @@ func (p *AnalyticsPulsePlugin) takeSnapshotLocked() pulseSnapshot {
 	return snap
 }
 
-// restoreSnapshotLocked puts an unsent snapshot back at the front of the
-// buffers (it is older than anything buffered since), drops records that have
-// aged past EdgeRetentionHours, and trims the buffers to MaxBufferSize by
-// discarding the oldest records. Caller holds bufferMutex.
-func (p *AnalyticsPulsePlugin) restoreSnapshotLocked(snap pulseSnapshot, now time.Time) {
+// nextBatchLocked returns the batch to send next: the held one, exactly as
+// it was left, under the sequence number it was first sent with; otherwise
+// everything buffered, under a new number. retried says which. An empty
+// snapshot means there is nothing to send. Caller holds bufferMutex.
+func (p *AnalyticsPulsePlugin) nextBatchLocked() (snap pulseSnapshot, seq uint64, retried bool) {
+	if h := p.held; h != nil {
+		p.held = nil
+		return h.snap, h.seq, true
+	}
+	snap = p.takeSnapshotLocked()
+	if snap.empty() {
+		return snap, 0, false
+	}
+	seq = p.sequenceNumber
+	p.sequenceNumber++
+	return snap, seq, false
+}
+
+// holdSnapshotLocked keeps an undelivered batch for the next pulse, which
+// sends it again under seq before anything newer. Records that have aged
+// past EdgeRetentionHours are dropped from it, and the held batch and the
+// buffers together are trimmed to MaxBufferSize by discarding the oldest
+// records (the held batch's first). A batch only ever loses records while
+// it is held: nothing newer is added to it, so the hub, which stores a
+// batch once by its sequence number, can tell a repeat from new data.
+// Caller holds bufferMutex.
+func (p *AnalyticsPulsePlugin) holdSnapshotLocked(snap pulseSnapshot, seq uint64, now time.Time) {
 	cutoff := now.Add(-time.Duration(p.config.EdgeRetentionHours) * time.Hour)
 	fresh := func(ts time.Time) bool { return p.config.EdgeRetentionHours <= 0 || !ts.Before(cutoff) }
 
 	// Analytics events and their metadata are paired by index; keep them in step.
-	analytics := make([]database.AnalyticsEvent, 0, len(snap.analytics))
-	metadata := make([]AnalyticsMetadata, 0, len(snap.analytics))
+	kept := pulseSnapshot{
+		analytics: make([]database.AnalyticsEvent, 0, len(snap.analytics)),
+		metadata:  make([]AnalyticsMetadata, 0, len(snap.analytics)),
+	}
 	for i, ev := range snap.analytics {
 		if !fresh(ev.TimeStamp) {
 			continue
 		}
-		analytics = append(analytics, ev)
+		kept.analytics = append(kept.analytics, ev)
 		if i < len(snap.metadata) {
-			metadata = append(metadata, snap.metadata[i])
+			kept.metadata = append(kept.metadata, snap.metadata[i])
 		} else {
-			metadata = append(metadata, AnalyticsMetadata{})
+			kept.metadata = append(kept.metadata, AnalyticsMetadata{})
 		}
 	}
-	budget := snap.budget[:0:0]
 	for _, b := range snap.budget {
 		if fresh(b.Timestamp) {
-			budget = append(budget, b)
+			kept.budget = append(kept.budget, b)
 		}
 	}
-	proxy := snap.proxy[:0:0]
 	for _, pr := range snap.proxy {
 		if fresh(pr.LastRequest) {
-			proxy = append(proxy, pr)
+			kept.proxy = append(kept.proxy, pr)
 		}
 	}
-	compliance := snap.compliance[:0:0]
 	for _, ce := range snap.compliance {
 		if fresh(ce.Timestamp) {
-			compliance = append(compliance, ce)
+			kept.compliance = append(kept.compliance, ce)
 		}
 	}
-	toolCalls := snap.toolCalls[:0:0]
 	for _, tc := range snap.toolCalls {
 		if fresh(tc.Timestamp) {
-			toolCalls = append(toolCalls, tc)
+			kept.toolCalls = append(kept.toolCalls, tc)
 		}
 	}
+	expired := snap.size() - kept.size()
+	p.held = &heldPulse{snap: kept, seq: seq}
 
-	expired := (len(snap.analytics) - len(analytics)) + (len(snap.budget) - len(budget)) +
-		(len(snap.proxy) - len(proxy)) + (len(snap.compliance) - len(compliance)) +
-		(len(snap.toolCalls) - len(toolCalls))
-
-	p.analyticsBuffer = append(analytics, p.analyticsBuffer...)
-	p.analyticsMetadata = append(metadata, p.analyticsMetadata...)
-	p.budgetBuffer = append(budget, p.budgetBuffer...)
-	p.proxyBuffer = append(proxy, p.proxyBuffer...)
-	p.complianceBuffer = append(compliance, p.complianceBuffer...)
-	p.toolCallBuffer = append(toolCalls, p.toolCallBuffer...)
-
-	// Trim to the cap, oldest first. Kinds are drained in order of how much
-	// the hub loses without them: a proxy summary is a rollup of an analytics
-	// event, a budget record is what spend enforcement runs on.
+	// Trim to the cap, oldest first: the held batch is older than anything
+	// buffered since. Kinds are drained in order of how much the hub loses
+	// without them: a proxy summary is a rollup of an analytics event, a
+	// budget record is what spend enforcement runs on.
 	dropped := 0
 	if max := p.config.MaxBufferSize; max > 0 {
+		// trim says how many of n records to drop to get back under the cap.
 		trim := func(n int) int {
 			over := p.totalBufferedLocked() - max
 			if over <= 0 || n == 0 {
@@ -691,31 +745,31 @@ func (p *AnalyticsPulsePlugin) restoreSnapshotLocked(snap pulseSnapshot, now tim
 			if over > n {
 				over = n
 			}
+			dropped += over
 			return over
 		}
-		if n := trim(len(p.proxyBuffer)); n > 0 {
-			p.proxyBuffer = p.proxyBuffer[n:]
-			dropped += n
+		h := &p.held.snap
+		h.proxy = h.proxy[trim(len(h.proxy)):]
+		p.proxyBuffer = p.proxyBuffer[trim(len(p.proxyBuffer)):]
+		if n := trim(len(h.analytics)); n > 0 {
+			h.analytics, h.metadata = h.analytics[n:], h.metadata[n:]
 		}
 		if n := trim(len(p.analyticsBuffer)); n > 0 {
 			p.analyticsBuffer = p.analyticsBuffer[n:]
 			if n <= len(p.analyticsMetadata) {
 				p.analyticsMetadata = p.analyticsMetadata[n:]
 			}
-			dropped += n
 		}
-		if n := trim(len(p.toolCallBuffer)); n > 0 {
-			p.toolCallBuffer = p.toolCallBuffer[n:]
-			dropped += n
-		}
-		if n := trim(len(p.complianceBuffer)); n > 0 {
-			p.complianceBuffer = p.complianceBuffer[n:]
-			dropped += n
-		}
-		if n := trim(len(p.budgetBuffer)); n > 0 {
-			p.budgetBuffer = p.budgetBuffer[n:]
-			dropped += n
-		}
+		h.toolCalls = h.toolCalls[trim(len(h.toolCalls)):]
+		p.toolCallBuffer = p.toolCallBuffer[trim(len(p.toolCallBuffer)):]
+		h.compliance = h.compliance[trim(len(h.compliance)):]
+		p.complianceBuffer = p.complianceBuffer[trim(len(p.complianceBuffer)):]
+		h.budget = h.budget[trim(len(h.budget)):]
+		p.budgetBuffer = p.budgetBuffer[trim(len(p.budgetBuffer)):]
+	}
+	// Nothing left of it: there is no batch to send again.
+	if p.held.snap.empty() {
+		p.held = nil
 	}
 
 	if expired > 0 || dropped > 0 {
@@ -774,8 +828,10 @@ func (p *AnalyticsPulsePlugin) sendWithRetry(pulse *pb.AnalyticsPulse, sequenceN
 }
 
 // sendPulse creates and sends an analytics pulse to control server. Data is
-// only released once the hub has accepted it; a pulse the hub never received
-// goes back into the buffers for the next one.
+// only released once the hub has accepted it; a pulse the hub never
+// acknowledged is held and sent again, as the same batch, by the next one.
+// When that held batch is delivered, what was buffered meanwhile follows at
+// once as a batch of its own.
 func (p *AnalyticsPulsePlugin) sendPulse() {
 	if !p.sending.CompareAndSwap(false, true) {
 		log.Debug().Msg("Analytics pulse already in flight - skipping")
@@ -783,17 +839,23 @@ func (p *AnalyticsPulsePlugin) sendPulse() {
 	}
 	defer p.sending.Store(false)
 
-	p.bufferMutex.Lock()
-	snap := p.takeSnapshotLocked()
-	if snap.empty() {
+	for {
+		p.bufferMutex.Lock()
+		snap, sequenceNum, retried := p.nextBatchLocked()
 		p.bufferMutex.Unlock()
-		log.Debug().Msg("No analytics data to pulse - skipping")
-		return
+		if snap.empty() {
+			log.Debug().Msg("No analytics data to pulse - skipping")
+			return
+		}
+		if !p.deliver(snap, sequenceNum, retried) || !retried {
+			return
+		}
 	}
-	sequenceNum := p.sequenceNumber
-	p.sequenceNumber++
-	p.bufferMutex.Unlock()
+}
 
+// deliver sends one batch under sequenceNum and reports whether the hub
+// answered. On failure the batch is held for the next pulse.
+func (p *AnalyticsPulsePlugin) deliver(snap pulseSnapshot, sequenceNum uint64, retried bool) bool {
 	// Build and send pulse
 	pulse := p.buildPulseMessage(snap.analytics, snap.metadata, snap.budget, snap.proxy, snap.compliance, snap.toolCalls, sequenceNum)
 	if n := makeValidUTF8(pulse.ProtoReflect()); n > 0 {
@@ -805,6 +867,7 @@ func (p *AnalyticsPulsePlugin) sendPulse() {
 
 	log.Debug().
 		Uint64("sequence", sequenceNum).
+		Bool("retried_batch", retried).
 		Int("analytics_events", len(snap.analytics)).
 		Int("budget_events", len(snap.budget)).
 		Int("proxy_summaries", len(snap.proxy)).
@@ -818,7 +881,7 @@ func (p *AnalyticsPulsePlugin) sendPulse() {
 		p.bufferMutex.Lock()
 		p.lastError = err
 		p.lastErrorTime = time.Now()
-		p.restoreSnapshotLocked(snap, p.lastErrorTime)
+		p.holdSnapshotLocked(snap, sequenceNum, p.lastErrorTime)
 		buffered := p.totalBufferedLocked()
 		p.bufferMutex.Unlock()
 		log.Error().
@@ -826,7 +889,7 @@ func (p *AnalyticsPulsePlugin) sendPulse() {
 			Uint64("sequence", sequenceNum).
 			Int("buffered_for_retry", buffered).
 			Msg("Analytics pulse not delivered - data kept for the next pulse")
-		return
+		return false
 	}
 
 	p.bufferMutex.Lock()
@@ -844,12 +907,13 @@ func (p *AnalyticsPulsePlugin) sendPulse() {
 			Msg("Analytics pulse sent successfully")
 	} else {
 		// The hub received the pulse and refused it. Retrying the same data
-		// would be refused again, so it is not restored.
+		// would be refused again, so it is not held.
 		log.Error().
 			Str("message", resp.Message).
 			Uint64("sequence", sequenceNum).
 			Msg("Analytics pulse rejected by control server")
 	}
+	return true
 }
 
 // buildPulseMessage constructs the analytics pulse protobuf message
@@ -1032,6 +1096,7 @@ func (p *AnalyticsPulsePlugin) buildPulseMessage(
 		DataFrom:         timestamppb.New(p.lastPulseTime),
 		DataTo:           timestamppb.New(now),
 		SequenceNumber:   sequenceNum,
+		BootId:           p.bootID,
 		AnalyticsEvents:  analyticsEvents,
 		BudgetEvents:     budgetEvents,
 		ProxySummaries:   proxySummaries,
@@ -1090,12 +1155,13 @@ func (p *AnalyticsPulsePlugin) GetStats() map[string]interface{} {
 	stats := map[string]interface{}{
 		"total_pulses_sent":     p.totalPulsesSent,
 		"total_records_sent":    p.totalRecordsSent,
-		"current_buffer_size":   len(p.analyticsBuffer) + len(p.budgetBuffer) + len(p.proxyBuffer) + len(p.complianceBuffer) + len(p.toolCallBuffer),
+		"current_buffer_size":   p.totalBufferedLocked(),
 		"analytics_buffered":    len(p.analyticsBuffer),
 		"budget_buffered":       len(p.budgetBuffer),
 		"proxy_buffered":        len(p.proxyBuffer),
 		"compliance_buffered":   len(p.complianceBuffer),
 		"tool_calls_buffered":   len(p.toolCallBuffer),
+		"held_for_retry":        p.heldSizeLocked(),
 		"sequence_number":       p.sequenceNumber,
 		"last_pulse_time":       p.lastPulseTime,
 		"pulse_interval_seconds": p.config.IntervalSeconds,
