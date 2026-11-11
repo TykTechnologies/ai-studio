@@ -88,9 +88,12 @@ coordination mechanism is added.
   with the other site as a synchronous standby) is the recommended setting.
   With asynchronous replication, a key acknowledged just before a failover
   can be lost: R3 cannot be met.
-- **Per-site labels.** `studio.Options.NodeLabel` exists but has no
-  environment variable; add `CLUSTER_NODE_LABEL` so the cluster status and
-  the Edge Gateways page show which site holds each edge.
+- **Per-site labels.** `CLUSTER_NODE_LABEL` (built) sets
+  `studio.Options.NodeLabel` in the Studio binary, so the cluster status and
+  the Edge Gateways page show which site holds each edge. The binary checks
+  it with `cluster.ValidateLabel` before anything else starts and exits
+  naming the setting when it is invalid (at most 64 characters: letters,
+  digits, spaces and `. _ - : / ( )`); unset keeps the label `studio`.
 
 ## Guarantees after this work
 
