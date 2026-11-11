@@ -1,0 +1,78 @@
+# Fault 7 (a partition between the zones): one observer per site, on that
+# site's hub node, at replicas 0 until the run. Each records, once a second
+# and to its own stdout, what its side can see of both sides: the HTTP
+# endpoints (observer.py) and both PostgreSQL nodes (observer-pg.sh). kubectl
+# may not reach the pods during the cut; the logs are read after the heal.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: observer-a, namespace: aa-load}
+spec:
+  replicas: 0
+  selector: {matchLabels: {app: observer, site: a}}
+  template:
+    metadata: {labels: {app: observer, site: a}}
+    spec:
+      nodeSelector: {aa-load/role: hub, aa-load/site: a}
+      tolerations: [{key: aa-load, operator: Equal, value: hub, effect: NoSchedule}]
+      terminationGracePeriodSeconds: 2
+      containers:
+        - name: http
+          image: public.ecr.aws/docker/library/python:3.12.8-alpine
+          command: ["python3", "-u", "/scripts/observer.py"]
+          env: [{name: SIDE, value: a}]
+          resources:
+            requests: {cpu: 50m, memory: 48Mi}
+            limits: {cpu: 200m, memory: 96Mi}
+          volumeMounts: [{name: script, mountPath: /scripts}]
+        - name: pg
+          image: public.ecr.aws/docker/library/postgres:16.6-alpine
+          command: ["sh", "/scripts/observer-pg.sh"]
+          env:
+            - {name: SIDE, value: a}
+            - {name: PGCONNECT_TIMEOUT, value: "2"}
+            - name: PGPASSWORD
+              valueFrom: {secretKeyRef: {name: aa-shared, key: POSTGRES_PASSWORD}}
+          resources:
+            requests: {cpu: 50m, memory: 48Mi}
+            limits: {cpu: 200m, memory: 96Mi}
+          volumeMounts: [{name: script, mountPath: /scripts}]
+      volumes:
+        - name: script
+          configMap: {name: aa-observer}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: observer-b, namespace: aa-load}
+spec:
+  replicas: 0
+  selector: {matchLabels: {app: observer, site: b}}
+  template:
+    metadata: {labels: {app: observer, site: b}}
+    spec:
+      nodeSelector: {aa-load/role: hub, aa-load/site: b}
+      tolerations: [{key: aa-load, operator: Equal, value: hub, effect: NoSchedule}]
+      terminationGracePeriodSeconds: 2
+      containers:
+        - name: http
+          image: public.ecr.aws/docker/library/python:3.12.8-alpine
+          command: ["python3", "-u", "/scripts/observer.py"]
+          env: [{name: SIDE, value: b}]
+          resources:
+            requests: {cpu: 50m, memory: 48Mi}
+            limits: {cpu: 200m, memory: 96Mi}
+          volumeMounts: [{name: script, mountPath: /scripts}]
+        - name: pg
+          image: public.ecr.aws/docker/library/postgres:16.6-alpine
+          command: ["sh", "/scripts/observer-pg.sh"]
+          env:
+            - {name: SIDE, value: b}
+            - {name: PGCONNECT_TIMEOUT, value: "2"}
+            - name: PGPASSWORD
+              valueFrom: {secretKeyRef: {name: aa-shared, key: POSTGRES_PASSWORD}}
+          resources:
+            requests: {cpu: 50m, memory: 48Mi}
+            limits: {cpu: 200m, memory: 96Mi}
+          volumeMounts: [{name: script, mountPath: /scripts}]
+      volumes:
+        - name: script
+          configMap: {name: aa-observer}

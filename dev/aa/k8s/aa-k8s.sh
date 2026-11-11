@@ -73,6 +73,8 @@ cmd_apply() {
 	k create configmap aa-pg-node --from-file=pg-node-k8s.sh="$HERE/pg-node-k8s.sh" --dry-run=client -o yaml | k apply -f -
 	k create configmap aa-scenarios --from-file="$HERE/scenarios" --dry-run=client -o yaml | k apply -f -
 	k create configmap aa-adminloop --from-file=adminloop.py="$HERE/adminloop.py" --dry-run=client -o yaml | k apply -f -
+	k create configmap aa-observer --from-file=observer.py="$HERE/observer.py" --from-file=observer-pg.sh="$HERE/observer-pg.sh" --dry-run=client -o yaml | k apply -f -
+	k apply -f "$HERE/50-observers.yaml"
 	# The roles ConfigMap is the failover state: never reset it on a re-apply.
 	k get configmap aa-pg-roles >/dev/null 2>&1 || k apply -f "$HERE/05-pg-roles.yaml"
 	k apply -f "$HERE/10-postgres.yaml"
