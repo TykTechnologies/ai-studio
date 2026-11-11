@@ -5,6 +5,7 @@ package studio
 import (
 	"errors"
 	"strconv"
+	"sync/atomic"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -144,11 +145,15 @@ func TestCheckSchemaIsUnchangedByTheFullStudioCheck(t *testing.T) {
 }
 
 // refusedLicense is a licensing service whose license does not validate.
-type refusedLicense struct{ err error }
+type refusedLicense struct {
+	err     error
+	started *atomic.Bool // Start was called: the background loops would run
+}
 
-func (r refusedLicense) Start() error { return r.err }
-func (refusedLicense) Stop()          {}
-func (refusedLicense) IsValid() bool  { return false }
+func (r refusedLicense) Start() error      { r.started.Store(true); return r.err }
+func (r refusedLicense) Revalidate() error { return r.err }
+func (refusedLicense) Stop()               {}
+func (refusedLicense) IsValid() bool       { return false }
 func (refusedLicense) Entitlement(string) (licensing.Feature, bool) {
 	return licensing.Feature{}, false
 }
@@ -164,7 +169,7 @@ func (refusedLicense) GetLicenseInfo() *licensing.LicenseInfo { return nil }
 // can); the Enterprise build runs the same check with real refused licenses
 // (enterprise/_coretests/pkg/studio).
 func TestRefusedLicenseLeavesTheDatabaseUntouched_Postgres(t *testing.T) {
-	refused := errors.New("license validation failed at boot: license does not include the Tyk AI Studio SKU")
+	refused := errors.New("license does not include the Tyk AI Studio SKU")
 	prev := newLicensingService
 	t.Cleanup(func() { newLicensingService = prev })
 
@@ -188,9 +193,13 @@ func TestRefusedLicenseLeavesTheDatabaseUntouched_Postgres(t *testing.T) {
 				keys := seed(t, opts)
 				before := databaseFingerprint(t, opts.DB)
 
-				newLicensingService = func(licensing.Config, *gorm.DB) licensing.Service { return refusedLicense{refused} }
+				var started atomic.Bool
+				newLicensingService = func(licensing.Config, *gorm.DB) licensing.Service {
+					return refusedLicense{err: refused, started: &started}
+				}
 				_, err := New(opts)
 				require.ErrorIs(t, err, refused)
+				assert.False(t, started.Load(), "the license is only validated up front: its periodic checks and telemetry are not started")
 				assert.Contains(t, err.Error(), "studio: start licensing: license validation failed at boot", "today's message")
 				assert.Equal(t, before, databaseFingerprint(t, opts.DB), "a refused license leaves the database untouched")
 
@@ -205,4 +214,42 @@ func TestRefusedLicenseLeavesTheDatabaseUntouched_Postgres(t *testing.T) {
 			})
 		})
 	}
+}
+
+// orderedLicense records when its license is validated and when its
+// background work is started, against the state of the database.
+type orderedLicense struct {
+	refusedLicense
+	db                                  *gorm.DB
+	migratedAtValidate, migratedAtStart *bool
+}
+
+func (o orderedLicense) migrated() bool { return o.db.Migrator().HasTable(&models.StudioSchema{}) }
+func (o orderedLicense) Revalidate() error {
+	*o.migratedAtValidate = o.migrated()
+	return nil
+}
+func (o orderedLicense) Start() error {
+	*o.migratedAtStart = o.migrated()
+	return nil
+}
+func (orderedLicense) IsValid() bool { return true }
+
+// The license is validated before the database is migrated, and the
+// service's periodic re-validation and telemetry, which read the database,
+// are started only after: they must not run against tables in the middle of
+// a migration.
+func TestLicenseIsValidatedBeforeMigrationsAndStartedAfter(t *testing.T) {
+	prev := newLicensingService
+	t.Cleanup(func() { newLicensingService = prev })
+	opts := newTestOptions(t)
+	var atValidate, atStart bool
+	newLicensingService = func(_ licensing.Config, db *gorm.DB) licensing.Service {
+		return orderedLicense{db: db, migratedAtValidate: &atValidate, migratedAtStart: &atStart}
+	}
+	s, err := New(opts)
+	require.NoError(t, err)
+	defer stopStudio(t, s)
+	assert.False(t, atValidate, "validated before anything is migrated")
+	assert.True(t, atStart, "background work started after the migrations")
 }

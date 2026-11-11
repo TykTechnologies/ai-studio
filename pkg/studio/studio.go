@@ -325,9 +325,13 @@ func New(opts Options) (_ *Studio, err error) {
 		return nil, fmt.Errorf("studio: %w", err)
 	}
 
-	// Then the license (Enterprise: validated here, with periodic checks
-	// from then on; Community: nothing to check). A license issued for an
-	// earlier version, a missing one or an expired one ends the start here.
+	// Then the license (Enterprise; Community has none to check). It is
+	// validated here, so that a license issued for an earlier version, a
+	// missing one or an expired one ends the start before anything is
+	// written. Only validated: the service's periodic re-validation and
+	// its telemetry, which read the database, start further down, after
+	// the migrations, where they always did (Start validates again there,
+	// which costs nothing).
 	// A host that keeps Studio running on an invalid licence gets Agent Call
 	// Tracing capture stopped first (the standalone binary exits instead).
 	onInvalid := opts.OnLicenceInvalid
@@ -349,10 +353,12 @@ func New(opts Options) (_ *Studio, err error) {
 		TelemetryConcurrency: conf.LicenseTelemetryConcurrency,
 		OnInvalid:            onInvalid,
 	}, s.db)
-	if err := s.licensing.Start(); err != nil {
-		return nil, fmt.Errorf("studio: start licensing: %w", err)
+	if v, ok := s.licensing.(licensing.Revalidator); ok {
+		if err := v.Revalidate(); err != nil {
+			// The words Start uses for the same failure.
+			return nil, fmt.Errorf("studio: start licensing: license validation failed at boot: %w", err)
+		}
 	}
-	logger.Info("Licensing service initialized")
 
 	// Migrations and seeding (through the RBAC seed below) run under a
 	// Postgres advisory lock, so replicas sharing a database do not race
@@ -422,6 +428,14 @@ func New(opts Options) (_ *Studio, err error) {
 		defer s.background.Done()
 		reencryptSecrets(backgroundCtx, s.db)
 	})
+
+	// Licensing's periodic checks and telemetry start now that the
+	// database is migrated (the license itself was validated before the
+	// first write, above).
+	if err := s.licensing.Start(); err != nil {
+		return nil, fmt.Errorf("studio: start licensing: %w", err)
+	}
+	logger.Info("Licensing service initialized")
 
 	var ociConfig *ociplugins.OCIConfig
 	if conf.OCIPlugins.IsEnabled() {
