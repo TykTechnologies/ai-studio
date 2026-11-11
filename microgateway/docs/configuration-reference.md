@@ -143,7 +143,7 @@ DATABASE_DSN="postgres://username:password@localhost:5432/microgateway?sslmode=r
 | `EDGE_NAMESPACE` | string | `""` | Namespace for configuration filtering |
 | `EDGE_RECONNECT_INTERVAL` | duration | `5s` | First reconnection delay; doubles per failed attempt up to 30s (or this value, if longer) |
 | `EDGE_HEARTBEAT_INTERVAL` | duration | `30s` | Heartbeat frequency to control |
-| `EDGE_SYNC_TIMEOUT` | duration | `10s` | Configuration sync timeout |
+| `EDGE_SYNC_TIMEOUT` | duration | `10s` | Unused: the setting is accepted but nothing reads it |
 
 ### Edge Authentication Configuration
 
@@ -154,7 +154,7 @@ DATABASE_DSN="postgres://username:password@localhost:5432/microgateway?sslmode=r
 | `EDGE_TLS_CERT_PATH` | string | - | Client certificate path |
 | `EDGE_TLS_KEY_PATH` | string | - | Client private key path |
 | `EDGE_TLS_CA_PATH` | string | - | CA certificate path (PEM) the control plane's certificate is checked against; unset uses the system roots |
-| `EDGE_TLS_SERVER_NAME` | string | - | Name the control plane's certificate is checked against, when it differs from the host in `EDGE_CONTROL_ENDPOINT` |
+| `EDGE_TLS_SERVER_NAME` | string | - | Name the control plane's certificate is checked against, when it differs from the host in `CONTROL_ENDPOINT` |
 | `EDGE_SKIP_TLS_VERIFY` | bool | `false` | Skip TLS certificate verification |
 
 ### Namespace Configuration Examples

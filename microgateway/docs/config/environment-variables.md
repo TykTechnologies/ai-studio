@@ -205,7 +205,7 @@ Complete reference for all microgateway environment variables organized by funct
 | `EDGE_AUTH_TOKEN` | - | Authentication token for control connection |
 | `EDGE_RECONNECT_INTERVAL` | 5s | Reconnection interval |
 | `EDGE_HEARTBEAT_INTERVAL` | 30s | Heartbeat interval |
-| `EDGE_SYNC_TIMEOUT` | 10s | Configuration sync timeout |
+| `EDGE_SYNC_TIMEOUT` | 10s | Unused: the setting is accepted but nothing reads it |
 
 ### Edge TLS Settings
 | Variable | Default | Description |
@@ -214,7 +214,7 @@ Complete reference for all microgateway environment variables organized by funct
 | `EDGE_TLS_CERT_PATH` | - | Client certificate path |
 | `EDGE_TLS_KEY_PATH` | - | Client key path |
 | `EDGE_TLS_CA_PATH` | - | CA certificate path (PEM) the control plane's certificate is checked against; unset uses the system roots |
-| `EDGE_TLS_SERVER_NAME` | - | Name the control plane's certificate is checked against, when it differs from the host in `EDGE_CONTROL_ENDPOINT` |
+| `EDGE_TLS_SERVER_NAME` | - | Name the control plane's certificate is checked against, when it differs from the host in `CONTROL_ENDPOINT` |
 | `EDGE_SKIP_TLS_VERIFY` | false | Skip TLS certificate verification |
 
 ## Plugin Configuration

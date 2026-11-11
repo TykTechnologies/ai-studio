@@ -213,7 +213,6 @@ EDGE_AUTH_TOKEN=secure-control-token
 # Reconnection settings
 EDGE_RECONNECT_INTERVAL=5s
 EDGE_HEARTBEAT_INTERVAL=30s
-EDGE_SYNC_TIMEOUT=10s
 ```
 
 ## Monitoring and Operations
