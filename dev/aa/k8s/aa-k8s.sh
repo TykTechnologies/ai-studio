@@ -151,7 +151,10 @@ cmd_fetch() {
 	mkdir -p "$out"
 	for half in short stream; do
 		pod=$(k get pod -l "app=gwbench,half=$half" -o jsonpath='{.items[0].metadata.name}')
-		kubectl --context "$CTX" cp "$NS/$pod:/bench/results" "$out/$half" >/dev/null
+		# Every request is a line of results.jsonl (millions per run): compress first.
+		k exec "$pod" -- sh -c 'cd /bench/results && tar czf /tmp/results.tgz .'
+		kubectl --context "$CTX" cp "$NS/$pod:/tmp/results.tgz" "$out/$half.tgz" >/dev/null
+		mkdir -p "$out/$half" && tar xzf "$out/$half.tgz" -C "$out/$half"
 	done
 	k logs deploy/adminloop --tail=-1 > "$out/adminloop.jsonl"
 	k scale deployment adminloop --replicas=0 >/dev/null

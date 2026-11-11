@@ -1,9 +1,10 @@
-# The gateway benchmark's own tools (benchmarks/gateway), on the tools nodes:
-# its mock upstream and two load generators, one for short requests and one
-# for streams, because a gwbench process runs one rate and the two halves of a
-# run go side by side. The generators idle until aa-k8s.sh starts a run in
-# them with kubectl exec, and keep the results until they are copied out.
-# TOOLS_IMAGE is replaced by aa-k8s.sh.
+# The gateway benchmark's own tools (benchmarks/gateway), on the two tools
+# nodes: its mock upstream alone on one (as in the benchmark, where the mock
+# has a machine to itself), and on the other the two load generators, one for
+# short requests and one for streams, because a gwbench process runs one rate
+# and the two halves of a run go side by side. The generators idle until
+# aa-k8s.sh starts a run in them with kubectl exec, and keep the results until
+# they are copied out. TOOLS_IMAGE is replaced by aa-k8s.sh.
 apiVersion: apps/v1
 kind: Deployment
 metadata: {name: mockllm, namespace: aa-load}
@@ -11,7 +12,7 @@ spec:
   replicas: 1
   selector: {matchLabels: {app: mockllm}}
   template:
-    metadata: {labels: {app: mockllm, tools: heavy}}
+    metadata: {labels: {app: mockllm}}
     spec:
       nodeSelector: {aa-load/role: tools}
       tolerations: [{key: aa-load, operator: Equal, value: tools, effect: NoSchedule}]
@@ -23,7 +24,7 @@ spec:
           command: ["mockllm", "-addr", ":9999"]
           ports: [{name: http, containerPort: 9999}]
           resources:
-            requests: {cpu: "3", memory: 2Gi}
+            requests: {cpu: "7", memory: 4Gi}
             limits: {cpu: "7", memory: 4Gi}
 ---
 apiVersion: v1
@@ -40,12 +41,11 @@ spec:
   replicas: 1
   selector: {matchLabels: {app: gwbench, half: short}}
   template:
-    metadata: {labels: {app: gwbench, half: short, tools: heavy}}
+    metadata: {labels: {app: gwbench, half: short}}
     spec:
       nodeSelector: {aa-load/role: tools}
       tolerations: [{key: aa-load, operator: Equal, value: tools, effect: NoSchedule}]
-      # The short-request generator and the mock are the two heavy tools:
-      # keep them on different tools nodes.
+      # Never on the mock's node.
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -65,8 +65,8 @@ spec:
             - {name: GWBENCH_STATE, value: /state/state.json}
             - {name: GWBENCH_OUT, value: /bench/results}
           resources:
-            requests: {cpu: "6", memory: 4Gi}
-            limits: {cpu: "7", memory: 8Gi}
+            requests: {cpu: "4500m", memory: 4Gi}
+            limits: {cpu: "4500m", memory: 6Gi}
           volumeMounts:
             - {name: state, mountPath: /state}
             - {name: scenarios, mountPath: /bench/scenarios}
@@ -90,12 +90,12 @@ spec:
     spec:
       nodeSelector: {aa-load/role: tools}
       tolerations: [{key: aa-load, operator: Equal, value: tools, effect: NoSchedule}]
-      # Next to the mock, away from the short-request generator.
+      # Never on the mock's node (so: next to the short-request generator).
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             - topologyKey: kubernetes.io/hostname
-              labelSelector: {matchLabels: {app: gwbench, half: short}}
+              labelSelector: {matchLabels: {app: mockllm}}
       securityContext:
         sysctls: [{name: net.ipv4.ip_local_port_range, value: "1024 65535"}]
       terminationGracePeriodSeconds: 5
@@ -110,8 +110,8 @@ spec:
             - {name: GWBENCH_STATE, value: /state/state.json}
             - {name: GWBENCH_OUT, value: /bench/results}
           resources:
-            requests: {cpu: "4", memory: 4Gi}
-            limits: {cpu: "4", memory: 8Gi}
+            requests: {cpu: "2800m", memory: 4Gi}
+            limits: {cpu: "2800m", memory: 6Gi}
           volumeMounts:
             - {name: state, mountPath: /state}
             - {name: scenarios, mountPath: /bench/scenarios}
@@ -135,12 +135,17 @@ spec:
   template:
     metadata: {labels: {app: adminloop}}
     spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector: {matchLabels: {app: mockllm}}
       nodeSelector: {aa-load/role: tools}
       tolerations: [{key: aa-load, operator: Equal, value: tools, effect: NoSchedule}]
       terminationGracePeriodSeconds: 2
       containers:
         - name: loop
-          image: python:3.12-alpine
+          image: public.ecr.aws/docker/library/python:3.12.8-alpine
           command: ["python3", "-u", "/scripts/adminloop.py"]
           env:
             - {name: STUDIOS, value: "a=http://studio-a:8080,b=http://studio-b:8080"}

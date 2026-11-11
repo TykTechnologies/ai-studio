@@ -36,7 +36,7 @@ spec:
       securityContext: {runAsUser: 70, runAsGroup: 70, fsGroup: 70}
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          image: public.ecr.aws/docker/library/postgres:16.6-alpine
           command: ["/aa/pg-node-k8s.sh"]
           env:
             - {name: AA_NODE, value: pg-a}
@@ -50,8 +50,8 @@ spec:
             exec: {command: ["pg_isready", "-U", "postgres", "-q"]}
             periodSeconds: 3
           resources:
-            requests: {cpu: "1500m", memory: 4Gi}
-            limits: {cpu: "1500m", memory: 4Gi}
+            requests: {cpu: "1500m", memory: 6Gi}
+            limits: {cpu: "1500m", memory: 6Gi}
           volumeMounts:
             - {name: data, mountPath: /var/lib/postgresql/data}
             - {name: script, mountPath: /aa}
@@ -84,7 +84,7 @@ spec:
       securityContext: {runAsUser: 70, runAsGroup: 70, fsGroup: 70}
       containers:
         - name: postgres
-          image: postgres:16-alpine
+          image: public.ecr.aws/docker/library/postgres:16.6-alpine
           command: ["/aa/pg-node-k8s.sh"]
           env:
             - {name: AA_NODE, value: pg-b}
@@ -98,8 +98,8 @@ spec:
             exec: {command: ["pg_isready", "-U", "postgres", "-q"]}
             periodSeconds: 3
           resources:
-            requests: {cpu: "1500m", memory: 4Gi}
-            limits: {cpu: "1500m", memory: 4Gi}
+            requests: {cpu: "1500m", memory: 6Gi}
+            limits: {cpu: "1500m", memory: 6Gi}
           volumeMounts:
             - {name: data, mountPath: /var/lib/postgresql/data}
             - {name: script, mountPath: /aa}

@@ -54,8 +54,8 @@ spec:
             httpGet: {path: /ready, port: http}
             periodSeconds: 3
           resources:
-            requests: {cpu: "2", memory: 4Gi}
-            limits: {cpu: "2", memory: 4Gi}
+            requests: {cpu: "2", memory: 6Gi}
+            limits: {cpu: "2", memory: 6Gi}
 ---
 apiVersion: v1
 kind: Service
@@ -82,7 +82,8 @@ spec:
       terminationGracePeriodSeconds: 1
       containers:
         - name: socat
-          image: alpine/socat:1.8.0.3
+          # No public.ecr.aws mirror of this image; pinned on Docker Hub.
+          image: docker.io/alpine/socat:1.8.0.3
           args: ["TCP-LISTEN:50051,fork,reuseaddr", "TCP:studio-a-grpc:50051"]
           ports: [{name: grpc, containerPort: 50051}]
           resources:
@@ -156,8 +157,8 @@ spec:
             httpGet: {path: /ready, port: http}
             periodSeconds: 3
           resources:
-            requests: {cpu: "2", memory: 4Gi}
-            limits: {cpu: "2", memory: 4Gi}
+            requests: {cpu: "2", memory: 6Gi}
+            limits: {cpu: "2", memory: 6Gi}
 ---
 apiVersion: v1
 kind: Service
@@ -184,7 +185,8 @@ spec:
       terminationGracePeriodSeconds: 1
       containers:
         - name: socat
-          image: alpine/socat:1.8.0.3
+          # No public.ecr.aws mirror of this image; pinned on Docker Hub.
+          image: docker.io/alpine/socat:1.8.0.3
           args: ["TCP-LISTEN:50051,fork,reuseaddr", "TCP:studio-b-grpc:50051"]
           ports: [{name: grpc, containerPort: 50051}]
           resources:

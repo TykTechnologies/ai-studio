@@ -63,7 +63,10 @@ max_connections = 300
 wal_level = replica
 hot_standby = on
 max_wal_senders = 10
-wal_keep_size = '1GB'
+wal_keep_size = '2GB'
+# Sized for the analytics ingest of a load run (6 GiB container).
+shared_buffers = '1500MB'
+max_wal_size = '4GB'
 include_if_exists = 'aa.conf'
 CONF
 		echo "synchronous_standby_names = '*'" >"$PGDATA/aa.conf"
