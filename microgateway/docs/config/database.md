@@ -157,6 +157,16 @@ DB_AUTO_MIGRATE=true
 mgw system health | grep database
 ```
 
+**Enterprise: the migration needs the license.** The microgateway validates
+its license before it opens the database, whether it is starting or only
+migrating. Give `./microgateway -migrate` the same `TYK_AI_LICENSE` as the
+gateway itself (in the environment, or the env file you pass with `-env`):
+without a valid license it exits with "License validation failed; the
+database was not opened" and the database is left as it was. That is
+deliberate: since 2.3 a start changes the database in ways an earlier
+version cannot read, so a microgateway that will not run must not have
+touched it. Community builds have no license and migrate as before.
+
 ## Performance Tuning
 
 ### Connection Pool Optimization
