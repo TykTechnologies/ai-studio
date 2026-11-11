@@ -82,7 +82,9 @@ func installPromptTemplates(cfgs []*pb.PromptTemplateConfig) {
 var installedTemplates atomic.Pointer[edgeTemplateSource]
 
 // InstalledPromptTemplates returns how many trusted prompt templates this
-// edge holds for an App, from the snapshot it last applied.
+// edge holds for an App, from the snapshot it last applied. It exists for
+// tests, which have no other way to see this in-memory configuration (the
+// last-known-good tests assert it is rebuilt); nothing at run time calls it.
 func InstalledPromptTemplates(appID uint) int {
 	if src := installedTemplates.Load(); src != nil {
 		return len(src.byApp[appID])

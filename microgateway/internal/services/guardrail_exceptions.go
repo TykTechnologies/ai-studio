@@ -81,7 +81,9 @@ func installGuardrailExceptions(cfgs []*pb.GuardrailExceptionConfig) {
 var installedExceptions atomic.Pointer[edgeExceptionSource]
 
 // InstalledGuardrailExceptions returns how many guardrail exceptions this
-// edge holds for an App, from the snapshot it last applied.
+// edge holds for an App, from the snapshot it last applied. It exists for
+// tests, which have no other way to see this in-memory configuration (the
+// last-known-good tests assert it is rebuilt); nothing at run time calls it.
 func InstalledGuardrailExceptions(appID uint) int {
 	if src := installedExceptions.Load(); src != nil {
 		if app := src.byApp[appID]; app != nil {
