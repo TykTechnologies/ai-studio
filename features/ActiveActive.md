@@ -377,6 +377,30 @@ Files: `microgateway/internal/config/config.go`,
      reasons `over_cap`, `expired`, `oversized`) and its log line names
      why pulses were failing: no connection, a control plane that answered
      but could not store, or one that did not answer in time.
+   - *What is not kept through an outage* (established in bead .36; not
+     changed by this epic unless a fix is chosen there). The records for
+     the control plane wait in the edge's memory. A pulse is tried
+     `max_retries` + 1 times (4 attempts over 15 s as packaged); when that
+     fails, for whatever reason (no connection, a control plane that
+     answers but cannot store, a timeout), the batch and everything
+     buffered since are trimmed to `max_buffer_size` records (10,000,
+     about 3,300 requests), oldest first, at every failed pulse. After the
+     outage the control plane receives those newest records and nothing
+     older: the edge does not resend from its own database, whose
+     `analytics_events` rows lack what a pulse carries (the budget record,
+     the proxy summary, model and vendor, stored bodies). So an outage of
+     T seconds at R requests/s loses about R x (T - 15) requests' records
+     (the load test: 698,000 rows in 3 min 28 s at 3,200 requests/s). The
+     loss is logged with the reason pulses failed and counted
+     (`microgateway_analytics_pulse_dropped_records_total{reason}`).
+     Budgets: an edge enforces on the higher of its own count (complete)
+     and the control plane's total; the control plane's total, its blocks
+     and its reports stay short by what other edges could not report, so
+     an App can overrun by that. Measured cost of keeping more in memory:
+     about 1.8 KB per request (three records), against 282 bytes per
+     request as a pulse message. "Pulses queue as in any outage", as an
+     earlier draft of this spec and the docs said, was true only up to
+     the buffer.
 5. A single DNS name or global load balancer in front of both CPs keeps
    working and stays documented as the alternative.
 
