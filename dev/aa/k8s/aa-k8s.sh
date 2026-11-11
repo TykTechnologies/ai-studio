@@ -41,7 +41,7 @@ role() {
 	case "$(sql "$1" 'SELECT pg_is_in_recovery()' 2>/dev/null)" in f) echo primary ;; t) echo standby ;; *) echo starting ;; esac
 }
 primary() { local s; for s in a b; do [ "$(role "$s")" = primary ] && { echo "$s"; return; }; done; return 1; }
-wait_sql() { local i; for i in $(seq 1 90); do [ "$(sql "$1" "$2" 2>/dev/null)" = t ] && return 0; sleep 1; done; die "pg-$1 did not $3 within 90 s"; }
+wait_sql() { local i n=${WAIT_TRIES:-90}; for i in $(seq 1 "$n"); do [ "$(sql "$1" "$2" 2>/dev/null)" = t ] && return 0; sleep 1; done; die "pg-$1 did not $3 within $n tries"; }
 set_sync() { # <site> on|off
 	local names=''; [ "$2" = on ] && names='*'
 	k exec "pg-$1-0" -c postgres -- sh -c "sed -i '/^synchronous_standby_names/d' \"\$PGDATA/aa.conf\"; echo \"synchronous_standby_names = '$names'\" >> \"\$PGDATA/aa.conf\""
@@ -261,14 +261,16 @@ cmd_rejoin() {
 	# The pod's entrypoint sees it is not the named primary and rebuilds
 	# its data directory from pg-$o.
 	k scale statefulset "pg-$s" --replicas=1
-	wait_sql "$o" "SELECT count(*) = 1 FROM pg_stat_replication WHERE state = 'streaming'" "see pg-$s streaming"
+	# By name: while the node copies its data directory, pg_basebackup's own
+	# WAL stream is in pg_stat_replication too, and must not be taken for the
+	# standby (it once became the synchronous one and held every commit).
+	# The copy takes minutes once the database has grown, hence the long wait.
+	WAIT_TRIES=900 wait_sql "$o" "SELECT count(*) = 1 FROM pg_stat_replication WHERE application_name = 'pg-$s' AND state = 'streaming'" "see pg-$s streaming"
 	# Synchronous only once the standby has caught up: a commit waits for a
-	# synchronous standby to have everything before it, so switching it on
-	# while the standby is still replaying its backlog holds every commit
-	# (seen under load: single INSERTs took a minute).
-	wait_sql "$o" "SELECT count(*) = 1 FROM pg_stat_replication WHERE pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn) < 8 * 1024 * 1024" "see pg-$s caught up"
+	# synchronous standby to have everything before it.
+	WAIT_TRIES=900 wait_sql "$o" "SELECT count(*) = 1 FROM pg_stat_replication WHERE application_name = 'pg-$s' AND pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn) < 8 * 1024 * 1024" "see pg-$s caught up"
 	set_sync "$o" on
-	wait_sql "$o" "SELECT count(*) = 1 FROM pg_stat_replication WHERE sync_state = 'sync'" "get a synchronous standby"
+	wait_sql "$o" "SELECT count(*) = 1 FROM pg_stat_replication WHERE application_name = 'pg-$s' AND sync_state = 'sync'" "get a synchronous standby"
 	stamp "pg-$s is the synchronous standby of pg-$o"
 }
 
