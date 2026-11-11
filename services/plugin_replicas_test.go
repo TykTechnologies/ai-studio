@@ -2,6 +2,7 @@ package services
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -77,4 +78,46 @@ func TestLoadsAtStart(t *testing.T) {
 		}
 		assert.Equal(t, tc.want, loadsAtStart(p), "%v", tc.hooks)
 	}
+}
+
+// A replica that missed cluster events for longer than they are kept checks
+// its plugins against the database: what changed or was deleted meanwhile is
+// applied as its event would have been, and a plugin that did not change is
+// left alone.
+func TestReconcilePluginsAfterGap(t *testing.T) {
+	db := setupTestDB(t)
+	svc := &Service{DB: db}
+	ui := func(name string) *models.Plugin {
+		p := &models.Plugin{
+			Name: name, Command: "file:///bin/true",
+			HookType: models.HookTypeStudioUI, HookTypes: []string{models.HookTypeStudioUI},
+			IsActive: true,
+		}
+		require.NoError(t, db.Create(p).Error)
+		t.Cleanup(func() { authz.UnregisterPlugin(p.PermissionKey()) })
+		return p
+	}
+	old, changed, deleted := ui("Old"), ui("Changed"), ui("Deleted")
+
+	// This replica knew "Deleted" before the gap, and nothing of "Changed"
+	// (created while it was away). "Old" was last written long before.
+	svc.ApplyPluginChangeFromReplica(TopicPluginCreated, deleted.ID)
+	_, ok := authz.ResourceByKey(deleted.PermissionKey())
+	require.True(t, ok)
+	long := time.Now().Add(-48 * time.Hour)
+	require.NoError(t, db.Model(&models.Plugin{}).Where("id = ?", old.ID).UpdateColumn("updated_at", long).Error)
+	require.NoError(t, db.Delete(deleted).Error)
+
+	svc.ReconcilePluginsAfterGap(time.Now().Add(-time.Hour))
+
+	_, ok = authz.ResourceByKey(changed.PermissionKey())
+	assert.True(t, ok, "a plugin created while the replica was away is in its catalogue")
+	_, ok = authz.ResourceByKey(deleted.PermissionKey())
+	assert.False(t, ok, "a plugin deleted while it was away is dropped")
+	_, ok = authz.ResourceByKey(old.PermissionKey())
+	assert.False(t, ok, "a plugin that did not change is not touched")
+
+	// Nothing to do the second time, and no database: no panic.
+	svc.ReconcilePluginsAfterGap(time.Now().Add(-time.Hour))
+	(&Service{}).ReconcilePluginsAfterGap(time.Now())
 }

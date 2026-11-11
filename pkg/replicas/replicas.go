@@ -126,6 +126,22 @@ func Deliver(name string) {
 	run(fns, fmt.Sprintf("replica signal %q", name))
 }
 
+// DeliverAll runs the handlers of every signal: for a replica that may have
+// missed signals (it could not read the cluster event log for longer than
+// events are kept), so that everything a signal would have refreshed is
+// refreshed.
+func DeliverAll() {
+	mu.Lock()
+	var fns []func()
+	for _, byID := range handlers {
+		for _, fn := range byID {
+			fns = append(fns, fn)
+		}
+	}
+	mu.Unlock()
+	run(fns, "replica signals after a gap")
+}
+
 // OnLeading registers fn to run each time this replica becomes the leader.
 // Leader-only work that checks IsLeader on a timer uses it to catch up at
 // once instead of waiting a whole interval: a replica restarted after a

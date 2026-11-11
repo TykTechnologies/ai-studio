@@ -65,3 +65,20 @@ func TestOnLeading(t *testing.T) {
 	BecameLeader()
 	assert.Equal(t, 1, calls, "removed")
 }
+
+// A replica that may have missed signals runs the handlers of all of them.
+func TestDeliverAll(t *testing.T) {
+	var budgets, branding int
+	removeA := OnSignal(SignalBudgets, func() { budgets++ })
+	removeB := OnSignal(SignalBranding, func() { branding++ })
+	removed := 0
+	removeC := OnSignal(SignalGovernedMetadata, func() { removed++ })
+	removeC()
+	t.Cleanup(removeA)
+	t.Cleanup(removeB)
+
+	DeliverAll()
+	assert.Equal(t, 1, budgets)
+	assert.Equal(t, 1, branding)
+	assert.Zero(t, removed, "a removed handler is not run")
+}
