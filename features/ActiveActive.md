@@ -801,7 +801,13 @@ credential migration, in "Before you upgrade":
   message. An older full Studio, 2.2.x or a 2.3 release candidate, does
   not check: it starts, refuses every App key and shows the ciphertext as
   the key, so every older replica is stopped first. Rolling back means
-  restoring the backup taken before the upgrade); Edges
+  restoring the backup taken before the upgrade. From this release on a
+  full Studio makes the same check as a headless one before its first
+  write, `models.CheckSchemaReadable`, and refuses a database whose
+  minimum reader is above its own schema version, so later rollbacks fail
+  safely; and an Enterprise Studio validates its license before that first
+  write too, after the reader check, so a refused license leaves the
+  database untouched); Edges
   (upgrade the hub first; new options are off by default); API (a write
   that cannot reach a writable database answers 503 `database_unavailable`
   with `Retry-After`, where it used to answer 500).
