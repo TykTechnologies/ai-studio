@@ -9,6 +9,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	"github.com/TykTechnologies/midsommar/v2/pkg/credhash"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	coresvc "github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/rs/zerolog/log"
@@ -40,14 +41,19 @@ type HybridGatewayService struct {
 	edgeClient     interface{}                               // Edge client for on-demand token validation
 	edgeNamespace  string                                    // Edge namespace for token validation
 	
-	// Token validation cache
-	tokenCache     map[string]*TokenCacheEntry              // token -> validation result
+	// Token validation cache. It is keyed by the token's credential hash
+	// (cacheKey), never by the token: the gateway holds a raw key only while
+	// it handles the request that carries it. The same hash is what a hub
+	// with full credential sync sends (features/ActiveActive.md, Phase 4).
+	hasher         *credhash.Hasher
+	tokenCache     map[string]*TokenCacheEntry              // credential hash -> validation result
 	cacheMutex     sync.RWMutex                            // Protects token cache
 	cacheConfig    config.HubSpokeConfig                    // Cache configuration
 	stopCleanup    chan bool                               // Signal to stop cleanup goroutine
 
 	// validations makes concurrent validations of one token share a single
-	// call to the control instance (and a single App upsert).
+	// call to the control instance (and a single App upsert). Keyed by the
+	// credential hash, as the cache is.
 	validations singleflight.Group
 	// warnings rate-limits the warnings for failed validations.
 	warnings warnLimiter
@@ -58,13 +64,16 @@ type HybridGatewayService struct {
 	apps *database.GenCache[uint, *database.App]
 }
 
-// NewHybridGatewayService creates a hybrid gateway service for edge instances
-func NewHybridGatewayService(db *gorm.DB, repo *database.Repository, edgeNamespace string, cacheConfig config.HubSpokeConfig) *HybridGatewayService {
+// NewHybridGatewayService creates a hybrid gateway service for edge instances.
+// hasher, made from the edge's ENCRYPTION_KEY, gives the keys of the token
+// cache.
+func NewHybridGatewayService(db *gorm.DB, repo *database.Repository, edgeNamespace string, cacheConfig config.HubSpokeConfig, hasher *credhash.Hasher) *HybridGatewayService {
 	dbService := NewDatabaseGatewayService(db, repo)
 	
 	service := &HybridGatewayService{
 		DatabaseGatewayService: dbService.(*DatabaseGatewayService),
 		edgeNamespace:         edgeNamespace,
+		hasher:               hasher,
 		tokenCache:           make(map[string]*TokenCacheEntry),
 		cacheConfig:          cacheConfig,
 		stopCleanup:          make(chan bool),
@@ -104,17 +113,18 @@ func (h *HybridGatewayService) SetEdgeClient(edgeClient interface{}) {
 // for about a second every five minutes under load and, with a slow hub,
 // refused valid requests.
 func (h *HybridGatewayService) ValidateAPIToken(token string) (*TokenValidationResult, error) {
+	key := h.cacheKey(token)
 	if h.cacheConfig.TokenCacheEnabled {
-		if cachedResult, refresh := h.cachedForRequest(token); cachedResult != nil {
+		if cachedResult, refresh := h.cachedForRequest(key); cachedResult != nil {
 			if refresh {
-				go h.refreshAhead(token)
+				go h.refreshAhead(token, key)
 			}
 			return cachedResult, nil
 		}
 	}
 
-	v, err, _ := h.validations.Do(token, func() (interface{}, error) {
-		return h.validateWithControl(token)
+	v, err, _ := h.validations.Do(key, func() (interface{}, error) {
+		return h.validateWithControl(token, key)
 	})
 	if err != nil {
 		return nil, err
@@ -125,15 +135,22 @@ func (h *HybridGatewayService) ValidateAPIToken(token string) (*TokenValidationR
 // refreshAhead revalidates a token whose cached result is near its expiry.
 // Success replaces the entry; a rejection removes it (validateWithControl);
 // any other failure leaves it to expire at its TTL as before.
-func (h *HybridGatewayService) refreshAhead(token string) {
-	_, _, _ = h.validations.Do(token, func() (interface{}, error) {
-		return h.validateWithControl(token)
+func (h *HybridGatewayService) refreshAhead(token, key string) {
+	_, _, _ = h.validations.Do(key, func() (interface{}, error) {
+		return h.validateWithControl(token, key)
 	})
 }
 
+// cacheKey returns the key of token in the token cache and in validations:
+// its credential hash (pkg/credhash).
+func (h *HybridGatewayService) cacheKey(token string) string {
+	return h.hasher.Hash(token)
+}
+
 // validateWithControl validates a token with the control instance, caches the
-// result and makes sure its App is in local SQLite.
-func (h *HybridGatewayService) validateWithControl(token string) (*TokenValidationResult, error) {
+// result under key (the token's cacheKey) and makes sure its App is in local
+// SQLite.
+func (h *HybridGatewayService) validateWithControl(token, key string) (*TokenValidationResult, error) {
 	tokenPrefix := token
 	if len(token) > 8 {
 		tokenPrefix = token[:8]
@@ -151,7 +168,7 @@ func (h *HybridGatewayService) validateWithControl(token string) (*TokenValidati
 	// client its key is wrong.
 	staleFallback := func(cause error) (*TokenValidationResult, error) {
 		cause = fmt.Errorf("%w: %w", coresvc.ErrCredentialCheckUnavailable, cause)
-		if stale, age := h.getStaleFromCache(token); stale != nil {
+		if stale, age := h.getStaleFromCache(key); stale != nil {
 			log.Warn().
 				Str("token_prefix", tokenPrefix).
 				Dur("stale_for", age).
@@ -181,7 +198,7 @@ func (h *HybridGatewayService) validateWithControl(token string) (*TokenValidati
 				log.Warn().Str("reason", resp.ErrorMessage).Msg("Token validation: rejected by the control instance")
 			}
 			// The hub has spoken: whatever we cached for this token is no longer true.
-			h.removeFromCache(token)
+			h.removeFromCache(key)
 			// The hub names an inactive App, so the edge can refuse it the way
 			// the embedded gateway does (403 "app is inactive"), not as a bad key.
 			if resp.ErrorMessage == coresvc.AppInactiveMessage {
@@ -238,7 +255,7 @@ func (h *HybridGatewayService) validateWithControl(token string) (*TokenValidati
 
 		// Cache the result if caching is enabled
 		if h.cacheConfig.TokenCacheEnabled {
-			h.storeInCache(token, result)
+			h.storeInCache(key, result)
 			log.Debug().Str("token_prefix", tokenPrefix).Dur("ttl", h.cacheConfig.TokenCacheTTL).Msg("Token validation result cached")
 		}
 
@@ -282,12 +299,12 @@ func (h *HybridGatewayService) loadAppByTokenID(tokenID uint) (*database.App, er
 	return &app, nil
 }
 
-// cachedForRequest returns the cached result for a token if it is still valid,
+// cachedForRequest returns the cached result for a cache key if it is still valid,
 // and whether this request should start its refresh-ahead: the entry is past
 // refreshAheadFraction of its TTL and no refresh has been started for it.
-func (h *HybridGatewayService) cachedForRequest(token string) (*TokenValidationResult, bool) {
+func (h *HybridGatewayService) cachedForRequest(key string) (*TokenValidationResult, bool) {
 	h.cacheMutex.RLock()
-	entry, exists := h.tokenCache[token]
+	entry, exists := h.tokenCache[key]
 	h.cacheMutex.RUnlock()
 	if !exists {
 		return nil, false
@@ -325,7 +342,7 @@ func (l *warnLimiter) allow(key string) bool {
 }
 
 // getFromCache retrieves a token validation result from cache if valid
-func (h *HybridGatewayService) getFromCache(token string) *TokenValidationResult {
+func (h *HybridGatewayService) getFromCache(key string) *TokenValidationResult {
 	if !h.cacheConfig.TokenCacheEnabled {
 		return nil
 	}
@@ -333,7 +350,7 @@ func (h *HybridGatewayService) getFromCache(token string) *TokenValidationResult
 	h.cacheMutex.RLock()
 	defer h.cacheMutex.RUnlock()
 
-	entry, exists := h.tokenCache[token]
+	entry, exists := h.tokenCache[key]
 	if !exists {
 		return nil
 	}
@@ -349,7 +366,7 @@ func (h *HybridGatewayService) getFromCache(token string) *TokenValidationResult
 // getStaleFromCache returns an expired entry that is still within the stale
 // grace, together with how long ago it expired. Only the hub-unreachable path
 // asks for one; a fresh entry is served by getFromCache before we get here.
-func (h *HybridGatewayService) getStaleFromCache(token string) (*TokenValidationResult, time.Duration) {
+func (h *HybridGatewayService) getStaleFromCache(key string) (*TokenValidationResult, time.Duration) {
 	if !h.cacheConfig.TokenCacheEnabled || h.cacheConfig.TokenCacheStaleGrace <= 0 {
 		return nil, 0
 	}
@@ -357,7 +374,7 @@ func (h *HybridGatewayService) getStaleFromCache(token string) (*TokenValidation
 	h.cacheMutex.RLock()
 	defer h.cacheMutex.RUnlock()
 
-	entry, exists := h.tokenCache[token]
+	entry, exists := h.tokenCache[key]
 	if !exists {
 		return nil, 0
 	}
@@ -370,8 +387,8 @@ func (h *HybridGatewayService) getStaleFromCache(token string) (*TokenValidation
 	return entry.Result, now.Sub(entry.ExpiresAt)
 }
 
-// removeFromCache drops a token's cached result, fresh or stale.
-func (h *HybridGatewayService) removeFromCache(token string) {
+// removeFromCache drops the cached result under a cache key, fresh or stale.
+func (h *HybridGatewayService) removeFromCache(key string) {
 	if !h.cacheConfig.TokenCacheEnabled {
 		return
 	}
@@ -379,7 +396,7 @@ func (h *HybridGatewayService) removeFromCache(token string) {
 	h.cacheMutex.Lock()
 	defer h.cacheMutex.Unlock()
 
-	delete(h.tokenCache, token)
+	delete(h.tokenCache, key)
 }
 
 // retireAt is the moment an entry is of no further use: its expiry plus the
@@ -391,8 +408,8 @@ func (h *HybridGatewayService) retireAt(entry *TokenCacheEntry) time.Time {
 	return entry.ExpiresAt.Add(h.cacheConfig.TokenCacheStaleGrace)
 }
 
-// storeInCache stores a token validation result in cache
-func (h *HybridGatewayService) storeInCache(token string, result *TokenValidationResult) {
+// storeInCache stores a token validation result in cache under its cache key
+func (h *HybridGatewayService) storeInCache(key string, result *TokenValidationResult) {
 	if !h.cacheConfig.TokenCacheEnabled {
 		return
 	}
@@ -407,7 +424,7 @@ func (h *HybridGatewayService) storeInCache(token string, result *TokenValidatio
 
 	// Store new entry
 	now := time.Now()
-	h.tokenCache[token] = &TokenCacheEntry{
+	h.tokenCache[key] = &TokenCacheEntry{
 		Result:    result,
 		CachedAt:  now,
 		ExpiresAt: now.Add(h.cacheConfig.TokenCacheTTL),
@@ -417,23 +434,23 @@ func (h *HybridGatewayService) storeInCache(token string, result *TokenValidatio
 // evictOldestEntry removes the oldest cache entry (simple LRU). An entry that
 // is past its stale grace is useless on every path and goes first.
 func (h *HybridGatewayService) evictOldestEntry() {
-	var oldestToken string
+	var oldestKey string
 	var oldestTime time.Time
 
 	now := time.Now()
-	for token, entry := range h.tokenCache {
+	for key, entry := range h.tokenCache {
 		if now.After(h.retireAt(entry)) {
-			delete(h.tokenCache, token)
+			delete(h.tokenCache, key)
 			return
 		}
-		if oldestToken == "" || entry.CachedAt.Before(oldestTime) {
-			oldestToken = token
+		if oldestKey == "" || entry.CachedAt.Before(oldestTime) {
+			oldestKey = key
 			oldestTime = entry.CachedAt
 		}
 	}
 
-	if oldestToken != "" {
-		delete(h.tokenCache, oldestToken)
+	if oldestKey != "" {
+		delete(h.tokenCache, oldestKey)
 	}
 }
 
@@ -461,9 +478,9 @@ func (h *HybridGatewayService) cleanupExpiredEntries() {
 	now := time.Now()
 	expiredCount := 0
 
-	for token, entry := range h.tokenCache {
+	for key, entry := range h.tokenCache {
 		if now.After(h.retireAt(entry)) {
-			delete(h.tokenCache, token)
+			delete(h.tokenCache, key)
 			expiredCount++
 		}
 	}

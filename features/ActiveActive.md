@@ -293,6 +293,14 @@ Files: `proto/config_sync.proto`, `proto/common.proto`,
    values, so a fast keyed hash is sufficient, FIPS-approved, and allows an
    indexed lookup; a captured edge database yields nothing usable without
    the key, and cannot be reversed with it.
+   **Built** as `pkg/credhash` (usable by the hub and by the microgateway
+   module): `credhash.New(encryptionKey)` then `Hash(credential)`, which
+   returns `"v1:"` and 64 hexadecimal characters (67 in all,
+   `credhash.Len`). The HKDF label is `credential-hash-v1`; the prefix
+   names the construction, so a later one can be told apart. The key must
+   be at least 14 bytes (112 bits, the least FIPS mode accepts). Test
+   vectors are fixed in `pkg/credhash/credhash_test.go` and asserted again
+   from the microgateway module.
 2. **New RPC `SyncCredentials`** (server stream, paged): for the edge's
    namespace, every App credential as `{credential_id, key_id, secret_hash,
    active, deleted, updated_at}` with its App (`AppConfig`, as

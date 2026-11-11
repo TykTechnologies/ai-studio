@@ -9,6 +9,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/providers"
+	"github.com/TykTechnologies/midsommar/v2/pkg/credhash"
 	"github.com/rs/zerolog/log"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -136,7 +137,13 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 		gatewayService = NewDatabaseGatewayService(db, repo)
 	} else {
 		// Edge: use HybridGatewayService - DatabaseGatewayService + on-demand token validation
-		gatewayService = NewHybridGatewayService(db, repo, cfg.HubSpoke.EdgeNamespace, cfg.HubSpoke)
+		// The token cache is keyed by credential hashes made with the edge's
+		// ENCRYPTION_KEY, which is the hub's MICROGATEWAY_ENCRYPTION_KEY.
+		hasher, err := credhash.New(cfg.Security.EncryptionKey)
+		if err != nil {
+			return nil, fmt.Errorf("credential hashing needs ENCRYPTION_KEY: %w", err)
+		}
+		gatewayService = NewHybridGatewayService(db, repo, cfg.HubSpoke.EdgeNamespace, cfg.HubSpoke, hasher)
 		log.Debug().Msg("Edge instance using HybridGatewayService with synced SQLite + on-demand token validation")
 	}
 	
