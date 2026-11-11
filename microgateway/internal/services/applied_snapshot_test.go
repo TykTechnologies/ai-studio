@@ -167,6 +167,41 @@ func TestAppliedSnapshot_StoreFailureRollsTheApplyBack(t *testing.T) {
 	assert.Equal(t, "c1", sum, "the edge still reports the configuration it runs")
 }
 
+// The same with the table in place: when writing the row fails (the last
+// step of the apply's transaction), the tables keep the configuration of
+// the previous snapshot and the previous row is still the stored one.
+func TestAppliedSnapshot_StoreFailureKeepsThePreviousRowAndTables(t *testing.T) {
+	forEachEdgeDB(t, func(t *testing.T, db *gorm.DB) {
+		s := persistingSync(t, db, "")
+		at := time.Now().Add(-time.Minute)
+		first := snapshotAt(at, "c1", []*pb.LLMConfig{syncLLM(1, "fast", at.Add(-time.Hour))}, nil)
+		require.NoError(t, s.SyncConfiguration(first))
+		before := storedRow(t, db)
+
+		require.NoError(t, db.Callback().Create().Before("gorm:create").Register("test:fail_applied_snapshot", func(tx *gorm.DB) {
+			if tx.Statement != nil && tx.Statement.Table == "applied_snapshots" {
+				_ = tx.AddError(assert.AnError)
+			}
+		}))
+		err := s.SyncConfiguration(snapshotAt(at.Add(10*time.Second), "c2",
+			[]*pb.LLMConfig{syncLLM(1, "fast", at.Add(-time.Hour)), syncLLM(2, "smart", at)}, nil))
+		require.NoError(t, db.Callback().Create().Remove("test:fail_applied_snapshot"))
+		require.ErrorIs(t, err, assert.AnError)
+
+		var llms int64
+		require.NoError(t, db.Model(&database.LLM{}).Count(&llms).Error)
+		assert.EqualValues(t, 1, llms, "the apply was rolled back with the row")
+		after := storedRow(t, db)
+		require.NotNil(t, after)
+		assert.Equal(t, before.Snapshot, after.Snapshot, "the previous row survives")
+		stored, err := LoadAppliedSnapshot(db, snapshotTestKey)
+		require.NoError(t, err)
+		assert.Equal(t, "c1", stored.Checksum)
+		sum, _, _ := s.ReportedConfig()
+		assert.Equal(t, "c1", sum)
+	})
+}
+
 // An unchanged snapshot (same fingerprint, apply skipped) does not rewrite
 // the row.
 func TestAppliedSnapshot_UnchangedSnapshotIsNotRewritten(t *testing.T) {
