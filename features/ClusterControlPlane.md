@@ -229,8 +229,8 @@ alone.
     backwards moves nothing (the push only takes longer to time out). A
     step beyond 5 minutes moves nothing and is logged as an error.
   - Once per failover for the cluster: the new server has a marker row in
-    `cluster_counters` (`push-clock:<address>/<timeline>`, value 1 = seen,
-    2 = decided). Whichever replica looks first records it and removes the
+    `cluster_counters` (`push-clock:<address>/<timeline>`, or a digest of
+    that when it does not fit the column; value 1 = seen, 2 = decided). Whichever replica looks first records it and removes the
     markers of earlier servers; a replica that measured the step (it read
     both servers' clocks) decides, the one whose update from 1 to 2
     succeeds. A replica without a measurement (started during the

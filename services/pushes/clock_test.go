@@ -3,6 +3,7 @@ package pushes
 import (
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -285,4 +286,17 @@ func TestSecondFailoverMovesOpenPushesOnceMore(t *testing.T) {
 		assert.Contains(t, []time.Duration{40 * time.Second, 70 * time.Second}, moved.Round(time.Second))
 		assert.Equal(t, []models.ClusterCounter{{Name: "push-clock:10.0.0.1:5432/3", Value: clockMarkerDecided}}, clockMarkers(t, db))
 	})
+}
+
+// A marker's name fits the column (64 characters) and is never a cut
+// server name: two servers that differ only at the end must not share one.
+func TestClockMarkerNames(t *testing.T) {
+	assert.Equal(t, "push-clock:10.0.0.2:5432/2", clockMarker("10.0.0.2:5432/2"))
+
+	a := clockMarker("2001:0db8:85a3:0000:0000:8a2e:0370:7334:5432/2147483646")
+	b := clockMarker("2001:0db8:85a3:0000:0000:8a2e:0370:7334:5432/2147483647")
+	assert.LessOrEqual(t, len(a), 64)
+	assert.True(t, strings.HasPrefix(a, clockMarkerPrefix+"sha256:"), a)
+	assert.NotEqual(t, a, b, "the next timeline on the same server is another marker")
+	assert.Equal(t, a, clockMarker("2001:0db8:85a3:0000:0000:8a2e:0370:7334:5432/2147483646"))
 }

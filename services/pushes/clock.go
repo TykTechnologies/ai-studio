@@ -1,6 +1,8 @@
 package pushes
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"sync"
 	"time"
@@ -161,11 +163,15 @@ func databaseServer(db *gorm.DB) (string, error) {
 const clockMarkerPrefix = "push-clock:"
 
 // clockMarker is the name of the row that says the pushes' times are on
-// server's clock.
+// server's clock: the server's name when it fits the column (64
+// characters), a digest of it otherwise (an IPv6 address with port and
+// timeline does not fit). Never a cut name: two servers must not share a
+// marker.
 func clockMarker(server string) string {
 	name := clockMarkerPrefix + server
 	if len(name) > 64 {
-		name = name[:64]
+		sum := sha256.Sum256([]byte(server))
+		name = clockMarkerPrefix + "sha256:" + hex.EncodeToString(sum[:20])
 	}
 	return name
 }
