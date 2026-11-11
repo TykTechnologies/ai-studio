@@ -45,3 +45,57 @@ instead, so the values file never has to hold the plaintext.
 {{ .Values.serviceAccount.name | default "default" }}
 {{- end -}}
 {{- end -}}
+
+{{/*
+"true" when the edge may start from its last-known-good configuration
+(config.startFromLastKnownGood, a boolean or the string "true"); empty
+otherwise.
+*/}}
+{{- define "microgateway.startFromLastKnownGood" -}}
+{{- if eq (toString .Values.config.startFromLastKnownGood) "true" -}}true{{- end -}}
+{{- end }}
+
+{{/*
+"true" when the edge's database is on a persistent volume: the StatefulSet
+form with persistence. A Deployment's emptyDir survives a container restart
+but not a rescheduled pod.
+*/}}
+{{- define "microgateway.persistentDatabase" -}}
+{{- if and .Values.persistence.enabled (eq (.Values.kind | default "Deployment") "StatefulSet") -}}true{{- end -}}
+{{- end }}
+
+{{/*
+"true" when a setting is on that relies on the edge's database surviving a
+restart (starting from last-known-good) while the
+database is not on a persistent volume.
+*/}}
+{{- define "microgateway.needsPersistenceWarning" -}}
+{{- $needs := include "microgateway.startFromLastKnownGood" . -}}
+{{- if and $needs (not (include "microgateway.persistentDatabase" .)) -}}true{{- end -}}
+{{- end }}
+
+{{/*
+What the chart prints after an install or upgrade (templates/NOTES.txt):
+the persistence warning, or nothing.
+*/}}
+{{- define "microgateway.notes" -}}
+{{- if and .Values.enabled (include "microgateway.needsPersistenceWarning" .) }}
+WARNING: this edge gateway keeps its database on an emptyDir volume.
+
+{{- if include "microgateway.startFromLastKnownGood" . }}
+  config.startFromLastKnownGood is on: the edge starts from the configuration
+  it stored in its database when no control plane answers.
+{{- end }}
+
+  An emptyDir survives a container restart, so that case is covered. It does
+  not survive a rescheduled pod (a node drain, an eviction, a rollout): such a
+  pod starts with an empty database and needs a control plane, exactly as
+  without the setting.
+
+  To cover rescheduled pods too, give each replica a persistent volume:
+
+    kind: StatefulSet
+    persistence:
+      enabled: true
+{{- end }}
+{{- end }}

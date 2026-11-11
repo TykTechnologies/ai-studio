@@ -7,10 +7,13 @@ image:
 
 replicaCount: 1
 
-# Workload kind. "Deployment" (default) is fine: the edge's SQLite is a cache
-# rebuilt from the hub on every start. Use "StatefulSet" when you want stable
-# per-replica edge identities and a PVC (see persistence below), so analytics
-# buffered between pulses survive a restart.
+# Workload kind. "Deployment" (default) is fine while the edge's SQLite is only
+# a cache rebuilt from the hub on every start. Use "StatefulSet" when you want
+# stable per-replica edge identities (the pod name, which is the edge ID, keeps
+# its ordinal) and a PVC (see persistence below), so analytics buffered between
+# pulses survive a restart. With config.startFromLastKnownGood the database
+# is more than a cache: use StatefulSet with persistence, or a rescheduled pod starts empty and needs a
+# control plane (the chart prints a warning on install otherwise).
 kind: Deployment
 
 # Must be >= SHUTDOWN_TIMEOUT (30s) or the graceful drain is cut short.
@@ -65,7 +68,8 @@ topologySpreadConstraints: []
   #     matchLabels:
   #       app: microgateway
 
-# Only takes effect with kind: StatefulSet.
+# Only takes effect with kind: StatefulSet. Needed for
+# config.startFromLastKnownGood to cover a rescheduled pod; a Deployment's emptyDir only covers a container restart.
 persistence:
   enabled: false
   storageClass: ""
@@ -132,6 +136,30 @@ ingress:
 config:
   # Control endpoint — AI Studio service name and gRPC port
   controlEndpoint: ""   # Auto-set in parent values, e.g. "midsommar:50051"
+  # Several control planes (CONTROL_ENDPOINTS), tried in order: list this
+  # edge's own site first. When its connection fails the edge moves to the
+  # next. Used instead of controlEndpoint when not empty.
+  controlEndpoints: []
+  #  - studio.site-a.example.com:50051
+  #  - studio.site-b.example.com:50051
+  # How often an edge that is not on its first control endpoint tries to
+  # return to it (EDGE_CONTROL_FAILBACK_INTERVAL), e.g. "5m". Empty: it stays
+  # where it is until that connection ends.
+  controlFailbackInterval: ""
+  # Start from the configuration the edge last applied (stored encrypted in
+  # its database) when no control plane answers at start-up
+  # (EDGE_START_FROM_LAST_KNOWN_GOOD). Off by default: such an edge serves
+  # what it last knew, so something removed or revoked in AI Studio since
+  # keeps working on it until it reconnects. Needs a database that survives
+  # the restart: see kind and persistence above.
+  startFromLastKnownGood: false
+  # How long the edge keeps trying its control endpoints at start-up before it
+  # uses the stored configuration (EDGE_STARTUP_CONTROL_TIMEOUT). Empty: 30s.
+  # Keep probes.startup (periodSeconds x failureThreshold) above it.
+  startupControlTimeout: ""
+  # The longest the edge may have been without a control plane and still
+  # start that way (EDGE_LAST_KNOWN_GOOD_MAX_AGE). Empty: 72h. "0": no limit.
+  lastKnownGoodMaxAge: ""
   # edgeId is no longer set here: each pod derives EDGE_ID from its own name via
   # the downward API, because a single shared value made every replica register
   # with the hub under one identity.
@@ -151,7 +179,11 @@ config:
   analyticsFlushInterval: "10s"
   analyticsRetentionDays: "90"
 
-  # Database (SQLite for edge)
+  # Database (SQLite for edge). The data volume is mounted at
+  # /opt/tyk-microgateway/data; the relative path below resolves against the
+  # image's working directory, which is /opt/tyk-microgateway in the release
+  # images. With an image that has another working directory, give the
+  # absolute path: "file:/opt/tyk-microgateway/data/edge.db?mode=rwc".
   databaseType: "sqlite"
   databaseDsn: "file:./data/edge.db?mode=rwc"
   dbAutoMigrate: "true"

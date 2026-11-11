@@ -15,7 +15,26 @@ data:
   DATABASE_DSN: {{ .Values.config.databaseDsn | quote }}
   DB_AUTO_MIGRATE: {{ .Values.config.dbAutoMigrate | quote }}
   GATEWAY_MODE: "edge"
+  {{- if .Values.config.controlEndpoints }}
+  # Several control planes, in order (the edge's own site first).
+  # CONTROL_ENDPOINT is not set with it: the edge refuses both.
+  CONTROL_ENDPOINTS: {{ join "," .Values.config.controlEndpoints | quote }}
+  {{- else }}
   CONTROL_ENDPOINT: {{ default (printf "%s:50051" .Release.Name) .Values.config.controlEndpoint | quote }}
+  {{- end }}
+  {{- with .Values.config.controlFailbackInterval }}
+  EDGE_CONTROL_FAILBACK_INTERVAL: {{ . | quote }}
+  {{- end }}
+  {{- if include "microgateway.startFromLastKnownGood" . }}
+  EDGE_START_FROM_LAST_KNOWN_GOOD: "true"
+  {{- end }}
+  {{- with .Values.config.startupControlTimeout }}
+  EDGE_STARTUP_CONTROL_TIMEOUT: {{ . | quote }}
+  {{- end }}
+  {{- /* "0" (no limit) must reach the edge: compared as a string, so a bare 0 is not read as unset */}}
+  {{- if ne (toString .Values.config.lastKnownGoodMaxAge) "" }}
+  EDGE_LAST_KNOWN_GOOD_MAX_AGE: {{ .Values.config.lastKnownGoodMaxAge | quote }}
+  {{- end }}
   # EDGE_ID is deliberately absent: it is set per-pod from the downward API in
   # the workload template, because one shared value made every replica register
   # under the same edge identity.
