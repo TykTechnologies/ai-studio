@@ -790,12 +790,15 @@ Files: `proto/config_sync.proto`, `proto/common.proto`,
    the event takes it without error (nothing subscribes to the topic).
    **Hub side built** (bead .18, `services/credential_changed.go`): the
    credential service raises the event on create, update (a regenerated
-   secret raises the old hash as deleted, then the new one), delete (the
-   hash is taken before the row goes), activate and deactivate, and on an
+   secret raises the old hash, then the new one), delete (the hash is taken
+   in the deleting transaction), activate and deactivate, and on an
    App's activation or deactivation and its key's activation through the
    App. The hash is made with `MICROGATEWAY_ENCRYPTION_KEY`
    (`services.SetEdgeCredentialHasher`, set by `pkg/studio`); without a
    usable key, or for a secret the replica cannot read, nothing is raised.
+   The hub sends the hash only: the event reaches every edge of every
+   namespace, and an edge drops by hash, so the credential ID, App ID and
+   namespace of the payload type stay zero and empty.
    The topic is reserved (`eventbridge.IsCredentialTopic`): plugins cannot
    publish it, on Studio or on an edge, and a control node drops one an
    edge sends. Measured on the cluster rig: a key deactivated through

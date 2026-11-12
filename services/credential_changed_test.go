@@ -70,22 +70,22 @@ func edgeHash(t *testing.T, secret string) string {
 	return h.Hash(secret)
 }
 
-// Every change to an App key tells the edges, naming the key by the hash
-// they hold for it (never the key): created, activated, deactivated,
-// regenerated (the old key as deleted, then the new one) and deleted.
+// Every change to an App key tells the edges, naming the key only by the
+// hash they hold for it: no key, no credential ID, no App, no namespace
+// (the event reaches every edge of every namespace). Created, activated,
+// deactivated, regenerated (the old key, then the new one) and deleted.
 func TestCredentialChanged_RaisedForEveryKeyChange(t *testing.T) {
 	svc, sink := credentialChangedService(t)
 
 	cred, err := svc.CreateCredential()
 	require.NoError(t, err)
 	got := sink.take(t, 1)
-	assert.Equal(t, eventbridge.CredentialChanged{CredentialID: cred.ID, Hash: edgeHash(t, cred.Secret), Active: false}, got[0])
-	assert.NotContains(t, got[0].Hash, cred.Secret)
+	assert.Equal(t, eventbridge.CredentialChanged{Hash: edgeHash(t, cred.Secret)}, got[0], "the hash and nothing else")
 
 	require.NoError(t, svc.ActivateCredential(cred.ID))
-	assert.True(t, sink.take(t, 1)[0].Active)
+	assert.Equal(t, edgeHash(t, cred.Secret), sink.take(t, 1)[0].Hash)
 	require.NoError(t, svc.DeactivateCredential(cred.ID))
-	assert.False(t, sink.take(t, 1)[0].Active)
+	assert.Equal(t, edgeHash(t, cred.Secret), sink.take(t, 1)[0].Hash)
 
 	old := cred.Secret
 	cred, err = svc.GetCredentialByID(cred.ID)
@@ -94,19 +94,15 @@ func TestCredentialChanged_RaisedForEveryKeyChange(t *testing.T) {
 	require.NoError(t, svc.UpdateCredential(cred))
 	got = sink.take(t, 2)
 	assert.Equal(t, edgeHash(t, old), got[0].Hash, "the old key first")
-	assert.True(t, got[0].Deleted)
 	assert.Equal(t, edgeHash(t, cred.Secret), got[1].Hash)
-	assert.False(t, got[1].Deleted)
 
 	require.NoError(t, svc.DeleteCredential(cred.ID))
 	got = sink.take(t, 1)
-	assert.Equal(t, edgeHash(t, cred.Secret), got[0].Hash, "hashed before the row went")
-	assert.True(t, got[0].Deleted)
-	assert.False(t, got[0].Active)
+	assert.Equal(t, eventbridge.CredentialChanged{Hash: edgeHash(t, cred.Secret)}, got[0], "hashed before the row went")
 }
 
 // An App's activation and its key's activation through the App tell the
-// edges, with the App and its namespace.
+// edges, still by the key's hash only: not the App or its namespace.
 func TestCredentialChanged_RaisedForAppChanges(t *testing.T) {
 	svc, sink := credentialChangedService(t)
 	cred, err := svc.CreateCredential()
@@ -115,18 +111,14 @@ func TestCredentialChanged_RaisedForAppChanges(t *testing.T) {
 	require.NoError(t, svc.DB.Create(app).Error)
 	sink.take(t, 1)
 
+	want := eventbridge.CredentialChanged{Hash: edgeHash(t, cred.Secret)}
 	require.NoError(t, svc.ActivateAppCredential(app.ID))
-	got := sink.take(t, 1)
-	assert.Equal(t, eventbridge.CredentialChanged{CredentialID: cred.ID, Hash: edgeHash(t, cred.Secret), AppID: app.ID, Namespace: "eu", Active: true}, got[0])
-
+	assert.Equal(t, want, sink.take(t, 1)[0])
 	_, err = svc.SetAppActive(app.ID, false, 0)
 	require.NoError(t, err)
-	got = sink.take(t, 1)
-	assert.False(t, got[0].Active, "an inactive App's key")
-	assert.Equal(t, app.ID, got[0].AppID)
-
+	assert.Equal(t, want, sink.take(t, 1)[0])
 	require.NoError(t, svc.DeactivateAppCredential(app.ID))
-	assert.False(t, sink.take(t, 1)[0].Active)
+	assert.Equal(t, want, sink.take(t, 1)[0])
 }
 
 // No event without a usable MICROGATEWAY_ENCRYPTION_KEY (no hash edges
@@ -138,7 +130,7 @@ func TestCredentialChanged_NotRaisedWithoutAHash(t *testing.T) {
 	require.NoError(t, err)
 
 	SetEdgeCredentialHasher(edgeKey)
-	_, ok := svc.credentialChange(svc.DB, &models.Credential{ID: 9, Secret: "refused-credential-reference"}, nil, false)
+	_, ok := credentialChange(&models.Credential{ID: 9, Secret: "refused-credential-reference"})
 	assert.False(t, ok, "an unreadable secret")
 	time.Sleep(50 * time.Millisecond)
 	sink.mu.Lock()

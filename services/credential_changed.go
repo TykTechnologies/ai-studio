@@ -1,7 +1,6 @@
 package services
 
 import (
-	"errors"
 	"sync/atomic"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
@@ -40,37 +39,18 @@ func SetEdgeCredentialHasher(encryptionKey string) {
 	edgeCredentialHasher.Store(h)
 }
 
-// credentialChange describes cred for credential.changed, as it is now, or
-// as it was for a key being replaced or deleted. ok is false when no event
-// can be raised: no edge hasher, or a secret this replica cannot read (the
-// edges' hash is of the secret).
-//
-// app is the credential's App when the caller has it (nil: it is read).
-func (s *Service) credentialChange(db *gorm.DB, cred *models.Credential, app *models.App, deleted bool) (eventbridge.CredentialChanged, bool) {
+// credentialChange is the credential.changed event for cred: the hash an
+// edge holds for its key, and nothing else. The event reaches every edge of
+// every namespace, and an edge only ever drops what it cached under that
+// hash, so it carries no credential ID, App or namespace (the payload's
+// other fields stay zero). ok is false when no event can be raised: no edge
+// hasher, or a secret this replica cannot read.
+func credentialChange(cred *models.Credential) (eventbridge.CredentialChanged, bool) {
 	h := edgeCredentialHasher.Load()
 	if h == nil || cred == nil || cred.Secret == "" || cred.Secret == secrets.RefusedCredential {
 		return eventbridge.CredentialChanged{}, false
 	}
-	change := eventbridge.CredentialChanged{
-		CredentialID: cred.ID,
-		Hash:         h.Hash(cred.Secret),
-		Active:       cred.Active && !deleted,
-		Deleted:      deleted,
-	}
-	if app == nil {
-		var found models.App
-		switch err := db.Select("id", "namespace", "is_active").Where("credential_id = ?", cred.ID).Take(&found).Error; {
-		case err == nil:
-			app = &found
-		case !errors.Is(err, gorm.ErrRecordNotFound):
-			logger.Log.Warn().Err(err).Uint("credential_id", cred.ID).Msg("credential.changed: reading the credential's App failed; the event names no App")
-		}
-	}
-	if app != nil {
-		change.AppID, change.Namespace = app.ID, app.Namespace
-		change.Active = change.Active && app.IsActive
-	}
-	return change, true
+	return eventbridge.CredentialChanged{Hash: h.Hash(cred.Secret)}, true
 }
 
 // publishCredentialChanged raises credential.changed for each change.
@@ -80,20 +60,20 @@ func (s *Service) publishCredentialChanged(changes ...eventbridge.CredentialChan
 	}
 	for _, c := range changes {
 		if err := eventbridge.PublishDown(s.EventBus, "control", eventbridge.CredentialChangedTopic, c); err != nil {
-			logger.Log.Warn().Err(err).Uint("credential_id", c.CredentialID).Msg("credential.changed: the event could not be raised; edges learn of the change at their next sync or cache expiry")
+			logger.Log.Warn().Err(err).Msg("credential.changed: the event could not be raised; edges learn of the change at their next sync or cache expiry")
 		}
 	}
 }
 
-// credentialChanged raises credential.changed for cred as it is now.
+// credentialChanged raises credential.changed for cred's key.
 func (s *Service) credentialChanged(cred *models.Credential) {
-	if change, ok := s.credentialChange(s.DB, cred, nil, false); ok {
+	if change, ok := credentialChange(cred); ok {
 		s.publishCredentialChanged(change)
 	}
 }
 
-// appCredentialChanged raises credential.changed for app's credential, as
-// it is now (after the App or its credential changed).
+// appCredentialChanged raises credential.changed for app's key (after the
+// App or its credential changed).
 func (s *Service) appCredentialChanged(app *models.App) {
 	if app == nil || app.CredentialID == 0 {
 		return
@@ -102,9 +82,7 @@ func (s *Service) appCredentialChanged(app *models.App) {
 	if err != nil {
 		return
 	}
-	if change, ok := s.credentialChange(s.DB, cred, app, false); ok {
-		s.publishCredentialChanged(change)
-	}
+	s.credentialChanged(cred)
 }
 
 // lockCredential locks the credential's row for the rest of tx on
