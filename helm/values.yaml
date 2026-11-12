@@ -292,6 +292,19 @@ metrics:
     enabled: false
     interval: 30s
 
+# How an AI Studio pod stops. On SIGTERM Studio stops accepting connections
+# and lets the requests in flight finish, for up to 30 seconds. Kubernetes
+# removes the pod from the Service's endpoints at the same time, which takes
+# a few seconds to reach every node, so without a delay requests routed to
+# the pod in that window are refused (2 of 600 probes in a rolling restart).
+shutdown:
+  # preStop sleep before Studio gets SIGTERM (0: none). The sleep action
+  # needs Kubernetes 1.30 or later; on an older cluster set 0.
+  preStopDelaySeconds: 10
+  # Empty: preStopDelaySeconds + 30 + 5. A value below
+  # preStopDelaySeconds + 30 fails the render.
+  terminationGracePeriodSeconds: ""
+
 # Configure startup, liveness and readiness probes
 probes:
   # Studio answers neither /health nor /ready while it waits for its database

@@ -252,3 +252,31 @@ func TestHelmStudioGlobalScheduling(t *testing.T) {
 		assert.NotContains(t, spec, k)
 	}
 }
+
+// A Studio pod sleeps before it stops, so requests routed to it while
+// Kubernetes takes it out of the Service are still answered, and its grace
+// period covers the sleep and Studio's 30-second drain.
+func TestHelmStudioStopDelay(t *testing.T) {
+	values := readValues(t, "../helm/values.yaml")
+	assert.Equal(t, 10, lookup(t, values, "shutdown", "preStopDelaySeconds"))
+
+	studio := func(rendered string) map[string]any {
+		d := renderedDoc(t, rendered, "Deployment", "test-midsommar")
+		require.NotNil(t, d)
+		return d
+	}
+	d := studio(helmTemplate(t))
+	assert.EqualValues(t, 45, dig(t, d, "spec", "template", "spec", "terminationGracePeriodSeconds"), "10 + 30 + 5")
+	assert.EqualValues(t, 10, dig(t, studioContainer(t, d), "lifecycle", "preStop", "sleep", "seconds"), "the sleep action: no shell needed")
+
+	d = studio(helmTemplate(t, "--set", "shutdown.preStopDelaySeconds=0"))
+	assert.Nil(t, studioContainer(t, d)["lifecycle"], "0: no preStop")
+	assert.EqualValues(t, 35, dig(t, d, "spec", "template", "spec", "terminationGracePeriodSeconds"))
+
+	d = studio(helmTemplate(t, "--set", "shutdown.preStopDelaySeconds=15", "--set", "shutdown.terminationGracePeriodSeconds=60"))
+	assert.EqualValues(t, 60, dig(t, d, "spec", "template", "spec", "terminationGracePeriodSeconds"))
+	assert.EqualValues(t, 15, dig(t, studioContainer(t, d), "lifecycle", "preStop", "sleep", "seconds"))
+
+	out := helmTemplateExpectingError(t, "--set", "shutdown.terminationGracePeriodSeconds=20")
+	assert.Contains(t, out, "must be at least shutdown.preStopDelaySeconds (10) plus Studio's 30-second shutdown: 40")
+}
