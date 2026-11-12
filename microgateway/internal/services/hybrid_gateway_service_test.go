@@ -290,6 +290,7 @@ func newStaleGraceService(t *testing.T, grace time.Duration) *HybridGatewayServi
 		DatabaseGatewayService: dbService.(*DatabaseGatewayService),
 		hasher:                 testCredentialHasher(t),
 		tokenCache:             make(map[string]*TokenCacheEntry),
+		evictedAt:              make(map[string]time.Time),
 		cacheConfig: config.HubSpokeConfig{
 			TokenCacheEnabled:    true,
 			TokenCacheTTL:        time.Minute,
@@ -369,7 +370,7 @@ func TestHybridGatewayService_ValidateAPIToken_StaleGrace(t *testing.T) {
 		client := &fakeEdgeClient{err: assert.AnError}
 		h.SetEdgeClient(client)
 		fresh := &TokenValidationResult{TokenID: 7, AppID: 7}
-		h.storeInCache(h.cacheKey("tok-fresh"), fresh)
+		h.storeInCache(h.cacheKey("tok-fresh"), fresh, time.Now())
 
 		got, err := h.ValidateAPIToken("tok-fresh")
 		require.NoError(t, err)

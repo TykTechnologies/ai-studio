@@ -518,6 +518,20 @@ Files: `proto/config_sync.proto`, `proto/common.proto`,
    `DirDown` event `credential.changed` on create, activate, deactivate and
    delete, which the cluster relay already carries to every replica's
    edges, so a revocation lands in about a second while connected.
+   The event's name and payload are fixed in `pkg/eventbridge`
+   (`CredentialChangedTopic`, `CredentialChanged`: credential_id, hash,
+   app_id, namespace, active, deleted; no key). The hash is the
+   edge-facing one (`pkg/credhash` under `MICROGATEWAY_ENCRYPTION_KEY`, as
+   `SyncCredentials` sends it), computed by the hub from the decrypted
+   secret before a deactivation or delete takes effect; nothing is sent
+   when the secret cannot be read. **Edge side built** (bead .18): on the
+   event an edge drops what it cached for that hash, fresh or within the
+   stale grace, forgets a validation in flight for it, and does not cache
+   the result of a validation that started before the event. It only ever
+   drops, whatever App or namespace the event names. An edge from before
+   the event takes it without error (nothing subscribes to the topic). The
+   hub side waits for bead .15; applying the event to the synced list in
+   full mode waits for bead .17.
 5. **Validation order with `EDGE_CREDENTIAL_SYNC=full`.**
    - Local hit, active: accept, no CP call.
    - Local hit, inactive or deleted: reject.

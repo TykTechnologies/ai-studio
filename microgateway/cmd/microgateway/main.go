@@ -21,6 +21,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/providers"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/server"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/filterscript"
 	"github.com/TykTechnologies/midsommar/v2/pkg/fipsinfo"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pathcheck"
@@ -280,6 +281,9 @@ func main() {
 				if hybridGateway, ok := hubSpokeContainer.GatewayService.(*services.HybridGatewayService); ok {
 					hybridGateway.SetEdgeClient(edgeClient)
 					log.Debug().Msg("Edge client connected to hybrid gateway service for token validation")
+					// A credential changed on the control plane: drop what
+					// this edge cached for it now, not at the cache TTL.
+					edgeClient.GetEventBus().Subscribe(eventbridge.CredentialChangedTopic, hybridGateway.HandleCredentialChanged)
 				}
 
 				// Create and connect edge reload handler for distributed reload operations
