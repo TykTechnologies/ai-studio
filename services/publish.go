@@ -99,6 +99,9 @@ func (s *Service) SetAppActive(id uint, active bool, userID uint) (*models.App, 
 	if s.SystemEvents != nil {
 		s.SystemEvents.EmitAppUpdated(app, app.ID, userID)
 	}
+	// Edges drop what they cached for the App's key: an inactive App's
+	// key is refused at once.
+	s.appCredentialChanged(app)
 	return app, nil
 }
 

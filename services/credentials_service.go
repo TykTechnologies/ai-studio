@@ -2,6 +2,8 @@ package services
 
 import (
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // CreateCredential creates a new credential
@@ -14,6 +16,8 @@ func (s *Service) CreateCredential() (*models.Credential, error) {
 	if err := credential.Create(s.DB); err != nil {
 		return nil, err
 	}
+	// An edge may hold a refusal for this key: it drops it.
+	s.credentialChanged(credential)
 
 	return credential, nil
 }
@@ -44,18 +48,52 @@ func (s *Service) GetCredentialBySecret(secret string) (*models.Credential, erro
 	return credential, nil
 }
 
-// UpdateCredential updates an existing credential
+// UpdateCredential updates an existing credential. A regenerated secret
+// replaces the old key at once: edges are told about the old one (as
+// deleted) as well as the new one. The old secret is read and replaced in
+// one transaction, with the row locked on PostgreSQL, so the old key the
+// event names is the one this write replaced.
 func (s *Service) UpdateCredential(credential *models.Credential) error {
-	return credential.Update(s.DB)
-}
-
-// DeleteCredential deletes a credential
-func (s *Service) DeleteCredential(id uint) error {
-	credential, err := s.GetCredentialByID(id)
+	var replaced *eventbridge.CredentialChanged
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		old := &models.Credential{}
+		if err := lockCredential(tx).First(old, credential.ID).Error; err == nil && old.Secret != credential.Secret {
+			if change, ok := credentialChange(old); ok {
+				replaced = &change
+			}
+		}
+		return credential.Update(tx)
+	})
 	if err != nil {
 		return err
 	}
-	return credential.Delete(s.DB)
+	if replaced != nil {
+		s.publishCredentialChanged(*replaced)
+	}
+	s.credentialChanged(credential)
+	return nil
+}
+
+// DeleteCredential deletes a credential. The edges' hash is of the secret:
+// it is taken from the row in the transaction that deletes it.
+func (s *Service) DeleteCredential(id uint) error {
+	var change eventbridge.CredentialChanged
+	var ok bool
+	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		credential := &models.Credential{}
+		if err := lockCredential(tx).First(credential, id).Error; err != nil {
+			return err
+		}
+		change, ok = credentialChange(credential)
+		return credential.Delete(tx)
+	})
+	if err != nil {
+		return err
+	}
+	if ok {
+		s.publishCredentialChanged(change)
+	}
+	return nil
 }
 
 // ActivateCredential activates a credential
@@ -64,7 +102,11 @@ func (s *Service) ActivateCredential(id uint) error {
 	if err != nil {
 		return err
 	}
-	return credential.Activate(s.DB)
+	if err := credential.Activate(s.DB); err != nil {
+		return err
+	}
+	s.credentialChanged(credential)
+	return nil
 }
 
 // DeactivateCredential deactivates a credential
@@ -73,7 +115,11 @@ func (s *Service) DeactivateCredential(id uint) error {
 	if err != nil {
 		return err
 	}
-	return credential.Deactivate(s.DB)
+	if err := credential.Deactivate(s.DB); err != nil {
+		return err
+	}
+	s.credentialChanged(credential)
+	return nil
 }
 
 // GetAllCredentials retrieves all credentials

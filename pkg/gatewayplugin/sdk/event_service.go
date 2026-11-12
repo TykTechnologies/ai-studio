@@ -64,11 +64,8 @@ func (s *PluginEventServer) Publish(ctx context.Context, req *pb.PublishRequest)
 			ErrorMessage: "topic is required",
 		}, nil
 	}
-	if eventbridge.IsGuardrailTopic(req.Topic) {
-		return &pb.PublishResponse{
-			Success:      false,
-			ErrorMessage: "topics under " + eventbridge.GuardrailAlertTopicPrefix + " and " + eventbridge.GuardrailOutcomeTopicPrefix + " are raised by AI Studio only; plugins cannot publish them",
-		}, nil
+	if refusal := eventbridge.PluginPublishRefusal(req.Topic); refusal != "" {
+		return &pb.PublishResponse{Success: false, ErrorMessage: refusal}, nil
 	}
 
 	// Generate event ID
