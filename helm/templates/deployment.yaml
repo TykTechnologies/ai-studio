@@ -48,6 +48,9 @@ spec:
             matchLabels:
               {{- include "midsommar.selectorLabels" . | nindent 14 }}
       {{- end }}
+      {{- /* preStop delay + Studio's shutdown (up to 30 s: it stops accepting
+             connections and lets requests in flight finish) + a margin. */}}
+      terminationGracePeriodSeconds: {{ include "midsommar.terminationGracePeriod" . }}
       containers:
         - name: midsommar
           image: "{{ .Values.midsommar.image.repository }}:{{ .Values.midsommar.image.tag }}"
@@ -86,6 +89,17 @@ spec:
                 name: {{ include "midsommar.fullname" . }}-config
             - secretRef:
                 name: {{ include "midsommar.fullname" . }}-secrets
+          {{- with (include "midsommar.preStopDelay" . | int) }}
+          {{- /* Keep serving for a moment after Kubernetes starts removing
+                 the pod from the Service's endpoints, which takes a few
+                 seconds to reach every node: requests already routed to it
+                 are answered instead of refused. The sleep action needs no
+                 shell, so it works with the distroless images. */}}
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: {{ . }}
+          {{- end }}
           {{- /* Studio answers neither /health nor /ready while it waits for its
                  database at start-up (DATABASE_STARTUP_TIMEOUT) and runs its
                  migrations: the startup probe covers that time, and liveness

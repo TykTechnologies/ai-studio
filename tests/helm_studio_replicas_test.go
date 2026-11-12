@@ -7,6 +7,7 @@
 package tests
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -251,4 +252,51 @@ func TestHelmStudioGlobalScheduling(t *testing.T) {
 	for _, k := range []string{"nodeSelector", "tolerations", "affinity"} {
 		assert.NotContains(t, spec, k)
 	}
+}
+
+// A Studio pod sleeps before it stops, so requests routed to it while
+// Kubernetes takes it out of the Service are still answered, and its grace
+// period covers the sleep and Studio's 30-second drain. The sleep action
+// exists from Kubernetes 1.30: on an older cluster no hook is rendered and
+// the grace period stays.
+func TestHelmStudioStopDelay(t *testing.T) {
+	values := readValues(t, "../helm/values.yaml")
+	assert.Equal(t, 10, lookup(t, values, "shutdown", "preStopDelaySeconds"))
+
+	studio := func(rendered string) map[string]any {
+		d := renderedDoc(t, rendered, "Deployment", "test-midsommar")
+		require.NotNil(t, d)
+		return d
+	}
+	k130 := []string{"--kube-version", "1.30.0"}
+	with := func(args ...string) []string { return append(append([]string{}, k130...), args...) }
+
+	d := studio(helmTemplate(t, k130...))
+	assert.EqualValues(t, 45, dig(t, d, "spec", "template", "spec", "terminationGracePeriodSeconds"), "10 + 30 + 5")
+	assert.EqualValues(t, 10, dig(t, studioContainer(t, d), "lifecycle", "preStop", "sleep", "seconds"), "the sleep action: no shell needed")
+
+	// An older cluster: no hook (its API server would reject the sleep
+	// action), the same grace period.
+	for _, v := range []string{"1.29.4", "1.16.0"} {
+		d = studio(helmTemplate(t, "--kube-version", v))
+		assert.Nil(t, studioContainer(t, d)["lifecycle"], v)
+		assert.EqualValues(t, 45, dig(t, d, "spec", "template", "spec", "terminationGracePeriodSeconds"), v)
+	}
+
+	d = studio(helmTemplate(t, with("--set", "shutdown.preStopDelaySeconds=0")...))
+	assert.Nil(t, studioContainer(t, d)["lifecycle"], "0: no preStop")
+	assert.EqualValues(t, 35, dig(t, d, "spec", "template", "spec", "terminationGracePeriodSeconds"))
+
+	d = studio(helmTemplate(t, with("--set", "shutdown.preStopDelaySeconds=15", "--set", "shutdown.terminationGracePeriodSeconds=60")...))
+	assert.EqualValues(t, 60, dig(t, d, "spec", "template", "spec", "terminationGracePeriodSeconds"))
+	assert.EqualValues(t, 15, dig(t, studioContainer(t, d), "lifecycle", "preStop", "sleep", "seconds"))
+
+	out := helmTemplateExpectingError(t, "--set", "shutdown.terminationGracePeriodSeconds=20")
+	assert.Contains(t, out, "must be at least shutdown.preStopDelaySeconds (10) plus Studio's 30-second shutdown: 40")
+
+	// The install notes say what an older cluster misses, and only there.
+	notes, err := os.ReadFile("../helm/templates/NOTES.txt")
+	require.NoError(t, err)
+	assert.Contains(t, string(notes), `semverCompare ">=1.30-0" .Capabilities.KubeVersion.Version`)
+	assert.Contains(t, string(notes), "may refuse the few requests")
 }

@@ -28,6 +28,8 @@ This Helm chart deploys Midsommar along with its optional components. It support
 | `config.csrfKey` | `CSRF_KEY`, stored in the Secret; required with several replicas | `""` |
 | `config.databaseMaxOpenConns`, `databaseMaxIdleConns`, `databaseConnMaxLifetime`, `databaseConnectTimeout`, `databaseReadyGrace`, `databaseStartupTimeout` | The `DATABASE_*` pool, readiness and start-up settings; empty keeps Studio's default, `0` is passed on | `""` |
 | `probes.startup` | Startup probe on `/health`: `periodSeconds` × `failureThreshold` must cover `DATABASE_STARTUP_TIMEOUT` plus the migrations | `5` × `36` (180 s) |
+| `shutdown.preStopDelaySeconds` | Seconds an AI Studio pod keeps serving after Kubernetes starts removing it from the Service, before it gets SIGTERM, so requests routed to it meanwhile are answered (`0`: none). Rendered on Kubernetes 1.30 and later (the `sleep` action); on an older cluster no hook is rendered and the install notes say so | `10` |
+| `shutdown.terminationGracePeriodSeconds` | Pod grace period. Empty: the delay plus Studio's 30-second drain plus 5 s; a smaller value fails the render | `""` (45) |
 | `probes.readiness.requireWrite` | Probe `/ready?require=write` instead of `/ready` | `false` |
 | `config.allowRegistrations` | Enable user registrations | `"true"` |
 | `config.adminEmail` | Admin email address | `"you@tyk.io"` |

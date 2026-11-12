@@ -84,3 +84,35 @@ rolling update that keeps every replica serving for several.
 strategy:
   {{- toYaml $s | nindent 2 }}
 {{- end }}
+
+{{/*
+terminationGracePeriodSeconds for Studio: shutdown.terminationGracePeriodSeconds
+when set, otherwise the preStop delay plus Studio's shutdown (30 s) plus a
+5 s margin. A value too short to cover the delay and the shutdown fails the
+render: Kubernetes would kill Studio mid-drain.
+*/}}
+{{- define "midsommar.terminationGracePeriod" -}}
+{{- $delay := int .Values.shutdown.preStopDelaySeconds -}}
+{{- $need := add $delay 30 -}}
+{{- $grace := int (default 0 .Values.shutdown.terminationGracePeriodSeconds) -}}
+{{- if eq $grace 0 -}}
+{{- $grace = add $need 5 -}}
+{{- else if lt $grace $need -}}
+{{- fail (printf "shutdown.terminationGracePeriodSeconds (%d) must be at least shutdown.preStopDelaySeconds (%d) plus Studio's 30-second shutdown: %d" $grace $delay $need) -}}
+{{- end -}}
+{{- $grace -}}
+{{- end }}
+
+{{/*
+The preStop sleep in seconds, or 0: shutdown.preStopDelaySeconds on a
+cluster whose API server is 1.30 or later. The sleep action needs no shell
+(the release images are distroless), but older API servers reject it, so
+on them no hook is rendered (NOTES.txt says what that costs).
+*/}}
+{{- define "midsommar.preStopDelay" -}}
+{{- if semverCompare ">=1.30-0" .Capabilities.KubeVersion.Version -}}
+{{- int .Values.shutdown.preStopDelaySeconds -}}
+{{- else -}}
+0
+{{- end -}}
+{{- end }}
