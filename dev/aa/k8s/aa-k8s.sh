@@ -24,6 +24,12 @@
 #   aa-k8s.sh cut-cp a|b|all          fault 4, first half: control proxies at zero   undo: restore-cp
 #   aa-k8s.sh kill-edge a|b           fault 4, second half: delete that edge's pod
 #   aa-k8s.sh switchover              fault 5: planned move of the primary role
+#                                     (SWITCHOVER_HOLD=N: N more seconds without a primary before the promote)
+#   aa-k8s.sh pulse [FILE]            each edge's dropped-pulse-records counters and pod start (run/fetch record them)
+#   aa-k8s.sh zone-b up|down          fault 7: mock and generator in zone b, observers on, mock Service zone-local
+#   aa-k8s.sh run-partition NAME [DURATION]  fault 7: zone a's generators on edge-a, zone b's on edge-b, half the
+#                                     part A level each (fetch NAME collects both zones)
+#   aa-k8s.sh drop-sync-at EPOCH      fault 7: the primary's own pod drops the synchronous requirement at that time
 #   aa-k8s.sh teardown                delete the namespace (asks for the namespace name)
 set -euo pipefail
 
@@ -166,10 +172,10 @@ cmd_seed() {
 
 # start_half <short|stream> <run name> <scenario> <duration> <rate scale> <edge whose /metrics is sampled>
 start_half() {
-	k exec "deploy/gwbench-$1" -- sh -c "
+	k exec "deploy/${GEN_DEPLOY:-gwbench-$1}" -- sh -c "
 		sed 's/RUN_DURATION/$4/' /bench/scenarios/$3.yaml > /tmp/$2-$1.yaml &&
 		mkdir -p /bench/results/$2 &&
-		nohup gwbench run -no-analytics-check -rate-scale $5 -label '$2 ($3 x$5)' -out /bench/results/$2 \
+		${GATEWAY_URL:+GWBENCH_GATEWAY_URL=$GATEWAY_URL} nohup gwbench run -no-analytics-check -rate-scale $5 -label '$2 ($3 x$5)' -out /bench/results/$2 \
 			-metrics http://edge-$6:8080/metrics /tmp/$2-$1.yaml > /bench/results/$2/$1.log 2>&1 &"
 }
 
@@ -181,10 +187,29 @@ cmd_run() {
 	# check is done once for both afterwards (they share the App).
 	mkdir -p "$HERE/results/$name"
 	log_rows > "$HERE/results/$name/proxy-log-rows.before"
+	cmd_pulse "$HERE/results/$name/pulse-dropped.before"
 	start_half short "$name" "${SHORT_SCENARIO:-aa-short}" "$duration" "${SHORT_SCALE:-1}" a
 	# NO_STREAM=1: the short half alone (the ramp, with the stream generator at zero).
 	[ "${NO_STREAM:-}" = 1 ] || start_half stream "$name" aa-stream "$duration" "${STREAM_SCALE:-1}" b
 	stamp "run $name started for $duration (short x${SHORT_SCALE:-1}, stream x${STREAM_SCALE:-1})"
+}
+
+# Fault 7: each zone's load goes to its own zone's edge, so the cut never
+# stands between a generator and its edge. Half the part A level per zone
+# (0.25 of the MEDIAN scale each): 1,500 short + 94 streams/s.
+cmd_run_partition() {
+	local name=${1:?run name} duration=${2:-12m} sc=${ZONE_SCALE:-0.25}
+	k get deploy gwbench-zb >/dev/null 2>&1 || die "run 'aa-k8s.sh zone-b up' first"
+	k scale deployment adminloop --replicas=1 >/dev/null
+	k rollout status deployment adminloop --timeout=60s >/dev/null
+	mkdir -p "$HERE/results/$name"
+	log_rows > "$HERE/results/$name/proxy-log-rows.before"
+	cmd_pulse "$HERE/results/$name/pulse-dropped.before"
+	GATEWAY_URL=http://edge-a:8080 start_half short "$name" aa-short "$duration" "$sc" a
+	GATEWAY_URL=http://edge-a:8080 start_half stream "$name" aa-stream "$duration" "$sc" a
+	GEN_DEPLOY=gwbench-zb start_half short "$name-zb-short" aa-short "$duration" "$sc" b
+	GEN_DEPLOY=gwbench-zb start_half stream "$name-zb-stream" aa-stream "$duration" "$sc" b
+	stamp "partition run $name started for $duration (each zone: short x$sc, stream x$sc on its own edge)"
 }
 
 # Rows in Studio's proxy log, in all and by response code. gwbench's own
@@ -210,6 +235,14 @@ cmd_fetch() {
 		# run) and nothing here clears it; a dozen runs put the node under disk
 		# pressure and the pod is evicted. Restart the generators between passes.
 	done
+	# Fault 7: the zone-b generator's two halves.
+	pod=$(k get pod -l app=gwbench-zb -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) || pod=
+	for half in short stream; do
+		[ -n "$pod" ] && k exec "$pod" -- test -d "/bench/results/$name-zb-$half" 2>/dev/null || continue
+		k exec "$pod" -- sh -c "cd /bench/results/$name-zb-$half && tar czf /tmp/results-$half.tgz ."
+		kubectl --context "$CTX" cp "$NS/$pod:/tmp/results-$half.tgz" "$out/zb-$half.tgz" >/dev/null
+		mkdir -p "$out/zb-$half" && tar xzf "$out/zb-$half.tgz" -C "$out/zb-$half"
+	done
 	k logs deploy/adminloop --tail=-1 > "$out/adminloop.jsonl"
 	k scale deployment adminloop --replicas=0 >/dev/null
 	# Analytics reach Studio on the edges' pulse: wait until the count has
@@ -222,6 +255,7 @@ cmd_fetch() {
 		last=$rows; sleep 5
 	done
 	echo "$rows" > "$out/proxy-log-rows.after"
+	cmd_pulse "$out/pulse-dropped.after"
 	local p; p=$(primary)
 	sql "$p" "SELECT response_code || ' ' || count(*) FROM proxy_logs GROUP BY response_code ORDER BY response_code" midsommar > "$out/proxy-log-rows.by-code"
 	python3 "$HERE/analytics-check.py" "$out"
@@ -299,6 +333,8 @@ cmd_switchover() {
 	set_sync "$p" off
 	k scale statefulset "pg-$p" --replicas=0 # SIGTERM: a clean shutdown, the standby has everything
 	k wait --for=delete "pod/pg-$p-0" --timeout=60s >/dev/null
+	# SWITCHOVER_HOLD: a slower switchover, longer without a writable database.
+	[ "${SWITCHOVER_HOLD:-0}" = 0 ] || { stamp "holding ${SWITCHOVER_HOLD}s without a primary"; sleep "$SWITCHOVER_HOLD"; }
 	cmd_promote
 	cmd_rejoin "$p"
 }
@@ -344,6 +380,62 @@ cmd_cp() { # 0|1 a|b|all
 
 cmd_kill_edge() { local s; s=$(site "${1:-}"); stamp "fault: edge-$s pod deleted"; k delete pod "edge-$s-microgateway-0" --grace-period=0 --force; }
 
+# Each edge's microgateway_analytics_pulse_dropped_records_total{reason}
+# (images with the .37 fix), read through the API server's Service proxy so
+# no tool is needed in any image; with the pod's start time and restarts,
+# because a restarted edge starts its counters at zero.
+cmd_pulse() {
+	local out=${1:-/dev/stdout} s m
+	{
+		stamp "pulse counters"
+		for s in a b; do
+			k get pod "edge-$s-microgateway-0" -o jsonpath="{'edge-$s pod started '}{.status.startTime}{' restarts '}{.status.containerStatuses[0].restartCount}{'\n'}" 2>/dev/null || echo "edge-$s pod absent"
+			if m=$(kubectl --context "$CTX" get --raw "/api/v1/namespaces/$NS/services/edge-$s:8080/proxy/metrics" 2>/dev/null); then
+				echo "$m" | grep -e '^microgateway_analytics_pulse_dropped_records_total' | sed "s/^/edge-$s /" || echo "edge-$s no pulse-dropped counter yet"
+			else
+				echo "edge-$s /metrics unreachable"
+			fi
+		done
+	} > "$out"
+}
+
+# Fault 7 only. up: a second mock and a generator on the zone-b tools node,
+# the mock Service made zone-local (each edge keeps to its own zone's mock
+# through the cut), the observers at 1. down: undo.
+cmd_zone_b() {
+	: "${TOOLS_IMAGE:?set TOOLS_IMAGE}"
+	case "${1:-}" in
+	up)
+		sed "s|TOOLS_IMAGE|$TOOLS_IMAGE|" "$HERE/35-zone-b.yaml" | k apply -f -
+		k patch service mockllm --type merge -p '{"spec":{"trafficDistribution":"PreferClose"}}'
+		k scale deployment observer-a observer-b --replicas=1
+		k rollout status deployment mockllm-b --timeout=180s
+		k rollout status deployment gwbench-zb --timeout=180s
+		;;
+	down)
+		k scale deployment observer-a observer-b --replicas=0
+		k patch service mockllm --type json -p '[{"op":"remove","path":"/spec/trafficDistribution"}]' || true
+		sed "s|TOOLS_IMAGE|$TOOLS_IMAGE|" "$HERE/35-zone-b.yaml" | k delete -f - --ignore-not-found
+		;;
+	*) die "zone-b up|down" ;;
+	esac
+}
+
+# Fault 7, run (ii): kubectl may not reach the pods during the cut, so the
+# drop is staged beforehand inside the primary's own pod, on a timer.
+cmd_drop_sync_at() {
+	local at=${1:?epoch seconds} p
+	p=$(primary) || die "no primary"
+	k exec -i "pg-$p-0" -c postgres -- sh -c 'cat > /tmp/drop-sync.sh && setsid nohup sh /tmp/drop-sync.sh </dev/null >/dev/null 2>&1 &' <<EOS
+while [ \$(date +%s) -lt $at ]; do sleep 0.2; done
+sed -i '/^synchronous_standby_names/d' "\$PGDATA/aa.conf"
+echo "synchronous_standby_names = ''" >> "\$PGDATA/aa.conf"
+psql -U postgres -qAtc 'SELECT pg_reload_conf()'
+date -u +%FT%TZ > /tmp/sync-dropped
+EOS
+	stamp "pg-$p drops the synchronous requirement at $(date -u -d "@$at" +%FT%TZ) (marker /tmp/sync-dropped in its pod)"
+}
+
 cmd_teardown() {
 	[ "${1:-}" = "$NS" ] || die "to delete the namespace and everything in it, run: aa-k8s.sh teardown $NS"
 	kubectl --context "$CTX" delete namespace "$NS"
@@ -371,5 +463,9 @@ cut-cp) cmd_cp 0 "${2:-}" ;;
 restore-cp) cmd_cp 1 "${2:-}" ;;
 kill-edge) cmd_kill_edge "${2:-}" ;;
 teardown) cmd_teardown "${2:-}" ;;
-*) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+pulse) cmd_pulse "${2:-/dev/stdout}" ;;
+zone-b) cmd_zone_b "${2:-}" ;;
+drop-sync-at) cmd_drop_sync_at "${2:-}" ;;
+run-partition) cmd_run_partition "${2:-}" "${3:-}" ;;
+*) sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

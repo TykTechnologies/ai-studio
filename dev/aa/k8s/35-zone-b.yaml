@@ -1,0 +1,70 @@
+# Fault 7 only (a partition between the zones): a second mock upstream and a
+# generator on the zone-b tools node (aa-load-tools-b), so that each zone has
+# its own load and its own upstream through the cut. Applied and removed by
+# 'aa-k8s.sh zone-b up|down', which also makes the mockllm Service zone-local
+# (trafficDistribution: PreferClose): each edge then calls its own zone's mock.
+# The zone-a generators are aimed at edge-a and this one at edge-b, half the
+# rate each ('aa-k8s.sh run-partition'). TOOLS_IMAGE is replaced by aa-k8s.sh.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: mockllm-b, namespace: aa-load}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  # Same app label as the zone-a mock: one Service, an endpoint per zone.
+  selector: {matchLabels: {app: mockllm, zone: b}}
+  template:
+    metadata: {labels: {app: mockllm, zone: b}}
+    spec:
+      nodeSelector: {aa-load/role: tools, topology.kubernetes.io/zone: eu-west-3b}
+      tolerations: [{key: aa-load, operator: Equal, value: tools, effect: NoSchedule}]
+      securityContext:
+        sysctls: [{name: net.ipv4.ip_local_port_range, value: "1024 65535"}]
+      containers:
+        - name: mockllm
+          image: TOOLS_IMAGE
+          command: ["mockllm", "-addr", ":9999"]
+          ports: [{name: http, containerPort: 9999}]
+          resources: # half the part A level: 1,500 short + 94 streams/s
+            requests: {cpu: "2500m", memory: 2Gi}
+            limits: {cpu: "2500m", memory: 2Gi}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: gwbench-zb, namespace: aa-load}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: gwbench-zb}}
+  template:
+    metadata: {labels: {app: gwbench-zb}}
+    spec:
+      nodeSelector: {aa-load/role: tools, topology.kubernetes.io/zone: eu-west-3b}
+      tolerations: [{key: aa-load, operator: Equal, value: tools, effect: NoSchedule}]
+      securityContext:
+        sysctls: [{name: net.ipv4.ip_local_port_range, value: "1024 65535"}]
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: gwbench
+          image: TOOLS_IMAGE
+          command: ["sleep", "infinity"]
+          env:
+            - {name: GWBENCH_GATEWAY_URL, value: "http://edge-b:8080"}
+            - {name: GWBENCH_MOCK_URL, value: "http://mockllm:9999"}
+            - {name: GWBENCH_STUDIO_URL, value: "http://studio-b:8080"}
+            - {name: GWBENCH_STATE, value: /state/state.json}
+            - {name: GWBENCH_OUT, value: /bench/results}
+          resources: # both halves run here, as two processes
+            requests: {cpu: "4", memory: 3Gi}
+            limits: {cpu: "4", memory: 4Gi}
+          volumeMounts:
+            - {name: state, mountPath: /state}
+            - {name: scenarios, mountPath: /bench/scenarios}
+            - {name: results, mountPath: /bench/results}
+      volumes:
+        - name: state
+          secret: {secretName: aa-gwbench-state}
+        - name: scenarios
+          configMap: {name: aa-scenarios}
+        - name: results
+          emptyDir: {}
