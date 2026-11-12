@@ -1,0 +1,5 @@
+# Rendered only (chart22.sh check), never applied: a node selector and a
+# toleration as a dedicated node pool would need them (global.*, #995).
+global:
+  nodeSelector: {aa-load/role: hub}
+  tolerations: [{key: aa-load, operator: Equal, value: hub, effect: NoSchedule}]

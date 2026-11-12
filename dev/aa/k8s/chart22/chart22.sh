@@ -15,7 +15,9 @@ set -euo pipefail
 CTX=${AA_K8S_CONTEXT:-aa-epic-23}
 NS=aa-chart22
 HERE=$(cd "$(dirname "$0")" && pwd)
-CHART=$(cd "$HERE/../../../../helm" && pwd)
+# AA_CHART: the Studio chart to render (default: this checkout's helm/; for
+# the check, an archive of the integration tip's helm/).
+CHART=$(cd "${AA_CHART:-$HERE/../../../../helm}" && pwd)
 k() { kubectl --context "$CTX" -n "$NS" "$@"; }
 rand() { head -c "$1" /dev/urandom | od -An -tx1 | tr -d ' \n'; }
 
@@ -45,12 +47,16 @@ cmd_render() {
 		-e "s|GENERATED_GRPC_TOKEN|$grpc|g" -e "s|GENERATED_ENC_KEY|$enc|g" "$HERE/values.yaml" > "$HERE/rendered/values.yaml"
 	docker run --rm -v "$CHART:/chart:ro" -v "$HERE/rendered/values.yaml:/values.yaml:ro" alpine/helm:3.16.2 \
 		template studio /chart --namespace "$NS" -f /values.yaml > "$HERE/rendered/studio.yaml"
+	# Rendered only, never applied: the same values plus a node selector and
+	# a toleration, to show they reach the Studio pod spec (#995).
+	docker run --rm -v "$CHART:/chart:ro" -v "$HERE/rendered/values.yaml:/values.yaml:ro" -v "$HERE/scheduling.yaml:/scheduling.yaml:ro" alpine/helm:3.16.2 \
+		template studio /chart --namespace "$NS" -f /values.yaml -f /scheduling.yaml > "$HERE/rendered/studio-scheduling.yaml"
 	echo "rendered/studio.yaml: $(grep -c '^kind:' "$HERE/rendered/studio.yaml") objects"
 }
 
 cmd_check() {
 	local r="$HERE/rendered/studio.yaml"
-	python3 - "$r" <<'PY'
+	python3 - "$r" "$HERE/rendered/studio-scheduling.yaml" <<'PY'
 import sys, yaml
 docs = [d for d in yaml.safe_load_all(open(sys.argv[1])) if d]
 dep = next(d for d in docs if d["kind"] == "Deployment" and "microgateway" not in d["metadata"]["name"])
@@ -70,6 +76,12 @@ checks = {
   "CSRF_KEY in the chart Secret": any("CSRF_KEY" in (d.get("data") or {}) or "CSRF_KEY" in (d.get("stringData") or {}) for d in secrets),
   "CLUSTER_NODE_LABEL site-a": any((d.get("data") or {}).get("CLUSTER_NODE_LABEL") == "site-a" for d in cms) or env.get("CLUSTER_NODE_LABEL", {}).get("value") == "site-a",
 }
+sched = [d for d in yaml.safe_load_all(open(sys.argv[2])) if d]
+sdep = next(d for d in sched if d["kind"] == "Deployment" and "microgateway" not in d["metadata"]["name"])
+spod = sdep["spec"]["template"]["spec"]
+checks["global.nodeSelector reaches the Studio pod"] = spod.get("nodeSelector", {}).get("aa-load/role") == "hub"
+checks["global.tolerations reach the Studio pod"] = any(t.get("key") == "aa-load" and t.get("value") == "hub" for t in spod.get("tolerations", []))
+checks["no nodeSelector or toleration without them"] = not pod.get("nodeSelector") and not pod.get("tolerations")
 print("rendered Deployment:", dep["metadata"]["name"])
 for name, ok in checks.items():
     print(("PASS " if ok else "FAIL ") + name)
