@@ -55,7 +55,7 @@ Two sites cannot safely decide a failover on their own. When site A loses contac
 - a Kubernetes API server, or a CloudNativePG or Patroni quorum, spread over three zones;
 - a witness node (etcd, Consul or ZooKeeper member, a Patroni DCS member) in a third site.
 
-**Without a third location, failover is manual.** An operator decides that a site is lost and promotes the standby ([Manual promotion](#manual-promotion)). Until then there is no primary: requests that need to write fail, and they are not queued for later (see [Requests while there is no primary](#requests-while-there-is-no-primary)). Studio never promotes anything, and it refuses to treat a read-only node as a primary: it neither writes to nor migrates a standby.
+**Without a third location, failover is manual.** An operator decides that a site is lost and promotes the standby ([Manual promotion](#manual-promotion)). Until then there is no primary: a write is held for at most `DATABASE_WRITE_RETRY_WINDOW` (15 seconds), then answered with a retryable `503`, and it is not queued for later (see [Requests while there is no primary](#requests-while-there-is-no-primary)). Studio never promotes anything, and it refuses to treat a read-only node as a primary: it neither writes to nor migrates a standby.
 
 ### Connection string
 
@@ -147,7 +147,14 @@ Once the hub part of bead .18 is merged (Studio publishes `credential.changed` w
 
 ## Requests while there is no primary
 
-While the database has no writable node (between the loss of the primary and the promotion of the standby), requests that need the database fail, reads included: with `target_session_attrs=read-write` Studio connects only to a node that takes writes, and it does not read from the standby. Nothing is queued: a write that failed is not applied later, so the client makes it again. Once a node is promoted, Studio replicas in both sites use it within seconds, without a restart. Requests that do not need the database (the UI's static files, `/health`) keep working.
+While the database has no writable node (between the loss of the primary and the promotion of the standby), Studio **holds** a request's database statement and tries it again until a writable node answers, for up to `DATABASE_WRITE_RETRY_WINDOW` (15 seconds by default):
+
+- **A promotion inside the window**: the request waits a few seconds and succeeds, once. An App or a key created during an automatic failover is created exactly once.
+- **No promotion inside the window**: the request is answered `503` with `Retry-After` and `errors[0].code` `database_unavailable`, and nothing it began is kept. Signing in and requests with a session or an API key answer the same `503`, never `401`, so clients retry rather than drop their credentials.
+- **No queue beyond the window.** A write that was answered `503` is not applied later: the client makes it again. This is the line between a failover (seconds, covered) and an outage (a manual promotion, a lost database): during an outage writes fail.
+- **What is not held**: a statement inside a transaction that was already open when the primary was lost fails at once (and leaves no partial rows), as does a statement that may have reached the server. At most 512 statements are held at once per replica; beyond that a request is answered `503` straight away. Edges' calls to the control plane and Studio's background work are not held: they fail at once, so an edge moves to the other site's control plane without waiting.
+
+Size the window for your failover manager: longer than its detection time plus the promotion. Keep `DATABASE_READY_GRACE` longer than the window, so the load balancer still sends traffic to a replica while its requests are held (Studio warns at start when it is not). See [Requests during a failover](./configuration.md#postgres-with-a-standby-failover).
 
 Edges are not affected by a database failover beyond the control plane being briefly unable to answer: they keep serving from their loaded configuration, and validation and analytics resume when the control plane can reach the database again.
 
@@ -156,7 +163,7 @@ Edges are not affected by a database failover beyond the control plane being bri
 | Situation | What happens | What to plan for |
 |---|---|---|
 | **A whole site is lost** (Studio and its PostgreSQL node) | Edges of that site move to the other site's control plane and keep serving. If the lost node was the primary, the failover manager promotes the other site's standby (automatically with a witness, by hand without one) and the surviving replicas resume writing, without a restart. The leader lease moves to a surviving replica within about 30 seconds. Pushes in flight are completed by the other site. | A witness in a third location for automatic failover. Capacity in each site to carry all edges and all admin traffic. |
-| **The PostgreSQL primary is lost**, both Studios up | No primary until the standby is promoted (see the row above for who promotes). Replicas follow the promotion on their own: broken connections are dialled again and reach the new primary. `/ready` stays 200 for `DATABASE_READY_GRACE` (30 seconds), so the load balancers keep both sites. | Keep `DATABASE_READY_GRACE` longer than your failover manager's time to promote. |
+| **The PostgreSQL primary is lost**, both Studios up | No primary until the standby is promoted (see the row above for who promotes). Requests are held for up to `DATABASE_WRITE_RETRY_WINDOW` (15 seconds) and complete once the new primary is up, or are answered `503 database_unavailable`. Replicas follow the promotion on their own: broken connections are dialled again and reach the new primary. `/ready` stays 200 for `DATABASE_READY_GRACE` (30 seconds), so the load balancers keep both sites. | A promotion time shorter than the window; `DATABASE_READY_GRACE` longer than both. |
 | **A primary is demoted but keeps running** (a switchover, or fencing) | Its connections would fail every write with SQLSTATE 25006. Studio notices from the first refused write, or within 5 seconds when idle, and reconnects to the new primary. | Nothing: this is the planned switchover's path. |
 | **One site's Studio is lost**, its database node fine | Edges of that site move to the other site. The UI and API load balancer stops sending traffic there; users on that site's replicas may lose an open chat session. | Session affinity that fails over; `EDGE_CONTROL_FAILBACK_INTERVAL` if edges should return when it is back. |
 | **The link between the sites is lost** | Each site's replicas keep the database they can reach. The site that loses the primary sees its database as unreachable: after `DATABASE_READY_GRACE` its `/ready` fails and the load balancer stops sending traffic there; its edges keep serving and keep their connections. The failover manager must not promote the cut-off standby unless a witness says the primary's site is gone (this is the split-brain case). | A witness; alerts on `aistudio_db_writable == 0` per replica. |
@@ -201,7 +208,7 @@ Without a witness, a person decides the primary's site is gone:
 
 1. **Make sure the old primary cannot accept writes**: stop it, or cut it off (fence it). Promoting while it may still be running and reachable is how split brain happens.
 2. Promote the standby (`pg_ctl promote` or `SELECT pg_promote()` on it; `aa.sh promote`). Clear `synchronous_standby_names` on it.
-3. Studio replicas reach it on their own. Until this step, writes have been failing and were not queued: anything users tried to save during the outage must be done again.
+3. Studio replicas reach it on their own. Until this step, writes held longer than `DATABASE_WRITE_RETRY_WINDOW` have been answered `503` and were not queued: anything users tried to save during the outage must be done again.
 
 ### Bringing the old primary back as a standby
 
@@ -233,6 +240,8 @@ Replicas are never refused for disagreeing, so a rotation can roll; the cluster 
 | `aistudio_db_writable` per replica | Studio `/metrics` | 0 for longer than your failover manager's promotion time |
 | `aistudio_db_failovers_total` | Studio `/metrics` | It increases (a failover happened: check the runbook steps) |
 | `/ready` body: `"database"` and `"database_since"` | Studio | — (what the load balancer sees) |
+| `aistudio_db_writes_held`, `aistudio_db_write_retries_total{outcome}`, `aistudio_db_write_hold_seconds` | Studio `/metrics` | `outcome="gave_up"` or `"rejected"` increases: requests answered `503` during a failover |
+| `aistudio_db_unavailable_responses_total` | Studio `/metrics` | It increases: `500`s answered as `503 database_unavailable` (linked to the outage by time, so it can include `500`s of other causes during one) |
 | `microgateway_control_connected{endpoint}` | edge `/metrics` | An edge's first endpoint is 0 for long (it is on the other site) |
 | `microgateway_config_source{source}` and `microgateway_config_age_seconds` | edge `/metrics` | `last_known_good` is 1; the age approaches `EDGE_LAST_KNOWN_GOOD_MAX_AGE` |
 | `microgateway_analytics_pulse_dropped_records_total{reason}` | edge `/metrics` | It increases: analytics lost during an outage |
@@ -248,7 +257,7 @@ See [Observability](./observability.md#database-metrics) for the metric definiti
 ## What is guaranteed
 
 1. With automatic database failover, losing either site (Studio, PostgreSQL or both) needs no operator action. Studio replicas in the surviving site resume writing within seconds of the promotion, without a restart.
-2. Writes made while there is no primary fail and are not queued. They are never applied twice.
+2. API writes in flight during a failover are held and retried up to `DATABASE_WRITE_RETRY_WINDOW`, then fail with a retryable `503 database_unavailable`. They are never applied twice.
 3. A running edge keeps serving through any control-plane outage, moves to the other control plane on its own, and loses no configuration push.
 4. With `EDGE_START_FROM_LAST_KNOWN_GOOD=true`, an edge with an intact database starts and serves with no control plane reachable.
 5. With full credential sync (Enterprise), an edge validates every active key of its namespace locally, control plane or not, from hashes it cannot reverse.
@@ -258,7 +267,7 @@ See [Observability](./observability.md#database-metrics) for the metric definiti
 
 - Revocation reaching an edge that cannot reach any control plane. It is bounded by the maximum ages you configure (`EDGE_LAST_KNOWN_GOOD_MAX_AGE`, the credential sync's maximum age, `EDGE_TOKEN_CACHE_STALE_GRACE`).
 - A key being usable on edges before its creation has committed.
-- Writes surviving the time without a primary: they fail and must be made again. There is no write queue.
+- Writes surviving an outage longer than the retry window: they fail with a retryable `503` and must be made again. There is no write queue beyond the window.
 - Analytics beyond an edge's in-memory buffer through a long control-plane outage (see [Analytics during a control-plane outage](./edge-gateways.md#analytics-during-a-control-plane-outage)).
 - Anything with multi-primary PostgreSQL, or with two nodes promoted at once.
 
