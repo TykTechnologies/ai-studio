@@ -166,7 +166,7 @@ How long a revoked or deactivated key can still be accepted by an edge in this m
 
 Keep the clocks of both control planes and the database within 30 seconds of each other.
 
-Cost on AI Studio, measured with 50,000 keys: a full list is about 8 MB and takes about 4 seconds of one CPU core per edge, every 15 minutes, at a moment that differs from edge to edge; memory use does not grow with the number of keys. For 100 edges that averages about half a core and 1 MB/s. A sync with nothing changed takes a few tens of milliseconds.
+Cost on AI Studio, measured with 50,000 keys: a full list is about 8 MB and takes about 4 seconds of one CPU core per edge, every 15 minutes, at a moment that differs from edge to edge (ten edges taking theirs at the same moment took about 12 seconds); memory use does not grow with the number of keys. For 100 edges that averages about half a core and 1 MB/s. A sync with nothing changed takes a few tens of milliseconds.
 
 A Community AI Studio does not offer this; an edge that asks for it stays on pull-on-miss.
 

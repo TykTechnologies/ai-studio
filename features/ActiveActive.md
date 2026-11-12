@@ -654,6 +654,9 @@ Files: `proto/config_sync.proto`, `proto/common.proto`,
      edge every 15 minutes: for 100 edges, about half a core and 1 MB/s on
      average, spread over the interval. Ten edges taking theirs at the
      same moment took 12 s.
+   - **Index**: each page's Apps are read by credential, so
+     `apps.credential_id` is indexed (`idx_apps_credential_id`, schema
+     43, additive; `MinReaderSchemaVersion` stays 42).
    - Every path that changes `credentials.active` or `apps.is_active`
      moves `updated_at` (a whole-struct save, or gorm `Update`); none uses
      `UpdateColumn`.
