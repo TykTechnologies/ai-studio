@@ -61,6 +61,8 @@ func openPostgres(conf *config.AppConf, dsn string) (gorm.Dialector, *sql.DB, er
 	if connConfig.ConnectTimeout == 0 && conf.DatabaseConnectTimeout > 0 {
 		connConfig.ConnectTimeout = conf.DatabaseConnectTimeout
 	}
+	// Every host's connections notice a host that has gone (database_tcp.go).
+	connConfig.DialFunc = deadPeerDialer(connConfig.ConnectTimeout).DialContext
 
 	// The tracker is created after the pool it probes, and its first probe
 	// dials the first connection: until it is stored the generation is 0

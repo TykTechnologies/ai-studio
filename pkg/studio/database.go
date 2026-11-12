@@ -114,6 +114,10 @@ func OpenDatabase(conf *config.AppConf) (db *gorm.DB, err error) {
 		sqlDB.Close()
 		return nil, err
 	}
+	if err := noteUnavailable(opened); err != nil {
+		sqlDB.Close()
+		return nil, err
+	}
 	holdAcrossFailover(conf, opened, sqlDB)
 	return opened, nil
 }
@@ -127,9 +131,36 @@ func holdAcrossFailover(conf *config.AppConf, db *gorm.DB, pool *sql.DB) {
 	if tracker == nil || conf.DatabaseWriteRetryWindow <= 0 {
 		return
 	}
-	held := dbhold.New(pool, conf.DatabaseWriteRetryWindow, tracker)
+	held := dbhold.New(pool, conf.DatabaseWriteRetryWindow, tracker, conf.DatabaseMaxIdleConns)
 	db.ConnPool = held
 	db.Statement.ConnPool = held
+}
+
+// noteUnavailable records every statement that fails because the database
+// could not be used (dbhold.IsUnavailable), including one inside a
+// transaction, which the hold does not retry: the API then answers the
+// request's 500 as 503 database_unavailable.
+func noteUnavailable(db *gorm.DB) error {
+	note := func(tx *gorm.DB) {
+		if tx.Error != nil && dbhold.IsUnavailable(tx.Error) {
+			dbhold.NoteUnavailable()
+		}
+	}
+	const name = "studio:database_unavailable"
+	cb := db.Callback()
+	for _, register := range []func() error{
+		func() error { return cb.Create().After("gorm:create").Register(name, note) },
+		func() error { return cb.Query().After("gorm:query").Register(name, note) },
+		func() error { return cb.Update().After("gorm:update").Register(name, note) },
+		func() error { return cb.Delete().After("gorm:delete").Register(name, note) },
+		func() error { return cb.Row().After("gorm:row").Register(name, note) },
+		func() error { return cb.Raw().After("gorm:raw").Register(name, note) },
+	} {
+		if err := register(); err != nil {
+			return fmt.Errorf("studio: note an unavailable database: %w", err)
+		}
+	}
+	return nil
 }
 
 // isBuiltinPostgres reports whether open is the built-in Postgres driver (a

@@ -149,6 +149,10 @@ func New(service *services.Service, disableCORS bool, authService *auth.AuthServ
 	// Always add recovery middleware (handles panics)
 	router.Use(middleware.Recovery())
 
+	// A 500 written while the database was unavailable (a failover) is
+	// answered 503 database_unavailable with Retry-After.
+	router.Use(databaseUnavailableMiddleware())
+
 	// Only add Gin's request logger if debug logging is enabled
 	if logger.IsDebugEnabled() {
 		router.Use(gin.Logger())

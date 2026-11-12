@@ -10,6 +10,13 @@
 // transaction is never retried, and neither is one that may have reached
 // the server: it fails as before.
 //
+// A statement that only reads (SELECT), preparing a statement and beginning
+// a transaction have no effect to repeat, so they are also tried again when
+// the connection was lost after they were sent (a pooled connection to a
+// server that has gone). When a connection is found lost, the pool's idle
+// connections are closed, so the next statement dials afresh rather than
+// finding another dead one.
+//
 // When the window runs out the error is an *UnavailableError; IsUnavailable
 // also recognises the errors of a transaction that lost its connection, so
 // callers can answer 503 database_unavailable for both.
@@ -24,6 +31,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -48,14 +56,19 @@ type Pool struct {
 	db      *sql.DB
 	window  time.Duration
 	tracker *dbstate.Tracker
+	maxIdle int
 }
 
 // New wraps db. A window of 0 or less holds nothing: every call goes
 // straight to db. tracker, when not nil, is told of every read-only
 // refusal, so the pool's connections are dialled again to the new primary
-// between attempts.
-func New(db *sql.DB, window time.Duration, tracker *dbstate.Tracker) *Pool {
-	return &Pool{db: db, window: window, tracker: tracker}
+// between attempts. maxIdle is the pool's idle connection limit (0: the
+// database/sql default), restored after idle connections are closed.
+func New(db *sql.DB, window time.Duration, tracker *dbstate.Tracker, maxIdle int) *Pool {
+	if maxIdle <= 0 {
+		maxIdle = 2 // database/sql's default
+	}
+	return &Pool{db: db, window: window, tracker: tracker, maxIdle: maxIdle}
 }
 
 // GetDBConn returns the wrapped pool (gorm.GetDBConnector).
@@ -63,7 +76,7 @@ func (p *Pool) GetDBConn() (*sql.DB, error) { return p.db, nil }
 
 // PrepareContext prepares query, held across a failover.
 func (p *Pool) PrepareContext(ctx context.Context, query string) (stmt *sql.Stmt, err error) {
-	err = p.hold(ctx, func() error {
+	err = p.hold(ctx, true, func() error {
 		stmt, err = p.db.PrepareContext(ctx, query)
 		return err
 	})
@@ -72,7 +85,7 @@ func (p *Pool) PrepareContext(ctx context.Context, query string) (stmt *sql.Stmt
 
 // ExecContext runs query, held across a failover.
 func (p *Pool) ExecContext(ctx context.Context, query string, args ...any) (res sql.Result, err error) {
-	err = p.hold(ctx, func() error {
+	err = p.hold(ctx, readOnly(query), func() error {
 		res, err = p.db.ExecContext(ctx, query, args...)
 		return err
 	})
@@ -81,7 +94,7 @@ func (p *Pool) ExecContext(ctx context.Context, query string, args ...any) (res 
 
 // QueryContext runs query, held across a failover.
 func (p *Pool) QueryContext(ctx context.Context, query string, args ...any) (rows *sql.Rows, err error) {
-	err = p.hold(ctx, func() error {
+	err = p.hold(ctx, readOnly(query), func() error {
 		rows, err = p.db.QueryContext(ctx, query, args...)
 		return err
 	})
@@ -100,18 +113,38 @@ func (p *Pool) QueryRowContext(ctx context.Context, query string, args ...any) *
 // transaction has been sent until it has begun. What runs inside it is not
 // held.
 func (p *Pool) BeginTx(ctx context.Context, opts *sql.TxOptions) (tx *sql.Tx, err error) {
-	err = p.hold(ctx, func() error {
+	err = p.hold(ctx, true, func() error {
 		tx, err = p.db.BeginTx(ctx, opts)
 		return err
 	})
 	return tx, err
 }
 
+// readOnly reports whether query only reads, so running it twice is
+// harmless: a SELECT (row locks taken outside a transaction end with it).
+func readOnly(query string) bool {
+	q := strings.TrimLeft(query, " \t\r\n(")
+	return len(q) >= 6 && strings.EqualFold(q[:6], "SELECT")
+}
+
 // hold runs op, and again while it fails retryably, until the window has
-// passed or ctx is done.
-func (p *Pool) hold(ctx context.Context, op func() error) error {
+// passed or ctx is done. repeatable ops are also retried when the
+// connection was lost after they were sent.
+func (p *Pool) hold(ctx context.Context, repeatable bool, op func() error) error {
+	retryable := func(err error) bool {
+		if Retryable(err) {
+			return true
+		}
+		if IsUnavailable(err) {
+			// The connection was lost: the next attempt, and other
+			// statements, must not find another dead one.
+			p.closeIdle()
+			return repeatable
+		}
+		return false
+	}
 	err := op()
-	if err == nil || p.window <= 0 || !Retryable(err) {
+	if err == nil || p.window <= 0 || !retryable(err) {
 		return err
 	}
 	started := time.Now()
@@ -121,6 +154,7 @@ func (p *Pool) hold(ctx context.Context, op func() error) error {
 		p.noteFailure(err)
 		wait := min(delay, time.Until(deadline))
 		if wait <= 0 {
+			NoteUnavailable()
 			metrics.RecordDBWriteHold(ctx, "gave_up", retries-1, time.Since(started).Seconds())
 			return &UnavailableError{Held: time.Since(started), Err: err}
 		}
@@ -137,11 +171,18 @@ func (p *Pool) hold(ctx context.Context, op func() error) error {
 			metrics.RecordDBWriteHold(ctx, "succeeded", retries, time.Since(started).Seconds())
 			return nil
 		}
-		if !Retryable(err) {
+		if !retryable(err) {
 			metrics.RecordDBWriteHold(ctx, "failed", retries, time.Since(started).Seconds())
 			return err
 		}
 	}
+}
+
+// closeIdle closes the pool's idle connections (database/sql closes those
+// over a lowered limit), then restores the limit.
+func (p *Pool) closeIdle() {
+	p.db.SetMaxIdleConns(-1)
+	p.db.SetMaxIdleConns(p.maxIdle)
 }
 
 // noteFailure tells the tracker of a read-only refusal, so the connection
@@ -174,15 +215,21 @@ func (p *Pool) waitWritable(ctx context.Context) {
 // Retryable reports whether err means a statement never reached a writable
 // server, so running it again cannot apply it twice: the connection could
 // not be made (or was refused while the server starts or stops), the
-// server refused it as read-only (SQLSTATE 25006), or the driver reports
-// that nothing was sent.
+// server refused it as read-only (SQLSTATE 25006) or as shutting down or
+// starting (57P01 to 57P03), or the driver reports that nothing was sent.
 func Retryable(err error) bool {
 	if err == nil {
 		return false
 	}
 	var connectErr *pgconn.ConnectError
+	var pgErr *pgconn.PgError
 	switch {
 	case dbstate.IsReadOnlyError(err):
+		return true
+	case errors.As(err, &pgErr) && (pgErr.Code == "57P01" || pgErr.Code == "57P02" || pgErr.Code == "57P03"):
+		// The server is shutting down or starting: a statement answered
+		// with this was aborted (its implicit transaction rolled back)
+		// or never ran.
 		return true
 	case errors.As(err, &connectErr):
 		return true
@@ -233,3 +280,17 @@ func IsUnavailable(err error) bool {
 	return errors.Is(err, sql.ErrConnDone) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
 		errors.As(err, &opErr) || strings.Contains(err.Error(), "conn closed")
 }
+
+// lastUnavailable is when an unavailable database was last seen (unix
+// nanoseconds), by any statement.
+var lastUnavailable atomic.Int64
+
+// NoteUnavailable records that a statement just found the database
+// unavailable (IsUnavailable). The API answers a 500 written by a request
+// that was running since then as 503 database_unavailable.
+func NoteUnavailable() { lastUnavailable.Store(time.Now().UnixNano()) }
+
+// UnavailableSince reports whether a statement found the database
+// unavailable at or after t. It is not tied to one request: during an
+// outage a 500 of any request running at the time counts as the outage's.
+func UnavailableSince(t time.Time) bool { return lastUnavailable.Load() >= t.UnixNano() }

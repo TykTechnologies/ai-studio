@@ -226,6 +226,45 @@ Files: `pkg/studio/database.go`, `startup/connectivity.go`,
    connection fails as now and the handler returns 503 with `Retry-After`
    and code `database_unavailable` instead of 500. This covers key creation
    during an automatic failover with no API change.
+   **Built** (midsommar-clean-4x5y.6). `pkg/dbhold.Pool` wraps Studio's own
+   Postgres pool as gorm's `ConnPool` (installed by `OpenDatabase` when the
+   window is above 0). Retried: a pgconn `ConnectError`, 25006 (the tracker
+   is told, so the connection is redialled), 57P01 to 57P03, `ErrBadConn`,
+   and anything pgconn reports as `SafeToRetry`; backoff 100 ms doubling to
+   1 s. A SELECT, a prepare and `BEGIN` are also retried when the
+   connection was lost after sending (a pooled connection to a primary that
+   has gone answers EOF): repeating them has no effect. Anything else that
+   may have reached the server is not retried. On a lost connection the
+   pool's idle connections are closed so the next statement dials afresh.
+   `QueryRowContext` (its error only shows at `Scan`) waits instead while
+   the tracker says the database is not writable. The request context ends
+   any wait. A wait that runs out is a `dbhold.UnavailableError`;
+   `dbhold.IsUnavailable` also matches a transaction that lost its
+   connection (class 08, 57P0x, EOF, `ErrConnDone`, `*net.OpError`).
+   Metrics `aistudio_db_write_retries_total` and
+   `aistudio_db_write_hold_seconds` (label `outcome`).
+   **503 mapping.** There is no common API error path (handlers write their
+   own 500s, and services mostly call gorm without the request context), so
+   a gorm callback and the hold record when a statement found the database
+   unavailable, and a middleware answers a 500 written by a request that
+   was running since then as 503 with `Retry-After: 5` and
+   `errors[0].code` `database_unavailable`, dropping the handler's body.
+   It is time-based, not tied to one request: during an outage another
+   request's genuine 500 can become a 503, which errs toward a retryable
+   answer. Sign-in (`auth.Login`) and the session and API-key lookups
+   (`AuthMiddleware`) answer the same 503 instead of 401 when the lookup
+   failed for that reason; `helpers.SendErrorResponse` maps such an error
+   too. gRPC handlers are unchanged (Internal, which edges treat as "hub
+   unavailable").
+   **Requests that hung for 38 to 60 s** in the load test's failovers were
+   statements in flight on pooled connections to the killed primary:
+   neither pgx nor database/sql has a read timeout, so a statement waits
+   for as long as TCP retransmits to an address that drops packets. The
+   pool now dials with TCP keep-alives (5 s idle, 3 probes 2 s apart) and,
+   on Linux, `TCP_USER_TIMEOUT` 10 s, so such a connection fails in about
+   10 s and the statement is retried or answered 503. A server that is
+   alive but stalled (its kernel still acknowledges) is not covered; that
+   is a slow database, not a lost one.
 6. **Event log after a failover.** If asynchronous replication lost recent
    transactions, `cluster_events` ids can fall behind a replica's cursor
    and new events would be skipped. Detect an id below the cursor (or a

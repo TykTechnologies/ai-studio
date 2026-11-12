@@ -106,6 +106,8 @@ conventions, and keep their own names:
 | `aistudio_native_request_duration_seconds` | `vendor`, `operation`, `status_code` | Native API operation latency (histogram; results downloads can run for minutes) |
 | `aistudio_native_results_bytes_total` | `vendor`, `operation` | Bytes of batch results files streamed to clients |
 | `aistudio_native_reconcile_outcomes_total` | `vendor`, `resource_type`, `outcome` | Batches the background reconciler looked at; `outcome` is `accounted`, `settled`, `not_ended`, `unaccountable`, `lost` or `failed` |
+| `aistudio_db_write_retries_total` | `outcome` | Database statements tried again during a failover; `outcome` of the wait is `succeeded`, `gave_up` (answered `503`), `cancelled` or `failed` |
+| `aistudio_db_write_hold_seconds` | `outcome` | Time a statement waited for a writable database (histogram) |
 | `aistudio_guardrail_latency_seconds` | `provider`, `outcome`, `action`, `segment_kind` | [Guardrail](./guardrails.md#compliance-events-and-metrics) provider call latency (histogram) |
 | `aistudio_guardrail_errors_total` | `provider`, `fail_mode` | Guardrail provider failures and how they were handled |
 | `aistudio_guardrail_segments_total` | `provider`, `segment_kind`, `result` | Request segments a guardrail screened: `scanned`, `cached` or `unscanned` |
