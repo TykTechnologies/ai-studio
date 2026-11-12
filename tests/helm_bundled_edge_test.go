@@ -95,24 +95,24 @@ func TestHelmBundledEdgeEndpointChecks(t *testing.T) {
 	assert.Contains(t, out, "AI Studio listens for gRPC on config.grpcPort 50052")
 }
 
-// The edge's token and key must be Studio's, and it must use TLS when
-// Studio serves gRPC over TLS.
+// The edge's encryption key must be Studio's, and it must use TLS when
+// Studio serves gRPC over TLS, but only when the edge uses this release's
+// Studio by default. The auth token is never compared: during a rotation
+// the edges move to GRPC_AUTH_TOKEN_NEXT first, so the two differ by design.
 func TestHelmBundledEdgeCredentialsAndTLS(t *testing.T) {
 	_, err := helmTemplateRelease(t, "test",
-		"--set", "config.grpcAuthToken=tok", "--set", "microgateway.secrets.edgeAuthToken=tok",
 		"--set", "config.microgatewayEncryptionKey=0123456789abcdef0123456789abcdef", "--set", "microgateway.secrets.encryptionKey=0123456789abcdef0123456789abcdef")
-	require.NoError(t, err, "matching pairs render")
+	require.NoError(t, err, "a matching key renders")
 
-	out, err := helmTemplateRelease(t, "test", "--set", "config.grpcAuthToken=tok", "--set", "microgateway.secrets.edgeAuthToken=other")
-	require.Error(t, err)
-	assert.Contains(t, out, "microgateway.secrets.edgeAuthToken must equal config.grpcAuthToken")
+	_, err = helmTemplateRelease(t, "test", "--set", "config.grpcAuthToken=current", "--set", "microgateway.secrets.edgeAuthToken=next")
+	require.NoError(t, err, "a token that differs (mid-rotation) renders")
 
-	out, err = helmTemplateRelease(t, "test", "--set", "config.microgatewayEncryptionKey=a", "--set", "microgateway.secrets.encryptionKey=b")
+	out, err := helmTemplateRelease(t, "test", "--set", "config.microgatewayEncryptionKey=a", "--set", "microgateway.secrets.encryptionKey=b")
 	require.Error(t, err)
 	assert.Contains(t, out, "microgateway.secrets.encryptionKey must equal config.microgatewayEncryptionKey")
 
 	// An existing Secret is not inspected.
-	_, err = helmTemplateRelease(t, "test", "--set", "config.grpcAuthToken=tok", "--set", "microgateway.secrets.existingSecret=edge-creds", "--set", "microgateway.secrets.edgeAuthToken=other")
+	_, err = helmTemplateRelease(t, "test", "--set", "config.microgatewayEncryptionKey=a", "--set", "microgateway.secrets.existingSecret=edge-creds", "--set", "microgateway.secrets.encryptionKey=b")
 	require.NoError(t, err)
 
 	out, err = helmTemplateRelease(t, "test", "--set-string", "config.grpcTlsInsecure=false")
@@ -120,6 +120,18 @@ func TestHelmBundledEdgeCredentialsAndTLS(t *testing.T) {
 	assert.Contains(t, out, "microgateway.config.tlsEnabled is not true")
 	_, err = helmTemplateRelease(t, "test", "--set-string", "config.grpcTlsInsecure=false", "--set-string", "microgateway.config.tlsEnabled=true")
 	require.NoError(t, err)
+
+	// An edge pointed at another control plane: neither TLS nor the key is
+	// this release's business.
+	for _, endpoint := range [][]string{
+		{"--set", "microgateway.config.controlEndpoint=studio.elsewhere:50051"},
+		{"--set", "microgateway.config.controlEndpoints={studio.site-a:50051,studio.site-b:50051}"},
+	} {
+		args := append([]string{"--set-string", "config.grpcTlsInsecure=false",
+			"--set", "config.microgatewayEncryptionKey=a", "--set", "microgateway.secrets.encryptionKey=b"}, endpoint...)
+		_, err = helmTemplateRelease(t, "test", args...)
+		require.NoError(t, err, "%v", endpoint)
+	}
 
 	// The bundled edge off: nothing to check.
 	_, err = helmTemplateRelease(t, "test", "--set", "microgateway.enabled=false", "--set", "fullnameOverride=ai")
