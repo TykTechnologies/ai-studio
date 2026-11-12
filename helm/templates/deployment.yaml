@@ -89,7 +89,7 @@ spec:
                 name: {{ include "midsommar.fullname" . }}-config
             - secretRef:
                 name: {{ include "midsommar.fullname" . }}-secrets
-          {{- with (int .Values.shutdown.preStopDelaySeconds) }}
+          {{- with (include "midsommar.preStopDelay" . | int) }}
           {{- /* Keep serving for a moment after Kubernetes starts removing
                  the pod from the Service's endpoints, which takes a few
                  seconds to reach every node: requests already routed to it

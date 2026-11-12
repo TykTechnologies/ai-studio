@@ -9,7 +9,7 @@ This guide deploys Tyk AI Studio (control plane), a Microgateway (data plane), a
 
 ## Prerequisites
 
-- Kubernetes 1.30+ for the AI Studio pods' default stop delay (`shutdown.preStopDelaySeconds`); on an older cluster set it to `0`
+- Kubernetes 1.16+
 - Helm 3.0+
 - kubectl configured with access to your cluster
 - For production with TLS: cert-manager installed in your cluster
@@ -666,7 +666,7 @@ And it renders, with `replicaCount` above 1:
 
 **Probes.** Studio waits for its database at start-up (`DATABASE_STARTUP_TIMEOUT`, 60 seconds by default) and runs its migrations before it listens, so neither `/health` nor `/ready` answers during that time. A startup probe on `/health` allows `probes.startup.periodSeconds` × `probes.startup.failureThreshold`, 180 seconds by default; keep it longer than `DATABASE_STARTUP_TIMEOUT` plus the migration time plus one more connection attempt (`DATABASE_CONNECT_TIMEOUT` per host, twice with `sslmode=prefer`), and raise it for the first start of a new version on a large database. Readiness is `/ready`, which stays 200 through a database failover shorter than `DATABASE_READY_GRACE` (30 seconds; see [Readiness during a failover](./configuration.md#postgres-with-a-standby-failover)). `probes.readiness.requireWrite: true` probes `/ready?require=write` instead, which takes a replica whose database is read-only out of the Service after the grace.
 
-**Stopping a replica.** On SIGTERM AI Studio stops accepting connections and lets the requests in flight finish, for up to 30 seconds. Kubernetes takes the pod out of the Service at the same moment, which takes a few seconds to reach every node, so the chart has the pod sleep first (`shutdown.preStopDelaySeconds`, 10 seconds, the `sleep` preStop action, Kubernetes 1.30+) and sets `terminationGracePeriodSeconds` to cover the sleep and the drain (45 seconds by default). Without the sleep, a rolling restart refused 2 of 600 requests at the moment an old pod began terminating.
+**Stopping a replica.** On SIGTERM AI Studio stops accepting connections and lets the requests in flight finish, for up to 30 seconds. Kubernetes takes the pod out of the Service at the same moment, which takes a few seconds to reach every node, so the chart has the pod sleep first (`shutdown.preStopDelaySeconds`, 10 seconds, with the `sleep` preStop action; on a cluster older than Kubernetes 1.30, which lacks that action, no hook is rendered and the install notes say a rolling update may refuse a few requests there) and sets `terminationGracePeriodSeconds` to cover the sleep and the drain (45 seconds by default). Without the sleep, a rolling restart refused 2 of 600 requests at the moment an old pod began terminating.
 
 **gRPC.** Each edge holds one long-lived stream to port 50051. The Service spreads new connections over the replicas, and a replica that stops hands its edges to the others, which reconnect within seconds. A load balancer in front of port 50051 must support HTTP/2 and keep idle streams open for at least a minute (edges ping every 30 seconds). Set `appProtocol: grpc` on the `grpc` port in `midsommar.service.ports` when a service mesh or a Gateway API route needs to know the port speaks gRPC.
 

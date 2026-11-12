@@ -298,8 +298,9 @@ metrics:
 # a few seconds to reach every node, so without a delay requests routed to
 # the pod in that window are refused (2 of 600 probes in a rolling restart).
 shutdown:
-  # preStop sleep before Studio gets SIGTERM (0: none). The sleep action
-  # needs Kubernetes 1.30 or later; on an older cluster set 0.
+  # preStop sleep before Studio gets SIGTERM (0: none). Rendered on
+  # Kubernetes 1.30 and later, which have the sleep action; on an older
+  # cluster no hook is rendered (the install notes say so).
   preStopDelaySeconds: 10
   # Empty: preStopDelaySeconds + 30 + 5. A value below
   # preStopDelaySeconds + 30 fails the render.

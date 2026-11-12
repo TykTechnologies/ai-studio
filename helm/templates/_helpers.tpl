@@ -102,3 +102,17 @@ render: Kubernetes would kill Studio mid-drain.
 {{- end -}}
 {{- $grace -}}
 {{- end }}
+
+{{/*
+The preStop sleep in seconds, or 0: shutdown.preStopDelaySeconds on a
+cluster whose API server is 1.30 or later. The sleep action needs no shell
+(the release images are distroless), but older API servers reject it, so
+on them no hook is rendered (NOTES.txt says what that costs).
+*/}}
+{{- define "midsommar.preStopDelay" -}}
+{{- if semverCompare ">=1.30-0" .Capabilities.KubeVersion.Version -}}
+{{- int .Values.shutdown.preStopDelaySeconds -}}
+{{- else -}}
+0
+{{- end -}}
+{{- end }}
