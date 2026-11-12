@@ -49,8 +49,10 @@ type HybridGatewayService struct {
 	hasher         *credhash.Hasher
 	tokenCache     map[string]*TokenCacheEntry              // credential hash -> validation result
 	// evictionsMu guards evictedAt and evictionsPruned, apart from
-	// cacheMutex so that pruning them never holds up the token cache. Lock
-	// order: cacheMutex, then evictionsMu.
+	// cacheMutex so that pruning them never holds up the token cache.
+	// EvictCredential takes the two one after the other, never both;
+	// storeInCache holds cacheMutex and takes evictionsMu inside it, so
+	// whoever holds both takes cacheMutex first.
 	evictionsMu sync.Mutex
 	// evictedAt is when a credential.changed event last dropped a cache
 	// key: a validation that started before then does not cache its
