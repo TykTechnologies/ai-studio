@@ -711,10 +711,21 @@ reachable a control plane cannot authenticate a caller at all.
    `BRANDING_STORAGE_PATH` are imported once at start and left in place.
    Log exports stay files on the replica that made them. Details in
    `features/Branding.md` ("Asset Storage").
-3. **Studio Helm chart.** The Deployment hardcodes `replicas: 1` and
-   ignores `replicaCount`, `podDisruptionBudget` and `autoscaling`. Honour
-   them, default to `RollingUpdate` when `replicaCount > 1`, add topology
-   spread, and document an external multi-host `DATABASE_URL`.
+3. **Studio Helm chart** (built). The Deployment honours `replicaCount`.
+   Above 1: a rolling update (maxUnavailable 0) unless `midsommar.strategy`
+   says otherwise (Recreate stays the default for one replica), a
+   PodDisruptionBudget, spread over nodes and zones (ScheduleAnyway; a
+   `topologySpreadConstraints` list replaces it), cookie affinity on the
+   nginx Ingress, and the render fails with the reason on the bundled
+   single-pod PostgreSQL, on SQLite, or without `config.csrfKey`.
+   `database.existingSecret` gives the whole (multi-host) `DATABASE_URL`
+   from a Secret; `config.clusterNodeLabel`, `config.csrfKey` and the
+   `DATABASE_*` pool, readiness and start-up settings are values. A startup
+   probe on `/health` (180 s by default) covers the start-up wait for the
+   database (`DATABASE_STARTUP_TIMEOUT`) and the migrations; readiness stays
+   on `/ready`, `probes.readiness.requireWrite` switches it to
+   `/ready?require=write`. The unused `autoscaling` values are removed:
+   Studio is scaled by `replicaCount`.
    Microgateway chart: `controlEndpoints`, the new edge settings, and the
    persistence warning from Phase 3.
 

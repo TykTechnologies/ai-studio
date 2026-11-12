@@ -4,13 +4,16 @@ midsommar:
     tag: v2.3.0
     pullPolicy: IfNotPresent
 
-  # Deployment strategy. Recreate stops the running pod before starting the
+  # Deployment strategy. Empty (the default) means Recreate for one replica
+  # and a rolling update (maxUnavailable 0, maxSurge 1) for several
+  # (replicaCount > 1). Recreate stops the running pod before starting the
   # new one, so two Studio instances never run side by side during an
   # upgrade: required with SQLite (one process per database file) and the
   # supported way to run a single Studio (see the reference architecture).
-  # From 2.3, several replicas on PostgreSQL can use RollingUpdate.
-  strategy:
-    type: Recreate
+  # From 2.3, several replicas on PostgreSQL can use RollingUpdate; the
+  # upgrade TO 2.3 itself must still stop every older replica first (use
+  # Recreate for that one upgrade, see the 2.3 upgrade notes).
+  strategy: {}
 
   # Service configuration
   service:
@@ -25,6 +28,9 @@ midsommar:
       - name: grpc
         port: 50051
         targetPort: 50051
+        # appProtocol: grpc   # set it when a mesh or a Gateway API route in
+        #                     # front needs to know the port speaks gRPC; each
+        #                     # edge holds one long-lived stream on this port
 
   # Ingress configuration
   ingress:
@@ -37,6 +43,14 @@ midsommar:
       kubernetes.io/ingress.class: nginx
       nginx.ingress.kubernetes.io/ssl-redirect: "true"
       nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    # With several replicas (replicaCount > 1) and the nginx class, the
+    # Ingress pins each browser to one replica with a cookie: chat, agent
+    # and MCP SSE sessions are held by the replica that started them. For
+    # another ingress controller, set its own affinity annotations above.
+    sessionAffinity:
+      enabled: true
+      cookieName: tyk-ai-studio-route
+      maxAge: 172800  # seconds
     hosts:
       - host: midsommar.example.com
         paths:
@@ -76,6 +90,12 @@ database:
   name: "tyk_ai_studio"
   user: "postgres"
   password: "postgres"
+  # The whole DATABASE_URL from a Secret you manage (External Secrets, Sealed
+  # Secrets, ...): for an external, replicated PostgreSQL give the
+  # multi-host form, postgres://user:pass@pg-a,pg-b/db?target_session_attrs=read-write.
+  # When set, url, host, port, name, user and password are not used.
+  existingSecret: ""
+  existingSecretKey: "DATABASE_URL"
 
 # PostgreSQL configuration
 postgres:
@@ -126,6 +146,20 @@ config:
   databaseType: "postgres"
   filterSignupDomains: ""
   databaseUrl: ""
+  # PostgreSQL pool, readiness and start-up (see docs/site/docs/configuration.md,
+  # "Postgres with a standby"). Empty keeps Studio's default; 0 is rendered.
+  databaseMaxOpenConns: ""     # DATABASE_MAX_OPEN_CONNS: keep all replicas together under max_connections
+  databaseMaxIdleConns: ""     # DATABASE_MAX_IDLE_CONNS (default 2)
+  databaseConnMaxLifetime: ""  # DATABASE_CONN_MAX_LIFETIME (default 30m)
+  databaseConnectTimeout: ""   # DATABASE_CONNECT_TIMEOUT (default 10s; lower it, e.g. 3s, for a multi-host URL)
+  databaseReadyGrace: ""       # DATABASE_READY_GRACE (default 30s): /ready stays 200 through a failover shorter than this
+  databaseStartupTimeout: ""   # DATABASE_STARTUP_TIMEOUT (default 60s): how long Studio waits for its database at start-up; keep probes.startup longer
+  # CLUSTER_NODE_LABEL: names this release's replicas on the cluster status,
+  # e.g. site-a and site-b for two releases in two clusters (default "studio").
+  clusterNodeLabel: ""
+  # CSRF_KEY (sensitive — stored in Secret). Required with replicaCount > 1:
+  # every replica must share it. Generate with: openssl rand -hex 32
+  csrfKey: ""
 
   # Tyk AI Configuration (sensitive — stored in Secret)
   tykAiSecretKey: ""
@@ -218,22 +252,26 @@ global:
   # Affinity rules for all pods
   affinity: {}
 
-# Deployment specific configurations
+# Studio replicas. Studio is scaled by replicaCount; the chart has no
+# autoscaler for it. Above 1 it needs an external PostgreSQL
+# (database.internal=false), config.csrfKey, and gets a rolling update, a
+# PodDisruptionBudget, spread over nodes and zones, and cookie affinity on the
+# nginx Ingress. See "Several Studio replicas" in helm/README.md.
 replicaCount: 1
 
-# Pod disruption budget
+# Pod disruption budget: rendered whenever replicaCount > 1 (minAvailable,
+# default 1, or maxUnavailable when set). enabled adds one for a single
+# replica too, which then blocks node drains.
 podDisruptionBudget:
   enabled: false
   minAvailable: 1
   # maxUnavailable: 1
 
-# Horizontal Pod Autoscaler
-autoscaling:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 5
-  targetCPUUtilizationPercentage: 80
-  targetMemoryUtilizationPercentage: 80
+# Scheduling of the Studio pods. Empty topologySpreadConstraints with
+# replicaCount > 1 spreads the replicas over nodes and zones (ScheduleAnyway);
+# a list given here replaces that.
+affinity: {}
+topologySpreadConstraints: []
 
 # Pod security context
 podSecurityContext:
@@ -255,8 +293,18 @@ metrics:
     enabled: false
     interval: 30s
 
-# Configure liveness and readiness probes
+# Configure startup, liveness and readiness probes
 probes:
+  # Studio answers neither /health nor /ready while it waits for its database
+  # at start-up (DATABASE_STARTUP_TIMEOUT, 60s by default) and runs its
+  # migrations. periodSeconds x failureThreshold (180s by default) must cover
+  # that wait plus the migration time plus one more connection attempt
+  # (DATABASE_CONNECT_TIMEOUT per host, twice with sslmode=prefer); raise it
+  # for a large database's first start on a new version.
+  startup:
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 36
   liveness:
     initialDelaySeconds: 30
     periodSeconds: 10
@@ -264,6 +312,10 @@ probes:
     failureThreshold: 6
     successThreshold: 1
   readiness:
+    # true probes /ready?require=write: a replica whose database is read-only
+    # leaves the Service after DATABASE_READY_GRACE. The default /ready keeps
+    # it in (reads work; writes are held or answered 503).
+    requireWrite: false
     initialDelaySeconds: 5
     periodSeconds: 10
     timeoutSeconds: 5

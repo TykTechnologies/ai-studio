@@ -606,6 +606,76 @@ database:
   url: "postgres://user:password@your-db-host:5432/tyk_ai_studio?sslmode=require"
 ```
 
+To keep the credentials out of values, put the whole URL in a Secret of your own and name it with `database.existingSecret` (key `DATABASE_URL`, or `database.existingSecretKey`). It is then passed to Studio from the Secret only, not through the ConfigMap.
+
+### Several Studio replicas
+
+From 2.3 several AI Studio replicas can serve one PostgreSQL database (see [Several replicas](./reference-architecture.md#several-replicas-from-23)). Set `replicaCount` above 1. The chart then needs:
+
+- **An external PostgreSQL** (`database.internal: false`). The bundled PostgreSQL is a single pod, and SQLite serves one process, so the render fails with either.
+- **One `CSRF_KEY`** for every replica (`config.csrfKey`, generate it with `openssl rand -hex 32`). Without it each replica generates its own and a form loaded from one replica is refused by another, so the render fails without it. The other shared secrets (`config.tykAiSecretKey`, `config.grpcAuthToken`, `config.microgatewayEncryptionKey`) are the same for every replica of a release already.
+
+And it renders, with `replicaCount` above 1:
+
+- **A rolling update** that starts a new replica before stopping an old one (`maxUnavailable: 0`, `maxSurge: 1`), unless `midsommar.strategy` is set. With one replica the default stays `Recreate`.
+- **A PodDisruptionBudget** keeping `podDisruptionBudget.minAvailable` (1) replicas through node drains, or allowing `podDisruptionBudget.maxUnavailable` when that is set.
+- **Spread** of the replicas over nodes and zones (`ScheduleAnyway`). A `topologySpreadConstraints` list replaces it; `affinity` is passed through as given.
+- **Cookie affinity on the Ingress** for the nginx class (`midsommar.ingress.sessionAffinity`), because chat, agent and MCP SSE sessions are held by the replica that started them. Annotations you set in `midsommar.ingress.annotations` win. For another ingress controller, set its own affinity annotations.
+
+**Probes.** Studio waits for its database at start-up (`DATABASE_STARTUP_TIMEOUT`, 60 seconds by default) and runs its migrations before it listens, so neither `/health` nor `/ready` answers during that time. A startup probe on `/health` allows `probes.startup.periodSeconds` × `probes.startup.failureThreshold`, 180 seconds by default; keep it longer than `DATABASE_STARTUP_TIMEOUT` plus the migration time plus one more connection attempt (`DATABASE_CONNECT_TIMEOUT` per host, twice with `sslmode=prefer`), and raise it for the first start of a new version on a large database. Readiness is `/ready`, which stays 200 through a database failover shorter than `DATABASE_READY_GRACE` (30 seconds; see [Readiness during a failover](./configuration.md#postgres-with-a-standby-failover)). `probes.readiness.requireWrite: true` probes `/ready?require=write` instead, which takes a replica whose database is read-only out of the Service after the grace.
+
+**gRPC.** Each edge holds one long-lived stream to port 50051. The Service spreads new connections over the replicas, and a replica that stops hands its edges to the others, which reconnect within seconds. A load balancer in front of port 50051 must support HTTP/2 and keep idle streams open for at least a minute (edges ping every 30 seconds). Set `appProtocol: grpc` on the `grpc` port in `midsommar.service.ports` when a service mesh or a Gateway API route needs to know the port speaks gRPC.
+
+**Upgrading to 2.3.** Stop every older replica before the first 2.3 replica starts (see the 2.3 upgrade notes): for that one upgrade, set `midsommar.strategy.type: Recreate`, or scale to one replica first. Later upgrades can roll.
+
+```yaml
+replicaCount: 3
+
+database:
+  internal: false
+  existingSecret: studio-database   # key DATABASE_URL
+
+config:
+  csrfKey: "<openssl rand -hex 32>"
+  databaseMaxOpenConns: "30"        # all replicas together under the server's max_connections
+  databaseConnectTimeout: "3s"
+```
+
+#### Two clusters, one replicated PostgreSQL
+
+The active-active layout of the reference architecture: one release in each site's cluster, both on the same replicated PostgreSQL, each site's replicas labelled with its name so the cluster status (`GET /api/v1/cluster/status`) and the Edge Gateways page tell them apart. The two releases must share every secret: put them in values both sites use, or in Secrets with the same contents.
+
+```yaml
+# values-site-a.yaml. values-site-b.yaml is the same with site-b as the label
+# and site-b's control endpoint first.
+replicaCount: 2
+
+database:
+  internal: false
+  # postgres://studio:...@pg-a.example.internal,pg-b.example.internal/tyk_ai_studio?target_session_attrs=read-write&sslmode=require&connect_timeout=3
+  existingSecret: studio-database
+
+config:
+  clusterNodeLabel: site-a
+  csrfKey: "<the same in both sites>"
+  tykAiSecretKey: "<the same in both sites>"
+  grpcAuthToken: "<the same in both sites>"
+  microgatewayEncryptionKey: "<the same in both sites>"
+  databaseConnectTimeout: "3s"
+
+microgateway:
+  config:
+    # Each site's edges try their own site's Studio first.
+    controlEndpoints:
+      - studio-site-a.example.internal:50051
+      - studio-site-b.example.internal:50051
+```
+
+```bash
+helm upgrade --install studio ./helm -f values-site-a.yaml --kube-context site-a
+helm upgrade --install studio ./helm -f values-site-b.yaml --kube-context site-b
+```
+
 ---
 
 ## Maintenance

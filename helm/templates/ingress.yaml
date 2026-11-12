@@ -7,8 +7,21 @@ metadata:
     {{- if .Values.midsommar.ingress.certificateEnabled }}
     cert-manager.io/cluster-issuer: {{ .Values.midsommar.ingress.certManager.issuer }}
     {{- end }}
+    {{- $sticky := .Values.midsommar.ingress.sessionAffinity }}
+    {{- if and (gt (int .Values.replicaCount) 1) $sticky.enabled (eq (toString .Values.midsommar.ingress.className) "nginx") }}
+    {{- /* Several replicas: chat, agent and MCP SSE sessions are held by the
+           replica that started them, so a browser keeps to one replica.
+           Annotations set in midsommar.ingress.annotations win. */}}
+    {{- $affinity := dict
+          "nginx.ingress.kubernetes.io/affinity" "cookie"
+          "nginx.ingress.kubernetes.io/affinity-mode" "persistent"
+          "nginx.ingress.kubernetes.io/session-cookie-name" (default "tyk-ai-studio-route" $sticky.cookieName)
+          "nginx.ingress.kubernetes.io/session-cookie-max-age" (toString (default 172800 $sticky.maxAge)) }}
+    {{- toYaml (mergeOverwrite $affinity (default dict .Values.midsommar.ingress.annotations)) | nindent 4 }}
+    {{- else }}
     {{- with .Values.midsommar.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
+    {{- end }}
     {{- end }}
 spec:
   ingressClassName: {{ .Values.midsommar.ingress.className }}

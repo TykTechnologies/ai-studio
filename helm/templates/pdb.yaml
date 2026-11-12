@@ -1,0 +1,21 @@
+{{- /* With several replicas a voluntary disruption (a node drain, a cluster
+       upgrade) keeps podDisruptionBudget.minAvailable of them serving.
+       podDisruptionBudget.enabled adds one for a single replica too, which
+       then blocks drains until the pod is deleted by hand. */}}
+{{- if or .Values.podDisruptionBudget.enabled (gt (int .Values.replicaCount) 1) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "midsommar.fullname" . }}
+  labels:
+    {{- include "midsommar.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "midsommar.selectorLabels" . | nindent 6 }}
+  {{- if .Values.podDisruptionBudget.maxUnavailable }}
+  maxUnavailable: {{ .Values.podDisruptionBudget.maxUnavailable }}
+  {{- else }}
+  minAvailable: {{ default 1 .Values.podDisruptionBudget.minAvailable }}
+  {{- end }}
+{{- end }}
