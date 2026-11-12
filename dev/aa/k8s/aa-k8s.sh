@@ -17,6 +17,8 @@
 #
 #   aa-k8s.sh lose-cp a|b             fault 1: that site's Studio held at zero       undo: return-cp
 #   aa-k8s.sh lose-db                 fault 2: the primary's pod killed and held at zero, then promote
+#   aa-k8s.sh crash-db                the primary's postmaster stopped -m immediate (a crash, pod kept), then promote
+#   aa-k8s.sh create-check NAME       App creates of that run: 201s in the admin loop's log against rows (double apply)
 #   aa-k8s.sh promote                 promote the standby and name it the primary
 #   aa-k8s.sh rejoin a|b              bring that site's PostgreSQL back as the synchronous standby
 #   aa-k8s.sh lose-site a|b           fault 3: Studio, control proxy, PostgreSQL and edge of that site at zero
@@ -304,6 +306,51 @@ kill_primary() {
 	python3 -c "import time; time.sleep(max(0, ${PROMOTE_DELAY:-10} - (time.time() - $t0)))"
 }
 
+# A crash rather than a lost pod: the postmaster is stopped -m immediate
+# (no checkpoint, connections cut mid-transaction) and the pod held at zero
+# so it does not restart as a second primary; then the usual promote.
+cmd_crash_db() {
+	local p t0
+	p=$(primary) || die "no primary"
+	stamp "fault: pg-$p postmaster stopped -m immediate (PROMOTE_DELAY=${PROMOTE_DELAY:-10}s)"
+	t0=$(date +%s.%N)
+	k exec "pg-$p-0" -c postgres -- sh -c 'pg_ctl -D "$PGDATA" -m immediate stop' >/dev/null 2>&1 ||
+		k exec "pg-$p-0" -c postgres -- sh -c 'kill -QUIT $(head -1 "$PGDATA/postmaster.pid")' || true
+	k scale statefulset "pg-$p" --replicas=0 >/dev/null
+	k delete pod "pg-$p-0" --grace-period=0 --force >/dev/null 2>&1 || true
+	while [ "$(role "$p")" != stopped ]; do sleep 0.2; done
+	python3 -c "import time; time.sleep(max(0, ${PROMOTE_DELAY:-10} - (time.time() - $t0)))"
+	cmd_promote
+}
+
+# Every 'create' line of the admin loop's log (results/NAME/adminloop.jsonl)
+# against the apps table: a name answered 201 must be there once; a name
+# answered otherwise must be there at most once (and is reported).
+cmd_create_check() {
+	local name=${1:?run name} out="$HERE/results/${1}" p
+	p=$(primary) || die "no primary"
+	sql "$p" "SELECT name || ' ' || count(*) FROM apps WHERE name LIKE 'aa-create-%' AND deleted_at IS NULL GROUP BY name" midsommar > "$out/apps-created.rows"
+	python3 - "$out" <<'PY'
+import collections, json, os, sys
+out = sys.argv[1]
+answers = {}
+for line in open(os.path.join(out, "adminloop.jsonl")):
+    try: r = json.loads(line)
+    except ValueError: continue
+    if r.get("kind") == "create": answers[r["name"]] = r["status"]
+rows = collections.Counter()
+for line in open(os.path.join(out, "apps-created.rows")):
+    n, c = line.rsplit(" ", 1); rows[n] = int(c)
+res = {"creates": len(answers), "answered_201": sum(1 for s in answers.values() if s == 201),
+       "by_status": dict(collections.Counter(str(s) for s in answers.values())),
+       "201_missing_row": [n for n, s in answers.items() if s == 201 and rows[n] == 0],
+       "duplicated": {n: c for n, c in rows.items() if n in answers and c > 1},
+       "non_201_but_written": {n: answers[n] for n in answers if answers[n] != 201 and rows[n] > 0}}
+json.dump(res, open(os.path.join(out, "create-check.json"), "w"), indent=2)
+print(json.dumps(res, indent=2))
+PY
+}
+
 cmd_rejoin() {
 	local s o
 	s=$(site "${1:-}"); o=$(other "$s")
@@ -454,6 +501,8 @@ fetch) cmd_fetch "${2:-}" ;;
 lose-cp) cmd_lose_cp "${2:-}" ;;
 return-cp) cmd_return_cp "${2:-}" ;;
 lose-db) cmd_lose_db ;;
+crash-db) cmd_crash_db ;;
+create-check) cmd_create_check "${2:-}" ;;
 promote) cmd_promote ;;
 rejoin) cmd_rejoin "${2:-}" ;;
 switchover) cmd_switchover ;;
@@ -467,5 +516,5 @@ pulse) cmd_pulse "${2:-/dev/stdout}" ;;
 zone-b) cmd_zone_b "${2:-}" ;;
 drop-sync-at) cmd_drop_sync_at "${2:-}" ;;
 run-partition) cmd_run_partition "${2:-}" "${3:-}" ;;
-*) sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+*) sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
