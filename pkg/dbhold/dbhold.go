@@ -130,6 +130,12 @@ func (p *Pool) BeginTx(ctx context.Context, opts *sql.TxOptions) (tx *sql.Tx, er
 
 // readOnly reports whether query only reads, so running it twice is
 // harmless: a SELECT (row locks taken outside a transaction end with it).
+// It is a prefix check, not a parser: a SELECT that calls a function with
+// side effects (pg_notify, nextval, a user function that writes) must not
+// be run through QueryContext outside a transaction, or it may run twice
+// after a lost connection; use Exec, which is never repeated. Today
+// pg_notify goes through Exec or inside a WITH ... INSERT, and advisory
+// locks through Exec or a dedicated connection.
 func readOnly(query string) bool {
 	q := strings.TrimLeft(query, " \t\r\n(")
 	return len(q) >= 6 && strings.EqualFold(q[:6], "SELECT")
