@@ -442,7 +442,7 @@ cmd_pulse() {
 		for s in a b; do
 			k get pod "edge-$s-microgateway-0" -o jsonpath="{'edge-$s pod started '}{.status.startTime}{' restarts '}{.status.containerStatuses[0].restartCount}{'\n'}" 2>/dev/null || echo "edge-$s pod absent"
 			if m=$(kubectl --context "$CTX" get --raw "/api/v1/namespaces/$NS/services/edge-$s:8080/proxy/metrics" 2>/dev/null); then
-				echo "$m" | grep -e '^microgateway_analytics_pulse_dropped_records_total' | sed "s/^/edge-$s /" || echo "edge-$s no pulse-dropped counter yet"
+				echo "$m" | grep -e '^microgateway_analytics_pulse_dropped_records_total' -e '^microgateway_database_full' | sed "s/^/edge-$s /" || echo "edge-$s no pulse-dropped counter yet"
 			else
 				echo "edge-$s /metrics unreachable"
 			fi
