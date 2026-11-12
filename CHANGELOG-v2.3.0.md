@@ -302,6 +302,7 @@ AI Studio can run as two control planes in two sites over one replicated Postgre
 ### Deployment
 - **The Community Edition quickstart works with the distroless images** (the edge no longer crash-loops, and OCI plugins work).
 - **The Helm chart** renders `extraEnv`, `extraVolumes` and `extraVolumeMounts` for AI Studio.
+- **The Helm chart's `global.nodeSelector`, `global.tolerations` and `global.affinity` were ignored**, so AI Studio could not be placed on tainted or dedicated nodes. They now apply to the AI Studio pods and the bundled PostgreSQL pod; a top-level `affinity` replaces `global.affinity` for AI Studio.
 - **`config.ociRequireSignature: false` in the Helm chart was ignored** unless written as the string `"false"`, so signatures stayed required. An unquoted boolean, or `--set`, now turns them off.
 - **The quickstart ships placeholders instead of sample secrets.**
 - **Stopping AI Studio** waits for background work to finish.
