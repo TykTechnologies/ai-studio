@@ -158,7 +158,19 @@ func createBaseServiceContainer(db *gorm.DB, cfg *config.Config, configProvider 
 		if err != nil {
 			return nil, fmt.Errorf("credential hashing needs ENCRYPTION_KEY: %w", err)
 		}
-		gatewayService = NewHybridGatewayService(db, repo, cfg.HubSpoke.EdgeNamespace, cfg.HubSpoke, hasher)
+		hybrid := NewHybridGatewayService(db, repo, cfg.HubSpoke.EdgeNamespace, cfg.HubSpoke, hasher)
+		gatewayService = hybrid
+		// Full credential sync (Enterprise): the edge validates keys from
+		// the hashed list in its own database. The list is there from the
+		// start, so an edge that comes up with no control plane validates
+		// from what it stored; the sync itself starts with the edge client.
+		if CredentialSyncEnabled(cfg.HubSpoke) {
+			list, err := NewCredentialSync(db, cfg.HubSpoke.CredentialSyncMaxAge)
+			if err != nil {
+				return nil, fmt.Errorf("credential sync: %w", err)
+			}
+			hybrid.SetCredentialSync(list)
+		}
 		log.Debug().Msg("Edge instance using HybridGatewayService with synced SQLite + on-demand token validation")
 	}
 	

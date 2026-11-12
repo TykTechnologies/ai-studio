@@ -548,6 +548,25 @@ TABLE sync_states
   column last_sync_at timestamp with time zone(timestamptz) nullable=YES
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES
+TABLE synced_app_fingerprints
+  constraint synced_app_fingerprints_pkey PRIMARY KEY (app_id)
+  index CREATE UNIQUE INDEX synced_app_fingerprints_pkey ON synced_app_fingerprints USING btree (app_id)
+  column app_id bigint(int8) nullable=NO precision=64 scale=0
+  column fingerprint character varying(varchar) nullable=NO len=64
+  column app_updated_at timestamp with time zone(timestamptz) nullable=NO
+TABLE synced_credentials
+  constraint synced_credentials_pkey PRIMARY KEY (secret_hash)
+  index CREATE INDEX idx_synced_credentials_app_id ON synced_credentials USING btree (app_id)
+  index CREATE INDEX idx_synced_credentials_credential_id ON synced_credentials USING btree (credential_id)
+  index CREATE INDEX idx_synced_credentials_synced_at ON synced_credentials USING btree (synced_at)
+  index CREATE UNIQUE INDEX synced_credentials_pkey ON synced_credentials USING btree (secret_hash)
+  column secret_hash character varying(varchar) nullable=NO len=67
+  column credential_id bigint(int8) nullable=YES precision=64 scale=0
+  column app_id bigint(int8) nullable=YES precision=64 scale=0
+  column active boolean(bool) nullable=YES
+  column deleted boolean(bool) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+  column synced_at timestamp with time zone(timestamptz) nullable=YES
 TABLE tool_filters
   constraint tool_filters_pkey PRIMARY KEY (tool_id, filter_id)
   index CREATE UNIQUE INDEX tool_filters_pkey ON tool_filters USING btree (tool_id, filter_id)

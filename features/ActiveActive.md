@@ -665,7 +665,24 @@ Files: `proto/config_sync.proto`, `proto/common.proto`,
      `UpdateColumn`.
 3. **Edge store.** New table `synced_credentials` (hash unique-indexed, App
    ID, active, updated_at) and the watermark in `sync_states`. No plaintext
-   column.
+   column. **Built** (bead .17). Each page is written in one
+   transaction: its Apps (batched upserts, `is_active` written explicitly,
+   false included), their LLM grants, and its credentials. An App is
+   skipped when it has not changed since the sync last stored it: the
+   table `synced_app_fingerprints` holds, per App, a SHA-256 of the
+   `AppConfig` as the hub sent it (its deterministic protobuf encoding, so
+   a field added later counts) and the `updated_at` the sync wrote on the
+   App's row; any other write of the row changes that, and the App is
+   stored again. A full sync then removes the fingerprints of Apps it did
+   not bring and, on PostgreSQL only and only after a full sync, runs
+   `ANALYZE` on `synced_credentials`, `synced_app_fingerprints`, `apps` and
+   `app_llms`: a full sync can rewrite every row, and with statistics from
+   before it the next sync of 50,000 credentials took 10 s instead of
+   3.4 s. ANALYZE samples a bounded number of rows (about 0.3 s measured at
+   50,000). Measured with 50,000 credentials, each the key of its own App:
+   first full sync 2.8 s SQLite / 5.0 s Postgres, a repeat while
+   validating 2.2 s / 3.4 s, a repeat with 1% of the Apps changed
+   1.2 s / 2.7 s.
 4. **Keeping it current.** Full sync at start and after every reconnect
    (delta when a watermark exists); a delta on each heartbeat tick; and a
    `DirDown` event `credential.changed` on create, activate, deactivate and
@@ -695,6 +712,19 @@ Files: `proto/config_sync.proto`, `proto/common.proto`,
    - `EDGE_CREDENTIAL_SYNC_MAX_AGE` (default 24 h, `0` for no limit): once
      the last successful delta is older than this, the edge stops trusting
      the local list and behaves as `on_demand`.
+   **Built** (bead .17, `microgateway/internal/services/credential_sync.go`,
+   the RPC client in `microgateway/internal/grpc/credential_sync.go`): an
+   explicit refusal from the hub always wins and updates the local row; a
+   "valid" answer for an App the edge's namespace may not serve is refused
+   on the synced path and nothing is added from it. The sync runs on every
+   accepted registration (which also forgets an earlier `Unimplemented`)
+   and every acknowledged heartbeat, one at a time, with a 5-minute bound.
+   A `FailedPrecondition` "register first" answer makes the edge register
+   again and ask again, at most once a minute; it is not the on-demand
+   fallback. Metrics `microgateway_credential_sync_last_success_timestamp`,
+   `microgateway_credentials_synced` and
+   `microgateway_credential_validations_total{source}` (local, control,
+   stale; a list that never synced counts as stale).
 6. **Default stays `on_demand`.** In that mode nothing changes, except that
    the in-memory cache is keyed by the hash rather than the raw token.
    `full` is an **Enterprise** option: a Community edge given

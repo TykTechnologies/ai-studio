@@ -149,6 +149,18 @@ func (c *SimpleEdgeClient) SetControlContactHook(fn func(time.Time)) {
 	c.onContact.Store(&fn)
 }
 
+// SetRegisteredHook has fn called whenever a control plane accepts this
+// edge's registration: at start, after a reconnect and after a move to
+// another control endpoint. It is called before the control contact hook
+// of the same registration.
+func (c *SimpleEdgeClient) SetRegisteredHook(fn func()) {
+	if fn == nil {
+		c.onRegistered.Store(nil)
+		return
+	}
+	c.onRegistered.Store(&fn)
+}
+
 // controlContact notes contact with a control plane now.
 func (c *SimpleEdgeClient) controlContact() {
 	now := time.Now()

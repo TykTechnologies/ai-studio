@@ -77,6 +77,11 @@ type HybridGatewayService struct {
 	// warnings rate-limits the warnings for failed validations.
 	warnings warnLimiter
 
+	// credentials is the synced credential list of an edge with full
+	// credential sync (credential_sync.go); nil on an edge that validates on
+	// demand.
+	credentials *CredentialSync
+
 	// apps caches GetAppByTokenID, which runs on every authenticated request
 	// (the app with its LLMs, tools and datasources: five or more queries).
 	// Invalidated by any configuration write; see database.GenCache.
@@ -134,6 +139,11 @@ func (h *HybridGatewayService) SetEdgeClient(edgeClient interface{}) {
 // refused valid requests.
 func (h *HybridGatewayService) ValidateAPIToken(token string) (*TokenValidationResult, error) {
 	key := h.cacheKey(token)
+	if h.credentials != nil {
+		if res, err, answered := h.validateFromSyncedList(key); answered {
+			return res, err
+		}
+	}
 	if h.cacheConfig.TokenCacheEnabled {
 		if cachedResult, refresh := h.cachedForRequest(key); cachedResult != nil {
 			if refresh {
@@ -150,6 +160,78 @@ func (h *HybridGatewayService) ValidateAPIToken(token string) (*TokenValidationR
 		return nil, err
 	}
 	return v.(*TokenValidationResult), nil
+}
+
+// SetCredentialSync gives the service the synced credential list of an edge
+// with full credential sync. Requests are then validated from the list
+// first (validateFromSyncedList).
+func (h *HybridGatewayService) SetCredentialSync(credentials *CredentialSync) {
+	h.credentials = credentials
+}
+
+// CredentialSync returns the synced credential list this edge validates
+// from, nil when it validates on demand only.
+func (h *HybridGatewayService) CredentialSync() *CredentialSync { return h.credentials }
+
+// validateFromSyncedList answers a validation from the synced credential
+// list when it can; answered is false when the control plane has to be
+// asked, as on demand:
+//
+//   - the list is trusted and has the key, usable, and its App is active:
+//     accepted, with no control plane call;
+//   - the list is trusted and has the key, deactivated or deleted, or its
+//     App is inactive: refused (403 "app is inactive" for the App, as on
+//     demand);
+//   - the key is not on the list (it may have been created a moment ago),
+//     or its App is not in the edge's database yet: not answered;
+//   - the list is past EDGE_CREDENTIAL_SYNC_MAX_AGE, or no sync has
+//     completed: not answered.
+func (h *HybridGatewayService) validateFromSyncedList(key string) (res *TokenValidationResult, err error, answered bool) {
+	c := h.credentials
+	if !c.Trusted(time.Now()) {
+		c.counted(ValidationStale)
+		return nil, nil, false
+	}
+	row, found, err := c.Lookup(key)
+	if err != nil {
+		// The list cannot be read: ask the control plane rather than refuse.
+		if h.warnings.allow("synced-list") {
+			log.Warn().Err(err).Msg("Token validation: the synced credential list could not be read; asking the control instance")
+		}
+		c.counted(ValidationControl)
+		return nil, nil, false
+	}
+	if !found {
+		c.counted(ValidationControl)
+		return nil, nil, false
+	}
+	if !row.Active || row.Deleted {
+		c.counted(ValidationLocal)
+		return nil, fmt.Errorf("invalid token: the credential is not active"), true
+	}
+	// A credential the control plane sent without an App has none this
+	// edge may serve: refused here, like an inactive one.
+	if row.AppID == 0 {
+		c.counted(ValidationLocal)
+		return nil, fmt.Errorf("invalid token: the credential has no App on this gateway"), true
+	}
+	app, err := h.GetAppByTokenID(row.AppID)
+	if err != nil {
+		// The key is good but its App is not here yet: the control plane's
+		// answer brings it.
+		c.counted(ValidationControl)
+		return nil, nil, false
+	}
+	c.counted(ValidationLocal)
+	if !app.IsActive {
+		return nil, fmt.Errorf("invalid token: %w", coresvc.ErrAppInactive), true
+	}
+	return &TokenValidationResult{
+		TokenID:   row.AppID, // the App ID stands in for a token ID, as on demand
+		TokenName: "synced-credential",
+		AppID:     row.AppID,
+		App:       app,
+	}, nil, true
 }
 
 // refreshAhead revalidates a token whose cached result is near its expiry.
@@ -220,6 +302,9 @@ func (h *HybridGatewayService) validateWithControl(token, key string) (*TokenVal
 			}
 			// The hub has spoken: whatever we cached for this token is no longer true.
 			h.removeFromCache(key)
+			if h.credentials != nil {
+				h.credentials.Learned(key, 0, false)
+			}
 			// The hub names an inactive App, so the edge can refuse it the way
 			// the embedded gateway does (403 "app is inactive"), not as a bad key.
 			if resp.ErrorMessage == coresvc.AppInactiveMessage {
@@ -233,6 +318,21 @@ func (h *HybridGatewayService) validateWithControl(token, key string) (*TokenVal
 			Uint32("app_id", resp.AppId).
 			Str("app_name", resp.AppName).
 			Msg("On-demand token validation successful")
+
+		// With full credential sync the edge serves a key only when the
+		// control plane says, for this edge, both that the key is valid and
+		// which App it belongs to. A valid answer without the App means the
+		// App is not one this edge's namespace may serve (the list has no
+		// row for the key for the same reason): refused, whatever this
+		// edge's database still holds for that App ID, and not cached.
+		if h.credentials != nil && resp.App == nil {
+			h.removeFromCache(key)
+			h.credentials.Learned(key, 0, false)
+			if h.warnings.allow("valid-no-app") {
+				log.Warn().Uint32("app_id", resp.AppId).Msg("Token validation: the control instance accepted the key but did not send its App (the App is not served in this edge's namespace); refused")
+			}
+			return nil, fmt.Errorf("invalid token: the key's App is not served by this gateway")
+		}
 
 		// Store App if provided in response (pull-on-miss sync)
 		if resp.App != nil {
@@ -272,6 +372,12 @@ func (h *HybridGatewayService) validateWithControl(token, key string) (*TokenVal
 			TokenName: "on-demand-validated",
 			AppID:     uint(resp.AppId),
 			App:       app,
+		}
+
+		// A key the synced list did not have (created a moment ago) is on
+		// it from now on.
+		if h.credentials != nil {
+			h.credentials.Learned(key, uint(resp.AppId), true)
 		}
 
 		// Cache the result if caching is enabled

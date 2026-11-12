@@ -54,3 +54,16 @@ func TestStorageFullMetricValues(t *testing.T) {
 		map[string]float64{"configuration": 2, "control_contact": 0, "budget_blocks": 0, "budget_sync_position": 0, "analytics": 0},
 		storageFullValues(map[string]uint64{"configuration": 2}))
 }
+
+// The credential sync metrics: a list that never synced reports 0, not the
+// zero time as a negative timestamp; and every validation source is a
+// series from the start, at 0.
+func TestCredentialSyncMetricValues(t *testing.T) {
+	assert.Zero(t, credentialSyncTimestamp(time.Time{}))
+	at := time.Date(2026, 11, 11, 7, 0, 0, 0, time.UTC)
+	assert.Equal(t, float64(at.Unix()), credentialSyncTimestamp(at))
+
+	assert.Equal(t,
+		map[string]float64{"local": 3, "control": 1, "stale": 0},
+		credentialValidationValues(map[string]uint64{"local": 3, "control": 1, "stale": 0}))
+}

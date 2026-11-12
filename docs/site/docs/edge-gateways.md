@@ -170,6 +170,21 @@ Cost on AI Studio, measured with 50,000 keys: a full list is about 8 MB and take
 
 A Community AI Studio does not offer this; an edge that asks for it stays on pull-on-miss.
 
+On the edge:
+
+- **Settings.** `EDGE_CREDENTIAL_SYNC=full` (default `on_demand`) and `EDGE_CREDENTIAL_SYNC_MAX_AGE` (default `24h`, `0` for no limit). A Community edge given `full` logs that it is an Enterprise option and validates on demand.
+- **When it syncs.** After every registration (at start, after a reconnect, after a move to another control plane) and on every acknowledged heartbeat: the whole list the first time, the changes afterwards. A sync runs one at a time; one that fails is retried on the next heartbeat, and the edge keeps the list it has. An AI Studio that answers that it does not know the edge gets a new registration, then the sync again.
+- **What it stores.** In its own database: each key's hash, id, App, and whether it is active (`synced_credentials`), and the Apps of those keys. Never a key. A page of the list is written in one transaction; an App that has not changed since the edge last stored it is not written again.
+- **How it validates a key.**
+  1. On the list, active, App active: accepted, without asking AI Studio.
+  2. On the list, inactive or deleted, or its App inactive: refused (`401`, or `403` "app is inactive").
+  3. Not on the list (created a moment ago): AI Studio is asked, as on demand, and the answer is added to the list. An explicit refusal from AI Studio always wins and updates the list.
+  4. Not on the list, and no control plane answers: `503 credential_check_unavailable`, as on demand.
+- **Past `EDGE_CREDENTIAL_SYNC_MAX_AGE`** without a successful sync, the edge stops trusting the list and validates as on demand until a sync succeeds.
+- **Across a restart.** The list is in the edge's database, so an edge restarted with no control plane (with `EDGE_START_FROM_LAST_KNOWN_GOOD`) validates from it, within the max age. This needs a database that survives the restart: the StatefulSet form of the Helm chart with persistence.
+- **Older or Community AI Studio.** It answers that it does not offer the sync: the edge logs that once and validates on demand.
+- **Metrics.** `microgateway_credential_sync_last_success_timestamp` (when the last sync completed), `microgateway_credentials_synced` (usable keys on the list), and `microgateway_credential_validations_total{source}`: `local` (the list answered), `control` (AI Studio or its cached answer did) and `stale` (the list was past its max age).
+
 ### Sync Status Values
 
 | Status | Description | UI Indicator |
@@ -454,6 +469,7 @@ Treat the token and `MICROGATEWAY_ENCRYPTION_KEY` as secrets for the whole hub, 
 If an edge host is compromised:
 
 - rotate the edge token, with `GRPC_AUTH_TOKEN_NEXT`, and `MICROGATEWAY_ENCRYPTION_KEY`;
+- App keys need no rotation for this: the edge holds only their hashes ([full credential sync](#full-credential-sync-enterprise)), which cannot be turned into keys;
 - in every namespace the edge served, rotate the LLM provider keys and each LLM's resource-signing secrets, tool, datasource, embedder and guardrail provider credentials, and any secrets in plugin configuration;
 - revoke the OAuth access tokens issued to MCP clients in those namespaces;
 - optionally, rotate `AGENT_TRACING_KEY` (keeping the old value as `AGENT_TRACING_KEY_PREVIOUS` until payload retention has passed) if forged links into genuine agent sessions matter to you. Fingerprints and exported `user.id` pseudonyms change at the rotation, so sessions that span it lose cross-gateway correlation.

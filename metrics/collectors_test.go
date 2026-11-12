@@ -65,4 +65,7 @@ func TestRegisterLabelledCounterFunc(t *testing.T) {
 			t.Errorf("scrape lacks %q", want)
 		}
 	}
+	if !strings.Contains(body, "# TYPE test_labelled_gauge_connected gauge") && strings.Contains(body, "test_labelled_gauge_connected") {
+		t.Error("the labelled gauge is no longer exported as a gauge")
+	}
 }

@@ -166,6 +166,8 @@ func autoMigrate(db *gorm.DB) error {
 		&ControlPayload{},
 		&SyncState{},
 		&AppliedSnapshot{},
+		&SyncedCredential{},
+		&SyncedAppFingerprint{},
 		&BudgetBlock{},
 		&LLMBudgetBlock{},
 		// Model Router models (Enterprise)
