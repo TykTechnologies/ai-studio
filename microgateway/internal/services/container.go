@@ -66,6 +66,10 @@ type ServiceContainer struct {
 	// edge runs came from ("control" or "last_known_good") and when the
 	// edge last had contact with a control plane (zero if never).
 	ConfigSource func() (source string, lastControlContact time.Time)
+	// CredentialSync, set on an edge with full credential sync
+	// (EDGE_CREDENTIAL_SYNC=full, Enterprise), is its synced credential
+	// list; nil otherwise.
+	CredentialSync *CredentialSync
 }
 
 // NewServiceContainer creates a new service container with essential dependencies only

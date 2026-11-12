@@ -540,6 +540,40 @@ type AppliedSnapshot struct {
 	Snapshot []byte
 }
 
+// SyncedCredential is one App key as an edge with full credential sync
+// (EDGE_CREDENTIAL_SYNC=full) knows it: the key's credential hash
+// (pkg/credhash), never the key, and whether it may be used. The control
+// plane sends the list and its changes; the edge validates from it. See
+// features/ActiveActive.md, Phase 4.
+type SyncedCredential struct {
+	// SecretHash is the key's credential hash: what a request's key is
+	// hashed to and looked up by.
+	SecretHash   string `gorm:"primaryKey;size:67"`
+	CredentialID uint   `gorm:"index"`
+	AppID        uint   `gorm:"index"`
+	Active       bool
+	Deleted      bool
+	// UpdatedAt is when the credential last changed on the control plane.
+	UpdatedAt time.Time `gorm:"autoUpdateTime:false"`
+	// SyncedAt is when the edge last received the row. A full sync removes
+	// the rows it did not bring.
+	SyncedAt time.Time `gorm:"index"`
+}
+
+// SyncedAppFingerprint is what the credential sync last stored for an App:
+// a hash of the App as the control plane sent it (its deterministic
+// protobuf encoding), and the updated_at the sync wrote on the App's row. A
+// later sync skips an App whose fingerprint is unchanged and whose row still
+// has that updated_at; any other write of the row (the configuration
+// snapshot, a key validated on demand, a plugin) changes updated_at, so the
+// App is stored again. A field added to the App later changes the
+// fingerprint and is never silently skipped.
+type SyncedAppFingerprint struct {
+	AppID        uint      `gorm:"primaryKey;autoIncrement:false"`
+	Fingerprint  string    `gorm:"size:64;not null"`
+	AppUpdatedAt time.Time `gorm:"not null"`
+}
+
 // BudgetBlock is an App the control plane says this gateway must refuse on
 // budget grounds (Enterprise): its Studio budget is 0, or its team has spent
 // a hard-blocking team budget. The budget sync replaces the whole table each
@@ -764,6 +798,7 @@ func (PluginKV) TableName() string          { return "plugin_kv" }
 func (ControlPayload) TableName() string    { return "control_payloads" }
 func (SyncState) TableName() string         { return "sync_states" }
 func (AppliedSnapshot) TableName() string   { return "applied_snapshots" }
+func (SyncedCredential) TableName() string  { return "synced_credentials" }
 func (ModelRouter) TableName() string       { return "model_routers" }
 func (ModelPool) TableName() string         { return "model_pools" }
 func (PoolVendor) TableName() string        { return "pool_vendors" }

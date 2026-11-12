@@ -284,6 +284,23 @@ func main() {
 					// A credential changed on the control plane: drop what
 					// this edge cached for it now, not at the cache TTL.
 					edgeClient.GetEventBus().Subscribe(eventbridge.CredentialChangedTopic, hybridGateway.HandleCredentialChanged)
+
+					// Full credential sync (Enterprise): the list syncs from
+					// the control plane the edge is connected to. A
+					// registration accepted (at start, after a reconnect or a
+					// move to another control endpoint) forgets that a control
+					// plane did not offer the sync; every contact, the
+					// registration and each acknowledged heartbeat, asks for a
+					// sync (the full list the first time, the changes after).
+					if list := hybridGateway.CredentialSync(); list != nil {
+						serviceContainer.CredentialSync = list
+						edgeClient.SetRegisteredHook(list.Reset)
+						edgeClient.SetControlContactHook(func(time.Time) { list.Kick() })
+						go list.Run(context.Background(), edgeClient, credentialSyncTimeout)
+						// The edge registered before the hooks were set.
+						list.Kick()
+						log.Info().Msg("Full credential sync: keys are validated from the synced, hashed list")
+					}
 				}
 
 				// Create and connect edge reload handler for distributed reload operations
@@ -585,6 +602,10 @@ type shutdownSteps struct {
 // control server through the edge client. Stopping the edge client earlier
 // (as this used to) closed that connection first, so every graceful shutdown
 // lost up to one pulse interval of edge analytics at the hub.
+// credentialSyncTimeout bounds one credential sync: a full stream of 50,000
+// credentials is about 8 MB and takes seconds.
+const credentialSyncTimeout = 5 * time.Minute
+
 func runShutdown(ctx context.Context, s shutdownSteps) {
 	if s.stopServer != nil {
 		if err := s.stopServer(ctx); err != nil {

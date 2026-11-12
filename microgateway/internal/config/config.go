@@ -245,6 +245,18 @@ type HubSpokeConfig struct {
 	// control plane and still start from its stored snapshot; past it the
 	// edge exits as it does without the option. 0 means no limit.
 	LastKnownGoodMaxAge time.Duration `env:"EDGE_LAST_KNOWN_GOOD_MAX_AGE" envDefault:"72h"`
+
+	// CredentialSync is how an edge learns App keys. "on_demand" (the
+	// default) asks the control plane about a key it has not seen and
+	// caches the answer. "full" (Enterprise) keeps the hashed list of every
+	// key of the edge's namespace in its own database and validates from
+	// it, with or without a control plane; a key not on the list is still
+	// asked about.
+	CredentialSync string `env:"EDGE_CREDENTIAL_SYNC" envDefault:"on_demand"`
+	// CredentialSyncMaxAge is how long the synced list is trusted after
+	// the last successful sync; past it the edge behaves as on_demand
+	// until a sync succeeds. 0 means no limit.
+	CredentialSyncMaxAge time.Duration `env:"EDGE_CREDENTIAL_SYNC_MAX_AGE" envDefault:"24h"`
 	EdgeID            string        `env:"EDGE_ID" envDefault:""`
 	EdgeNamespace     string        `env:"EDGE_NAMESPACE" envDefault:""`
 	ReconnectInterval time.Duration `env:"EDGE_RECONNECT_INTERVAL" envDefault:"5s"`
@@ -283,6 +295,12 @@ type HubSpokeConfig struct {
 	// Increase if config snapshots exceed the limit (many plugins, LLMs, tools, apps).
 	MaxMessageSize int `env:"GRPC_MAX_MESSAGE_SIZE" envDefault:"16777216"` // 16MB
 }
+
+// Values of EDGE_CREDENTIAL_SYNC.
+const (
+	CredentialSyncOnDemand = "on_demand"
+	CredentialSyncFull     = "full"
+)
 
 // Endpoints returns the control planes of an edge in the order it tries
 // them: CONTROL_ENDPOINTS, or CONTROL_ENDPOINT as a list of one. Entries are
@@ -328,6 +346,14 @@ func (h HubSpokeConfig) validateEndpoints() error {
 	}
 	if h.LastKnownGoodMaxAge < 0 {
 		return fmt.Errorf("EDGE_LAST_KNOWN_GOOD_MAX_AGE must not be negative (0 means no limit): %s", h.LastKnownGoodMaxAge)
+	}
+	switch h.CredentialSync {
+	case "", CredentialSyncOnDemand, CredentialSyncFull:
+	default:
+		return fmt.Errorf("EDGE_CREDENTIAL_SYNC must be %s or %s, not %q", CredentialSyncOnDemand, CredentialSyncFull, h.CredentialSync)
+	}
+	if h.CredentialSyncMaxAge < 0 {
+		return fmt.Errorf("EDGE_CREDENTIAL_SYNC_MAX_AGE must not be negative (0 means no limit): %s", h.CredentialSyncMaxAge)
 	}
 	return nil
 }

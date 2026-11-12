@@ -121,3 +121,60 @@ func pulseDropValues(counts map[string]uint64) map[string]float64 {
 	}
 	return values
 }
+
+// registerCredentialSyncMetrics exports, on an edge with full credential
+// sync, the state of its synced credential list:
+//
+//   - microgateway_credential_sync_last_success_timestamp is when the last
+//     sync completed (Unix seconds; 0 when none has). The list is trusted
+//     for EDGE_CREDENTIAL_SYNC_MAX_AGE from then.
+//   - microgateway_credentials_synced is the number of usable credentials
+//     on the list.
+//   - microgateway_credential_validations_total{source} counts key
+//     validations by who answered: "local" (the list, no control plane
+//     call), "control" (the key was not on the list and the control plane
+//     or its cached answer decided) and "stale" (the list was past its max
+//     age, so the edge asked as on demand).
+func registerCredentialSyncMetrics(cfg *config.Config, sc *services.ServiceContainer) {
+	if !cfg.IsEdge() || sc.CredentialSync == nil {
+		return
+	}
+	list := sc.CredentialSync
+	if err := metrics.RegisterGaugeFunc(
+		"microgateway_credential_sync_last_success_timestamp",
+		"Unix time of this edge's last completed credential sync (0 if none has completed)",
+		func() float64 { return credentialSyncTimestamp(list.LastSuccess()) },
+	); err != nil {
+		log.Warn().Err(err).Msg("Failed to register credential sync timestamp metric")
+	}
+	if err := metrics.RegisterGaugeFunc(
+		"microgateway_credentials_synced",
+		"Usable credentials on this edge's synced credential list",
+		func() float64 { return float64(list.Count()) },
+	); err != nil {
+		log.Warn().Err(err).Msg("Failed to register synced credentials metric")
+	}
+	if err := metrics.RegisterLabelledCounterFunc(
+		"microgateway_credential_validations_total",
+		"Key validations on this edge by who answered: local (the synced list), control (the control plane or its cached answer), stale (the list was past its max age)",
+		"source",
+		func() map[string]float64 { return credentialValidationValues(list.Validations()) },
+	); err != nil {
+		log.Warn().Err(err).Msg("Failed to register credential validation metric")
+	}
+}
+
+func credentialSyncTimestamp(last time.Time) float64 {
+	if last.IsZero() {
+		return 0
+	}
+	return float64(last.Unix())
+}
+
+func credentialValidationValues(counts map[string]uint64) map[string]float64 {
+	values := make(map[string]float64, len(counts))
+	for source, n := range counts {
+		values[source] = float64(n)
+	}
+	return values
+}
