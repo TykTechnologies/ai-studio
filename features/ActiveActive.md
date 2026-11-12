@@ -804,7 +804,10 @@ Files: `proto/config_sync.proto`, `proto/common.proto`,
    through the relay). **Full mode built** (bead .18): on the event an
    edge with full credential sync also asks for a sync at once (a hint
    only: nothing is added to or changed on the list from the payload, known
-   hash or not); the delta brings the change with the credential's ID. On
+   hash or not); the delta brings the change with the credential's ID.
+   The event carries no namespace, so every event makes every connected
+   full-sync edge ask for a delta, whatever the key's namespace; a burst
+   of events folds into one pending delta per edge. On
    the rig a key deactivated through another replica was refused from the
    list 24 ms later, and with no event raised the heartbeat's sync
    repaired it in 0.25 s (300 ms heartbeat).
