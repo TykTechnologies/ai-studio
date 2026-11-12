@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"math/rand/v2"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -159,6 +160,15 @@ type CredentialSync struct {
 	count atomic.Int64
 	// kick wakes Run: at most one sync is pending behind the running one.
 	kick chan struct{}
+	// Syncs started by credential.changed events (KickForChange): at most
+	// one is scheduled at a time, after a random delay of up to
+	// eventSyncMaxDelay, and no sooner than eventSyncMinInterval after the
+	// last one. Zero values mean the defaults (tests shorten them).
+	eventPending         atomic.Bool
+	eventMu              sync.Mutex
+	lastEventKick        time.Time
+	eventSyncMaxDelay    time.Duration
+	eventSyncMinInterval time.Duration
 	// lastReregister is when Run last registered the edge again after a
 	// "register first" answer (Run's goroutine only).
 	lastReregister time.Time
@@ -301,6 +311,56 @@ func (s *CredentialSync) Unavailable() bool { return s.unavailable.Load() }
 // Reset forgets that the control plane did not offer the sync: the edge has
 // reconnected, possibly to another control plane or an upgraded one.
 func (s *CredentialSync) Reset() { s.unavailable.Store(false) }
+
+// Defaults for the spacing of event-driven syncs (KickForChange).
+const (
+	// defaultEventSyncMaxDelay spreads the edges that hold a changed key
+	// over half a second instead of all calling the hub at once.
+	defaultEventSyncMaxDelay = 500 * time.Millisecond
+	// defaultEventSyncMinInterval bounds one edge to about one
+	// event-driven sync a second under a stream of key changes.
+	defaultEventSyncMinInterval = time.Second
+)
+
+// KickForChange is the edge's answer to a credential.changed event for
+// hash: a sync, so the change arrives with the credential's ID, but only
+// when the list holds hash. A key the list does not hold is another
+// namespace's, or one created since the last sync; neither needs a sync
+// now (a new key's first use asks the control plane, and the heartbeat's
+// sync brings it), so one key change does not make every edge call the
+// hub. The sync is spaced (a random delay, and a least interval between
+// event-driven syncs on this edge); heartbeat syncs are not. Reports
+// whether a sync was asked for.
+func (s *CredentialSync) KickForChange(hash string) bool {
+	_, found, err := s.Lookup(hash)
+	if err != nil || !found {
+		return false
+	}
+	if !s.eventPending.CompareAndSwap(false, true) {
+		return true // one is scheduled already: it will bring this change too
+	}
+	maxDelay, minInterval := s.eventSyncMaxDelay, s.eventSyncMinInterval
+	if maxDelay <= 0 {
+		maxDelay = defaultEventSyncMaxDelay
+	}
+	if minInterval <= 0 {
+		minInterval = defaultEventSyncMinInterval
+	}
+	delay := rand.N(maxDelay)
+	s.eventMu.Lock()
+	if wait := time.Until(s.lastEventKick.Add(minInterval)); wait > delay {
+		delay = wait
+	}
+	s.eventMu.Unlock()
+	time.AfterFunc(delay, func() {
+		s.eventMu.Lock()
+		s.lastEventKick = time.Now()
+		s.eventMu.Unlock()
+		s.eventPending.Store(false)
+		s.Kick()
+	})
+	return true
+}
 
 // Kick asks Run for a sync and returns at once. The edge calls it on every
 // contact with a control plane: a registration accepted (after Reset) and

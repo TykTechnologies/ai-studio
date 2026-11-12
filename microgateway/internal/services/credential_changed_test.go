@@ -188,11 +188,11 @@ func TestCredentialChanged_RememberedEvictionsAreBounded(t *testing.T) {
 	assert.True(t, cached(h, "tok-unrelated"), "started after it: cached as usual")
 }
 
-// With full credential sync the event is a hint for the list: the edge
-// syncs at once, so a key deactivated on the control plane is refused from
-// the list within the sync's round trip, not at the next heartbeat. Nothing
-// is taken from the payload: an event for a hash the control plane does
-// not have adds nothing.
+// With full credential sync the event is a hint for the list: for a hash
+// the list holds, the edge syncs (within about half a second), so a key
+// deactivated on the control plane is refused from the list well before
+// the next heartbeat. A hash the list does not hold starts no sync, and
+// nothing is taken from the payload.
 func TestCredentialChanged_FullSyncEdgeSyncsAtOnce(t *testing.T) {
 	sqliteFile := func(t *testing.T) *gorm.DB {
 		// A file, not :memory:: the sync runs on its own connection.
@@ -228,11 +228,46 @@ func fullSyncEdgeSyncsAtOnce(t *testing.T, db *gorm.DB) {
 		return err != nil && !errors.Is(err, coresvc.ErrCredentialCheckUnavailable)
 	}, 2*time.Second, 10*time.Millisecond, "refused from the list after the sync the event started")
 
-	// A hash the control plane does not have: a sync, and nothing added.
+	// A hash this edge's list does not hold (another namespace's key, or
+	// one created since the last sync): no sync, and nothing added.
 	calls := e.hub.callCount()
 	e.h.HandleCredentialChanged(credentialChanged(t, e.h, keyC, true, false))
-	require.Eventually(t, func() bool { return e.hub.callCount() > calls }, 2*time.Second, 10*time.Millisecond, "a sync")
+	time.Sleep(1500 * time.Millisecond) // past the longest delay and interval
+	assert.Equal(t, calls, e.hub.callCount(), "no sync for a hash the list does not hold")
 	_, found, err := e.list.Lookup(e.hash(keyC))
 	require.NoError(t, err)
 	assert.False(t, found, "nothing is added from the payload")
+}
+
+// Under a stream of 100 events a second for 10 seconds, all for a key the
+// edge holds, the edge makes about one event-driven sync a second, not one
+// per event.
+func TestCredentialChanged_EventSyncsAreSpaced(t *testing.T) {
+	if testing.Short() {
+		t.Skip("streams events for 10 seconds")
+	}
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "edge.db")+"?_busy_timeout=5000"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, database.Migrate(db))
+	t.Cleanup(func() { database.Close(db) })
+	e := newSyncedEdge(t, db, 24*time.Hour)
+	e.hub.apps[1] = pbApp(1, "app", true)
+	e.hub.set(SyncedCredentialUpdate{CredentialID: 11, SecretHash: e.hash(keyA), AppID: 1, Active: true, UpdatedAt: time.Now()})
+	require.NoError(t, e.list.Sync(context.Background(), e.hub))
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go e.list.Run(ctx, e.hub, time.Minute)
+
+	before := e.hub.callCount()
+	event := credentialChanged(t, e.h, keyA, true, false)
+	tick := time.NewTicker(10 * time.Millisecond)
+	defer tick.Stop()
+	for end := time.Now().Add(10 * time.Second); time.Now().Before(end); <-tick.C {
+		e.h.HandleCredentialChanged(event)
+	}
+	time.Sleep(1500 * time.Millisecond) // the last scheduled one
+	syncs := e.hub.callCount() - before
+	t.Logf("1000 events over 10 s: %d event-driven syncs", syncs)
+	assert.GreaterOrEqual(t, syncs, 8, "still syncing on events")
+	assert.LessOrEqual(t, syncs, 12, "about one a second, not one per event")
 }
