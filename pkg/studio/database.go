@@ -41,7 +41,10 @@ func RegisterDatabaseDriver(name string, open func(dsn string) gorm.Dialector) {
 // or "sqlite" once pkg/studio/sqlitedb is imported, at DatabaseURL) and checks
 // it responds. With DatabaseSchema set (postgres only) Studio's tables live
 // in that schema: OpenDatabase creates it when missing and pins every
-// connection's search_path to it alone. The result is what Options.DB takes. A host opens Studio's
+// connection's search_path to it alone. On Postgres it waits up to
+// DatabaseStartupTimeout (DATABASE_STARTUP_TIMEOUT) for a server that answers
+// and takes writes (database_wait.go); a server that only reads is never
+// returned, since New migrates. The result is what Options.DB takes. A host opens Studio's
 // database with it rather than with gorm itself: Studio builds with its own
 // copy of gorm (third_party/gorm.io), which the host's gorm cannot stand in
 // for. The caller closes it after Stop, through DB().
@@ -62,7 +65,7 @@ func OpenDatabase(conf *config.AppConf) (db *gorm.DB, err error) {
 			return nil, fmt.Errorf("studio: DATABASE_SCHEMA is for postgres only (DatabaseType is %q)", conf.DatabaseType)
 		}
 		var err error
-		if dsn, err = withSchema(open, dsn, conf.DatabaseSchema); err != nil {
+		if dsn, err = schemaDSN(dsn, conf.DatabaseSchema); err != nil {
 			return nil, err
 		}
 	}
@@ -83,7 +86,11 @@ func OpenDatabase(conf *config.AppConf) (db *gorm.DB, err error) {
 		}()
 	}
 
-	opened, err := gorm.Open(dialector, logger.GetGormConfig())
+	// No ping in gorm.Open: waitForDatabase pings, as often as the start-up
+	// timeout allows.
+	gormConfig := logger.GetGormConfig()
+	gormConfig.DisableAutomaticPing = true
+	opened, err := gorm.Open(dialector, gormConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +98,12 @@ func OpenDatabase(conf *config.AppConf) (db *gorm.DB, err error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := sqlDB.Ping(); err != nil {
+	if err := waitForDatabase(conf, opened, func() error {
+		if conf.DatabaseSchema == "" {
+			return nil
+		}
+		return ensureSchema(open, conf.DatabaseURL, conf.DatabaseSchema)
+	}); err != nil {
 		sqlDB.Close()
 		return nil, err
 	}
@@ -123,40 +135,41 @@ func registeredDatabaseTypes() string {
 // in lower case, so it means the same quoted and unquoted.
 var schemaName = regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}$`)
 
-// withSchema creates schema in the database dsn names when it does not
-// exist yet, and returns dsn with search_path set to that schema alone.
-// Only that schema: Postgres skips search_path entries that do not exist,
-// and gorm's migrator creates tables in current_schema(), so a fallback such
-// as "studio,public" would put tables in public whenever the schema is
-// missing.
-func withSchema(open func(string) gorm.Dialector, dsn, schema string) (string, error) {
+// schemaDSN checks schema is a name DatabaseSchema accepts and returns dsn
+// with search_path set to that schema alone. Only that schema: Postgres
+// skips search_path entries that do not exist, and gorm's migrator creates
+// tables in current_schema(), so a fallback such as "studio,public" would
+// put tables in public whenever the schema is missing. Nothing is
+// connected to: ensureSchema creates the schema once the database answers.
+func schemaDSN(dsn, schema string) (string, error) {
 	if !schemaName.MatchString(schema) {
 		return "", fmt.Errorf("studio: DATABASE_SCHEMA %q must be a lower-case identifier (letters, digits, underscores; at most 63)", schema)
 	}
-	scoped, err := dsnWithSearchPath(dsn, schema)
-	if err != nil {
-		return "", err
-	}
+	return dsnWithSearchPath(dsn, schema)
+}
 
+// ensureSchema creates schema in the database dsn names when it does not
+// exist yet.
+func ensureSchema(open func(string) gorm.Dialector, dsn, schema string) error {
 	admin, err := gorm.Open(open(dsn), logger.GetGormConfig())
 	if err != nil {
-		return "", err
+		return err
 	}
 	if sqlDB, err := admin.DB(); err == nil {
 		defer sqlDB.Close()
 	}
 	var exists bool
 	if err := admin.Raw("SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = ?)", schema).Scan(&exists).Error; err != nil {
-		return "", fmt.Errorf("studio: look up schema %q: %w", schema, err)
+		return fmt.Errorf("studio: look up schema %q: %w", schema, err)
 	}
 	if !exists {
 		// IF NOT EXISTS: replicas starting together may both get here.
 		if err := admin.Exec(`CREATE SCHEMA IF NOT EXISTS "` + schema + `"`).Error; err != nil {
-			return "", fmt.Errorf("studio: create schema %q: %w", schema, err)
+			return fmt.Errorf("studio: create schema %q: %w", schema, err)
 		}
 		logger.Infof("Created database schema %q", schema)
 	}
-	return scoped, nil
+	return nil
 }
 
 // dsnWithSearchPath sets search_path in a Postgres DSN, either a URL

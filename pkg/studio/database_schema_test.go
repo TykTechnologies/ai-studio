@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
-	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
 )
 
 func TestDSNWithSearchPath(t *testing.T) {
@@ -41,7 +40,7 @@ func TestDSNWithSearchPath(t *testing.T) {
 // plain lower-case identifiers: search_path would fold an unquoted name.
 func TestWithSchemaRejectsBadNames(t *testing.T) {
 	for _, name := range []string{"Studio", "1studio", "studio-ai", "studio;drop", `a"b`, strings.Repeat("s", 64)} {
-		_, err := withSchema(postgres.Open, "postgres://127.0.0.1:1/db", name)
+		_, err := schemaDSN("postgres://127.0.0.1:1/db", name)
 		require.Error(t, err, name)
 		assert.Contains(t, err.Error(), "lower-case identifier", name)
 	}

@@ -152,6 +152,12 @@ shares the one-instance-per-process rule with `New`. See
   lifetime unless it sets one). `dbstate.For(db).Status()`
   (`pkg/dbstate`) says whether the database is writable, read-only or
   unreachable. A pool the host opens some other way has none of this.
+- **Waiting for the database at start-up.** On Postgres, `OpenDatabase`
+  waits up to `Config.DatabaseStartupTimeout` (`DATABASE_STARTUP_TIMEOUT`;
+  `config.LoadFrom` sets 60 seconds, a `Config` built by hand has 0, one
+  attempt) for a server that answers and takes writes, and never returns a
+  read-only one, since `New` migrates. Nothing serves HTTP during the wait,
+  so size a startup probe to cover it.
 - **Databases and cgo.** `OpenDatabase` opens Postgres. SQLite needs cgo,
   so it is in `pkg/studio/sqlitedb`: import that package for its side effect
   to use `DatabaseType` `sqlite`. Studio builds with `CGO_ENABLED=0`, but

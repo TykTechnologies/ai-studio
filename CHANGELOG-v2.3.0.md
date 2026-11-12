@@ -291,6 +291,7 @@ AI Studio can run as two control planes in two sites over one replicated Postgre
 - **`config.ociRequireSignature: false` in the Helm chart was ignored** unless written as the string `"false"`, so signatures stayed required. An unquoted boolean, or `--set`, now turns them off.
 - **The quickstart ships placeholders instead of sample secrets.**
 - **Stopping AI Studio** waits for background work to finish.
+- **Start-up exiting when the database is briefly away.** AI Studio on Postgres now waits for its database at start-up, up to `DATABASE_STARTUP_TIMEOUT` (60 seconds by default), instead of exiting at the first failed connection and relying on its supervisor to restart it. It also waits while only a read-only server (a hot standby, or a demoted primary) answers, since it migrates the schema at start; when the time is up it exits with a message that names the setting. Neither `/health` nor `/ready` answers during the wait, so give a Kubernetes deployment a `startupProbe` that allows at least `DATABASE_STARTUP_TIMEOUT` plus the time migrations take. `DATABASE_STARTUP_TIMEOUT=0` keeps the old fail-fast behaviour.
 
 ---
 
@@ -454,6 +455,7 @@ See the [FIPS guide](docs/site/docs/fips.md).
 - The plugin, management and config-sync protocols change additively (new fields and a `CallDecision` RPC).
 - When embedding with `pkg/studio`, `AppConf.FilterLimits` applies only to names in `config.FilterLimitNames`, which now include the `GUARDRAIL_*` settings.
 - Analytics sinks can implement `analytics.MCPCallRecorder` to receive MCP calls. Existing handlers compile unchanged.
+- `studio.OpenDatabase` waits up to `AppConf.DatabaseStartupTimeout` for a writable Postgres database. `config.LoadFrom` sets it to 60 seconds; an `AppConf` built by hand has 0, one attempt as before.
 
 ---
 
@@ -495,6 +497,7 @@ The Helm chart adds `config.logLevel` (AI Studio's `LOG_LEVEL`), and `config.plu
 | `DATABASE_MAX_IDLE_CONNS` | AI Studio | `2` | Idle Postgres connections kept open |
 | `DATABASE_CONN_MAX_LIFETIME` | AI Studio | `30m` | Close and replace connections of this age, so they also move after a planned switchover (`0`: never) |
 | `DATABASE_CONNECT_TIMEOUT` | AI Studio | `10s` | Time for one connection attempt, unless `DATABASE_URL` sets `connect_timeout` |
+| `DATABASE_STARTUP_TIMEOUT` | AI Studio | `60s` | How long start-up waits for a Postgres database that answers and takes writes before exiting (`0`: one attempt) |
 | `CONTROL_ENDPOINTS` | edge | unset | Ordered, comma-separated list of control planes; `CONTROL_ENDPOINT` is a list of one (setting both is a start-up error) |
 | `EDGE_CONTROL_FAILBACK_INTERVAL` | edge | off | How often an edge that is not on its first control plane tries to return to it |
 | `EDGE_START_FROM_LAST_KNOWN_GOOD` | edge | `false` | Start from the stored configuration snapshot when no control plane answers at start-up |
