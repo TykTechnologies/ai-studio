@@ -36,6 +36,12 @@ service ConfigurationSyncService {
   // SendPluginControlBatch sends batched plugin control payloads from edge to control
   // This allows plugins running on edge instances to send arbitrary data back to control
   rpc SendPluginControlBatch(PluginControlBatch) returns (PluginControlBatchResponse);
+
+  // SyncCredentials streams the App credentials an edge's namespace may
+  // serve, as hashes, so the edge can validate keys without asking
+  // (EDGE_CREDENTIAL_SYNC=full, Enterprise). A Community or older control
+  // plane answers Unimplemented.
+  rpc SyncCredentials(CredentialSyncRequest) returns (stream CredentialSyncPage);
 }
 
 // EdgeRegistrationRequest is sent when an edge instance connects
@@ -638,4 +644,33 @@ message PluginPayloadError {
   // refused the payload itself, which is final.
   bool retry = 4;
   uint32 payload_index = 5;                    // The payload's position in the batch
+}
+
+// CredentialSyncRequest asks for the credentials of the edge's namespace.
+message CredentialSyncRequest {
+  string edge_id = 1;
+  string edge_namespace = 2;   // informational; the registered edge's namespace is what counts, as for ValidateToken
+  uint64 since = 3;            // watermark of the last stream the edge applied in full; 0 = send everything
+  string hash_version = 4;     // credential hash the edge uses: "v1" (credhash.Prefix without the colon). Unknown: FailedPrecondition
+}
+
+// SyncedCredential is one App credential as an edge holds it: never the secret.
+message SyncedCredential {
+  uint32 credential_id = 1;
+  string key_id = 2;
+  string secret_hash = 3;      // pkg/credhash hash ("v1:" + 64 hex) under MICROGATEWAY_ENCRYPTION_KEY
+  bool active = 4;
+  bool deleted = 5;            // soft-deleted on the hub: the edge removes or refuses it
+  google.protobuf.Timestamp updated_at = 6;
+  uint32 app_id = 7;           // 0 when no App uses the credential
+}
+
+// CredentialSyncPage is one page of the stream.
+message CredentialSyncPage {
+  repeated SyncedCredential credentials = 1;
+  repeated AppConfig apps = 2;  // the Apps of this page's credentials (only those the namespace may serve), as ValidateToken returns them
+  bool full = 3;                // set on every page when the hub is sending everything (since was 0, or not usable): after the last page the edge deletes the rows it did not see
+  bool last = 4;                // the final page
+  uint64 watermark = 5;         // on the last page only; 0 = do not store one, ask for everything next time. Store it only after the whole stream is applied
+  string hash_version = 6;      // the hash version of secret_hash on this page ("v1")
 }

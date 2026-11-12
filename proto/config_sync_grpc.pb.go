@@ -28,6 +28,7 @@ const (
 	ConfigurationSyncService_ValidateToken_FullMethodName          = "/microgateway.ConfigurationSyncService/ValidateToken"
 	ConfigurationSyncService_SendAnalyticsPulse_FullMethodName     = "/microgateway.ConfigurationSyncService/SendAnalyticsPulse"
 	ConfigurationSyncService_SendPluginControlBatch_FullMethodName = "/microgateway.ConfigurationSyncService/SendPluginControlBatch"
+	ConfigurationSyncService_SyncCredentials_FullMethodName        = "/microgateway.ConfigurationSyncService/SyncCredentials"
 )
 
 // ConfigurationSyncServiceClient is the client API for ConfigurationSyncService service.
@@ -55,6 +56,11 @@ type ConfigurationSyncServiceClient interface {
 	// SendPluginControlBatch sends batched plugin control payloads from edge to control
 	// This allows plugins running on edge instances to send arbitrary data back to control
 	SendPluginControlBatch(ctx context.Context, in *PluginControlBatch, opts ...grpc.CallOption) (*PluginControlBatchResponse, error)
+	// SyncCredentials streams the App credentials an edge's namespace may
+	// serve, as hashes, so the edge can validate keys without asking
+	// (EDGE_CREDENTIAL_SYNC=full, Enterprise). A Community or older control
+	// plane answers Unimplemented.
+	SyncCredentials(ctx context.Context, in *CredentialSyncRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[CredentialSyncPage], error)
 }
 
 type configurationSyncServiceClient struct {
@@ -148,6 +154,25 @@ func (c *configurationSyncServiceClient) SendPluginControlBatch(ctx context.Cont
 	return out, nil
 }
 
+func (c *configurationSyncServiceClient) SyncCredentials(ctx context.Context, in *CredentialSyncRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[CredentialSyncPage], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &ConfigurationSyncService_ServiceDesc.Streams[1], ConfigurationSyncService_SyncCredentials_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[CredentialSyncRequest, CredentialSyncPage]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ConfigurationSyncService_SyncCredentialsClient = grpc.ServerStreamingClient[CredentialSyncPage]
+
 // ConfigurationSyncServiceServer is the server API for ConfigurationSyncService service.
 // All implementations must embed UnimplementedConfigurationSyncServiceServer
 // for forward compatibility.
@@ -173,6 +198,11 @@ type ConfigurationSyncServiceServer interface {
 	// SendPluginControlBatch sends batched plugin control payloads from edge to control
 	// This allows plugins running on edge instances to send arbitrary data back to control
 	SendPluginControlBatch(context.Context, *PluginControlBatch) (*PluginControlBatchResponse, error)
+	// SyncCredentials streams the App credentials an edge's namespace may
+	// serve, as hashes, so the edge can validate keys without asking
+	// (EDGE_CREDENTIAL_SYNC=full, Enterprise). A Community or older control
+	// plane answers Unimplemented.
+	SyncCredentials(*CredentialSyncRequest, grpc.ServerStreamingServer[CredentialSyncPage]) error
 	mustEmbedUnimplementedConfigurationSyncServiceServer()
 }
 
@@ -206,6 +236,9 @@ func (UnimplementedConfigurationSyncServiceServer) SendAnalyticsPulse(context.Co
 }
 func (UnimplementedConfigurationSyncServiceServer) SendPluginControlBatch(context.Context, *PluginControlBatch) (*PluginControlBatchResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendPluginControlBatch not implemented")
+}
+func (UnimplementedConfigurationSyncServiceServer) SyncCredentials(*CredentialSyncRequest, grpc.ServerStreamingServer[CredentialSyncPage]) error {
+	return status.Errorf(codes.Unimplemented, "method SyncCredentials not implemented")
 }
 func (UnimplementedConfigurationSyncServiceServer) mustEmbedUnimplementedConfigurationSyncServiceServer() {
 }
@@ -362,6 +395,17 @@ func _ConfigurationSyncService_SendPluginControlBatch_Handler(srv interface{}, c
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ConfigurationSyncService_SyncCredentials_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(CredentialSyncRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ConfigurationSyncServiceServer).SyncCredentials(m, &grpc.GenericServerStream[CredentialSyncRequest, CredentialSyncPage]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ConfigurationSyncService_SyncCredentialsServer = grpc.ServerStreamingServer[CredentialSyncPage]
+
 // ConfigurationSyncService_ServiceDesc is the grpc.ServiceDesc for ConfigurationSyncService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -404,6 +448,11 @@ var ConfigurationSyncService_ServiceDesc = grpc.ServiceDesc{
 			Handler:       _ConfigurationSyncService_SubscribeToChanges_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "SyncCredentials",
+			Handler:       _ConfigurationSyncService_SyncCredentials_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "proto/config_sync.proto",

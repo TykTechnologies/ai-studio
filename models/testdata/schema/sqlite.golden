@@ -362,6 +362,7 @@ TABLE apps
   column `guardrail_capability_reset_at` datetime
   constraint CONSTRAINT `fk_apps_credential` FOREIGN KEY (`credential_id`) REFERENCES `credentials`(`id`)
   index CREATE INDEX `idx_app_namespace` ON `apps`(`namespace`)
+  index CREATE INDEX `idx_apps_credential_id` ON `apps`(`credential_id`)
   index CREATE INDEX `idx_apps_deleted_at` ON `apps`(`deleted_at`)
   index CREATE INDEX `idx_apps_team_id` ON `apps`(`team_id`)
 TABLE attestation_templates

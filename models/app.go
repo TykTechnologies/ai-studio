@@ -13,7 +13,7 @@ type App struct {
 	Name            string                 `json:"name"`
 	Description     string                 `json:"description"`
 	UserID          uint                   `json:"user_id" gorm:"foreignKey:ID"`
-	CredentialID    uint                   `json:"credential_id"`
+	CredentialID    uint                   `json:"credential_id" gorm:"index:idx_apps_credential_id"`
 	Credential      Credential
 	MonthlyBudget   *float64               `json:"monthly_budget" gorm:"column:monthly_budget"`
 	BudgetStartDate *time.Time             `json:"budget_start_date" gorm:"column:budget_start_date"`

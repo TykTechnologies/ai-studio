@@ -145,6 +145,31 @@ Two properties keep the checksum meaningful:
 
 This approach balances performance (no need to sync every credential change) with security (admin can revoke access without waiting for a full config push).
 
+#### Full credential sync (Enterprise)
+
+An edge set to `EDGE_CREDENTIAL_SYNC=full` asks AI Studio for the App keys of its namespace in advance and validates them locally, so a key it has never seen is accepted while no control plane is reachable. AI Studio never sends a key: it sends a keyed hash of each one (HMAC-SHA-256 under a key derived from `MICROGATEWAY_ENCRYPTION_KEY`), with the key's id, whether it is active, and its App. An edge cannot turn a hash back into a key.
+
+What AI Studio does:
+
+- **First, after a reconnect to another control plane, and at least every 15 minutes:** a full list, in pages of 500 keys. The edge drops whatever the list does not contain.
+- **In between:** only what changed since the last answer (a new key, a deactivated or re-activated one, a regenerated secret, a deleted key or App, a deactivated App).
+- **Only for the edge's registered namespace**, plus global Apps, and only if the namespace is licensed. An edge that has not registered gets nothing until it does.
+
+How long a revoked or deactivated key can still be accepted by an edge in this mode:
+
+| Situation | At most |
+|---|---|
+| Edge connected | About a second |
+| Edge connected, the change notification was lost | Until the edge's next sync (its heartbeat interval) |
+| Edge connected, and a sync missed the change (clocks more than 30 seconds apart between control planes or the database) | 15 minutes plus one heartbeat interval |
+| Edge cannot reach any control plane | `EDGE_CREDENTIAL_SYNC_MAX_AGE` (24 hours by default) |
+
+Keep the clocks of both control planes and the database within 30 seconds of each other.
+
+Cost on AI Studio, measured with 50,000 keys: a full list is about 8 MB and takes about 4 seconds of one CPU core per edge, every 15 minutes, at a moment that differs from edge to edge (ten edges taking theirs at the same moment took about 12 seconds); memory use does not grow with the number of keys. For 100 edges that averages about half a core and 1 MB/s. A sync with nothing changed takes a few tens of milliseconds.
+
+A Community AI Studio does not offer this; an edge that asks for it stays on pull-on-miss.
+
 ### Sync Status Values
 
 | Status | Description | UI Indicator |
@@ -409,7 +434,8 @@ Every edge authenticates to AI Studio with the same token: `EDGE_AUTH_TOKEN` on 
 
 - register under any edge ID, including one that already exists;
 - claim any namespace and receive that namespace's configuration snapshot;
-- report analytics, budget usage and agent-trace captures for that namespace's Apps.
+- report analytics, budget usage and agent-trace captures for that namespace's Apps;
+- on Enterprise, receive the hashes of that namespace's App keys ([full credential sync](#full-credential-sync-enterprise)). These are not keys and cannot be turned into keys.
 
 The snapshot carries the namespace's secrets. Most are encrypted with `MICROGATEWAY_ENCRYPTION_KEY`, which every edge also holds, so the token plus that key decrypts them:
 

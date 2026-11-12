@@ -4454,6 +4454,253 @@ func (x *PluginPayloadError) GetPayloadIndex() uint32 {
 	return 0
 }
 
+// CredentialSyncRequest asks for the credentials of the edge's namespace.
+type CredentialSyncRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EdgeId        string                 `protobuf:"bytes,1,opt,name=edge_id,json=edgeId,proto3" json:"edge_id,omitempty"`
+	EdgeNamespace string                 `protobuf:"bytes,2,opt,name=edge_namespace,json=edgeNamespace,proto3" json:"edge_namespace,omitempty"` // informational; the registered edge's namespace is what counts, as for ValidateToken
+	Since         uint64                 `protobuf:"varint,3,opt,name=since,proto3" json:"since,omitempty"`                                     // watermark of the last stream the edge applied in full; 0 = send everything
+	HashVersion   string                 `protobuf:"bytes,4,opt,name=hash_version,json=hashVersion,proto3" json:"hash_version,omitempty"`       // credential hash the edge uses: "v1" (credhash.Prefix without the colon). Unknown: FailedPrecondition
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CredentialSyncRequest) Reset() {
+	*x = CredentialSyncRequest{}
+	mi := &file_proto_config_sync_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CredentialSyncRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CredentialSyncRequest) ProtoMessage() {}
+
+func (x *CredentialSyncRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_config_sync_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CredentialSyncRequest.ProtoReflect.Descriptor instead.
+func (*CredentialSyncRequest) Descriptor() ([]byte, []int) {
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *CredentialSyncRequest) GetEdgeId() string {
+	if x != nil {
+		return x.EdgeId
+	}
+	return ""
+}
+
+func (x *CredentialSyncRequest) GetEdgeNamespace() string {
+	if x != nil {
+		return x.EdgeNamespace
+	}
+	return ""
+}
+
+func (x *CredentialSyncRequest) GetSince() uint64 {
+	if x != nil {
+		return x.Since
+	}
+	return 0
+}
+
+func (x *CredentialSyncRequest) GetHashVersion() string {
+	if x != nil {
+		return x.HashVersion
+	}
+	return ""
+}
+
+// SyncedCredential is one App credential as an edge holds it: never the secret.
+type SyncedCredential struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	CredentialId  uint32                 `protobuf:"varint,1,opt,name=credential_id,json=credentialId,proto3" json:"credential_id,omitempty"`
+	KeyId         string                 `protobuf:"bytes,2,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
+	SecretHash    string                 `protobuf:"bytes,3,opt,name=secret_hash,json=secretHash,proto3" json:"secret_hash,omitempty"` // pkg/credhash hash ("v1:" + 64 hex) under MICROGATEWAY_ENCRYPTION_KEY
+	Active        bool                   `protobuf:"varint,4,opt,name=active,proto3" json:"active,omitempty"`
+	Deleted       bool                   `protobuf:"varint,5,opt,name=deleted,proto3" json:"deleted,omitempty"` // soft-deleted on the hub: the edge removes or refuses it
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	AppId         uint32                 `protobuf:"varint,7,opt,name=app_id,json=appId,proto3" json:"app_id,omitempty"` // 0 when no App uses the credential
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncedCredential) Reset() {
+	*x = SyncedCredential{}
+	mi := &file_proto_config_sync_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncedCredential) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncedCredential) ProtoMessage() {}
+
+func (x *SyncedCredential) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_config_sync_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncedCredential.ProtoReflect.Descriptor instead.
+func (*SyncedCredential) Descriptor() ([]byte, []int) {
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *SyncedCredential) GetCredentialId() uint32 {
+	if x != nil {
+		return x.CredentialId
+	}
+	return 0
+}
+
+func (x *SyncedCredential) GetKeyId() string {
+	if x != nil {
+		return x.KeyId
+	}
+	return ""
+}
+
+func (x *SyncedCredential) GetSecretHash() string {
+	if x != nil {
+		return x.SecretHash
+	}
+	return ""
+}
+
+func (x *SyncedCredential) GetActive() bool {
+	if x != nil {
+		return x.Active
+	}
+	return false
+}
+
+func (x *SyncedCredential) GetDeleted() bool {
+	if x != nil {
+		return x.Deleted
+	}
+	return false
+}
+
+func (x *SyncedCredential) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+func (x *SyncedCredential) GetAppId() uint32 {
+	if x != nil {
+		return x.AppId
+	}
+	return 0
+}
+
+// CredentialSyncPage is one page of the stream.
+type CredentialSyncPage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Credentials   []*SyncedCredential    `protobuf:"bytes,1,rep,name=credentials,proto3" json:"credentials,omitempty"`
+	Apps          []*AppConfig           `protobuf:"bytes,2,rep,name=apps,proto3" json:"apps,omitempty"`                                  // the Apps of this page's credentials (only those the namespace may serve), as ValidateToken returns them
+	Full          bool                   `protobuf:"varint,3,opt,name=full,proto3" json:"full,omitempty"`                                 // set on every page when the hub is sending everything (since was 0, or not usable): after the last page the edge deletes the rows it did not see
+	Last          bool                   `protobuf:"varint,4,opt,name=last,proto3" json:"last,omitempty"`                                 // the final page
+	Watermark     uint64                 `protobuf:"varint,5,opt,name=watermark,proto3" json:"watermark,omitempty"`                       // on the last page only; 0 = do not store one, ask for everything next time. Store it only after the whole stream is applied
+	HashVersion   string                 `protobuf:"bytes,6,opt,name=hash_version,json=hashVersion,proto3" json:"hash_version,omitempty"` // the hash version of secret_hash on this page ("v1")
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CredentialSyncPage) Reset() {
+	*x = CredentialSyncPage{}
+	mi := &file_proto_config_sync_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CredentialSyncPage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CredentialSyncPage) ProtoMessage() {}
+
+func (x *CredentialSyncPage) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_config_sync_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CredentialSyncPage.ProtoReflect.Descriptor instead.
+func (*CredentialSyncPage) Descriptor() ([]byte, []int) {
+	return file_proto_config_sync_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *CredentialSyncPage) GetCredentials() []*SyncedCredential {
+	if x != nil {
+		return x.Credentials
+	}
+	return nil
+}
+
+func (x *CredentialSyncPage) GetApps() []*AppConfig {
+	if x != nil {
+		return x.Apps
+	}
+	return nil
+}
+
+func (x *CredentialSyncPage) GetFull() bool {
+	if x != nil {
+		return x.Full
+	}
+	return false
+}
+
+func (x *CredentialSyncPage) GetLast() bool {
+	if x != nil {
+		return x.Last
+	}
+	return false
+}
+
+func (x *CredentialSyncPage) GetWatermark() uint64 {
+	if x != nil {
+		return x.Watermark
+	}
+	return 0
+}
+
+func (x *CredentialSyncPage) GetHashVersion() string {
+	if x != nil {
+		return x.HashVersion
+	}
+	return ""
+}
+
 var File_proto_config_sync_proto protoreflect.FileDescriptor
 
 const file_proto_config_sync_proto_rawDesc = "" +
@@ -4917,7 +5164,29 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x0ecorrelation_id\x18\x02 \x01(\tR\rcorrelationId\x12#\n" +
 	"\rerror_message\x18\x03 \x01(\tR\ferrorMessage\x12\x14\n" +
 	"\x05retry\x18\x04 \x01(\bR\x05retry\x12#\n" +
-	"\rpayload_index\x18\x05 \x01(\rR\fpayloadIndex*[\n" +
+	"\rpayload_index\x18\x05 \x01(\rR\fpayloadIndex\"\x90\x01\n" +
+	"\x15CredentialSyncRequest\x12\x17\n" +
+	"\aedge_id\x18\x01 \x01(\tR\x06edgeId\x12%\n" +
+	"\x0eedge_namespace\x18\x02 \x01(\tR\redgeNamespace\x12\x14\n" +
+	"\x05since\x18\x03 \x01(\x04R\x05since\x12!\n" +
+	"\fhash_version\x18\x04 \x01(\tR\vhashVersion\"\xf3\x01\n" +
+	"\x10SyncedCredential\x12#\n" +
+	"\rcredential_id\x18\x01 \x01(\rR\fcredentialId\x12\x15\n" +
+	"\x06key_id\x18\x02 \x01(\tR\x05keyId\x12\x1f\n" +
+	"\vsecret_hash\x18\x03 \x01(\tR\n" +
+	"secretHash\x12\x16\n" +
+	"\x06active\x18\x04 \x01(\bR\x06active\x12\x18\n" +
+	"\adeleted\x18\x05 \x01(\bR\adeleted\x129\n" +
+	"\n" +
+	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x15\n" +
+	"\x06app_id\x18\a \x01(\rR\x05appId\"\xec\x01\n" +
+	"\x12CredentialSyncPage\x12@\n" +
+	"\vcredentials\x18\x01 \x03(\v2\x1e.microgateway.SyncedCredentialR\vcredentials\x12+\n" +
+	"\x04apps\x18\x02 \x03(\v2\x17.microgateway.AppConfigR\x04apps\x12\x12\n" +
+	"\x04full\x18\x03 \x01(\bR\x04full\x12\x12\n" +
+	"\x04last\x18\x04 \x01(\bR\x04last\x12\x1c\n" +
+	"\twatermark\x18\x05 \x01(\x04R\twatermark\x12!\n" +
+	"\fhash_version\x18\x06 \x01(\tR\vhashVersion*[\n" +
 	"\vReloadPhase\x12\b\n" +
 	"\x04PONG\x10\x00\x12\x10\n" +
 	"\fPULL_STARTED\x10\x01\x12\f\n" +
@@ -4925,7 +5194,7 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\aUPDATED\x10\x03\x12\t\n" +
 	"\x05READY\x10\x04\x12\n" +
 	"\n" +
-	"\x06FAILED\x10\x052\xf0\x05\n" +
+	"\x06FAILED\x10\x052\xcc\x06\n" +
 	"\x18ConfigurationSyncService\x12]\n" +
 	"\fRegisterEdge\x12%.microgateway.EdgeRegistrationRequest\x1a&.microgateway.EdgeRegistrationResponse\x12_\n" +
 	"\x14GetFullConfiguration\x12\".microgateway.ConfigurationRequest\x1a#.microgateway.ConfigurationSnapshot\x12Q\n" +
@@ -4934,7 +5203,8 @@ const file_proto_config_sync_proto_rawDesc = "" +
 	"\x0eUnregisterEdge\x12'.microgateway.EdgeUnregistrationRequest\x1a\x16.google.protobuf.Empty\x12\\\n" +
 	"\rValidateToken\x12$.microgateway.TokenValidationRequest\x1a%.microgateway.TokenValidationResponse\x12X\n" +
 	"\x12SendAnalyticsPulse\x12\x1c.microgateway.AnalyticsPulse\x1a$.microgateway.AnalyticsPulseResponse\x12d\n" +
-	"\x16SendPluginControlBatch\x12 .microgateway.PluginControlBatch\x1a(.microgateway.PluginControlBatchResponseB/Z-github.com/TykTechnologies/midsommar/v2/protob\x06proto3"
+	"\x16SendPluginControlBatch\x12 .microgateway.PluginControlBatch\x1a(.microgateway.PluginControlBatchResponse\x12Z\n" +
+	"\x0fSyncCredentials\x12#.microgateway.CredentialSyncRequest\x1a .microgateway.CredentialSyncPage0\x01B/Z-github.com/TykTechnologies/midsommar/v2/protob\x06proto3"
 
 var (
 	file_proto_config_sync_proto_rawDescOnce sync.Once
@@ -4949,7 +5219,7 @@ func file_proto_config_sync_proto_rawDescGZIP() []byte {
 }
 
 var file_proto_config_sync_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_proto_config_sync_proto_msgTypes = make([]protoimpl.MessageInfo, 45)
+var file_proto_config_sync_proto_msgTypes = make([]protoimpl.MessageInfo, 48)
 var file_proto_config_sync_proto_goTypes = []any{
 	(ReloadPhase)(0),                    // 0: microgateway.ReloadPhase
 	(*EdgeRegistrationRequest)(nil),     // 1: microgateway.EdgeRegistrationRequest
@@ -4991,24 +5261,27 @@ var file_proto_config_sync_proto_goTypes = []any{
 	(*PluginControlBatch)(nil),          // 37: microgateway.PluginControlBatch
 	(*PluginControlBatchResponse)(nil),  // 38: microgateway.PluginControlBatchResponse
 	(*PluginPayloadError)(nil),          // 39: microgateway.PluginPayloadError
-	nil,                                 // 40: microgateway.EdgeRegistrationRequest.MetadataEntry
-	nil,                                 // 41: microgateway.EdgeMetrics.CustomMetricsEntry
-	nil,                                 // 42: microgateway.AnalyticsPulse.CaptureDroppedEntry
-	nil,                                 // 43: microgateway.CaptureEventProto.AttributesEntry
-	nil,                                 // 44: microgateway.CaptureDeclaredContextProto.BaggageEntry
-	nil,                                 // 45: microgateway.PluginControlPayload.MetadataEntry
-	(*HealthStatus)(nil),                // 46: microgateway.HealthStatus
-	(*ConfigurationSnapshot)(nil),       // 47: microgateway.ConfigurationSnapshot
-	(*timestamppb.Timestamp)(nil),       // 48: google.protobuf.Timestamp
-	(*ConfigurationChange)(nil),         // 49: microgateway.ConfigurationChange
-	(*AppConfig)(nil),                   // 50: microgateway.AppConfig
-	(*emptypb.Empty)(nil),               // 51: google.protobuf.Empty
+	(*CredentialSyncRequest)(nil),       // 40: microgateway.CredentialSyncRequest
+	(*SyncedCredential)(nil),            // 41: microgateway.SyncedCredential
+	(*CredentialSyncPage)(nil),          // 42: microgateway.CredentialSyncPage
+	nil,                                 // 43: microgateway.EdgeRegistrationRequest.MetadataEntry
+	nil,                                 // 44: microgateway.EdgeMetrics.CustomMetricsEntry
+	nil,                                 // 45: microgateway.AnalyticsPulse.CaptureDroppedEntry
+	nil,                                 // 46: microgateway.CaptureEventProto.AttributesEntry
+	nil,                                 // 47: microgateway.CaptureDeclaredContextProto.BaggageEntry
+	nil,                                 // 48: microgateway.PluginControlPayload.MetadataEntry
+	(*HealthStatus)(nil),                // 49: microgateway.HealthStatus
+	(*ConfigurationSnapshot)(nil),       // 50: microgateway.ConfigurationSnapshot
+	(*timestamppb.Timestamp)(nil),       // 51: google.protobuf.Timestamp
+	(*ConfigurationChange)(nil),         // 52: microgateway.ConfigurationChange
+	(*AppConfig)(nil),                   // 53: microgateway.AppConfig
+	(*emptypb.Empty)(nil),               // 54: google.protobuf.Empty
 }
 var file_proto_config_sync_proto_depIdxs = []int32{
-	40, // 0: microgateway.EdgeRegistrationRequest.metadata:type_name -> microgateway.EdgeRegistrationRequest.MetadataEntry
-	46, // 1: microgateway.EdgeRegistrationRequest.health:type_name -> microgateway.HealthStatus
-	47, // 2: microgateway.EdgeRegistrationResponse.initial_config:type_name -> microgateway.ConfigurationSnapshot
-	48, // 3: microgateway.ConfigurationRequest.last_sync_time:type_name -> google.protobuf.Timestamp
+	43, // 0: microgateway.EdgeRegistrationRequest.metadata:type_name -> microgateway.EdgeRegistrationRequest.MetadataEntry
+	49, // 1: microgateway.EdgeRegistrationRequest.health:type_name -> microgateway.HealthStatus
+	50, // 2: microgateway.EdgeRegistrationResponse.initial_config:type_name -> microgateway.ConfigurationSnapshot
+	51, // 3: microgateway.ConfigurationRequest.last_sync_time:type_name -> google.protobuf.Timestamp
 	1,  // 4: microgateway.EdgeMessage.registration:type_name -> microgateway.EdgeRegistrationRequest
 	7,  // 5: microgateway.EdgeMessage.heartbeat:type_name -> microgateway.HeartbeatRequest
 	3,  // 6: microgateway.EdgeMessage.config_request:type_name -> microgateway.ConfigurationRequest
@@ -5016,41 +5289,41 @@ var file_proto_config_sync_proto_depIdxs = []int32{
 	17, // 8: microgateway.EdgeMessage.reload_response:type_name -> microgateway.ConfigurationReloadResponse
 	6,  // 9: microgateway.EdgeMessage.event:type_name -> microgateway.EventFrame
 	2,  // 10: microgateway.ControlMessage.registration_response:type_name -> microgateway.EdgeRegistrationResponse
-	47, // 11: microgateway.ControlMessage.configuration:type_name -> microgateway.ConfigurationSnapshot
-	49, // 12: microgateway.ControlMessage.change:type_name -> microgateway.ConfigurationChange
+	50, // 11: microgateway.ControlMessage.configuration:type_name -> microgateway.ConfigurationSnapshot
+	52, // 12: microgateway.ControlMessage.change:type_name -> microgateway.ConfigurationChange
 	8,  // 13: microgateway.ControlMessage.heartbeat_response:type_name -> microgateway.HeartbeatResponse
 	11, // 14: microgateway.ControlMessage.error:type_name -> microgateway.ErrorMessage
 	16, // 15: microgateway.ControlMessage.reload_request:type_name -> microgateway.ConfigurationReloadRequest
 	6,  // 16: microgateway.ControlMessage.event:type_name -> microgateway.EventFrame
-	46, // 17: microgateway.HeartbeatRequest.health:type_name -> microgateway.HealthStatus
+	49, // 17: microgateway.HeartbeatRequest.health:type_name -> microgateway.HealthStatus
 	10, // 18: microgateway.HeartbeatRequest.metrics:type_name -> microgateway.EdgeMetrics
-	48, // 19: microgateway.HeartbeatRequest.timestamp:type_name -> google.protobuf.Timestamp
-	41, // 20: microgateway.EdgeMetrics.custom_metrics:type_name -> microgateway.EdgeMetrics.CustomMetricsEntry
-	48, // 21: microgateway.TokenValidationResponse.expires_at:type_name -> google.protobuf.Timestamp
-	50, // 22: microgateway.TokenValidationResponse.app:type_name -> microgateway.AppConfig
-	48, // 23: microgateway.ConfigurationReloadRequest.initiated_at:type_name -> google.protobuf.Timestamp
+	51, // 19: microgateway.HeartbeatRequest.timestamp:type_name -> google.protobuf.Timestamp
+	44, // 20: microgateway.EdgeMetrics.custom_metrics:type_name -> microgateway.EdgeMetrics.CustomMetricsEntry
+	51, // 21: microgateway.TokenValidationResponse.expires_at:type_name -> google.protobuf.Timestamp
+	53, // 22: microgateway.TokenValidationResponse.app:type_name -> microgateway.AppConfig
+	51, // 23: microgateway.ConfigurationReloadRequest.initiated_at:type_name -> google.protobuf.Timestamp
 	0,  // 24: microgateway.ConfigurationReloadResponse.phase:type_name -> microgateway.ReloadPhase
-	48, // 25: microgateway.ConfigurationReloadResponse.timestamp:type_name -> google.protobuf.Timestamp
-	48, // 26: microgateway.AnalyticsPulse.pulse_timestamp:type_name -> google.protobuf.Timestamp
-	48, // 27: microgateway.AnalyticsPulse.data_from:type_name -> google.protobuf.Timestamp
-	48, // 28: microgateway.AnalyticsPulse.data_to:type_name -> google.protobuf.Timestamp
+	51, // 25: microgateway.ConfigurationReloadResponse.timestamp:type_name -> google.protobuf.Timestamp
+	51, // 26: microgateway.AnalyticsPulse.pulse_timestamp:type_name -> google.protobuf.Timestamp
+	51, // 27: microgateway.AnalyticsPulse.data_from:type_name -> google.protobuf.Timestamp
+	51, // 28: microgateway.AnalyticsPulse.data_to:type_name -> google.protobuf.Timestamp
 	21, // 29: microgateway.AnalyticsPulse.analytics_events:type_name -> microgateway.AnalyticsEvent
 	22, // 30: microgateway.AnalyticsPulse.budget_events:type_name -> microgateway.BudgetUsageEvent
 	23, // 31: microgateway.AnalyticsPulse.proxy_summaries:type_name -> microgateway.ProxyLogSummary
 	24, // 32: microgateway.AnalyticsPulse.compliance_events:type_name -> microgateway.ComplianceEventProto
 	25, // 33: microgateway.AnalyticsPulse.tool_calls:type_name -> microgateway.ToolCallProto
 	26, // 34: microgateway.AnalyticsPulse.capture_events:type_name -> microgateway.CaptureEventProto
-	42, // 35: microgateway.AnalyticsPulse.capture_dropped:type_name -> microgateway.AnalyticsPulse.CaptureDroppedEntry
-	48, // 36: microgateway.AnalyticsPulseResponse.processed_at:type_name -> google.protobuf.Timestamp
+	45, // 35: microgateway.AnalyticsPulse.capture_dropped:type_name -> microgateway.AnalyticsPulse.CaptureDroppedEntry
+	51, // 36: microgateway.AnalyticsPulseResponse.processed_at:type_name -> google.protobuf.Timestamp
 	20, // 37: microgateway.AnalyticsPulseResponse.updated_config:type_name -> microgateway.AnalyticsPulseConfig
-	48, // 38: microgateway.AnalyticsEvent.timestamp:type_name -> google.protobuf.Timestamp
-	48, // 39: microgateway.BudgetUsageEvent.timestamp:type_name -> google.protobuf.Timestamp
-	48, // 40: microgateway.BudgetUsageEvent.period_start:type_name -> google.protobuf.Timestamp
-	48, // 41: microgateway.BudgetUsageEvent.period_end:type_name -> google.protobuf.Timestamp
-	48, // 42: microgateway.ProxyLogSummary.first_request:type_name -> google.protobuf.Timestamp
-	48, // 43: microgateway.ProxyLogSummary.last_request:type_name -> google.protobuf.Timestamp
-	48, // 44: microgateway.ComplianceEventProto.timestamp:type_name -> google.protobuf.Timestamp
-	48, // 45: microgateway.ToolCallProto.timestamp:type_name -> google.protobuf.Timestamp
+	51, // 38: microgateway.AnalyticsEvent.timestamp:type_name -> google.protobuf.Timestamp
+	51, // 39: microgateway.BudgetUsageEvent.timestamp:type_name -> google.protobuf.Timestamp
+	51, // 40: microgateway.BudgetUsageEvent.period_start:type_name -> google.protobuf.Timestamp
+	51, // 41: microgateway.BudgetUsageEvent.period_end:type_name -> google.protobuf.Timestamp
+	51, // 42: microgateway.ProxyLogSummary.first_request:type_name -> google.protobuf.Timestamp
+	51, // 43: microgateway.ProxyLogSummary.last_request:type_name -> google.protobuf.Timestamp
+	51, // 44: microgateway.ComplianceEventProto.timestamp:type_name -> google.protobuf.Timestamp
+	51, // 45: microgateway.ToolCallProto.timestamp:type_name -> google.protobuf.Timestamp
 	27, // 46: microgateway.CaptureEventProto.identity:type_name -> microgateway.CaptureIdentityProto
 	28, // 47: microgateway.CaptureEventProto.resource:type_name -> microgateway.CaptureResourceProto
 	29, // 48: microgateway.CaptureEventProto.usage:type_name -> microgateway.CaptureUsageProto
@@ -5058,37 +5331,42 @@ var file_proto_config_sync_proto_depIdxs = []int32{
 	33, // 50: microgateway.CaptureEventProto.extracts:type_name -> microgateway.CaptureExtractsProto
 	34, // 51: microgateway.CaptureEventProto.gateway_events:type_name -> microgateway.CaptureGatewayEventProto
 	35, // 52: microgateway.CaptureEventProto.parts:type_name -> microgateway.CapturePayloadPartProto
-	43, // 53: microgateway.CaptureEventProto.attributes:type_name -> microgateway.CaptureEventProto.AttributesEntry
-	44, // 54: microgateway.CaptureDeclaredContextProto.baggage:type_name -> microgateway.CaptureDeclaredContextProto.BaggageEntry
+	46, // 53: microgateway.CaptureEventProto.attributes:type_name -> microgateway.CaptureEventProto.AttributesEntry
+	47, // 54: microgateway.CaptureDeclaredContextProto.baggage:type_name -> microgateway.CaptureDeclaredContextProto.BaggageEntry
 	31, // 55: microgateway.CaptureExtractsProto.tool_calls:type_name -> microgateway.CaptureToolCallProto
 	32, // 56: microgateway.CaptureExtractsProto.tool_results:type_name -> microgateway.CaptureToolResultProto
-	48, // 57: microgateway.PluginControlPayload.timestamp:type_name -> google.protobuf.Timestamp
-	45, // 58: microgateway.PluginControlPayload.metadata:type_name -> microgateway.PluginControlPayload.MetadataEntry
+	51, // 57: microgateway.PluginControlPayload.timestamp:type_name -> google.protobuf.Timestamp
+	48, // 58: microgateway.PluginControlPayload.metadata:type_name -> microgateway.PluginControlPayload.MetadataEntry
 	36, // 59: microgateway.PluginControlBatch.payloads:type_name -> microgateway.PluginControlPayload
-	48, // 60: microgateway.PluginControlBatch.batch_timestamp:type_name -> google.protobuf.Timestamp
-	48, // 61: microgateway.PluginControlBatchResponse.processed_at:type_name -> google.protobuf.Timestamp
+	51, // 60: microgateway.PluginControlBatch.batch_timestamp:type_name -> google.protobuf.Timestamp
+	51, // 61: microgateway.PluginControlBatchResponse.processed_at:type_name -> google.protobuf.Timestamp
 	39, // 62: microgateway.PluginControlBatchResponse.errors:type_name -> microgateway.PluginPayloadError
-	1,  // 63: microgateway.ConfigurationSyncService.RegisterEdge:input_type -> microgateway.EdgeRegistrationRequest
-	3,  // 64: microgateway.ConfigurationSyncService.GetFullConfiguration:input_type -> microgateway.ConfigurationRequest
-	4,  // 65: microgateway.ConfigurationSyncService.SubscribeToChanges:input_type -> microgateway.EdgeMessage
-	7,  // 66: microgateway.ConfigurationSyncService.SendHeartbeat:input_type -> microgateway.HeartbeatRequest
-	9,  // 67: microgateway.ConfigurationSyncService.UnregisterEdge:input_type -> microgateway.EdgeUnregistrationRequest
-	14, // 68: microgateway.ConfigurationSyncService.ValidateToken:input_type -> microgateway.TokenValidationRequest
-	18, // 69: microgateway.ConfigurationSyncService.SendAnalyticsPulse:input_type -> microgateway.AnalyticsPulse
-	37, // 70: microgateway.ConfigurationSyncService.SendPluginControlBatch:input_type -> microgateway.PluginControlBatch
-	2,  // 71: microgateway.ConfigurationSyncService.RegisterEdge:output_type -> microgateway.EdgeRegistrationResponse
-	47, // 72: microgateway.ConfigurationSyncService.GetFullConfiguration:output_type -> microgateway.ConfigurationSnapshot
-	5,  // 73: microgateway.ConfigurationSyncService.SubscribeToChanges:output_type -> microgateway.ControlMessage
-	8,  // 74: microgateway.ConfigurationSyncService.SendHeartbeat:output_type -> microgateway.HeartbeatResponse
-	51, // 75: microgateway.ConfigurationSyncService.UnregisterEdge:output_type -> google.protobuf.Empty
-	15, // 76: microgateway.ConfigurationSyncService.ValidateToken:output_type -> microgateway.TokenValidationResponse
-	19, // 77: microgateway.ConfigurationSyncService.SendAnalyticsPulse:output_type -> microgateway.AnalyticsPulseResponse
-	38, // 78: microgateway.ConfigurationSyncService.SendPluginControlBatch:output_type -> microgateway.PluginControlBatchResponse
-	71, // [71:79] is the sub-list for method output_type
-	63, // [63:71] is the sub-list for method input_type
-	63, // [63:63] is the sub-list for extension type_name
-	63, // [63:63] is the sub-list for extension extendee
-	0,  // [0:63] is the sub-list for field type_name
+	51, // 63: microgateway.SyncedCredential.updated_at:type_name -> google.protobuf.Timestamp
+	41, // 64: microgateway.CredentialSyncPage.credentials:type_name -> microgateway.SyncedCredential
+	53, // 65: microgateway.CredentialSyncPage.apps:type_name -> microgateway.AppConfig
+	1,  // 66: microgateway.ConfigurationSyncService.RegisterEdge:input_type -> microgateway.EdgeRegistrationRequest
+	3,  // 67: microgateway.ConfigurationSyncService.GetFullConfiguration:input_type -> microgateway.ConfigurationRequest
+	4,  // 68: microgateway.ConfigurationSyncService.SubscribeToChanges:input_type -> microgateway.EdgeMessage
+	7,  // 69: microgateway.ConfigurationSyncService.SendHeartbeat:input_type -> microgateway.HeartbeatRequest
+	9,  // 70: microgateway.ConfigurationSyncService.UnregisterEdge:input_type -> microgateway.EdgeUnregistrationRequest
+	14, // 71: microgateway.ConfigurationSyncService.ValidateToken:input_type -> microgateway.TokenValidationRequest
+	18, // 72: microgateway.ConfigurationSyncService.SendAnalyticsPulse:input_type -> microgateway.AnalyticsPulse
+	37, // 73: microgateway.ConfigurationSyncService.SendPluginControlBatch:input_type -> microgateway.PluginControlBatch
+	40, // 74: microgateway.ConfigurationSyncService.SyncCredentials:input_type -> microgateway.CredentialSyncRequest
+	2,  // 75: microgateway.ConfigurationSyncService.RegisterEdge:output_type -> microgateway.EdgeRegistrationResponse
+	50, // 76: microgateway.ConfigurationSyncService.GetFullConfiguration:output_type -> microgateway.ConfigurationSnapshot
+	5,  // 77: microgateway.ConfigurationSyncService.SubscribeToChanges:output_type -> microgateway.ControlMessage
+	8,  // 78: microgateway.ConfigurationSyncService.SendHeartbeat:output_type -> microgateway.HeartbeatResponse
+	54, // 79: microgateway.ConfigurationSyncService.UnregisterEdge:output_type -> google.protobuf.Empty
+	15, // 80: microgateway.ConfigurationSyncService.ValidateToken:output_type -> microgateway.TokenValidationResponse
+	19, // 81: microgateway.ConfigurationSyncService.SendAnalyticsPulse:output_type -> microgateway.AnalyticsPulseResponse
+	38, // 82: microgateway.ConfigurationSyncService.SendPluginControlBatch:output_type -> microgateway.PluginControlBatchResponse
+	42, // 83: microgateway.ConfigurationSyncService.SyncCredentials:output_type -> microgateway.CredentialSyncPage
+	75, // [75:84] is the sub-list for method output_type
+	66, // [66:75] is the sub-list for method input_type
+	66, // [66:66] is the sub-list for extension type_name
+	66, // [66:66] is the sub-list for extension extendee
+	0,  // [0:66] is the sub-list for field type_name
 }
 
 func init() { file_proto_config_sync_proto_init() }
@@ -5121,7 +5399,7 @@ func file_proto_config_sync_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_config_sync_proto_rawDesc), len(file_proto_config_sync_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   45,
+			NumMessages:   48,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -359,6 +359,7 @@ TABLE apps
   constraint fk_apps_credential FOREIGN KEY (credential_id) REFERENCES credentials(id)
   index CREATE UNIQUE INDEX apps_pkey ON apps USING btree (id)
   index CREATE INDEX idx_app_namespace ON apps USING btree (namespace)
+  index CREATE INDEX idx_apps_credential_id ON apps USING btree (credential_id)
   index CREATE INDEX idx_apps_deleted_at ON apps USING btree (deleted_at)
   index CREATE INDEX idx_apps_team_id ON apps USING btree (team_id)
   column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('apps_id_seq'::regclass)

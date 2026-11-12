@@ -147,7 +147,10 @@ const (
 	//     key would be refused), and would show and send the ciphertext as
 	//     the key, so the minimum reader is 42 and an older headless
 	//     replica refuses the database.
-	SchemaVersion          = 42
+	// 43: index idx_apps_credential_id on apps.credential_id (additive): the
+	//     credential sync looks up each page's Apps by credential
+	//     (midsommar-clean-4x5y.16).
+	SchemaVersion          = 43
 	MinReaderSchemaVersion = 42
 )
 
