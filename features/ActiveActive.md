@@ -803,9 +803,13 @@ Files: `proto/config_sync.proto`, `proto/common.proto`,
    publish it, on Studio or on an edge, and a control node drops one an
    edge sends. Measured on the cluster rig: a key deactivated through
    another replica was refused by an on-demand edge 46 ms later (Postgres,
-   through the relay). Applying the event to the synced list in full mode
-   (as a hint only: an unknown credential triggers a delta, nothing is
-   added from the payload) waits for bead .17.
+   through the relay). **Full mode built** (bead .18): on the event an
+   edge with full credential sync also asks for a sync at once (a hint
+   only: nothing is added to or changed on the list from the payload, known
+   hash or not); the delta brings the change with the credential's ID. On
+   the rig a key deactivated through another replica was refused from the
+   list 24 ms later, and with no event raised the heartbeat's sync
+   repaired it in 0.25 s (300 ms heartbeat).
 5. **Validation order with `EDGE_CREDENTIAL_SYNC=full`.**
    - Local hit, active: accept, no CP call.
    - Local hit, inactive or deleted: reject.

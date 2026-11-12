@@ -1,8 +1,13 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -181,4 +186,53 @@ func TestCredentialChanged_RememberedEvictionsAreBounded(t *testing.T) {
 	assert.False(t, cached(h, "tok-unrelated"), "started before the flood: not cached")
 	h.storeInCache(key, &TokenValidationResult{AppID: 1}, time.Now().Add(time.Millisecond))
 	assert.True(t, cached(h, "tok-unrelated"), "started after it: cached as usual")
+}
+
+// With full credential sync the event is a hint for the list: the edge
+// syncs at once, so a key deactivated on the control plane is refused from
+// the list within the sync's round trip, not at the next heartbeat. Nothing
+// is taken from the payload: an event for a hash the control plane does
+// not have adds nothing.
+func TestCredentialChanged_FullSyncEdgeSyncsAtOnce(t *testing.T) {
+	sqliteFile := func(t *testing.T) *gorm.DB {
+		// A file, not :memory:: the sync runs on its own connection.
+		db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "edge.db")+"?_busy_timeout=5000"), &gorm.Config{})
+		require.NoError(t, err)
+		require.NoError(t, database.Migrate(db))
+		t.Cleanup(func() { database.Close(db) })
+		return db
+	}
+	for name, open := range map[string]func(*testing.T) *gorm.DB{"sqlite": sqliteFile, "postgres": openPostgresSchema} {
+		t.Run(name, func(t *testing.T) { fullSyncEdgeSyncsAtOnce(t, open(t)) })
+	}
+}
+
+func fullSyncEdgeSyncsAtOnce(t *testing.T, db *gorm.DB) {
+	e := newSyncedEdge(t, db, 24*time.Hour)
+	e.hub.apps[1] = pbApp(1, "app", true)
+	e.hub.set(SyncedCredentialUpdate{CredentialID: 11, SecretHash: e.hash(keyA), AppID: 1, Active: true, UpdatedAt: time.Now()})
+	require.NoError(t, e.list.Sync(context.Background(), e.hub))
+	_, err := e.h.ValidateAPIToken(keyA)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go e.list.Run(ctx, e.hub, time.Minute)
+
+	// Deactivated on the control plane; no heartbeat, only the event.
+	e.hub.set(SyncedCredentialUpdate{CredentialID: 11, SecretHash: e.hash(keyA), AppID: 1, Active: false, UpdatedAt: time.Now()})
+	e.h.HandleCredentialChanged(credentialChanged(t, e.h, keyA, false, false))
+	require.Eventually(t, func() bool {
+		_, err := e.h.ValidateAPIToken(keyA)
+		// Refused from the list, not 503 for want of a control plane.
+		return err != nil && !errors.Is(err, coresvc.ErrCredentialCheckUnavailable)
+	}, 2*time.Second, 10*time.Millisecond, "refused from the list after the sync the event started")
+
+	// A hash the control plane does not have: a sync, and nothing added.
+	calls := e.hub.callCount()
+	e.h.HandleCredentialChanged(credentialChanged(t, e.h, keyC, true, false))
+	require.Eventually(t, func() bool { return e.hub.callCount() > calls }, 2*time.Second, 10*time.Millisecond, "a sync")
+	_, found, err := e.list.Lookup(e.hash(keyC))
+	require.NoError(t, err)
+	assert.False(t, found, "nothing is added from the payload")
 }

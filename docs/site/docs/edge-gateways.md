@@ -173,7 +173,7 @@ A Community AI Studio does not offer this; an edge that asks for it stays on pul
 On the edge:
 
 - **Settings.** `EDGE_CREDENTIAL_SYNC=full` (default `on_demand`) and `EDGE_CREDENTIAL_SYNC_MAX_AGE` (default `24h`, `0` for no limit). A Community edge given `full` logs that it is an Enterprise option and validates on demand.
-- **When it syncs.** After every registration (at start, after a reconnect, after a move to another control plane) and on every acknowledged heartbeat: the whole list the first time, the changes afterwards. A sync runs one at a time; one that fails is retried on the next heartbeat, and the edge keeps the list it has. An AI Studio that answers that it does not know the edge gets a new registration, then the sync again.
+- **When it syncs.** After every registration (at start, after a reconnect, after a move to another control plane), on every acknowledged heartbeat, and at once when AI Studio says a key changed (the edge takes nothing from that message but the prompt to sync): the whole list the first time, the changes afterwards. A sync runs one at a time; one that fails is retried on the next heartbeat, and the edge keeps the list it has. An AI Studio that answers that it does not know the edge gets a new registration, then the sync again.
 - **What it stores.** In its own database: each key's hash, id, App, and whether it is active (`synced_credentials`), and the Apps of those keys. Never a key. A page of the list is written in one transaction; an App that has not changed since the edge last stored it is not written again.
 - **How it validates a key.**
   1. On the list, active, App active: accepted, without asking AI Studio.

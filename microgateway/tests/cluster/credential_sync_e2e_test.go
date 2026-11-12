@@ -19,6 +19,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/credhash"
 	"github.com/TykTechnologies/midsommar/v2/pkg/credsync"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	coresvc "github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
@@ -99,6 +100,7 @@ func runSyncEdge(t *testing.T, path, id string, opts syncEdgeOptions, fwds ...*f
 		client.StartReconnecting()
 	}
 	h.SetEdgeClient(client)
+	client.GetEventBus().Subscribe(eventbridge.CredentialChangedTopic, h.HandleCredentialChanged)
 	ctx, cancel := context.WithCancel(context.Background())
 	go list.Run(ctx, client, time.Minute)
 	list.Kick()
