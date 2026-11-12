@@ -21,7 +21,7 @@ Both work, but neither gives you central configuration with independently scaled
 - **Studio is the brain, not the pipe.** Application traffic to LLMs goes through the Microgateways. Studio holds configuration, identity, the portal, chat and analytics, and it is only on a request's path when an edge meets an access token it has not validated in the last five minutes. Tokens in use are revalidated in the background before their cache entry expires.
 - **Edges connect out; Studio never connects in.** Each edge opens one long-lived gRPC connection to Studio on port 50051. Edges can therefore sit in private networks, other clouds or on-premises with outbound-only access.
 - **Scale the data plane horizontally.** One 4-vCPU edge sustained **~690 streaming requests per second** (about 3,000 concurrent streams) or **~8,500 short non-streaming requests per second**, adding **about 0.55 ms at p50**. Both limits are CPU. Add nodes behind a load balancer for more.
-- **Make Studio's database highly available, and run as many Studio replicas as you need.** From 2.3 several Studio replicas can serve one PostgreSQL database, in one site or in two (see [Several replicas](#several-replicas-from-23) and [Active-Active](./deployment-active-active.md)); one instance, with an optional cold standby, remains a valid choice. Availability comes from a replicated PostgreSQL with automatic failover, which Studio follows without a restart. Running edges keep serving while Studio is down; edges set to start from their last-known-good configuration can start too.
+- **Make Studio's database highly available, and run as many Studio replicas as you need.** From 2.3 several Studio replicas can serve one PostgreSQL database, in one site or in two (see [Several replicas](#several-replicas-from-2-3) and [Active-Active](./deployment-active-active.md)); one instance, with an optional cold standby, remains a valid choice. Availability comes from a replicated PostgreSQL with automatic failover, which Studio follows without a restart. Running edges keep serving while Studio is down; edges set to start from their last-known-good configuration can start too.
 
 ## The picture
 
@@ -136,7 +136,7 @@ Plan the control plane's availability around this table.
 
 ### One instance, with a cold standby
 
-> **In 2.2 this is the only supported shape.** Never run two 2.2 Studio instances against the same database at the same time, including behind a load balancer and as a "warm" standby. From 2.3, several replicas can run at once ([below](#several-replicas-from-23)); a single instance remains a valid choice when one site is enough.
+> **In 2.2 this is the only supported shape.** Never run two 2.2 Studio instances against the same database at the same time, including behind a load balancer and as a "warm" standby. From 2.3, several replicas can run at once ([below](#several-replicas-from-2-3)); a single instance remains a valid choice when one site is enough.
 
 Run AI Studio as a **hot / cold singleton**: exactly one **hot** instance serves the UI, the API and the edges, and an optional **cold** standby is installed and configured but stopped. Availability comes from the database and from fast restarts or failover, not from replicas:
 
@@ -373,7 +373,7 @@ Watch at least:
 
 - [ ] Studio: one instance with an optional cold standby, or (from 2.3) several replicas; `GATEWAY_MODE=control`
 - [ ] One instance: `Recreate` upgrades and a persistent `data/` volume; a cold standby, if used, with the same version, configuration, secrets and `data/` contents, stopped, and a documented failover that stops the hot instance first and switches the UI and gRPC endpoints
-- [ ] Several replicas: PostgreSQL, the same secrets and `CSRF_KEY` on every replica, sticky sessions for the UI, `/ready` health checks, rolling upgrades (see [Several replicas](#several-replicas-from-23))
+- [ ] Several replicas: PostgreSQL, the same secrets and `CSRF_KEY` on every replica, sticky sessions for the UI, `/ready` health checks, rolling upgrades (see [Several replicas](#several-replicas-from-2-3))
 - [ ] Two sites: synchronous replication between them, a witness in a third location (or a documented manual promotion), `CLUSTER_NODE_LABEL` per site, `CONTROL_ENDPOINTS` on edges with the own site first (see [Active-Active](./deployment-active-active.md))
 - [ ] PostgreSQL 14+, managed or replicated, with automatic failover and backups; `DATABASE_URL` naming every node with `target_session_attrs=read-write`, and `DATABASE_READY_GRACE` longer than the failover's promotion time
 - [ ] `TYK_AI_SECRET_KEY`, `MICROGATEWAY_ENCRYPTION_KEY` (32 characters), `GRPC_AUTH_TOKEN` and `TYK_AI_LICENSE` stored in a secret manager and backed up

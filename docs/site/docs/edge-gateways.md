@@ -209,7 +209,7 @@ The Edge Gateways list and each gateway's detail page show **Last pushed HH:MM**
 
 ### Push Process
 
-> **Several replicas from 2.3.** The notes on replicas below apply to 2.3, where several AI Studio replicas can serve one database, in one site or in two (see [Several replicas](./reference-architecture.md#several-replicas-from-23) and [Active-Active](./deployment-active-active.md)). AI Studio 2.2 runs as a single instance (see [One instance, with a cold standby](./reference-architecture.md#one-instance-with-a-cold-standby)).
+> **Several replicas from 2.3.** The notes on replicas below apply to 2.3, where several AI Studio replicas can serve one database, in one site or in two (see [Several replicas](./reference-architecture.md#several-replicas-from-2-3) and [Active-Active](./deployment-active-active.md)). AI Studio 2.2 runs as a single instance (see [One instance, with a cold standby](./reference-architecture.md#one-instance-with-a-cold-standby)).
 
 When you push configuration:
 

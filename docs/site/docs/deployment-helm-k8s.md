@@ -644,7 +644,7 @@ To keep the credentials out of values, put the whole URL in a Secret of your own
 
 ### Several Studio replicas
 
-From 2.3 several AI Studio replicas can serve one PostgreSQL database (see [Several replicas](./reference-architecture.md#several-replicas-from-23)). Set `replicaCount` above 1. The chart then needs:
+From 2.3 several AI Studio replicas can serve one PostgreSQL database (see [Several replicas](./reference-architecture.md#several-replicas-from-2-3)). Set `replicaCount` above 1. The chart then needs:
 
 - **An external PostgreSQL** (`database.internal: false`). The bundled PostgreSQL is a single pod, and SQLite serves one process, so the render fails with either.
 - **One `CSRF_KEY`** for every replica (`config.csrfKey`, generate it with `openssl rand -hex 32`). Without it each replica generates its own and a form loaded from one replica is refused by another, so the render fails without it. The other shared secrets (`config.tykAiSecretKey`, `config.grpcAuthToken`, `config.microgatewayEncryptionKey`) are the same for every replica of a release already.
