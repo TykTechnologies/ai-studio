@@ -20,6 +20,9 @@ spec:
           env:
             - {name: CLUSTER_NODE_LABEL, value: site-a}
             - {name: DATABASE_TYPE, value: postgres}
+            # /metrics on the ClusterIP Service only (read through the API
+            # server's Service proxy by aa-k8s.sh pulse): aistudio_db_*.
+            - {name: METRICS_ALLOW_UNAUTHENTICATED, value: "true"}
             - name: DATABASE_URL
               valueFrom: {secretKeyRef: {name: aa-shared, key: DATABASE_URL}}
             - {name: GATEWAY_MODE, value: control}
@@ -125,6 +128,9 @@ spec:
           env:
             - {name: CLUSTER_NODE_LABEL, value: site-b}
             - {name: DATABASE_TYPE, value: postgres}
+            # /metrics on the ClusterIP Service only (read through the API
+            # server's Service proxy by aa-k8s.sh pulse): aistudio_db_*.
+            - {name: METRICS_ALLOW_UNAUTHENTICATED, value: "true"}
             - name: DATABASE_URL
               valueFrom: {secretKeyRef: {name: aa-shared, key: DATABASE_URL}}
             - {name: GATEWAY_MODE, value: control}

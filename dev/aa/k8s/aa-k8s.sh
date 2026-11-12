@@ -28,7 +28,7 @@
 #   aa-k8s.sh kill-edge a|b           fault 4, second half: delete that edge's pod
 #   aa-k8s.sh switchover              fault 5: planned move of the primary role
 #                                     (SWITCHOVER_HOLD=N: N more seconds without a primary before the promote)
-#   aa-k8s.sh pulse [FILE]            each edge's dropped-pulse-records counters and pod start (run/fetch record them)
+#   aa-k8s.sh pulse [FILE]            edges' pulse-dropped and database-full metrics, pod starts, Studios' aistudio_db_* (run/fetch record them)
 #   aa-k8s.sh zone-b up|down          fault 7: mock and generator in zone b, observers on, mock Service zone-local
 #   aa-k8s.sh run-partition NAME [DURATION]  fault 7: zone a's generators on edge-a, zone b's on edge-b, half the
 #                                     part A level each (fetch NAME collects both zones)
@@ -445,6 +445,13 @@ cmd_pulse() {
 				echo "$m" | grep -e '^microgateway_analytics_pulse_dropped_records_total' -e '^microgateway_database_full' | sed "s/^/edge-$s /" || echo "edge-$s no pulse-dropped counter yet"
 			else
 				echo "edge-$s /metrics unreachable"
+			fi
+		done
+		for s in a b; do
+			if m=$(kubectl --context "$CTX" get --raw "/api/v1/namespaces/$NS/services/studio-$s:8080/proxy/metrics" 2>/dev/null); then
+				echo "$m" | grep -e '^aistudio_db_' | sed "s/^/studio-$s /" || echo "studio-$s no aistudio_db_ metrics"
+			else
+				echo "studio-$s /metrics unreachable"
 			fi
 		done
 	} > "$out"
