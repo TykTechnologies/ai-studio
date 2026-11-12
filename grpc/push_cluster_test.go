@@ -190,13 +190,18 @@ func (e *fakeEdge) requests() []*pb.ConfigurationReloadRequest { return reloadRe
 
 func waitForPush(t *testing.T, c *pushes.Coordinator, op string, want string) *pushes.OperationStatus {
 	t.Helper()
+	return waitForPushWithin(t, c, op, want, 20*time.Second)
+}
+
+func waitForPushWithin(t *testing.T, c *pushes.Coordinator, op string, want string, within time.Duration) *pushes.OperationStatus {
+	t.Helper()
 	var st *pushes.OperationStatus
 	require.Eventually(t, func() bool {
 		var err error
 		st, err = c.Status(context.Background(), op)
 		require.NoError(t, err)
 		return st.Operation.Status == want
-	}, 20*time.Second, 25*time.Millisecond, "push %s never reached %s", op, want)
+	}, within, 25*time.Millisecond, "push %s never reached %s", op, want)
 	return st
 }
 
@@ -344,7 +349,13 @@ func TestPushCluster_ReplicaCrashAfterSending(t *testing.T) {
 		first.disconnect()
 
 		startFakeEdge(t, b, "edge-1", "default")
-		st := waitForPush(t, b.pushes, op, models.PushOperationSucceeded)
+		// On Postgres B started moments ago, and a replica leaves the
+		// commands of replicas that look dead alone for its first liveness
+		// window (it cannot yet tell a stopped replica from one whose
+		// registration carries a failed-over database's old clock;
+		// services/pushes/clock.go). So the retry comes up to one window
+		// after B's start: wait that long and some.
+		st := waitForPushWithin(t, b.pushes, op, models.PushOperationSucceeded, cluster.LivenessWindow+10*time.Second)
 		assert.Equal(t, 2, st.Commands[0].Attempts)
 		found := false
 		for _, h := range st.Commands[0].History {
