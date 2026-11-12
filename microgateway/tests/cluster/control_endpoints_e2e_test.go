@@ -67,8 +67,14 @@ func TestE2E_ControlPlaneCutMidPush_EdgeFinishesOnTheOther(t *testing.T) {
 		t.Logf("edge on node-b %v after the cut", moved.Round(time.Millisecond))
 		assert.Less(t, moved, 5*time.Second)
 		assert.Equal(t, fwdA.addr(), e.client.ControlLink().Endpoints[0])
+		// The control plane records the edge as its own when it accepts the
+		// registration; the edge marks its link connected a moment later,
+		// when the answer has arrived and its stream is open. So the link
+		// is waited for, not read straight after waitOwner (which made this
+		// fail once in CI with the edge already on node-b).
+		require.Eventually(t, func() bool { return e.client.ControlLink().Connected }, 5*time.Second, 10*time.Millisecond,
+			"the edge's link to the control plane it moved to is open")
 		link := e.client.ControlLink()
-		assert.True(t, link.Connected)
 		assert.Equal(t, e.fwdMore[0].addr(), link.Endpoint, "the edge reports the endpoint it is on")
 
 		st := waitPush(t, b, op, models.PushOperationSucceeded, 40*time.Second)
