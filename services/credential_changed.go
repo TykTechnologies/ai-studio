@@ -44,7 +44,9 @@ func SetEdgeCredentialHasher(encryptionKey string) {
 // as it was for a key being replaced or deleted. ok is false when no event
 // can be raised: no edge hasher, or a secret this replica cannot read (the
 // edges' hash is of the secret).
-func (s *Service) credentialChange(db *gorm.DB, cred *models.Credential, deleted bool) (eventbridge.CredentialChanged, bool) {
+//
+// app is the credential's App when the caller has it (nil: it is read).
+func (s *Service) credentialChange(db *gorm.DB, cred *models.Credential, app *models.App, deleted bool) (eventbridge.CredentialChanged, bool) {
 	h := edgeCredentialHasher.Load()
 	if h == nil || cred == nil || cred.Secret == "" || cred.Secret == secrets.RefusedCredential {
 		return eventbridge.CredentialChanged{}, false
@@ -55,13 +57,18 @@ func (s *Service) credentialChange(db *gorm.DB, cred *models.Credential, deleted
 		Active:       cred.Active && !deleted,
 		Deleted:      deleted,
 	}
-	var app models.App
-	switch err := db.Select("id", "namespace", "is_active").Where("credential_id = ?", cred.ID).Take(&app).Error; {
-	case err == nil:
+	if app == nil {
+		var found models.App
+		switch err := db.Select("id", "namespace", "is_active").Where("credential_id = ?", cred.ID).Take(&found).Error; {
+		case err == nil:
+			app = &found
+		case !errors.Is(err, gorm.ErrRecordNotFound):
+			logger.Log.Warn().Err(err).Uint("credential_id", cred.ID).Msg("credential.changed: reading the credential's App failed; the event names no App")
+		}
+	}
+	if app != nil {
 		change.AppID, change.Namespace = app.ID, app.Namespace
 		change.Active = change.Active && app.IsActive
-	case !errors.Is(err, gorm.ErrRecordNotFound):
-		logger.Log.Warn().Err(err).Uint("credential_id", cred.ID).Msg("credential.changed: reading the credential's App failed; the event names no App")
 	}
 	return change, true
 }
@@ -80,7 +87,7 @@ func (s *Service) publishCredentialChanged(changes ...eventbridge.CredentialChan
 
 // credentialChanged raises credential.changed for cred as it is now.
 func (s *Service) credentialChanged(cred *models.Credential) {
-	if change, ok := s.credentialChange(s.DB, cred, false); ok {
+	if change, ok := s.credentialChange(s.DB, cred, nil, false); ok {
 		s.publishCredentialChanged(change)
 	}
 }
@@ -95,7 +102,9 @@ func (s *Service) appCredentialChanged(app *models.App) {
 	if err != nil {
 		return
 	}
-	s.credentialChanged(cred)
+	if change, ok := s.credentialChange(s.DB, cred, app, false); ok {
+		s.publishCredentialChanged(change)
+	}
 }
 
 // lockCredential locks the credential's row for the rest of tx on

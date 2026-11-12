@@ -58,7 +58,7 @@ func (s *Service) UpdateCredential(credential *models.Credential) error {
 	err := s.DB.Transaction(func(tx *gorm.DB) error {
 		old := &models.Credential{}
 		if err := lockCredential(tx).First(old, credential.ID).Error; err == nil && old.Secret != credential.Secret {
-			if change, ok := s.credentialChange(tx, old, true); ok {
+			if change, ok := s.credentialChange(tx, old, nil, true); ok {
 				replaced = &change
 			}
 		}
@@ -84,7 +84,7 @@ func (s *Service) DeleteCredential(id uint) error {
 		if err := lockCredential(tx).First(credential, id).Error; err != nil {
 			return err
 		}
-		change, ok = s.credentialChange(tx, credential, true)
+		change, ok = s.credentialChange(tx, credential, nil, true)
 		return credential.Delete(tx)
 	})
 	if err != nil {
