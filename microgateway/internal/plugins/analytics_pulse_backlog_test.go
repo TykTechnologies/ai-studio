@@ -1,13 +1,17 @@
 package plugins
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -315,4 +319,35 @@ func TestPulseBacklog_SplitPulse(t *testing.T) {
 	f, s := splitPulse(one, 9)
 	assert.Same(t, one, f)
 	assert.Nil(t, s)
+}
+
+// When the backlog first discards records in an outage, the log says how to
+// raise the bound, once; after a delivered pulse ends the outage, the next
+// one says it again.
+func TestPulseBacklog_FullHintOncePerOutage(t *testing.T) {
+	var logged bytes.Buffer
+	prev := log.Logger
+	log.Logger = zerolog.New(&logged)
+	t.Cleanup(func() { log.Logger = prev })
+	hint := "raise max_backlog_bytes"
+
+	hub := &fakeSyncClient{failures: 1 << 30}
+	p := newRetryPlugin(hub, PulsePluginConfig{MaxBufferSize: 50, MaxRetries: 0, MaxBacklogBytes: 8 << 10})
+	outage := func(prefix string) {
+		for round := 0; round < 10; round++ {
+			bufferEvents(p, fmt.Sprintf("%s%02d", prefix, round), 100, 0)
+			p.sendPulse()
+		}
+	}
+	outage("x")
+	assert.Equal(t, 1, strings.Count(logged.String(), hint), "once in the first outage, though records were discarded at several pulses")
+	assert.Greater(t, strings.Count(logged.String(), "Analytics records discarded"), 1)
+
+	recoverHub(hub)
+	p.sendPulse()
+	hub.mu.Lock()
+	hub.failures = 1 << 30
+	hub.mu.Unlock()
+	outage("y")
+	assert.Equal(t, 2, strings.Count(logged.String(), hint), "and once more in the next outage")
 }

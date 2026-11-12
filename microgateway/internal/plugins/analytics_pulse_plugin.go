@@ -65,6 +65,10 @@ type AnalyticsPulsePlugin struct {
 	// Only the sender changes it. Guarded by bufferMutex.
 	backlog      []backlogBatch
 	backlogBytes int64
+	// backlogFullHinted is set once the log has said, in this outage, how
+	// to raise max_backlog_bytes; a delivered pulse ends the outage and
+	// clears it. Guarded by bufferMutex.
+	backlogFullHinted bool
 
 	// bootID is drawn once per process and sent with every pulse: sequence
 	// numbers start at 1 again after a restart, and the boot ID keeps the
@@ -1247,6 +1251,7 @@ func (p *AnalyticsPulsePlugin) deliver(snap pulseSnapshot, sequenceNum uint64, r
 
 	p.bufferMutex.Lock()
 	p.lastError = nil
+	p.backlogFullHinted = false
 	p.bufferMutex.Unlock()
 
 	p.totalPulsesSent++

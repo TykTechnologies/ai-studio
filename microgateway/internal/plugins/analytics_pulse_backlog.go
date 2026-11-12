@@ -284,6 +284,12 @@ func (p *AnalyticsPulsePlugin) trimBacklogLocked(now time.Time) {
 	pulseDroppedExpired.Add(uint64(expired))
 	pulseDroppedOverBacklog.Add(uint64(overBound))
 	if expired > 0 || overBound > 0 {
+		msg := "Analytics records discarded: pulses are failing and the backlog for the control plane is full (max_backlog_bytes); the oldest go first"
+		if overBound > 0 && !p.backlogFullHinted {
+			// Once per outage: how to keep more next time.
+			p.backlogFullHinted = true
+			msg += ". To keep more through an outage, raise max_backlog_bytes in the analytics pulse file at PLUGINS_CONFIG_PATH (analyticsPulse.maxBacklogBytes in the microgateway Helm chart) and give the edge that much more memory: a request takes about 280 bytes there without stored bodies"
+		}
 		log.Warn().
 			Int("expired", expired).
 			Int("dropped_over_backlog", overBound).
@@ -291,7 +297,7 @@ func (p *AnalyticsPulsePlugin) trimBacklogLocked(now time.Time) {
 			Int64("max_backlog_bytes", p.config.MaxBacklogBytes).
 			Str("pulses_fail_because", pulseFailureReason(p.lastError)).
 			AnErr("last_error", p.lastError).
-			Msg("Analytics records discarded: pulses are failing and the backlog for the control plane is full (max_backlog_bytes); the oldest go first")
+			Msg(msg)
 	}
 }
 
@@ -368,6 +374,7 @@ func (p *AnalyticsPulsePlugin) deliverBacklogHead() pulseOutcome {
 	p.popBacklogHead()
 	p.bufferMutex.Lock()
 	p.lastError = nil
+	p.backlogFullHinted = false // the outage is over
 	p.bufferMutex.Unlock()
 	p.totalPulsesSent++
 	p.totalRecordsSent += uint64(pulse.TotalRecords)
