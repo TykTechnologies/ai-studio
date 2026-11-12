@@ -37,8 +37,9 @@ import (
 type Source interface {
 	// RegisteredNamespace is the namespace an edge's requests are
 	// answered for: the one the edge registered in, whatever the request
-	// names; requested is used for an edge that is not registered.
-	RegisteredNamespace(edgeID, requested string) string
+	// names. registered is false for an empty edge ID and for one with no
+	// registration, which get nothing; err is a failed lookup.
+	RegisteredNamespace(edgeID string) (namespace string, registered bool, err error)
 	// NamespaceLicensed reports whether the namespace holds a licensed
 	// slot (or is the default namespace).
 	NamespaceLicensed(namespace string) bool

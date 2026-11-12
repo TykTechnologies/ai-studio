@@ -61,6 +61,29 @@ func TestSyncCredentials_UnimplementedWithoutAHandler(t *testing.T) {
 	})
 }
 
+// The namespace a handler serves is the registered edge's, whatever the
+// request names; an empty edge ID and one with no registration are not
+// registered, so the handler sends them nothing.
+func TestRegisteredNamespace(t *testing.T) {
+	forEachClusterDB(t, func(t *testing.T, db *gorm.DB) {
+		server, err := NewControlServer(&Config{GRPCHost: "localhost", AuthToken: "t", EncryptionKey: "0123456789abcdef0123456789abcdef"}, db)
+		require.NoError(t, err)
+		t.Cleanup(server.Stop)
+		require.NoError(t, db.Create(&models.EdgeInstance{EdgeID: "edge-a", Namespace: "ns-a", Status: models.EdgeStatusConnected}).Error)
+
+		ns, registered, err := server.RegisteredNamespace("edge-a")
+		require.NoError(t, err)
+		assert.True(t, registered)
+		assert.Equal(t, "ns-a", ns)
+		for _, id := range []string{"", "never-registered"} {
+			ns, registered, err := server.RegisteredNamespace(id)
+			require.NoError(t, err)
+			assert.False(t, registered, "edge %q", id)
+			assert.Empty(t, ns)
+		}
+	})
+}
+
 // What a handler reads: credentials by id in pages, soft-deleted ones
 // included, each with its live App loaded as ValidateToken loads it; and,
 // with a time, only those whose credential or App changed at or after it.

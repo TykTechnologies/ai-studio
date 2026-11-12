@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"google.golang.org/grpc"
@@ -13,6 +14,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/credsync"
 	"github.com/TykTechnologies/midsommar/v2/pkg/dbstate"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // The control server's side of SyncCredentials (see pkg/credsync): the RPC,
@@ -33,17 +35,20 @@ var _ credsync.Source = (*ControlServer)(nil)
 
 // RegisteredNamespace is the namespace an edge's requests are answered for:
 // the one the edge registered in, whatever the request names, as for
-// ValidateToken and the edge's configuration. requested is used for an edge
-// that is not registered.
-func (s *ControlServer) RegisteredNamespace(edgeID, requested string) string {
-	ns := s.edgeManagementService.GetNamespaceForEdge(requested)
-	if edgeID != "" {
-		var edge models.EdgeInstance
-		if err := edge.GetByEdgeID(s.db, edgeID); err == nil {
-			ns = edge.Namespace
-		}
+// ValidateToken and the edge's configuration. registered is false for an
+// empty edge ID and for one with no registration; err is a failed lookup.
+func (s *ControlServer) RegisteredNamespace(edgeID string) (namespace string, registered bool, err error) {
+	if edgeID == "" {
+		return "", false, nil
 	}
-	return ns
+	var edge models.EdgeInstance
+	switch err := edge.GetByEdgeID(s.db, edgeID); {
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		return "", false, nil
+	case err != nil:
+		return "", false, err
+	}
+	return edge.Namespace, true, nil
 }
 
 // NamespaceLicensed reports whether ns holds a licensed slot (or is the

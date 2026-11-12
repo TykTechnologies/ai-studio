@@ -153,7 +153,7 @@ What AI Studio does:
 
 - **First, after a reconnect to another control plane, and at least every 15 minutes:** a full list, in pages of 500 keys. The edge drops whatever the list does not contain.
 - **In between:** only what changed since the last answer (a new key, a deactivated or re-activated one, a regenerated secret, a deleted key or App, a deactivated App).
-- **Only for the edge's registered namespace**, plus global Apps, and only if the namespace is licensed.
+- **Only for the edge's registered namespace**, plus global Apps, and only if the namespace is licensed. An edge that has not registered gets nothing until it does.
 
 How long a revoked or deactivated key can still be accepted by an edge in this mode:
 

@@ -614,7 +614,10 @@ Files: `proto/config_sync.proto`, `proto/common.proto`,
      A full stream carries every credential of an App that namespace may
      serve (global or its own), inactive credentials and inactive Apps
      included, and nothing else; an unlicensed namespace gets one empty
-     full page, so the edge drops what it held.
+     full page, so the edge drops what it held. An edge that is not
+     registered (no edge ID, or one with no registration) gets
+     `FailedPrecondition` ("register first") and nothing else: it
+     registers, then asks again.
    - **Watermark**: `(unix seconds << 28) | tag`, opaque to the edge. The
      seconds are the earlier of the database's clock and the replica's
      when the stream started; the tag is 28 bits of a hash of the
@@ -947,7 +950,8 @@ otherwise.
   `MICROGATEWAY_ENCRYPTION_KEY`: not a key, and not reversible) with its
   key id and App. A tombstone carries nothing but a credential's numeric
   id, so the credentials of other namespaces are visible only as ids that
-  changed.
+  changed. Only a registered edge's namespace is streamed: an unregistered
+  edge ID is refused rather than served the namespace its request names.
 
 ## Decisions (Martin, 2026-11-10)
 
