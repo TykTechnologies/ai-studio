@@ -22,6 +22,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/dbhold"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/clause"
@@ -117,6 +118,7 @@ type Node struct {
 // is reported rather than discovered later. At most one NodeOptions is used;
 // without one the replica is unlabelled and may lead.
 func StartNode(db *gorm.DB, id, version string, opts ...NodeOptions) (*Node, error) {
+	db = dbhold.Unheld(db) // a background loop: fail fast, retry on the next tick
 	var o NodeOptions
 	if len(opts) > 0 {
 		o = opts[0]

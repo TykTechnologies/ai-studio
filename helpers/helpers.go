@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/pkg/dbhold"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/text/encoding/charmap"
 	"golang.org/x/text/transform"
@@ -222,6 +224,35 @@ func IntToObjectId(id uint) *string {
 
 // SendErrorResponse sends a standardized error response to the client
 // It handles different error types, particularly ErrorResponse
+// DatabaseUnavailableRetryAfter is the Retry-After, in seconds, of a 503
+// database_unavailable.
+const DatabaseUnavailableRetryAfter = "5"
+
+// SendDatabaseUnavailable answers 503 with Retry-After and the code
+// database_unavailable: the database could not be used (a failover), so the
+// request may be made again shortly. Nothing was written.
+func SendDatabaseUnavailable(c *gin.Context) {
+	c.Header("Retry-After", DatabaseUnavailableRetryAfter)
+	SendErrorResponse(c, databaseUnavailable)
+}
+
+var databaseUnavailable = ErrorResponse{
+	StatusCode: http.StatusServiceUnavailable,
+	Title:      "Service Unavailable",
+	Message:    "The database is not available (a failover may be in progress); try again shortly",
+	Code:       "database_unavailable",
+}
+
+// DatabaseUnavailableBody is the JSON body SendDatabaseUnavailable sends.
+func DatabaseUnavailableBody() []byte {
+	body, _ := json.Marshal(gin.H{"errors": []gin.H{{
+		"title":  databaseUnavailable.Title,
+		"detail": databaseUnavailable.Message,
+		"code":   databaseUnavailable.Code,
+	}}})
+	return body
+}
+
 func SendErrorResponse(c *gin.Context, err error) {
 	switch e := err.(type) {
 	case ErrorResponse:
@@ -241,6 +272,10 @@ func SendErrorResponse(c *gin.Context, err error) {
 		var he ErrorResponse
 		if errors.As(err, &he) && he.Code != "" {
 			SendErrorResponse(c, he)
+			return
+		}
+		if dbhold.IsUnavailable(err) {
+			SendDatabaseUnavailable(c)
 			return
 		}
 		// Unexpected error type

@@ -9,6 +9,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/dbhold"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/clause"
@@ -145,6 +146,7 @@ type Leadership struct {
 // NewLeadership returns node's claim on the lease called name. It does
 // nothing until Start.
 func NewLeadership(db *gorm.DB, name, node string, opts LeadershipOptions) *Leadership {
+	db = dbhold.Unheld(db) // a renewal must not wait past the lease's term
 	return &Leadership{
 		// Each write is one statement; gorm's default transaction around
 		// it would make it three, every renewal.

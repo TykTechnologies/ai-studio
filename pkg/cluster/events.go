@@ -12,6 +12,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/dbhold"
 	"github.com/TykTechnologies/midsommar/v2/pkg/dbstate"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pglisten"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
@@ -184,6 +185,7 @@ type handlerEntry struct {
 
 // NewLog returns the event log for node. It does nothing until Start.
 func NewLog(db *gorm.DB, node string, opts LogOptions) *Log {
+	db = dbhold.Unheld(db) // a background loop: fail fast, retry on the next tick
 	return &Log{
 		db:       db,
 		node:     node,

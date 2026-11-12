@@ -226,6 +226,89 @@ Files: `pkg/studio/database.go`, `startup/connectivity.go`,
    connection fails as now and the handler returns 503 with `Retry-After`
    and code `database_unavailable` instead of 500. This covers key creation
    during an automatic failover with no API change.
+   **Built** (midsommar-clean-4x5y.6). `pkg/dbhold.Pool` wraps Studio's own
+   Postgres pool as gorm's `ConnPool` (installed by `OpenDatabase` when the
+   window is above 0). Retried, because the statement cannot have
+   executed: a pgconn `ConnectError` (never sent), 25006 (refused before
+   executing; the tracker is told, so the connection is redialled), 57P03
+   (only at connection start), `ErrBadConn` (database/sql's contract: not
+   returned if the server might have performed the operation) and pgconn's
+   `SafeToRetry` (failed before sending anything); backoff 100 ms doubling
+   to 1 s. 57P01 and 57P02 are not in that list: 57P02 comes from the
+   quickdie handler, possibly after an autocommit statement's commit record
+   was flushed, so the write may exist (57P01 is treated the same). After
+   them, as after a connection lost once the statement was sent (a pooled
+   connection to a primary that has gone answers EOF), only a repeatable
+   statement is retried: a read through `QueryContext` (a plain `SELECT`),
+   a prepare, `BEGIN`. `ExecContext` is never repeatable (`SELECT
+   pg_notify(...)` runs through it for its side effect). On a lost
+   connection the pool's idle connections are closed so the next statement
+   dials afresh.
+   **Bounds.** At most `dbhold.MaxHeld` (512, a constant) statements are
+   held at once; beyond it a statement fails at once as
+   `UnavailableError`. Once a hold has run out its window, statements that
+   fail within the next window are not held: a request runs several
+   statements in turn, and this keeps it to about one window in an outage
+   longer than the window (after a window the next one is held again, as a
+   probe). Measured on the pair rig with no primary, window 10 s, pool of
+   8 connections: 3,000 concurrent `POST /api/v1/credentials`, at most 512
+   statements held, every request answered 503 `database_unavailable`,
+   all within 27 s; goroutines 40 before and 12,042 at most, heap 14 MB
+   before and 208 MB at most (both include the test's own 3,000 clients).
+   With 1,500 requests: all within 18 s, 121 MB.
+   `QueryRowContext` (its error only shows at `Scan`) waits instead while
+   the tracker says the database is not writable. The request context ends
+   any wait. A wait that runs out is a `dbhold.UnavailableError`;
+   `dbhold.IsUnavailable` also matches a transaction that lost its
+   connection (class 08, 57P0x, EOF, `ErrConnDone`, `*net.OpError`).
+   Metrics `aistudio_db_write_retries_total` and
+   `aistudio_db_write_hold_seconds` (label `outcome`: `succeeded`,
+   `gave_up`, `cancelled`, `failed`, `rejected`), and
+   `aistudio_db_writes_held` (statements held now).
+   **Who is held and who fails fast.** Held: the management API, sign-in
+   and session checks, and the embedded gateway's request path (it reaches
+   the database through the same services as the API; no second Service).
+   Fail fast, through `dbhold.Unheld(db)` applied at construction (a
+   Session with its own Statement whose pool is the unwrapped one, which
+   survives `Session`, `WithContext` and transactions): the control
+   server's RPCs (`grpc.NewControlServer`: token validation, pulses,
+   heartbeats, configuration pulls, credential sync, its cleanup ticker),
+   the push coordinator (`services/pushes.New`: deliveries and the
+   janitor) and the cluster loops (`pkg/cluster`: `NewLeadership`,
+   `StartNode`, `NewLog`; the relay reads through the log). Why: an edge
+   answered "unavailable" at once moves to its other control plane, which
+   is the point of the epic; held, a token validation would outlive the
+   edge's 5 s `tokenValidationTimeout`, and a pulse (edge timeout 30 s by
+   default) would be answered up to the window late. A lease renewal must
+   not wait past the lease's term, and a ticker retries on its next tick.
+   There is no per-call marker; none is needed today. Tests: a token
+   validation and a lease acquisition on a held database with no primary
+   fail at once (`grpc`, `pkg/cluster` pair tests).
+   **503 mapping.** There is no common API error path (handlers write their
+   own 500s, and services mostly call gorm without the request context), so
+   a gorm callback and the hold record when a statement found the database
+   unavailable, and a middleware answers a 500 written by a request that
+   was running since then as 503 with `Retry-After: 5` and
+   `errors[0].code` `database_unavailable`, dropping the handler's body.
+   Only an exact 500 not yet written changes; nothing is buffered. The
+   link between the error and the request is by time, not by request:
+   during an outage another cause's genuine 500 reads as 503, which errs
+   toward a retryable answer; `aistudio_db_unavailable_responses_total`
+   counts the conversions. It is mounted on the whole admin router
+   (management API, portal, chat); the LLM proxy has its own server. Sign-in (`auth.Login`) and the session and API-key lookups
+   (`AuthMiddleware`) answer the same 503 instead of 401 when the lookup
+   failed for that reason; `helpers.SendErrorResponse` maps such an error
+   too. gRPC handlers are unchanged (Internal, which edges treat as "hub
+   unavailable").
+   **Requests that hung for 38 to 60 s** in the load test's failovers were
+   statements in flight on pooled connections to the killed primary:
+   neither pgx nor database/sql has a read timeout, so a statement waits
+   for as long as TCP retransmits to an address that drops packets. The
+   pool now dials with TCP keep-alives (5 s idle, 3 probes 2 s apart) and,
+   on Linux, `TCP_USER_TIMEOUT` 10 s, so such a connection fails in about
+   10 s and the statement is retried or answered 503. A server that is
+   alive but stalled (its kernel still acknowledges) is not covered; that
+   is a slow database, not a lost one.
 6. **Event log after a failover.** If asynchronous replication lost recent
    transactions, `cluster_events` ids can fall behind a replica's cursor
    and new events would be skipped. Detect an id below the cursor (or a

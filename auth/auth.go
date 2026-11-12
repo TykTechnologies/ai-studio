@@ -16,6 +16,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/dbhold"
 	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/entitlements"
@@ -180,6 +181,12 @@ func (a *AuthService) Login(c *gin.Context, email, password string) error {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Email unverified, please verify email or contact your administrator"})
 		case errors.Is(err, services.UserDisabledError):
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Account disabled, contact your administrator"})
+		case dbhold.IsUnavailable(err):
+			// The database could not be read (a failover): not a wrong
+			// password, so not a 401.
+			helpers.SendDatabaseUnavailable(c)
+			c.Abort()
+			return fmt.Errorf("database unavailable: %w", err)
 		default:
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid email or password"})
 		}
@@ -188,7 +195,25 @@ func (a *AuthService) Login(c *gin.Context, email, password string) error {
 
 	// SetUserSession saves the whole struct, which persists the stamp.
 	user.StampLogin(models.LoginMethodPassword)
-	return a.SetUserSession(c, user)
+	if err := a.SetUserSession(c, user); err != nil {
+		if dbhold.IsUnavailable(err) && !c.Writer.Written() {
+			helpers.SendDatabaseUnavailable(c)
+			c.Abort()
+		}
+		return err
+	}
+	return nil
+}
+
+// databaseUnavailableKey marks, on the request, that looking up its
+// credentials failed because the database could not be used, so the
+// request is answered 503 database_unavailable rather than 401.
+const databaseUnavailableKey = "auth_database_unavailable"
+
+func noteLookupError(c *gin.Context, err error) {
+	if dbhold.IsUnavailable(err) {
+		c.Set(databaseUnavailableKey, true)
+	}
 }
 
 func (a *AuthService) GetAuthenticatedUser(c *gin.Context) *models.User {
@@ -204,15 +229,17 @@ func (a *AuthService) GetAuthenticatedUser(c *gin.Context) *models.User {
 	if err == nil && cookie != "" {
 		// Cookie exists, validate it
 		user := &models.User{}
-		if err := a.Config.DB.Where("session_token = ?", cookie).First(user).Error; err == nil && !user.Disabled {
+		err := a.Config.DB.Where("session_token = ?", cookie).First(user).Error
+		if err == nil && !user.Disabled {
 			c.Set(AuthMethodKey, AuthMethodSession)
 			return user
 		}
+		noteLookupError(c, err)
 	}
 
 	// Try to get token from query parameter
 	if token := c.Query("token"); token != "" {
-		if user := a.userForAPIKey(token); user != nil {
+		if user := a.userForAPIKey(c, token); user != nil {
 			c.Set(AuthMethodKey, AuthMethodAPIKey)
 			return user
 		}
@@ -223,7 +250,7 @@ func (a *AuthService) GetAuthenticatedUser(c *gin.Context) *models.User {
 	if authHeader != "" {
 		parts := strings.Split(authHeader, " ")
 		if len(parts) == 2 && parts[1] != "" {
-			if user := a.userForAPIKey(parts[1]); user != nil {
+			if user := a.userForAPIKey(c, parts[1]); user != nil {
 				c.Set(AuthMethodKey, AuthMethodAPIKey)
 				return user
 			}
@@ -273,9 +300,10 @@ func (a *AuthService) hostUser(c *gin.Context) (user *models.User, decided bool)
 // and, for SSO-provisioned users, the key is only honoured while the user
 // keeps signing in through the identity provider (SSOAPIKeyLiveness).
 // Successful use is stamped on the user, throttled per APIKeyTouchInterval.
-func (a *AuthService) userForAPIKey(apiKey string) *models.User {
+func (a *AuthService) userForAPIKey(c *gin.Context, apiKey string) *models.User {
 	user, err := a.Config.Service.GetUserByAPIKey(apiKey)
 	if err != nil || user == nil {
+		noteLookupError(c, err)
 		return nil
 	}
 	if !user.EmailVerified || user.Disabled {
@@ -356,6 +384,13 @@ func (a *AuthService) AuthMiddleware() gin.HandlerFunc {
 				c.Abort()
 				return
 			}
+		}
+
+		// The credentials could not be looked up (a failover): 503, not 401.
+		if _, unavailable := c.Get(databaseUnavailableKey); unavailable {
+			helpers.SendDatabaseUnavailable(c)
+			c.Abort()
+			return
 		}
 
 		// No valid authentication found
