@@ -1,9 +1,9 @@
 # Active-active control planes and edge resilience
 
-**Status:** built in 2.3.0 except, as of 2026-11-12: the hub part of
-`credential.changed` (midsommar-clean-4x5y.18, PR #990; the edge part is
-built), so a revocation reaches a connected edge at its next check rather
-than within about a second. The
+**Status:** built in 2.3.0 except, as of 2026-11-12: a full-sync edge
+acting on `credential.changed` (PR #991), so with `EDGE_CREDENTIAL_SYNC=full`
+a revocation reaches a connected edge at its next sync rather than within
+about a second (on demand it does, since #990). The
 operator documentation is `docs/site/docs/deployment-active-active.md`.
 Target: **2.3.0** (a priority addition during the release-candidate
 phase). This is the feature specification and
