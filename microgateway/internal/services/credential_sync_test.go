@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -35,6 +36,15 @@ type fakeCredentialHub struct {
 	failAfter   int // fail the stream after this many pages (0: never)
 	calls       int
 	sinceSeen   []uint64
+	// mu lets a test change the hub while the edge's sync runs in another
+	// goroutine (set, SyncCredentials and callCount take it).
+	mu sync.Mutex
+}
+
+func (f *fakeCredentialHub) callCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
 }
 
 func newFakeCredentialHub() *fakeCredentialHub {
@@ -42,6 +52,8 @@ func newFakeCredentialHub() *fakeCredentialHub {
 }
 
 func (f *fakeCredentialHub) set(c SyncedCredentialUpdate) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.version++
 	f.versions[c.SecretHash] = f.version
 	for i := range f.credentials {
@@ -64,6 +76,8 @@ func (f *fakeCredentialHub) purge(hash string) {
 }
 
 func (f *fakeCredentialHub) SyncCredentials(_ context.Context, since uint64, onPage func(*CredentialSyncPage) error) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.calls++
 	f.sinceSeen = append(f.sinceSeen, since)
 	if f.unavailable {

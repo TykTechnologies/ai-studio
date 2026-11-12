@@ -126,3 +126,46 @@ func TestE2E_CredentialChanged_RevocationReachesAnEdgeOfAnotherReplica(t *testin
 		assert.False(t, cred.Active)
 	})
 }
+
+// With full credential sync, a key deactivated through replica B is
+// refused from the list of an edge held by replica A within 2 seconds: the
+// event starts a sync at once. A lost event (here: Studio raises none) is
+// repaired by the next sync, which the edge runs on every heartbeat.
+func TestE2E_CredentialChanged_FullSyncEdgeOfAnotherReplica(t *testing.T) {
+	requireSyncHandler(t)
+	forEachStudioDB(t, func(t *testing.T, sdb studioDB) {
+		if !sdb.postgres {
+			t.Skip("two replicas need the cluster event log (PostgreSQL)")
+		}
+		coresvc.SetEdgeCredentialHasher(encryptionKey)
+		t.Cleanup(func() { coresvc.SetEdgeCredentialHasher("") })
+		a := startReplica(t, sdb, "node-a")
+		b := startReplica(t, sdb, "node-b")
+		relayed(t, a)
+		relayed(t, b)
+		one := hubKey(t, a.db, "one", key(1), true)
+		two := hubKey(t, a.db, "two", key(2), true)
+		fwd := newForwarder(t, a.addr)
+		e := runSyncEdge(t, filepath.Join(t.TempDir(), "edge.db"), "edge-1", syncEdgeOptions{}, fwd)
+		waitOwner(t, a.db, "edge-1", "node-a")
+		e.waitSynced(t, 2)
+
+		start := time.Now()
+		require.NoError(t, studioService(b).DeactivateCredential(one.CredentialID))
+		require.Eventually(t, func() bool {
+			_, err := e.h.ValidateAPIToken(key(1))
+			return err != nil
+		}, 2*time.Second, 20*time.Millisecond, "refused within 2 s of the deactivation through node-b")
+		t.Logf("full sync: refused %s after the deactivation", time.Since(start).Round(time.Millisecond))
+
+		// No event this time: the heartbeat's sync repairs it.
+		coresvc.SetEdgeCredentialHasher("")
+		start = time.Now()
+		require.NoError(t, studioService(b).DeactivateCredential(two.CredentialID))
+		require.Eventually(t, func() bool {
+			_, err := e.h.ValidateAPIToken(key(2))
+			return err != nil
+		}, 5*time.Second, 20*time.Millisecond, "refused after the next heartbeat's sync")
+		t.Logf("lost event: refused %s after the deactivation", time.Since(start).Round(time.Millisecond))
+	})
+}
