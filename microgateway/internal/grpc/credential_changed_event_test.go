@@ -43,7 +43,7 @@ func TestCredentialChangedEvent_IgnoredByAnEdgeWithoutAHandler(t *testing.T) {
 	select {
 	case e := <-seen:
 		assert.Equal(t, eventbridge.CredentialChangedTopic, e.Topic)
-	case <-time.After(5 * time.Second):
+	case <-time.After(2 * time.Second):
 		t.Fatal("the event did not reach the edge's bus")
 	}
 }
@@ -66,7 +66,7 @@ func TestCredentialChangedEvent_ReachesTheSubscribedHandler(t *testing.T) {
 	case change := <-got:
 		assert.EqualValues(t, 11, change.CredentialID)
 		assert.False(t, change.Active)
-	case <-time.After(5 * time.Second):
+	case <-time.After(2 * time.Second):
 		t.Fatal("the handler was not called")
 	}
 }

@@ -48,6 +48,10 @@ type HybridGatewayService struct {
 	// with full credential sync sends (features/ActiveActive.md, Phase 4).
 	hasher         *credhash.Hasher
 	tokenCache     map[string]*TokenCacheEntry              // credential hash -> validation result
+	// evictionsMu guards evictedAt and evictionsPruned, apart from
+	// cacheMutex so that pruning them never holds up the token cache. Lock
+	// order: cacheMutex, then evictionsMu.
+	evictionsMu sync.Mutex
 	// evictedAt is when a credential.changed event last dropped a cache
 	// key: a validation that started before then does not cache its
 	// result (the control plane may have answered before the change).
@@ -428,13 +432,15 @@ func (h *HybridGatewayService) EvictCredential(hash string) {
 	if hash == "" {
 		return
 	}
-	h.cacheMutex.Lock()
-	delete(h.tokenCache, hash)
+	// Record the eviction first, then drop the entry: a validation that
+	// checks the record (storeInCache, under cacheMutex) before it is
+	// written stores its result before the drop below, which removes it.
 	now := time.Now()
+	h.evictionsMu.Lock()
 	// Forget evictions older than evictionMemory here, where they are
-	// added, at most once a minute: a burst of events costs one walk of
-	// the map per minute, not one per event, and the cache's cleanup
-	// worker does not grow.
+	// added, at most once a minute, under the evictions' own lock: a burst
+	// of events costs one walk of the map per minute and never holds up
+	// the token cache.
 	if now.Sub(h.evictionsPruned) >= time.Minute {
 		for key, at := range h.evictedAt {
 			if now.Sub(at) > evictionMemory {
@@ -444,6 +450,10 @@ func (h *HybridGatewayService) EvictCredential(hash string) {
 		h.evictionsPruned = now
 	}
 	h.evictedAt[hash] = now
+	h.evictionsMu.Unlock()
+
+	h.cacheMutex.Lock()
+	delete(h.tokenCache, hash)
 	h.cacheMutex.Unlock()
 	h.validations.Forget(hash)
 }
@@ -488,7 +498,10 @@ func (h *HybridGatewayService) storeInCache(key string, result *TokenValidationR
 	h.cacheMutex.Lock()
 	defer h.cacheMutex.Unlock()
 
-	if evicted, ok := h.evictedAt[key]; ok && !started.After(evicted) {
+	h.evictionsMu.Lock()
+	evicted, wasEvicted := h.evictedAt[key]
+	h.evictionsMu.Unlock()
+	if wasEvicted && !started.After(evicted) {
 		return
 	}
 
