@@ -45,15 +45,25 @@ func TestHelmEdgeResilienceDefaults(t *testing.T) {
 	assert.Equal(t, false, lookup(t, gateway, "config", "startFromLastKnownGood"), "an edge serves stored configuration only when asked to")
 	assert.Equal(t, "", lookup(t, gateway, "config", "startupControlTimeout"))
 	assert.Equal(t, "", lookup(t, gateway, "config", "lastKnownGoodMaxAge"))
+	assert.Equal(t, "", lookup(t, gateway, "config", "credentialSync"), "on demand unless asked")
+	assert.Equal(t, "", lookup(t, gateway, "config", "credentialSyncMaxAge"))
 
 	template, err := os.ReadFile("../helm/charts/microgateway/templates/configmap.yaml")
 	require.NoError(t, err)
 	for _, name := range []string{
 		"CONTROL_ENDPOINTS:", "EDGE_CONTROL_FAILBACK_INTERVAL:", "EDGE_START_FROM_LAST_KNOWN_GOOD:",
 		"EDGE_STARTUP_CONTROL_TIMEOUT:", "EDGE_LAST_KNOWN_GOOD_MAX_AGE:",
+		"EDGE_CREDENTIAL_SYNC:", "EDGE_CREDENTIAL_SYNC_MAX_AGE:",
 	} {
 		assert.Contains(t, string(template), name)
 	}
+
+	// helm template does not render NOTES.txt: the persistence warning
+	// covers full credential sync as it does last-known-good.
+	helpers, err := os.ReadFile("../helm/charts/microgateway/templates/_helpers.tpl")
+	require.NoError(t, err)
+	assert.Contains(t, string(helpers), `(eq (include "microgateway.credentialSync" .) "full")`)
+	assert.Contains(t, string(helpers), `config.credentialSync is "full"`)
 
 	notes, err := os.ReadFile("../helm/charts/microgateway/templates/NOTES.txt")
 	require.NoError(t, err)
@@ -68,6 +78,7 @@ func TestHelmEdgeDefaultRenderHasNoResilienceSettings(t *testing.T) {
 	for _, name := range []string{
 		"CONTROL_ENDPOINTS", "EDGE_CONTROL_FAILBACK_INTERVAL", "EDGE_START_FROM_LAST_KNOWN_GOOD",
 		"EDGE_STARTUP_CONTROL_TIMEOUT", "EDGE_LAST_KNOWN_GOOD_MAX_AGE",
+		"EDGE_CREDENTIAL_SYNC", "EDGE_CREDENTIAL_SYNC_MAX_AGE",
 	} {
 		assert.NotContains(t, data, name)
 	}
@@ -129,5 +140,30 @@ func TestHelmEdgeStartFromLastKnownGood(t *testing.T) {
 			}
 		}
 		assert.True(t, mounted, "the claim is mounted at the data directory")
+	})
+}
+
+// Full credential sync (Enterprise): the mode and its trust limit reach the
+// edge; "0" (no limit) is rendered; a mode the edge would refuse fails the
+// render.
+func TestHelmEdgeCredentialSync(t *testing.T) {
+	t.Run("full, with its max age", func(t *testing.T) {
+		data := edgeConfig(t, helmTemplate(t,
+			"--set", "microgateway.config.credentialSync=full",
+			"--set", "microgateway.config.credentialSyncMaxAge=12h"))
+		assert.Equal(t, "full", data["EDGE_CREDENTIAL_SYNC"])
+		assert.Equal(t, "12h", data["EDGE_CREDENTIAL_SYNC_MAX_AGE"])
+	})
+	t.Run("on_demand is passed as given", func(t *testing.T) {
+		data := edgeConfig(t, helmTemplate(t, "--set", "microgateway.config.credentialSync=on_demand"))
+		assert.Equal(t, "on_demand", data["EDGE_CREDENTIAL_SYNC"])
+	})
+	t.Run("a max age of 0 reaches the edge", func(t *testing.T) {
+		data := edgeConfig(t, helmTemplate(t, "--set", "microgateway.config.credentialSyncMaxAge=0"))
+		assert.Equal(t, "0", data["EDGE_CREDENTIAL_SYNC_MAX_AGE"])
+	})
+	t.Run("another mode fails the render", func(t *testing.T) {
+		out := helmTemplateExpectingError(t, "--set", "microgateway.config.credentialSync=cached")
+		assert.Contains(t, out, `config.credentialSync must be on_demand or full, not "cached"`)
 	})
 }
