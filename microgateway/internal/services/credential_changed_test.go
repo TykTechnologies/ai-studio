@@ -142,15 +142,15 @@ func TestCredentialChanged_UnreadableEventIsIgnored(t *testing.T) {
 	assert.True(t, cached(h, "tok"))
 }
 
-// Evictions are remembered only as long as a call can take.
+// Evictions are remembered only as long as a call can take: older ones
+// are forgotten when the next one is added.
 func TestCredentialChanged_EvictionMemoryIsPruned(t *testing.T) {
 	h := newStaleGraceService(t, time.Hour)
 	h.EvictCredential(h.cacheKey("tok-old"))
-	h.EvictCredential(h.cacheKey("tok-new"))
 	h.cacheMutex.Lock()
 	h.evictedAt[h.cacheKey("tok-old")] = time.Now().Add(-evictionMemory - time.Minute)
 	h.cacheMutex.Unlock()
-	h.cleanupExpiredEntries()
+	h.EvictCredential(h.cacheKey("tok-new"))
 	h.cacheMutex.RLock()
 	defer h.cacheMutex.RUnlock()
 	assert.NotContains(t, h.evictedAt, h.cacheKey("tok-old"))

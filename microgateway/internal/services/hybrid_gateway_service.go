@@ -428,7 +428,16 @@ func (h *HybridGatewayService) EvictCredential(hash string) {
 	}
 	h.cacheMutex.Lock()
 	delete(h.tokenCache, hash)
-	h.evictedAt[hash] = time.Now()
+	now := time.Now()
+	// Forget evictions older than evictionMemory here, where they are
+	// added: the map holds the events of the last few minutes, so this
+	// walk is short and the cache's cleanup worker does not grow.
+	for key, at := range h.evictedAt {
+		if now.Sub(at) > evictionMemory {
+			delete(h.evictedAt, key)
+		}
+	}
+	h.evictedAt[hash] = now
 	h.cacheMutex.Unlock()
 	h.validations.Forget(hash)
 }
@@ -542,11 +551,6 @@ func (h *HybridGatewayService) cleanupExpiredEntries() {
 		if now.After(h.retireAt(entry)) {
 			delete(h.tokenCache, key)
 			expiredCount++
-		}
-	}
-	for key, at := range h.evictedAt {
-		if now.Sub(at) > evictionMemory {
-			delete(h.evictedAt, key)
 		}
 	}
 
