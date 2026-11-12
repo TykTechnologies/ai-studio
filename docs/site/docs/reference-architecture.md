@@ -5,7 +5,7 @@ weight: 1
 
 # Reference Architecture
 
-This page describes the recommended production deployment of Tyk AI Studio: one **control plane** (AI Studio) managing a fleet of **data-plane** gateways (the Microgateway, running in edge mode). It shows how the pieces connect, what happens when one of them fails, and how to size the data plane using the measured performance of Tyk AI Studio 2.2.
+This page describes the recommended production deployment of Tyk AI Studio: one **control plane** (AI Studio, one or more replicas) managing a fleet of **data-plane** gateways (the Microgateway, running in edge mode). To run the control plane in two sites at once, see [Active-Active (Two Sites)](./deployment-active-active.md). It shows how the pieces connect, what happens when one of them fails, and how to size the data plane using the measured performance of Tyk AI Studio 2.2.
 
 Two deployment shapes are left out on purpose:
 
@@ -21,7 +21,7 @@ Both work, but neither gives you central configuration with independently scaled
 - **Studio is the brain, not the pipe.** Application traffic to LLMs goes through the Microgateways. Studio holds configuration, identity, the portal, chat and analytics, and it is only on a request's path when an edge meets an access token it has not validated in the last five minutes. Tokens in use are revalidated in the background before their cache entry expires.
 - **Edges connect out; Studio never connects in.** Each edge opens one long-lived gRPC connection to Studio on port 50051. Edges can therefore sit in private networks, other clouds or on-premises with outbound-only access.
 - **Scale the data plane horizontally.** One 4-vCPU edge sustained **~690 streaming requests per second** (about 3,000 concurrent streams) or **~8,500 short non-streaming requests per second**, adding **about 0.55 ms at p50**. Both limits are CPU. Add nodes behind a load balancer for more.
-- **Run Studio as a hot / cold singleton and make its database highly available.** In 2.2 the control plane supports exactly one running instance: one hot instance serving traffic, with an optional cold standby that stays stopped until the hot one is lost. Replicated Studio instances are not supported in 2.2. Availability comes from a managed, replicated PostgreSQL and a fast restart or failover. Running edges keep serving while Studio is down, but new edges cannot start. Support for multiple active replicas is planned for 2.3.
+- **Make Studio's database highly available, and run as many Studio replicas as you need.** From 2.3 several Studio replicas can serve one PostgreSQL database, in one site or in two (see [Several replicas](#several-replicas-from-2-3) and [Active-Active](./deployment-active-active.md)); one instance, with an optional cold standby, remains a valid choice. Availability comes from a replicated PostgreSQL with automatic failover, which Studio follows without a restart. Running edges keep serving while Studio is down; edges set to start from their last-known-good configuration can start too.
 
 ## The picture
 
@@ -58,7 +58,7 @@ Each edge pool serves one **namespace**. A single-region deployment has one pool
 
 | Component | Role | Runs as | State |
 |---|---|---|---|
-| **AI Studio** | Control plane: configuration of LLMs, Apps, filters, plugins, budgets and routers; users, SSO and RBAC; AI Portal and Chat; analytics dashboards; the gRPC control server that edges connect to (`GATEWAY_MODE=control`) | One running instance (hot / cold singleton), `tykio/tyk-ai-studio-ent` | PostgreSQL, plus a small data directory (branding assets, exports, plugin cache) |
+| **AI Studio** | Control plane: configuration of LLMs, Apps, filters, plugins, budgets and routers; users, SSO and RBAC; AI Portal and Chat; analytics dashboards; the gRPC control server that edges connect to (`GATEWAY_MODE=control`) | One or more replicas on one PostgreSQL (from 2.3; one instance in 2.2), `tykio/tyk-ai-studio-ent` | PostgreSQL, plus a small data directory (branding assets, exports, plugin cache) |
 | **PostgreSQL** | System of record for configuration, credentials and all analytics shipped from edges | Managed service or HA cluster, PostgreSQL 14+ | Everything that matters |
 | **Microgateway (edge)** | Data plane: authenticates requests, applies access control, filters, guardrails, plugins and budgets, proxies to the LLM, records analytics (`GATEWAY_MODE=edge`) | N stateless-by-design nodes per namespace, `tykio/tyk-microgateway-ent` | A local SQLite file per node: a cache of the configuration snapshot, budget counters, and a local copy of recent analytics (`ANALYTICS_RETENTION_DAYS`). Configuration is rebuilt from Studio on every start. |
 | **Load balancer** | Spreads application traffic across the edges of one pool | Any L7 load balancer or Kubernetes Ingress/Gateway | None |
@@ -127,15 +127,16 @@ Plan the control plane's availability around this table.
 | **An edge is pushed past its capacity** | Latency rises as the CPU fills. If Go memory passes 85% of the memory limit (`OVERLOAD_MEMORY_THRESHOLD`), new requests get 503 with `Retry-After: 1`, which vendor SDKs retry, until it falls; requests in flight complete. `MAX_INFLIGHT_REQUESTS` adds an optional cap. | Size for peak with the planning figure below, and alert on `microgateway_overload_shedding`. |
 | **An upstream provider fails** | A refused or dropped upstream connection is answered with 502, a timed-out one with 504. | Use LLM fallbacks or routers if a provider's availability matters. |
 | **An edge crashes or is killed** | Other edges carry the traffic. That edge's in-memory analytics buffer (up to one pulse interval of records) is lost; graceful shutdown flushes it. | Use graceful termination (the chart's 40 s grace period is enough). |
+| **A whole site is lost** (two-site deployment) | Edges of that site move to the other site's control plane (`CONTROL_ENDPOINTS`); the surviving replicas follow the database failover, if there is one, without a restart. | See [When something fails](./deployment-active-active.md#when-something-fails) on the Active-Active page, including why automatic failover between two sites needs a witness in a third location. |
 | **PostgreSQL fails over** | From 2.3, Studio's readiness probe (`/ready`) stays 200 for `DATABASE_READY_GRACE` (30 s) after the database stopped taking writes, so a failover shorter than that keeps every replica in the load balancer and requests get an answer from Studio rather than a refused connection; after it, `/ready` fails until the database is back. The body says `"database": "writable"`, `"read_only"` or `"unreachable"`. Studio does not need restarting, and its liveness probe (`/health`) never fails for the database. Edges are unaffected apart from the token-miss and analytics behaviour above. | Use a managed or replicated PostgreSQL with automatic failover, and keep `DATABASE_READY_GRACE` longer than its promotion time (see [Readiness during a failover](./configuration.md#postgres-with-a-standby-failover)). |
 
 **Budget accuracy.** With several edges, a budget is enforced on the estate-wide total with a delay of roughly one analytics pulse plus one budget sync (about 40 seconds with the defaults). An App can overrun its budget by the spend it makes across all edges in that window. See [Budget Control](./budgeting.md).
 
 ## The control plane
 
-### Run Studio as a hot / cold singleton
+### One instance, with a cold standby
 
-> **Replicated Studio instances are not supported in 2.2.** Never run two Studio instances against the same database at the same time, including behind a load balancer and as a "warm" standby. Support for several active replicas is planned for 2.3.
+> **In 2.2 this is the only supported shape.** Never run two 2.2 Studio instances against the same database at the same time, including behind a load balancer and as a "warm" standby. From 2.3, several replicas can run at once ([below](#several-replicas-from-2-3)); a single instance remains a valid choice when one site is enough.
 
 Run AI Studio as a **hot / cold singleton**: exactly one **hot** instance serves the UI, the API and the edges, and an optional **cold** standby is installed and configured but stopped. Availability comes from the database and from fast restarts or failover, not from replicas:
 
@@ -153,7 +154,7 @@ Set up the pair like this:
 
 > This section describes 2.3. In 2.2, run the hot / cold singleton above.
 
-From 2.3, several AI Studio replicas can serve one PostgreSQL database behind a load balancer. The replicas coordinate through the database; there is nothing to configure beyond running them against the same database:
+From 2.3, several AI Studio replicas can serve one PostgreSQL database behind a load balancer, in one site or spread over two (see [Active-Active (Two Sites)](./deployment-active-active.md) for the second case: the database, the witness, what must match in both sites and the runbooks). The replicas coordinate through the database; there is nothing to configure beyond running them against the same database:
 
 - **Edges** connect to any replica. A configuration push is delivered by whichever replica holds each edge's connection, and its outcome can be read from any replica. An edge that reconnects to another replica during a push still gets it.
 - **Changes** made on one replica reach the others within about a second: their embedded gateways reload changed LLMs, datasources and filters, budget caches are cleared, and Studio plugins that were changed, deactivated or deleted are restarted or stopped. Events for edges (budget sync, plugin events) reach the edges of every replica.
@@ -319,6 +320,19 @@ One Studio manages edge pools in several regions. Each region's pool uses its ow
 
 Prompts and completions pass through the regional edge to the regional provider and **do not cross to the control region** in the default configuration. What does cross is the analytics record for every request: App, model, token counts, cost, latency and status. If you turn on body storage (`ANALYTICS_STORE_REQUESTS` / `ANALYTICS_STORE_RESPONSES`), up to 4 KB of each request and response is shipped to Studio too, so keep it off for regions under residency rules, or place Studio in the most restrictive jurisdiction. Guardrails and filters run on the edge, inside the region.
 
+### Two sites (active-active)
+
+Two control planes, one per site, over one PostgreSQL replicated synchronously between the sites; edges list both control planes, their own site first, and keep serving when either site is lost. The whole design (database requirements, why automatic failover needs a witness in a third location, what must match, failure behaviour and runbooks) is on its own page: [Active-Active (Two Sites)](./deployment-active-active.md).
+
+```
+   Site A                              Site B
+   Studio replicas ─┐            ┌─ Studio replicas
+   Edges ───────────┤            ├─ Edges
+                    ▼            ▼
+   PostgreSQL primary ◄──sync──► PostgreSQL hot standby
+                    (witness in a third location for automatic failover)
+```
+
 ### Hybrid and on-premises edges
 
 Because edges only dial out, an edge can run in a customer data centre, a partner network or a different cloud from Studio, with no inbound firewall rules on that side. The site needs outbound access to Studio's gRPC endpoint and to its model providers (or its self-hosted models). This is the usual shape for keeping inference traffic next to on-premises GPUs while administering centrally.
@@ -357,9 +371,11 @@ Watch at least:
 
 **Control plane**
 
-- [ ] Studio: hot / cold singleton (never two running instances in 2.2), `GATEWAY_MODE=control`, `Recreate` upgrades, persistent `data/` volume
-- [ ] Cold standby, if used: same version, configuration, secrets and `data/` contents; stopped; a documented failover that stops the hot instance first and switches the UI and gRPC endpoints
-- [ ] PostgreSQL 14+, managed or replicated, with automatic failover and backups
+- [ ] Studio: one instance with an optional cold standby, or (from 2.3) several replicas; `GATEWAY_MODE=control`
+- [ ] One instance: `Recreate` upgrades and a persistent `data/` volume; a cold standby, if used, with the same version, configuration, secrets and `data/` contents, stopped, and a documented failover that stops the hot instance first and switches the UI and gRPC endpoints
+- [ ] Several replicas: PostgreSQL, the same secrets and `CSRF_KEY` on every replica, sticky sessions for the UI, `/ready` health checks, rolling upgrades (see [Several replicas](#several-replicas-from-2-3))
+- [ ] Two sites: synchronous replication between them, a witness in a third location (or a documented manual promotion), `CLUSTER_NODE_LABEL` per site, `CONTROL_ENDPOINTS` on edges with the own site first (see [Active-Active](./deployment-active-active.md))
+- [ ] PostgreSQL 14+, managed or replicated, with automatic failover and backups; `DATABASE_URL` naming every node with `target_session_attrs=read-write`, and `DATABASE_READY_GRACE` longer than the failover's promotion time
 - [ ] `TYK_AI_SECRET_KEY`, `MICROGATEWAY_ENCRYPTION_KEY` (32 characters), `GRPC_AUTH_TOKEN` and `TYK_AI_LICENSE` stored in a secret manager and backed up
 - [ ] gRPC `:50051` with TLS, reachable from edge networks only
 - [ ] UI/API ingress with TLS

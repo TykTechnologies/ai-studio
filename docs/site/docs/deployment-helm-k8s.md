@@ -652,7 +652,7 @@ To keep the credentials out of values, put the whole URL in a Secret of your own
 
 ### Several Studio replicas
 
-From 2.3 several AI Studio replicas can serve one PostgreSQL database (see [Several replicas](./reference-architecture.md#several-replicas-from-23)). Set `replicaCount` above 1. The chart then needs:
+From 2.3 several AI Studio replicas can serve one PostgreSQL database (see [Several replicas](./reference-architecture.md#several-replicas-from-2-3)). Set `replicaCount` above 1. The chart then needs:
 
 - **An external PostgreSQL** (`database.internal: false`). The bundled PostgreSQL is a single pod, and SQLite serves one process, so the render fails with either.
 - **One `CSRF_KEY`** for every replica (`config.csrfKey`, generate it with `openssl rand -hex 32`). Without it each replica generates its own and a form loaded from one replica is refused by another, so the render fails without it. The other shared secrets (`config.tykAiSecretKey`, `config.grpcAuthToken`, `config.microgatewayEncryptionKey`) are the same for every replica of a release already.
@@ -685,7 +685,7 @@ config:
 
 #### Two clusters, one replicated PostgreSQL
 
-The active-active layout of the reference architecture: one release in each site's cluster, both on the same replicated PostgreSQL, each site's replicas labelled with its name so the cluster status (`GET /api/v1/cluster/status`) and the Edge Gateways page tell them apart. The two releases must share every secret: put them in values both sites use, or in Secrets with the same contents.
+The active-active layout (see [Active-Active (Two Sites)](./deployment-active-active.md) for the database, the witness and the runbooks): one release in each site's cluster, both on the same replicated PostgreSQL, each site's replicas labelled with its name so the cluster status (`GET /api/v1/cluster/status`) and the Edge Gateways page tell them apart. The two releases must share every secret: put them in values both sites use, or in Secrets with the same contents.
 
 ```yaml
 # values-site-a.yaml. values-site-b.yaml is the same with site-b as the label

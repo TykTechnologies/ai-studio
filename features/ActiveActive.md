@@ -1,7 +1,12 @@
 # Active-active control planes and edge resilience
 
-**Status:** approved, not built. Target: **2.3.0** (a priority addition
-during the release-candidate phase). This is the feature specification and
+**Status:** built in 2.3.0 except, as of 2026-11-12: the edge side of
+full credential sync (`EDGE_CREDENTIAL_SYNC=full`, midsommar-clean-4x5y.17;
+the hub side is built), the microgateway chart values for it (.23), and
+the write hold of Phase 1 item 5 (built, PR #983, waiting to merge). The
+operator documentation is `docs/site/docs/deployment-active-active.md`.
+Target: **2.3.0** (a priority addition during the release-candidate
+phase). This is the feature specification and
 the build plan; the work is tracked in bd under the epic "Active-active
 control planes and edge resilience". **Keep this file current:** whoever
 changes the design while building it updates this spec in the same PR.
@@ -979,7 +984,7 @@ Studio settings go in `config/config.go` (`loadFrom`), `.env.example` and
 
 | File | Change |
 |---|---|
-| `docs/site/docs/deployment-active-active.md` (new; register in `docs/site/.vitepress/config.mjs`) | The topology, database requirements (synchronous replication, the witness), DSN examples, what must match on both sites, load balancer and DNS options, failover and failback runbooks, what is and is not guaranteed, monitoring |
+| `docs/site/docs/deployment-active-active.md` (new; register in `docs/site/.vitepress/config.mjs`; written, bead .26, with marked gaps for .17, .23 and the cluster pass's numbers) | The topology, database requirements (synchronous replication, the witness), DSN examples, what must match on both sites, load balancer and DNS options, failover and failback runbooks, what is and is not guaranteed, monitoring |
 | `docs/site/docs/reference-architecture.md` | Failure table: the "edge starts while Studio is down" and "unknown token" rows gain the new options; the "PostgreSQL fails over" row describes Phase 1; add the topology under Topologies; checklist items. Fix the reconnect backoff, stated as 5 minutes at line 123 (the code caps at 30 s) |
 | `docs/site/docs/edge-gateways.md` | "Apps and Credentials": the `full` sync mode and its revocation trade-off; Connection Settings: `CONTROL_ENDPOINTS`; the compromise section: what an edge database now holds (hashes only) |
 | `docs/site/docs/configuration.md`, `microgateway/docs/config/environment-variables.md`, `microgateway/docs/configuration-reference.md`, `.env.example` | The variables above |

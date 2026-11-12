@@ -88,6 +88,8 @@ With `DATABASE_TYPE=sqlite`, `DATABASE_URL` is a file path (default `midsommar.d
 `DATABASE_URL` takes a `postgres://` URL or `key=value` pairs, with any option the pgx driver accepts. Without `sslmode`, Studio uses TLS when the server offers it and a plain connection when it does not (`prefer`); set `sslmode=require` or `verify-full` to insist on TLS. Every connection Studio makes, including the one it keeps open for LISTEN/NOTIFY, uses the same string.
 
 ### Postgres with a standby (failover)
+For AI Studio in two sites over one replicated database, see [Active-Active (Two Sites)](./deployment-active-active.md): what the database needs (synchronous replication, a witness for automatic failover) and the runbooks. The settings themselves are below.
+
 `DATABASE_URL` may name several hosts. With `target_session_attrs=read-write`, Studio connects to the one that takes writes, whichever it is at the time:
 
 ```

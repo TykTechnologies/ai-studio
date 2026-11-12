@@ -130,6 +130,10 @@ series is reported.
 | `aistudio_db_writable` | none | Gauge: 1 while this replica's database takes writes, 0 while it is read-only or unreachable |
 | `aistudio_db_failovers_total` | none | Times this replica saw the writable server change (another node, or a promotion behind the same address) since it started |
 
+For what else to watch in a two-site deployment (edges' control endpoints,
+last-known-good, replication) see
+[Monitoring](./deployment-active-active.md#monitoring) on the Active-Active page.
+
 Alert on `aistudio_db_writable == 0` lasting longer than your failover
 manager's promotion time: a replica that stays on a read-only or unreachable
 database fails every write. `/ready` (`"database"` in its body),
@@ -278,6 +282,7 @@ are attributed per replica. See
 
 ## See also
 
+- [Active-Active (Two Sites)](./deployment-active-active.md#monitoring) — what to watch in a two-site deployment
 - [Kubernetes / Helm Deployment](./deployment-helm-k8s.md)
 - [Running Alongside the Kubernetes Inference Gateway](./deployment-kubernetes-inference-gateway.md)
 - [Analytics](./analytics.md) — dashboard reporting, sourced from the database
