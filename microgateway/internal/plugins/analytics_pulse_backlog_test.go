@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -255,12 +256,47 @@ func TestPulseBacklog_RealTimeOutageAtLoad(t *testing.T) {
 		}(w)
 	}
 
+	// Heap at the peak of the outage: the backlog plus what the buffers
+	// gather (as Go structs) while a pulse's retries run.
+	runtime.GC()
+	var base runtime.MemStats
+	runtime.ReadMemStats(&base)
+	// peakHeap is the heap as allocated (garbage included); peakLive is
+	// measured after a collection, every half second: what is reachable.
+	var peakHeap, peakLive uint64
+	sampled := make(chan struct{})
+	go func() {
+		defer close(sampled)
+		tick := time.NewTicker(100 * time.Millisecond)
+		defer tick.Stop()
+		for n := 0; ; n++ {
+			select {
+			case <-stop:
+				return
+			case <-tick.C:
+			}
+			if n%5 == 4 {
+				runtime.GC()
+			}
+			var m runtime.MemStats
+			runtime.ReadMemStats(&m)
+			if m.HeapAlloc > peakHeap {
+				peakHeap = m.HeapAlloc
+			}
+			if n%5 == 4 && m.HeapAlloc > peakLive {
+				peakLive = m.HeapAlloc
+			}
+		}
+	}()
+
 	started := time.Now()
 	for time.Since(started) < 16*time.Second {
 		p.sendPulse() // each failed ladder moves what arrived into the backlog
 	}
+	backlogPeak, _ := PulseBacklog()
 	close(stop)
 	writers.Wait()
+	<-sampled
 	outage := time.Since(started)
 	after := PulseDroppedRecords()
 	assert.Equal(t, before["over_backlog"], after["over_backlog"])
@@ -273,7 +309,9 @@ func TestPulseBacklog_RealTimeOutageAtLoad(t *testing.T) {
 	got, _, sizes, records := delivered(hub)
 	mu.Lock()
 	defer mu.Unlock()
-	t.Logf("outage %s, %d requests recorded, %d pulses on recovery", outage.Round(time.Second), len(ids), len(sizes))
+	t.Logf("outage %s, %d requests recorded, %d pulses on recovery; backlog %.1f MB at the end of the outage; heap %.1f MB before, %.1f MB at the peak, %.1f MB live at the peak (after a collection)",
+		outage.Round(time.Second), len(ids), len(sizes), float64(backlogPeak)/(1<<20),
+		float64(base.HeapAlloc)/(1<<20), float64(peakHeap)/(1<<20), float64(peakLive)/(1<<20))
 	assert.Greater(t, outage, 15*time.Second)
 	require.Equal(t, len(ids), len(got), "every record arrives")
 	seen := make(map[string]int, len(got))
