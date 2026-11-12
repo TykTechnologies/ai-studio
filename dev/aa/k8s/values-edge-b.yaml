@@ -36,6 +36,9 @@ secrets:
   existingSecret: aa-edge   # EDGE_AUTH_TOKEN, ENCRYPTION_KEY; created by aa-k8s.sh secrets
 extraEnv:
   - {name: GATEWAY_SERVER_TIMING, value: "true"}
+  # Enterprise images only; the Secret is created by aa-k8s.sh license.
+  - name: TYK_AI_LICENSE
+    valueFrom: {secretKeyRef: {name: aa-license, key: TYK_AI_LICENSE, optional: true}}
 analyticsPulse:   # as benchmarks/gateway/compose/analytics-pulse.yaml
   includeRequestResponseData: false
   excludedVendors: []

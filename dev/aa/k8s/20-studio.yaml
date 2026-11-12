@@ -43,6 +43,8 @@ spec:
             # CSRF_KEY (and TYK_AI_LICENSE for an Enterprise pass): identical
             # on both sites because both read the one Secret.
             - secretRef: {name: aa-studio}
+            # Enterprise images only: TYK_AI_LICENSE, created by aa-k8s.sh license.
+            - secretRef: {name: aa-license, optional: true}
           ports:
             - {name: http, containerPort: 8080}
             - {name: grpc, containerPort: 50051}
@@ -146,6 +148,8 @@ spec:
             # CSRF_KEY (and TYK_AI_LICENSE for an Enterprise pass): identical
             # on both sites because both read the one Secret.
             - secretRef: {name: aa-studio}
+            # Enterprise images only: TYK_AI_LICENSE, created by aa-k8s.sh license.
+            - secretRef: {name: aa-license, optional: true}
           ports:
             - {name: http, containerPort: 8080}
             - {name: grpc, containerPort: 50051}

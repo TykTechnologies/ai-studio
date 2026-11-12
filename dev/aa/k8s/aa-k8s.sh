@@ -4,6 +4,7 @@
 # script is the failover manager, as dev/aa/aa.sh is for the compose stack.
 #
 #   aa-k8s.sh secrets                 create the Secrets with throwaway random values (once)
+#   aa-k8s.sh license                 Enterprise only: TYK_AI_LICENSE from AA_LICENSE_ENV_FILE into its own Secret
 #   aa-k8s.sh apply                   namespace, PostgreSQL, Studio, control proxies, mock upstream
 #                                     (needs STUDIO_IMAGE and TOOLS_IMAGE; edges are the Helm chart, see README)
 #   aa-k8s.sh render-edges            helm template of the two edges into rendered/ (needs MICROGATEWAY_IMAGE)
@@ -61,9 +62,20 @@ cmd_secrets() {
 	local token enc
 	token=$(rand); enc=$(rand | cut -c1-32)
 	k create secret generic aa-studio --from-literal=TYK_AI_SECRET_KEY="$key" --from-literal=MICROGATEWAY_ENCRYPTION_KEY="$enc" \
-		--from-literal=GRPC_AUTH_TOKEN="$token" --from-literal=CSRF_KEY="$(rand)" ${TYK_AI_LICENSE:+--from-literal=TYK_AI_LICENSE="$TYK_AI_LICENSE"}
-	k create secret generic aa-edge --from-literal=EDGE_AUTH_TOKEN="$token" --from-literal=ENCRYPTION_KEY="$enc" ${TYK_AI_LICENSE:+--from-literal=TYK_AI_LICENSE="$TYK_AI_LICENSE"}
+		--from-literal=GRPC_AUTH_TOKEN="$token" --from-literal=CSRF_KEY="$(rand)"
+	k create secret generic aa-edge --from-literal=EDGE_AUTH_TOKEN="$token" --from-literal=ENCRYPTION_KEY="$enc"
 	k create secret generic aa-load --from-literal=PROBE_PASSWORD="Probe-$(rand | cut -c1-16)!x" --from-literal=APP_KEY=unset
+}
+
+# The Enterprise license, for Enterprise images only: read in place from a
+# gitignored env file (AA_LICENSE_ENV_FILE, a line TYK_AI_LICENSE=...) straight
+# into a Secret of its own. It is never printed, never an argument, and in no
+# manifest; it goes when the namespace is deleted.
+cmd_license() {
+	: "${AA_LICENSE_ENV_FILE:?set AA_LICENSE_ENV_FILE to the env file holding TYK_AI_LICENSE}"
+	grep -q '^TYK_AI_LICENSE=.' "$AA_LICENSE_ENV_FILE" || die "no TYK_AI_LICENSE in that file"
+	k create secret generic aa-license --from-env-file=<(grep '^TYK_AI_LICENSE=' "$AA_LICENSE_ENV_FILE") >/dev/null
+	echo "secret aa-license created ($(k get secret aa-license -o jsonpath='{.data.TYK_AI_LICENSE}' | wc -c) base64 characters)"
 }
 
 cmd_apply() {
@@ -339,6 +351,7 @@ cmd_teardown() {
 
 case "${1:-}" in
 secrets) cmd_secrets ;;
+license) cmd_license ;;
 apply) cmd_apply ;;
 render-edges) cmd_render_edges ;;
 status) cmd_status ;;
@@ -358,5 +371,5 @@ cut-cp) cmd_cp 0 "${2:-}" ;;
 restore-cp) cmd_cp 1 "${2:-}" ;;
 kill-edge) cmd_kill_edge "${2:-}" ;;
 teardown) cmd_teardown "${2:-}" ;;
-*) sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+*) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
