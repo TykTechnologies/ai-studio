@@ -22,6 +22,7 @@ This Helm chart deploys Midsommar along with its optional components. It support
 | `replicaCount` | Studio replicas. Above 1 needs an external PostgreSQL and `config.csrfKey` (see [Several Studio replicas](#several-studio-replicas)); Studio has no autoscaler | `1` |
 | `podDisruptionBudget.minAvailable` / `.maxUnavailable` | PodDisruptionBudget, rendered when `replicaCount` is above 1 (or `podDisruptionBudget.enabled`) | `1` / unset |
 | `topologySpreadConstraints`, `affinity` | Scheduling of the Studio pods. Empty spread with several replicas: over nodes and zones, `ScheduleAnyway` | `[]`, `{}` |
+| `global.nodeSelector`, `global.tolerations`, `global.affinity` | Scheduling of the AI Studio pods and the bundled PostgreSQL pod (for example one site per node pool); `affinity` replaces `global.affinity` for AI Studio. The microgateway subchart has its own `microgateway.nodeSelector`, `.tolerations` and `.affinity` | `{}`, `[]`, `{}` |
 | `midsommar.ingress.sessionAffinity` | Cookie affinity on the nginx Ingress with several replicas (`enabled`, `cookieName`, `maxAge`) | on |
 | `config.clusterNodeLabel` | `CLUSTER_NODE_LABEL`: names this release's replicas on the cluster status (for example `site-a`) | `""` (`studio`) |
 | `config.csrfKey` | `CSRF_KEY`, stored in the Secret; required with several replicas | `""` |

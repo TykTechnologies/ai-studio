@@ -208,3 +208,47 @@ func TestHelmStudioReplicasRefused(t *testing.T) {
 	out = helmTemplateExpectingError(t, "--set", "replicaCount=2", "--set", "database.internal=false")
 	assert.Contains(t, out, "replicaCount > 1 needs config.csrfKey")
 }
+
+// global.nodeSelector, global.tolerations and global.affinity place the
+// AI Studio pods and the bundled PostgreSQL pod (one site per node pool);
+// the top-level affinity, when set, replaces global.affinity for Studio.
+func TestHelmStudioGlobalScheduling(t *testing.T) {
+	rendered := helmTemplate(t,
+		"--set", "global.nodeSelector.pool=site-a",
+		"--set", "global.tolerations[0].key=site",
+		"--set", "global.tolerations[0].operator=Equal",
+		"--set", "global.tolerations[0].value=a",
+		"--set", "global.tolerations[0].effect=NoSchedule",
+		"--set", "global.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key=zone",
+		"--set", "global.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].operator=Exists",
+	)
+	for _, name := range []string{"test-midsommar", "test-midsommar-postgres"} {
+		d := renderedDoc(t, rendered, "Deployment", name)
+		require.NotNil(t, d, name)
+		spec, _ := dig(t, d, "spec", "template", "spec").(map[string]any)
+		assert.Equal(t, map[string]any{"pool": "site-a"}, spec["nodeSelector"], name)
+		tolerations, _ := spec["tolerations"].([]any)
+		require.Len(t, tolerations, 1, name)
+		assert.Equal(t, "site", tolerations[0].(map[string]any)["key"], name)
+		assert.NotNil(t, dig(t, spec, "affinity", "nodeAffinity"), name)
+	}
+
+	// The top-level affinity wins for Studio.
+	rendered = helmTemplate(t,
+		"--set", "global.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key=zone",
+		"--set", "global.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].operator=Exists",
+		"--set", "affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].weight=100",
+		"--set", "affinity.podAntiAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].podAffinityTerm.topologyKey=kubernetes.io/hostname",
+	)
+	d := renderedDoc(t, rendered, "Deployment", "test-midsommar")
+	affinity, _ := dig(t, d, "spec", "template", "spec", "affinity").(map[string]any)
+	assert.Contains(t, affinity, "podAntiAffinity")
+	assert.NotContains(t, affinity, "nodeAffinity", "replaced, not merged")
+
+	// Unset: none of them is rendered.
+	d = renderedDoc(t, helmTemplate(t), "Deployment", "test-midsommar")
+	spec, _ := dig(t, d, "spec", "template", "spec").(map[string]any)
+	for _, k := range []string{"nodeSelector", "tolerations", "affinity"} {
+		assert.NotContains(t, spec, k)
+	}
+}

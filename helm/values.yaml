@@ -243,13 +243,12 @@ global:
   # Environment name (development, staging, production)
   environment: "development"
 
-  # Node selector for all pods
+  # Scheduling of the AI Studio pods and the bundled PostgreSQL pod, for
+  # example one site per node pool. The microgateway subchart has its own
+  # microgateway.nodeSelector, .tolerations and .affinity.
   nodeSelector: {}
-
-  # Tolerations for all pods
   tolerations: []
-
-  # Affinity rules for all pods
+  # The top-level affinity, when set, replaces this for the AI Studio pods.
   affinity: {}
 
 # Studio replicas. Studio is scaled by replicaCount; the chart has no
