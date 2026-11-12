@@ -37,7 +37,7 @@ Everything here is in both editions except **full credential sync**, which is En
 
 ## Database requirements
 
-- **PostgreSQL 14 or later** with physical streaming replication: a primary in one site and a hot standby in the other (`hot_standby = on`).
+- **PostgreSQL with physical streaming replication**: a primary in one site and a hot standby in the other (`hot_standby = on`). The failover behaviour on this page is tested with PostgreSQL 16 (the failover test rig and CI run `postgres:16-alpine`); AI Studio's general requirement is PostgreSQL 14 or later (see [Reference Architecture](./reference-architecture.md#database)), not separately tested for failover.
 - **Synchronous replication between the sites** is the recommended setting: on the primary, `synchronous_commit = on` and `synchronous_standby_names` naming the other site's standby. A commit is then acknowledged only once the standby has it, so nothing acknowledged is lost when the primary's site is.
   - **With asynchronous replication** a failover can lose the last transactions the primary acknowledged. An App key created and shown to a user just before the failover can be gone afterwards, and an edge that validated it may have cached it. Studio copes with the database going back in time (its event log and budget sync recover), but the lost writes are lost.
   - **Losing the standby's site.** With synchronous replication every commit on the primary waits for the standby, so when the standby's site is lost the failover manager must drop the synchronous requirement (or hold writes until the standby is back). Managed services and the operators below do this; in a hand-built setup it is a runbook step.
@@ -45,7 +45,7 @@ Everything here is in both editions except **full credential sync**, which is En
   - a **managed PostgreSQL** with cross-zone or cross-region high availability;
   - **CloudNativePG** on Kubernetes, across two zones or clusters;
   - **Patroni**, with its distributed configuration store spread over three locations.
-- **Clocks.** Keep the database nodes and the Studio replicas on NTP. Studio tolerates clocks up to 30 seconds apart between replicas and the database (the leader lease and the credential sync are designed for that), but no more.
+- **Clocks.** Keep the database nodes and the Studio replicas on NTP. A failover to a node whose clock differs by up to 30 seconds keeps one leader at a time (the leader lease's clock allowance; tested with the new primary's clock 30 seconds ahead and 30 seconds behind). Full credential sync assumes the replicas' and the database's clocks are within 30 seconds of each other. Larger differences are not covered.
 
 ### Two sites need a third location to fail over automatically
 
@@ -119,6 +119,16 @@ By default an edge that starts while no control plane answers exits. With `EDGE_
 - **The trade-off.** An edge started this way serves what it last knew: something removed or revoked in Studio since then keeps working on it until it reconnects. That is why it is off by default.
 - Details: [Starting without a control plane](./edge-gateways.md#starting-without-a-control-plane).
 
+### Edge volumes and capacity
+
+An edge in either site may carry the other site's load after a site is lost, so size each site's edges for all of it. Each edge keeps a copy of its analytics in its own database for `ANALYTICS_RETENTION_DAYS`, which fills a small volume quickly: size the volume with the table in [Scaling Edge Gateways](./deployment-helm-k8s.md#scaling-edge-gateways) (about 35 MB per day per request per second), or set a short retention, since Studio has the same records. When the volume is full the edge keeps serving and says so (`"database_full"` on `/ready`, `microgateway_database_full`), but it can no longer apply a configuration push or store what last-known-good starts from.
+
+::: warning GAP: edge findings of the load test (bead midsommar-clean-4x5y.29)
+Fill in from the combined cluster pass:
+- how fast the edge database volume filled under sustained load (the first run filled the chart's 2 Gi in 30 to 45 minutes at 3,000 to 6,000 requests per second) and the volume size and retention recommended for each site;
+- what an edge does when it is overloaded (it was seen to restart rather than answer `503`), the per-edge request rate at which that began, and how many edges a site needs to carry both sites' load.
+:::
+
 ### Keys an edge has never seen (full credential sync, Enterprise)
 
 Without it, an edge validates a key it has not seen by asking a control plane, and caches the answer for 5 minutes (`EDGE_TOKEN_CACHE_TTL`). While no control plane answers, a key the edge has not cached is answered `503` with `Retry-After` (`credential_check_unavailable`).
@@ -129,7 +139,11 @@ With full credential sync, Studio sends each edge a keyed hash of every App key 
 The edge's setting (`EDGE_CREDENTIAL_SYNC=full`), its maximum age (`EDGE_CREDENTIAL_SYNC_MAX_AGE`), the metric for the age of the synced list and the microgateway chart values are bead midsommar-clean-4x5y.17 and .23, not merged yet. Fill this section in from those PRs: the setting, its default, the revocation trade-off below, and the metric to alert on.
 :::
 
-**The revocation trade-off.** A key revoked in Studio stops working on a connected edge within about a second. An edge that reaches no control plane cannot learn of a revocation at all: with full credential sync it keeps accepting the revoked key until its list is older than its maximum age (24 hours by default), and with `EDGE_TOKEN_CACHE_STALE_GRACE` it keeps accepting a cached key until the grace runs out. Choose those maximums for how long you are willing to let a revoked key work on an isolated edge.
+**The revocation trade-off.** A key revoked in Studio stops working on a connected edge when the edge next checks it: within `EDGE_TOKEN_CACHE_TTL` (5 minutes) of when it last validated the key. An edge that reaches no control plane cannot learn of a revocation at all: with `EDGE_TOKEN_CACHE_STALE_GRACE` it keeps accepting a cached key until the grace runs out, and with full credential sync until its list is older than its maximum age. Choose those maximums for how long you are willing to let a revoked key work on an isolated edge.
+
+::: warning GAP: revocation in about a second (bead midsommar-clean-4x5y.18)
+Once the hub part of bead .18 is merged (Studio publishes `credential.changed` when a key is deactivated or deleted; the edge part is merged), replace the first sentence above with: "A key revoked in Studio stops working on a connected edge within about a second, whichever site holds it: Studio tells every edge, and the edge drops what it cached for that key." Until then the sentence above (the cache TTL) is what a connected edge does, in both modes.
+:::
 
 ## Requests while there is no primary
 
