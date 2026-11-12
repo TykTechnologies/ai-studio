@@ -407,9 +407,15 @@ func TestFailover_ReadinessOnAReadOnlyDatabase(t *testing.T) {
 	primary := openFailoverDB(t, pair)
 	require.NoError(t, primary.AutoMigrate(&models.ClusterNode{}, &models.ClusterLease{}, &models.EdgeInstance{}, &models.EdgePushCommand{}))
 
+	// OpenDatabase waits for a writable server (it migrates at start), so
+	// the standby's pool is opened as OpenDatabase opens a Postgres pool,
+	// with its tracker, without that wait: a replica whose primary was
+	// demoted under it is in the same state.
 	conf := failoverConf(pair)
 	conf.DatabaseURL = pair.Standby().DSN()
-	standby, err := OpenDatabase(conf)
+	dialector, _, err := openPostgres(conf, conf.DatabaseURL)
+	require.NoError(t, err)
+	standby, err := gorm.Open(dialector, &gorm.Config{})
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		if pool, err := standby.DB(); err == nil {
