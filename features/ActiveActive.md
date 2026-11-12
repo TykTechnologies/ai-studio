@@ -1,9 +1,9 @@
 # Active-active control planes and edge resilience
 
-**Status:** built in 2.3.0 except, as of 2026-11-12: the edge side of
-full credential sync (`EDGE_CREDENTIAL_SYNC=full`, midsommar-clean-4x5y.17;
-the hub side is built), the microgateway chart values for it (.23), and
-the write hold of Phase 1 item 5 (built, PR #983, waiting to merge). The
+**Status:** built in 2.3.0 except, as of 2026-11-12: the hub part of
+`credential.changed` (midsommar-clean-4x5y.18, PR #990; the edge part is
+built), so a revocation reaches a connected edge at its next check rather
+than within about a second. The
 operator documentation is `docs/site/docs/deployment-active-active.md`.
 Target: **2.3.0** (a priority addition during the release-candidate
 phase). This is the feature specification and

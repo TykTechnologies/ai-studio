@@ -133,16 +133,22 @@ Fill in from the combined cluster pass:
 
 Without it, an edge validates a key it has not seen by asking a control plane, and caches the answer for 5 minutes (`EDGE_TOKEN_CACHE_TTL`). While no control plane answers, a key the edge has not cached is answered `503` with `Retry-After` (`credential_check_unavailable`).
 
-With full credential sync, Studio sends each edge a keyed hash of every App key of its namespace in advance (never a key), so the edge validates keys locally whether or not a control plane answers. AI Studio's side is in 2.3 (see [Full credential sync](./edge-gateways.md#full-credential-sync-enterprise)).
+With full credential sync, Studio sends each edge a keyed hash of every App key of its namespace in advance (never a key), so the edge validates keys locally whether or not a control plane answers:
 
-::: warning GAP: the edge side of full credential sync
-The edge's setting (`EDGE_CREDENTIAL_SYNC=full`), its maximum age (`EDGE_CREDENTIAL_SYNC_MAX_AGE`), the metric for the age of the synced list and the microgateway chart values are bead midsommar-clean-4x5y.17 and .23, not merged yet. Fill this section in from those PRs: the setting, its default, the revocation trade-off below, and the metric to alert on.
-:::
+| Edge setting | Default | Purpose |
+|---|---|---|
+| `EDGE_CREDENTIAL_SYNC` | `on_demand` | `full` (Enterprise): keep the hashed list of every App key of the edge's namespace in its database and validate from it. A Community edge given `full` validates on demand. Any other value stops start-up. |
+| `EDGE_CREDENTIAL_SYNC_MAX_AGE` | `24h` | How long the list is trusted after the last successful sync. Past it the edge validates on demand until a sync succeeds. `0` means no limit. |
 
-**The revocation trade-off.** A key revoked in Studio stops working on a connected edge when the edge next checks it: within `EDGE_TOKEN_CACHE_TTL` (5 minutes) of when it last validated the key. An edge that reaches no control plane cannot learn of a revocation at all: with `EDGE_TOKEN_CACHE_STALE_GRACE` it keeps accepting a cached key until the grace runs out, and with full credential sync until its list is older than its maximum age. Choose those maximums for how long you are willing to let a revoked key work on an isolated edge.
+- **How it stays current.** The edge syncs on every registration a control plane accepts and every heartbeat it acknowledges (`EDGE_HEARTBEAT_INTERVAL`, 30 seconds): the whole list the first time, after a move to the other site's control plane and at least every 15 minutes, only the changes in between.
+- **How a key is checked.** On the list and active, with its App active: accepted without asking a control plane. On the list but deactivated, deleted, or its App inactive: refused. Not on the list (created in the last seconds): asked as on demand, and the answer recorded. An explicit refusal from a control plane always wins.
+- **What it needs.** The list is in the edge's database, so on Kubernetes use the microgateway chart's StatefulSet form with persistence (`config.credentialSync: full`, `config.credentialSyncMaxAge`); without it a rescheduled pod validates on demand until its first sync. An older or Community control plane cannot send the list: the edge logs it and stays on demand.
+- Details: [Full credential sync](./edge-gateways.md#full-credential-sync-enterprise) and [Scaling Edge Gateways](./deployment-helm-k8s.md#scaling-edge-gateways).
+
+**The revocation trade-off.** A key revoked in Studio stops working on a connected edge when the edge next checks it: on demand, within `EDGE_TOKEN_CACHE_TTL` (5 minutes) of when it last validated the key; with full credential sync, at its next sync (one heartbeat interval, 30 seconds). An edge that reaches no control plane cannot learn of a revocation at all: with `EDGE_TOKEN_CACHE_STALE_GRACE` it keeps accepting a cached key until the grace runs out, and with full credential sync until its list is older than `EDGE_CREDENTIAL_SYNC_MAX_AGE` (24 hours). Choose those maximums for how long you are willing to let a revoked key work on an isolated edge.
 
 ::: warning GAP: revocation in about a second (bead midsommar-clean-4x5y.18)
-Once the hub part of bead .18 is merged (Studio publishes `credential.changed` when a key is deactivated or deleted; the edge part is merged), replace the first sentence above with: "A key revoked in Studio stops working on a connected edge within about a second, whichever site holds it: Studio tells every edge, and the edge drops what it cached for that key." Until then the sentence above (the cache TTL) is what a connected edge does, in both modes.
+Once the hub part of bead .18 is merged (Studio publishes `credential.changed` when a key is deactivated or deleted; the edge part is merged), replace the first sentence above with: "A key revoked in Studio stops working on a connected edge within about a second, whichever site holds it: Studio tells every edge, and the edge drops what it cached for that key." Until then the sentence above (the cache TTL on demand, the next sync with full credential sync) is what a connected edge does.
 :::
 
 ## Requests while there is no primary
@@ -168,7 +174,7 @@ Edges are not affected by a database failover beyond the control plane being bri
 | **One site's Studio is lost**, its database node fine | Edges of that site move to the other site. The UI and API load balancer stops sending traffic there; users on that site's replicas may lose an open chat session. | Session affinity that fails over; `EDGE_CONTROL_FAILBACK_INTERVAL` if edges should return when it is back. |
 | **The link between the sites is lost** | Each site's replicas keep the database they can reach. The site that loses the primary sees its database as unreachable: after `DATABASE_READY_GRACE` its `/ready` fails and the load balancer stops sending traffic there; its edges keep serving and keep their connections. The failover manager must not promote the cut-off standby unless a witness says the primary's site is gone (this is the split-brain case). | A witness; alerts on `aistudio_db_writable == 0` per replica. |
 | **An edge restarts during a control-plane outage** | By default it exits until a control plane answers. With `EDGE_START_FROM_LAST_KNOWN_GOOD=true` and a persistent volume it starts from its stored configuration. | Decide on last-known-good; persistent volumes for edges. |
-| **An unknown key during a control-plane outage** | `503` with `Retry-After` (`credential_check_unavailable`), which SDKs retry. With full credential sync (Enterprise), validated locally. | Decide on full credential sync and on `EDGE_TOKEN_CACHE_STALE_GRACE` against the revocation trade-off above. |
+| **An unknown key during a control-plane outage** | `503` with `Retry-After` (`credential_check_unavailable`), which SDKs retry. With `EDGE_CREDENTIAL_SYNC=full` (Enterprise), validated locally from the synced list. | Decide on full credential sync and on `EDGE_TOKEN_CACHE_STALE_GRACE` against the revocation trade-off above. |
 | **Asynchronous replication and a failover** | The last transactions the old primary acknowledged may be lost. Studio's event log, leader lease and budget sync recover on their own; lost writes stay lost. | Synchronous replication between the sites. |
 
 ::: warning GAP: measured failover times (combined cluster pass, bead midsommar-clean-4x5y.29)
@@ -245,12 +251,11 @@ Replicas are never refused for disagreeing, so a rotation can roll; the cluster 
 | `microgateway_control_connected{endpoint}` | edge `/metrics` | An edge's first endpoint is 0 for long (it is on the other site) |
 | `microgateway_config_source{source}` and `microgateway_config_age_seconds` | edge `/metrics` | `last_known_good` is 1; the age approaches `EDGE_LAST_KNOWN_GOOD_MAX_AGE` |
 | `microgateway_analytics_pulse_dropped_records_total{reason}` | edge `/metrics` | It increases: analytics lost during an outage |
+| `microgateway_credential_sync_last_success_timestamp` (full credential sync) | edge `/metrics` | `time() - ` it approaches `EDGE_CREDENTIAL_SYNC_MAX_AGE`: past it the edge stops trusting its list |
+| `microgateway_credentials_synced`, `microgateway_credential_validations_total{source}` | edge `/metrics` | `source="stale"` increases (validations made on demand because the list was too old); the synced count drops to 0 |
 | Edge sync status (In Sync, Pending, Stale) and **Held by** | Studio → Edge Gateways | Edges stale; all edges held by one site for long |
 | Replication lag and `sync_state` | PostgreSQL (`pg_stat_replication`) or your managed service | The standby is not synchronous, or lags |
 
-::: warning GAP: credential sync age (edge side, bead midsommar-clean-4x5y.17)
-Add the edge metric for the age of the synced credential list, and the alert against `EDGE_CREDENTIAL_SYNC_MAX_AGE`, when the edge side is merged.
-:::
 
 See [Observability](./observability.md#database-metrics) for the metric definitions.
 
@@ -260,12 +265,12 @@ See [Observability](./observability.md#database-metrics) for the metric definiti
 2. API writes in flight during a failover are held and retried up to `DATABASE_WRITE_RETRY_WINDOW`, then fail with a retryable `503 database_unavailable`. They are never applied twice.
 3. A running edge keeps serving through any control-plane outage, moves to the other control plane on its own, and loses no configuration push.
 4. With `EDGE_START_FROM_LAST_KNOWN_GOOD=true`, an edge with an intact database starts and serves with no control plane reachable.
-5. With full credential sync (Enterprise), an edge validates every active key of its namespace locally, control plane or not, from hashes it cannot reverse.
+5. With `EDGE_CREDENTIAL_SYNC=full` (Enterprise), an edge validates every active key of its namespace locally, control plane or not, from hashes it cannot reverse, for up to `EDGE_CREDENTIAL_SYNC_MAX_AGE` after its last sync.
 6. With synchronous replication, a key whose creation was committed is valid on every edge after a failover.
 
 **Not guaranteed:**
 
-- Revocation reaching an edge that cannot reach any control plane. It is bounded by the maximum ages you configure (`EDGE_LAST_KNOWN_GOOD_MAX_AGE`, the credential sync's maximum age, `EDGE_TOKEN_CACHE_STALE_GRACE`).
+- Revocation reaching an edge that cannot reach any control plane. It is bounded by the maximum ages you configure (`EDGE_LAST_KNOWN_GOOD_MAX_AGE`, `EDGE_CREDENTIAL_SYNC_MAX_AGE`, `EDGE_TOKEN_CACHE_STALE_GRACE`).
 - A key being usable on edges before its creation has committed.
 - Writes surviving an outage longer than the retry window: they fail with a retryable `503` and must be made again. There is no write queue beyond the window.
 - Analytics beyond an edge's in-memory buffer through a long control-plane outage (see [Analytics during a control-plane outage](./edge-gateways.md#analytics-during-a-control-plane-outage)).
