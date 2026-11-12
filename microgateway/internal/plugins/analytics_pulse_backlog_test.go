@@ -351,3 +351,29 @@ func TestPulseBacklog_FullHintOncePerOutage(t *testing.T) {
 	outage("y")
 	assert.Equal(t, 2, strings.Count(logged.String(), hint), "and once more in the next outage")
 }
+
+// Batches the backlog drops do not stay reachable through its backing
+// array: their messages can be collected, so memory follows the bound.
+func TestPulseBacklog_DroppedBatchesAreReleased(t *testing.T) {
+	hub := &fakeSyncClient{failures: 1 << 30}
+	p := newRetryPlugin(hub, PulsePluginConfig{MaxBufferSize: 50, MaxRetries: 0, MaxBacklogBytes: 8 << 10, EdgeRetentionHours: 1})
+	for round := 0; round < 10; round++ {
+		bufferEvents(p, fmt.Sprintf("m%02d", round), 100, 0)
+		p.sendPulse()
+	}
+	old := time.Now().Add(-2 * time.Hour)
+	bufferOneOfEach(p, "expiring", old)
+	p.sendPulse()
+
+	p.bufferMutex.Lock()
+	defer p.bufferMutex.Unlock()
+	full := p.backlog[:cap(p.backlog)]
+	for i := len(p.backlog); i < len(full); i++ {
+		assert.Nil(t, full[i].msg, "a dropped entry past the end holds no message")
+	}
+	var live int64
+	for _, b := range p.backlog {
+		live += int64(len(b.msg))
+	}
+	assert.Equal(t, p.backlogBytes, live)
+}

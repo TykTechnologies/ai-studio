@@ -272,10 +272,15 @@ func (p *AnalyticsPulsePlugin) trimBacklogLocked(now time.Time) {
 			}
 			kept = append(kept, b)
 		}
+		// The entries filtered out are still in the backing array: clear
+		// them, or their messages stay reachable and memory exceeds the
+		// bound until the array is reallocated.
+		clear(p.backlog[len(kept):])
 		p.backlog = kept
 	}
 	for p.backlogBytes > p.config.MaxBacklogBytes && len(p.backlog) > 0 {
 		b := p.backlog[0]
+		p.backlog[0] = backlogBatch{} // release its message (see above)
 		p.backlog = p.backlog[1:]
 		p.backlogBytes -= int64(len(b.msg))
 		overBound += b.records
