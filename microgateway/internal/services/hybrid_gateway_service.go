@@ -10,6 +10,7 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/v2/pkg/credhash"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	coresvc "github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/rs/zerolog/log"
@@ -47,6 +48,11 @@ type HybridGatewayService struct {
 	// with full credential sync sends (features/ActiveActive.md, Phase 4).
 	hasher         *credhash.Hasher
 	tokenCache     map[string]*TokenCacheEntry              // credential hash -> validation result
+	// evictedAt is when a credential.changed event last dropped a cache
+	// key: a validation that started before then does not cache its
+	// result (the control plane may have answered before the change).
+	// Pruned by the cleanup worker.
+	evictedAt map[string]time.Time
 	cacheMutex     sync.RWMutex                            // Protects token cache
 	cacheConfig    config.HubSpokeConfig                    // Cache configuration
 	stopCleanup    chan bool                               // Signal to stop cleanup goroutine
@@ -75,6 +81,7 @@ func NewHybridGatewayService(db *gorm.DB, repo *database.Repository, edgeNamespa
 		edgeNamespace:         edgeNamespace,
 		hasher:               hasher,
 		tokenCache:           make(map[string]*TokenCacheEntry),
+		evictedAt:            make(map[string]time.Time),
 		cacheConfig:          cacheConfig,
 		stopCleanup:          make(chan bool),
 		apps:                 database.NewGenCache[uint, *database.App](),
@@ -151,6 +158,7 @@ func (h *HybridGatewayService) cacheKey(token string) string {
 // result under key (the token's cacheKey) and makes sure its App is in local
 // SQLite.
 func (h *HybridGatewayService) validateWithControl(token, key string) (*TokenValidationResult, error) {
+	started := time.Now()
 	tokenPrefix := token
 	if len(token) > 8 {
 		tokenPrefix = token[:8]
@@ -255,7 +263,7 @@ func (h *HybridGatewayService) validateWithControl(token, key string) (*TokenVal
 
 		// Cache the result if caching is enabled
 		if h.cacheConfig.TokenCacheEnabled {
-			h.storeInCache(key, result)
+			h.storeInCache(key, result, started)
 			log.Debug().Str("token_prefix", tokenPrefix).Dur("ttl", h.cacheConfig.TokenCacheTTL).Msg("Token validation result cached")
 		}
 
@@ -399,6 +407,54 @@ func (h *HybridGatewayService) removeFromCache(key string) {
 	delete(h.tokenCache, key)
 }
 
+// evictionMemory is how long an eviction by a credential.changed event
+// keeps a validation that started before it from caching its result: far
+// longer than one call to the control instance can take.
+const evictionMemory = 10 * time.Minute
+
+// EvictCredential drops everything the edge holds in memory for the
+// credential with this hash (pkg/credhash, the token cache's key): its
+// cached validation, fresh or stale, so neither the cache TTL nor the stale
+// grace keeps serving a key that was revoked; a validation in flight for
+// it, which may carry the control plane's answer from before the change;
+// and the right of any validation that started before now to cache its
+// result. The next request for the key asks the control plane again.
+//
+// It only ever drops: whatever an event says, nothing is added or made
+// valid here.
+func (h *HybridGatewayService) EvictCredential(hash string) {
+	if hash == "" {
+		return
+	}
+	h.cacheMutex.Lock()
+	delete(h.tokenCache, hash)
+	if h.evictedAt == nil {
+		h.evictedAt = make(map[string]time.Time)
+	}
+	h.evictedAt[hash] = time.Now()
+	h.cacheMutex.Unlock()
+	h.validations.Forget(hash)
+}
+
+// HandleCredentialChanged acts on a credential.changed event from the
+// control plane (eventbridge.CredentialChangedTopic): the edge drops what
+// it cached for that credential, whatever the change and whichever App or
+// namespace the event names. A credential this edge never cached costs a
+// map lookup. A payload that cannot be read is logged and ignored: the
+// cache TTL still bounds what is cached.
+func (h *HybridGatewayService) HandleCredentialChanged(event eventbridge.Event) {
+	change, err := eventbridge.ParseCredentialChanged(event.Payload)
+	if err != nil {
+		if h.warnings.allow("credential-changed") {
+			log.Warn().Err(err).Str("event_id", event.ID).Msg("Ignoring a credential.changed event that cannot be read")
+		}
+		return
+	}
+	h.EvictCredential(change.Hash)
+	log.Debug().Uint("credential_id", change.CredentialID).Bool("active", change.Active).Bool("deleted", change.Deleted).
+		Msg("credential.changed: dropped what the edge cached for the credential")
+}
+
 // retireAt is the moment an entry is of no further use: its expiry plus the
 // stale grace during which it may still be served if the hub is unreachable.
 func (h *HybridGatewayService) retireAt(entry *TokenCacheEntry) time.Time {
@@ -408,14 +464,21 @@ func (h *HybridGatewayService) retireAt(entry *TokenCacheEntry) time.Time {
 	return entry.ExpiresAt.Add(h.cacheConfig.TokenCacheStaleGrace)
 }
 
-// storeInCache stores a token validation result in cache under its cache key
-func (h *HybridGatewayService) storeInCache(key string, result *TokenValidationResult) {
+// storeInCache stores a token validation result in cache under its cache
+// key. A result from a validation that started before a credential.changed
+// event dropped the key is not stored: the control plane may have answered
+// before the change.
+func (h *HybridGatewayService) storeInCache(key string, result *TokenValidationResult, started time.Time) {
 	if !h.cacheConfig.TokenCacheEnabled {
 		return
 	}
 
 	h.cacheMutex.Lock()
 	defer h.cacheMutex.Unlock()
+
+	if evicted, ok := h.evictedAt[key]; ok && !started.After(evicted) {
+		return
+	}
 
 	// Check cache size limit and evict oldest entries if needed
 	if len(h.tokenCache) >= h.cacheConfig.TokenCacheMaxSize {
@@ -482,6 +545,11 @@ func (h *HybridGatewayService) cleanupExpiredEntries() {
 		if now.After(h.retireAt(entry)) {
 			delete(h.tokenCache, key)
 			expiredCount++
+		}
+	}
+	for key, at := range h.evictedAt {
+		if now.Sub(at) > evictionMemory {
+			delete(h.evictedAt, key)
 		}
 	}
 
