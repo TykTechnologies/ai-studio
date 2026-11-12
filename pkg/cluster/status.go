@@ -203,7 +203,7 @@ func databaseWarning(ds dbstate.Status) string {
 	}
 	switch ds.State {
 	case dbstate.ReadOnly:
-		return "This replica's database has been read-only" + since + " (a standby, or a primary being demoted): writes fail until a writable server answers on DATABASE_URL."
+		return "This replica's database has been read-only" + since + " (a standby, or a primary being demoted): writes fail until the replica reaches a writable database server."
 	case dbstate.Unreachable:
 		return "This replica cannot reach its database" + since + ": requests that need it fail."
 	}
