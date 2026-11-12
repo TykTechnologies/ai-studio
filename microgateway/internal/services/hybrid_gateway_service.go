@@ -53,6 +53,8 @@ type HybridGatewayService struct {
 	// result (the control plane may have answered before the change).
 	// Pruned by the cleanup worker.
 	evictedAt map[string]time.Time
+	// evictionsPruned is when evictedAt was last pruned (EvictCredential).
+	evictionsPruned time.Time
 	cacheMutex     sync.RWMutex                            // Protects token cache
 	cacheConfig    config.HubSpokeConfig                    // Cache configuration
 	stopCleanup    chan bool                               // Signal to stop cleanup goroutine
@@ -430,12 +432,16 @@ func (h *HybridGatewayService) EvictCredential(hash string) {
 	delete(h.tokenCache, hash)
 	now := time.Now()
 	// Forget evictions older than evictionMemory here, where they are
-	// added: the map holds the events of the last few minutes, so this
-	// walk is short and the cache's cleanup worker does not grow.
-	for key, at := range h.evictedAt {
-		if now.Sub(at) > evictionMemory {
-			delete(h.evictedAt, key)
+	// added, at most once a minute: a burst of events costs one walk of
+	// the map per minute, not one per event, and the cache's cleanup
+	// worker does not grow.
+	if now.Sub(h.evictionsPruned) >= time.Minute {
+		for key, at := range h.evictedAt {
+			if now.Sub(at) > evictionMemory {
+				delete(h.evictedAt, key)
+			}
 		}
+		h.evictionsPruned = now
 	}
 	h.evictedAt[hash] = now
 	h.cacheMutex.Unlock()
