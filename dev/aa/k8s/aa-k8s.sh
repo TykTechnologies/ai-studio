@@ -35,6 +35,7 @@
 #   aa-k8s.sh drop-sync-at EPOCH      fault 7: the primary's own pod drops the synchronous requirement at that time
 #   aa-k8s.sh fill-disk a|b           #976 check: fill that edge's data volume (files /opt/tyk-microgateway/data/aa-fill-*)
 #   aa-k8s.sh unfill-disk a|b         remove those files
+#   aa-k8s.sh wait SECONDS [MSG]      sleep through a run, touching the watchdog heartbeat every minute
 #   aa-k8s.sh teardown                delete the namespace (asks for the namespace name)
 set -euo pipefail
 
@@ -62,6 +63,11 @@ set_sync() { # <site> on|off
 }
 name_primary() { k patch configmap aa-pg-roles --type merge -p "{\"data\":{\"primary\":\"pg-$1\"}}" >/dev/null; }
 stamp() { echo "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ) $*"; }
+# The lead's watchdog scales the load nodes to zero when AA_HEARTBEAT has not
+# been touched for 45 minutes: touched only while a run, a fault or a fetch is
+# in progress, never from an idle shell.
+AA_HEARTBEAT=${AA_HEARTBEAT:-/tmp/claude-1001/-home-martin-apps-ai-studio/6991822f-073e-4e1f-ac05-1325bcc2634a/scratchpad/aa-heartbeat}
+hb() { touch "$AA_HEARTBEAT" 2>/dev/null || true; }
 
 cmd_secrets() {
 	k get secret aa-shared >/dev/null 2>&1 && die "the Secrets exist already; delete the namespace to start over"
@@ -187,6 +193,7 @@ start_half() {
 
 cmd_run() {
 	local name=${1:?run name} duration=${2:-12m}
+	hb
 	k scale deployment adminloop --replicas=1 >/dev/null
 	k rollout status deployment adminloop --timeout=60s >/dev/null
 	# Two processes, because gwbench runs one rate at a time; the analytics
@@ -205,6 +212,7 @@ cmd_run() {
 # (0.25 of the MEDIAN scale each): 1,500 short + 94 streams/s.
 cmd_run_partition() {
 	local name=${1:?run name} duration=${2:-12m} sc=${ZONE_SCALE:-0.25}
+	hb
 	k get deploy gwbench-zb >/dev/null 2>&1 || die "run 'aa-k8s.sh zone-b up' first"
 	k scale deployment adminloop --replicas=1 >/dev/null
 	k rollout status deployment adminloop --timeout=60s >/dev/null
@@ -229,6 +237,7 @@ log_rows() {
 
 cmd_fetch() {
 	local name=${1:?run name} out="$HERE/results/${1}" half pod
+	hb
 	mkdir -p "$out"
 	for half in short stream; do
 		pod=$(k get pod -l "app=gwbench,half=$half" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) || continue
@@ -258,12 +267,13 @@ cmd_fetch() {
 		rows=$(log_rows)
 		if [ "$rows" = "$last" ]; then still=$((still + 5)); else still=0; fi
 		[ "$still" -ge 30 ] && break
-		last=$rows; sleep 5
+		last=$rows; hb; sleep 5
 	done
 	echo "$rows" > "$out/proxy-log-rows.after"
 	cmd_pulse "$out/pulse-dropped.after"
 	local p; p=$(primary)
 	sql "$p" "SELECT response_code || ' ' || count(*) FROM proxy_logs GROUP BY response_code ORDER BY response_code" midsommar > "$out/proxy-log-rows.by-code"
+	hb
 	python3 "$HERE/analytics-check.py" "$out"
 	stamp "results of $name in $out"
 }
@@ -508,6 +518,15 @@ cmd_unfill_disk() {
 	stamp "edge-$s data volume emptied"
 }
 
+# wait SECONDS [MESSAGE]: sleep through a run, touching the heartbeat every
+# minute (a run in progress keeps the nodes; an idle shell does not).
+cmd_wait() {
+	local total=${1:?seconds} msg=${2:-} t=0
+	[ -n "$msg" ] && stamp "waiting ${total}s: $msg"
+	while [ "$t" -lt "$total" ]; do hb; sleep $((total - t < 60 ? total - t : 60)); t=$((t + 60)); done
+	hb
+}
+
 cmd_teardown() {
 	[ "${1:-}" = "$NS" ] || die "to delete the namespace and everything in it, run: aa-k8s.sh teardown $NS"
 	kubectl --context "$CTX" delete namespace "$NS"
@@ -537,11 +556,12 @@ cut-cp) cmd_cp 0 "${2:-}" ;;
 restore-cp) cmd_cp 1 "${2:-}" ;;
 kill-edge) cmd_kill_edge "${2:-}" ;;
 teardown) cmd_teardown "${2:-}" ;;
+wait) cmd_wait "${2:-}" "${3:-}" ;;
 fill-disk) cmd_fill_disk "${2:-}" ;;
 unfill-disk) cmd_unfill_disk "${2:-}" ;;
 pulse) cmd_pulse "${2:-/dev/stdout}" ;;
 zone-b) cmd_zone_b "${2:-}" ;;
 drop-sync-at) cmd_drop_sync_at "${2:-}" ;;
 run-partition) cmd_run_partition "${2:-}" "${3:-}" ;;
-*) sed -n '2,38p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+*) sed -n '2,39p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
