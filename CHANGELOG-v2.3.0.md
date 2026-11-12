@@ -21,16 +21,17 @@ AI Studio 2.3 is built for teams running AI agents. You can now **see what your 
 
 2.3 changes several defaults to make deployments safer. Check these before upgrading. Each one is explained in [Upgrade notes](#upgrade-notes).
 
-1. **Internal addresses are blocked by default.** If an LLM, embedder, tool, data source, vector store or guardrail provider runs on your own network (a local Ollama, an in-cluster model server), allow it first. [Details](#network-access).
-2. **`$ENV/` references only resolve for names you allow.** List them in `AI_STUDIO_ENV_REF_ALLOWLIST`, or move those credentials to the secret store. [Details](#credentials-and-secrets).
-3. **Vendor keys are no longer read from environment variables** such as `OPENAI_API_KEY`. Set keys and endpoints on each LLM, embedder and data source. [Details](#credentials-and-secrets).
-4. **OCI plugins must be signed** (Enterprise), and plugins no longer inherit the host's environment. [Details](#plugins).
-5. **Upgrade the shipped plugins** to their 2.3.0 versions, and rebuild your own request-path plugins on the 2.3 SDK. [Details](#plugins) and [Plugin releases](#plugin-releases).
-6. **Existing guardrails start scanning tool results** (Enterprise), and remote guardrail providers start receiving tool output. [Details](#guardrails).
-7. **Upgrade edges together with AI Studio.** Several features and credential changes need both on 2.3. [Details](#edges).
-8. **Take a database backup.** Restoring it is the only way to roll back. An older AI Studio still starts on a database 2.3 has migrated, but its LLMs with literal keys then fail. [Details](#database).
-9. **Set `TYK_AI_SECRET_KEY`** if you use SSO, and so that LLM credentials are encrypted at rest. [Details](#credentials-and-secrets).
-10. **Using the quickstart?** Replace its placeholder secrets before the first start. [Details](#other-changes-in-behaviour).
+1. **Get a 2.3 license first** (Enterprise). A license issued for 2.2 or earlier is not accepted: AI Studio and Enterprise microgateways on 2.3 do not start with it. Speak to your account manager for a 2.3 license before you upgrade, and set it as `TYK_AI_LICENSE` on AI Studio and on every Enterprise microgateway. Community Edition needs no license. [Details](#license-enterprise).
+2. **Internal addresses are blocked by default.** If an LLM, embedder, tool, data source, vector store or guardrail provider runs on your own network (a local Ollama, an in-cluster model server), allow it first. [Details](#network-access).
+3. **`$ENV/` references only resolve for names you allow.** List them in `AI_STUDIO_ENV_REF_ALLOWLIST`, or move those credentials to the secret store. [Details](#credentials-and-secrets).
+4. **Vendor keys are no longer read from environment variables** such as `OPENAI_API_KEY`. Set keys and endpoints on each LLM, embedder and data source. [Details](#credentials-and-secrets).
+5. **OCI plugins must be signed** (Enterprise), and plugins no longer inherit the host's environment. [Details](#plugins).
+6. **Upgrade the shipped plugins** to their 2.3.0 versions, and rebuild your own request-path plugins on the 2.3 SDK. [Details](#plugins) and [Plugin releases](#plugin-releases).
+7. **Existing guardrails start scanning tool results** (Enterprise), and remote guardrail providers start receiving tool output. [Details](#guardrails).
+8. **Upgrade edges together with AI Studio.** Several features and credential changes need both on 2.3. [Details](#edges).
+9. **Take a database backup** before the first 2.3 start. Restoring it is the only way to roll back. An older AI Studio still starts on a database 2.3 has migrated, but its LLMs with literal keys then fail. [Details](#database).
+10. **Set `TYK_AI_SECRET_KEY`** if you use SSO, and so that LLM credentials are encrypted at rest. [Details](#credentials-and-secrets).
+11. **Using the quickstart?** Replace its placeholder secrets before the first start. [Details](#other-changes-in-behaviour).
 
 ---
 
@@ -295,6 +296,15 @@ AI Studio can run as two control planes in two sites over one replicated Postgre
 ---
 
 ## Upgrade notes
+
+### License (Enterprise)
+
+- **2.3 needs a license issued for 2.3.** A 2.3 license names the product it covers and carries the limits of your deployment. A license issued for 2.2 or earlier has neither and is refused, even if it has not expired. Speak to your account manager for a new one before you upgrade.
+- **Set it everywhere a license is read**: `TYK_AI_LICENSE` on every AI Studio replica (the same license on all of them) and on every Enterprise microgateway, edge or standalone.
+- **What you see without it.** AI Studio stops at start-up with `license validation failed at boot: license does not include the Tyk AI Studio SKU`. An Enterprise microgateway stops with `Microgateway license validation failed at boot` and the same reason.
+- **Keep your 2.2 license** until the upgrade is confirmed. You need it if you restore the backup and return to 2.2.
+- **Check the limits.** The license limits edge namespaces, users with admin access, users with portal access, Apps and LLMs. If you already use more than a limit allows, nothing is removed, but new ones are refused (HTTP `409`, `QUOTA_EXCEEDED`) until usage is below the limit. Owners see the limits and current usage under **Admin > Settings > License**. See [License and Quotas](docs/site/docs/license.md).
+- **Community Edition** needs no license, and none of this applies to it.
 
 ### Network access
 
