@@ -44,12 +44,12 @@ func relayed(t *testing.T, r *replica) {
 	})
 }
 
-// studioService is the Studio service of replica r: the credential writes
-// of its API, raising their events on r's bus.
+// studioService is the part of replica r's Studio service the test uses:
+// its credential writes, raising their events on r's bus. Built without
+// NewService, which an Enterprise build of this package cannot run (it
+// needs Enterprise registrations this test module does not link).
 func studioService(r *replica) *coresvc.Service {
-	svc := coresvc.NewService(r.db)
-	svc.EventBus = r.server.GetEventBus()
-	return svc
+	return &coresvc.Service{DB: r.db, EventBus: r.server.GetEventBus()}
 }
 
 // onDemandEdge is an edge validating on demand with a token cache, wired as

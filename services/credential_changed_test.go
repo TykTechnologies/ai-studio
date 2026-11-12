@@ -138,7 +138,7 @@ func TestCredentialChanged_NotRaisedWithoutAHash(t *testing.T) {
 	require.NoError(t, err)
 
 	SetEdgeCredentialHasher(edgeKey)
-	_, ok := svc.credentialChange(&models.Credential{ID: 9, Secret: "refused-credential-reference"}, false)
+	_, ok := svc.credentialChange(svc.DB, &models.Credential{ID: 9, Secret: "refused-credential-reference"}, false)
 	assert.False(t, ok, "an unreadable secret")
 	time.Sleep(50 * time.Millisecond)
 	sink.mu.Lock()

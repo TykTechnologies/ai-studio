@@ -10,6 +10,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/clause"
 )
 
 // credential.changed (eventbridge.CredentialChangedTopic): when an App
@@ -43,7 +44,7 @@ func SetEdgeCredentialHasher(encryptionKey string) {
 // as it was for a key being replaced or deleted. ok is false when no event
 // can be raised: no edge hasher, or a secret this replica cannot read (the
 // edges' hash is of the secret).
-func (s *Service) credentialChange(cred *models.Credential, deleted bool) (eventbridge.CredentialChanged, bool) {
+func (s *Service) credentialChange(db *gorm.DB, cred *models.Credential, deleted bool) (eventbridge.CredentialChanged, bool) {
 	h := edgeCredentialHasher.Load()
 	if h == nil || cred == nil || cred.Secret == "" || cred.Secret == secrets.RefusedCredential {
 		return eventbridge.CredentialChanged{}, false
@@ -55,7 +56,7 @@ func (s *Service) credentialChange(cred *models.Credential, deleted bool) (event
 		Deleted:      deleted,
 	}
 	var app models.App
-	switch err := s.DB.Select("id", "namespace", "is_active").Where("credential_id = ?", cred.ID).Take(&app).Error; {
+	switch err := db.Select("id", "namespace", "is_active").Where("credential_id = ?", cred.ID).Take(&app).Error; {
 	case err == nil:
 		change.AppID, change.Namespace = app.ID, app.Namespace
 		change.Active = change.Active && app.IsActive
@@ -79,7 +80,7 @@ func (s *Service) publishCredentialChanged(changes ...eventbridge.CredentialChan
 
 // credentialChanged raises credential.changed for cred as it is now.
 func (s *Service) credentialChanged(cred *models.Credential) {
-	if change, ok := s.credentialChange(cred, false); ok {
+	if change, ok := s.credentialChange(s.DB, cred, false); ok {
 		s.publishCredentialChanged(change)
 	}
 }
@@ -95,4 +96,14 @@ func (s *Service) appCredentialChanged(app *models.App) {
 		return
 	}
 	s.credentialChanged(cred)
+}
+
+// lockCredential locks the credential's row for the rest of tx on
+// PostgreSQL (SQLite serializes writers already), so the secret an event
+// is made from is the one the write replaces.
+func lockCredential(tx *gorm.DB) *gorm.DB {
+	if tx.Dialector.Name() == "postgres" {
+		return tx.Clauses(clause.Locking{Strength: "UPDATE"})
+	}
+	return tx
 }

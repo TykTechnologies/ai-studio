@@ -33,3 +33,17 @@ func IsGuardrailTopic(topic string) bool {
 func IsCredentialTopic(topic string) bool {
 	return topic == CredentialChangedTopic
 }
+
+// PluginPublishRefusal returns why a plugin may not publish an event on
+// topic, or "" when it may: guardrail alerts and outcomes and
+// credential.changed are raised by AI Studio only. Both plugin event
+// servers (Studio's and the gateway's) refuse with it.
+func PluginPublishRefusal(topic string) string {
+	switch {
+	case IsCredentialTopic(topic):
+		return CredentialChangedTopic + " is raised by AI Studio only; plugins cannot publish it"
+	case IsGuardrailTopic(topic):
+		return "topics under " + GuardrailAlertTopicPrefix + " and " + GuardrailOutcomeTopicPrefix + " are raised by AI Studio only; plugins cannot publish them"
+	}
+	return ""
+}
