@@ -40,10 +40,16 @@ def timed(site, kind, fn, extra=None):
         status = e.code
         try:
             b = json.loads(e.read() or b"{}")
-            err = b.get("error", b.get("code", ""))
-            code = err.get("code", "") if isinstance(err, dict) else str(err)
+            if isinstance(b.get("errors"), list) and b["errors"]:
+                first = b["errors"][0]
+                code = first.get("code") or first.get("title", "")
+            else:
+                err = b.get("error", b.get("code", ""))
+                code = err.get("code", "") if isinstance(err, dict) else str(err)
         except Exception:
             code = "unparsed body"
+        if e.headers.get("Retry-After"):
+            code += " retry-after=" + e.headers.get("Retry-After")
     except Exception as e:
         code = type(e).__name__ + ": " + str(e)[:100]
     with lock:
