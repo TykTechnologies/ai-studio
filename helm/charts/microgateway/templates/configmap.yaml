@@ -20,7 +20,7 @@ data:
   # CONTROL_ENDPOINT is not set with it: the edge refuses both.
   CONTROL_ENDPOINTS: {{ join "," .Values.config.controlEndpoints | quote }}
   {{- else }}
-  CONTROL_ENDPOINT: {{ default (printf "%s:50051" .Release.Name) .Values.config.controlEndpoint | quote }}
+  CONTROL_ENDPOINT: {{ default (include "microgateway.defaultControlEndpoint" .) .Values.config.controlEndpoint | quote }}
   {{- end }}
   {{- with .Values.config.controlFailbackInterval }}
   EDGE_CONTROL_FAILBACK_INTERVAL: {{ . | quote }}

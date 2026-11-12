@@ -74,7 +74,7 @@ func TestHelmEdgeResilienceDefaults(t *testing.T) {
 // settings, as before the settings existed.
 func TestHelmEdgeDefaultRenderHasNoResilienceSettings(t *testing.T) {
 	data := edgeConfig(t, helmTemplate(t))
-	assert.Equal(t, "test:50051", data["CONTROL_ENDPOINT"])
+	assert.Equal(t, "test-midsommar:50051", data["CONTROL_ENDPOINT"], "the release's AI Studio Service (midsommar-clean-ntg2)")
 	for _, name := range []string{
 		"CONTROL_ENDPOINTS", "EDGE_CONTROL_FAILBACK_INTERVAL", "EDGE_START_FROM_LAST_KNOWN_GOOD",
 		"EDGE_STARTUP_CONTROL_TIMEOUT", "EDGE_LAST_KNOWN_GOOD_MAX_AGE",
