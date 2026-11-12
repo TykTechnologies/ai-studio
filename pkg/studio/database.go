@@ -1,6 +1,7 @@
 package studio
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net/url"
@@ -98,11 +99,11 @@ func OpenDatabase(conf *config.AppConf) (db *gorm.DB, err error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := waitForDatabase(conf, opened, func() error {
+	if err := waitForDatabase(conf, opened, func(ctx context.Context) error {
 		if conf.DatabaseSchema == "" {
 			return nil
 		}
-		return ensureSchema(open, conf.DatabaseURL, conf.DatabaseSchema)
+		return ensureSchema(ctx, open, conf.DatabaseURL, conf.DatabaseSchema)
 	}); err != nil {
 		sqlDB.Close()
 		return nil, err
@@ -150,11 +151,15 @@ func schemaDSN(dsn, schema string) (string, error) {
 
 // ensureSchema creates schema in the database dsn names when it does not
 // exist yet.
-func ensureSchema(open func(string) gorm.Dialector, dsn, schema string) error {
-	admin, err := gorm.Open(open(dsn), logger.GetGormConfig())
+func ensureSchema(ctx context.Context, open func(string) gorm.Dialector, dsn, schema string) error {
+	// No ping in gorm.Open: the first statement dials, bounded by ctx.
+	gormConfig := logger.GetGormConfig()
+	gormConfig.DisableAutomaticPing = true
+	db, err := gorm.Open(open(dsn), gormConfig)
 	if err != nil {
 		return err
 	}
+	admin := db.WithContext(ctx)
 	if sqlDB, err := admin.DB(); err == nil {
 		defer sqlDB.Close()
 	}

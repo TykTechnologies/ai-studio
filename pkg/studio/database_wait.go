@@ -41,7 +41,7 @@ var errReadOnlyServer = errors.New("the database server answers but is read-only
 // also passes ready (creating the schema, which needs a writable server),
 // or with an error once conf.DatabaseStartupTimeout has passed. Each
 // distinct reason for waiting is logged once.
-func waitForDatabase(conf *config.AppConf, db *gorm.DB, ready func() error) error {
+func waitForDatabase(conf *config.AppConf, db *gorm.DB, ready func(context.Context) error) error {
 	timeout := conf.DatabaseStartupTimeout
 	if conf.DatabaseType != "postgres" {
 		timeout = 0
@@ -88,8 +88,8 @@ func waitForDatabase(conf *config.AppConf, db *gorm.DB, ready func() error) erro
 }
 
 // databaseReady makes one attempt: a ping, the read-only check on Postgres,
-// then ready.
-func databaseReady(db *gorm.DB, deadline time.Time, timeout time.Duration, ready func() error) error {
+// then ready, all bounded by the start-up deadline.
+func databaseReady(db *gorm.DB, deadline time.Time, timeout time.Duration, ready func(context.Context) error) error {
 	ctx := context.Background()
 	if timeout > 0 {
 		var cancel context.CancelFunc
@@ -112,7 +112,7 @@ func databaseReady(db *gorm.DB, deadline time.Time, timeout time.Duration, ready
 			return errReadOnlyServer
 		}
 	}
-	return ready()
+	return ready(ctx)
 }
 
 // waitReason is the kind of failure an attempt met, so that the wait logs
