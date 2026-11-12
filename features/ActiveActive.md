@@ -1,7 +1,7 @@
 # Active-active control planes and edge resilience
 
-**Status:** built in 2.3.0 (as of 2026-11-12; the last piece, a
-full-sync edge syncing on `credential.changed`, is #991). The
+**Status:** built in 2.3.0 (as of 2026-11-12; the last pieces, a
+full-sync edge syncing on `credential.changed`, are #991 and #998). The
 operator documentation is `docs/site/docs/deployment-active-active.md`.
 Target: **2.3.0** (a priority addition during the release-candidate
 phase). This is the feature specification and

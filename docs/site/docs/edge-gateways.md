@@ -159,7 +159,7 @@ How long a revoked or deactivated key can still be accepted by an edge in this m
 
 | Situation | At most |
 |---|---|
-| Edge connected | About a second: Studio's `credential.changed` notice makes the edge sync at once |
+| Edge connected | About a second: Studio's `credential.changed` notice makes the edge sync (after a random delay of up to half a second; at most about one such sync per second per edge) |
 | Edge connected, the change notification was lost | Until the edge's next sync (its heartbeat interval) |
 | Edge connected, and a sync missed the change (clocks more than 30 seconds apart between control planes or the database) | 15 minutes plus one heartbeat interval |
 | Edge cannot reach any control plane | `EDGE_CREDENTIAL_SYNC_MAX_AGE` (24 hours by default) |
