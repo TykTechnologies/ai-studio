@@ -120,9 +120,8 @@ func Rows(ctx context.Context, db *gorm.DB, afterID uint, limit int, changedSinc
 	q := db.Unscoped().Where("credentials.id > ?", afterID)
 	if changedSince != nil {
 		t := *changedSince
-		// The Apps that changed are found once, not once per credential
-		// (apps has no index on credential_id: a correlated subquery
-		// makes SQLite read every App for every credential).
+		// The Apps that changed are found once, in an uncorrelated
+		// subquery, not once per credential.
 		q = q.Where(`credentials.updated_at >= ? OR credentials.deleted_at >= ?
 			OR credentials.id IN (SELECT apps.credential_id FROM apps WHERE apps.updated_at >= ? OR apps.deleted_at >= ?)`,
 			t, t, t, t)
