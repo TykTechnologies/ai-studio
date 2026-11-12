@@ -47,6 +47,9 @@ func TestDatabasePoolSettings(t *testing.T) {
 }
 
 func TestDatabaseReadyGrace(t *testing.T) {
+	if DefaultDatabaseReadyGrace != 30*time.Second {
+		t.Fatalf("DefaultDatabaseReadyGrace = %s; the docs say 30s", DefaultDatabaseReadyGrace)
+	}
 	load := func(vals map[string]string) *AppConf {
 		return LoadFrom(func(k string) string { return vals[k] })
 	}
@@ -54,11 +57,11 @@ func TestDatabaseReadyGrace(t *testing.T) {
 		value string
 		want  time.Duration
 	}{
-		{"", 30 * time.Second},
+		{"", DefaultDatabaseReadyGrace},
 		{"45s", 45 * time.Second},
 		{"0", 0},
-		{"-1s", 30 * time.Second},
-		{"later", 30 * time.Second},
+		{"-1s", DefaultDatabaseReadyGrace},
+		{"later", DefaultDatabaseReadyGrace},
 	} {
 		if got := load(map[string]string{"DATABASE_READY_GRACE": tc.value}).DatabaseReadyGrace; got != tc.want {
 			t.Errorf("DATABASE_READY_GRACE=%q = %s, want %s", tc.value, got, tc.want)
