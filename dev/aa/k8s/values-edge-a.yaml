@@ -26,6 +26,9 @@ config:
   controlEndpoints: ["cp-a:50051", "cp-b:50051"]   # own site first
   controlFailbackInterval: "1m"
   startFromLastKnownGood: true
+  # EDGE_CREDENTIAL_SYNC: "full" for the Enterprise pass (AA_CREDENTIAL_SYNC
+  # at render-edges); empty is the default (keys validated on demand).
+  credentialSync: "CREDENTIAL_SYNC"
   edgeNamespace: default
   heartbeatInterval: "5s"
   # The image's working directory is not the chart's: name the volume.

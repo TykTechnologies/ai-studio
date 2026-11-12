@@ -7,7 +7,8 @@
 #   aa-k8s.sh license                 Enterprise only: TYK_AI_LICENSE from AA_LICENSE_ENV_FILE into its own Secret
 #   aa-k8s.sh apply                   namespace, PostgreSQL, Studio, control proxies, mock upstream
 #                                     (needs STUDIO_IMAGE and TOOLS_IMAGE; edges are the Helm chart, see README)
-#   aa-k8s.sh render-edges            helm template of the two edges into rendered/ (needs MICROGATEWAY_IMAGE)
+#   aa-k8s.sh render-edges            helm template of the two edges into rendered/ (needs MICROGATEWAY_IMAGE;
+#                                     AA_CREDENTIAL_SYNC=full for the Enterprise pass)
 #   aa-k8s.sh status                  pods, roles, replication, replicas, edges
 #   aa-k8s.sh users                   register the test's own users; make the seeder and the two writers administrators
 #   aa-k8s.sh seed                    gwbench seed: LLMs on the mock, App and key, prices, push to both edges
@@ -32,6 +33,8 @@
 #   aa-k8s.sh run-partition NAME [DURATION]  fault 7: zone a's generators on edge-a, zone b's on edge-b, half the
 #                                     part A level each (fetch NAME collects both zones)
 #   aa-k8s.sh drop-sync-at EPOCH      fault 7: the primary's own pod drops the synchronous requirement at that time
+#   aa-k8s.sh fill-disk a|b           #976 check: fill that edge's data volume (files /opt/tyk-microgateway/data/aa-fill-*)
+#   aa-k8s.sh unfill-disk a|b         remove those files
 #   aa-k8s.sh teardown                delete the namespace (asks for the namespace name)
 set -euo pipefail
 
@@ -118,7 +121,8 @@ cmd_render_edges() {
 	local chart=${AA_CHART_DIR:-$HERE/../../../helm/charts/microgateway} s
 	mkdir -p "$HERE/rendered"
 	for s in a b; do
-		sed -e "s|MICROGATEWAY_REPOSITORY|${MICROGATEWAY_IMAGE%:*}|" -e "s|MICROGATEWAY_TAG|${MICROGATEWAY_IMAGE##*:}|" "$HERE/values-edge-$s.yaml" > "$HERE/rendered/values-edge-$s.yaml"
+		sed -e "s|MICROGATEWAY_REPOSITORY|${MICROGATEWAY_IMAGE%:*}|" -e "s|MICROGATEWAY_TAG|${MICROGATEWAY_IMAGE##*:}|" \
+			-e "s|CREDENTIAL_SYNC|${AA_CREDENTIAL_SYNC:-}|" "$HERE/values-edge-$s.yaml" > "$HERE/rendered/values-edge-$s.yaml"
 		docker run --rm -v "$(cd "$chart" && pwd):/chart:ro" -v "$HERE/rendered/values-edge-$s.yaml:/values.yaml:ro" alpine/helm:3.16.2 \
 			template "edge-$s" /chart --namespace "$NS" -f /values.yaml > "$HERE/rendered/edge-$s.yaml"
 		echo "rendered/edge-$s.yaml: $(grep -c '^kind:' "$HERE/rendered/edge-$s.yaml") objects"
@@ -483,6 +487,20 @@ EOS
 	stamp "pg-$p drops the synchronous requirement at $(date -u -d "@$at" +%FT%TZ) (marker /tmp/sync-dropped in its pod)"
 }
 
+# Bead .35 / #976 confirmations: the edge's volume filled to the last byte
+# (dd until ENOSPC), and emptied again; the edge itself is not restarted.
+cmd_fill_disk() {
+	local s; s=$(site "${1:-}")
+	stamp "edge-$s data volume being filled"
+	k exec "edge-$s-microgateway-0" -- sh -c 'dd if=/dev/zero of=/opt/tyk-microgateway/data/aa-fill-1 bs=1M 2>/dev/null; dd if=/dev/zero of=/opt/tyk-microgateway/data/aa-fill-2 bs=4k 2>/dev/null; df -h /opt/tyk-microgateway/data' || true
+	stamp "edge-$s data volume full"
+}
+cmd_unfill_disk() {
+	local s; s=$(site "${1:-}")
+	k exec "edge-$s-microgateway-0" -- sh -c 'rm -f /opt/tyk-microgateway/data/aa-fill-*; df -h /opt/tyk-microgateway/data'
+	stamp "edge-$s data volume emptied"
+}
+
 cmd_teardown() {
 	[ "${1:-}" = "$NS" ] || die "to delete the namespace and everything in it, run: aa-k8s.sh teardown $NS"
 	kubectl --context "$CTX" delete namespace "$NS"
@@ -512,9 +530,11 @@ cut-cp) cmd_cp 0 "${2:-}" ;;
 restore-cp) cmd_cp 1 "${2:-}" ;;
 kill-edge) cmd_kill_edge "${2:-}" ;;
 teardown) cmd_teardown "${2:-}" ;;
+fill-disk) cmd_fill_disk "${2:-}" ;;
+unfill-disk) cmd_unfill_disk "${2:-}" ;;
 pulse) cmd_pulse "${2:-/dev/stdout}" ;;
 zone-b) cmd_zone_b "${2:-}" ;;
 drop-sync-at) cmd_drop_sync_at "${2:-}" ;;
 run-partition) cmd_run_partition "${2:-}" "${3:-}" ;;
-*) sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+*) sed -n '2,38p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

@@ -1,0 +1,41 @@
+# Bead .22 chart check: dev-2's values for two Studio replicas on an external
+# PostgreSQL, with the images and the four shared secrets filled in by
+# chart22.sh into rendered/values.yaml (gitignored). STUDIO_IMAGE_REPO etc.
+# and the GENERATED_* placeholders are replaced there; this file holds none.
+replicaCount: 2
+
+midsommar:
+  image:
+    repository: STUDIO_IMAGE_REPO
+    tag: STUDIO_IMAGE_TAG
+    pullPolicy: IfNotPresent
+  ingress:
+    enabled: false          # no Ingress on the test cluster; port-forward the Service
+
+database:
+  internal: false
+  existingSecret: studio-database   # key DATABASE_URL, created by chart22.sh
+
+config:
+  clusterNodeLabel: site-a
+  csrfKey: "GENERATED_CSRF_KEY"
+  tykAiSecretKey: "GENERATED_SECRET_KEY"
+  grpcAuthToken: "GENERATED_GRPC_TOKEN"
+  microgatewayEncryptionKey: "GENERATED_ENC_KEY"
+  databaseConnectTimeout: "3s"
+  databaseReadyGrace: "30s"
+  databaseStartupTimeout: "60s"
+  siteUrl: "http://localhost:8080"
+
+microgateway:
+  enabled: true
+  image:
+    repository: MICROGATEWAY_IMAGE_REPO
+    tag: MICROGATEWAY_IMAGE_TAG
+  config:
+    # The subchart mounts its volume at /opt/tyk-microgateway/data whatever
+    # the image's working directory: name that path.
+    databaseDsn: "file:/opt/tyk-microgateway/data/edge.db?mode=rwc"
+  secrets:
+    edgeAuthToken: "GENERATED_GRPC_TOKEN"
+    encryptionKey: "GENERATED_ENC_KEY"

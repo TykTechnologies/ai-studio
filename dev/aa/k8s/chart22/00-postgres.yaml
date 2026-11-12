@@ -1,0 +1,43 @@
+# Bead .22 chart check: namespace aa-chart22 and a single-host PostgreSQL of
+# its own (the chart's Studios are the only clients). No node selector: it
+# runs on the untainted system nodes, as the chart's own pods do (the Studio
+# chart has no nodeSelector or tolerations for its Studio pods). The password
+# comes from the Secret chart22-pg, created by chart22.sh with a random value.
+apiVersion: v1
+kind: Namespace
+metadata: {name: aa-chart22}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: pg, namespace: aa-chart22}
+spec:
+  serviceName: pg
+  replicas: 1
+  selector: {matchLabels: {app: pg}}
+  template:
+    metadata: {labels: {app: pg}}
+    spec:
+      containers:
+        - name: postgres
+          image: public.ecr.aws/docker/library/postgres:16.6-alpine
+          env:
+            - {name: POSTGRES_DB, value: studio}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: chart22-pg, key: POSTGRES_PASSWORD}}
+          ports: [{name: pg, containerPort: 5432}]
+          readinessProbe:
+            exec: {command: ["pg_isready", "-U", "postgres"]}
+            periodSeconds: 2
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "1", memory: 512Mi}
+          volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}]
+      volumes: [{name: data, emptyDir: {}}]   # a throwaway check: nothing to keep
+---
+apiVersion: v1
+kind: Service
+metadata: {name: pg, namespace: aa-chart22}
+spec:
+  selector: {app: pg}
+  ports: [{name: pg, port: 5432, targetPort: pg}]
