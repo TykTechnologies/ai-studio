@@ -152,8 +152,8 @@ func Snapshot(ctx context.Context, db *gorm.DB, self string, log *Log, relay *Re
 	}
 
 	// What needs attention.
-	if w := databaseWarning(dbstate.For(db).Status()); w != "" {
-		st.Warnings = append(st.Warnings, w)
+	if ds := dbstate.For(db).Status(); ds.State != dbstate.Writable {
+		st.Warnings = append(st.Warnings, databaseWarning(ds, selfName(db, self, live)))
 	}
 	st.Warnings = append(st.Warnings, secretWarnings(live)...)
 	if st.Database == "postgres" {
@@ -192,20 +192,43 @@ func Snapshot(ctx context.Context, db *gorm.DB, self string, log *Log, relay *Re
 	return st, nil
 }
 
-// databaseWarning explains a database that does not take writes on this
-// replica ("" while it does, and always with SQLite). The status is read
-// from the database, so an unreachable one usually fails the whole
-// request instead; the warning is what a read-only one looks like.
-func databaseWarning(ds dbstate.Status) string {
+// selfName names this replica for a warning: its label (CLUSTER_NODE_LABEL)
+// and node ID. With a partition one site may see the database as not
+// writable and the other not, so the warning says which replica it is. A
+// replica that cannot write may have dropped out of the live nodes (its
+// heartbeat fails), so its row is read directly when it is not among them.
+func selfName(db *gorm.DB, self string, live []models.ClusterNode) string {
+	label := ""
+	found := false
+	for _, n := range live {
+		if n.NodeID == self {
+			label, found = n.Label, true
+			break
+		}
+	}
+	if !found {
+		var n models.ClusterNode
+		if db.Select("label").Where("node_id = ?", self).Take(&n).Error == nil {
+			label = n.Label
+		}
+	}
+	if label == "" {
+		return "Replica " + self
+	}
+	return fmt.Sprintf("Replica %q (%s)", label, self)
+}
+
+// databaseWarning explains a database that does not take writes on the
+// replica named who. The status is read from the database, so an
+// unreachable one usually fails the whole request instead; the warning is
+// what a read-only one looks like.
+func databaseWarning(ds dbstate.Status, who string) string {
 	since := ""
 	if !ds.NotWritableSince.IsZero() {
 		since = " since " + ds.NotWritableSince.UTC().Format(time.RFC3339)
 	}
-	switch ds.State {
-	case dbstate.ReadOnly:
-		return "This replica's database has been read-only" + since + " (a standby, or a primary being demoted): writes fail until the replica reaches a writable database server."
-	case dbstate.Unreachable:
-		return "This replica cannot reach its database" + since + ": requests that need it fail."
+	if ds.State == dbstate.ReadOnly {
+		return who + " has seen its database as read-only" + since + " (a standby, or a primary being demoted): its writes fail until it reaches a writable database server."
 	}
-	return ""
+	return who + " cannot reach its database" + since + ": its requests that need it fail."
 }

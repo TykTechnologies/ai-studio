@@ -266,9 +266,10 @@ Files: `pkg/studio/database.go`, `startup/connectivity.go`,
    in the request decides). SQLite (no tracker): as before. Studio does not
    listen before it has reached the database at start-up, so `/ready` is
    never 200 before that. Metrics `aistudio_db_writable` (gauge) and
-   `aistudio_db_failovers_total` (counter); the cluster status warns while
-   this replica's database is not writable. This replaces the earlier
-   "unreachable stays a failing probe" on purpose.
+   `aistudio_db_failovers_total` (counter); the cluster status warns, naming
+   the replica (label and node ID; in a partition one site may see the
+   database and the other not), while its database is not writable. This
+   replaces the earlier "unreachable stays a failing probe" on purpose.
 8. **Budget sync sequence** (built). The leader's `budget.sync` sequence
    was nanosecond wall-clock time, and edges drop anything not above the
    last one they stored, so a leader in the other site with a slower clock

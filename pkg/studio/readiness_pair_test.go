@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -307,13 +308,19 @@ func withHost(t *testing.T, dsn, host string) string {
 	return u.String()
 }
 
-// A replica that alone loses the database stays ready for the grace, then
-// answers 503 and leaves the load balancer; the replica that still reaches
-// the database stays ready throughout. When the path is back, so is the
-// replica.
+// A replica that alone loses the database (the cluster's partition fault:
+// one site cut off from it) stays ready for the grace, then answers 503 and
+// leaves the load balancer; the replica that still reaches the database
+// stays ready throughout. When the path is back, so is the replica.
+//
+// With the default grace (30 s) the timing is explicit: the tracker sees
+// the loss within one check period plus one probe's bound after the cut
+// (dbstate's lag), and /ready turns 503 once the grace has passed from
+// then: never earlier than the grace after the cut, never later than grace
+// + check period + probe bound (plus the poll's own granularity).
 func TestFailover_ReadinessReplicaAloneLosesTheDatabase(t *testing.T) {
 	pair := containers.StartPostgresPair(t, nil)
-	const grace = 3 * time.Second
+	grace := config.DefaultDatabaseReadyGrace
 
 	healthy := openFailoverDB(t, pair)
 	cut := startTCPCut(t, pair.Primary().Addr())
@@ -326,6 +333,12 @@ func TestFailover_ReadinessReplicaAloneLosesTheDatabase(t *testing.T) {
 			pool.Close()
 		}
 	})
+	connConfig, err := pgx.ParseConfig(conf.DatabaseURL)
+	require.NoError(t, err)
+	probeBound := probeTimeout(connConfig)
+	maxLag := dbstate.DefaultCheckInterval + probeBound
+	const slack = time.Second // the polls below run every 100ms, and scheduling
+
 	healthyReady, lonelyReady := bareReplica(healthy, grace), bareReplica(lonely, grace)
 	require.Equal(t, probeAnswer{200, "writable"}, get(t, lonelyReady, "/ready"))
 
@@ -333,25 +346,48 @@ func TestFailover_ReadinessReplicaAloneLosesTheDatabase(t *testing.T) {
 		"healthy": func() probeAnswer { return get(t, healthyReady, "/ready") },
 	})
 
+	cutAt := time.Now()
 	cut.Cut()
+
+	// Poll the lonely replica until it answers 503; until then every
+	// answer is 200.
 	tracker := dbstate.For(lonely)
-	require.Eventually(t, func() bool { return tracker.Status().State == dbstate.Unreachable },
-		dbstate.DefaultCheckInterval+10*time.Second, 50*time.Millisecond, "the lonely replica sees its database go")
-	lost := tracker.Status().NotWritableSince
-	require.False(t, lost.IsZero())
-
-	// Within the grace: still ready, saying why it might not be.
-	if time.Since(lost) < grace-500*time.Millisecond {
-		assert.Equal(t, probeAnswer{200, "unreachable"}, get(t, lonelyReady, "/ready"), "within the grace")
+	var turned time.Duration
+	sawUnreachable := false
+	for {
+		a := get(t, lonelyReady, "/ready")
+		elapsed := time.Since(cutAt)
+		if a.code == http.StatusServiceUnavailable {
+			turned = elapsed
+			assert.Equal(t, "unreachable", a.database)
+			break
+		}
+		require.Equal(t, http.StatusOK, a.code, "ready until it turns 503 (%s after the cut)", elapsed)
+		sawUnreachable = sawUnreachable || a.database == string(dbstate.Unreachable)
+		require.Less(t, elapsed, grace+maxLag+slack, "/ready still 200 %s after the cut: later than grace %s + check period %s + probe bound %s",
+			elapsed, grace, dbstate.DefaultCheckInterval, probeBound)
+		time.Sleep(100 * time.Millisecond)
 	}
-	require.Eventually(t, func() bool { return get(t, lonelyReady, "/ready").code == http.StatusServiceUnavailable },
-		grace+5*time.Second, 50*time.Millisecond, "out of the load balancer after the grace")
-	assert.GreaterOrEqual(t, time.Since(lost), grace, "not before the grace")
-	assert.Equal(t, probeAnswer{503, "unreachable"}, get(t, lonelyReady, "/ready"))
+	lag := tracker.Status().NotWritableSince.Sub(cutAt)
+	t.Logf("cut -> tracker sees unreachable: %s (bound %s); cut -> /ready 503: %s (grace %s, bound %s)",
+		lag, maxLag, turned, grace, grace+maxLag)
+	assert.True(t, sawUnreachable, "the body said unreachable within the grace")
+	assert.GreaterOrEqual(t, lag, time.Duration(0))
+	assert.LessOrEqual(t, lag, maxLag, "dbstate's lag")
+	assert.GreaterOrEqual(t, turned, grace, "never before the grace")
+	assert.LessOrEqual(t, turned, grace+lag+slack, "the grace counts from when the tracker saw the loss")
 
+	// It stays out while the path is cut.
+	for i := 0; i < 10; i++ {
+		require.Equal(t, probeAnswer{503, "unreachable"}, get(t, lonelyReady, "/ready"))
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	restoredAt := time.Now()
 	cut.Restore()
 	require.Eventually(t, func() bool { return get(t, lonelyReady, "/ready").code == http.StatusOK },
-		dbstate.DefaultCheckInterval+10*time.Second, 50*time.Millisecond, "back when its path is")
+		maxLag+slack, 50*time.Millisecond, "back within one check period and probe once its path is")
+	t.Logf("restore -> /ready 200: %s", time.Since(restoredAt))
 	p.finish()
 
 	answers := p.of("healthy")
@@ -401,8 +437,8 @@ func TestFailover_ReadinessOnAReadOnlyDatabase(t *testing.T) {
 
 	st, err := cluster.Snapshot(context.Background(), standby, "node-a", nil, nil)
 	require.NoError(t, err, "a read-only database still answers the cluster status")
-	assert.Contains(t, fmt.Sprint(st.Warnings), "This replica's database has been read-only since")
+	assert.Contains(t, fmt.Sprint(st.Warnings), "Replica node-a has seen its database as read-only since")
 	st, err = cluster.Snapshot(context.Background(), primary, "node-a", nil, nil)
 	require.NoError(t, err)
-	assert.NotContains(t, fmt.Sprint(st.Warnings), "This replica's database")
+	assert.NotContains(t, fmt.Sprint(st.Warnings), "its database")
 }
