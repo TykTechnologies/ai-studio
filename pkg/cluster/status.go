@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/dbstate"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -151,6 +152,9 @@ func Snapshot(ctx context.Context, db *gorm.DB, self string, log *Log, relay *Re
 	}
 
 	// What needs attention.
+	if w := databaseWarning(dbstate.For(db).Status()); w != "" {
+		st.Warnings = append(st.Warnings, w)
+	}
 	st.Warnings = append(st.Warnings, secretWarnings(live)...)
 	if st.Database == "postgres" {
 		if log != nil && !st.EventLog.Enabled {
@@ -186,4 +190,22 @@ func Snapshot(ctx context.Context, db *gorm.DB, self string, log *Log, relay *Re
 		st.Warnings = append(st.Warnings, "A configuration push has been waiting for its edge for over 10 minutes.")
 	}
 	return st, nil
+}
+
+// databaseWarning explains a database that does not take writes on this
+// replica ("" while it does, and always with SQLite). The status is read
+// from the database, so an unreachable one usually fails the whole
+// request instead; the warning is what a read-only one looks like.
+func databaseWarning(ds dbstate.Status) string {
+	since := ""
+	if !ds.NotWritableSince.IsZero() {
+		since = " since " + ds.NotWritableSince.UTC().Format(time.RFC3339)
+	}
+	switch ds.State {
+	case dbstate.ReadOnly:
+		return "This replica's database has been read-only" + since + " (a standby, or a primary being demoted): writes fail until a writable server answers on DATABASE_URL."
+	case dbstate.Unreachable:
+		return "This replica cannot reach its database" + since + ": requests that need it fail."
+	}
+	return ""
 }

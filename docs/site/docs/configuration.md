@@ -111,12 +111,31 @@ The pool is tuned with these variables (Postgres only; SQLite ignores them):
 | `DATABASE_CONN_MAX_LIFETIME` | `30m` | Connections older than this are closed and replaced, so after a planned switchover they also move to the new primary on their own. `0` never closes them. |
 | `DATABASE_CONNECT_TIMEOUT` | `10s` | Time allowed for one connection attempt, unless `DATABASE_URL` sets `connect_timeout` itself. With several hosts it is how long an unreachable one delays reaching the next. |
 | `DATABASE_STARTUP_TIMEOUT` | `60s` | How long AI Studio waits at start-up for a database that answers and takes writes before it exits. `0` makes one attempt. |
+| `DATABASE_READY_GRACE` | `30s` | How long the database may be unreachable before `/ready` fails (see below). `0` fails it as soon as the database does not answer a ping, as before 2.3. |
 
 **What an unreachable first host costs.** Hosts are tried in the order `DATABASE_URL` lists them. A host that refuses the connection (its Postgres is stopped) costs nothing. A host that does not answer at all (its machine or site is down, or a firewall drops the packets) costs the full connect timeout for every *new* connection, twice when `sslmode` allows both a TLS and a plain attempt (the default, `prefer`), before the next host is tried: 20 seconds with the defaults. Connections that are already open are not affected, but requests that need a new one wait that long. For a multi-host URL set a lower timeout, for example `DATABASE_CONNECT_TIMEOUT=3s` (or `connect_timeout=3` in the URL), and set `sslmode` to `require` or `disable` rather than leaving it at `prefer`; once the failed site is not coming back soon, put the surviving host first.
 
 **Starting while the database is away.** A Studio that starts while its database is down, not up yet, or failing over waits for it, up to `DATABASE_STARTUP_TIMEOUT`, rather than exiting: it retries, at first after half a second and then every 5 seconds, and logs each kind of failure once (`Waiting for the database (up to DATABASE_STARTUP_TIMEOUT, 1m0s): …`) and its progress every 10 seconds. It waits while only a read-only server answers too (a hot standby, or a demoted primary, reached without `target_session_attrs=read-write`), because it migrates the schema at start and never does that on a standby. When the time is up it exits with `no writable database within DATABASE_STARTUP_TIMEOUT`. Neither `/health` nor `/ready` answers during the wait: on Kubernetes give AI Studio a `startupProbe` whose budget (`failureThreshold` × `periodSeconds`) is at least `DATABASE_STARTUP_TIMEOUT` plus the time migrations take, so the pod is not restarted while it waits. SQLite is opened once, as before.
 
 At start Studio logs the pool's settings at `debug` (`Database pool: 2 host(s), target_session_attrs=read-write, …`).
+
+**Readiness during a failover.** Studio checks its database every 5 seconds and `/ready` (and `/readyz`) answers from what that check last saw, with the state in the body: `"database": "writable"`, `"read_only"` or `"unreachable"`, and `"database_since"`, when it last changed.
+
+| Database | `/ready` | `/ready?require=write` |
+|---|---|---|
+| writable | 200 | 200 |
+| read-only (a standby, or a primary being demoted) | 200 | 200 for `DATABASE_READY_GRACE`, then 503 |
+| unreachable | 200 for `DATABASE_READY_GRACE`, then 503 | 200 for `DATABASE_READY_GRACE`, then 503 |
+
+The grace runs from when the database stopped taking writes, and it is not restarted when the database moves between read-only and unreachable. A failover shorter than the grace therefore keeps every replica in the load balancer, so requests that need the database get an answer from Studio rather than a refused connection; a replica that alone cannot reach the database for longer leaves the load balancer until it can. Use `/ready?require=write` as the health check of a load balancer that should send traffic only to replicas that can save. `/health` (and `/healthz`), the liveness probe, never looks at the database, so a replica is not restarted for a database outage.
+
+*   **When it notices.** The check runs every 5 seconds and one check may take as long as a connection attempt to every host in `DATABASE_URL` plus 3 seconds: `(1 + fallbacks) × DATABASE_CONNECT_TIMEOUT + 3s`, where `sslmode=prefer` (the default) makes two attempts per host. So the grace starts at most 5 seconds plus that bound after the database was lost: 28 seconds for one host with the defaults, 14 seconds with `DATABASE_CONNECT_TIMEOUT=3s` and `sslmode=disable` on two hosts (two attempts of 3 seconds, plus 3, plus the 5-second period). That bound is reached only when hosts do not answer at all; a stopped PostgreSQL refuses the connection and is noticed at the next check. Read-only is noticed at once when a write is refused. `/ready` can therefore stay 200 for up to the grace plus that delay.
+*   **How to choose the grace.** Make it longer than your failover manager takes to promote the standby (its detection time plus the promotion), so that a failover does not empty the load balancer. Tests measured 14.6 seconds without a primary with a failover manager detecting the loss in 10 seconds; the default of 30 seconds covers that.
+*   **With `DATABASE_READY_GRACE=0`** `/ready` pings the database in the request and fails as soon as the ping does, exactly as before 2.3; the body still carries the database's state, and `require=write` still needs a writable database.
+*   **At start-up** Studio does not answer `/ready` with 200 before it has reached its database and checked its migrations.
+*   **With SQLite** `/ready` is the ping alone, as before 2.3, and `require=write` is the same as without it.
+
+`GET /api/v1/cluster/status` warns while this replica's database is read-only, and the metrics `aistudio_db_writable` and `aistudio_db_failovers_total` follow the same check (see [Observability](./observability.md#database-metrics)).
 
 ### Behind PgBouncer
 Studio works behind PgBouncer in transaction mode with these settings:

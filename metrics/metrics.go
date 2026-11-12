@@ -98,6 +98,7 @@ func registerInstruments(meter otelmetric.Meter) {
 	initNative(meter)
 	initAgentTracing(meter)
 	initAgentMetrics(meter)
+	initDatabase(meter)
 
 	// Register counters
 	requestsTotal, err = meter.Int64Counter("aistudio_llm_requests_total",

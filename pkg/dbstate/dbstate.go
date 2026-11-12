@@ -78,6 +78,10 @@ type Status struct {
 	// node, or the same address on a new timeline) since the tracker
 	// started.
 	Failovers int64
+	// NotWritableSince is when the database last stopped taking writes
+	// (by a probe, or a write refused as read-only), kept while it moves
+	// between ReadOnly and Unreachable; zero while it is Writable.
+	NotWritableSince time.Time
 }
 
 // Probe is one look at the server.
@@ -110,6 +114,8 @@ type Tracker struct {
 	timeline  int64
 	// wasDown: the server was not writable since the last writable probe.
 	wasDown bool
+	// notWritableSince: see Status.NotWritableSince.
+	notWritableSince time.Time
 
 	// pool is set by Register, to forget the tracker when the pool closes.
 	pool atomic.Pointer[sql.DB]
@@ -160,7 +166,7 @@ func (t *Tracker) Status() Status {
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return Status{State: t.state, Since: t.since, Failovers: t.failovers}
+	return Status{State: t.state, Since: t.since, Failovers: t.failovers, NotWritableSince: t.notWritableSince}
 }
 
 // Generation is the number connections are stamped with when they are
@@ -269,9 +275,17 @@ func (t *Tracker) check() (closed bool) {
 }
 
 func (t *Tracker) setStateLocked(s State) {
-	if t.state != s {
-		t.state, t.since = s, time.Now()
+	if t.state == s {
+		return
 	}
+	now := time.Now()
+	switch {
+	case s == Writable:
+		t.notWritableSince = time.Time{}
+	case t.state == Writable:
+		t.notWritableSince = now
+	}
+	t.state, t.since = s, now
 }
 
 // trackers maps a pool to its tracker, so code that has only the *gorm.DB

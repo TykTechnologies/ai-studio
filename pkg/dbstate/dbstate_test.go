@@ -136,6 +136,39 @@ func TestReportReadOnly(t *testing.T) {
 	assert.Equal(t, 2, srv.probes())
 }
 
+// NotWritableSince is set when the database stops taking writes (by a
+// probe or a refused write), kept while it moves between read-only and
+// unreachable, and cleared when it is writable again.
+func TestNotWritableSince(t *testing.T) {
+	srv := &fakeServer{probe: Probe{Server: "pg-a:5432"}}
+	tr := Start(srv.Probe, Options{Interval: 10 * time.Millisecond})
+	defer tr.Stop()
+	assert.True(t, tr.Status().NotWritableSince.IsZero(), "writable")
+
+	before := time.Now()
+	srv.set(Probe{ReadOnly: true, Server: "pg-a:5432"}, nil)
+	tr.ReportReadOnly()
+	st := tr.Status()
+	require.Equal(t, ReadOnly, st.State)
+	since := st.NotWritableSince
+	assert.False(t, since.Before(before), "set by the refused write")
+	assert.Equal(t, st.Since, since)
+
+	srv.set(Probe{}, errors.New("connection refused"))
+	st = waitState(t, tr, Unreachable)
+	assert.Equal(t, since, st.NotWritableSince, "kept from read-only to unreachable")
+	assert.True(t, st.Since.After(since), "Since follows the state")
+	srv.set(Probe{ReadOnly: true, Server: "pg-b:5432"}, nil)
+	assert.Equal(t, since, waitState(t, tr, ReadOnly).NotWritableSince, "and back")
+
+	srv.set(Probe{Server: "pg-b:5432"}, nil)
+	assert.True(t, waitState(t, tr, Writable).NotWritableSince.IsZero(), "cleared when writable")
+
+	before = time.Now()
+	srv.set(Probe{}, errors.New("connection refused"))
+	assert.False(t, waitState(t, tr, Unreachable).NotWritableSince.Before(before), "set by a probe")
+}
+
 func TestIsReadOnlyError(t *testing.T) {
 	assert.True(t, IsReadOnlyError(&pgconn.PgError{Code: "25006"}))
 	assert.True(t, IsReadOnlyError(errors.Join(errors.New("create app"), &pgconn.PgError{Code: "25006"})))

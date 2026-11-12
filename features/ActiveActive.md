@@ -248,11 +248,27 @@ Files: `pkg/studio/database.go`, `startup/connectivity.go`,
    dead by the new clock keep their commands. Known behaviour: for up to
    5 s after a failover to a server whose clock is ahead, live replicas can
    show as stopped in the cluster status.
-7. **Readiness says what works.** `/ready` keeps answering 200 while the
-   database answers at all, with `"database": "writable" | "read_only" |
-   "unreachable"` in the body, and `/ready?require=write` fails unless
-   writable. Add `aistudio_db_writable`, `aistudio_db_failovers_total` and
-   a cluster-status warning.
+7. **Readiness says what works** (built). A database outage shorter than
+   the write hold must not take every replica out of the load balancer, or
+   held writes and 503 `database_unavailable` never reach the client
+   (found by the load test of bead .29: both replicas went unready at once).
+   So: liveness (`/health`, `/healthz`) never looks at the database.
+   `/ready` and `/readyz` answer from the `pkg/dbstate` tracker's state,
+   never by pinging in the request, with `"database": "writable" |
+   "read_only" | "unreachable"` and `"database_since"` in the body.
+   Writable and read-only are 200; unreachable is 200 until the database
+   has not taken writes for `DATABASE_READY_GRACE` (default 30 s, longer
+   than `DATABASE_WRITE_RETRY_WINDOW`), measured from the tracker's
+   `Status.NotWritableSince` (kept across read_only <-> unreachable), then
+   503. `/ready?require=write` is 200 only when writable, with the same
+   grace. The grace starts up to one check period (5 s) plus one probe's
+   bound after the loss. A grace of 0 is the behaviour before 2.3 (a ping
+   in the request decides). SQLite (no tracker): as before. Studio does not
+   listen before it has reached the database at start-up, so `/ready` is
+   never 200 before that. Metrics `aistudio_db_writable` (gauge) and
+   `aistudio_db_failovers_total` (counter); the cluster status warns while
+   this replica's database is not writable. This replaces the earlier
+   "unreachable stays a failing probe" on purpose.
 8. **Budget sync sequence** (built). The leader's `budget.sync` sequence
    was nanosecond wall-clock time, and edges drop anything not above the
    last one they stored, so a leader in the other site with a slower clock

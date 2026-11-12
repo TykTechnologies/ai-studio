@@ -133,6 +133,15 @@ type AppConf struct {
 	// Studio waits for its Postgres database to answer and take writes
 	// before it exits: a database that is failing over, or not up yet.
 	DatabaseStartupTimeout time.Duration
+	// DatabaseReadyGrace (DATABASE_READY_GRACE, default 30s) is how long
+	// the database may be unreachable (or, for /ready?require=write, not
+	// writable) before /ready fails: a failover shorter than it keeps the
+	// replica in the load balancer, so a held write or a 503 with
+	// Retry-After reaches the client instead of a refused connection. 0
+	// pings the database in the request and fails as soon as the ping
+	// does, as before 2.3. It should be longer than the time a write is
+	// held for a writable primary (DATABASE_WRITE_RETRY_WINDOW, 15s).
+	DatabaseReadyGrace time.Duration
 	FilterSignupDomains   []string
 	EchoConversation      bool
 	ProxyOnly             bool
@@ -616,6 +625,7 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 	conf.DatabaseConnMaxLifetime = parseNonNegativeDuration(getenv, "DATABASE_CONN_MAX_LIFETIME", 30*time.Minute)
 	conf.DatabaseConnectTimeout = parseNonNegativeDuration(getenv, "DATABASE_CONNECT_TIMEOUT", 10*time.Second)
 	conf.DatabaseStartupTimeout = parseNonNegativeDuration(getenv, "DATABASE_STARTUP_TIMEOUT", 60*time.Second)
+	conf.DatabaseReadyGrace = parseNonNegativeDuration(getenv, "DATABASE_READY_GRACE", DefaultDatabaseReadyGrace)
 
 	filterDomains := getenv("FILTER_SIGNUP_DOMAINS")
 	if filterDomains != "" {
@@ -1687,6 +1697,10 @@ func parseNonNegativeDuration(getenv func(string) string, envVar string, def tim
 	}
 	return d
 }
+
+// DefaultDatabaseReadyGrace is DATABASE_READY_GRACE when it is not set:
+// twice the time a write is held for a writable primary.
+const DefaultDatabaseReadyGrace = 30 * time.Second
 
 // parseDurationWithDefault parses a duration from an environment variable with a default fallback
 func parseDurationWithDefault(getenv func(string) string, envVar string, defaultDuration time.Duration) time.Duration {
