@@ -94,10 +94,13 @@ func controlLinkValues(endpoints []string, link func() (string, bool)) map[strin
 // The control plane's analytics, and the spend it computes from them, are
 // short by these.
 //
-//   - reason="over_cap": discarded, oldest first, to keep what the edge
-//     holds for the control plane within max_buffer_size while pulses fail
-//     (no control plane reachable, or one that answers but cannot store).
-//     This is the number to look at after an outage.
+//   - reason="over_backlog": discarded, oldest first, to keep the backlog
+//     of undelivered pulses within max_backlog_bytes while pulses fail (no
+//     control plane reachable, or one that answers but cannot store). This
+//     is the number to look at after an outage.
+//   - reason="over_cap": the same with the backlog off
+//     (max_backlog_bytes: 0): discarded to keep what the edge holds within
+//     max_buffer_size.
 //   - reason="expired": held for longer than edge_retention_hours.
 //   - reason="oversized": one record larger than a pulse may be.
 func registerPulseDropMetric(cfg *config.Config) {
@@ -106,11 +109,27 @@ func registerPulseDropMetric(cfg *config.Config) {
 	}
 	if err := metrics.RegisterLabelledCounterFunc(
 		"microgateway_analytics_pulse_dropped_records_total",
-		"Analytics records this edge's pulse gave up, by reason (over_cap: beyond max_buffer_size while pulses failed; expired: older than edge_retention_hours; oversized: one record too large for a pulse). The control plane's analytics are short by these.",
+		"Analytics records this edge's pulse gave up, by reason (over_backlog: beyond max_backlog_bytes while pulses failed; over_cap: beyond max_buffer_size with the backlog off; expired: older than edge_retention_hours; oversized: one record too large for a pulse). The control plane's analytics are short by these.",
 		"reason",
 		func() map[string]float64 { return pulseDropValues(plugins.PulseDroppedRecords()) },
 	); err != nil {
 		log.Warn().Err(err).Msg("Failed to register analytics pulse drop metric")
+	}
+	// The backlog of undelivered pulses (max_backlog_bytes): what the edge
+	// holds for a control plane that is not taking pulses.
+	if err := metrics.RegisterGaugeFunc(
+		"microgateway_analytics_pulse_backlog_bytes",
+		"Bytes of serialized analytics pulses this edge holds for a control plane while pulses fail (bounded by max_backlog_bytes; lost if the edge restarts)",
+		func() float64 { b, _ := plugins.PulseBacklog(); return float64(b) },
+	); err != nil {
+		log.Warn().Err(err).Msg("Failed to register analytics pulse backlog bytes metric")
+	}
+	if err := metrics.RegisterGaugeFunc(
+		"microgateway_analytics_pulse_backlog_batches",
+		"Analytics pulses this edge holds for a control plane while pulses fail",
+		func() float64 { _, n := plugins.PulseBacklog(); return float64(n) },
+	); err != nil {
+		log.Warn().Err(err).Msg("Failed to register analytics pulse backlog batches metric")
 	}
 }
 

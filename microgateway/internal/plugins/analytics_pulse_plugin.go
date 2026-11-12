@@ -60,6 +60,11 @@ type AnalyticsPulsePlugin struct {
 	// message, to be sent as the next batch, ahead of the buffers
 	// (putBackLocked). Guarded by bufferMutex.
 	returned pulseSnapshot
+	// backlog holds, serialized and oldest first, the pulses that were not
+	// delivered while max_backlog_bytes is set (analytics_pulse_backlog.go).
+	// Only the sender changes it. Guarded by bufferMutex.
+	backlog      []backlogBatch
+	backlogBytes int64
 
 	// bootID is drawn once per process and sent with every pulse: sequence
 	// numbers start at 1 again after a restart, and the boot ID keeps the
@@ -115,6 +120,11 @@ type PulsePluginConfig struct {
 	TimeoutSeconds              int      `json:"timeout_seconds"`
 	MaxRetries                  int      `json:"max_retries"`
 	RetryIntervalSecs           int      `json:"retry_interval_secs"`
+	// MaxBacklogBytes bounds what is kept, serialized, while pulses fail
+	// (analytics_pulse_backlog.go). Unset in the pulse file it is 256 MiB;
+	// 0 turns the backlog off, and a failed pulse is then trimmed to
+	// MaxBufferSize records as before.
+	MaxBacklogBytes int64 `json:"max_backlog_bytes"`
 }
 
 // AnalyticsMetadata stores additional analytics data not in database.AnalyticsEvent
@@ -262,6 +272,13 @@ func parsePluginConfig(config map[string]interface{}) (*PulsePluginConfig, error
 	}
 	if pluginConfig.EdgeRetentionHours == 0 {
 		pluginConfig.EdgeRetentionHours = 24
+	}
+	// Unset means the default; 0, set explicitly, turns the backlog off.
+	if _, set := config["max_backlog_bytes"]; !set {
+		pluginConfig.MaxBacklogBytes = defaultMaxBacklogBytes
+	}
+	if pluginConfig.MaxBacklogBytes < 0 {
+		return nil, fmt.Errorf("max_backlog_bytes must not be negative (0 turns the backlog off): %d", pluginConfig.MaxBacklogBytes)
 	}
 
 	return &pluginConfig, nil
@@ -960,13 +977,16 @@ var (
 )
 
 // PulseDroppedRecords returns how many records the analytics pulse has
-// given up since the process started, by reason: "over_cap", "expired",
+// given up since the process started, by reason: "over_backlog", "over_cap", "expired",
 // "oversized".
 func PulseDroppedRecords() map[string]uint64 {
 	return map[string]uint64{
 		"over_cap":  pulseDroppedOverCap.Load(),
 		"expired":   pulseDroppedExpired.Load(),
 		"oversized": pulseDroppedOversized.Load(),
+		// over_backlog: the oldest batches discarded to keep the backlog
+		// within max_backlog_bytes (analytics_pulse_backlog.go).
+		"over_backlog": pulseDroppedOverBacklog.Load(),
 	}
 }
 
@@ -1060,6 +1080,19 @@ func (p *AnalyticsPulsePlugin) sendPulse() {
 	defer p.sending.Store(false)
 
 	for {
+		// The backlog goes first, oldest batch first, one message at a
+		// time: it is older than anything buffered (a batch split for its
+		// size, p.held, is older still).
+		p.bufferMutex.Lock()
+		fromBacklog := p.held == nil && len(p.backlog) > 0
+		p.bufferMutex.Unlock()
+		if fromBacklog {
+			if p.deliverBacklogHead() == pulseFailed || p.stopping() {
+				return
+			}
+			continue
+		}
+
 		p.bufferMutex.Lock()
 		snap, sequenceNum, retried := p.nextBatchLocked()
 		p.bufferMutex.Unlock()
@@ -1178,6 +1211,24 @@ func (p *AnalyticsPulsePlugin) deliver(snap pulseSnapshot, sequenceNum uint64, r
 		// The control plane's limit is below this edge's: it answered, so
 		// this is not an outage, and nothing is discarded for it.
 		return p.splitTooLarge(snap, sequenceNum, proto.Size(pulse), err.Error())
+	}
+	if err != nil && p.backlogEnabled() {
+		now := time.Now()
+		p.bufferMutex.Lock()
+		p.lastError = err
+		p.lastErrorTime = now
+		p.bufferMutex.Unlock()
+		p.failToBacklog(pulse, snap, now)
+		p.bufferMutex.Lock()
+		bytes, batches := p.backlogBytes, len(p.backlog)
+		p.bufferMutex.Unlock()
+		log.Error().
+			Err(err).
+			Uint64("sequence", sequenceNum).
+			Int64("backlog_bytes", bytes).
+			Int("backlog_batches", batches).
+			Msg("Analytics pulse not delivered - data kept in the backlog for the next pulse")
+		return pulseFailed
 	}
 	if err != nil {
 		p.bufferMutex.Lock()
@@ -1440,6 +1491,18 @@ func (p *AnalyticsPulsePlugin) Stop() error {
 	}
 	p.sendPulse()
 	p.stopCapture()
+
+	// The backlog is in memory: what a control plane did not take by now
+	// is lost with the process.
+	p.bufferMutex.Lock()
+	lostRecords, lostBytes := p.backlogRecordsLocked(), p.backlogBytes
+	p.bufferMutex.Unlock()
+	if lostRecords > 0 {
+		log.Warn().
+			Int("records", lostRecords).
+			Int64("backlog_bytes", lostBytes).
+			Msg("Analytics pulse stopping with a backlog no control plane took: these records are lost")
+	}
 
 	log.Debug().
 		Uint64("total_pulses_sent", p.totalPulsesSent).

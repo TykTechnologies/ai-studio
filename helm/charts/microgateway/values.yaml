@@ -235,6 +235,14 @@ analyticsPulse:
   intervalSeconds: 10
   maxBatchSize: 1000   # Unused: accepted, but nothing reads it (maxBufferSize bounds a pulse)
   maxBufferSize: 10000
+  # Analytics kept, in memory, for AI Studio while pulses fail (a control
+  # plane outage), sent oldest first when one answers: about 280 bytes per
+  # request, so 64 MiB keeps about 230,000 requests (75 s at 3,000/s). The
+  # backlog comes on top of the edge's working set: raise it together with
+  # resources.limits.memory (the microgateway's own default, when the pulse
+  # file does not set it, is 256 MiB). 0 turns it off: only the newest
+  # maxBufferSize records are kept through an outage.
+  maxBacklogBytes: 67108864
   compressionEnabled: true
   includeProxySummaries: true
   # Forwards stored bodies only: set ANALYTICS_STORE_REQUESTS/RESPONSES=true via extraEnv to store them
