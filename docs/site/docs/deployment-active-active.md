@@ -138,7 +138,7 @@ With full credential sync, Studio sends each edge a keyed hash of every App key 
 | Edge setting | Default | Purpose |
 |---|---|---|
 | `EDGE_CREDENTIAL_SYNC` | `on_demand` | `full` (Enterprise): keep the hashed list of every App key of the edge's namespace in its database and validate from it. A Community edge given `full` validates on demand. Any other value stops start-up. |
-| `EDGE_CREDENTIAL_SYNC_MAX_AGE` | `24h` | How long the list is trusted after the last successful sync. Past it the edge validates on demand until a sync succeeds. `0` means no limit. |
+| `EDGE_CREDENTIAL_SYNC_MAX_AGE` | `24h` | How long the list is trusted after the last successful sync. Past it the edge validates on demand until a sync succeeds. `0` means no limit: an edge cut off from every control plane then accepts keys revoked since its last sync for as long as the outage lasts. Keep a limit in production. |
 
 - **How it stays current.** The edge syncs on every registration a control plane accepts and every heartbeat it acknowledges (`EDGE_HEARTBEAT_INTERVAL`, 30 seconds): the whole list the first time, after a move to the other site's control plane and at least every 15 minutes, only the changes in between.
 - **How a key is checked.** On the list and active, with its App active: accepted without asking a control plane. On the list but deactivated, deleted, or its App inactive: refused. Not on the list (created in the last seconds): asked as on demand, and the answer recorded. An explicit refusal from a control plane always wins.
