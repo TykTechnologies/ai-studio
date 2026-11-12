@@ -38,13 +38,17 @@ const (
 // *services.LastKnownGoodRefusal): the edge must exit.
 func (c *SimpleEdgeClient) StartWithLastKnownGood(db *gorm.DB) (*services.LastKnownGood, error) {
 	hs := c.config.HubSpoke
+	// The contact a registration is about to make is recorded
+	// authenticated with the key of the database's snapshot store, so the
+	// store is set up before the first registration, with the option on or
+	// off; the service container sets it up too, later in the start.
+	// Without the option a key the store cannot be made from is left for
+	// the container to report, as before: Start's behaviour is unchanged.
+	err := services.PersistAppliedSnapshots(db, c.config.Security.EncryptionKey)
 	if !hs.StartFromLastKnownGood {
 		return nil, c.Start()
 	}
-	// The contact a registration is about to make is recorded
-	// authenticated with the key of the database's snapshot store; the
-	// service container sets that store up too, later in the start.
-	if err := services.PersistAppliedSnapshots(db, c.config.Security.EncryptionKey); err != nil {
+	if err != nil {
 		return nil, err
 	}
 	connErr := c.StartWithin(hs.StartupControlTimeout)

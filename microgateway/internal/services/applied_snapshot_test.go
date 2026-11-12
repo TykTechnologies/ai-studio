@@ -31,7 +31,7 @@ func persistingSync(t *testing.T, db *gorm.DB, namespace string) *EdgeSyncServic
 	t.Helper()
 	require.NoError(t, PersistAppliedSnapshots(db, snapshotTestKey))
 	t.Cleanup(func() {
-		snapshotSealers.Delete(db.Config)
+		snapshotSealers.Delete(dbKey(db))
 		// What the test snapshots installed in memory.
 		installPromptTemplates(nil)
 		installGuardrailExceptions(nil)
@@ -279,8 +279,8 @@ func TestAppliedSnapshot_PartialApplyKeepsItsReportedChecksum(t *testing.T) {
 
 		// Applied again from the stored copy, on a fresh process state, it
 		// reports the same checksum.
-		appliedSnapshots.Delete(appliedKey{config: db.Config, namespace: ""})
-		reportedConfigs.Delete(appliedKey{config: db.Config, namespace: ""})
+		appliedSnapshots.Delete(appliedKey{db: dbKey(db), namespace: ""})
+		reportedConfigs.Delete(appliedKey{db: dbKey(db), namespace: ""})
 		again := NewEdgeSyncService(db, "")
 		require.NoError(t, again.SyncConfiguration(stored.Snapshot))
 		sum, _, ok := again.ReportedConfig()

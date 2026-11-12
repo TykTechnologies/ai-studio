@@ -448,6 +448,15 @@ Files: `microgateway/cmd/microgateway/main.go`,
    restart. Checked on EKS: an edge pod deleted with no control plane
    reachable came back Ready from the snapshot on its volume claim. The
    credential sync values follow with Phase 4.
+   The per-database state behind this (the snapshot sealer, the control
+   contact's write time, the configuration the edge reports, a snapshot
+   being restored) is held in registries keyed by the database's
+   connection pool (`dbKey`), which every session and transaction of a
+   handle shares; they were keyed by the handle's `*gorm.Config`, which
+   gorm copies per session, so a lookup through a session-derived handle
+   silently found nothing (bead .38; every caller passed the base handle,
+   so nothing was lost). A database without a snapshot store is reported
+   once, as an error.
 
 Tests: restart with all CPs cut serves traffic, including a templated
 prompt and a guardrail exception; each refusal case; reconnect replaces the

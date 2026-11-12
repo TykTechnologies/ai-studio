@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/rs/zerolog/log"
 	"strconv"
 	"sync"
 	"time"
@@ -87,9 +88,48 @@ func appliedSnapshotAAD(row *database.AppliedSnapshot) []byte {
 	return aad
 }
 
+// dbKey identifies the database behind a handle, for the registries that
+// hold state per database (snapshotSealers and the others below): its
+// connection pool, which the handle the edge was opened with, every session
+// derived from it (WithContext, Session, Debug) and every transaction on it
+// share. The handle's *gorm.Config, which these registries were keyed by,
+// is not shared: gorm copies it for each session, so a lookup through a
+// session-derived handle found nothing, silently.
+//
+// A handle without a pool (none in the microgateway; a dry run, or a
+// connection pool of another kind) is its own database.
+func dbKey(db *gorm.DB) any {
+	if pool, err := db.DB(); err == nil && pool != nil {
+		return pool
+	}
+	return db.Config
+}
+
 // snapshotSealers holds, per database, the sealer its sync services store
 // applied snapshots with. A database without one stores none.
-var snapshotSealers sync.Map // *gorm.Config -> *snapshotSealer
+var snapshotSealers sync.Map // dbKey -> *snapshotSealer
+
+// missingSealerLogged holds the databases a missing sealer was reported
+// for, so that it is said once per database and not on every sync or
+// heartbeat.
+var missingSealerLogged sync.Map // dbKey -> struct{}
+
+// sealerOf returns db's sealer. When there is none, what would have been
+// stored is not, and what says so once per database, as an error: on an
+// edge every database has one (the edge registers it at start), so a miss
+// there means the configuration snapshot or the control contact is not
+// being kept and the edge could not start without a control plane.
+func sealerOf(db *gorm.DB, what string) (*snapshotSealer, bool) {
+	key := dbKey(db)
+	if v, ok := snapshotSealers.Load(key); ok {
+		return v.(*snapshotSealer), true
+	}
+	if _, logged := missingSealerLogged.LoadOrStore(key, struct{}{}); !logged {
+		log.Error().Str("not_stored", what).
+			Msg("This database has no snapshot store (PersistAppliedSnapshots was not called for it): the applied configuration and the last control contact are not kept, so this edge cannot start from last-known-good")
+	}
+	return nil, false
+}
 
 // PersistAppliedSnapshots makes every EdgeSyncService on db store the
 // snapshot it applies, encrypted with a key derived from encryptionKey (the
@@ -99,7 +139,9 @@ func PersistAppliedSnapshots(db *gorm.DB, encryptionKey string) error {
 	if err != nil {
 		return err
 	}
-	snapshotSealers.Store(db.Config, sealer)
+	key := dbKey(db)
+	snapshotSealers.Store(key, sealer)
+	missingSealerLogged.Delete(key)
 	return nil
 }
 
@@ -107,11 +149,10 @@ func PersistAppliedSnapshots(db *gorm.DB, encryptionKey string) error {
 // transaction that applies it. skipped are the entries left out of it. It
 // does nothing on a database that does not persist snapshots.
 func (s *EdgeSyncService) storeAppliedSnapshot(tx *gorm.DB, raw *pb.ConfigurationSnapshot, skipped []string) error {
-	v, ok := snapshotSealers.Load(s.db.Config)
+	sealer, ok := sealerOf(s.db, "the applied configuration snapshot")
 	if !ok {
 		return nil
 	}
-	sealer := v.(*snapshotSealer)
 	plain, err := proto.MarshalOptions{Deterministic: true}.Marshal(raw)
 	if err != nil {
 		return fmt.Errorf("encode snapshot: %w", err)
@@ -119,8 +160,7 @@ func (s *EdgeSyncService) storeAppliedSnapshot(tx *gorm.DB, raw *pb.Configuratio
 	// An edge starting from last-known-good applies the stored snapshot
 	// itself: the row already holds it (KeepStoredSnapshot). Anything else
 	// applied afterwards replaces the row as usual.
-	if restoring, ok := restoringSnapshots.Load(s.db.Config); ok {
-		restoringSnapshots.Delete(s.db.Config)
+	if restoring, ok := restoringSnapshots.LoadAndDelete(dbKey(s.db)); ok {
 		if restoring.([sha256.Size]byte) == sha256.Sum256(plain) {
 			return nil
 		}
