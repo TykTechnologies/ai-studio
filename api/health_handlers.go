@@ -32,7 +32,7 @@ func (a *API) handleReadiness(c *gin.Context) {
 	if a.config != nil {
 		db = a.config.DB
 	}
-	Readiness(db, a.dbReadyGrace)(c)
+	serveReadiness(c, db, a.dbReadyGrace)
 }
 
 // Readiness is the readiness probe of a replica on db, with grace as
@@ -54,48 +54,51 @@ func (a *API) handleReadiness(c *gin.Context) {
 // writable database. With SQLite (no tracker) the answer is the ping alone,
 // with the body of before 2.3.
 func Readiness(db *gorm.DB, grace time.Duration) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		if db == nil {
+	return func(c *gin.Context) { serveReadiness(c, db, grace) }
+}
+
+// serveReadiness answers one readiness probe (see Readiness).
+func serveReadiness(c *gin.Context, db *gorm.DB, grace time.Duration) {
+	if db == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not ready"})
+		return
+	}
+	tracker := dbstate.For(db)
+	if tracker == nil {
+		if !pingDatabase(c.Request.Context(), db) {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not ready"})
 			return
 		}
-		tracker := dbstate.For(db)
-		if tracker == nil {
-			if !pingDatabase(c.Request.Context(), db) {
-				c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not ready"})
-				return
-			}
-			c.JSON(http.StatusOK, gin.H{"status": "ready"})
-			return
-		}
-
-		requireWrite := c.Query("require") == "write"
-		st := tracker.Status()
-		var ready bool
-		if grace <= 0 {
-			ready = pingDatabase(c.Request.Context(), db)
-			if !ready && st.State != dbstate.Unreachable {
-				// The tracker has not probed since: the ping is newer.
-				st = dbstate.Status{State: dbstate.Unreachable}
-			}
-			if requireWrite && st.State != dbstate.Writable {
-				ready = false
-			}
-		} else {
-			ready = databaseReady(st, grace, requireWrite, time.Now())
-		}
-
-		body := gin.H{"status": "ready", "database": string(st.State)}
-		if !st.Since.IsZero() {
-			body["database_since"] = st.Since.UTC().Format(time.RFC3339)
-		}
-		if !ready {
-			body["status"] = "not ready"
-			c.JSON(http.StatusServiceUnavailable, body)
-			return
-		}
-		c.JSON(http.StatusOK, body)
+		c.JSON(http.StatusOK, gin.H{"status": "ready"})
+		return
 	}
+
+	requireWrite := c.Query("require") == "write"
+	st := tracker.Status()
+	var ready bool
+	if grace <= 0 {
+		ready = pingDatabase(c.Request.Context(), db)
+		if !ready && st.State != dbstate.Unreachable {
+			// The tracker has not probed since: the ping is newer.
+			st = dbstate.Status{State: dbstate.Unreachable}
+		}
+		if requireWrite && st.State != dbstate.Writable {
+			ready = false
+		}
+	} else {
+		ready = databaseReady(st, grace, requireWrite, time.Now())
+	}
+
+	body := gin.H{"status": "ready", "database": string(st.State)}
+	if !st.Since.IsZero() {
+		body["database_since"] = st.Since.UTC().Format(time.RFC3339)
+	}
+	if !ready {
+		body["status"] = "not ready"
+		c.JSON(http.StatusServiceUnavailable, body)
+		return
+	}
+	c.JSON(http.StatusOK, body)
 }
 
 // databaseReady applies the readiness rule to the tracker's status: a
