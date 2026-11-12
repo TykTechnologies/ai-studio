@@ -56,6 +56,18 @@ otherwise.
 {{- end }}
 
 {{/*
+config.credentialSync, checked: "on_demand" or "full" ("" when unset). Any
+other value fails the render, as the edge would refuse it at start.
+*/}}
+{{- define "microgateway.credentialSync" -}}
+{{- $mode := toString (.Values.config.credentialSync | default "") -}}
+{{- if not (has $mode (list "" "on_demand" "full")) -}}
+{{- fail (printf "config.credentialSync must be on_demand or full, not %q" $mode) -}}
+{{- end -}}
+{{- $mode -}}
+{{- end }}
+
+{{/*
 "true" when the edge's database is on a persistent volume: the StatefulSet
 form with persistence. A Deployment's emptyDir survives a container restart
 but not a rescheduled pod.
@@ -66,11 +78,11 @@ but not a rescheduled pod.
 
 {{/*
 "true" when a setting is on that relies on the edge's database surviving a
-restart (starting from last-known-good) while the
+restart (starting from last-known-good, full credential sync) while the
 database is not on a persistent volume.
 */}}
 {{- define "microgateway.needsPersistenceWarning" -}}
-{{- $needs := include "microgateway.startFromLastKnownGood" . -}}
+{{- $needs := or (include "microgateway.startFromLastKnownGood" .) (eq (include "microgateway.credentialSync" .) "full") -}}
 {{- if and $needs (not (include "microgateway.persistentDatabase" .)) -}}true{{- end -}}
 {{- end }}
 
@@ -85,6 +97,10 @@ WARNING: this edge gateway keeps its database on an emptyDir volume.
 {{- if include "microgateway.startFromLastKnownGood" . }}
   config.startFromLastKnownGood is on: the edge starts from the configuration
   it stored in its database when no control plane answers.
+{{- end }}
+{{- if eq (include "microgateway.credentialSync" .) "full" }}
+  config.credentialSync is "full": the edge validates keys from the hashed
+  credential list it stored in its database.
 {{- end }}
 
   An emptyDir survives a container restart, so that case is covered. It does

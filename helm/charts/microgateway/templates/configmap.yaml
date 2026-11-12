@@ -35,6 +35,13 @@ data:
   {{- if ne (toString .Values.config.lastKnownGoodMaxAge) "" }}
   EDGE_LAST_KNOWN_GOOD_MAX_AGE: {{ .Values.config.lastKnownGoodMaxAge | quote }}
   {{- end }}
+  {{- with include "microgateway.credentialSync" . }}
+  EDGE_CREDENTIAL_SYNC: {{ . | quote }}
+  {{- end }}
+  {{- /* "0" (no limit) is rendered, as for lastKnownGoodMaxAge */}}
+  {{- if ne (toString .Values.config.credentialSyncMaxAge) "" }}
+  EDGE_CREDENTIAL_SYNC_MAX_AGE: {{ .Values.config.credentialSyncMaxAge | quote }}
+  {{- end }}
   # EDGE_ID is deliberately absent: it is set per-pod from the downward API in
   # the workload template, because one shared value made every replica register
   # under the same edge identity.

@@ -11,8 +11,9 @@ replicaCount: 1
 # a cache rebuilt from the hub on every start. Use "StatefulSet" when you want
 # stable per-replica edge identities (the pod name, which is the edge ID, keeps
 # its ordinal) and a PVC (see persistence below), so analytics buffered between
-# pulses survive a restart. With config.startFromLastKnownGood the database
-# is more than a cache: use StatefulSet with persistence, or a rescheduled pod starts empty and needs a
+# pulses survive a restart. With config.startFromLastKnownGood or
+# config.credentialSync: full the database is more than a cache: use
+# StatefulSet with persistence, or a rescheduled pod starts empty and needs a
 # control plane (the chart prints a warning on install otherwise).
 kind: Deployment
 
@@ -69,7 +70,8 @@ topologySpreadConstraints: []
   #       app: microgateway
 
 # Only takes effect with kind: StatefulSet. Needed for
-# config.startFromLastKnownGood to cover a rescheduled pod; a Deployment's emptyDir only covers a container restart.
+# config.startFromLastKnownGood and config.credentialSync: full to cover a
+# rescheduled pod; a Deployment's emptyDir only covers a container restart.
 persistence:
   enabled: false
   storageClass: ""
@@ -160,6 +162,16 @@ config:
   # The longest the edge may have been without a control plane and still
   # start that way (EDGE_LAST_KNOWN_GOOD_MAX_AGE). Empty: 72h. "0": no limit.
   lastKnownGoodMaxAge: ""
+  # How the edge learns App keys (EDGE_CREDENTIAL_SYNC). Empty or
+  # "on_demand" (the default): it asks the control plane about a key it has
+  # not seen, and caches the answer. "full" (Enterprise): it keeps the hashed
+  # list of every App key of its namespace in its database and validates
+  # from it, so keys work with no control plane to ask. Needs a database
+  # that survives the restart: see kind and persistence above.
+  credentialSync: ""
+  # How long a synced credential list is trusted without a successful sync
+  # (EDGE_CREDENTIAL_SYNC_MAX_AGE). Empty: 24h. "0": no limit.
+  credentialSyncMaxAge: ""
   # edgeId is no longer set here: each pod derives EDGE_ID from its own name via
   # the downward API, because a single shared value made every replica register
   # with the hub under one identity.

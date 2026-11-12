@@ -419,6 +419,10 @@ rescheduling:
   configuration snapshot the edge starts from is in its database. Without a
   persistent volume a rescheduled pod has none and crash-loops until a control
   plane answers, exactly as without the setting.
+- **Full credential sync** (`config.credentialSync: full`, Enterprise). The
+  hashed list of keys the edge validates from is in its database. Without a
+  persistent volume a rescheduled pod starts with none, and validates on
+  demand until its first sync completes.
 - **A stable edge identity.** The edge ID is the pod name. A StatefulSet pod
   keeps its name (`<release>-microgateway-0`, `-1`, ...) across restarts and
   rescheduling, so the edge keeps its row, its history and its sync state in
@@ -426,7 +430,8 @@ rescheduling:
 - **Buffered analytics and budget counters** that should survive a restart.
 
 The chart prints a warning after `helm install` or `helm upgrade` when
-`startFromLastKnownGood` is set without StatefulSet persistence. It still installs: an `emptyDir` does cover container restarts.
+`startFromLastKnownGood` or `credentialSync: full` is set without StatefulSet
+persistence. It still installs: an `emptyDir` does cover container restarts.
 
 **Sizing the edge's volume.** What fills it is the edge's own copy of the
 analytics: one row per request, kept for `config.analyticsRetentionDays`
@@ -478,6 +483,8 @@ microgateway:
     startFromLastKnownGood: true      # optional: start from the stored configuration
     # startupControlTimeout: "30s"
     # lastKnownGoodMaxAge: "72h"
+    # credentialSync: "full"          # Enterprise: validate keys from the synced, hashed list
+    # credentialSyncMaxAge: "24h"     # how long that list is trusted without a sync ("0": no limit)
 ```
 
 `controlEndpoints` replaces `controlEndpoint` when it is not empty. Keep
@@ -533,7 +540,8 @@ microgateway:
 
   # Keeps analytics buffered between pulses across a restart. Optional while
   # the edge rebuilds its configuration from the hub on every start; required
-  # for config.startFromLastKnownGood to cover a rescheduled pod (see "When to use the StatefulSet form").
+  # for config.startFromLastKnownGood and config.credentialSync: full to cover
+  # a rescheduled pod (see "When to use the StatefulSet form").
   kind: StatefulSet
   persistence:
     enabled: true
