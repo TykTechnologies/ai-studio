@@ -616,14 +616,35 @@ reachable a control plane cannot authenticate a caller at all.
 
 ### Phase 6: hub hardening and non-database state
 
-1. **`credentials.secret` on the hub.** The hub must keep the secret
-   recoverable: the UI shows it again and Studio itself uses it as a bearer
-   token (`services/grpc/decision_call.go:101`). So: add `secret_hash`
-   (indexed; `ValidateToken` and `models/credentials.go:51` look up by it)
-   and encrypt `secret` with `TYK_AI_SECRET_KEY`, migrating existing rows
-   under the migration lock. Schema change: bump `models.SchemaVersion`,
-   decide `MinReaderSchemaVersion` (older code cannot read an encrypted
-   secret, so it rises), run `make schema-golden`.
+1. **`credentials.secret` on the hub** (built). The hub must keep the
+   secret recoverable: the UI shows it again and Studio itself uses it as a
+   bearer token (`services/grpc/decision_call.go`). So the secret is
+   encrypted and found by `secret_hash` (unique; `ValidateToken` and
+   `Credential.GetBySecret` look up by it, without reading the secret).
+   Deviation from the first plan, which was to encrypt it "as LLM
+   credentials are" (`secrets.EncryptValue`): that derives a key per
+   value, about 100 ms each, and does not scale to App keys (80 minutes to
+   migrate 50,000; 0.1 s of CPU per uncached key a hub validates). Instead
+   the secret is sealed under ONE data key per process, derived from
+   `TYK_AI_SECRET_KEY` and a random per-database salt (new table
+   `data_key_salts`, one row, not secret, created once under the migration
+   lock, never regenerated: Studio refuses to start if it is missing while
+   sealed credentials exist), with AES-256-GCM, a random nonce and the
+   credential's `key_id` as additional data; stored as `$DK1/...`
+   (`secrets/datakey.go`). The hash is the hub's own, keyed with
+   `TYK_AI_SECRET_KEY` (`secrets.LookupHash`: `pkg/credhash`'s
+   construction under that key, or a plain SHA-256 when no key of 14 bytes
+   is set), not the edge-facing one: that is computed from the decrypted
+   secret when credentials are sent (Phase 4), so rotating
+   `MICROGATEWAY_ENCRYPTION_KEY` needs no hub migration. Existing rows are
+   migrated at start under the migration lock, in batches, idempotently
+   (`models.MigrateCredentialsAtRest`; 50,000 rows in 7 s on SQLite and
+   34 s on Postgres). Schema 42; `MinReaderSchemaVersion` rises to 42,
+   because older code looks keys up by the plaintext secret (every App key
+   would be refused) and would show and send the ciphertext. Changing
+   `TYK_AI_SECRET_KEY` afterwards, or losing the salt, stops every App key
+   validating until it is back. Details in `features/Secrets.md` ("App
+   credentials").
 2. **State that is per replica and cannot be a shared volume across
    sites.** Move branding assets into Postgres (two small files); keep log
    exports per replica and say so. Require `CSRF_KEY` when more than one
@@ -723,7 +744,12 @@ credential migration, in "Before you upgrade":
   skew; a replica left on a demoted primary; start-up exiting when the
   database is briefly away.
 - **Upgrade notes:** Database (the credential migration is one-way: take a
-  backup; older Studio versions cannot read the migrated column); Edges
+  backup; older Studio versions cannot read the migrated column. An older
+  headless control plane refuses the database with the schema-version
+  message. An older full Studio, 2.2.x or a 2.3 release candidate, does
+  not check: it starts, refuses every App key and shows the ciphertext as
+  the key, so every older replica is stopped first. Rolling back means
+  restoring the backup taken before the upgrade); Edges
   (upgrade the hub first; new options are off by default); API (a write
   that cannot reach a writable database answers 503 `database_unavailable`
   with `Retry-After`, where it used to answer 500).

@@ -126,6 +126,7 @@ func deriveKeyScrypt(input string, salt []byte) ([]byte, error) {
 		}
 
 		scryptComputations.Add(1)
+		keyDerivations.Add(1)
 		key, err := scrypt.Key([]byte(input), salt, n, scryptR, scryptP, 32)
 		if err != nil {
 			return nil, fmt.Errorf("scrypt key derivation failed: %w", err)
@@ -172,6 +173,7 @@ func deriveKeyPBKDF2(input string, salt []byte, iter int) ([]byte, error) {
 		if k, ok := derivedKeyCache.get(cacheKey); ok {
 			return k, nil
 		}
+		keyDerivations.Add(1)
 		key, err := pbkdf2.Key(sha256.New, input, salt, iter, 32)
 		if err != nil {
 			return nil, fmt.Errorf("pbkdf2 key derivation failed: %w", err)
