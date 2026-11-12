@@ -310,6 +310,56 @@ func New(opts Options) (_ *Studio, err error) {
 	backgroundCtx, cancel := context.WithCancel(context.Background())
 	s.cancelBackground = cancel
 
+	// Two checks come before the first write to the database (the
+	// migrations below, the schema record and the conversion of stored
+	// credentials): once those have run, an older build cannot use the
+	// database, so a start that is going to be refused must be refused
+	// first, with the database untouched.
+	//
+	// First, whether this build can read the database at all: a newer
+	// build may have recorded a minimum reader version above this one's.
+	// It is one read, needs no license, and is the more basic answer: a
+	// database this build must not touch stays untouched whatever the
+	// license says.
+	if err := models.CheckSchemaReadable(backgroundCtx, s.db); err != nil {
+		return nil, fmt.Errorf("studio: %w", err)
+	}
+
+	// Then the license (Enterprise; Community has none to check). It is
+	// validated here, so that a license issued for an earlier version, a
+	// missing one or an expired one ends the start before anything is
+	// written. Only validated: the service's periodic re-validation and
+	// its telemetry, which read the database, start further down, after
+	// the migrations, where they always did (Start validates again there,
+	// which costs nothing).
+	// A host that keeps Studio running on an invalid licence gets Agent Call
+	// Tracing capture stopped first (the standalone binary exits instead).
+	onInvalid := opts.OnLicenceInvalid
+	if onInvalid != nil {
+		onInvalid = func(err error) {
+			if s.service != nil {
+				s.service.SyncAgentTracingLicence()
+			}
+			opts.OnLicenceInvalid(err)
+		}
+	}
+	s.licensing = newLicensingService(licensing.Config{
+		LicenseKey:           conf.LicenseKey,
+		LicenseSource:        opts.License,
+		TelemetryURL:         conf.LicenseTelemetryURL,
+		TelemetryPeriod:      conf.LicenseTelemetryPeriod,
+		TelemetryDisabled:    conf.LicenseDisableTelemetry,
+		ValidityCheckPeriod:  conf.LicenseValidityPeriod,
+		TelemetryConcurrency: conf.LicenseTelemetryConcurrency,
+		OnInvalid:            onInvalid,
+	}, s.db)
+	if v, ok := s.licensing.(licensing.Revalidator); ok {
+		if err := v.Revalidate(); err != nil {
+			// The words Start uses for the same failure.
+			return nil, fmt.Errorf("studio: start licensing: license validation failed at boot: %w", err)
+		}
+	}
+
 	// Migrations and seeding (through the RBAC seed below) run under a
 	// Postgres advisory lock, so replicas sharing a database do not race
 	// through AutoMigrate and the get-or-create seeds. A no-op on SQLite.
@@ -379,28 +429,9 @@ func New(opts Options) (_ *Studio, err error) {
 		reencryptSecrets(backgroundCtx, s.db)
 	})
 
-	// Licensing (Enterprise: validates the licence and starts periodic checks).
-	// A host that keeps Studio running on an invalid licence gets Agent Call
-	// Tracing capture stopped first (the standalone binary exits instead).
-	onInvalid := opts.OnLicenceInvalid
-	if onInvalid != nil {
-		onInvalid = func(err error) {
-			if s.service != nil {
-				s.service.SyncAgentTracingLicence()
-			}
-			opts.OnLicenceInvalid(err)
-		}
-	}
-	s.licensing = licensing.NewService(licensing.Config{
-		LicenseKey:           conf.LicenseKey,
-		LicenseSource:        opts.License,
-		TelemetryURL:         conf.LicenseTelemetryURL,
-		TelemetryPeriod:      conf.LicenseTelemetryPeriod,
-		TelemetryDisabled:    conf.LicenseDisableTelemetry,
-		ValidityCheckPeriod:  conf.LicenseValidityPeriod,
-		TelemetryConcurrency: conf.LicenseTelemetryConcurrency,
-		OnInvalid:            onInvalid,
-	}, s.db)
+	// Licensing's periodic checks and telemetry start now that the
+	// database is migrated (the license itself was validated before the
+	// first write, above).
 	if err := s.licensing.Start(); err != nil {
 		return nil, fmt.Errorf("studio: start licensing: %w", err)
 	}

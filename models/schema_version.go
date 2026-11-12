@@ -13,7 +13,11 @@ import (
 
 // The schema version lets an instance that does not migrate (a headless
 // control plane sharing a full Studio's database) check that the schema is
-// one it understands.
+// one it understands (CheckSchemaVersion), and lets a full Studio refuse,
+// before it writes anything, a database a newer build has made unreadable
+// for it (CheckSchemaReadable): a rollback after an upgrade that raised the
+// minimum reader. Builds from before that check, 2.2.x and the 2.3 release
+// candidates, start on such a database regardless.
 //
 // Rules for a change to the models:
 //   - Every change to the schema (the goldens in testdata/schema) bumps
@@ -181,7 +185,8 @@ var (
 // schema. Call it after every migration has run, under the migration lock.
 // It never lowers the record: an older Studio started against a database a
 // newer one migrated leaves the newer version in place (its own migrations
-// only add), and logs that it did.
+// only add), and logs that it did. A full Studio only gets here on a newer
+// database it can still read: CheckSchemaReadable has refused the others.
 func RecordSchemaVersion(db *gorm.DB, writtenBy string) error {
 	var current StudioSchema
 	err := db.Take(&current, studioSchemaRowID).Error
@@ -211,6 +216,42 @@ func RecordSchemaVersion(db *gorm.DB, writtenBy string) error {
 	}).Create(&row).Error
 	if err != nil {
 		return fmt.Errorf("record schema version: %w", err)
+	}
+	return nil
+}
+
+// CheckSchemaReadable reports whether this build may start on the database
+// as a full Studio, which migrates it: it may unless a newer build has
+// recorded a minimum reader version above this build's schema version. It
+// only reads, and creates nothing: a full Studio calls it before its first
+// write, so that a build started on a database it cannot read (a rollback
+// after an upgrade that changed how data is stored) refuses, with the
+// database untouched, instead of migrating, serving and misreading it. The
+// error wraps ErrSchemaTooNew.
+//
+// A database with no record (new, or migrated only by a Studio from before
+// schema versions), one at this build's version or older, and a newer one
+// that still lists this build as a reader all pass: the last starts with
+// RecordSchemaVersion's warning, as before.
+//
+// Builds from before this check (2.2.x and the 2.3 release candidates) do
+// not have it: they start on such a database, which is why upgrades to 2.3
+// stop every older replica first.
+func CheckSchemaReadable(ctx context.Context, db *gorm.DB) error {
+	db = db.WithContext(ctx)
+	if !db.Migrator().HasTable(&StudioSchema{}) {
+		return ctx.Err()
+	}
+	var row StudioSchema
+	if err := db.Take(&row, studioSchemaRowID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		return fmt.Errorf("read schema version: %w", err)
+	}
+	if row.MinReaderVersion > SchemaVersion {
+		return fmt.Errorf("%w: the database is at schema version %d (recorded by Studio %s), which needs schema version %d or later to read; this build has %d. Nothing was changed. Run that Studio version or a later one, or restore the database backup taken before the upgrade",
+			ErrSchemaTooNew, row.Version, row.WrittenBy, row.MinReaderVersion, SchemaVersion)
 	}
 	return nil
 }

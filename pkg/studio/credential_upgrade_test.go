@@ -14,25 +14,6 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
-// legacyCredentials is the credentials table as 2.2.2 created it (and as
-// every 2.3 release candidate before this change did: the table had not
-// changed): the secret in plaintext, found by its value.
-const legacyCredentials = "CREATE TABLE `credentials` (`id` integer PRIMARY KEY AUTOINCREMENT,`created_at` datetime,`updated_at` datetime,`deleted_at` datetime,`key_id` text,`secret` text,`active` numeric DEFAULT false)"
-
-func legacyKeys(t *testing.T, db *gorm.DB, n int) map[uint]string {
-	t.Helper()
-	keys := map[uint]string{}
-	for i := 0; i < n; i++ {
-		secret := "legacy-app-key-" + string(rune('a'+i))
-		require.NoError(t, db.Exec("INSERT INTO credentials (key_id, secret, active, created_at, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
-			"legacy-"+string(rune('a'+i)), secret, i%2 == 0).Error)
-		var id uint
-		require.NoError(t, db.Table("credentials").Select("id").Where("secret = ?", secret).Scan(&id).Error)
-		keys[id] = secret
-	}
-	return keys
-}
-
 // assertCredentialsAtRest checks what an upgrade must leave: no plaintext
 // secret in the table, and every key still found by its secret, with the
 // state it had.
