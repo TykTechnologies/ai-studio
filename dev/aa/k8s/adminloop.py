@@ -84,7 +84,8 @@ def write_loop(site, base, interval):
 
 
 def create_loop(site, base, interval):
-    user = "aa-probe-write-%s@tyk.io" % site
+    # A user of its own: sharing the write loop's would log each other out.
+    user = "aa-probe-create-%s@tyk.io" % site
     client, logged_in, n, run = Client(base), False, 0, os.environ.get("RUN_ID", str(int(time.time())))
     while True:
         tick = time.time()

@@ -157,7 +157,7 @@ cmd_users() {
 	local pf=$!
 	trap 'kill $pf 2>/dev/null' RETURN
 	sleep 3
-	for u in aa-probe-seed aa-probe-write-a aa-probe-write-b aa-probe-login-a aa-probe-login-b; do
+	for u in ${AA_USERS:-aa-probe-seed aa-probe-write-a aa-probe-write-b aa-probe-login-a aa-probe-login-b aa-probe-create-a aa-probe-create-b}; do
 		local jar token
 		jar=$(mktemp)
 		token=$(curl -s -D - -o /dev/null -c "$jar" -H "Origin: http://studio.aa-load.test" http://localhost:18180/csrf-token | tr -d '\r' | awk 'tolower($1)=="x-csrf-token:"{print $2}')
@@ -165,7 +165,7 @@ cmd_users() {
 			-H 'Content-Type: application/json' -d "{\"data\":{\"type\":\"user\",\"attributes\":{\"email\":\"$u@tyk.io\",\"name\":\"$u\",\"password\":\"$pw\",\"with_portal\":true,\"with_chat\":true}}}" http://localhost:18180/auth/register
 		rm -f "$jar"
 	done
-	sql "$p" "UPDATE users SET email_verified = true WHERE email LIKE 'aa-probe-%@tyk.io'; UPDATE users SET is_admin = true WHERE email LIKE 'aa-probe-write-%@tyk.io' OR email = 'aa-probe-seed@tyk.io'" midsommar
+	sql "$p" "UPDATE users SET email_verified = true WHERE email LIKE 'aa-probe-%@tyk.io'; UPDATE users SET is_admin = true WHERE email LIKE 'aa-probe-write-%@tyk.io' OR email LIKE 'aa-probe-create-%@tyk.io' OR email = 'aa-probe-seed@tyk.io'" midsommar
 }
 
 cmd_seed() {
@@ -242,6 +242,13 @@ cmd_fetch() {
 	for half in short stream; do
 		pod=$(k get pod -l "app=gwbench,half=$half" -o jsonpath='{.items[0].metadata.name}' 2>/dev/null) || continue
 		[ -n "$pod" ] && k exec "$pod" -- test -d "/bench/results/$name" 2>/dev/null || continue
+		# gwbench writes summary.json when the run (warm-up included) is over:
+		# copying before that takes a partial run (3 minutes at most).
+		local w
+		for w in $(seq 1 36); do
+			k exec "$pod" -- sh -c "ls /bench/results/$name/*/summary.json" >/dev/null 2>&1 && break
+			hb; sleep 5
+		done
 		# Every request is a line of results.jsonl (millions per run): compress first.
 		k exec "$pod" -- sh -c "cd /bench/results/$name && tar czf /tmp/results.tgz ."
 		kubectl --context "$CTX" cp "$NS/$pod:/tmp/results.tgz" "$out/$half.tgz" >/dev/null
@@ -258,7 +265,8 @@ cmd_fetch() {
 		kubectl --context "$CTX" cp "$NS/$pod:/tmp/results-$half.tgz" "$out/zb-$half.tgz" >/dev/null
 		mkdir -p "$out/zb-$half" && tar xzf "$out/zb-$half.tgz" -C "$out/zb-$half"
 	done
-	k logs deploy/adminloop --tail=-1 > "$out/adminloop.jsonl"
+	k logs -l app=adminloop --tail=-1 --max-log-requests=4 --request-timeout=120s > "$out/adminloop.jsonl" ||
+		k logs deploy/adminloop --tail=-1 --request-timeout=120s > "$out/adminloop.jsonl"
 	k scale deployment adminloop --replicas=0 >/dev/null
 	# Analytics reach Studio on the edges' pulse: wait until the count has
 	# stood still for 30 s (5 minutes at most), then compare.
