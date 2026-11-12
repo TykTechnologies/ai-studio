@@ -3,12 +3,14 @@ package models
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
@@ -240,12 +242,42 @@ func (c *Credential) AfterFind(tx *gorm.DB) error {
 	}
 	plain, ok := openCredentialSecret(tx, c.KeyID, stored)
 	if !ok {
-		logger.Errorf("Credential %d: the stored secret cannot be read (TYK_AI_SECRET_KEY unset or changed, or the database's data key salt is missing); it is refused until that is put right", c.ID)
+		if _, logged := unreadableCredentials.LoadOrStore(unreadableKeyFor(tx, c.ID), struct{}{}); !logged {
+			unreadableCount.Add(1)
+			logger.Errorf("Credential %d: the stored secret cannot be read (TYK_AI_SECRET_KEY unset or changed, or the database's data key salt is missing); it is refused until that is put right", c.ID)
+		}
 		c.Secret, c.stored = secrets.RefusedCredential, stored
 		return nil
 	}
+	if unreadableCount.Load() > 0 {
+		if _, was := unreadableCredentials.LoadAndDelete(unreadableKeyFor(tx, c.ID)); was {
+			unreadableCount.Add(-1)
+			logger.Infof("Credential %d: the stored secret can be read again", c.ID)
+		}
+	}
 	c.Secret, c.stored = plain, ""
 	return nil
+}
+
+// unreadableCredentials holds the IDs of credentials whose secret could
+// not be read when last read, so that is logged once per credential while
+// it lasts (every read would otherwise log it: each validation, list and
+// credential-sync page), and once when it clears. Keyed by the database's
+// pool as well: IDs repeat across databases. unreadableCount spares readable
+// reads the lookup while nothing is marked.
+var (
+	unreadableCredentials sync.Map // unreadableKey -> struct{}
+	unreadableCount       atomic.Int64
+)
+
+type unreadableKey struct {
+	pool *sql.DB
+	id   uint
+}
+
+func unreadableKeyFor(tx *gorm.DB, id uint) unreadableKey {
+	pool, _ := tx.DB()
+	return unreadableKey{pool: pool, id: id}
 }
 
 func NewCredential() (*Credential, error) {

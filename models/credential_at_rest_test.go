@@ -1,6 +1,7 @@
 package models
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -14,10 +15,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
+	"github.com/rs/zerolog"
 )
 
 const credentialTestKey = "credentials-unit-test-key"
@@ -901,4 +904,40 @@ func TestCredentialReadWithoutHooksIsRefusedNotCiphertext(t *testing.T) {
 	// The same struct read again with hooks is opened.
 	require.NoError(t, skipped.Get(db, cred.ID))
 	assert.Equal(t, cred.Secret, skipped.Secret)
+}
+
+// An unreadable secret is logged once per credential while it lasts, not
+// on every read, and once when it can be read again
+// (midsommar-clean-4x5y.39). What callers see does not change.
+func TestUnreadableCredentialIsLoggedOnce(t *testing.T) {
+	t.Setenv("TYK_AI_SECRET_KEY", credentialTestKey)
+	db := setupTestDB(t)
+	cred := &Credential{KeyID: "k", Secret: "the-app-key", Active: true}
+	require.NoError(t, cred.Create(db))
+
+	prev := logger.Log
+	t.Cleanup(func() { logger.Use(prev) })
+	var logged bytes.Buffer
+	logger.Use(zerolog.New(&logged))
+
+	t.Setenv("TYK_AI_SECRET_KEY", "another-unit-test-key")
+	for i := 0; i < 20; i++ {
+		var read Credential
+		require.NoError(t, read.Get(db, cred.ID))
+		assert.Equal(t, secrets.RefusedCredential, read.Secret)
+	}
+	assert.Equal(t, 1, strings.Count(logged.String(), "cannot be read"), logged.String())
+
+	t.Setenv("TYK_AI_SECRET_KEY", credentialTestKey)
+	for i := 0; i < 5; i++ {
+		var read Credential
+		require.NoError(t, read.Get(db, cred.ID))
+		assert.Equal(t, "the-app-key", read.Secret)
+	}
+	assert.Equal(t, 1, strings.Count(logged.String(), "can be read again"), logged.String())
+
+	t.Setenv("TYK_AI_SECRET_KEY", "another-unit-test-key")
+	var read Credential
+	require.NoError(t, read.Get(db, cred.ID))
+	assert.Equal(t, 2, strings.Count(logged.String(), "cannot be read"), "logged again when it recurs")
 }
