@@ -61,6 +61,11 @@ type HybridGatewayService struct {
 	evictedAt map[string]time.Time
 	// evictionsPruned is when evictedAt was last pruned (EvictCredential).
 	evictionsPruned time.Time
+	// evictedAllAt is set when evictedAt was full (maxRememberedEvictions):
+	// the map is cleared and no validation that started before this moment
+	// caches its result, for any key. It bounds the memory a flood of
+	// events can take without weakening the guard.
+	evictedAllAt time.Time
 	cacheMutex     sync.RWMutex                            // Protects token cache
 	cacheConfig    config.HubSpokeConfig                    // Cache configuration
 	stopCleanup    chan bool                               // Signal to stop cleanup goroutine
@@ -420,6 +425,12 @@ func (h *HybridGatewayService) removeFromCache(key string) {
 // longer than one call to the control instance can take.
 const evictionMemory = 10 * time.Minute
 
+// maxRememberedEvictions bounds evictedAt. Past it the remembered evictions
+// are replaced by one for every key (evictedAllAt): validations in flight
+// then do not cache their results, which costs one more call to the
+// control plane each, never a stale answer.
+const maxRememberedEvictions = 10000
+
 // EvictCredential drops everything the edge holds in memory for the
 // credential with this hash (pkg/credhash, the token cache's key): its
 // cached validation, fresh or stale, so neither the cache TTL nor the stale
@@ -450,6 +461,10 @@ func (h *HybridGatewayService) EvictCredential(hash string) {
 			}
 		}
 		h.evictionsPruned = now
+	}
+	if len(h.evictedAt) >= maxRememberedEvictions {
+		clear(h.evictedAt)
+		h.evictedAllAt = now
 	}
 	h.evictedAt[hash] = now
 	h.evictionsMu.Unlock()
@@ -502,6 +517,9 @@ func (h *HybridGatewayService) storeInCache(key string, result *TokenValidationR
 
 	h.evictionsMu.Lock()
 	evicted, wasEvicted := h.evictedAt[key]
+	if !h.evictedAllAt.IsZero() && (!wasEvicted || h.evictedAllAt.After(evicted)) {
+		evicted, wasEvicted = h.evictedAllAt, true
+	}
 	h.evictionsMu.Unlock()
 	if wasEvicted && !started.After(evicted) {
 		return

@@ -2,6 +2,7 @@ package services
 
 import (
 	"encoding/json"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -158,4 +159,26 @@ func TestCredentialChanged_EvictionMemoryIsPruned(t *testing.T) {
 	defer h.evictionsMu.Unlock()
 	assert.NotContains(t, h.evictedAt, h.cacheKey("tok-old"))
 	assert.Contains(t, h.evictedAt, h.cacheKey("tok-new"))
+}
+
+// A flood of events does not grow the remembered evictions without bound:
+// past maxRememberedEvictions they become one eviction of every key, so a
+// validation that started before still does not cache, and one that
+// starts after does.
+func TestCredentialChanged_RememberedEvictionsAreBounded(t *testing.T) {
+	h := newStaleGraceService(t, time.Hour)
+	before := time.Now()
+	for i := 0; i <= maxRememberedEvictions; i++ {
+		h.EvictCredential(fmt.Sprintf("v1:%064d", i))
+	}
+	h.evictionsMu.Lock()
+	n := len(h.evictedAt)
+	h.evictionsMu.Unlock()
+	assert.LessOrEqual(t, n, maxRememberedEvictions)
+
+	key := h.cacheKey("tok-unrelated")
+	h.storeInCache(key, &TokenValidationResult{AppID: 1}, before)
+	assert.False(t, cached(h, "tok-unrelated"), "started before the flood: not cached")
+	h.storeInCache(key, &TokenValidationResult{AppID: 1}, time.Now().Add(time.Millisecond))
+	assert.True(t, cached(h, "tok-unrelated"), "started after it: cached as usual")
 }
