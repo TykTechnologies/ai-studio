@@ -716,7 +716,11 @@ Files: `proto/config_sync.proto`, `proto/common.proto`,
    the RPC client in `microgateway/internal/grpc/credential_sync.go`): an
    explicit refusal from the hub always wins and updates the local row; a
    "valid" answer for an App the edge's namespace may not serve is refused
-   on the synced path and nothing is added from it. The sync runs on every
+   on the synced path and nothing is added from it. A key recorded from a
+   validation has no credential ID, so a delta cannot remove or replace it:
+   every completed sync drops such rows recorded before it started (a key
+   that still exists came with its ID; otherwise the next request asks
+   again). The sync runs on every
    accepted registration (which also forgets an earlier `Unimplemented`)
    and every acknowledged heartbeat, one at a time, with a 5-minute bound.
    A `FailedPrecondition` "register first" answer makes the edge register

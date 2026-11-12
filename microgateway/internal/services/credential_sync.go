@@ -278,8 +278,12 @@ func (s *CredentialSync) Learned(hash string, appID uint, valid bool) {
 			DoUpdates: clause.AssignmentColumns([]string{"app_id", "active", "deleted", "synced_at"}),
 		}).Create(&row).Error
 	} else {
-		err = s.db.Model(&database.SyncedCredential{}).Where("secret_hash = ?", hash).
-			Updates(map[string]interface{}{"active": false, "synced_at": now}).Error
+		res := s.db.Model(&database.SyncedCredential{}).Where("secret_hash = ?", hash).
+			Updates(map[string]interface{}{"active": false, "synced_at": now})
+		if err = res.Error; err == nil && res.RowsAffected == 0 {
+			// A key the list does not hold: nothing changed to count.
+			return
+		}
 	}
 	if err != nil {
 		log.Warn().Err(err).Msg("Credential sync: could not record the control plane's answer")
@@ -404,6 +408,16 @@ func (s *CredentialSync) Sync(ctx context.Context, source CredentialSyncSource) 
 	}
 	if !finished {
 		return errors.New("credential sync: the stream ended without its last page")
+	}
+
+	// Rows the edge added on the control plane's word (Learned) have no
+	// credential ID, so a delta cannot remove or replace them: a key used
+	// once and then deleted or regenerated would stay accepted until the
+	// next full sync. Any such row learned before this sync started is
+	// dropped now; the sync has brought the key with its ID if it still
+	// exists, and otherwise the next request asks again.
+	if err := s.db.Where("credential_id = 0 AND synced_at < ?", started).Delete(&database.SyncedCredential{}).Error; err != nil {
+		return fmt.Errorf("credential sync: remove keys learned before the sync: %w", err)
 	}
 
 	// A full sync brought every credential there is: what it did not bring

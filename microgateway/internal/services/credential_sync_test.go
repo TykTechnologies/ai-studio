@@ -741,3 +741,101 @@ func TestCredentialSync_ValidAnswerWithoutAnAppIsRefused(t *testing.T) {
 	require.NoError(t, err)
 	assert.EqualValues(t, 7, res.AppID)
 }
+
+// A key the edge learned from a validation (no credential ID) cannot be
+// removed or replaced by a delta, which works by ID. Each completed sync
+// therefore drops the learned rows from before it: a key used once at the
+// edge and then deleted, or regenerated, before a delta carries it is not
+// accepted from the list afterwards.
+func TestCredentialSync_LearnedKeysDoNotOutliveASync(t *testing.T) {
+	forEachEdgeDB(t, func(t *testing.T, db *gorm.DB) {
+		for _, tc := range []struct {
+			name   string
+			change func(e *syncedEdge)
+		}{
+			{"deleted", func(e *syncedEdge) {
+				// Created and deleted on the hub between two syncs: no
+				// delta ever carries it.
+			}},
+			{"regenerated", func(e *syncedEdge) {
+				e.hub.set(SyncedCredentialUpdate{CredentialID: 12, SecretHash: e.hash(keyC), AppID: 1, Active: true, UpdatedAt: time.Now()})
+			}},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				e := newSyncedEdge(t, db, 24*time.Hour)
+				require.NoError(t, db.Where("1 = 1").Delete(&database.SyncedCredential{}).Error)
+				require.NoError(t, db.Where("topic = ?", credentialSyncTopic).Delete(&database.SyncState{}).Error)
+				e.hub.apps[1] = pbApp(1, "app", true)
+				e.hub.set(SyncedCredentialUpdate{CredentialID: 11, SecretHash: e.hash(keyA), AppID: 1, Active: true, UpdatedAt: time.Now()})
+				require.NoError(t, e.list.Sync(context.Background(), e.hub))
+
+				// keyB is used at the edge: the control plane says valid,
+				// and the edge records it, without an ID.
+				e.list.Learned(e.hash(keyB), 1, true)
+				_, found, err := e.list.Lookup(e.hash(keyB))
+				require.NoError(t, err)
+				require.True(t, found)
+
+				tc.change(e)
+				require.NoError(t, e.list.Sync(context.Background(), e.hub), "a delta")
+				_, found, err = e.list.Lookup(e.hash(keyB))
+				require.NoError(t, err)
+				assert.False(t, found, "the learned row is gone after the sync")
+
+				// With no control plane, the old key cannot be checked: 503,
+				// not accepted from the list.
+				e.control.err = errors.New("no control plane")
+				_, err = e.h.ValidateAPIToken(keyB)
+				require.ErrorIs(t, err, coresvc.ErrCredentialCheckUnavailable)
+				// keyA, which the sync brought with its ID, stays.
+				_, err = e.h.ValidateAPIToken(keyA)
+				require.NoError(t, err)
+			})
+		}
+	})
+}
+
+// A key learned while a sync runs is kept: only rows from before the sync
+// started are dropped.
+func TestCredentialSync_KeyLearnedDuringASyncIsKept(t *testing.T) {
+	db := setupEdgeSyncTestDB(t)
+	e := newSyncedEdge(t, db, 24*time.Hour)
+	e.hub.apps[1] = pbApp(1, "app", true)
+	e.hub.set(SyncedCredentialUpdate{CredentialID: 11, SecretHash: e.hash(keyA), AppID: 1, Active: true, UpdatedAt: time.Now()})
+	require.NoError(t, e.list.Sync(context.Background(), pagesDuring{e.hub, func() { e.list.Learned(e.hash(keyB), 1, true) }}))
+	_, found, err := e.list.Lookup(e.hash(keyB))
+	require.NoError(t, err)
+	assert.True(t, found)
+}
+
+// pagesDuring runs during once, after the first page of source's stream.
+type pagesDuring struct {
+	source CredentialSyncSource
+	during func()
+}
+
+func (p pagesDuring) SyncCredentials(ctx context.Context, since uint64, onPage func(*CredentialSyncPage) error) error {
+	once := false
+	return p.source.SyncCredentials(ctx, since, func(page *CredentialSyncPage) error {
+		if err := onPage(page); err != nil {
+			return err
+		}
+		if !once {
+			once = true
+			p.during()
+		}
+		return nil
+	})
+}
+
+// A rejected key the list does not hold changes nothing: no recount.
+func TestCredentialSync_RejectedUnknownKeyChangesNothing(t *testing.T) {
+	db := setupEdgeSyncTestDB(t)
+	e := newSyncedEdge(t, db, 24*time.Hour)
+	before := e.list.Count()
+	e.list.Learned(e.hash(keyC), 0, false)
+	assert.Equal(t, before, e.list.Count())
+	var n int64
+	require.NoError(t, db.Model(&database.SyncedCredential{}).Count(&n).Error)
+	assert.Zero(t, n, "nothing added for a rejected key")
+}

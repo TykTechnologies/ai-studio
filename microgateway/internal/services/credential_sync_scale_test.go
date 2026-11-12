@@ -173,6 +173,20 @@ func TestCredentialSync_FullSyncOf50000WhileValidating(t *testing.T) {
 			db.Dialector.Name(), second.Round(time.Millisecond), len(latencies), failed.Load(), p(0.5), p(0.99), latencies[len(latencies)-1])
 		t.Logf("%s: repeat full sync with 1%% of the Apps changed: %s", db.Dialector.Name(), third.Round(time.Millisecond))
 
+		// The per-request cost of the list at rest: no sync running, the
+		// token cache off, so every validation reads the list (the hash's
+		// row by its primary key) and the App.
+		var rest []time.Duration
+		for i := 0; i < 5000; i++ {
+			t0 := time.Now()
+			_, err := h.ValidateAPIToken(key((i * 37) % n))
+			require.NoError(t, err)
+			rest = append(rest, time.Since(t0))
+		}
+		sort.Slice(rest, func(i, j int) bool { return rest[i] < rest[j] })
+		t.Logf("%s: validation from the list at rest (no sync, no token cache): p50 %s, p99 %s, max %s over %d",
+			db.Dialector.Name(), rest[len(rest)/2], rest[len(rest)*99/100], rest[len(rest)-1], len(rest))
+
 		assert.Zero(t, failed.Load(), "a key on the list is accepted throughout a full sync")
 		assert.EqualValues(t, n, list.Count())
 		assert.Less(t, p(0.99), 250*time.Millisecond, "validation does not wait for the sync")
