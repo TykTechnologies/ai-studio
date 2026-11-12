@@ -248,8 +248,10 @@ func pushAcrossFailover(t *testing.T, offset time.Duration, restart bool) (moved
 	require.NoError(t, pair.EnableClockOffset(ctx))
 	require.NoError(t, pair.Standby().SetClockOffset(ctx, offset))
 	dbA, dbB := openFailoverDB(t, pair), openFailoverDB(t, pair)
-	require.NoError(t, dbA.AutoMigrate(&models.EdgeInstance{}, &models.NamespaceSyncStatus{}, &models.ClusterNode{},
-		&models.PushOperation{}, &models.EdgePushCommand{}, &models.ClusterCounter{}))
+	// Studio's whole schema: in the Enterprise build a push also reads
+	// tables of other domains (licensed_namespaces, through the
+	// entitlements service), so a hand-picked list of tables falls short.
+	require.NoError(t, models.InitModels(dbA))
 
 	sender := &pushStreams{streams: map[string]string{"edge-1": "session-1"}}
 	start := func(db *gorm.DB, id string, streams *pushStreams) (*pushes.Coordinator, func()) {
