@@ -20,8 +20,12 @@ func (a *API) handleHealth(c *gin.Context) {
 
 // SetDatabaseReadyGrace sets how long the database may be unreachable (or,
 // for /ready?require=write, not writable) before /ready fails
-// (DATABASE_READY_GRACE; set by pkg/studio). 0, the default, fails it as
-// soon as the database does not answer, as before 2.3.
+// (DATABASE_READY_GRACE; set by pkg/studio from Config.DatabaseReadyGrace).
+// From the environment (or config.LoadFrom) it is 30s unless set. 0 pings
+// the database in each request and fails as soon as the ping does, as
+// before 2.3: that is what an API built without this call gets, and what
+// an embedding host gets from a Config it builds by hand without setting
+// DatabaseReadyGrace.
 func (a *API) SetDatabaseReadyGrace(d time.Duration) {
 	a.dbReadyGrace = d
 }

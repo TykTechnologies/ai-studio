@@ -139,7 +139,8 @@ type AppConf struct {
 	// replica in the load balancer, so a held write or a 503 with
 	// Retry-After reaches the client instead of a refused connection. 0
 	// pings the database in the request and fails as soon as the ping
-	// does, as before 2.3. It should be longer than the time a write is
+	// does, as before 2.3; a Config built by hand (not by Load or
+	// LoadFrom) has 0 unless it sets the field. It should be longer than the time a write is
 	// held for a writable primary (DATABASE_WRITE_RETRY_WINDOW, 15s).
 	DatabaseReadyGrace time.Duration
 	FilterSignupDomains   []string

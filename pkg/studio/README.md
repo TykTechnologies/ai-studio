@@ -149,7 +149,11 @@ shares the one-instance-per-process rule with `New`. See
   `Config.DatabaseMaxOpenConns`, `DatabaseMaxIdleConns`,
   `DatabaseConnMaxLifetime` and `DatabaseConnectTimeout` (zero values keep
   the driver's defaults; a `Config` built by hand gets no 30-minute
-  lifetime unless it sets one). `dbstate.For(db).Status()`
+  lifetime unless it sets one). `/ready` rides out a failover shorter
+  than `Config.DatabaseReadyGrace` (`DATABASE_READY_GRACE`): 30 seconds
+  from `config.LoadFrom`, but 0 in a `Config` built by hand, which keeps
+  the readiness of before 2.3 (a ping in each request; `/ready` fails as
+  soon as the database does not answer). `dbstate.For(db).Status()`
   (`pkg/dbstate`) says whether the database is writable, read-only or
   unreachable. A pool the host opens some other way has none of this.
 - **Waiting for the database at start-up.** On Postgres, `OpenDatabase`
