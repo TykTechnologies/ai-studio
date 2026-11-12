@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -131,11 +132,23 @@ func splitPulse(m *pb.AnalyticsPulse, seq2 uint64) (first, second *pb.AnalyticsP
 	return first, second
 }
 
-// encodeBacklogLocked serializes a pulse into backlog batches, split until
-// each is at most maxPulseBytes, so every batch can be delivered as it is.
-// A record larger than a pulse may be by itself is dropped, as a fresh
-// batch's is. Caller holds bufferMutex (the sequence number).
-func (p *AnalyticsPulsePlugin) encodeBacklogLocked(m *pb.AnalyticsPulse, newest time.Time) []backlogBatch {
+// nextSequence takes the next sequence number, for a part split off a
+// batch. It takes bufferMutex itself, briefly, so that serializing a batch
+// never holds the lock the request path records analytics under.
+func (p *AnalyticsPulsePlugin) nextSequence() uint64 {
+	p.bufferMutex.Lock()
+	defer p.bufferMutex.Unlock()
+	seq := p.sequenceNumber
+	p.sequenceNumber++
+	return seq
+}
+
+// encodeBacklog serializes a pulse into backlog batches, split until each
+// is at most maxPulseBytes, so every batch can be delivered as it is. A
+// record larger than a pulse may be by itself is dropped, as a fresh
+// batch's is. Called without bufferMutex: it takes the lock only for a
+// split's sequence number.
+func (p *AnalyticsPulsePlugin) encodeBacklog(m *pb.AnalyticsPulse, newest time.Time) []backlogBatch {
 	if pulseRecords(m) == 0 {
 		return nil
 	}
@@ -150,10 +163,8 @@ func (p *AnalyticsPulsePlugin) encodeBacklogLocked(m *pb.AnalyticsPulse, newest 
 				Msg("Analytics pulse: one record is larger than a pulse may be and cannot be delivered; it is dropped (stored request and response bodies are the usual reason: see ANALYTICS_STORE_REQUESTS / ANALYTICS_STORE_RESPONSES)")
 			return nil
 		}
-		seq2 := p.sequenceNumber
-		p.sequenceNumber++
-		first, second := splitPulse(m, seq2)
-		return append(p.encodeBacklogLocked(first, newest), p.encodeBacklogLocked(second, newest)...)
+		first, second := splitPulse(m, p.nextSequence())
+		return append(p.encodeBacklog(first, newest), p.encodeBacklog(second, newest)...)
 	}
 	msg, err := proto.Marshal(m)
 	if err != nil {
@@ -218,9 +229,7 @@ func (p *AnalyticsPulsePlugin) spillToBacklog(now time.Time) {
 	for _, b := range batches {
 		m := p.buildPulseMessage(b.snap.analytics, b.snap.metadata, b.snap.budget, b.snap.proxy, b.snap.compliance, b.snap.toolCalls, b.seq)
 		makeValidUTF8(m.ProtoReflect())
-		p.bufferMutex.Lock()
-		encoded = append(encoded, p.encodeBacklogLocked(m, b.snap.newest())...)
-		p.bufferMutex.Unlock()
+		encoded = append(encoded, p.encodeBacklog(m, b.snap.newest())...)
 	}
 
 	p.bufferMutex.Lock()
@@ -290,13 +299,10 @@ func (p *AnalyticsPulsePlugin) deliverBacklogHead() pulseOutcome {
 	resp, err := p.sendWithRetry(pulse, head.seq)
 	if err != nil && isMessageTooLarge(err) {
 		// The control plane's limit is below this edge's: split the batch
-		// in place, the older half keeping its sequence number.
-		p.bufferMutex.Lock()
-		seq2 := p.sequenceNumber
-		p.sequenceNumber++
-		first, second := splitPulse(pulse, seq2)
+		// in place, the older half keeping its sequence number. Serialized
+		// before the lock is taken.
+		first, second := splitPulse(pulse, p.nextSequence())
 		if second == nil {
-			p.bufferMutex.Unlock()
 			p.oversizedDropped.Add(1)
 			pulseDroppedOversized.Add(1)
 			log.Error().Uint64("sequence", head.seq).Str("cause", err.Error()).Msg("Analytics pulse: one record is larger than the control plane accepts and cannot be delivered; it is dropped")
@@ -311,9 +317,10 @@ func (p *AnalyticsPulsePlugin) deliverBacklogHead() pulseOutcome {
 			}
 			parts = append(parts, backlogBatch{seq: m.SequenceNumber, msg: msg, records: pulseRecords(m), newest: head.newest})
 		}
+		// Only the sender changes the backlog, so the head is still head.
+		p.bufferMutex.Lock()
 		p.backlogBytes -= int64(len(head.msg))
-		rest := append(parts, p.backlog[1:]...)
-		p.backlog = rest
+		p.backlog = slices.Replace(p.backlog, 0, 1, parts...) // entries are small headers: a copy of the slice, not of the messages
 		for _, b := range parts {
 			p.backlogBytes += int64(len(b.msg))
 		}
@@ -372,8 +379,9 @@ func (p *AnalyticsPulsePlugin) popBacklogHead() {
 // behind it. Called by deliver instead of holdSnapshotLocked when the
 // backlog is on.
 func (p *AnalyticsPulsePlugin) failToBacklog(pulse *pb.AnalyticsPulse, snap pulseSnapshot, now time.Time) {
+	encoded := p.encodeBacklog(pulse, snap.newest())
 	p.bufferMutex.Lock()
-	p.pushBacklogLocked(p.encodeBacklogLocked(pulse, snap.newest()))
+	p.pushBacklogLocked(encoded)
 	p.bufferMutex.Unlock()
 	p.spillToBacklog(now)
 }
