@@ -209,7 +209,7 @@ The Edge Gateways list and each gateway's detail page show **Last pushed HH:MM**
 
 ### Push Process
 
-> **AI Studio 2.2 runs as a single instance.** Replicated AI Studio instances are not supported in 2.2: run one hot instance with an optional cold standby (see [Reference Architecture](./reference-architecture.md#run-studio-as-a-hot-cold-singleton)). Support for several active replicas is planned for 2.3; the notes on replicas below apply from then.
+> **Several replicas from 2.3.** The notes on replicas below apply to 2.3, where several AI Studio replicas can serve one database, in one site or in two (see [Several replicas](./reference-architecture.md#several-replicas-from-23) and [Active-Active](./deployment-active-active.md)). AI Studio 2.2 runs as a single instance (see [One instance, with a cold standby](./reference-architecture.md#one-instance-with-a-cold-standby)).
 
 When you push configuration:
 
@@ -376,7 +376,7 @@ The paths and the response envelope are unchanged, and every attribute 2.2 retur
 
 ### Several control planes
 
-An edge can be given more than one control plane, for example one per site when AI Studio runs in two sites over one replicated database:
+An edge can be given more than one control plane, for example one per site when AI Studio runs in two sites over one replicated database (see [Active-Active (Two Sites)](./deployment-active-active.md)):
 
 ```bash
 # Ordered: the edge's own site first
@@ -551,5 +551,6 @@ An edge also reports, in its heartbeats, the configuration it applied rather tha
 ## See Also
 
 - [Observability](./observability.md) — metrics and traces emitted by each edge
+- [Active-Active (Two Sites)](./deployment-active-active.md) — edges with a control plane in each of two sites
 - [Kubernetes / Helm Deployment](./deployment-helm-k8s.md) — running edges on Kubernetes, including scale-out
 - [Running Alongside the Kubernetes Inference Gateway](./deployment-kubernetes-inference-gateway.md)

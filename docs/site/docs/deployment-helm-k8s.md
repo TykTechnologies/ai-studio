@@ -677,7 +677,7 @@ config:
 
 #### Two clusters, one replicated PostgreSQL
 
-The active-active layout of the reference architecture: one release in each site's cluster, both on the same replicated PostgreSQL, each site's replicas labelled with its name so the cluster status (`GET /api/v1/cluster/status`) and the Edge Gateways page tell them apart. The two releases must share every secret: put them in values both sites use, or in Secrets with the same contents.
+The active-active layout (see [Active-Active (Two Sites)](./deployment-active-active.md) for the database, the witness and the runbooks): one release in each site's cluster, both on the same replicated PostgreSQL, each site's replicas labelled with its name so the cluster status (`GET /api/v1/cluster/status`) and the Edge Gateways page tell them apart. The two releases must share every secret: put them in values both sites use, or in Secrets with the same contents.
 
 ```yaml
 # values-site-a.yaml. values-site-b.yaml is the same with site-b as the label
