@@ -807,7 +807,11 @@ Files: `proto/config_sync.proto`, `proto/common.proto`,
    hash or not); the delta brings the change with the credential's ID.
    The event carries no namespace, so every event makes every connected
    full-sync edge ask for a delta, whatever the key's namespace; a burst
-   of events folds into one pending delta per edge. On
+   of events folds into one pending delta per edge. Only Studio raises the
+   event, from an administrator's change to a key or App (plugins and edges
+   cannot: the topic is reserved), and an unchanged delta is one small
+   page (16 bytes, 20 to 53 ms measured), so the cost is one such request
+   per edge per change, the same as one heartbeat's delta. On
    the rig a key deactivated through another replica was refused from the
    list 24 ms later, and with no event raised the heartbeat's sync
    repaired it in 0.25 s (300 ms heartbeat).
