@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/dbstate"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -151,6 +152,9 @@ func Snapshot(ctx context.Context, db *gorm.DB, self string, log *Log, relay *Re
 	}
 
 	// What needs attention.
+	if ds := dbstate.For(db).Status(); ds.State != dbstate.Writable {
+		st.Warnings = append(st.Warnings, databaseWarning(ds, selfName(db, self, live)))
+	}
 	st.Warnings = append(st.Warnings, secretWarnings(live)...)
 	if st.Database == "postgres" {
 		if log != nil && !st.EventLog.Enabled {
@@ -186,4 +190,45 @@ func Snapshot(ctx context.Context, db *gorm.DB, self string, log *Log, relay *Re
 		st.Warnings = append(st.Warnings, "A configuration push has been waiting for its edge for over 10 minutes.")
 	}
 	return st, nil
+}
+
+// selfName names this replica for a warning: its label (CLUSTER_NODE_LABEL)
+// and node ID. With a partition one site may see the database as not
+// writable and the other not, so the warning says which replica it is. A
+// replica that cannot write may have dropped out of the live nodes (its
+// heartbeat fails), so its row is read directly when it is not among them.
+func selfName(db *gorm.DB, self string, live []models.ClusterNode) string {
+	label := ""
+	found := false
+	for _, n := range live {
+		if n.NodeID == self {
+			label, found = n.Label, true
+			break
+		}
+	}
+	if !found {
+		var n models.ClusterNode
+		if db.Select("label").Where("node_id = ?", self).Take(&n).Error == nil {
+			label = n.Label
+		}
+	}
+	if label == "" {
+		return "Replica " + self
+	}
+	return fmt.Sprintf("Replica %q (%s)", label, self)
+}
+
+// databaseWarning explains a database that does not take writes on the
+// replica named who. The status is read from the database, so an
+// unreachable one usually fails the whole request instead; the warning is
+// what a read-only one looks like.
+func databaseWarning(ds dbstate.Status, who string) string {
+	since := ""
+	if !ds.NotWritableSince.IsZero() {
+		since = " since " + ds.NotWritableSince.UTC().Format(time.RFC3339)
+	}
+	if ds.State == dbstate.ReadOnly {
+		return who + " has seen its database as read-only" + since + " (a standby, or a primary being demoted): its writes fail until it reaches a writable database server."
+	}
+	return who + " cannot reach its database" + since + ": its requests that need it fail."
 }

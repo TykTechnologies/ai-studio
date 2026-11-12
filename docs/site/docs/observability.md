@@ -114,6 +114,25 @@ conventions, and keep their own names:
 | `aistudio_guardrail_templates_total` | `provider`, `result` | Messages tried against an App's trusted prompt templates: `hit`, `miss`, `mimicry`, `over_cap`, `backstop_only` |
 | `aistudio_guardrail_template_exempt_share` | `provider` | Histogram of the share of a matched message left unscored by its template |
 
+### Database metrics
+
+With PostgreSQL, each replica reports what its database can do, from the
+same check every 5 seconds that `/ready` answers from (see
+[Readiness during a failover](./configuration.md#postgres-with-a-standby-failover)). With SQLite neither
+series is reported.
+
+| Metric | Labels | Description |
+|---|---|---|
+| `aistudio_db_writable` | none | Gauge: 1 while this replica's database takes writes, 0 while it is read-only or unreachable |
+| `aistudio_db_failovers_total` | none | Times this replica saw the writable server change (another node, or a promotion behind the same address) since it started |
+
+Alert on `aistudio_db_writable == 0` lasting longer than your failover
+manager's promotion time: a replica that stays on a read-only or unreachable
+database fails every write. `/ready` (`"database"` in its body),
+`/ready?require=write` and the cluster status
+(`GET /api/v1/cluster/status`, which warns while the database is read-only)
+say the same.
+
 ### Migrating existing dashboards
 
 Three metrics were renamed to their convention equivalents. The old names are

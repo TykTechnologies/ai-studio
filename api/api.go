@@ -79,6 +79,8 @@ type API struct {
 	auth                          *auth.AuthService
 	proxy                         *proxy.Proxy
 	clusterStatus                 ClusterStatusFunc
+	// dbReadyGrace is DATABASE_READY_GRACE (see SetDatabaseReadyGrace).
+	dbReadyGrace time.Duration
 	// frontend holds the built admin UI, rooted at its build directory.
 	frontend                      fs.FS
 	// basePath is the path prefix the API and UI are served under ("" for

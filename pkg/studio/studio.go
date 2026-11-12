@@ -42,6 +42,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/notifications"
 	"github.com/TykTechnologies/midsommar/v2/pkg/cluster"
 	"github.com/TykTechnologies/midsommar/v2/pkg/corsutil"
+	"github.com/TykTechnologies/midsommar/v2/pkg/dbstate"
 	"github.com/TykTechnologies/midsommar/v2/pkg/replicas"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
@@ -762,6 +763,13 @@ func New(opts Options) (_ *Studio, err error) {
 	s.api.SetClusterStatus(func(ctx context.Context) (interface{}, error) {
 		return cluster.Snapshot(ctx, s.db, nodeID, s.clusterLog, s.relay)
 	})
+	s.api.SetDatabaseReadyGrace(conf.DatabaseReadyGrace)
+	if tracker := dbstate.For(s.db); tracker != nil {
+		metrics.SetDatabaseState(func() (bool, int64) {
+			st := tracker.Status()
+			return st.State == dbstate.Writable, st.Failovers
+		})
+	}
 
 	return s, nil
 }

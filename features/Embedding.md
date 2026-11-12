@@ -554,6 +554,14 @@ tables in `public`). Studio's unprefixed table names (`users`, `roles`,
 Raw SQL in Studio never qualifies a schema, and the schema snapshot goldens
 are schema-independent, so nothing else changes.
 
+**Readiness.** `/ready` keeps a replica in the load balancer through a
+database failover shorter than `Config.DatabaseReadyGrace`
+(`DATABASE_READY_GRACE`, see `docs/site/docs/configuration.md`). A `Config`
+from `config.LoadFrom` gets the default of 30 seconds; a `Config` built by
+hand gets 0 unless it sets the field, which is the readiness of before 2.3:
+the database is pinged in each request and `/ready` fails as soon as it
+does not answer.
+
 `studio.New` runs every migration and seed, from `models.InitModels` through
 the RBAC seed (plus the analytics and identity broker tables, which used to
 migrate later), under `models.AcquireMigrationLock`: a Postgres
