@@ -228,30 +228,68 @@ Files: `pkg/studio/database.go`, `startup/connectivity.go`,
    during an automatic failover with no API change.
    **Built** (midsommar-clean-4x5y.6). `pkg/dbhold.Pool` wraps Studio's own
    Postgres pool as gorm's `ConnPool` (installed by `OpenDatabase` when the
-   window is above 0). Retried: a pgconn `ConnectError`, 25006 (the tracker
-   is told, so the connection is redialled), 57P01 to 57P03, `ErrBadConn`,
-   and anything pgconn reports as `SafeToRetry`; backoff 100 ms doubling to
-   1 s. A SELECT, a prepare and `BEGIN` are also retried when the
-   connection was lost after sending (a pooled connection to a primary that
-   has gone answers EOF): repeating them has no effect. Anything else that
-   may have reached the server is not retried. On a lost connection the
-   pool's idle connections are closed so the next statement dials afresh.
+   window is above 0). Retried, because the statement cannot have
+   executed: a pgconn `ConnectError` (never sent), 25006 (refused before
+   executing; the tracker is told, so the connection is redialled), 57P03
+   (only at connection start), `ErrBadConn` (database/sql's contract: not
+   returned if the server might have performed the operation) and pgconn's
+   `SafeToRetry` (failed before sending anything); backoff 100 ms doubling
+   to 1 s. 57P01 and 57P02 are not in that list: 57P02 comes from the
+   quickdie handler, possibly after an autocommit statement's commit record
+   was flushed, so the write may exist (57P01 is treated the same). After
+   them, as after a connection lost once the statement was sent (a pooled
+   connection to a primary that has gone answers EOF), only a repeatable
+   statement is retried: a read through `QueryContext` (a plain `SELECT`),
+   a prepare, `BEGIN`. `ExecContext` is never repeatable (`SELECT
+   pg_notify(...)` runs through it for its side effect). On a lost
+   connection the pool's idle connections are closed so the next statement
+   dials afresh.
+   **Bounds.** At most `dbhold.MaxHeld` (512, a constant) statements are
+   held at once; beyond it a statement fails at once as
+   `UnavailableError`. Once a hold has run out its window, statements that
+   fail within the next window are not held: a request runs several
+   statements in turn, and this keeps it to about one window in an outage
+   longer than the window (after a window the next one is held again, as a
+   probe). Measured on the pair rig: 1,500 concurrent `POST
+   /api/v1/credentials` with no primary, window 10 s, pool of 8
+   connections: at most 512 statements held, every request answered 503
+   `database_unavailable`, all within 18 s; goroutines 40 before and 6,043
+   at most (the test's 1,500 clients included), heap 14 MB before and 121
+   MB at most.
    `QueryRowContext` (its error only shows at `Scan`) waits instead while
    the tracker says the database is not writable. The request context ends
    any wait. A wait that runs out is a `dbhold.UnavailableError`;
    `dbhold.IsUnavailable` also matches a transaction that lost its
    connection (class 08, 57P0x, EOF, `ErrConnDone`, `*net.OpError`).
    Metrics `aistudio_db_write_retries_total` and
-   `aistudio_db_write_hold_seconds` (label `outcome`).
+   `aistudio_db_write_hold_seconds` (label `outcome`: `succeeded`,
+   `gave_up`, `cancelled`, `failed`, `rejected`), and
+   `aistudio_db_writes_held` (statements held now).
+   **What else is held.** The pool is Studio's only one, so the hold applies
+   to every caller, with no opt-out: the embedded gateway's request path
+   (through the same services), the control server's gRPC handlers (edge
+   pulses and heartbeats, configuration pulls, the edge's token
+   validation), the lease renewal and the cluster's background loops (node
+   heartbeat, event log poll and prune, relay, push janitor). The edge
+   gives up on a token validation after 5 s (`tokenValidationTimeout`),
+   while the hub may hold the lookup up to the window; an analytics pulse
+   waits up to the edge's pulse timeout (30 s by default), longer than the
+   15 s window, so a pulse during a failover is answered late (stored, or
+   "not stored; retry") instead of failing at once. The lease is safe under
+   a held renewal: `renewedAt` is the start of the renewal. Loops on a
+   ticker retry on their next tick as before, only later.
    **503 mapping.** There is no common API error path (handlers write their
    own 500s, and services mostly call gorm without the request context), so
    a gorm callback and the hold record when a statement found the database
    unavailable, and a middleware answers a 500 written by a request that
    was running since then as 503 with `Retry-After: 5` and
    `errors[0].code` `database_unavailable`, dropping the handler's body.
-   It is time-based, not tied to one request: during an outage another
-   request's genuine 500 can become a 503, which errs toward a retryable
-   answer. Sign-in (`auth.Login`) and the session and API-key lookups
+   Only an exact 500 not yet written changes; nothing is buffered. The
+   link between the error and the request is by time, not by request:
+   during an outage another cause's genuine 500 reads as 503, which errs
+   toward a retryable answer; `aistudio_db_unavailable_responses_total`
+   counts the conversions. It is mounted on the whole admin router
+   (management API, portal, chat); the LLM proxy has its own server. Sign-in (`auth.Login`) and the session and API-key lookups
    (`AuthMiddleware`) answer the same 503 instead of 401 when the lookup
    failed for that reason; `helpers.SendErrorResponse` maps such an error
    too. gRPC handlers are unchanged (Internal, which edges treat as "hub

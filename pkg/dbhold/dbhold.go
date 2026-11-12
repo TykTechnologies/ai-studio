@@ -57,6 +57,9 @@ type Pool struct {
 	window  time.Duration
 	tracker *dbstate.Tracker
 	maxIdle int
+	held    atomic.Int64
+	// gaveUp is when a hold last ran out its window (unix nanoseconds).
+	gaveUp atomic.Int64
 }
 
 // New wraps db. A window of 0 or less holds nothing: every call goes
@@ -83,9 +86,11 @@ func (p *Pool) PrepareContext(ctx context.Context, query string) (stmt *sql.Stmt
 	return stmt, err
 }
 
-// ExecContext runs query, held across a failover.
+// ExecContext runs query, held across a failover. Never repeatable: a
+// SELECT run through Exec is there for its side effect (SELECT
+// pg_notify(...)), and gorm's reads go through QueryContext.
 func (p *Pool) ExecContext(ctx context.Context, query string, args ...any) (res sql.Result, err error) {
-	err = p.hold(ctx, readOnly(query), func() error {
+	err = p.hold(ctx, false, func() error {
 		res, err = p.db.ExecContext(ctx, query, args...)
 		return err
 	})
@@ -105,7 +110,10 @@ func (p *Pool) QueryContext(ctx context.Context, query string, args ...any) (row
 // scanned, so it cannot be retried; instead, while the tracker says the
 // database is not writable, it waits (within the window) for it to be.
 func (p *Pool) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
-	p.waitWritable(ctx)
+	if p.enter() {
+		p.waitWritable(ctx)
+		p.leave()
+	}
 	return p.db.QueryRowContext(ctx, query, args...)
 }
 
@@ -147,6 +155,24 @@ func (p *Pool) hold(ctx context.Context, repeatable bool, op func() error) error
 	if err == nil || p.window <= 0 || !retryable(err) {
 		return err
 	}
+	if time.Since(time.Unix(0, p.gaveUp.Load())) < p.window {
+		// A hold ran out its window with no writable server less than a
+		// window ago: the outage is longer than the window, so do not
+		// make this statement (and the request after it) wait it out
+		// again. A request runs several statements in turn; this keeps
+		// it to about one window. After a window the next one waits
+		// again, as a probe.
+		NoteUnavailable()
+		metrics.RecordDBWriteHold(ctx, "rejected", 0, 0)
+		return &UnavailableError{Err: err}
+	}
+	if !p.enter() {
+		// MaxHeld statements are waiting already: fail at once.
+		NoteUnavailable()
+		metrics.RecordDBWriteHold(ctx, "rejected", 0, 0)
+		return &UnavailableError{Err: err}
+	}
+	defer p.leave()
 	started := time.Now()
 	deadline := started.Add(p.window)
 	delay := retryFirst
@@ -154,6 +180,7 @@ func (p *Pool) hold(ctx context.Context, repeatable bool, op func() error) error
 		p.noteFailure(err)
 		wait := min(delay, time.Until(deadline))
 		if wait <= 0 {
+			p.gaveUp.Store(time.Now().UnixNano())
 			NoteUnavailable()
 			metrics.RecordDBWriteHold(ctx, "gave_up", retries-1, time.Since(started).Seconds())
 			return &UnavailableError{Held: time.Since(started), Err: err}
@@ -177,6 +204,33 @@ func (p *Pool) hold(ctx context.Context, repeatable bool, op func() error) error
 		}
 	}
 }
+
+// MaxHeld is the most statements held at once, per pool. During a failover
+// under load every request could otherwise sit in the hold for the whole
+// window (services mostly run statements without the request's context, so
+// one stays held after its client has gone), each retrying against a
+// primary that is just coming up. Beyond it a statement fails at once as
+// an UnavailableError (503 database_unavailable).
+const MaxHeld = 512
+
+// enter takes a place among the held statements; false when MaxHeld are
+// held already.
+func (p *Pool) enter() bool {
+	if p.held.Add(1) > MaxHeld {
+		p.held.Add(-1)
+		return false
+	}
+	metrics.AddDBWritesHeld(context.Background(), 1)
+	return true
+}
+
+func (p *Pool) leave() {
+	p.held.Add(-1)
+	metrics.AddDBWritesHeld(context.Background(), -1)
+}
+
+// Held is how many statements are held now.
+func (p *Pool) Held() int64 { return p.held.Load() }
 
 // closeIdle closes the pool's idle connections (database/sql closes those
 // over a lowered limit), then restores the limit.
@@ -212,11 +266,28 @@ func (p *Pool) waitWritable(ctx context.Context) {
 	}
 }
 
-// Retryable reports whether err means a statement never reached a writable
-// server, so running it again cannot apply it twice: the connection could
-// not be made (or was refused while the server starts or stops), the
-// server refused it as read-only (SQLSTATE 25006) or as shutting down or
-// starting (57P01 to 57P03), or the driver reports that nothing was sent.
+// Retryable reports whether err means a statement cannot have executed, so
+// running it again, whatever it is, cannot apply it twice. Each class, and
+// why:
+//   - SQLSTATE 25006 (read-only transaction): the server refused the
+//     statement before executing it, so it wrote nothing.
+//   - 57P03 (cannot connect now): sent only while a connection starts,
+//     before any statement.
+//   - *pgconn.ConnectError: the connection was never established, so the
+//     statement was never sent.
+//   - driver.ErrBadConn: by database/sql's contract a driver returns it
+//     only when the server cannot have performed the operation ("ErrBadConn
+//     should NOT be returned if there's a possibility that the database
+//     server might have performed the operation", database/sql/driver).
+//   - pgconn.SafeToRetry: pgx's guarantee that the error "occurred before
+//     sending any data to the server".
+//
+// Not here: 57P01 and 57P02 (the server terminating the session). 57P02 is
+// sent from the quickdie signal handler, which can run after an autocommit
+// statement's commit record was flushed and before CommandComplete, so the
+// write may exist; 57P01 is treated the same. Like a connection lost after
+// sending, they count as IsUnavailable, and only a repeatable statement
+// (a read, a prepare, BEGIN) is retried after them.
 func Retryable(err error) bool {
 	if err == nil {
 		return false
@@ -226,16 +297,11 @@ func Retryable(err error) bool {
 	switch {
 	case dbstate.IsReadOnlyError(err):
 		return true
-	case errors.As(err, &pgErr) && (pgErr.Code == "57P01" || pgErr.Code == "57P02" || pgErr.Code == "57P03"):
-		// The server is shutting down or starting: a statement answered
-		// with this was aborted (its implicit transaction rolled back)
-		// or never ran.
+	case errors.As(err, &pgErr) && pgErr.Code == "57P03":
 		return true
 	case errors.As(err, &connectErr):
 		return true
 	case errors.Is(err, driver.ErrBadConn):
-		// database/sql retries a bad connection itself; a driver returns
-		// it only when nothing was sent.
 		return true
 	case pgconn.SafeToRetry(err):
 		return true

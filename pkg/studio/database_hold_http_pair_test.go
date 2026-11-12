@@ -8,7 +8,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/dbhold"
 	"github.com/TykTechnologies/midsommar/v2/pkg/testinfra/containers"
 )
 
@@ -118,5 +122,92 @@ func TestFailover_CredentialRefusedWith503AfterTheWindow(t *testing.T) {
 	var after int64
 	require.NoError(t, s.db.Model(&models.Credential{}).Count(&after).Error)
 	assert.Equal(t, before, after, "nothing written")
+	stopStudio(t, s)
+}
+
+// Admin requests in flight during an outage against the cap on held
+// statements: at most dbhold.MaxHeld wait, the rest are answered 503 at
+// once. Logs the numbers (held at most, answers by kind, goroutines and
+// heap) for the PR.
+func TestFailover_HeldStatementsAreCapped(t *testing.T) {
+	const requests = 1500
+	window := 10 * time.Second
+	pair := containers.StartPostgresPair(t, nil)
+	ctx := context.Background()
+	s, url, key, _ := heldStudio(t, pair, window)
+	pool, ok := s.db.ConnPool.(*dbhold.Pool)
+	require.True(t, ok)
+
+	// Keep-alive connections for all the clients at once.
+	http.DefaultTransport.(*http.Transport).MaxIdleConnsPerHost = requests
+	var heapBefore runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&heapBefore)
+	goroutinesBefore := runtime.NumGoroutine()
+
+	require.NoError(t, pair.StopPrimary(ctx))
+	var maxHeld, maxGoroutines atomic.Int64
+	var heapPeak atomic.Uint64
+	stop := make(chan struct{})
+	sampled := make(chan struct{})
+	go func() {
+		defer close(sampled)
+		tick := time.NewTicker(50 * time.Millisecond)
+		defer tick.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-tick.C:
+			}
+			if h := pool.Held(); h > maxHeld.Load() {
+				maxHeld.Store(h)
+			}
+			if g := int64(runtime.NumGoroutine()); g > maxGoroutines.Load() {
+				maxGoroutines.Store(g)
+			}
+			var m runtime.MemStats
+			runtime.ReadMemStats(&m)
+			if m.HeapAlloc > heapPeak.Load() {
+				heapPeak.Store(m.HeapAlloc)
+			}
+		}
+	}()
+
+	var fast503, slow503, other atomic.Int64
+	var wg sync.WaitGroup
+	started := time.Now()
+	for i := 0; i < requests; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			t0 := time.Now()
+			resp, body := postJSON(t, url+"/api/v1/credentials", key, "{}")
+			switch {
+			case resp.StatusCode == http.StatusServiceUnavailable && time.Since(t0) < window/2:
+				fast503.Add(1)
+			case resp.StatusCode == http.StatusServiceUnavailable:
+				slow503.Add(1)
+			default:
+				other.Add(1)
+				t.Logf("unexpected %d: %s", resp.StatusCode, body)
+			}
+		}()
+	}
+	wg.Wait()
+	close(stop)
+	<-sampled
+	took := time.Since(started)
+
+	t.Logf("%d concurrent POST /api/v1/credentials with no primary, window %s, MaxHeld %d: statements held at most %d; 503 at once %d, 503 after the window %d, other %d; all answered in %s; goroutines %d before, %d at most; heap %.1f MB before, %.1f MB at most",
+		requests, window, dbhold.MaxHeld, maxHeld.Load(), fast503.Load(), slow503.Load(), other.Load(), took.Round(time.Millisecond),
+		goroutinesBefore, maxGoroutines.Load(), float64(heapBefore.HeapAlloc)/(1<<20), float64(heapPeak.Load())/(1<<20))
+	assert.LessOrEqual(t, maxHeld.Load(), int64(dbhold.MaxHeld))
+	assert.Zero(t, other.Load(), "every answer is 503 database_unavailable")
+	// Loose: the time also counts the test's own 1,500 clients and the
+	// pool's queue for its 8 connections on a busy machine.
+	assert.Less(t, took, 6*window, "bounded")
+
+	require.NoError(t, pair.Promote(ctx))
 	stopStudio(t, s)
 }
