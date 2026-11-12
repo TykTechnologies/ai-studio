@@ -119,8 +119,14 @@ psql_admin() { psql "$BASE/postgres" -v ON_ERROR_STOP=1 -qAt -c "$1"; }
 # ent_suite: the suite is an enterprise one (its own module, or the enterprise
 # tag). root_ent: an enterprise-tagged suite of the root module, which needs
 # the workspace and the linked files.
-ent_suite() { [ "$1" = enterprise ] || [[ ",$2," == *",enterprise,"* ]]; }
-root_ent() { [ "$1" != enterprise ] && [[ ",$2," == *",enterprise,"* ]]; }
+has_ent_tag() {
+	case ",$1," in
+	*,enterprise,*) return 0 ;;
+	*) return 1 ;;
+	esac
+}
+ent_suite() { [ "$1" = enterprise ] || has_ent_tag "$2"; }
+root_ent() { [ "$1" != enterprise ] && has_ent_tag "$2"; }
 ROOT_GOWORK=$ROOT/enterprise.work
 
 # --- Expand the suites into one run per package. ---------------------------
