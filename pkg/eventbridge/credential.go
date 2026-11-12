@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
+	"github.com/TykTechnologies/midsommar/v2/pkg/credhash"
 )
 
 // CredentialChangedTopic is the DirDown event the control plane raises when
@@ -41,7 +43,12 @@ type CredentialChanged struct {
 // credential hash: the edge has nothing to find.
 var ErrCredentialChangedNoHash = errors.New("credential.changed event without a credential hash")
 
-// ParseCredentialChanged decodes a CredentialChangedTopic payload.
+// ErrCredentialChangedBadHash is returned for a payload whose hash is not
+// the length of a credential hash (credhash.Len): it cannot name a key.
+var ErrCredentialChangedBadHash = errors.New("credential.changed event with a hash that is not a credential hash")
+
+// ParseCredentialChanged decodes a CredentialChangedTopic payload. A
+// payload with no hash, or one that is not credhash.Len long, is refused.
 func ParseCredentialChanged(payload json.RawMessage) (CredentialChanged, error) {
 	var c CredentialChanged
 	if err := json.Unmarshal(payload, &c); err != nil {
@@ -49,6 +56,9 @@ func ParseCredentialChanged(payload json.RawMessage) (CredentialChanged, error) 
 	}
 	if c.Hash == "" {
 		return CredentialChanged{}, ErrCredentialChangedNoHash
+	}
+	if len(c.Hash) != credhash.Len {
+		return CredentialChanged{}, fmt.Errorf("%w (%d characters, not %d)", ErrCredentialChangedBadHash, len(c.Hash), credhash.Len)
 	}
 	return c, nil
 }

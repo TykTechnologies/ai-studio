@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,7 +17,7 @@ import (
 // edge's stream.
 func credentialChangedFrame(t *testing.T) *pb.EventFrame {
 	t.Helper()
-	payload, err := json.Marshal(eventbridge.CredentialChanged{CredentialID: 11, Hash: "v1:00", Active: false})
+	payload, err := json.Marshal(eventbridge.CredentialChanged{CredentialID: 11, Hash: "v1:" + strings.Repeat("0", 64), Active: false})
 	require.NoError(t, err)
 	return &pb.EventFrame{Id: "evt-1", Topic: eventbridge.CredentialChangedTopic, Origin: "control",
 		Dir: int32(eventbridge.DirDown), Payload: payload}

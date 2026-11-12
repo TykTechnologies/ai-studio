@@ -132,11 +132,13 @@ func TestCredentialChanged_ValidationInFlightIsNotCached(t *testing.T) {
 	assert.True(t, cached(h, "tok-racing"), "a validation after the change is cached as usual")
 }
 
-// An event that cannot be read changes nothing.
+// An event that cannot be read, or whose hash is not a credential hash,
+// changes nothing.
 func TestCredentialChanged_UnreadableEventIsIgnored(t *testing.T) {
 	h := newStaleGraceService(t, time.Hour)
 	h.storeInCache(h.cacheKey("tok"), &TokenValidationResult{AppID: 1}, time.Now())
-	for _, payload := range []string{`not json`, `{}`, `{"credential_id": 11}`} {
+	short := h.cacheKey("tok")[:20]
+	for _, payload := range []string{`not json`, `{}`, `{"credential_id": 11}`, `{"credential_id": 11, "hash": "` + short + `"}`} {
 		h.HandleCredentialChanged(eventbridge.Event{Topic: eventbridge.CredentialChangedTopic, Payload: json.RawMessage(payload)})
 	}
 	assert.True(t, cached(h, "tok"))
