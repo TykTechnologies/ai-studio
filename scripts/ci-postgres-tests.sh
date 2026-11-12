@@ -21,6 +21,10 @@
 #   PG_TEST_OUT   directory for logs and JSON (default $RUNNER_TEMP/pg-tests)
 #   FORK_PR=true  skip the enterprise suites (forks have only a stub)
 #
+# A suite of the root module with the enterprise tag (ent-failover) is built
+# through the enterprise workspace (GOWORK=enterprise.work) with the
+# enterprise files of core packages linked in (scripts/enterprise-link-tests.sh).
+#
 # Docker is needed as well as the server: the failover tests start a
 # Postgres pair of their own (PGPAIR_REQUIRED is set below).
 set -uo pipefail
@@ -80,6 +84,10 @@ pgpair|.||TestPostgresPair||./pkg/testinfra/containers/
 # multi-host DSN follows a promoted standby and leaves a demoted primary,
 # and the LISTEN connection and cluster events move with it.
 failover|.||TestFailover_||./pkg/studio/
+# The push failover tests again, in the Enterprise build: a push there also
+# reads the namespace licensing tables (entitlements), which the Community
+# build does not.
+ent-failover|.|enterprise|TestFailover_PushInFlight||./pkg/studio/
 # Agent Call Tracing: the store and capture staging in core, and the
 # enterprise assembler, correlation goldens, JSON v1 and content API
 # (purge). Their gates read DATABASE_URL or AGENT_TRACE_TEST_POSTGRES_DSN,
@@ -108,19 +116,34 @@ parse() {
 
 psql_admin() { psql "$BASE/postgres" -v ON_ERROR_STOP=1 -qAt -c "$1"; }
 
+# ent_suite: the suite is an enterprise one (its own module, or the enterprise
+# tag). root_ent: an enterprise-tagged suite of the root module, which needs
+# the workspace and the linked files.
+ent_suite() { [ "$1" = enterprise ] || [[ ",$2," == *",enterprise,"* ]]; }
+root_ent() { [ "$1" != enterprise ] && [[ ",$2," == *",enterprise,"* ]]; }
+ROOT_GOWORK=$ROOT/enterprise.work
+
 # --- Expand the suites into one run per package. ---------------------------
+linked=false
 labels=() dirs=() tags=() runs=() vars=() pkgs=()
 while IFS= read -r line; do
 	case $line in "" | "#"*) continue ;; esac
 	parse "$line"
-	if [ "$S_DIR" = enterprise ] && [ "${FORK_PR:-false}" = true ]; then
+	if ent_suite "$S_DIR" "$S_TAGS" && [ "${FORK_PR:-false}" = true ]; then
 		echo "Skipping $S_LABEL: fork pull request (enterprise stub)."
 		continue
 	fi
-	tagflag=()
+	tagflag=() work=()
 	[ -z "$S_TAGS" ] || tagflag=(-tags "$S_TAGS")
+	if root_ent "$S_DIR" "$S_TAGS"; then
+		if [ "$linked" != true ]; then
+			scripts/enterprise-link-tests.sh || { echo "::error::linking the enterprise files failed"; exit 1; }
+			linked=true
+		fi
+		work=(GOWORK="$ROOT_GOWORK")
+	fi
 	# shellcheck disable=SC2086 # S_PKGS is a list of patterns
-	list=$(cd "$S_DIR" && go list "${tagflag[@]}" -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' $S_PKGS) || {
+	list=$(cd "$S_DIR" && env "${work[@]}" go list "${tagflag[@]}" -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' $S_PKGS) || {
 		echo "::error::go list failed for suite $S_LABEL"
 		exit 1
 	}
@@ -151,6 +174,7 @@ run_one() {
 	done
 	[ -z "${tags[i]}" ] || tagflag=(-tags "${tags[i]}")
 	[ -z "${runs[i]}" ] || runflag=(-run "${runs[i]}")
+	! root_ent "${dirs[i]}" "${tags[i]}" || env+=(GOWORK="$ROOT_GOWORK")
 	cd "${dirs[i]}" &&
 		env "${env[@]}" go test "${tagflag[@]}" -json -v -race -count=1 "${runflag[@]}" "${pkgs[i]}" 2>&1 |
 		"$TEE" tee "$OUT/run$i.json" >"$OUT/run$i.log"
