@@ -143,6 +143,13 @@ type AppConf struct {
 	// LoadFrom) has 0 unless it sets the field. It should be longer than the time a write is
 	// held for a writable primary (DATABASE_WRITE_RETRY_WINDOW, 15s).
 	DatabaseReadyGrace time.Duration
+	// DatabaseWriteRetryWindow (DATABASE_WRITE_RETRY_WINDOW, default 15s
+	// when loaded from the environment; 0 disables) is how long a
+	// statement outside a transaction that failed before reaching a
+	// writable Postgres server (a failover) is held and tried again, and
+	// how long beginning a transaction waits, before the request answers
+	// 503 database_unavailable.
+	DatabaseWriteRetryWindow time.Duration
 	FilterSignupDomains   []string
 	EchoConversation      bool
 	ProxyOnly             bool
@@ -627,6 +634,7 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 	conf.DatabaseConnectTimeout = parseNonNegativeDuration(getenv, "DATABASE_CONNECT_TIMEOUT", 10*time.Second)
 	conf.DatabaseStartupTimeout = parseNonNegativeDuration(getenv, "DATABASE_STARTUP_TIMEOUT", 60*time.Second)
 	conf.DatabaseReadyGrace = parseNonNegativeDuration(getenv, "DATABASE_READY_GRACE", DefaultDatabaseReadyGrace)
+	conf.DatabaseWriteRetryWindow = parseNonNegativeDuration(getenv, "DATABASE_WRITE_RETRY_WINDOW", 15*time.Second)
 
 	filterDomains := getenv("FILTER_SIGNUP_DOMAINS")
 	if filterDomains != "" {

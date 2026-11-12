@@ -16,6 +16,8 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/TykTechnologies/midsommar/v2/pkg/dbhold"
+	"github.com/TykTechnologies/midsommar/v2/pkg/dbstate"
 )
 
 // databaseDrivers maps a DatabaseType to the function that makes its gorm
@@ -112,7 +114,22 @@ func OpenDatabase(conf *config.AppConf) (db *gorm.DB, err error) {
 		sqlDB.Close()
 		return nil, err
 	}
+	holdAcrossFailover(conf, opened, sqlDB)
 	return opened, nil
+}
+
+// holdAcrossFailover makes statements outside a transaction wait, up to
+// DatabaseWriteRetryWindow, for a writable server when they fail before
+// reaching one (pkg/dbhold). Only on Studio's own Postgres pool, which has
+// a tracker to retire connections to a read-only server.
+func holdAcrossFailover(conf *config.AppConf, db *gorm.DB, pool *sql.DB) {
+	tracker := dbstate.For(db)
+	if tracker == nil || conf.DatabaseWriteRetryWindow <= 0 {
+		return
+	}
+	held := dbhold.New(pool, conf.DatabaseWriteRetryWindow, tracker)
+	db.ConnPool = held
+	db.Statement.ConnPool = held
 }
 
 // isBuiltinPostgres reports whether open is the built-in Postgres driver (a
