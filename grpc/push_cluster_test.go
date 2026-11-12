@@ -188,9 +188,12 @@ func (e *fakeEdge) disconnect() {
 
 func (e *fakeEdge) requests() []*pb.ConfigurationReloadRequest { return reloadRequests(e.stream) }
 
+// pushWait is how long waitForPush waits for a push to reach a status.
+const pushWait = 20 * time.Second
+
 func waitForPush(t *testing.T, c *pushes.Coordinator, op string, want string) *pushes.OperationStatus {
 	t.Helper()
-	return waitForPushWithin(t, c, op, want, 20*time.Second)
+	return waitForPushWithin(t, c, op, want, pushWait)
 }
 
 func waitForPushWithin(t *testing.T, c *pushes.Coordinator, op string, want string, within time.Duration) *pushes.OperationStatus {
