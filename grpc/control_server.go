@@ -20,6 +20,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/dbhold"
 	"github.com/TykTechnologies/midsommar/v2/pkg/fipsinfo"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/pkg/config"
@@ -278,6 +279,10 @@ func validateEncryptionKey(key string) error {
 // NewControlServer creates a new control server for AI Studio. It fails when
 // the microgateway encryption key is missing or insecure.
 func NewControlServer(cfg *Config, db *gorm.DB) (*ControlServer, error) {
+	// Edges' RPCs fail fast during a database failover rather than wait
+	// for a new primary: an edge answered "unavailable" moves to its other
+	// control plane (pkg/dbhold).
+	db = dbhold.Unheld(db)
 	// Set default connection limit if not specified
 	maxStreams := cfg.MaxConcurrentStreams
 	if maxStreams <= 0 {

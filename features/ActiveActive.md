@@ -250,12 +250,12 @@ Files: `pkg/studio/database.go`, `startup/connectivity.go`,
    fail within the next window are not held: a request runs several
    statements in turn, and this keeps it to about one window in an outage
    longer than the window (after a window the next one is held again, as a
-   probe). Measured on the pair rig: 1,500 concurrent `POST
-   /api/v1/credentials` with no primary, window 10 s, pool of 8
-   connections: at most 512 statements held, every request answered 503
-   `database_unavailable`, all within 18 s; goroutines 40 before and 6,043
-   at most (the test's 1,500 clients included), heap 14 MB before and 121
-   MB at most.
+   probe). Measured on the pair rig with no primary, window 10 s, pool of
+   8 connections: 3,000 concurrent `POST /api/v1/credentials`, at most 512
+   statements held, every request answered 503 `database_unavailable`,
+   all within 27 s; goroutines 40 before and 12,042 at most, heap 14 MB
+   before and 208 MB at most (both include the test's own 3,000 clients).
+   With 1,500 requests: all within 18 s, 121 MB.
    `QueryRowContext` (its error only shows at `Scan`) waits instead while
    the tracker says the database is not writable. The request context ends
    any wait. A wait that runs out is a `dbhold.UnavailableError`;
@@ -265,19 +265,25 @@ Files: `pkg/studio/database.go`, `startup/connectivity.go`,
    `aistudio_db_write_hold_seconds` (label `outcome`: `succeeded`,
    `gave_up`, `cancelled`, `failed`, `rejected`), and
    `aistudio_db_writes_held` (statements held now).
-   **What else is held.** The pool is Studio's only one, so the hold applies
-   to every caller, with no opt-out: the embedded gateway's request path
-   (through the same services), the control server's gRPC handlers (edge
-   pulses and heartbeats, configuration pulls, the edge's token
-   validation), the lease renewal and the cluster's background loops (node
-   heartbeat, event log poll and prune, relay, push janitor). The edge
-   gives up on a token validation after 5 s (`tokenValidationTimeout`),
-   while the hub may hold the lookup up to the window; an analytics pulse
-   waits up to the edge's pulse timeout (30 s by default), longer than the
-   15 s window, so a pulse during a failover is answered late (stored, or
-   "not stored; retry") instead of failing at once. The lease is safe under
-   a held renewal: `renewedAt` is the start of the renewal. Loops on a
-   ticker retry on their next tick as before, only later.
+   **Who is held and who fails fast.** Held: the management API, sign-in
+   and session checks, and the embedded gateway's request path (it reaches
+   the database through the same services as the API; no second Service).
+   Fail fast, through `dbhold.Unheld(db)` applied at construction (a
+   Session with its own Statement whose pool is the unwrapped one, which
+   survives `Session`, `WithContext` and transactions): the control
+   server's RPCs (`grpc.NewControlServer`: token validation, pulses,
+   heartbeats, configuration pulls, credential sync, its cleanup ticker),
+   the push coordinator (`services/pushes.New`: deliveries and the
+   janitor) and the cluster loops (`pkg/cluster`: `NewLeadership`,
+   `StartNode`, `NewLog`; the relay reads through the log). Why: an edge
+   answered "unavailable" at once moves to its other control plane, which
+   is the point of the epic; held, a token validation would outlive the
+   edge's 5 s `tokenValidationTimeout`, and a pulse (edge timeout 30 s by
+   default) would be answered up to the window late. A lease renewal must
+   not wait past the lease's term, and a ticker retries on its next tick.
+   There is no per-call marker; none is needed today. Tests: a token
+   validation and a lease acquisition on a held database with no primary
+   fail at once (`grpc`, `pkg/cluster` pair tests).
    **503 mapping.** There is no common API error path (handlers write their
    own 500s, and services mostly call gorm without the request context), so
    a gorm callback and the hold record when a statement found the database

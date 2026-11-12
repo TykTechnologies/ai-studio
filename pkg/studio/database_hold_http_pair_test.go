@@ -8,7 +8,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -130,7 +132,11 @@ func TestFailover_CredentialRefusedWith503AfterTheWindow(t *testing.T) {
 // once. Logs the numbers (held at most, answers by kind, goroutines and
 // heap) for the PR.
 func TestFailover_HeldStatementsAreCapped(t *testing.T) {
-	const requests = 1500
+	// HOLD_CAP_REQUESTS overrides the number (3000 for the PR's figures).
+	requests := 1500
+	if n, err := strconv.Atoi(os.Getenv("HOLD_CAP_REQUESTS")); err == nil && n > 0 {
+		requests = n
+	}
 	window := 10 * time.Second
 	pair := containers.StartPostgresPair(t, nil)
 	ctx := context.Background()

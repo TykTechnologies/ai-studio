@@ -14,6 +14,10 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
+	gormlogger "github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/logger"
 )
 
 func TestRetryableAndUnavailable(t *testing.T) {
@@ -175,4 +179,30 @@ func TestNoSecondWaitWithinAWindowOfGivingUp(t *testing.T) {
 	started = time.Now()
 	_, _ = p.ExecContext(context.Background(), "INSERT INTO a VALUES (3)")
 	assert.GreaterOrEqual(t, time.Since(started), window, "after a window, held again")
+}
+
+// Unheld goes straight to the pool and leaves the db it was made from held,
+// also through Session, WithContext and a transaction.
+func TestUnheld(t *testing.T) {
+	p, calls := fakePool(t, &pgconn.PgError{Code: "25006"}, 300*time.Millisecond)
+	db, err := gorm.Open(postgres.New(postgres.Config{Conn: p}), &gorm.Config{DisableAutomaticPing: true, Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.ConnPool, db.Statement.ConnPool = p, p
+
+	unheld := Unheld(db)
+	for _, tx := range []*gorm.DB{unheld, unheld.Session(&gorm.Session{SkipDefaultTransaction: true}), unheld.WithContext(context.Background())} {
+		calls.Store(0)
+		started := time.Now()
+		assert.Error(t, tx.Exec("INSERT INTO a VALUES (1)").Error)
+		assert.Less(t, time.Since(started), 200*time.Millisecond, "not held")
+		assert.EqualValues(t, 1, calls.Load())
+	}
+
+	started := time.Now()
+	assert.Error(t, db.Exec("INSERT INTO a VALUES (1)").Error)
+	assert.GreaterOrEqual(t, time.Since(started), 300*time.Millisecond, "the original is still held")
+	_, stillHeld := db.Statement.ConnPool.(*Pool)
+	assert.True(t, stillHeld)
 }

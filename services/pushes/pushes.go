@@ -32,6 +32,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/cluster"
+	"github.com/TykTechnologies/midsommar/v2/pkg/dbhold"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pglisten"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
@@ -187,6 +188,7 @@ type Coordinator struct {
 
 // New returns the coordinator for node. It does nothing until Start.
 func New(db *gorm.DB, node string, streams Streams, opts Options) *Coordinator {
+	db = dbhold.Unheld(db) // deliveries and the janitor: fail fast, retry later
 	if opts.Entitlements == nil {
 		opts.Entitlements = entitlements.NewService(entitlements.Deps{DB: db})
 	}

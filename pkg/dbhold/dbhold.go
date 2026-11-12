@@ -38,6 +38,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/metrics"
 	"github.com/TykTechnologies/midsommar/v2/pkg/dbstate"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // DefaultWindow is DATABASE_WRITE_RETRY_WINDOW's default.
@@ -366,3 +367,33 @@ func NoteUnavailable() { lastUnavailable.Store(time.Now().UnixNano()) }
 // unavailable at or after t. It is not tied to one request: during an
 // outage a 500 of any request running at the time counts as the outage's.
 func UnavailableSince(t time.Time) bool { return lastUnavailable.Load() >= t.UnixNano() }
+
+// Unheld returns db with statements that are not held: they go straight to
+// the pool under the hold and fail as they always did. For the callers that
+// must fail fast rather than queue: the control server's RPCs (an edge
+// answered "unavailable" moves to its other control plane) and every
+// background loop (a lease renewal must not wait past its term; a ticker
+// tries again on its next tick). Apply it once, at construction: the
+// result keeps going straight to the pool through Session, WithContext
+// and transactions. A db without a hold is returned as it is.
+func Unheld(db *gorm.DB) *gorm.DB {
+	if db == nil {
+		return nil
+	}
+	pool, ok := db.Statement.ConnPool.(*Pool)
+	if !ok {
+		if pool, ok = db.ConnPool.(*Pool); !ok {
+			return db
+		}
+	}
+	// A Session shares db's Statement unless given a Context: give it
+	// one, so the pool is replaced on a copy and db stays held.
+	ctx := db.Statement.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	tx := db.Session(&gorm.Session{Context: ctx})
+	tx.Config.ConnPool = pool.db
+	tx.Statement.ConnPool = pool.db
+	return tx
+}
