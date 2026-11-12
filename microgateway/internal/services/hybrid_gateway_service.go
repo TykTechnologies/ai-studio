@@ -589,9 +589,10 @@ func (h *HybridGatewayService) EvictCredential(hash string) {
 // cache TTL still bounds what is cached.
 //
 // With full credential sync the event is a hint for the synced list too:
-// the edge asks for a sync at once, and the delta brings the change with
-// the credential's ID, as any sync does. Nothing is added to or changed on
-// the list from the payload, known hash or not.
+// when the list holds the hash, the edge asks for a sync, spaced
+// (CredentialSync.KickForChange), and the delta brings the change with the
+// credential's ID, as any sync does. A hash the list does not hold starts
+// no sync. Nothing is added to or changed on the list from the payload.
 func (h *HybridGatewayService) HandleCredentialChanged(event eventbridge.Event) {
 	change, err := eventbridge.ParseCredentialChanged(event.Payload)
 	if err != nil {
@@ -602,7 +603,7 @@ func (h *HybridGatewayService) HandleCredentialChanged(event eventbridge.Event) 
 	}
 	h.EvictCredential(change.Hash)
 	if h.credentials != nil {
-		h.credentials.Kick()
+		h.credentials.KickForChange(change.Hash)
 	}
 	log.Debug().Msg("credential.changed: dropped what the edge cached for the credential")
 }

@@ -801,13 +801,22 @@ Files: `proto/config_sync.proto`, `proto/common.proto`,
    publish it, on Studio or on an edge, and a control node drops one an
    edge sends. Measured on the cluster rig: a key deactivated through
    another replica was refused by an on-demand edge 46 ms later (Postgres,
-   through the relay). **Full mode built** (bead .18): on the event an
-   edge with full credential sync also asks for a sync at once (a hint
-   only: nothing is added to or changed on the list from the payload, known
-   hash or not); the delta brings the change with the credential's ID. On
-   the rig a key deactivated through another replica was refused from the
-   list 24 ms later, and with no event raised the heartbeat's sync
-   repaired it in 0.25 s (300 ms heartbeat).
+   through the relay). **Full mode built** (beads .18, .45): on the event
+   an edge with full credential sync also asks for a sync, but only when
+   its synced list holds the event's hash (one indexed read). The event
+   carries no namespace and reaches every edge: a hash the list does not
+   hold is another namespace's key, or one created since the last sync,
+   and needs no sync (a new key's first use asks the control plane, and
+   the heartbeat's sync brings it). So a key change makes only the edges
+   that hold the key sync, not the fleet. Event-driven syncs are spaced:
+   a random delay of up to 0.5 s before each, so the edges of one
+   namespace do not call at the same instant, and at least 1 s between two
+   on one edge (a stream of 100 events/s gave 11 syncs in 10 s); heartbeat
+   syncs are not. The event is a hint only: nothing is added to or changed
+   on the list from the payload; the delta brings the change with the
+   credential's ID. On the rig a key deactivated through another replica
+   was refused from the list within 2 s, and with no event raised the
+   heartbeat's sync repaired it in 0.25 s (300 ms heartbeat).
 5. **Validation order with `EDGE_CREDENTIAL_SYNC=full`.**
    - Local hit, active: accept, no CP call.
    - Local hit, inactive or deleted: reject.
