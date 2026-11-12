@@ -128,6 +128,11 @@ type AppConf struct {
 	DatabaseMaxIdleConns    int
 	DatabaseConnMaxLifetime time.Duration
 	DatabaseConnectTimeout  time.Duration
+	// DatabaseStartupTimeout (DATABASE_STARTUP_TIMEOUT, default 60s when
+	// loaded from the environment; 0 tries once) is how long a starting
+	// Studio waits for its Postgres database to answer and take writes
+	// before it exits: a database that is failing over, or not up yet.
+	DatabaseStartupTimeout time.Duration
 	FilterSignupDomains   []string
 	EchoConversation      bool
 	ProxyOnly             bool
@@ -610,6 +615,7 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 	conf.DatabaseMaxIdleConns = parseNonNegativeInt(getenv, "DATABASE_MAX_IDLE_CONNS")
 	conf.DatabaseConnMaxLifetime = parseNonNegativeDuration(getenv, "DATABASE_CONN_MAX_LIFETIME", 30*time.Minute)
 	conf.DatabaseConnectTimeout = parseNonNegativeDuration(getenv, "DATABASE_CONNECT_TIMEOUT", 10*time.Second)
+	conf.DatabaseStartupTimeout = parseNonNegativeDuration(getenv, "DATABASE_STARTUP_TIMEOUT", 60*time.Second)
 
 	filterDomains := getenv("FILTER_SIGNUP_DOMAINS")
 	if filterDomains != "" {

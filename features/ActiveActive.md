@@ -201,6 +201,23 @@ Files: `pkg/studio/database.go`, `startup/connectivity.go`,
 4. **Start-up waits for the database** up to `DATABASE_STARTUP_TIMEOUT`
    (default 60 s) instead of exiting on the first failed ping, so a replica
    that starts mid-failover joins when the primary appears.
+   **Built** (midsommar-clean-4x5y.5). `studio.OpenDatabase` opens the pool
+   without gorm's ping and then, on Postgres, tries until a ping succeeds
+   and the server is writable (`pg_is_in_recovery() OR
+   transaction_read_only`), then creates `DATABASE_SCHEMA` if set; retries
+   after 0.5 s, doubling to every 5 s; each kind of failure (cannot
+   connect, no read-write server, read-only server, a SQLSTATE, timeout)
+   is logged once, with progress every 10 s. A read-only server is never
+   returned, so `New` never migrates a standby; at the timeout the error
+   says `no writable database within DATABASE_STARTUP_TIMEOUT`, and `0`
+   means one attempt (a read-only server then fails at once too). SQLite is
+   opened once. The wait is inside start-up, before anything listens, so
+   neither `/health` nor `/ready` answers during it (Martin, 2026-11-12):
+   a deployment needs a startup probe of at least the timeout plus the
+   migrations. `main.go` now opens the database before the one-shot
+   connectivity tests, which would otherwise fail first. Embedders get the
+   wait through `OpenDatabase`, which the README already has them use;
+   an `AppConf` built by hand has a timeout of 0.
 5. **Hold writes across the failover.** A wrapper at the gorm `ConnPool`
    retries statements that fail before reaching a writable server
    (connection refused, 25006, 57P01 to 57P03) until

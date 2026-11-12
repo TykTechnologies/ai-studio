@@ -55,16 +55,19 @@ func main() {
 	// Report every configured path (grep 'startup path'); problems are WARNs.
 	startup.ReportPaths(appConf, *envFile)
 
-	// Perform connectivity tests before proceeding with initialization
-	if err := startup.TestConnectivity(appConf); err != nil {
-		logger.FatalErr("Connectivity tests failed", err)
-	}
-
+	// The database first: OpenDatabase waits for it (up to
+	// DATABASE_STARTUP_TIMEOUT), which the one-shot connectivity tests
+	// below do not.
 	db, err := studio.OpenDatabase(appConf)
 	if err != nil {
 		logger.FatalErr("Failed to connect to the database", err)
 	}
 	logger.Info("Successfully connected to the database")
+
+	// Perform connectivity tests before proceeding with initialization
+	if err := startup.TestConnectivity(appConf); err != nil {
+		logger.FatalErr("Connectivity tests failed", err)
+	}
 
 	gin.SetMode(gin.ReleaseMode)
 	s, err := studio.New(studio.Options{
