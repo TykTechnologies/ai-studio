@@ -428,9 +428,6 @@ func (h *HybridGatewayService) EvictCredential(hash string) {
 	}
 	h.cacheMutex.Lock()
 	delete(h.tokenCache, hash)
-	if h.evictedAt == nil {
-		h.evictedAt = make(map[string]time.Time)
-	}
 	h.evictedAt[hash] = time.Now()
 	h.cacheMutex.Unlock()
 	h.validations.Forget(hash)
