@@ -504,6 +504,26 @@ Files: `microgateway/internal/config/config.go`,
      request as a pulse message. "Pulses queue as in any outage", as an
      earlier draft of this spec and the docs said, was true only up to
      the buffer.
+   - *The backlog* (bead .36, option B, Martin's choice; built in
+     `microgateway/internal/plugins/analytics_pulse_backlog.go`). A pulse
+     that is given up is no longer trimmed to `max_buffer_size`: it and
+     everything buffered behind it go into a backlog of serialized pulse
+     messages (`proto.Marshal`, each under its own sequence number, split
+     until each is within the 8 MB pulse bound), bounded by the pulse
+     file's `max_backlog_bytes` (default 256 MiB when unset; `0` turns it
+     off and restores the trim). Over the bound the oldest batches go,
+     counted as `reason="over_backlog"`; a batch whose newest record is
+     older than `edge_retention_hours` expires whole. The sender sends the
+     backlog's head first, as it was serialized, and on success the next,
+     then the buffers, so recovery drains in bounded pulses (at most
+     `max_buffer_size` records and 8 MB each, under the hub's 16 MiB). A
+     failed head stays at the head under its number, so a repeat after a
+     lost acknowledgement is stored once (item 4). Records are taken
+     under the buffer lock and serialized outside it. Gauges
+     `microgateway_analytics_pulse_backlog_bytes` and `_batches`. In
+     memory: lost if the edge restarts during the outage (option C, a
+     disk-backed outbox, is the later item for that). Live Go-struct memory
+     stays bounded by what arrives between two pulse attempts.
 5. A single DNS name or global load balancer in front of both CPs keeps
    working and stays documented as the alternative.
 

@@ -246,6 +246,7 @@ Replicas are never refused for disagreeing, so a rotation can roll; the cluster 
 | `aistudio_db_unavailable_responses_total` | Studio `/metrics` | It increases: `500`s answered as `503 database_unavailable` (linked to the outage by time, so it can include `500`s of other causes during one) |
 | `microgateway_control_connected{endpoint}` | edge `/metrics` | An edge's first endpoint is 0 for long (it is on the other site) |
 | `microgateway_config_source{source}` and `microgateway_config_age_seconds` | edge `/metrics` | `last_known_good` is 1; the age approaches `EDGE_LAST_KNOWN_GOOD_MAX_AGE` |
+| `microgateway_analytics_pulse_backlog_bytes` | edge `/metrics` | It approaches `max_backlog_bytes`: analytics held for a control plane that is not taking them |
 | `microgateway_analytics_pulse_dropped_records_total{reason}` | edge `/metrics` | It increases: analytics lost during an outage |
 | `microgateway_credential_sync_last_success_timestamp` (full credential sync) | edge `/metrics` | `time() - ` it approaches `EDGE_CREDENTIAL_SYNC_MAX_AGE`: past it the edge stops trusting its list |
 | `microgateway_credentials_synced`, `microgateway_credential_validations_total{source}` | edge `/metrics` | `source="stale"` increases (validations made on demand because the list was too old); the synced count drops to 0 |
@@ -269,7 +270,7 @@ See [Observability](./observability.md#database-metrics) for the metric definiti
 - Revocation reaching an edge that cannot reach any control plane. It is bounded by the maximum ages you configure (`EDGE_LAST_KNOWN_GOOD_MAX_AGE`, `EDGE_CREDENTIAL_SYNC_MAX_AGE`, `EDGE_TOKEN_CACHE_STALE_GRACE`).
 - A key being usable on edges before its creation has committed.
 - Writes surviving an outage longer than the retry window: they fail with a retryable `503` and must be made again. There is no write queue beyond the window.
-- Analytics beyond an edge's in-memory buffer through a long control-plane outage (see [Analytics during a control-plane outage](./edge-gateways.md#analytics-during-a-control-plane-outage)).
+- Analytics beyond an edge's backlog (`max_backlog_bytes`) through a long control-plane outage, or through an edge restart during one (see [Analytics during a control-plane outage](./edge-gateways.md#analytics-during-a-control-plane-outage)).
 - Anything with multi-primary PostgreSQL, or with two nodes promoted at once.
 
 ## Try it on the development stack

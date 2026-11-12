@@ -190,6 +190,7 @@ data_collection_plugins:
       interval_seconds: 10
       max_batch_size: 1000   # Unused: accepted, but nothing reads it (max_buffer_size bounds a pulse)
       max_buffer_size: 10000
+      max_backlog_bytes: 268435456   # kept for AI Studio while pulses fail (256 MiB; 0: off)
       compression_enabled: true
       include_proxy_summaries: true
       include_request_response_data: true  # Forward stored bodies to the hub (needs ANALYTICS_STORE_REQUESTS/RESPONSES=true on the edge)
