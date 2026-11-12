@@ -46,3 +46,11 @@ func TestPulseDropMetricValues(t *testing.T) {
 		map[string]float64{"over_cap": 12, "expired": 0, "oversized": 1},
 		pulseDropValues(map[string]uint64{"over_cap": 12, "expired": 0, "oversized": 1}))
 }
+
+// Every kind of write is a series of the refused-writes counter from the
+// start, at 0.
+func TestStorageFullMetricValues(t *testing.T) {
+	assert.Equal(t,
+		map[string]float64{"configuration": 2, "control_contact": 0, "budget_blocks": 0, "budget_sync_position": 0, "analytics": 0},
+		storageFullValues(map[string]uint64{"configuration": 2}))
+}

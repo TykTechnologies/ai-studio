@@ -539,6 +539,35 @@ prompt and a guardrail exception; each refusal case; reconnect replaces the
 configuration; a snapshot applied partially (entries left out) restores to
 the same reported checksum.
 
+**An edge whose volume is full** (bead .35, found by the load test: the
+chart's 2Gi filled in 30 to 45 minutes at 3,000 to 6,000 requests/s with
+the edge's own analytics copy). Established on a filesystem that is really
+full (`TestFullDisk_WhatAnEdgeCanStillStore`, run in a container with a
+16 MB tmpfs; a SQLite page limit is not the same thing, since writes that
+replace rows in place still succeed there):
+
+- A configuration cannot be applied, not even one of the same size:
+  SQLite cannot extend its write-ahead log and the commit fails. The
+  configuration and its stored snapshot are one transaction, so the edge
+  keeps the configuration it had, in its tables, in memory and as its
+  stored snapshot, and its heartbeat reports that one. Last-known-good
+  therefore never holds a configuration the edge does not run, and never
+  silently an older one than it reports.
+- The control contact, the budget blocks and the budget sync's position are
+  not stored; blocks are still enforced from memory. A volume full for
+  longer than `EDGE_LAST_KNOWN_GOOD_MAX_AGE` means a later start without a
+  control plane is refused, by age.
+- Made visible, not fixed (no size cap or pruning here):
+  `database.NoteWrite` tracks writes refused for lack of room by kind; one
+  error in the log when a kind begins to fail and one line when it is
+  stored again; `/ready` stays 200 with `database_full`,
+  `database_full_since` and `database_full_not_stored`; metrics
+  `microgateway_database_full` and
+  `microgateway_database_full_writes_total{write}`.
+- Sizing: about 400 bytes per request times rate times
+  `ANALYTICS_RETENTION_DAYS` (the chart sets 90; an edge without the
+  setting keeps 7). Documented with the persistence notes of the chart.
+
 ### Phase 4: full credential sync, hashed (R5, R6, rest of R3)
 
 Files: `proto/config_sync.proto`, `proto/common.proto`,

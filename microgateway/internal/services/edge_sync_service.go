@@ -175,7 +175,12 @@ func (s *EdgeSyncService) SyncConfigurationReport(raw *pb.ConfigurationSnapshot)
 	config, left := snapshotguard.Sanitize(raw)
 	skipped := append(append([]string(nil), raw.OmittedEntries...), snapshotguard.Strings(left)...)
 
-	if err := s.apply(config, func(tx *gorm.DB) error { return s.storeAppliedSnapshot(tx, raw, skipped) }); err != nil {
+	// The configuration and its stored snapshot are one transaction: on a
+	// database with no room left neither is written, the edge keeps the
+	// configuration it had and goes on reporting that one. The outcome is
+	// noted so that the condition is visible (database.NoteWrite).
+	err := s.apply(config, func(tx *gorm.DB) error { return s.storeAppliedSnapshot(tx, raw, skipped) })
+	if database.NoteWrite(database.WriteConfiguration, err) != nil {
 		return nil, err
 	}
 	installAgentTracingKey(config.AgentTracingKeys)

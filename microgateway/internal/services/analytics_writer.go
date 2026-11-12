@@ -197,6 +197,12 @@ func (w *AnalyticsWriter) flush(events []*database.AnalyticsEvent) {
 		}
 		return usage.write(tx)
 	})
+	// A database with no room left shows here first: analytics rows are
+	// what grows it. Noted for /ready and the metrics; the rows are handled
+	// as before.
+	if err == nil || !isBusyError(err) {
+		_ = database.NoteWrite(database.WriteAnalytics, err)
+	}
 	written, failed := len(events), 0
 	var usageOK []bool // per ledger entry, when written one by one
 	if err != nil && !isBusyError(err) {

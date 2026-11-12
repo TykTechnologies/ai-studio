@@ -104,7 +104,7 @@ func RecordControlContact(db *gorm.DB, now time.Time) error {
 		Columns:   []clause.Column{{Name: "topic"}},
 		DoUpdates: clause.AssignmentColumns([]string{"last_sync_at", "sequence_number", "updated_at"}),
 	}).Create(row).Error
-	if err != nil {
+	if database.NoteWrite(database.WriteControlContact, err) != nil {
 		return fmt.Errorf("record control contact: %w", err)
 	}
 	w.last = now
