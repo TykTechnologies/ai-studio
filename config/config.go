@@ -635,6 +635,9 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 	conf.DatabaseStartupTimeout = parseNonNegativeDuration(getenv, "DATABASE_STARTUP_TIMEOUT", 60*time.Second)
 	conf.DatabaseReadyGrace = parseNonNegativeDuration(getenv, "DATABASE_READY_GRACE", DefaultDatabaseReadyGrace)
 	conf.DatabaseWriteRetryWindow = parseNonNegativeDuration(getenv, "DATABASE_WRITE_RETRY_WINDOW", 15*time.Second)
+	if msg := readyGraceWarning(conf.DatabaseReadyGrace, conf.DatabaseWriteRetryWindow); msg != "" {
+		cfgLog.Warn().Msg(msg)
+	}
 
 	filterDomains := getenv("FILTER_SIGNUP_DOMAINS")
 	if filterDomains != "" {
@@ -1705,6 +1708,18 @@ func parseNonNegativeDuration(getenv func(string) string, envVar string, def tim
 		return def
 	}
 	return d
+}
+
+// readyGraceWarning is the start-up warning when DATABASE_READY_GRACE is
+// set but not longer than DATABASE_WRITE_RETRY_WINDOW: /ready could then
+// fail while the replica's requests are still being held for a new
+// primary, and a load balancer would take it out of rotation during a
+// failover it was riding out. A warning, not a refusal; "" when fine.
+func readyGraceWarning(grace, window time.Duration) string {
+	if grace <= 0 || grace > window {
+		return ""
+	}
+	return fmt.Sprintf("DATABASE_READY_GRACE (%s) is not longer than DATABASE_WRITE_RETRY_WINDOW (%s): /ready can fail while requests are still held for a new primary, taking this replica out of the load balancer during a failover it would ride out. Make the grace longer than the window", grace, window)
 }
 
 // DefaultDatabaseReadyGrace is DATABASE_READY_GRACE when it is not set:
