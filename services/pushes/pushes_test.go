@@ -69,7 +69,7 @@ func forEachDB(t *testing.T, body func(t *testing.T, db *gorm.DB)) {
 func migrate(t *testing.T, db *gorm.DB) {
 	t.Helper()
 	require.NoError(t, db.AutoMigrate(&models.EdgeInstance{}, &models.NamespaceSyncStatus{}, &models.ClusterNode{},
-		&models.PushOperation{}, &models.EdgePushCommand{}))
+		&models.PushOperation{}, &models.EdgePushCommand{}, &models.ClusterCounter{}))
 }
 
 // fakeStreams stands in for one replica's control server.

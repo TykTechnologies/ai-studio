@@ -220,9 +220,41 @@ type relayedChanges struct {
 	unsubscribe func()
 }
 
+// pluginChange is one plugin changed on another replica, or, with
+// reconcileSince set, every plugin to be checked against the database.
 type pluginChange struct {
 	topic string
 	id    uint
+	// reconcileSince: this replica missed cluster events from then on.
+	reconcileSince time.Time
+}
+
+// gapMargin is added to the time a replica was away from the cluster event
+// log when it looks for what changed meanwhile: rows are stamped by the
+// replica that wrote them, whose clock is not this one's.
+const gapMargin = 5 * time.Minute
+
+// afterGap rebuilds what this replica holds in memory from the database, as
+// a restart would: it could not read the cluster event log for away, longer
+// than events are kept, so it cannot assume it saw every change. It runs on
+// the log's reader goroutine and only triggers background work.
+func (rc *relayedChanges) afterGap(away time.Duration) {
+	rc.reloadGateway.trigger()
+	rc.clearBudgets.trigger()
+	// Everything a signal from another replica would have refreshed
+	// (budget caches, branding assets, governed metadata, the budget
+	// sync's re-sum after a price recalculation).
+	replicas.DeliverAll()
+	rc.pluginsMu.Lock()
+	defer rc.pluginsMu.Unlock()
+	if rc.closed {
+		return
+	}
+	select {
+	case rc.plugins <- pluginChange{reconcileSince: time.Now().Add(-away - gapMargin)}:
+	default:
+		logger.Errorf("Too many plugin changes waiting; plugins are not reloaded after this replica missed cluster events, and keep their current state here until they change again or it restarts")
+	}
 }
 
 func (s *Studio) watchRelayedChanges(bus eventbridge.Bus) {
@@ -254,6 +286,10 @@ func (s *Studio) watchRelayedChanges(bus eventbridge.Bus) {
 		for ch := range rc.plugins {
 			// One plugin's failure must not stop the others' changes.
 			safe.Call("plugin change from another replica", func() {
+				if !ch.reconcileSince.IsZero() {
+					service.ReconcilePluginsAfterGap(ch.reconcileSince)
+					return
+				}
 				service.ApplyPluginChangeFromReplica(ch.topic, ch.id)
 			})
 		}
@@ -288,6 +324,11 @@ func (s *Studio) watchRelayedChanges(bus eventbridge.Bus) {
 	removeRecalc := replicas.OnSignal(replicas.SignalSpendRecalculated, rc.clearBudgets.trigger)
 	// Another replica stored or removed the logo or favicon.
 	removeBranding := replicas.OnSignal(replicas.SignalBranding, service.InvalidateBrandingAssets)
+	// A replica cut off from the cluster event log for longer than events
+	// are kept reloads all of the above from the database.
+	if s.clusterLog != nil {
+		s.clusterLog.OnGap(rc.afterGap)
+	}
 	rc.unsubscribe = func() {
 		bus.Unsubscribe(sub)
 		removeSignal()

@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/postgres"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/logger"
@@ -289,6 +291,50 @@ func TestLeadership_OtherPIDNamespaceTakenOverOnceSilent_Postgres(t *testing.T) 
 		assert.GreaterOrEqual(t, time.Since(start), time.Second)
 	})
 
+	// After a failover to a server whose clock is ahead, a live sibling
+	// looks silent by the database's clock until its next refresh. That
+	// alone is not evidence: this replica must have watched the silence.
+	t.Run("live container that only looks silent by the database's clock", func(t *testing.T) {
+		c := leaseCluster(t)
+		db := c.replicaDB("new")
+		// Refreshed a moment ago by the old clock: 20 s ago by the new one.
+		holdLease(t, db, "sibling", other, 20*time.Second)
+		l := NewLeadership(db, LeaderLease, "new", LeadershipOptions{Renew: 200 * time.Millisecond, PredecessorSilence: opts.PredecessorSilence})
+		l.Start()
+		t.Cleanup(l.Stop)
+		assert.False(t, l.IsLeader(), "not on the database clock's word")
+		// The sibling refreshes within its heartbeat interval, and keeps on.
+		time.Sleep(500 * time.Millisecond)
+		stop := make(chan struct{})
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			for {
+				db.Exec(`UPDATE cluster_nodes SET last_seen = now() WHERE node_id = 'sibling'`)
+				db.Exec(`UPDATE cluster_leases SET renewed_at = now(), expires_at = now() + interval '30 seconds' WHERE holder = 'sibling'`)
+				select {
+				case <-stop:
+					return
+				case <-time.After(200 * time.Millisecond):
+				}
+			}
+		}()
+		t.Cleanup(func() { close(stop); <-done })
+		time.Sleep(3 * time.Second)
+		assert.False(t, l.IsLeader(), "a live sibling keeps the lease")
+	})
+
+	// Silent for longer than any clock difference explains: taken at once.
+	t.Run("predecessor silent beyond the clock allowance", func(t *testing.T) {
+		c := leaseCluster(t)
+		db := c.replicaDB("new")
+		holdLease(t, db, "previous-container", other, time.Minute)
+		l := NewLeadership(db, LeaderLease, "restarted-container", opts)
+		l.Start()
+		t.Cleanup(l.Stop)
+		assert.True(t, l.IsLeader())
+	})
+
 	t.Run("live container with the same hostname", func(t *testing.T) {
 		c := leaseCluster(t)
 		db := c.replicaDB("new")
@@ -346,4 +392,190 @@ func TestLeadership_PanicDropsBeliefAndRecovers_Postgres(t *testing.T) {
 	assert.Equal(t, []bool{true, false, true, false, true}, seen)
 	mu.Unlock()
 	assert.Equal(t, before+2, safe.Panics())
+}
+
+// cutOff closes a replica's pool: it can no longer renew, as when the
+// database is unreachable from it.
+func cutOff(t *testing.T, l *Leadership) {
+	t.Helper()
+	sqlDB, err := l.db.DB()
+	require.NoError(t, err)
+	require.NoError(t, sqlDB.Close())
+}
+
+// watchLeaders samples both replicas until b leads or the deadline passes,
+// and reports whether both ever believed they led at once and when b took
+// over.
+func watchLeaders(a, b *Leadership, deadline time.Duration) (overlap bool, took time.Duration) {
+	start := time.Now()
+	for time.Since(start) < deadline {
+		aLeads, bLeads := a.IsLeader(), b.IsLeader()
+		if aLeads && bLeads {
+			overlap = true
+		}
+		if bLeads && !aLeads {
+			return overlap, time.Since(start)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	return overlap, -1
+}
+
+// After a failover the database's clock is the new primary's. When that
+// clock is ahead, the lease its holder renewed a moment ago looks expired at
+// once. Another replica must not take it on that: the holder still believes
+// it leads until its belief runs out by its own clock.
+func TestLeadership_DatabaseClockAheadNeverGivesTwoLeaders_Postgres(t *testing.T) {
+	c := leaseCluster(t)
+	opts := LeadershipOptions{TTL: 3 * time.Second, Renew: 300 * time.Millisecond}
+	a := NewLeadership(c.replicaDB("a"), LeaderLease, "a", opts)
+	a.Start()
+	t.Cleanup(a.Stop)
+	require.True(t, a.IsLeader())
+	b := NewLeadership(c.replicaDB("b"), LeaderLease, "b", opts)
+	b.Start()
+	t.Cleanup(b.Stop)
+	time.Sleep(500 * time.Millisecond)
+	require.False(t, b.IsLeader())
+
+	// The failover: a loses the database right after a renewal, and on the
+	// new primary, whose clock is 20 s ahead, that renewal's lease expired
+	// 17 s ago.
+	cutOff(t, a)
+	require.NoError(t, c.admin.Exec(`UPDATE "`+c.schema+`".cluster_leases SET expires_at = expires_at - interval '20 seconds'`).Error)
+	require.True(t, a.IsLeader(), "a still believes: its last renewal is a moment old")
+
+	overlap, took := watchLeaders(a, b, 3*opts.TTL)
+	require.GreaterOrEqual(t, took, time.Duration(0), "b takes over")
+	assert.False(t, overlap, "never two leaders")
+	assert.GreaterOrEqual(t, took, a.believeFor()-opts.Renew-500*time.Millisecond, "b waited for a's belief to run out, although the lease looked expired")
+	assert.LessOrEqual(t, took, opts.TTL+opts.Renew, "and no longer than a TTL")
+}
+
+// When the new primary's clock is behind, the lease looks valid for longer
+// than its TTL. A replica that watches it go unrenewed takes it after a
+// TTL all the same: the cluster is not left without a leader for the
+// difference between two servers' clocks.
+func TestLeadership_DatabaseClockBehindDoesNotDelayTakeOver_Postgres(t *testing.T) {
+	c := leaseCluster(t)
+	opts := LeadershipOptions{TTL: 3 * time.Second, Renew: 300 * time.Millisecond}
+	a := NewLeadership(c.replicaDB("a"), LeaderLease, "a", opts)
+	a.Start()
+	t.Cleanup(a.Stop)
+	require.True(t, a.IsLeader())
+	b := NewLeadership(c.replicaDB("b"), LeaderLease, "b", opts)
+	b.Start()
+	t.Cleanup(b.Stop)
+
+	// a is gone, and by the new primary's clock (30 s behind) its lease
+	// lasts another 33 s.
+	cutOff(t, a)
+	require.NoError(t, c.admin.Exec(`UPDATE "`+c.schema+`".cluster_leases SET expires_at = expires_at + interval '30 seconds'`).Error)
+
+	overlap, took := watchLeaders(a, b, 4*opts.TTL)
+	require.GreaterOrEqual(t, took, time.Duration(0), "b takes over although the lease has not expired by the database's clock")
+	assert.False(t, overlap, "never two leaders")
+	assert.LessOrEqual(t, took, opts.TTL+opts.Renew, "within a TTL")
+}
+
+// A lease whose holder keeps renewing is never taken, however long another
+// replica watches it and whatever the expiry says.
+func TestLeadership_RenewingHolderKeepsTheLeaseWhateverTheClock_Postgres(t *testing.T) {
+	c := leaseCluster(t)
+	opts := LeadershipOptions{TTL: 2 * time.Second, Renew: 200 * time.Millisecond}
+	a := NewLeadership(c.replicaDB("a"), LeaderLease, "a", opts)
+	a.Start()
+	t.Cleanup(a.Stop)
+	b := NewLeadership(c.replicaDB("b"), LeaderLease, "b", opts)
+	b.Start()
+	t.Cleanup(b.Stop)
+
+	// For three TTLs every renewal of a's is made to look expired by the
+	// database's clock, as with a clock that runs ahead.
+	stop := time.Now().Add(3 * opts.TTL)
+	for time.Now().Before(stop) {
+		require.NoError(t, c.admin.Exec(`UPDATE "`+c.schema+`".cluster_leases SET expires_at = now() - interval '1 second' WHERE holder = 'a'`).Error)
+		require.False(t, b.IsLeader(), "b took a lease its holder was renewing")
+		time.Sleep(50 * time.Millisecond)
+	}
+	assert.True(t, a.IsLeader())
+}
+
+// A cluster that starts after everything was down for a while finds a lease
+// that expired long ago: no clock difference explains that, and the first
+// replica takes it at once.
+func TestLeadership_LongExpiredLeaseIsTakenAtOnce_Postgres(t *testing.T) {
+	c := leaseCluster(t)
+	require.NoError(t, c.admin.Exec(`INSERT INTO "`+c.schema+`".cluster_leases (name, holder, acquired_at, renewed_at, expires_at)
+		VALUES (?, 'gone', now() - interval '10 minutes', now() - interval '5 minutes', now() - interval '4 minutes')`, LeaderLease).Error)
+	b := NewLeadership(c.replicaDB("b"), LeaderLease, "b", LeadershipOptions{TTL: time.Minute})
+	b.Start()
+	t.Cleanup(b.Stop)
+	assert.True(t, b.IsLeader())
+}
+
+// readOnlyReplicaDB is a replica's pool on a server that answers reads and
+// refuses writes (SQLSTATE 25006): what a pool still connected to a demoted
+// primary has until it is moved to the new one.
+func (c *testCluster) readOnlyReplicaDB(replica string) *gorm.DB {
+	u, err := url.Parse(c.dsn(replica))
+	require.NoError(c.t, err)
+	q := u.Query()
+	q.Set("options", "-c default_transaction_read_only=on")
+	u.RawQuery = q.Encode()
+	db, err := gorm.Open(postgres.Open(u.String()), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(c.t, err)
+	c.t.Cleanup(func() {
+		if sqlDB, err := db.DB(); err == nil {
+			sqlDB.Close()
+		}
+	})
+	return db
+}
+
+// A replica whose pool is still on a demoted primary could read the lease
+// there: the old holder's last renewal, which nobody renews on that server
+// any more. It never gets as far as acting on it. Every tick begins with a
+// write (renew, or take a lease nobody holds), the demoted server refuses
+// it, and the tick ends there with an error: the replica does not come to
+// believe it leads on the word of a server that is no longer the primary.
+// It leads only once a write succeeds, when its pool has moved to the new
+// primary.
+func TestLeadership_TakerOnAReadOnlyServerDoesNotLead_Postgres(t *testing.T) {
+	c := leaseCluster(t)
+	opts := LeadershipOptions{TTL: 2 * time.Second, Renew: 200 * time.Millisecond}
+	a := NewLeadership(c.replicaDB("a"), LeaderLease, "a", opts)
+	a.Start()
+	t.Cleanup(a.Stop)
+	require.True(t, a.IsLeader())
+
+	// b ran before the demotion (the lease row is known to exist) and its
+	// connections are now on the demoted server. Its ticks are made by hand
+	// here, to see what each one does.
+	b := NewLeadership(c.readOnlyReplicaDB("b"), LeaderLease, "b", opts)
+	b.created = true
+
+	// a is gone; its last renewal stays in the row.
+	cutOff(t, a)
+
+	// Well past the time a taker waits, tick after tick: each is refused at
+	// its first statement and b never believes it leads.
+	until := time.Now().Add(b.takeAfter() + 500*time.Millisecond)
+	for ticks := 0; time.Now().Before(until) || ticks < 3; ticks++ {
+		held, _, err := b.acquire()
+		require.Error(t, err, "a tick's first statement is a write, which a demoted primary refuses")
+		assert.Contains(t, err.Error(), "25006", "read_only_sql_transaction")
+		require.False(t, held)
+		require.False(t, b.IsLeader())
+		time.Sleep(opts.Renew)
+	}
+	var holder string
+	require.NoError(t, c.admin.Raw(`SELECT holder FROM "`+c.schema+`".cluster_leases WHERE name = ?`, LeaderLease).Scan(&holder).Error)
+	assert.Equal(t, "a", holder, "the row is as the old holder left it")
+
+	// The same replica on a server that takes writes does take it.
+	w := NewLeadership(c.replicaDB("b"), LeaderLease, "b", opts)
+	w.Start()
+	t.Cleanup(w.Stop)
+	require.Eventually(t, w.IsLeader, 3*opts.TTL, 20*time.Millisecond)
 }

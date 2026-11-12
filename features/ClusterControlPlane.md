@@ -131,6 +131,14 @@ leader lease). Both are nullable: a row written before they existed counts
 as unlabelled and eligible. Eligibility is recorded for operators; a
 replica's own code decides whether it contends for the lease.
 
+**Known behaviour after a failover to a server whose clock is ahead.**
+Liveness is `last_seen` against the database's clock, so for up to one
+heartbeat interval (5 s) after such a failover live replicas can look
+stopped: in the cluster status, in `LiveNodes`/`IsLive`, and in the edge
+owner view. It corrects itself at each replica's next refresh. The two
+places that act on it, the push janitor and the lease's predecessor
+takeover, do not act on the database's clock alone any more (below).
+
 ### Edge stream ownership
 
 `edge_instances` gains `owner_node_id` and `stream_session_id`. Opening a
@@ -202,6 +210,37 @@ alone.
   notification from any replica, or a push or stream on this one). An idle
   hub no longer runs its seven queries every 2 s; a push whose notification
   was lost is picked up by an idle janitor within 10 s.
+- **After a database failover** (2.3, `services/pushes/clock.go`). A push's
+  times (`deadline_at`, `claim_expires_at`, `sent_at`, `phase_at`) are
+  compared with the database's clock, which after a failover is another
+  server's. Ahead by 30 s, a claim made a moment ago looked lapsed, the
+  answer timeout was halved, every open push was 30 s nearer its deadline,
+  and every live replica looked dead until its next registration refresh,
+  so its commands in flight were requeued. Each coordinator now compares
+  the database's clock with its own monotonic clock on every reading:
+  - On a step of 1 s or more, and for the first liveness window (20 s)
+    after a replica starts, the janitor does not requeue the commands of
+    replicas that look dead.
+  - If the server changed as well (its address, or the timeline it writes
+    on) and the step is forward and at most 5 minutes, the times of open
+    pushes are moved forward by the step, in one transaction: the four
+    columns above on commands in `pending`, `claimed` or `sent`, and
+    `deadline_at` on operations in progress; nothing else. A step
+    backwards moves nothing (the push only takes longer to time out). A
+    step beyond 5 minutes moves nothing and is logged as an error.
+  - Once per failover for the cluster: the new server has a marker row in
+    `cluster_counters` (`push-clock:<address>/<timeline>`, or a digest of
+    that when it does not fit the column; value 1 = seen, 2 = decided). Whichever replica looks first records it and removes the
+    markers of earlier servers; a replica that measured the step (it read
+    both servers' clocks) decides, the one whose update from 1 to 2
+    succeeds. A replica without a measurement (started during the
+    failover) records and decides nothing, so one that measured still can.
+  - Limits: if no running replica measured the step (all restarted during
+    the failover), nothing is moved and open pushes can time out early by
+    the difference between the clocks; a replica whose janitor did not run
+    between two failovers decides the second with both steps added, which
+    errs late, never early; a promotion behind an unchanged address on a
+    server whose timeline cannot be read is not seen.
 - The operation's status is derived from its commands: `in_progress`,
   `succeeded`, `succeeded_with_warnings`, `partially_failed`, `failed`,
   `expired`.
@@ -244,6 +283,43 @@ two queries a second on every replica); it also re-reads a 30 s window and
 skips ids it has seen, so a row whose transaction committed after a later id
 is not missed. Rows older than 15 minutes are pruned. The listener is the
 chat queue's shared listener, moved to `pkg/pglisten`.
+
+**After a database failover** (2.3, `pkg/cluster/events.go`). With
+asynchronous replication the new primary may not have received the newest
+events, and it hands their ids out again, to new events.
+
+- Rows are told apart by what they are (id, `created_at` and origin), not by
+  id alone: an event that took a lost one's id is delivered, at once, to a
+  replica that had handled the lost row. Before, it was skipped.
+- When the listener reconnects, when reads work again after failing, or
+  when the database tracker (`pkg/dbstate`) counts a failover, the reader
+  compares the table's newest id with its cursor. If the table is behind,
+  the cursor moves back to it (`LogStats.CursorResets`, `LastCursorReset`, a
+  WARN, and a warning in the cluster status that points at asynchronous
+  replication). In each of those cases the next read looks back over the
+  time the replica could not read plus twice the window (the new primary's
+  clock may differ from the old one's), capped at the retention, instead
+  of the window alone. What the reader remembers about handled rows is
+  kept for three windows, so nothing handled is delivered again as long as
+  the two servers' clocks are within a window (30 s) of each other; beyond
+  that a handler can see again an event it handled that much before the
+  failover (delivery is at least once, as always). Events that were
+  lost with the transactions are lost for every replica: so were the
+  changes they announced.
+- **A gap longer than the retention.** A replica that could not read the
+  log for longer than 15 minutes (measured on its wall clock, so a
+  suspended machine counts) has missed events that were pruned. It counts
+  that (`LogStats.Gaps`, `LastGap`, a WARN, a warning in the cluster
+  status) and calls the handlers registered with `Log.OnGap`. `pkg/studio`
+  registers one that rebuilds from the database what events keep current:
+  the embedded gateway is reloaded, the budget caches are cleared, every
+  replica signal's handlers run (`replicas.DeliverAll`), and the plugins
+  are checked against the database (`Service.ReconcilePluginsAfterGap`):
+  what changed or was deleted since the replica went away (with five
+  minutes' margin for other replicas' clocks) is applied as its event would
+  have been, a plugin whose running state contradicts the database is
+  stopped or started, and a plugin that is as the database says is left
+  running, not restarted.
 
 The listener connects with pgx from the pool's own DSN, so it accepts
 exactly what the pool accepts (no `sslmode`, `sslmode=prefer`,
@@ -313,6 +389,9 @@ What each replica keeps current, and how:
   Scheduled tasks start their plugin if the scheduler's replica has not.
 - **Governed metadata schemas** (Enterprise): dropped on the signal.
 - **Webhook targets** (Enterprise): 30 s refresh, as before.
+- **After a gap in the event log** longer than its retention, all of the
+  above are rebuilt from the database (see "After a database failover"
+  under the event log).
 
 What stays per replica and needs deployment support: chat and agent
 sessions and MCP SSE sessions (session affinity), branding uploads and log
@@ -322,12 +401,69 @@ replica).
 ### Singleton jobs: the leader lease
 
 `pkg/cluster.Leadership` holds the `leader` row of `cluster_leases`: taken
-and renewed (every 10 s, TTL 30 s) with one conditional write against the
-database clock, released on shutdown. A replica believes it leads only until
-its last renewal plus the TTL minus one renewal period, by its monotonic
-clock, so it stops acting before another replica can take over, even
-without the database. `pkg/replicas.IsLeader` is the check for code that
-does not hold the lease itself.
+and renewed (every 10 s, TTL 30 s) with one conditional write, released on
+shutdown (the holder is cleared, so the next replica to look takes it at
+once). A replica believes it leads only until its last renewal plus the TTL
+minus one renewal period, by its monotonic clock, so it stops acting before
+another replica can take over, even without the database.
+`pkg/replicas.IsLeader` is the check for code that does not hold the lease
+itself. Every tick begins with a write (renew, or take a lease nobody
+holds), so a replica whose pool is still on a demoted primary is refused
+there (SQLSTATE 25006) and never acts on what that server's copy of the
+row says.
+
+**Whose clock decides a takeover** (2.3). Until 2.3 another replica took
+the lease when `expires_at` had passed by the database's clock. That clock
+is not one clock: after a failover it is the new primary's. With that clock
+ahead, a lease renewed a moment ago looked expired and was taken while its
+holder still believed in it, for up to 20 s (two leaders); with it behind
+by 30 s, a dead holder's lease looked valid for 60 s (no leader). Now no
+database clock is in the decision:
+
+- *The holder's belief* is measured on its own monotonic clock from the
+  moment it **started** its last successful renewal write, and lasts TTL
+  minus one renewal period (20 s).
+- *The taker's wait* is measured on its own monotonic clock from the moment
+  it first **read** that renewal (the holder and its `renewed_at`), so
+  after the write committed and therefore after the holder started it. It
+  lasts as long as the belief plus a twentieth of a renewal period
+  (20.5 s). A holder that renews changes what the taker watches, and the
+  wait starts again. The take is a write conditional on that same renewal
+  still being in the row.
+- So the wait ends after the belief does, unless the two machines' clocks
+  run at rates that differ by more than the margin: 0.5 s in 20 s, 2.4%.
+  Oscillators differ by parts per million. That is the only assumption
+  about clocks.
+- A dead holder's lease is therefore taken at most one renewal period (for
+  the taker to read the last renewal) plus 20.5 s after that renewal:
+  **30.5 s with the defaults, one TTL plus the margin** (before: up to
+  40 s; with a clock behind, up to 70 s).
+- The database's clock still decides one case: a lease that expired more
+  than `ClockAllowance` (30 s) ago is taken at once (a cluster starting
+  after everything was down). A jump of up to 30 s cannot make that of a
+  lease its holder still believes in, because such a lease has not expired
+  by the clock that stamped it. A failover between servers whose clocks
+  differ by more than 30 s is outside what this guarantees.
+- The takeover from a dead predecessor in another pid namespace (below)
+  went by the predecessor's silence in the node registry, by the database's
+  clock. It now also needs the taker's own observation of that silence
+  (the registration unrefreshed for `PredecessorSilence` while it watched),
+  unless the database puts the silence beyond `PredecessorSilence` plus
+  `ClockAllowance`.
+
+**When the belief ends during a run.** Nothing interrupts a singleton job
+that is running: jobs ask `IsLeader` before each run, and `OnChange(false)`
+listeners are told at the holder's next tick. A run that outlasts the
+holder's remaining belief can therefore overlap the new leader's first run
+of the same job, as before 2.3; jobs are written to tolerate that
+(idempotent writes, conditional updates).
+
+**Mixed versions.** A replica older than 2.3 still takes the lease by the
+database's clock, so the two-leader window after a failover to a server
+whose clock is ahead remains until every replica runs 2.3; and a 2.3
+replica waits about 20 s for a lease an older replica released (the older
+release leaves the holder's name in the row). The 2.3 upgrade notes say to
+upgrade replicas together.
 
 **After a crash.** A process that is killed never releases the lease, and
 its restart has a new node ID, so without more it would wait up to the TTL
