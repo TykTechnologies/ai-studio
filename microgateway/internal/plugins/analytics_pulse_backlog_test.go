@@ -284,3 +284,35 @@ func TestPulseBacklog_RealTimeOutageAtLoad(t *testing.T) {
 		assert.LessOrEqual(t, sizes[i], maxPulseBytes)
 	}
 }
+
+// splitPulse partitions the records: each once, the older half first, the
+// first half keeping the sequence number; capture events only in the first.
+func TestPulseBacklog_SplitPulse(t *testing.T) {
+	m := &pb.AnalyticsPulse{EdgeId: "e", SequenceNumber: 7, BootId: "b",
+		CaptureEvents: []*pb.CaptureEventProto{{}}}
+	for i := 0; i < 5; i++ {
+		m.AnalyticsEvents = append(m.AnalyticsEvents, &pb.AnalyticsEvent{RequestId: fmt.Sprint("a", i)})
+		m.BudgetEvents = append(m.BudgetEvents, &pb.BudgetUsageEvent{})
+	}
+	first, second := splitPulse(m, 8)
+	require.NotNil(t, second)
+	assert.Equal(t, pulseRecords(m), pulseRecords(first)+pulseRecords(second))
+	assert.Equal(t, 5, pulseRecords(first))
+	assert.EqualValues(t, 7, first.SequenceNumber)
+	assert.EqualValues(t, 8, second.SequenceNumber)
+	assert.Equal(t, "b", second.BootId)
+	assert.Len(t, first.CaptureEvents, 1)
+	assert.Empty(t, second.CaptureEvents)
+	var ids []string
+	for _, h := range []*pb.AnalyticsPulse{first, second} {
+		for _, ev := range h.AnalyticsEvents {
+			ids = append(ids, ev.RequestId)
+		}
+	}
+	assert.Equal(t, []string{"a0", "a1", "a2", "a3", "a4"}, ids)
+
+	one := &pb.AnalyticsPulse{AnalyticsEvents: []*pb.AnalyticsEvent{{}}}
+	f, s := splitPulse(one, 9)
+	assert.Same(t, one, f)
+	assert.Nil(t, s)
+}

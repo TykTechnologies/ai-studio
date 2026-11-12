@@ -114,18 +114,35 @@ func splitPulse(m *pb.AnalyticsPulse, seq2 uint64) (first, second *pb.AnalyticsP
 		left -= k
 		return k
 	}
-	first = proto.Clone(m).(*pb.AnalyticsPulse)
-	second = proto.Clone(m).(*pb.AnalyticsPulse)
+	// Shallow: the halves share m's records (sub-slices) and header values,
+	// which are only read (marshalled) from here on; nothing is copied.
+	header := func() *pb.AnalyticsPulse {
+		return &pb.AnalyticsPulse{
+			EdgeId:         m.EdgeId,
+			EdgeNamespace:  m.EdgeNamespace,
+			PulseTimestamp: m.PulseTimestamp,
+			DataFrom:       m.DataFrom,
+			DataTo:         m.DataTo,
+			SequenceNumber: m.SequenceNumber,
+			BootId:         m.BootId,
+			IsCompressed:   m.IsCompressed,
+			DataSizeBytes:  m.DataSizeBytes,
+		}
+	}
+	first, second = header(), header()
+	// Capture events, if a pulse ever carries them, stay with the first
+	// half only, so they are not sent twice.
+	first.CaptureEvents, first.CaptureDropped = m.CaptureEvents, m.CaptureDropped
 	a := take(len(m.AnalyticsEvents))
-	first.AnalyticsEvents, second.AnalyticsEvents = first.AnalyticsEvents[:a], second.AnalyticsEvents[a:]
+	first.AnalyticsEvents, second.AnalyticsEvents = m.AnalyticsEvents[:a:a], m.AnalyticsEvents[a:]
 	b := take(len(m.BudgetEvents))
-	first.BudgetEvents, second.BudgetEvents = first.BudgetEvents[:b], second.BudgetEvents[b:]
+	first.BudgetEvents, second.BudgetEvents = m.BudgetEvents[:b:b], m.BudgetEvents[b:]
 	c := take(len(m.ProxySummaries))
-	first.ProxySummaries, second.ProxySummaries = first.ProxySummaries[:c], second.ProxySummaries[c:]
+	first.ProxySummaries, second.ProxySummaries = m.ProxySummaries[:c:c], m.ProxySummaries[c:]
 	d := take(len(m.ComplianceEvents))
-	first.ComplianceEvents, second.ComplianceEvents = first.ComplianceEvents[:d], second.ComplianceEvents[d:]
+	first.ComplianceEvents, second.ComplianceEvents = m.ComplianceEvents[:d:d], m.ComplianceEvents[d:]
 	e := take(len(m.ToolCalls))
-	first.ToolCalls, second.ToolCalls = first.ToolCalls[:e], second.ToolCalls[e:]
+	first.ToolCalls, second.ToolCalls = m.ToolCalls[:e:e], m.ToolCalls[e:]
 	first.TotalRecords = uint32(pulseRecords(first))
 	second.TotalRecords = uint32(pulseRecords(second))
 	second.SequenceNumber = seq2
