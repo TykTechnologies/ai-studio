@@ -216,6 +216,7 @@ func New(cfg *config.Config, serviceContainer *services.ServiceContainer, versio
 		registerDatabaseMetrics(cfg, serviceContainer)
 		registerControlLinkMetric(cfg, serviceContainer)
 		registerConfigSourceMetrics(cfg, serviceContainer)
+		registerPulseDropMetric(cfg)
 		log.Info().Msg("Prometheus metrics enabled")
 	}
 

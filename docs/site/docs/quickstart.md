@@ -188,7 +188,7 @@ data_collection_plugins:
     priority: 100
     config:
       interval_seconds: 10
-      max_batch_size: 1000
+      max_batch_size: 1000   # Unused: accepted, but nothing reads it (max_buffer_size bounds a pulse)
       max_buffer_size: 10000
       compression_enabled: true
       include_proxy_summaries: true
