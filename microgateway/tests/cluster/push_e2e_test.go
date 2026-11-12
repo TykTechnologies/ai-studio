@@ -44,6 +44,10 @@ const (
 // SQLite in a temp file, or a fresh schema on DATABASE_URL.
 type studioDB struct {
 	open func(t *testing.T) *gorm.DB
+	// name is "sqlite" or "postgres"; postgres is set for the latter,
+	// where replicas have a cluster event log.
+	name     string
+	postgres bool
 }
 
 func forEachStudioDB(t *testing.T, body func(t *testing.T, sdb studioDB)) {
@@ -51,7 +55,7 @@ func forEachStudioDB(t *testing.T, body func(t *testing.T, sdb studioDB)) {
 		path := filepath.Join(t.TempDir(), "studio.db")
 		var once sync.Once
 		var shared *gorm.DB
-		body(t, studioDB{open: func(t *testing.T) *gorm.DB {
+		body(t, studioDB{name: "sqlite", open: func(t *testing.T) *gorm.DB {
 			// One process, one SQLite file: the replicas share a handle.
 			// _txlock=immediate, as the microgateway's own SQLite DSN has: a
 			// transaction that reads before it writes (the LLM and tool slug
@@ -89,7 +93,7 @@ func forEachStudioDB(t *testing.T, body func(t *testing.T, sdb studioDB)) {
 		q.Set("search_path", schema)
 		u.RawQuery = q.Encode()
 		var once sync.Once
-		body(t, studioDB{open: func(t *testing.T) *gorm.DB {
+		body(t, studioDB{name: "postgres", postgres: true, open: func(t *testing.T) *gorm.DB {
 			db, err := gorm.Open(postgres.Open(u.String()), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 			require.NoError(t, err)
 			t.Cleanup(func() {

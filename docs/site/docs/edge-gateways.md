@@ -141,7 +141,7 @@ Two properties keep the checksum meaningful:
 
 1. When a gateway receives a request with an unknown access token, it contacts AI Studio to validate and fetch the credential.
 2. The credential is then cached locally for subsequent requests.
-3. This ensures the admin retains ongoing control — disabling a credential in AI Studio takes effect as soon as the gateway's cache expires or the next pull-on-miss occurs.
+3. This ensures the admin retains ongoing control. From 2.3, when a key is created, regenerated, activated, deactivated or deleted, or its App is activated or deactivated, AI Studio tells every connected edge at once (the `credential.changed` event, carried to the edges of every replica), and the edge drops what it cached for that key: a revoked key is refused within about a second on a connected edge. An edge that is not connected when the change is made learns of it when its cache entry expires (`EDGE_TOKEN_CACHE_TTL`) or at the next pull-on-miss. The event names the key only by the hash edges hold for it, and needs `MICROGATEWAY_ENCRYPTION_KEY` set on AI Studio.
 
 This approach balances performance (no need to sync every credential change) with security (admin can revoke access without waiting for a full config push).
 

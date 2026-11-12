@@ -754,6 +754,7 @@ func (s *Service) ActivateAppCredential(appID uint) error {
 		return err
 	}
 	s.syncAppMCPGrants(app.ID)
+	s.appCredentialChanged(app)
 
 	// Emit app approved event (credential activated)
 	if s.SystemEvents != nil {
@@ -774,6 +775,7 @@ func (s *Service) DeactivateAppCredential(appID uint) error {
 		return err
 	}
 	s.syncAppMCPGrants(app.ID)
+	s.appCredentialChanged(app)
 	return nil
 }
 

@@ -24,3 +24,12 @@ func IsGuardrailAlertTopic(topic string) bool {
 func IsGuardrailTopic(topic string) bool {
 	return IsGuardrailAlertTopic(topic) || strings.HasPrefix(topic, GuardrailOutcomeTopicPrefix)
 }
+
+// IsCredentialTopic reports the credential.changed topic
+// (CredentialChangedTopic). Only Studio raises it, from its own credential
+// writes: plugins cannot publish it, on Studio or on an edge, and the
+// bridge drops it when an edge sends it. Edges only ever drop cached state
+// on it, but a payload from anywhere else must not reach them as Studio's.
+func IsCredentialTopic(topic string) bool {
+	return topic == CredentialChangedTopic
+}

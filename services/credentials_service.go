@@ -2,6 +2,7 @@ package services
 
 import (
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 )
 
 // CreateCredential creates a new credential
@@ -14,6 +15,8 @@ func (s *Service) CreateCredential() (*models.Credential, error) {
 	if err := credential.Create(s.DB); err != nil {
 		return nil, err
 	}
+	// An edge may hold a refusal for this key: it drops it.
+	s.credentialChanged(credential)
 
 	return credential, nil
 }
@@ -44,9 +47,24 @@ func (s *Service) GetCredentialBySecret(secret string) (*models.Credential, erro
 	return credential, nil
 }
 
-// UpdateCredential updates an existing credential
+// UpdateCredential updates an existing credential. A regenerated secret
+// replaces the old key at once: edges are told about the old one (as
+// deleted) as well as the new one.
 func (s *Service) UpdateCredential(credential *models.Credential) error {
-	return credential.Update(s.DB)
+	var replaced *eventbridge.CredentialChanged
+	if old, err := s.GetCredentialByID(credential.ID); err == nil && old.Secret != credential.Secret {
+		if change, ok := s.credentialChange(old, true); ok {
+			replaced = &change
+		}
+	}
+	if err := credential.Update(s.DB); err != nil {
+		return err
+	}
+	if replaced != nil {
+		s.publishCredentialChanged(*replaced)
+	}
+	s.credentialChanged(credential)
+	return nil
 }
 
 // DeleteCredential deletes a credential
@@ -55,7 +73,15 @@ func (s *Service) DeleteCredential(id uint) error {
 	if err != nil {
 		return err
 	}
-	return credential.Delete(s.DB)
+	// The edges' hash is of the secret: taken before the row goes.
+	change, ok := s.credentialChange(credential, true)
+	if err := credential.Delete(s.DB); err != nil {
+		return err
+	}
+	if ok {
+		s.publishCredentialChanged(change)
+	}
+	return nil
 }
 
 // ActivateCredential activates a credential
@@ -64,7 +90,12 @@ func (s *Service) ActivateCredential(id uint) error {
 	if err != nil {
 		return err
 	}
-	return credential.Activate(s.DB)
+	if err := credential.Activate(s.DB); err != nil {
+		return err
+	}
+	credential.Active = true
+	s.credentialChanged(credential)
+	return nil
 }
 
 // DeactivateCredential deactivates a credential
@@ -73,7 +104,12 @@ func (s *Service) DeactivateCredential(id uint) error {
 	if err != nil {
 		return err
 	}
-	return credential.Deactivate(s.DB)
+	if err := credential.Deactivate(s.DB); err != nil {
+		return err
+	}
+	credential.Active = false
+	s.credentialChanged(credential)
+	return nil
 }
 
 // GetAllCredentials retrieves all credentials

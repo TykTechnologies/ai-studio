@@ -787,9 +787,22 @@ Files: `proto/config_sync.proto`, `proto/common.proto`,
    stale grace, forgets a validation in flight for it, and does not cache
    the result of a validation that started before the event. It only ever
    drops, whatever App or namespace the event names. An edge from before
-   the event takes it without error (nothing subscribes to the topic). The
-   hub side waits for bead .15; applying the event to the synced list in
-   full mode waits for bead .17.
+   the event takes it without error (nothing subscribes to the topic).
+   **Hub side built** (bead .18, `services/credential_changed.go`): the
+   credential service raises the event on create, update (a regenerated
+   secret raises the old hash as deleted, then the new one), delete (the
+   hash is taken before the row goes), activate and deactivate, and on an
+   App's activation or deactivation and its key's activation through the
+   App. The hash is made with `MICROGATEWAY_ENCRYPTION_KEY`
+   (`services.SetEdgeCredentialHasher`, set by `pkg/studio`); without a
+   usable key, or for a secret the replica cannot read, nothing is raised.
+   The topic is reserved (`eventbridge.IsCredentialTopic`): plugins cannot
+   publish it, on Studio or on an edge, and a control node drops one an
+   edge sends. Measured on the cluster rig: a key deactivated through
+   another replica was refused by an on-demand edge 46 ms later (Postgres,
+   through the relay). Applying the event to the synced list in full mode
+   (as a hint only: an unknown credential triggers a delta, nothing is
+   added from the payload) waits for bead .17.
 5. **Validation order with `EDGE_CREDENTIAL_SYNC=full`.**
    - Local hit, active: accept, no CP call.
    - Local hit, inactive or deleted: reject.

@@ -859,6 +859,9 @@ func (s *Studio) wireEventBus(bus eventbridge.Bus) {
 		}
 	}
 	service.SetEventBus(bus)
+	// credential.changed carries the hash edges hold for a key, made with
+	// MICROGATEWAY_ENCRYPTION_KEY; without a usable key no event is raised.
+	services.SetEdgeCredentialHasher(s.conf.MicrogatewayEncryptionKey)
 
 	// Other replicas' edges and caches must hear about this replica's
 	// events, and this replica about theirs.

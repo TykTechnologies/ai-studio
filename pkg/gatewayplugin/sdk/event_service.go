@@ -64,6 +64,12 @@ func (s *PluginEventServer) Publish(ctx context.Context, req *pb.PublishRequest)
 			ErrorMessage: "topic is required",
 		}, nil
 	}
+	if eventbridge.IsCredentialTopic(req.Topic) {
+		return &pb.PublishResponse{
+			Success:      false,
+			ErrorMessage: eventbridge.CredentialChangedTopic + " is raised by AI Studio only; plugins cannot publish it",
+		}, nil
+	}
 	if eventbridge.IsGuardrailTopic(req.Topic) {
 		return &pb.PublishResponse{
 			Success:      false,

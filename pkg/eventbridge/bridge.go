@@ -296,6 +296,19 @@ func (b *Bridge) remoteToLocal(ctx context.Context) {
 			// configuration (services.PublishGuardrailEvents); an edge's own
 			// guardrail verdicts reach Studio as compliance events on the
 			// analytics pulse.
+			// credential.changed is Studio's, from its own credential
+			// writes: one an edge sends is not relayed to other edges.
+			if b.isControl && IsCredentialTopic(ev.Topic) {
+				if n := b.droppedSystem.Add(1); n == 1 || n%100 == 0 {
+					log.Warn().
+						Str("node_id", b.nodeID).
+						Str("topic", ev.Topic).
+						Str("origin", ev.Origin).
+						Uint64("dropped", n).
+						Msg("Dropped a credential.changed event sent by an edge; only Studio raises it")
+				}
+				continue
+			}
 			if b.isControl && IsGuardrailTopic(ev.Topic) {
 				if n := b.droppedSystem.Add(1); n == 1 || n%100 == 0 {
 					log.Warn().

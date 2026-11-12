@@ -367,7 +367,7 @@ func TestPluginEventServer_DirectionMapping(t *testing.T) {
 // gateway plugin cannot publish guardrail.alert.* or guardrail.outcome.*
 // (midsommar-clean-9u1j.55, .66).
 func TestPluginEventServer_Publish_GuardrailAlertRefused(t *testing.T) {
-	for _, topic := range []string{"guardrail.alert.visor-pr-flag", "guardrail.outcome.blocked", "guardrail.outcome.judge_softened"} {
+	for _, topic := range []string{"guardrail.alert.visor-pr-flag", "guardrail.outcome.blocked", "guardrail.outcome.judge_softened", "credential.changed"} {
 		t.Run(topic, func(t *testing.T) {
 			bus := eventbridge.NewBus()
 			got := make(chan eventbridge.Event, 1)
