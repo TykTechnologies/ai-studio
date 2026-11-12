@@ -9,6 +9,9 @@ spec:
     - port: {{ .port }}
       targetPort: {{ .targetPort }}
       name: {{ .name }}
+      {{- with .appProtocol }}
+      appProtocol: {{ . }}
+      {{- end }}
       {{- if and (eq $.Values.midsommar.service.type "NodePort") (.nodePort) }}
       nodePort: {{ .nodePort }}
       {{- end }}

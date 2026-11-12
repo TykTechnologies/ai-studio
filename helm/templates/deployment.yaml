@@ -1,13 +1,11 @@
+{{- include "midsommar.validateReplicas" . }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "midsommar.fullname" . }}
 spec:
-  replicas: 1
-  {{- with .Values.midsommar.strategy }}
-  strategy:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
+  replicas: {{ int .Values.replicaCount }}
+  {{- include "midsommar.strategy" . | trim | nindent 2 }}
   selector:
     matchLabels:
       {{- include "midsommar.selectorLabels" . | nindent 6 }}
@@ -17,6 +15,30 @@ spec:
         date: "{{ now | unixEpoch }}"
         {{- include "midsommar.selectorLabels" . | nindent 8 }}
     spec:
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml .Values.topologySpreadConstraints | nindent 8 }}
+      {{- else if gt (int .Values.replicaCount) 1 }}
+      {{- /* Several replicas: spread them over nodes, and over zones where
+             the nodes carry one, so one node or zone does not take them all. */}}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "midsommar.selectorLabels" . | nindent 14 }}
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "midsommar.selectorLabels" . | nindent 14 }}
+      {{- end }}
       containers:
         - name: midsommar
           image: "{{ .Values.midsommar.image.repository }}:{{ .Values.midsommar.image.tag }}"
@@ -31,6 +53,13 @@ spec:
           env:
             - name: DATABASE_TYPE
               value: {{ .Values.config.databaseType }}
+            {{- if .Values.database.existingSecret }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ default "DATABASE_URL" .Values.database.existingSecretKey }}
+            {{- else }}
             - name: DATABASE_URL
               value: {{ default (printf "postgres://%s:%s@%s:%v/%s"
                 (required "database.user is required" .Values.database.user)
@@ -39,6 +68,7 @@ spec:
                 (default 5432 .Values.database.port)
                 (default "midsommar" .Values.database.name))
                 .Values.database.url }}
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -47,6 +77,17 @@ spec:
                 name: {{ include "midsommar.fullname" . }}-config
             - secretRef:
                 name: {{ include "midsommar.fullname" . }}-secrets
+          {{- /* Studio answers neither /health nor /ready while it waits for its
+                 database at start-up (DATABASE_STARTUP_TIMEOUT) and runs its
+                 migrations: the startup probe covers that time, and liveness
+                 and readiness start after it. */}}
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+            timeoutSeconds: {{ .Values.probes.startup.timeoutSeconds }}
+            failureThreshold: {{ .Values.probes.startup.failureThreshold }}
           livenessProbe:
             httpGet:
               path: /health
@@ -58,7 +99,7 @@ spec:
             successThreshold: {{ .Values.probes.liveness.successThreshold }}
           readinessProbe:
             httpGet:
-              path: /ready
+              path: {{ ternary "/ready?require=write" "/ready" (eq (toString .Values.probes.readiness.requireWrite) "true") }}
               port: http
             initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
             periodSeconds: {{ .Values.probes.readiness.periodSeconds }}

@@ -21,12 +21,25 @@ data:
   {{- if .Values.config.filterSignupDomains }}
   FILTER_SIGNUP_DOMAINS: {{ .Values.config.filterSignupDomains | quote }}
   {{- end }}
-  {{- if .Values.config.databaseUrl }}
+  {{- if .Values.database.existingSecret }}
+  {{- /* DATABASE_URL comes from database.existingSecret (the Deployment's env) */}}
+  {{- else if .Values.config.databaseUrl }}
   DATABASE_URL: {{ .Values.config.databaseUrl | quote }}
   {{- else if .Values.database.url }}
   DATABASE_URL: {{ .Values.database.url | quote }}
   {{- else }}
   DATABASE_URL: {{ printf "postgres://%s:%s@%s:%v/%s" .Values.database.user .Values.database.password (default (printf "%s-postgres" (include "midsommar.fullname" .)) .Values.database.host) (default 5432 .Values.database.port) .Values.database.name | quote }}
+  {{- end }}
+  {{- /* Database pool, readiness and start-up (PostgreSQL). Rendered only
+         when set, 0 included; unset keeps Studio's defaults. */}}
+  {{- range $key, $env := dict "databaseMaxOpenConns" "DATABASE_MAX_OPEN_CONNS" "databaseMaxIdleConns" "DATABASE_MAX_IDLE_CONNS" "databaseConnMaxLifetime" "DATABASE_CONN_MAX_LIFETIME" "databaseConnectTimeout" "DATABASE_CONNECT_TIMEOUT" "databaseReadyGrace" "DATABASE_READY_GRACE" "databaseStartupTimeout" "DATABASE_STARTUP_TIMEOUT" }}
+  {{- $v := index $.Values.config $key }}
+  {{- if and (not (kindIs "invalid" $v)) (ne (toString $v) "") }}
+  {{ $env }}: {{ toString $v | quote }}
+  {{- end }}
+  {{- end }}
+  {{- with .Values.config.clusterNodeLabel }}
+  CLUSTER_NODE_LABEL: {{ . | quote }}
   {{- end }}
   {{- /* OCI Plugin / Marketplace Configuration */}}
   {{- if .Values.config.ociCacheDir }}
