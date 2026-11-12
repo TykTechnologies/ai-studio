@@ -17,7 +17,7 @@
 #
 #   aa-k8s.sh lose-cp a|b             fault 1: that site's Studio held at zero       undo: return-cp
 #   aa-k8s.sh lose-db                 fault 2: the primary's pod killed and held at zero, then promote
-#   aa-k8s.sh crash-db                the primary's postmaster stopped -m immediate (a crash, pod kept), then promote
+#   aa-k8s.sh crash-db                the primary's postmaster stopped -m immediate (a crash), held at zero, then promote
 #   aa-k8s.sh create-check NAME       App creates of that run: 201s in the admin loop's log against rows (double apply)
 #   aa-k8s.sh promote                 promote the standby and name it the primary
 #   aa-k8s.sh rejoin a|b              bring that site's PostgreSQL back as the synchronous standby
