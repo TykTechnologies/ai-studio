@@ -1706,7 +1706,8 @@ dev-aa-ent: ent-link dev-aa-env
 dev-aa-rebuild:
 	@echo "🔨 Rebuilding ($$(sed -n 's/^AA_EDITION=//p' dev/.env | grep . || echo ce))..."
 	cd dev && $(AA_COMPOSE) run --rm build
-	@# The edges last: an edge that starts while no control plane answers exits.
+	@# The edges last: an edge that starts while no control plane answers
+	@# waits EDGE_STARTUP_CONTROL_TIMEOUT, then serves last-known-good.
 	cd dev && $(AA_COMPOSE) stop edge-a edge-b
 	cd dev && $(AA_COMPOSE) restart studio-a studio-b
 	cd dev && $(AA_COMPOSE) up -d --no-deps --wait studio-a studio-b
