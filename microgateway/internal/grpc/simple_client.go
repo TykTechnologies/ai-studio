@@ -778,11 +778,6 @@ func (c *SimpleEdgeClient) stopEventBridge() {
 	if c.streamAdapter != nil {
 		c.streamAdapter.Close()
 	}
-	// Closing the adapter ends the bridge's receive loop; wait for both
-	// loops, so the bridge does not outlive the stream.
-	if c.eventBridge != nil && !c.eventBridge.Wait(stopWaitTimeout) {
-		log.Warn().Str("edge_id", c.config.HubSpoke.EdgeID).Msg("Event bridge did not stop in time")
-	}
 	log.Debug().Str("edge_id", c.config.HubSpoke.EdgeID).Msg("Event bridge stopped for edge client")
 }
 
@@ -1140,15 +1135,26 @@ func (c *SimpleEdgeClient) Stop() error {
 	}
 
 	// Let the receive loop of the stream end and clean up (it stops the
-	// event bridge), so nothing of this client runs once Stop returns.
+	// event bridge and closes its stream adapter), then let the bridge's
+	// loops end, so nothing of this client runs once Stop returns. Only
+	// Stop waits (process shutdown, or the control plane asking the edge
+	// to stop): a reconnect or a move to another control endpoint does not,
+	// and at most stopWaitTimeout in all.
+	deadline := time.Now().Add(stopWaitTimeout)
 	c.streamMu.RLock()
 	done := c.streamDone
 	c.streamMu.RUnlock()
 	if done != nil {
+		timer := time.NewTimer(stopWaitTimeout)
+		defer timer.Stop()
 		select {
 		case <-done:
-		case <-time.After(stopWaitTimeout):
+		case <-timer.C:
 			log.Warn().Msg("Stopping the edge client: the stream's receive loop did not end in time")
+			return err
+		}
+		if b := c.eventBridge; b != nil && !b.Wait(time.Until(deadline)) {
+			log.Warn().Msg("Stopping the edge client: the event bridge did not stop in time")
 		}
 	}
 	return err

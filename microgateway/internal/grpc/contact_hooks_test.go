@@ -182,3 +182,20 @@ func TestEdgeClientHooks_AddWhileCalling(t *testing.T) {
 	client.onRegistered.each(func(fn func()) { fn() })
 	assert.EqualValues(t, 400, calls.Load(), "every hook added is called")
 }
+
+// Stop waits for the stream's goroutines, but a receive loop that never
+// ends holds it up for stopWaitTimeout at most, not the whole shutdown.
+func TestEdgeClientStop_HungReceiveLoopIsBounded(t *testing.T) {
+	if testing.Short() {
+		t.Skip("waits for the stop timeout")
+	}
+	client := NewSimpleEdgeClient(&config.Config{}, "test", "hash", "time")
+	client.streamMu.Lock()
+	client.streamDone = make(chan struct{}) // never closed
+	client.streamMu.Unlock()
+	start := time.Now()
+	require.NoError(t, client.Stop())
+	took := time.Since(start)
+	assert.GreaterOrEqual(t, took, stopWaitTimeout)
+	assert.Less(t, took, stopWaitTimeout+time.Second)
+}

@@ -134,7 +134,14 @@ func (b *Bridge) Wait(timeout time.Duration) bool {
 	select {
 	case <-done:
 		return true
-	case <-time.After(timeout):
+	default:
+	}
+	t := time.NewTimer(timeout)
+	defer t.Stop()
+	select {
+	case <-done:
+		return true
+	case <-t.C:
 		return false
 	}
 }
