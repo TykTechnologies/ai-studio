@@ -60,10 +60,10 @@ type SimpleEdgeClient struct {
 	// sends a configuration. lastContact is the time (Unix nanoseconds) of
 	// the last registration a control plane accepted or heartbeat it
 	// acknowledged; the onContact hooks are told of each.
-	lastKnownGood   atomic.Bool
-	lastContact     atomic.Int64
-	onContact       hookList[func(time.Time)]
-	onRegistered    hookList[func()]
+	lastKnownGood atomic.Bool
+	lastContact   atomic.Int64
+	onContact     hookList[func(time.Time)]
+	onRegistered  hookList[func()]
 	// startupDeadline and startupMinAttempt are set while StartWithin runs
 	// (main goroutine only): a registration then has until the deadline,
 	// and at least startupMinAttempt, to be answered.
