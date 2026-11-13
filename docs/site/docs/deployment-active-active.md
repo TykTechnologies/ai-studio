@@ -95,6 +95,7 @@ Set a different `CLUSTER_NODE_LABEL` per site (`site-a`, `site-b`). The label is
 
 - **UI and API.** Put both sites behind one name with **session affinity** (cookie or client address): chat and agent conversations and MCP connections over SSE are held by the replica that started them. Health-check `GET /ready` (or `/ready?require=write` to send traffic only where the database takes writes) and use `GET /health` for liveness. `/ready` stays 200 through a database failover shorter than `DATABASE_READY_GRACE` (30 seconds), so a failover does not empty the load balancer; see [Readiness during a failover](./configuration.md#postgres-with-a-standby-failover). With a global load balancer, or DNS failover between two site addresses, a user moves to the other site when theirs stops answering. Sign-in sessions are in the database and carry over; a chat or agent conversation that was open on the lost replica ends and is started again.
 - **gRPC for edges** (`:50051`). Give each site's control plane its own address and list both on the edges (below). A load balancer in front of the port must support HTTP/2 and keep idle streams open for at least a minute.
+- **Name resolution inside each site.** This is a requirement of the cluster, not something AI Studio or the gateway provides. Clients, edges and Studio find each other through the cluster's DNS. If a site's lookups can reach a DNS server only across the link between the sites, losing that link stops name resolution in that site. Every request from its clients then fails for as long as the link is down, although its edges and Studio keep running. Keep DNS answering inside each site: on Kubernetes, run a DNS replica in each zone and route lookups to the replica in their own zone (zone-local routing on the DNS Service), or use NodeLocal DNSCache. NodeLocal DNSCache sends the names it does not have cached on to the cluster's DNS Service, so pair it with zone-local routing. In the partition test on one EKS cluster (a three-minute cut between two zones), there was no split brain and each zone's data plane kept serving. But clients whose lookups went to the DNS replica on the other side of the cut failed every request for the whole cut.
 
 ## Edges
 
@@ -124,10 +125,12 @@ By default an edge that starts while no control plane answers exits. With `EDGE_
 
 An edge in either site may carry the other site's load after a site is lost, so size each site's edges for all of it. Each edge keeps a copy of its analytics in its own database for `ANALYTICS_RETENTION_DAYS`, which fills a small volume quickly: size the volume with the table in [Scaling Edge Gateways](./deployment-helm-k8s.md#scaling-edge-gateways) (about 35 MB per day per request per second), or set a short retention, since Studio has the same records. When the volume is full the edge keeps serving and says so (`"database_full"` on `/ready`, `microgateway_database_full`), but it can no longer apply a configuration push or store what last-known-good starts from.
 
-::: warning GAP: edge findings of the load test (bead midsommar-clean-4x5y.29)
-Fill in from the combined cluster pass:
-- how fast the edge database volume filled under sustained load (the first run filled the chart's 2 Gi in 30 to 45 minutes at 3,000 to 6,000 requests per second) and the volume size and retention recommended for each site;
-- what an edge does when it is overloaded (it was seen to restart rather than answer `503`), the per-edge request rate at which that began, and how many edges a site needs to carry both sites' load.
+On the test cluster (see [Measured on one test cluster](#measured-on-one-test-cluster)), one 4-vCPU edge carried 2,700 short requests per second on its own at an added p99 of 49.5 ms (median 1.1 ms), using 3.0 to 3.3 of its 4 cores, against 3.7 ms when two edges shared the load. Size each site's edges so that, after a site is lost, they carry both sites' load at a latency you accept.
+
+::: warning GAP: edge volume and overload findings (bead midsommar-clean-4x5y.29)
+Fill in from the cluster pass:
+- how fast the edge database volume filled under sustained load (the first run filled the chart's 2 Gi in 30 to 45 minutes at 3,000 to 6,000 requests per second), what an edge does when it is full, and the volume size and retention recommended for each site;
+- what an edge does when it is overloaded (an earlier build was seen to restart rather than answer `503`), and the per-edge request rate at which that begins.
 :::
 
 ### Keys an edge has never seen (full credential sync, Enterprise)
@@ -170,16 +173,55 @@ Edges are not affected by a database failover beyond the control plane being bri
 | **A primary is demoted but keeps running** (a switchover, or fencing) | Its connections would fail every write with SQLSTATE 25006. Studio notices from the first refused write, or within 5 seconds when idle, and reconnects to the new primary. | Nothing: this is the planned switchover's path. |
 | **One site's Studio is lost**, its database node fine | Edges of that site move to the other site. The UI and API load balancer stops sending traffic there; users on that site's replicas may lose an open chat session. | Session affinity that fails over; `EDGE_CONTROL_FAILBACK_INTERVAL` if edges should return when it is back. |
 | **The link between the sites is lost** | Each site's replicas keep the database they can reach. The site that loses the primary sees its database as unreachable: after `DATABASE_READY_GRACE` its `/ready` fails and the load balancer stops sending traffic there; its edges keep serving and keep their connections. The failover manager must not promote the cut-off standby unless a witness says the primary's site is gone (this is the split-brain case). | A witness; alerts on `aistudio_db_writable == 0` per replica. |
+| **DNS reachable only across the link** (a site's lookups go to a DNS server in the other site, and the link is lost) | Name resolution fails in that site. Its clients cannot reach its edges or Studio, and every request from them fails for as long as the link is down, although the gateway and Studio keep running. This is a property of the cluster's DNS, not of AI Studio. | DNS that answers inside each site ([Load balancers and DNS](#load-balancers-and-dns)). |
 | **An edge restarts during a control-plane outage** | By default it exits until a control plane answers. With `EDGE_START_FROM_LAST_KNOWN_GOOD=true` and a persistent volume it starts from its stored configuration, but it validates keys only with full credential sync (Enterprise): on demand, every key gets `503` until a control plane answers. | Decide on last-known-good; persistent volumes for edges. |
 | **An unknown key during a control-plane outage** | `503` with `Retry-After` (`credential_check_unavailable`), which SDKs retry. With `EDGE_CREDENTIAL_SYNC=full` (Enterprise), validated locally from the synced list. | Decide on full credential sync and on `EDGE_TOKEN_CACHE_STALE_GRACE` against the revocation trade-off above. |
 | **Asynchronous replication and a failover** | The last transactions the old primary acknowledged may be lost. Studio's event log, leader lease and budget sync recover on their own; lost writes stay lost. | Synchronous replication between the sites. |
 
-::: warning GAP: measured failover times (combined cluster pass, bead midsommar-clean-4x5y.29)
-Fill in from the combined cluster pass on the final `aa/integration` tip:
-- time without a primary and time until Studio writes again, with automatic failover (the stand-in failover manager, and CloudNativePG if run);
-- how long edges take to move to the other site's control plane when a site is lost, under load;
-- the admin API during a database failover: share of requests answered 2xx, 503 and other, and the longest request;
-- the data plane during site loss: errors and latency at the load the pass ran (requests per second, number of edges).
+### Measured on one test cluster
+
+These figures come from one test cluster. They show what the mechanisms above do under load, not what your deployment will measure: your failover manager, network and load decide that.
+
+**Set-up.**
+- One Amazon EKS cluster in one region, with its two availability zones as the two sites.
+- In each site, one 4-vCPU node (m7i.xlarge) for Studio and that site's PostgreSQL node, and one 4-vCPU node (c7i.xlarge) for one edge.
+- PostgreSQL with a synchronous standby in the other site. Failover was done by a script standing in for a failover manager, with no witness.
+- Community edition images, built from commit `fe145cc2` of the 2.3 development branch.
+- Load: 3,000 short requests per second plus 188 streaming requests per second in total over the two edges, against a mock LLM, unless a row says otherwise. Each Studio also ran an admin loop of writes and sign-ins, plus App creates in the database-loss runs.
+- Baseline without faults: no errors, added p99 latency 3.7 ms, and analytics complete (every answered request has its record in Studio).
+
+**Database faults.** Analytics were complete in every run.
+
+| Fault | Without a primary | Data plane | Admin API |
+|---|---|---|---|
+| Planned switchover | 13 to 14 s | 0 errors of 2.2 million requests; added p99 6.0 ms | All answered 200. Writes waited up to 10.6 s, sign-ins up to 8.7 s. |
+| Switchover held without a primary for longer than the window | 33 s | 0 errors of 2.07 million short and 130,000 streaming requests; added p99 6.8 ms | Per Studio, 8 sign-ins and 16 writes were answered `503` after 15 s (`DATABASE_WRITE_RETRY_WINDOW`); the rest 200. No `401`, no `500`. |
+| Primary's PostgreSQL killed | 14 s | 0 errors of 2.07 million short and 130,000 streaming requests; added p99 3.2 ms | All answered 200 or 201, longest wait 13.7 s. 1,578 Apps created, each exactly once. |
+| Primary's PostgreSQL crashed (`pg_ctl stop -m immediate`) | 14 s | 0 errors of 1.35 million short and 85,000 streaming requests; added p99 5.8 ms | All answered 200 or 201, longest wait 13.9 s. 1,047 Apps created, each exactly once. |
+| Primary lost at saturation (ramp from 6,000 to 14,000 short requests per second, primary lost at about 12,000) | 14 s | 0 errors of 5.2 million requests; added p99 38.4 ms over the ramp | All answered 200, longest wait 12.7 s. |
+
+**Site and control-plane faults.**
+- **A site lost for five minutes, then returned.**
+  - 13 short and 38 streaming requests failed, of 2.79 million and 175,000, all in the second the lost site's edge was killed.
+  - The surviving edge carried the whole load at an added p99 of 47.7 ms. One edge carrying that load on its own, with no fault, measured 49.5 ms.
+  - Analytics were complete. The returning PostgreSQL node was a synchronous standby again 63 s after the site came back.
+- **Every control plane cut for 3.5 minutes, and one edge restarted during the cut** (Community, so no full credential sync).
+  - 632 of 1.35 million short requests (0.05%) and 406 of 85,000 streaming requests failed, nearly all of them requests that reached the restarted edge, which cannot validate a key until a control plane answers.
+  - All App creates on the Studios succeeded (1,070, each once).
+- **The link between the sites cut for three minutes.**
+  - Load: each zone's clients sent half the load to their own zone's edge.
+  - The stand-in failover script dropped the synchronous requirement 60 s into the cut.
+  - No split brain, and analytics were complete.
+  - **The zone with the primary:** its clients had 0 errors of 675,968 short requests, at an added p99 of 3.3 ms. Its Studio took writes again 108 s before the link returned, once the synchronous requirement was dropped.
+  - **The cut-off zone's Studio:** it stayed ready for `DATABASE_READY_GRACE` (30 s), then answered `503`, and took writes again within a second of the link returning.
+  - **The cut-off zone's clients:** they failed every request for the whole cut, because their DNS lookups went to a DNS server on the other side (see [Load balancers and DNS](#load-balancers-and-dns)).
+
+Not yet measured: the same faults on the Enterprise edition with full credential sync, and what the analytics backlog keeps through a control-plane outage.
+
+::: warning GAP: Enterprise figures (bead midsommar-clean-4x5y.29, session 2)
+Fill in from the Enterprise pass:
+- a restarted edge with full credential sync during a control-plane outage: errors, and never-served keys;
+- the analytics backlog through a control-plane outage: what was delivered afterwards and what was dropped.
 :::
 
 ## Runbooks
