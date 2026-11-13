@@ -364,7 +364,9 @@ func (f *ledgerFlush) writeEach(db *gorm.DB, run func(func(tx *gorm.DB) error) e
 		var n int64
 		if cerr := db.Unscoped().Model(&database.App{}).Where("id = ?", e.appID).Count(&n).Error; cerr == nil && n == 0 {
 			f.gone[i] = true
-		} else {
+		} else if !database.IsStorageFull(err) {
+			// A database with no room left is logged once by
+			// database.NoteWrite, not here for every App at every flush.
 			log.Warn().Err(err).Uint("app_id", e.appID).Msg("Budget ledger: writing the App's usage failed; retrying with the next flush")
 		}
 	}
