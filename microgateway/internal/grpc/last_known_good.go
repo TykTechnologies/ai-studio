@@ -2,8 +2,11 @@ package grpc
 
 import (
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/rs/zerolog/log"
@@ -137,37 +140,77 @@ func (c *SimpleEdgeClient) StartReconnecting() {
 	go c.attemptReconnection()
 }
 
-// SetControlContactHook has fn called, with the time, whenever a control
-// plane accepts a registration or acknowledges a heartbeat. The edge
-// records it (services.RecordControlContact) so a later start without a
-// control plane knows how long it has been without one.
-func (c *SimpleEdgeClient) SetControlContactHook(fn func(time.Time)) {
-	if fn == nil {
-		c.onContact.Store(nil)
-		return
-	}
-	c.onContact.Store(&fn)
+// hookList holds the functions several parts of the edge ask to have called
+// on one occasion. Adding never replaces: with one hook per occasion, full
+// credential sync's hook replaced the one recording control contacts (bead
+// midsommar-clean-4x5y.50). Safe for concurrent use; the functions run in
+// the order they were added.
+type hookList[F any] struct {
+	mu  sync.Mutex
+	fns atomic.Pointer[[]F]
 }
 
-// SetRegisteredHook has fn called whenever a control plane accepts this
-// edge's registration: at start, after a reconnect and after a move to
-// another control endpoint. It is called before the control contact hook
-// of the same registration.
-func (c *SimpleEdgeClient) SetRegisteredHook(fn func()) {
-	if fn == nil {
-		c.onRegistered.Store(nil)
-		return
+// add appends fn (copy on write, so a call in progress sees a whole list).
+func (h *hookList[F]) add(fn F) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var next []F
+	if cur := h.fns.Load(); cur != nil {
+		next = append(next, *cur...)
 	}
-	c.onRegistered.Store(&fn)
+	next = append(next, fn)
+	h.fns.Store(&next)
+}
+
+// each calls call with every function added.
+func (h *hookList[F]) each(call func(F)) {
+	if cur := h.fns.Load(); cur != nil {
+		for _, fn := range *cur {
+			call(fn)
+		}
+	}
+}
+
+// AddControlContactHook has fn called, with the time, whenever a control
+// plane accepts a registration or acknowledges a heartbeat, after the hooks
+// added before it. The edge records the contact
+// (services.RecordControlContact) so a later start without a control plane
+// knows how long it has been without one; full credential sync asks for a
+// sync.
+func (c *SimpleEdgeClient) AddControlContactHook(fn func(time.Time)) {
+	if fn != nil {
+		c.onContact.add(fn)
+	}
+}
+
+// AddRegisteredHook has fn called whenever a control plane accepts this
+// edge's registration: at start, after a reconnect and after a move to
+// another control endpoint. The registered hooks are called before the
+// control contact hooks of the same registration.
+func (c *SimpleEdgeClient) AddRegisteredHook(fn func()) {
+	if fn != nil {
+		c.onRegistered.add(fn)
+	}
+}
+
+// RecordControlContactsIn records each contact with a control plane in db
+// (services.RecordControlContact), so that a later start without one knows
+// how long the edge has been on its own. It adds to the client's hooks.
+func (c *SimpleEdgeClient) RecordControlContactsIn(db *gorm.DB) {
+	c.AddControlContactHook(func(at time.Time) {
+		// A database with no room left is reported once where the write
+		// is made (database.NoteWrite), not at every heartbeat.
+		if err := services.RecordControlContact(db, at); err != nil && !database.IsStorageFull(err) {
+			log.Warn().Err(err).Msg("Could not record the contact with the control plane")
+		}
+	})
 }
 
 // controlContact notes contact with a control plane now.
 func (c *SimpleEdgeClient) controlContact() {
 	now := time.Now()
 	c.lastContact.Store(now.UnixNano())
-	if fn := c.onContact.Load(); fn != nil {
-		(*fn)(now)
-	}
+	c.onContact.each(func(fn func(time.Time)) { fn(now) })
 }
 
 // ConfigSource reports where the configuration the edge runs came from

@@ -103,7 +103,7 @@ func lkgClient(t *testing.T, db *gorm.DB, mutate func(*config.HubSpokeConfig), e
 	client := NewSimpleEdgeClient(&config.Config{HubSpoke: hs, Security: config.SecurityConfig{EncryptionKey: lkgTestKey}}, "test", "hash", "time")
 	// Wired as cmd/microgateway wires it.
 	sync := services.NewEdgeSyncService(db, hs.EdgeNamespace)
-	client.SetControlContactHook(func(at time.Time) { _ = services.RecordControlContact(db, at) })
+	client.RecordControlContactsIn(db)
 	client.SetOnConfigChange(func(snap *pb.ConfigurationSnapshot) {
 		if err := sync.SyncConfiguration(snap); err != nil {
 			t.Logf("sync failed: %v", err)

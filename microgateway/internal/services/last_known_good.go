@@ -63,8 +63,18 @@ func controlContactTag(key []byte, at time.Time) uint64 {
 
 // controlContactWriteInterval is the least time between two writes of the
 // contact time: heartbeats arrive every 30 s by default, and a minute's
-// resolution is plenty against a limit counted in hours.
-const controlContactWriteInterval = time.Minute
+// resolution is plenty against a limit counted in hours. A variable only so
+// that tests elsewhere can shorten it (SetControlContactWriteInterval).
+var controlContactWriteInterval = time.Minute
+
+// SetControlContactWriteInterval sets the least time between two writes of
+// the contact time and returns a function that restores the previous one.
+// For tests: the edge never changes it.
+func SetControlContactWriteInterval(d time.Duration) (restore func()) {
+	prev := controlContactWriteInterval
+	controlContactWriteInterval = d
+	return func() { controlContactWriteInterval = prev }
+}
 
 // controlContactWrites holds, per database, when the contact time was last
 // written (Unix nanoseconds).
