@@ -115,3 +115,20 @@ WARNING: this edge gateway keeps its database on an emptyDir volume.
       enabled: true
 {{- end }}
 {{- end }}
+
+{{/*
+The control endpoint an edge of this chart uses when none is set: the AI
+Studio Service of the parent chart (helm/), named as that chart names it
+("<release>-midsommar", or the release name when it contains "midsommar"),
+on its gRPC port, 50051. The parent chart checks at render time that this
+matches the Service it renders (midsommar.validateEdge), and refuses with
+the value to set when it does not (a name override, another gRPC port).
+Installed on its own, this chart needs config.controlEndpoint(s).
+*/}}
+{{- define "microgateway.defaultControlEndpoint" -}}
+{{- $studio := printf "%s-midsommar" .Release.Name -}}
+{{- if contains "midsommar" .Release.Name -}}
+{{- $studio = .Release.Name -}}
+{{- end -}}
+{{- printf "%s:50051" ($studio | trunc 63 | trimSuffix "-") -}}
+{{- end }}

@@ -137,7 +137,7 @@ ingress:
 # Edge configuration
 config:
   # Control endpoint — AI Studio service name and gRPC port
-  controlEndpoint: ""   # Auto-set in parent values, e.g. "midsommar:50051"
+  controlEndpoint: ""   # Empty: the parent chart's AI Studio Service, "<release>-midsommar:50051"; set it when this chart is installed on its own
   # Several control planes (CONTROL_ENDPOINTS), tried in order: list this
   # edge's own site first. When its connection fails the edge moves to the
   # next. Used instead of controlEndpoint when not empty.

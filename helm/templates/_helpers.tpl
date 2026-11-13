@@ -116,3 +116,51 @@ on them no hook is rendered (NOTES.txt says what that costs).
 0
 {{- end -}}
 {{- end }}
+
+{{/*
+The bundled edge (microgateway subchart) must reach this release's Studio
+and authenticate to it. Checked at render time:
+- With no control endpoint set, the subchart's default
+  (microgateway.defaultControlEndpoint) must be this release's Studio
+  Service on its gRPC port; otherwise (a name override, another port) the
+  render fails with the value to set.
+- The gRPC Service must target the port Studio listens on (config.grpcPort).
+- When the edge uses this release's Studio by default (no controlEndpoint
+  or controlEndpoints): it must use TLS when Studio serves it, and its
+  encryption key must be Studio's when both are in values. The auth token
+  is not compared: during a token rotation the edges move to
+  GRPC_AUTH_TOKEN_NEXT first, so the two differ by design.
+*/}}
+{{- define "midsommar.validateEdge" -}}
+{{- $mgw := .Values.microgateway | default dict -}}
+{{- if $mgw.enabled -}}
+{{- $cfg := $mgw.config | default dict -}}
+{{- range .Values.midsommar.service.ports -}}
+{{- if and (eq .name "grpc") (ne (toString .targetPort) (toString $.Values.config.grpcPort)) -}}
+{{- fail (printf "the grpc Service port targets %v, but AI Studio listens for gRPC on config.grpcPort %v: make them the same" .targetPort $.Values.config.grpcPort) -}}
+{{- end -}}
+{{- end -}}
+{{- /* The rest only when the edge uses this release's Studio by default: an
+       edge pointed at another control plane is that one's business. */}}
+{{- if and (not $cfg.controlEndpoint) (not $cfg.controlEndpoints) -}}
+{{- $port := 50051 -}}
+{{- range .Values.midsommar.service.ports -}}
+{{- if eq .name "grpc" -}}{{- $port = int .port -}}{{- end -}}
+{{- end -}}
+{{- $want := printf "%s:%d" (include "midsommar.fullname" .) $port -}}
+{{- $studio := printf "%s-midsommar" .Release.Name -}}
+{{- if contains "midsommar" .Release.Name -}}{{- $studio = .Release.Name -}}{{- end -}}
+{{- $default := printf "%s:50051" ($studio | trunc 63 | trimSuffix "-") -}}
+{{- if ne $want $default -}}
+{{- fail (printf "the bundled edge would connect to %s, but this release's AI Studio gRPC Service is %s: set microgateway.config.controlEndpoint=%s" $default $want $want) -}}
+{{- end -}}
+{{- if and (eq (toString .Values.config.grpcTlsInsecure) "false") (ne (toString $cfg.tlsEnabled) "true") -}}
+{{- fail "config.grpcTlsInsecure is false (AI Studio serves gRPC over TLS), but microgateway.config.tlsEnabled is not true: the bundled edge would connect without TLS" -}}
+{{- end -}}
+{{- $sec := $mgw.secrets | default dict -}}
+{{- if and (not $sec.existingSecret) $sec.encryptionKey .Values.config.microgatewayEncryptionKey (ne $sec.encryptionKey .Values.config.microgatewayEncryptionKey) -}}
+{{- fail "microgateway.secrets.encryptionKey must equal config.microgatewayEncryptionKey: the bundled edge decrypts what AI Studio sends with it" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end }}

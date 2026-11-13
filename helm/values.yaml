@@ -209,7 +209,7 @@ microgateway:
   ingress:
     enabled: false
   config:
-    controlEndpoint: ""   # Auto-resolved to "<release-name>:50051"
+    controlEndpoint: ""   # Empty: this release's AI Studio Service, "<release>-midsommar:50051" (the render checks it)
     edgeId: "edge-1"
     edgeNamespace: "default"
     heartbeatInterval: "30s"
