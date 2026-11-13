@@ -853,3 +853,69 @@ func TestCredentialSync_RejectedUnknownKeyChangesNothing(t *testing.T) {
 	require.NoError(t, db.Model(&database.SyncedCredential{}).Count(&n).Error)
 	assert.Zero(t, n, "nothing added for a rejected key")
 }
+
+// Lookup caches the rows it found, so a key in use costs no database read
+// per request; every way the list changes clears that cache, so the next
+// request sees the change (bead midsommar-clean-4x5y.50).
+func TestCredentialSync_LookupCacheFollowsEveryWrite(t *testing.T) {
+	forEachEdgeDB(t, func(t *testing.T, db *gorm.DB) {
+		e := newSyncedEdge(t, db, 24*time.Hour)
+		now := time.Now()
+		lookup := func(key string) (database.SyncedCredential, bool) {
+			t.Helper()
+			row, found, err := e.list.Lookup(e.hash(key))
+			require.NoError(t, err)
+			return row, found
+		}
+		require.NoError(t, e.list.Sync(context.Background(), pagesOf{{Full: true, Last: true, Watermark: 5, HashVersion: "v1",
+			Apps: []*pb.AppConfig{pbApp(1, "app", true)},
+			Credentials: []SyncedCredentialUpdate{
+				{CredentialID: 11, SecretHash: e.hash(keyA), AppID: 1, Active: true, UpdatedAt: now},
+				{CredentialID: 12, SecretHash: e.hash(keyB), AppID: 1, Active: true, UpdatedAt: now},
+			}}}))
+		for _, key := range []string{keyA, keyB} {
+			row, found := lookup(key)
+			require.True(t, found)
+			require.True(t, row.Active)
+		}
+
+		// A page deactivates one key and deletes the other.
+		require.NoError(t, e.list.Sync(context.Background(), delta(6,
+			SyncedCredentialUpdate{CredentialID: 11, SecretHash: e.hash(keyA), AppID: 1, Active: false, UpdatedAt: now},
+			SyncedCredentialUpdate{CredentialID: 12, Deleted: true})))
+		row, found := lookup(keyA)
+		require.True(t, found)
+		assert.False(t, row.Active, "a page that deactivates a key applies to the next lookup")
+		_, found = lookup(keyB)
+		assert.False(t, found, "a tombstone too")
+
+		// The control plane's word (Learned), both ways.
+		e.list.Learned(e.hash(keyC), 1, true)
+		row, found = lookup(keyC)
+		require.True(t, found)
+		require.True(t, row.Active)
+		e.list.Learned(e.hash(keyC), 1, false)
+		row, found = lookup(keyC)
+		require.True(t, found)
+		assert.False(t, row.Active, "a refusal the control plane gave applies to the next lookup")
+
+		// The sweep after a sync drops what was learned before it.
+		e.list.Learned(e.hash(keyC), 1, true)
+		_, found = lookup(keyC)
+		require.True(t, found)
+		time.Sleep(10 * time.Millisecond) // learned before the sync starts
+		require.NoError(t, e.list.Sync(context.Background(), delta(7)))
+		_, found = lookup(keyC)
+		assert.False(t, found, "the sweep applies to the next lookup")
+
+		// A credential.changed eviction: the row changed behind the cache
+		// (here by hand) is read again once the event names it.
+		_, _ = lookup(keyA)
+		require.NoError(t, db.Model(&database.SyncedCredential{}).Where("secret_hash = ?", e.hash(keyA)).Update("active", true).Error)
+		row, _ = lookup(keyA)
+		require.False(t, row.Active, "served from the cache until something says it changed")
+		e.h.EvictCredential(e.hash(keyA))
+		row, _ = lookup(keyA)
+		assert.True(t, row.Active, "the eviction applies to the next lookup")
+	})
+}

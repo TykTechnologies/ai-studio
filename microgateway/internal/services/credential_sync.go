@@ -142,8 +142,24 @@ const (
 // CredentialSync is an edge's synced credential list: the store, the sync
 // with the control plane and the answers validation takes from it.
 type CredentialSync struct {
-	db     *gorm.DB
-	maxAge time.Duration
+	db *gorm.DB
+	// lookups is db with its statements prepared once and kept: Lookup runs
+	// on every request, and preparing its statement each time was a third
+	// of its SQLite time (bead midsommar-clean-4x5y.50).
+	lookups *gorm.DB
+	maxAge  time.Duration
+
+	// found caches the rows Lookup found, by hash, so that a key in use
+	// costs no database read per request (bead midsommar-clean-4x5y.50).
+	// Every write to the list (an applied page, the sweeps after a sync, a
+	// Learned answer) and every credential.changed eviction (Forget) clears
+	// it and moves foundGen on after the write, so a revocation applies to
+	// the next request; a read that began before then does not store what
+	// it read. Keys the list does not hold are not cached: the control
+	// plane is asked for them anyway.
+	foundMu  sync.RWMutex
+	found    map[string]database.SyncedCredential
+	foundGen uint64
 
 	// syncMu makes syncs run one at a time.
 	syncMu sync.Mutex
@@ -210,7 +226,8 @@ func CredentialSyncEnabled(hs config.HubSpokeConfig) bool {
 // the last successful sync is read from the database, so a restarted edge
 // knows how old its list is.
 func NewCredentialSync(db *gorm.DB, maxAge time.Duration) (*CredentialSync, error) {
-	s := &CredentialSync{db: db, maxAge: maxAge, kick: make(chan struct{}, 1)}
+	s := &CredentialSync{db: db, lookups: db.Session(&gorm.Session{PrepareStmt: true}), maxAge: maxAge, kick: make(chan struct{}, 1),
+		found: map[string]database.SyncedCredential{}}
 	// Limit(1).Find, not First: no row yet is the normal state of an edge
 	// that has not synced, not an error to log.
 	var state database.SyncState
@@ -279,14 +296,48 @@ func (s *CredentialSync) Trusted(now time.Time) bool {
 // Lookup returns the list's row for a credential hash; found is false when
 // the key is not on the list.
 func (s *CredentialSync) Lookup(hash string) (row database.SyncedCredential, found bool, err error) {
-	err = s.db.Where("secret_hash = ?", hash).First(&row).Error
+	s.foundMu.RLock()
+	row, found = s.found[hash]
+	gen := s.foundGen
+	s.foundMu.RUnlock()
+	if found {
+		return row, true, nil
+	}
+	err = s.lookups.Where("secret_hash = ?", hash).Take(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return row, false, nil
 	}
 	if err != nil {
 		return row, false, fmt.Errorf("look up synced credential: %w", err)
 	}
+	s.foundMu.Lock()
+	if s.foundGen == gen && len(s.found) < maxCachedCredentials {
+		s.found[hash] = row
+	}
+	s.foundMu.Unlock()
 	return row, true, nil
+}
+
+// maxCachedCredentials bounds Lookup's cache (about 200 bytes a key); keys
+// beyond it are read from the database each time.
+const maxCachedCredentials = 100_000
+
+// changed clears Lookup's cache after a write to the list.
+func (s *CredentialSync) changed() {
+	s.foundMu.Lock()
+	clear(s.found)
+	s.foundGen++
+	s.foundMu.Unlock()
+}
+
+// Forget drops what Lookup cached for hash: a credential.changed event
+// said it changed. The next request reads the list (which the sync the
+// event starts brings up to date).
+func (s *CredentialSync) Forget(hash string) {
+	s.foundMu.Lock()
+	delete(s.found, hash)
+	s.foundGen++
+	s.foundMu.Unlock()
 }
 
 // counted notes which source answered a validation.
@@ -322,6 +373,7 @@ func (s *CredentialSync) Learned(hash string, appID uint, valid bool) {
 			return
 		}
 	}
+	s.changed()
 	if err != nil {
 		log.Warn().Err(err).Msg("Credential sync: could not record the control plane's answer")
 		return
@@ -516,14 +568,18 @@ func (s *CredentialSync) Sync(ctx context.Context, source CredentialSyncSource) 
 	// next full sync. Any such row learned before this sync started is
 	// dropped now; the sync has brought the key with its ID if it still
 	// exists, and otherwise the next request asks again.
-	if err := s.db.Where("credential_id = 0 AND synced_at < ?", started).Delete(&database.SyncedCredential{}).Error; err != nil {
+	err = s.db.Where("credential_id = 0 AND synced_at < ?", started).Delete(&database.SyncedCredential{}).Error
+	s.changed()
+	if err != nil {
 		return fmt.Errorf("credential sync: remove keys learned before the sync: %w", err)
 	}
 
 	// A full sync brought every credential there is: what it did not bring
 	// no longer exists on the control plane.
 	if full {
-		if err := s.db.Where("synced_at < ?", started).Delete(&database.SyncedCredential{}).Error; err != nil {
+		err := s.db.Where("synced_at < ?", started).Delete(&database.SyncedCredential{}).Error
+		s.changed()
+		if err != nil {
 			return fmt.Errorf("credential sync: remove credentials the full sync did not bring: %w", err)
 		}
 		// Fingerprints of Apps the full sync did not bring only take room.
@@ -597,6 +653,9 @@ func (s *CredentialSync) applyPage(page *CredentialSyncPage, syncedAt time.Time,
 	if len(apps) == 0 && len(tombstones) == 0 && len(rows) == 0 {
 		return nil
 	}
+	// After the transaction, committed or not: what Lookup cached may be
+	// what this page changed.
+	defer s.changed()
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		if err := storeApps(tx, apps); err != nil {
 			return err

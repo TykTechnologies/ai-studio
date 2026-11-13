@@ -579,6 +579,9 @@ func (h *HybridGatewayService) EvictCredential(hash string) {
 	delete(h.tokenCache, hash)
 	h.cacheMutex.Unlock()
 	h.validations.Forget(hash)
+	if h.credentials != nil {
+		h.credentials.Forget(hash)
+	}
 }
 
 // HandleCredentialChanged acts on a credential.changed event from the
