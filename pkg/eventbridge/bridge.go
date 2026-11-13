@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/rs/zerolog/log"
 	"github.com/simonfxr/pubsub"
@@ -44,6 +45,9 @@ type Bridge struct {
 	cancel  context.CancelFunc
 	sub     *pubsub.Subscription
 	wg      sync.WaitGroup // Tracks remoteToLocal goroutine for clean shutdown
+	// done is closed when both loops of the last Start have returned
+	// (localToRemote returns after remoteToLocal); see Wait.
+	done chan struct{}
 
 	// droppedSystem counts the system.* events an edge sent that this
 	// control node dropped (see remoteToLocal).
@@ -85,9 +89,14 @@ func (b *Bridge) Start(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	b.cancel = cancel
 	b.wg.Add(1) // Track remoteToLocal goroutine
+	done := make(chan struct{})
+	b.done = done
 	b.mu.Unlock()
 
-	go b.localToRemote(ctx)
+	go func() {
+		defer close(done)
+		b.localToRemote(ctx)
+	}()
 	go b.remoteToLocal(ctx)
 
 	log.Debug().
@@ -109,6 +118,25 @@ func (b *Bridge) Stop() {
 	log.Debug().
 		Str("node_id", b.nodeID).
 		Msg("Event bridge stopped")
+}
+
+// Wait blocks until the loops of the last Start have returned, or timeout
+// passes; it reports whether they returned. Call it after Stop and after
+// closing the stream (remoteToLocal may be waiting to receive), so that
+// nothing of the bridge runs, or logs, once its owner has stopped.
+func (b *Bridge) Wait(timeout time.Duration) bool {
+	b.mu.RLock()
+	done := b.done
+	b.mu.RUnlock()
+	if done == nil {
+		return true
+	}
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
 }
 
 // IsRunning returns whether the bridge is currently running.

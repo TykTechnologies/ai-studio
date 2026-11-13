@@ -2,6 +2,8 @@ package grpc
 
 import (
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -143,4 +145,40 @@ func TestFullCredentialSync_StartsFromLastKnownGoodAfterALongRun(t *testing.T) {
 	require.NoError(t, err, "the last contact is recent: the edge must not refuse")
 	require.NotNil(t, lkg)
 	assert.Equal(t, "stable", lkg.Checksum)
+}
+
+// Hooks may be added while contacts and registrations fire on other
+// goroutines (go test -race): a call sees a whole list, the one before an
+// add or the one after it.
+func TestEdgeClientHooks_AddWhileCalling(t *testing.T) {
+	client := NewSimpleEdgeClient(&config.Config{}, "test", "hash", "time")
+	var calls atomic.Int64
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				client.controlContact()
+				client.onRegistered.each(func(fn func()) { fn() })
+			}
+		}()
+	}
+	for i := 0; i < 200; i++ {
+		client.AddControlContactHook(func(time.Time) { calls.Add(1) })
+		client.AddRegisteredHook(func() { calls.Add(1) })
+	}
+	close(stop)
+	wg.Wait()
+
+	calls.Store(0)
+	client.controlContact()
+	client.onRegistered.each(func(fn func()) { fn() })
+	assert.EqualValues(t, 400, calls.Load(), "every hook added is called")
 }

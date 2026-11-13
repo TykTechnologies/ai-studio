@@ -778,6 +778,11 @@ func (c *SimpleEdgeClient) stopEventBridge() {
 	if c.streamAdapter != nil {
 		c.streamAdapter.Close()
 	}
+	// Closing the adapter ends the bridge's receive loop; wait for both
+	// loops, so the bridge does not outlive the stream.
+	if c.eventBridge != nil && !c.eventBridge.Wait(stopWaitTimeout) {
+		log.Warn().Str("edge_id", c.config.HubSpoke.EdgeID).Msg("Event bridge did not stop in time")
+	}
 	log.Debug().Str("edge_id", c.config.HubSpoke.EdgeID).Msg("Event bridge stopped for edge client")
 }
 
@@ -1128,13 +1133,29 @@ func (c *SimpleEdgeClient) Stop() error {
 	}
 
 	// Close connection
+	var err error
 	if conn, _ := c.connection(); conn != nil {
 		log.Debug().Msg("Closing connection to control server")
-		return conn.Close()
+		err = conn.Close()
 	}
 
-	return nil
+	// Let the receive loop of the stream end and clean up (it stops the
+	// event bridge), so nothing of this client runs once Stop returns.
+	c.streamMu.RLock()
+	done := c.streamDone
+	c.streamMu.RUnlock()
+	if done != nil {
+		select {
+		case <-done:
+		case <-time.After(stopWaitTimeout):
+			log.Warn().Msg("Stopping the edge client: the stream's receive loop did not end in time")
+		}
+	}
+	return err
 }
+
+// stopWaitTimeout bounds how long Stop waits for the stream's goroutines.
+const stopWaitTimeout = 5 * time.Second
 
 // heartbeatWorker sends periodic heartbeats to the control instance until
 // streamCtx, the context of the stream it was started for, is done.
