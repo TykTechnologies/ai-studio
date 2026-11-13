@@ -62,9 +62,26 @@ type AnalyticsPulsePlugin struct {
 	returned pulseSnapshot
 	// backlog holds, serialized and oldest first, the pulses that were not
 	// delivered while max_backlog_bytes is set (analytics_pulse_backlog.go).
-	// Only the sender changes it. Guarded by bufferMutex.
+	// The sender takes from its head; full batches spilled from the buffers
+	// join its tail (spillFullBatches). Guarded by bufferMutex.
 	backlog      []backlogBatch
 	backlogBytes int64
+	// headInFlight is set while the sender delivers the backlog's head, so
+	// that trimming, which a spill may run meanwhile, leaves it in place.
+	// Guarded by bufferMutex.
+	headInFlight bool
+	// attemptFailed is set when an attempt to send a pulse fails and cleared
+	// when one succeeds: from the first failed attempt on, full batches go
+	// to the backlog instead of waiting in the buffers.
+	attemptFailed atomic.Bool
+	// spillMu orders the moves of buffered records into the backlog's tail
+	// (spillToBacklog, spillFullBatches), which serialize outside
+	// bufferMutex. The request path never takes it.
+	spillMu sync.Mutex
+	// spillQueued is set while a spill of full batches is running.
+	spillQueued atomic.Bool
+	// spilledBatches counts the full batches spillFullBatches moved.
+	spilledBatches atomic.Uint64
 	// backlogFullHinted is set once the log has said, in this outage, how
 	// to raise max_backlog_bytes; a delivered pulse ends the outage and
 	// clears it. Guarded by bufferMutex.
@@ -467,7 +484,15 @@ func (p *AnalyticsPulsePlugin) HandleAnalytics(ctx context.Context, req *interfa
 	// has just failed; the timer picks the data up once the interval passes.
 	totalBuffered := p.totalBufferedLocked()
 	if totalBuffered >= p.config.MaxBufferSize {
-		if p.inBackoffLocked(time.Now()) {
+		if p.spillModeLocked() {
+			// Pulses are failing, or the backlog is being sent: a full
+			// batch would wait here as Go structs (about 2 KB a request)
+			// until the backlog is through. It joins the backlog instead,
+			// serialized, where max_backlog_bytes bounds it.
+			if p.spillQueued.CompareAndSwap(false, true) {
+				go p.spillFullBatches()
+			}
+		} else if p.inBackoffLocked(time.Now()) {
 			log.Debug().
 				Int("total_buffered", totalBuffered).
 				Msg("Analytics buffer is full but the last pulse failed recently - waiting for backoff")
@@ -1044,7 +1069,13 @@ func (p *AnalyticsPulsePlugin) sendWithRetry(pulse *pb.AnalyticsPulse, sequenceN
 			cancel()
 		}
 		if err == nil {
+			p.attemptFailed.Store(false)
 			return resp, nil
+		}
+		if !isMessageTooLarge(err) {
+			// The control plane did not take it: from now on full batches
+			// go to the backlog (spillModeLocked).
+			p.attemptFailed.Store(true)
 		}
 		lastErr = err
 		log.Warn().
@@ -1087,17 +1118,16 @@ func (p *AnalyticsPulsePlugin) sendPulse() {
 		// The backlog goes first, oldest batch first, one message at a
 		// time: it is older than anything buffered (a batch split for its
 		// size, p.held, is older still).
+		// Checked and taken under one lock: a spill in between would put
+		// older records in the backlog than the batch taken here.
 		p.bufferMutex.Lock()
-		fromBacklog := p.held == nil && len(p.backlog) > 0
-		p.bufferMutex.Unlock()
-		if fromBacklog {
+		if p.held == nil && len(p.backlog) > 0 {
+			p.bufferMutex.Unlock()
 			if p.deliverBacklogHead() == pulseFailed || p.stopping() {
 				return
 			}
 			continue
 		}
-
-		p.bufferMutex.Lock()
 		snap, sequenceNum, retried := p.nextBatchLocked()
 		p.bufferMutex.Unlock()
 		if snap.empty() {

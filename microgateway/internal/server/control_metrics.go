@@ -109,7 +109,7 @@ func registerPulseDropMetric(cfg *config.Config) {
 	}
 	if err := metrics.RegisterLabelledCounterFunc(
 		"microgateway_analytics_pulse_dropped_records_total",
-		"Analytics records this edge's pulse gave up, by reason (over_backlog: beyond max_backlog_bytes while pulses failed; over_cap: beyond max_buffer_size with the backlog off; expired: older than edge_retention_hours; oversized: one record too large for a pulse). The control plane's analytics are short by these.",
+		"Analytics records this edge's pulse gave up, by reason (over_backlog: beyond max_backlog_bytes while pulses failed; over_cap: beyond max_buffer_size with the backlog off; expired: older than edge_retention_hours; oversized: one record too large for a pulse). Counted in records: a proxied request makes three (usage, budget, proxy summary). The control plane's analytics are short by these.",
 		"reason",
 		func() map[string]float64 { return pulseDropValues(plugins.PulseDroppedRecords()) },
 	); err != nil {

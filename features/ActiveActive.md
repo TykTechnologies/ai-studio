@@ -522,8 +522,27 @@ Files: `microgateway/internal/config/config.go`,
      under the buffer lock and serialized outside it. Gauges
      `microgateway_analytics_pulse_backlog_bytes` and `_batches`. In
      memory: lost if the edge restarts during the outage (option C, a
-     disk-backed outbox, is the later item for that). Live Go-struct memory
-     stays bounded by what arrives between two pulse attempts.
+     disk-backed outbox, is the later item for that).
+     *Memory* (bead .49): the first version left the buffers to fill as Go
+     structs (about 2 KB per request) while a pulse was retried and for
+     the whole drain, since the sender was busy and a full buffer waited
+     for it. In the cluster an edge at 3,000 requests/s with a 199 MB
+     backlog reached 2.04 GB RSS at the end of the drain, and a
+     chart-default edge (512Mi, 64 MiB) peaked at 530 of 537 MB. Now, from
+     a pulse's first failed attempt and while the backlog is not empty, a
+     buffer that reaches `max_buffer_size` records is serialized onto the
+     backlog's tail under its own sequence number (`spillFullBatches`); a
+     batch that fails in flight goes to the front, being older than
+     anything spilled meanwhile; the head being sent is not trimmed. A
+     healthy edge with an empty backlog serializes nothing extra, and with
+     `max_backlog_bytes: 0` nothing changes. Measured with the real handlers
+     and packaged settings at 3,000 requests/s through a 3.5-minute outage
+     and the drain (`analytics_pulse_memory_test.go`, run with
+     `PULSE_MEMORY_MEASURE=1`): live memory of the analytics at most the
+     backlog plus 17 MB, against the backlog plus about 230 MB before; no
+     record unaccounted for. Sizing rule: working set + `max_backlog_bytes`
+     + about 50 MB. The drop counter counts records, three per proxied
+     request.
 5. A single DNS name or global load balancer in front of both CPs keeps
    working and stays documented as the alternative.
 
