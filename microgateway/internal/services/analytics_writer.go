@@ -203,10 +203,17 @@ func (w *AnalyticsWriter) flush(events []*database.AnalyticsEvent) {
 	if err == nil || !isBusyError(err) {
 		_ = database.NoteWrite(database.WriteAnalytics, err)
 	}
+	// While there is no room, every flush fails the same way, several times
+	// a second: NoteWrite logs the condition once when it begins and once
+	// when it ends, the counters keep the detail, and a flush logs nothing
+	// about it (bead midsommar-clean-4x5y.48).
+	full := database.IsStorageFull(err)
 	written, failed := len(events), 0
 	var usageOK []bool // per ledger entry, when written one by one
 	if err != nil && !isBusyError(err) {
-		log.Warn().Err(err).Int("events", len(events)).Msg("Analytics writer: batch failed, writing its rows one by one")
+		if !full {
+			log.Warn().Err(err).Int("events", len(events)).Msg("Analytics writer: batch failed, writing its rows one by one")
+		}
 		err = nil
 		if !usage.empty() {
 			usageOK = usage.writeEach(w.db, w.withBusyRetry)
@@ -224,7 +231,9 @@ func (w *AnalyticsWriter) flush(events []*database.AnalyticsEvent) {
 				continue
 			}
 			failed++
-			log.Error().Err(rowErr).Str("request_id", e.RequestID).Msg("Analytics writer: event dropped")
+			if !database.IsStorageFull(rowErr) {
+				log.Error().Err(rowErr).Str("request_id", e.RequestID).Msg("Analytics writer: event dropped")
+			}
 			if written == 0 && failed >= writerMaxRowFailures {
 				// Every row fails: the database, not a row, is the
 				// problem. Drop the rest of the batch.
@@ -247,7 +256,7 @@ func (w *AnalyticsWriter) flush(events []*database.AnalyticsEvent) {
 	}
 	w.written.Add(uint64(written))
 	w.failed.Add(uint64(failed))
-	if err != nil {
+	if err != nil && !full {
 		log.Error().Err(err).Int("events", failed).Msg("Analytics writer: flush failed; events dropped, budget usage kept for the next flush")
 	}
 }
