@@ -95,11 +95,11 @@ x-edge-env: &edge-env
   EDGE_TLS_ENABLED: "false"
   EDGE_ALLOW_INSECURE: "true"
   EDGE_RECONNECT_INTERVAL: 2s
-  # On here, off by default in the product: an edge restarted while every
-  # control plane is cut starts from the configuration it last applied
-  # (features/ActiveActive.md, Phase 3), so that failure can be shown
-  # without editing env files. Each edge has its own volume, which is what
-  # the option needs. An edge that has never applied a configuration (a
+  # On here, off by default in the product: the stack exists to try the
+  # two-site runbooks, and an edge restarted while every control plane is
+  # cut (acceptance scenario 4) is one of them. With it, such an edge starts
+  # from the configuration it last applied (features/ActiveActive.md,
+  # Phase 3). Each edge has its own volume, which is what the option needs. An edge that has never applied a configuration (a
   # fresh volume) still exits, after EDGE_STARTUP_CONTROL_TIMEOUT.
   EDGE_START_FROM_LAST_KNOWN_GOOD: "true"
   TYK_AI_LICENSE: ${TYK_AI_LICENSE:-}
