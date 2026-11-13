@@ -289,7 +289,17 @@ make dev-aa-clean      # stop and remove its volumes
   once into a volume; replicas and edges run those binaries. There is no hot
   reload here: run `make dev-aa-rebuild` after changing Go code.
 - **Edges keep their own database on a volume** and list their own site's
-  control plane first.
+  control plane first. They run with `EDGE_START_FROM_LAST_KNOWN_GOOD=true`
+  (off by default in the product), so an edge restarted while every control
+  plane is cut starts from the configuration it last applied. On demand
+  (Community, or without `EDGE_CREDENTIAL_SYNC=full`) it then answers every
+  key `503 credential_check_unavailable` until a control plane answers; with
+  full credential sync (Enterprise) it validates keys from its synced list.
+  Set the option to `"false"` in the compose file to see the default, where
+  such an edge exits.
+- **A clean checkout builds.** Studio embeds the UI build and the docs site;
+  when they have not been built, the build service puts a placeholder in
+  each (the UI is served by the React dev server on 3100).
 - **A database of its own.** The stack starts empty: register a user in the
   UI (the first one is not an administrator automatically; promote it with
   `UPDATE users SET is_admin = true, email_verified = true WHERE email = ...`

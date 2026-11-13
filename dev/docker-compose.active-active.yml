@@ -95,6 +95,13 @@ x-edge-env: &edge-env
   EDGE_TLS_ENABLED: "false"
   EDGE_ALLOW_INSECURE: "true"
   EDGE_RECONNECT_INTERVAL: 2s
+  # On here, off by default in the product: the stack exists to try the
+  # two-site runbooks, and an edge restarted while every control plane is
+  # cut (acceptance scenario 4) is one of them. With it, such an edge starts
+  # from the configuration it last applied (features/ActiveActive.md,
+  # Phase 3). Each edge has its own volume, which is what the option needs. An edge that has never applied a configuration (a
+  # fresh volume) still exits, after EDGE_STARTUP_CONTROL_TIMEOUT.
+  EDGE_START_FROM_LAST_KNOWN_GOOD: "true"
   TYK_AI_LICENSE: ${TYK_AI_LICENSE:-}
   # The edge's own database, on a volume: what last-known-good starts from.
   DATABASE_TYPE: sqlite
@@ -150,9 +157,12 @@ services:
       - sh
       - -ec
       - |
+        # Studio embeds both directories. A checkout without a built UI or
+        # docs site gets a placeholder; go:embed skips names starting with
+        # a dot, so a .gitkeep would not do.
         mkdir -p /app/ui/admin-frontend/build /app/docs/site/dist
-        [ -n "$$(ls -A /app/ui/admin-frontend/build)" ] || touch /app/ui/admin-frontend/build/.gitkeep
-        [ -n "$$(ls -A /app/docs/site/dist)" ] || touch /app/docs/site/dist/.gitkeep
+        [ -n "$$(ls /app/ui/admin-frontend/build)" ] || echo placeholder > /app/ui/admin-frontend/build/placeholder.txt
+        [ -n "$$(ls /app/docs/site/dist)" ] || echo placeholder > /app/docs/site/dist/placeholder.txt
         if [ "$$EDITION" = ent ] && [ -d /app/enterprise ]; then
           echo "Building Studio and microgateway (Enterprise)..."
           GOWORK=/app/enterprise.work go build -tags enterprise -o /aa-bin/studio .

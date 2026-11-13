@@ -291,7 +291,7 @@ make dev-aa-status     # roles, replication, replicas, edges
 | 50151, 50251 | site-a and site-b control gRPC (cuttable) |
 | 8181, 8281 | edge-a and edge-b gateway |
 
-Its configuration (`dev/docker-compose.active-active.yml`) is a reference for what each piece needs: the multi-host `DATABASE_URL` with `target_session_attrs=read-write&connect_timeout=3`, the shared secrets, `CLUSTER_NODE_LABEL`, `QUEUE_TYPE=postgres`, `CONTROL_ENDPOINTS` with the own site first, and the edges' databases on volumes. Nothing in it fails over by itself; `dev/aa/aa.sh` does each step of a failover manager by hand:
+Its configuration (`dev/docker-compose.active-active.yml`) is a reference for what each piece needs: the multi-host `DATABASE_URL` with `target_session_attrs=read-write&connect_timeout=3`, the shared secrets, `CLUSTER_NODE_LABEL`, `QUEUE_TYPE=postgres`, `CONTROL_ENDPOINTS` with the own site first, and the edges' databases on volumes, with `EDGE_START_FROM_LAST_KNOWN_GOOD=true` so an edge restarted while every control plane is cut can be tried (see [Starting during an outage](#starting-during-an-outage)). Nothing in it fails over by itself; `dev/aa/aa.sh` does each step of a failover manager by hand:
 
 ```bash
 dev/aa/aa.sh stop-site a     # lose site A: its Studio, its control endpoint, its PostgreSQL node
