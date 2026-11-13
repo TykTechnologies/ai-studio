@@ -127,3 +127,101 @@ func BenchmarkValidateAPIToken(b *testing.B) {
 		runValidations(b, h, tokens)
 	})
 }
+
+// BenchmarkCredentialLookupUnderWriters is the lookup alone, with and
+// without the gateway's background writers on the same database: the
+// analytics writer and the budget ledger flushing every 100 ms on their
+// own connection, as the edge runs them, at 2,700 requests a second with
+// 1 KB bodies. It reports the lookup's p50 and p99.
+func BenchmarkCredentialLookupUnderWriters(b *testing.B) {
+	quietLogs(b)
+	for _, writers := range []bool{false, true} {
+		name := "idle"
+		if writers {
+			name = "writers"
+		}
+		b.Run(name, func(b *testing.B) {
+			path := filepath.Join(b.TempDir(), "edge.db")
+			cfg := database.DatabaseConfig{Type: "sqlite", DSN: "file:" + path + "?mode=rwc", MaxOpenConns: 8, MaxIdleConns: 8, LogLevel: "silent"}
+			db, err := database.Connect(cfg)
+			require.NoError(b, err)
+			db.Logger = logger.Default.LogMode(logger.Silent)
+			b.Cleanup(func() { database.Close(db) })
+			require.NoError(b, database.Migrate(db))
+			wdb, err := database.OpenWriter(cfg, db)
+			require.NoError(b, err)
+			wdb.Logger = logger.Default.LogMode(logger.Silent)
+			b.Cleanup(func() { database.Close(wdb) })
+
+			list, err := NewCredentialSync(db, time.Hour)
+			require.NoError(b, err)
+			page := &CredentialSyncPage{Full: true, Last: true, Watermark: 1, HashVersion: "v1"}
+			hashes := make([]string, benchKeys)
+			now := time.Now()
+			for i := range hashes {
+				hashes[i] = fmt.Sprintf("v1:%064x", i)
+				page.Credentials = append(page.Credentials, SyncedCredentialUpdate{CredentialID: uint(i + 1), SecretHash: hashes[i], AppID: uint(i%50 + 1), Active: true, UpdatedAt: now})
+			}
+			require.NoError(b, list.Sync(b.Context(), pagesOf{page}))
+
+			if writers {
+				for i := 1; i <= 50; i++ {
+					require.NoError(b, db.Create(&database.App{Model: gorm.Model{ID: uint(i)}, Name: fmt.Sprintf("app-%d", i), IsActive: true}).Error)
+				}
+				ledger := NewBudgetLedger(db)
+				w := NewAnalyticsWriter(wdb, 20000, 1000, 100*time.Millisecond)
+				w.SetLedger(ledger)
+				w.Start()
+				stop := make(chan struct{})
+				done := make(chan struct{})
+				go func() { // 2,700 a second, in ticks of 10 ms
+					defer close(done)
+					body := string(make([]byte, 1024))
+					start, end := ledgerPeriod()
+					tick := time.NewTicker(10 * time.Millisecond)
+					defer tick.Stop()
+					seq := 0
+					for {
+						select {
+						case <-stop:
+							return
+						case <-tick.C:
+						}
+						for j := 0; j < 27; j++ {
+							seq++
+							app := uint(seq%50 + 1)
+							w.Enqueue(&database.AnalyticsEvent{RequestID: fmt.Sprintf("r-%d", seq), AppID: app, TimeStamp: time.Now(), RequestBody: body, ResponseBody: body})
+							ledger.Add(app, start, end, 100, 0.001, 60, 40)
+						}
+					}
+				}()
+				time.Sleep(time.Second) // writers in their stride
+				b.Cleanup(func() { close(stop); <-done; w.Stop() })
+			}
+
+			var mu sync.Mutex
+			var all []time.Duration
+			b.ResetTimer()
+			b.RunParallel(func(pb *testing.PB) {
+				local := make([]time.Duration, 0, 1<<16)
+				i := 0
+				for pb.Next() {
+					i = (i + 7919) % benchKeys
+					t0 := time.Now()
+					if _, found, err := list.Lookup(hashes[i]); err != nil || !found {
+						b.Fatalf("lookup: found=%v err=%v", found, err)
+					}
+					local = append(local, time.Since(t0))
+				}
+				mu.Lock()
+				all = append(all, local...)
+				mu.Unlock()
+			})
+			b.StopTimer()
+			slices.Sort(all)
+			b.ReportMetric(float64(all[len(all)/2].Nanoseconds()), "p50-ns")
+			b.ReportMetric(float64(all[len(all)*99/100].Nanoseconds()), "p99-ns")
+			b.ReportMetric(float64(all[len(all)*999/1000].Nanoseconds()), "p999-ns")
+		})
+	}
+}
