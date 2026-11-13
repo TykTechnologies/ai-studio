@@ -174,7 +174,23 @@ type CredentialSync struct {
 	lastReregister time.Time
 
 	local, control, stale atomic.Uint64
+	// Syncs asked for, by trigger (KickFor).
+	byRegistration, byHeartbeat, byEvent atomic.Uint64
 }
+
+// Triggers of a sync, as microgateway_credential_sync_calls_total counts
+// them.
+const (
+	// SyncTriggerRegistration: a control plane accepted the edge's
+	// registration (at start, after a reconnect, after a move to another
+	// control endpoint).
+	SyncTriggerRegistration = "registration"
+	// SyncTriggerHeartbeat: a control plane acknowledged a heartbeat.
+	SyncTriggerHeartbeat = "heartbeat"
+	// SyncTriggerEvent: a credential.changed event for a key on the list
+	// (KickForChange).
+	SyncTriggerEvent = "event"
+)
 
 // CredentialSyncEnabled reports whether hs asks for full credential sync and
 // this build may run it. A Community edge given EDGE_CREDENTIAL_SYNC=full
@@ -236,6 +252,17 @@ func (s *CredentialSync) Validations() map[string]uint64 {
 		ValidationLocal:   s.local.Load(),
 		ValidationControl: s.control.Load(),
 		ValidationStale:   s.stale.Load(),
+	}
+}
+
+// SyncCalls returns how many syncs were asked for, by trigger, since the
+// process started. A sync asked for while one runs is folded into the next
+// one, so the sum can exceed the syncs run.
+func (s *CredentialSync) SyncCalls() map[string]uint64 {
+	return map[string]uint64{
+		SyncTriggerRegistration: s.byRegistration.Load(),
+		SyncTriggerHeartbeat:    s.byHeartbeat.Load(),
+		SyncTriggerEvent:        s.byEvent.Load(),
 	}
 }
 
@@ -357,9 +384,22 @@ func (s *CredentialSync) KickForChange(hash string) bool {
 		s.lastEventKick = time.Now()
 		s.eventMu.Unlock()
 		s.eventPending.Store(false)
-		s.Kick()
+		s.KickFor(SyncTriggerEvent)
 	})
 	return true
+}
+
+// KickFor is Kick, counted under trigger (SyncCalls).
+func (s *CredentialSync) KickFor(trigger string) {
+	switch trigger {
+	case SyncTriggerRegistration:
+		s.byRegistration.Add(1)
+	case SyncTriggerHeartbeat:
+		s.byHeartbeat.Add(1)
+	case SyncTriggerEvent:
+		s.byEvent.Add(1)
+	}
+	s.Kick()
 }
 
 // Kick asks Run for a sync and returns at once. The edge calls it on every

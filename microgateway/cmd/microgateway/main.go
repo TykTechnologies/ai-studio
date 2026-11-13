@@ -299,7 +299,7 @@ func main() {
 						edgeClient.SyncCredentialsOnContact(list)
 						go list.Run(context.Background(), edgeClient, credentialSyncTimeout)
 						// The edge registered before the hooks were set.
-						list.Kick()
+						list.KickFor(services.SyncTriggerRegistration)
 						log.Info().Msg("Full credential sync: keys are validated from the synced, hashed list")
 					}
 				}

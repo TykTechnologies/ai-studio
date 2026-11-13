@@ -227,6 +227,7 @@ func fullSyncEdgeSyncsAtOnce(t *testing.T, db *gorm.DB) {
 		// Refused from the list, not 503 for want of a control plane.
 		return err != nil && !errors.Is(err, coresvc.ErrCredentialCheckUnavailable)
 	}, 2*time.Second, 10*time.Millisecond, "refused from the list after the sync the event started")
+	assert.EqualValues(t, 1, e.list.SyncCalls()[SyncTriggerEvent], "one event-driven sync, counted")
 
 	// A hash this edge's list does not hold (another namespace's key, or
 	// one created since the last sync): no sync, and nothing added.
@@ -234,6 +235,9 @@ func fullSyncEdgeSyncsAtOnce(t *testing.T, db *gorm.DB) {
 	e.h.HandleCredentialChanged(credentialChanged(t, e.h, keyC, true, false))
 	time.Sleep(1500 * time.Millisecond) // past the longest delay and interval
 	assert.Equal(t, calls, e.hub.callCount(), "no sync for a hash the list does not hold")
+	assert.EqualValues(t, 1, e.list.SyncCalls()[SyncTriggerEvent], "and none counted: what another namespace's key change shows on this edge")
+	assert.Zero(t, e.list.SyncCalls()[SyncTriggerHeartbeat])
+	assert.Zero(t, e.list.SyncCalls()[SyncTriggerRegistration])
 	_, found, err := e.list.Lookup(e.hash(keyC))
 	require.NoError(t, err)
 	assert.False(t, found, "nothing is added from the payload")

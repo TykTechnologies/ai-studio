@@ -861,7 +861,9 @@ Files: `proto/config_sync.proto`, `proto/common.proto`,
    A `FailedPrecondition` "register first" answer makes the edge register
    again and ask again, at most once a minute; it is not the on-demand
    fallback. Metrics `microgateway_credential_sync_last_success_timestamp`,
-   `microgateway_credentials_synced` and
+   `microgateway_credentials_synced`,
+   `microgateway_credential_sync_calls_total{trigger}` (registration,
+   heartbeat, event; bead .50) and
    `microgateway_credential_validations_total{source}` (local, control,
    stale; a list that never synced counts as stale).
 6. **Default stays `on_demand`.** In that mode nothing changes, except that

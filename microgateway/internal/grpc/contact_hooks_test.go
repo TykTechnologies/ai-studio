@@ -100,6 +100,10 @@ func TestFullCredentialSync_HeartbeatsStillRecordTheContact(t *testing.T) {
 		return err == nil && ok && at.After(first)
 	}, 5*time.Second, 50*time.Millisecond, "acknowledged heartbeats record the contact")
 	assert.False(t, list.Unavailable(), "the list follows the client too")
+	calls := list.SyncCalls()
+	assert.EqualValues(t, 1, calls[services.SyncTriggerRegistration], "the registration asked for one sync")
+	assert.GreaterOrEqual(t, calls[services.SyncTriggerHeartbeat], uint64(1), "each acknowledged heartbeat asks for one")
+	assert.Zero(t, calls[services.SyncTriggerEvent])
 }
 
 // A full-sync edge that has run for longer than EDGE_LAST_KNOWN_GOOD_MAX_AGE

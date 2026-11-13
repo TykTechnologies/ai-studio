@@ -154,6 +154,11 @@ func pulseDropValues(counts map[string]uint64) map[string]float64 {
 //     call), "control" (the key was not on the list and the control plane
 //     or its cached answer decided) and "stale" (the list was past its max
 //     age, so the edge asked as on demand).
+//   - microgateway_credential_sync_calls_total{trigger} counts the syncs
+//     asked for, by what asked: "registration" (a control plane accepted
+//     the edge), "heartbeat" (one acknowledged) and "event" (a
+//     credential.changed event for a key on the list). Syncs asked for
+//     while one runs fold into one.
 func registerCredentialSyncMetrics(cfg *config.Config, sc *services.ServiceContainer) {
 	if !cfg.IsEdge() || sc.CredentialSync == nil {
 		return
@@ -180,6 +185,14 @@ func registerCredentialSyncMetrics(cfg *config.Config, sc *services.ServiceConta
 		func() map[string]float64 { return credentialValidationValues(list.Validations()) },
 	); err != nil {
 		log.Warn().Err(err).Msg("Failed to register credential validation metric")
+	}
+	if err := metrics.RegisterLabelledCounterFunc(
+		"microgateway_credential_sync_calls_total",
+		"Credential syncs this edge asked for, by trigger: registration (a control plane accepted the edge), heartbeat (one acknowledged), event (a credential.changed event for a key on the list)",
+		"trigger",
+		func() map[string]float64 { return credentialValidationValues(list.SyncCalls()) },
+	); err != nil {
+		log.Warn().Err(err).Msg("Failed to register credential sync calls metric")
 	}
 }
 
