@@ -29,6 +29,23 @@ import (
 // max_buffer_size keeps its meaning: the size at which a filling buffer is
 // flushed and the most records one pulse carries. The backlog is in memory:
 // it is lost if the edge restarts during the outage.
+//
+// While pulses fail (from the first failed attempt, not only once the
+// retries are spent) and while the backlog is being sent, a buffer that
+// reaches max_buffer_size records is not left to wait as Go structs: the
+// full batch is serialized onto the backlog's tail under a sequence number
+// of its own (spillFullBatches). Left in the buffers, the records gathered
+// through a retry ladder and through the whole drain, about 2 KB a request
+// against ~280 bytes serialized, and an edge at 3,000 requests/s held
+// several times its backlog in memory (bead midsommar-clean-4x5y.49). With
+// a healthy control plane and an empty backlog nothing is serialized
+// beyond the pulses themselves.
+//
+// Order: the backlog is oldest first. A fresh batch is taken only when the
+// backlog is empty (sendPulse checks and takes under one lock), so a batch
+// in flight is older than anything spilled while it was, and when it fails
+// it goes to the backlog's front (failToBacklog). The backlog's head stays
+// at the head while it is being sent (headInFlight).
 
 // defaultMaxBacklogBytes is max_backlog_bytes when the pulse file does not
 // set it.
@@ -192,6 +209,53 @@ func (p *AnalyticsPulsePlugin) encodeBacklog(m *pb.AnalyticsPulse, newest time.T
 	return []backlogBatch{{seq: m.SequenceNumber, msg: msg, records: pulseRecords(m), newest: newest}}
 }
 
+// spillModeLocked reports whether full batches go to the backlog instead
+// of waiting in the buffers: the backlog is on, and a pulse attempt has
+// failed or the backlog holds batches. Caller holds bufferMutex.
+func (p *AnalyticsPulsePlugin) spillModeLocked() bool {
+	return p.backlogEnabled() && (len(p.backlog) > 0 || p.lastError != nil || p.attemptFailed.Load())
+}
+
+// encodeSnapshot builds a batch's pulse message and serializes it for the
+// backlog. Called without bufferMutex.
+func (p *AnalyticsPulsePlugin) encodeSnapshot(snap pulseSnapshot, seq uint64) []backlogBatch {
+	m := p.buildPulseMessage(snap.analytics, snap.metadata, snap.budget, snap.proxy, snap.compliance, snap.toolCalls, seq)
+	makeValidUTF8(m.ProtoReflect())
+	return p.encodeBacklog(m, snap.newest())
+}
+
+// spillFullBatches moves full batches (max_buffer_size records each) from
+// the buffers to the backlog's tail, serialized, each under a new sequence
+// number, for as long as spillModeLocked holds and a full batch is
+// buffered; what is left below a batch stays. Started by the request path
+// when a buffer fills (one at a time, spillQueued); the records are taken
+// under the lock and serialized outside it.
+func (p *AnalyticsPulsePlugin) spillFullBatches() {
+	defer p.spillQueued.Store(false)
+	p.spillMu.Lock()
+	defer p.spillMu.Unlock()
+	for !p.stopping() {
+		p.bufferMutex.Lock()
+		full := p.batchRecords()
+		if full <= 0 || !p.spillModeLocked() || p.totalBufferedLocked()-p.heldSizeLocked() < full {
+			p.bufferMutex.Unlock()
+			return
+		}
+		snap := p.takeBatchLocked(full)
+		seq := p.sequenceNumber
+		p.sequenceNumber++
+		p.bufferMutex.Unlock()
+
+		encoded := p.encodeSnapshot(snap, seq)
+
+		p.bufferMutex.Lock()
+		p.pushBacklogLocked(encoded)
+		p.trimBacklogLocked(time.Now())
+		p.bufferMutex.Unlock()
+		p.spilledBatches.Add(1)
+	}
+}
+
 // setBacklogGaugesLocked publishes the backlog's size. Caller holds
 // bufferMutex.
 func (p *AnalyticsPulsePlugin) setBacklogGaugesLocked() {
@@ -230,6 +294,8 @@ func (p *AnalyticsPulsePlugin) spillToBacklog(now time.Time) {
 		seq  uint64
 	}
 	var batches []taken
+	p.spillMu.Lock()
+	defer p.spillMu.Unlock()
 	p.bufferMutex.Lock()
 	p.unreturnLocked()
 	for {
@@ -244,9 +310,7 @@ func (p *AnalyticsPulsePlugin) spillToBacklog(now time.Time) {
 
 	var encoded []backlogBatch
 	for _, b := range batches {
-		m := p.buildPulseMessage(b.snap.analytics, b.snap.metadata, b.snap.budget, b.snap.proxy, b.snap.compliance, b.snap.toolCalls, b.seq)
-		makeValidUTF8(m.ProtoReflect())
-		encoded = append(encoded, p.encodeBacklog(m, b.snap.newest())...)
+		encoded = append(encoded, p.encodeSnapshot(b.snap, b.seq)...)
 	}
 
 	p.bufferMutex.Lock()
@@ -258,13 +322,18 @@ func (p *AnalyticsPulsePlugin) spillToBacklog(now time.Time) {
 // trimBacklogLocked applies the backlog's bounds: batches whose newest
 // record is older than edge_retention_hours are dropped, then the oldest
 // batches until the backlog is within max_backlog_bytes. Both are counted
-// and logged. Caller holds bufferMutex.
+// and logged. A head being sent (headInFlight) is left in place: the oldest
+// after it go instead. Caller holds bufferMutex.
 func (p *AnalyticsPulsePlugin) trimBacklogLocked(now time.Time) {
 	expired, overBound := 0, 0
+	keep := 0 // entries at the front that stay whatever their age or size
+	if p.headInFlight && len(p.backlog) > 0 {
+		keep = 1
+	}
 	if hours := p.config.EdgeRetentionHours; hours > 0 {
 		cutoff := now.Add(-time.Duration(hours) * time.Hour)
-		kept := p.backlog[:0]
-		for _, b := range p.backlog {
+		kept := p.backlog[:keep]
+		for _, b := range p.backlog[keep:] {
 			if b.newest.Before(cutoff) {
 				expired += b.records
 				p.backlogBytes -= int64(len(b.msg))
@@ -278,10 +347,14 @@ func (p *AnalyticsPulsePlugin) trimBacklogLocked(now time.Time) {
 		clear(p.backlog[len(kept):])
 		p.backlog = kept
 	}
-	for p.backlogBytes > p.config.MaxBacklogBytes && len(p.backlog) > 0 {
-		b := p.backlog[0]
-		p.backlog[0] = backlogBatch{} // release its message (see above)
-		p.backlog = p.backlog[1:]
+	for p.backlogBytes > p.config.MaxBacklogBytes && len(p.backlog) > keep {
+		b := p.backlog[keep]
+		if keep == 0 {
+			p.backlog[0] = backlogBatch{} // release its message (see above)
+			p.backlog = p.backlog[1:]
+		} else {
+			p.backlog = slices.Delete(p.backlog, keep, keep+1) // clears the vacated entry
+		}
 		p.backlogBytes -= int64(len(b.msg))
 		overBound += b.records
 	}
@@ -313,7 +386,13 @@ func (p *AnalyticsPulsePlugin) trimBacklogLocked(now time.Time) {
 func (p *AnalyticsPulsePlugin) deliverBacklogHead() pulseOutcome {
 	p.bufferMutex.Lock()
 	head := p.backlog[0]
+	p.headInFlight = true
 	p.bufferMutex.Unlock()
+	defer func() {
+		p.bufferMutex.Lock()
+		p.headInFlight = false
+		p.bufferMutex.Unlock()
+	}()
 
 	pulse := &pb.AnalyticsPulse{}
 	if err := proto.Unmarshal(head.msg, pulse); err != nil {
@@ -345,7 +424,8 @@ func (p *AnalyticsPulsePlugin) deliverBacklogHead() pulseOutcome {
 			}
 			parts = append(parts, backlogBatch{seq: m.SequenceNumber, msg: msg, records: pulseRecords(m), newest: head.newest})
 		}
-		// Only the sender changes the backlog, so the head is still head.
+		// Only the sender removes the head, and trimming leaves it while it
+		// is in flight, so the head is still head.
 		p.bufferMutex.Lock()
 		p.backlogBytes -= int64(len(head.msg))
 		p.backlog = slices.Replace(p.backlog, 0, 1, parts...) // entries are small headers: a copy of the slice, not of the messages
@@ -362,6 +442,9 @@ func (p *AnalyticsPulsePlugin) deliverBacklogHead() pulseOutcome {
 		p.bufferMutex.Lock()
 		p.lastError = err
 		p.lastErrorTime = now
+		// Not delivered: the head is an ordinary oldest batch again, the
+		// first to go if the backlog is over its bound.
+		p.headInFlight = false
 		p.bufferMutex.Unlock()
 		p.spillToBacklog(now)
 		p.bufferMutex.Lock()
@@ -404,13 +487,18 @@ func (p *AnalyticsPulsePlugin) popBacklogHead() {
 }
 
 // failToBacklog keeps a fresh batch that was not delivered: it goes to the
-// backlog (serialized, under its sequence number) with everything buffered
-// behind it. Called by deliver instead of holdSnapshotLocked when the
-// backlog is on.
+// backlog's front (serialized, under its sequence number), ahead of the
+// full batches spilled while it was in flight, which are newer, with
+// everything still buffered behind them. Called by deliver instead of
+// holdSnapshotLocked when the backlog is on.
 func (p *AnalyticsPulsePlugin) failToBacklog(pulse *pb.AnalyticsPulse, snap pulseSnapshot, now time.Time) {
 	encoded := p.encodeBacklog(pulse, snap.newest())
 	p.bufferMutex.Lock()
-	p.pushBacklogLocked(encoded)
+	p.backlog = slices.Insert(p.backlog, 0, encoded...)
+	for _, b := range encoded {
+		p.backlogBytes += int64(len(b.msg))
+	}
+	p.setBacklogGaugesLocked()
 	p.bufferMutex.Unlock()
 	p.spillToBacklog(now)
 }

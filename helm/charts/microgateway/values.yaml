@@ -238,10 +238,11 @@ analyticsPulse:
   # Analytics kept, in memory, for AI Studio while pulses fail (a control
   # plane outage), sent oldest first when one answers: about 280 bytes per
   # request, so 64 MiB keeps about 230,000 requests (75 s at 3,000/s).
-  # Memory during an outage is the backlog plus the records gathered while
-  # one pulse is retried (about 2 KB per request for maxRetries x
-  # retryIntervalSecs, 15 s here), on top of the edge's working set: raise
-  # this together with resources.limits.memory (the microgateway's own
+  # Memory during an outage and the drain after it is the backlog plus
+  # about 15 MB (at most two batches of maxBufferSize records in memory),
+  # on top of the edge's working set and the Go runtime's garbage
+  # headroom: size resources.limits.memory for the working set plus this
+  # value plus about 50 MB, and raise them together (the microgateway's own
   # default, when the pulse file does not set it, is 256 MiB). 0 turns it
   # off: only the newest maxBufferSize records are kept through an outage.
   maxBacklogBytes: 67108864
