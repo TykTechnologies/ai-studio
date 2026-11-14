@@ -127,11 +127,9 @@ An edge in either site may carry the other site's load after a site is lost, so 
 
 On the test cluster (see [Measured on one test cluster](#measured-on-one-test-cluster)), one 4-vCPU edge carried 2,700 short requests per second on its own at an added p99 of 49.5 ms (median 1.1 ms), using 3.0 to 3.3 of its 4 cores, against 3.7 ms when two edges shared the load. Size each site's edges so that, after a site is lost, they carry both sites' load at a latency you accept.
 
-::: warning GAP: edge volume and overload findings (bead midsommar-clean-4x5y.29)
-Fill in from the cluster pass:
-- how fast the edge database volume filled under sustained load (the first run filled the chart's 2 Gi in 30 to 45 minutes at 3,000 to 6,000 requests per second), what an edge does when it is full, and the volume size and retention recommended for each site;
-- what an edge does when it is overloaded (an earlier build was seen to restart rather than answer `503`), and the per-edge request rate at which that begins.
-:::
+**A full volume, measured** (Community build, see the set-up below). One edge's volume was held full for 271 s at 3,000 short and 188 streaming requests per second. The edge kept serving: no errors, an added p99 of 3.1 ms, no restarts. `/ready` stayed 200 with `database_full` and what it could not store. A configuration pushed meanwhile left that edge with its old configuration, shown in Studio as not in sync. Once the volume had room, the next push applied within 5 s, without a restart. How fast the volume fills was not re-measured: size it with the table in [Scaling Edge Gateways](./deployment-helm-k8s.md#scaling-edge-gateways), or set a short retention.
+
+**Past capacity.** Overload was measured only on an earlier 2.3 build. Two edges driven at their combined benchmark capacity were restarted by their liveness probes instead of refusing requests with `503`. That test was not run again on the final build, so whether the final build refuses or restarts at that load is not known. Size each site's edges so that, after a site is lost, the remaining edges carry both sites' load below the benchmarked capacity in the [Reference Architecture](./reference-architecture.md).
 
 ### Keys an edge has never seen (full credential sync, Enterprise)
 
@@ -216,13 +214,35 @@ These figures come from one test cluster. They show what the mechanisms above do
   - **The cut-off zone's Studio:** it stayed ready for `DATABASE_READY_GRACE` (30 s), then answered `503`, and took writes again within a second of the link returning.
   - **The cut-off zone's clients:** they failed every request for the whole cut, because their DNS lookups went to a DNS server on the other side (see [Load balancers and DNS](#load-balancers-and-dns)).
 
-Not yet measured: the same faults on the Enterprise edition with full credential sync, and what the analytics backlog keeps through a control-plane outage.
+**Enterprise edition, with full credential sync.** The same cluster and load, on Enterprise images built from commits `859c9bbb` and `1897ef3a` of the 2.3 development branch.
+- **Cost per request.** On one edge at 2,700 short requests per second, full credential sync and on-demand validation measured level:
+  - added p50 / p90 / p99 of 1.29 / 1.64 / 7.56 ms with full sync, against 1.27 / 1.57 / 6.87 ms on demand;
+  - edge CPU 1.10 against 1.11 cores.
 
-::: warning GAP: Enterprise figures (bead midsommar-clean-4x5y.29, session 2)
-Fill in from the Enterprise pass:
-- a restarted edge with full credential sync during a control-plane outage: errors, and never-served keys;
-- the analytics backlog through a control-plane outage: what was delivered afterwards and what was dropped.
-:::
+  An earlier 2.3 build added about 3 ms at p99 with full sync; the final build does not. Absolute latency varied between runs on different nodes (an on-demand p99 of 2.6 ms one day, 6.9 ms the next), so compare the two modes, not the figures.
+- **One site's control plane lost for 3 minutes.** 0 errors of 1.35 million short and 85,000 streaming requests; added p99 6.4 ms; analytics complete. The edges moved to the other site's control plane, so nothing waited in a backlog.
+- **Every control plane cut for 3.5 minutes, one edge restarted during the cut.**
+  - The restarted edge was serving from last-known-good about 75 s after the restart. With every control plane still cut, it answered a key it had never served with 200 (from its synced list) and refused an unknown key.
+  - 45 of 1.35 million short requests failed, 43 of them refused at the moment the pod was killed. The 355 streams open on the killed pod timed out. No request was answered `503` (632 failed in the Community run above).
+  - Analytics were 10,016 rows short: what the killed pod held in memory.
+- **The analytics backlog through an outage.** Every control plane was cut for 3.5 minutes, no edge restarted, with the chart's 64 MiB backlog.
+  - Both edges kept serving: 0 errors of 2,249,599 short and 141,213 streaming requests, added p99 3.67 ms, no restarts, no shedding.
+  - Peak memory was 520 MB on a 1Gi limit and 517 MB on 512Mi.
+  - Each edge's backlog filled about 3 minutes into the cut, at 1,500 requests per second per edge. Past that, the oldest records were dropped: 829,898 records (276,633 requests at three records each), exactly the requests missing from Studio's analytics.
+  - The backlog drained 58 s after the control planes returned.
+  - **With the chart's 64 MiB, an outage longer than about 3 minutes at 3,000 requests per second over two edges loses analytics.** For longer outages or higher rates, raise `analyticsPulse.maxBacklogBytes`, and the memory limit with it ([Analytics during a control-plane outage](./edge-gateways.md#analytics-during-a-control-plane-outage)).
+- **Revocation.** A key deactivated in Studio was refused by a full-sync edge 0.9 s after the API call returned.
+- **Namespaces.** A key changed in one namespace started a sync only on that namespace's edge. A key of a global App started one on every edge.
+- **Primary's PostgreSQL killed.**
+  - 14 s without a primary.
+  - Data plane: 0 errors, added p99 5.5 ms, analytics complete.
+  - Admin API: all answered 200 or 201, with waits up to 14.2 s. 60 Apps were created, each with exactly one audit entry.
+- **Budgets.** After all the faults, every App's usage total in Studio equalled the sum of its 5,536,849 records.
+- **Both databases down for 91 s.** `/health` answered 200 throughout. `/ready` answered 200 (`"database": "unreachable"`) for `DATABASE_READY_GRACE` (30 s), then `503`, then 200 again 16 s after the primary returned.
+
+**Not measured:**
+- How long edges take to move to the other site's control plane under load. No request failed while they moved, and an end-to-end test measures 2.0 s.
+- How fast an edge's volume fills (see [Edge volumes and capacity](#edge-volumes-and-capacity)).
 
 ## Runbooks
 
@@ -273,8 +293,8 @@ Replicas are never refused for disagreeing, so a rotation can roll; the cluster 
 
 ### Upgrading
 
-- **To 2.3 (once).** Enterprise needs a **license issued for 2.3**: a 2.2 license is refused, so get one from your account manager before you start. **Take a database backup** before the first 2.3 replica starts, and **keep your 2.2 license**: the 2.3 migration is one way (App keys are hashed and encrypted at rest), and returning to 2.2 means restoring that backup and running 2.2 with its 2.2 license. Stop every older replica, in both sites, before the first 2.3 replica starts: an older AI Studio on a 2.3 database refuses every App key. The upgrade to 2.3 is therefore not rolling. See [Upgrading from 2.2](./license.md#upgrading-from-2-2) and the 2.3.0 release notes (`CHANGELOG-v2.3.0.md`, "Before you upgrade" and "Upgrade notes").
-- **Later upgrades roll**, one replica at a time, across both sites. Migrations run under a database lock (a replica that is waiting logs `Another Studio instance is migrating this database`, and gives up after `MIGRATION_LOCK_TIMEOUT`, 15 minutes), and a replica that stops hands its edges and pushes to the others. An older replica refuses to start on a database a newer version changed in a way it cannot read (the schema's minimum reader version), so a rollback fails safely instead of corrupting data.
+- **To 2.3 (once).** Enterprise needs a **license issued for 2.3**: a 2.2 license is refused, so get one from your account manager before you start. **Take a database backup** before the first 2.3 replica starts, and **keep your 2.2 license**: the 2.3 migration is one way (App keys are hashed and encrypted at rest), and returning to 2.2 means restoring that backup and running 2.2 with its 2.2 license. A 2.3 replica refused for its license changes no table, row or schema, so 2.2 runs on the database again without a restore (on SQLite the file's journal mode becomes WAL, which 2.2 reads, and two empty sidecar files appear). Stop every older replica, in both sites, before the first 2.3 replica starts: an older AI Studio on a 2.3 database refuses every App key. The upgrade to 2.3 is therefore not rolling. See [Upgrading from 2.2](./license.md#upgrading-from-2-2) and the 2.3.0 release notes (`CHANGELOG-v2.3.0.md`, "Before you upgrade" and "Upgrade notes").
+- **Later upgrades roll**, one replica at a time, across both sites. Migrations run under a database lock (a replica that is waiting logs `Another Studio instance is migrating this database`, and gives up after `MIGRATION_LOCK_TIMEOUT`, 15 minutes), and a replica that stops hands its edges and pushes to the others. An older replica refuses to start on a database a newer version changed in a way it cannot read (the schema's minimum reader version), before it changes any table, row or schema, so a rollback fails safely instead of corrupting data.
 - **Upgrade the hub before the edges.** Every new edge option is off by default and behaves as before against an older hub.
 
 ## Monitoring
