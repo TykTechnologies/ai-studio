@@ -21,7 +21,8 @@
 #   PG_TEST_OUT   directory for logs and JSON (default $RUNNER_TEMP/pg-tests)
 #   FORK_PR=true  skip the enterprise suites (forks have only a stub)
 #
-# A suite of the root module with the enterprise tag (ent-failover) is built
+# A suite of the root module with the enterprise tag (ent-failover,
+# ent-license-before-write) is built
 # through the enterprise workspace (GOWORK=enterprise.work) with the
 # enterprise files of core packages linked in (scripts/enterprise-link-tests.sh).
 #
@@ -70,6 +71,11 @@ mgw|microgateway||Postgres|TestPricingRegression|MGW_TEST_POSTGRES_DSN=own|./int
 # Real edges against several Studio replicas sharing DATABASE_URL (a schema
 # per test): pushes land whatever happens to the connections.
 mgw-cluster|microgateway||||./tests/cluster/
+# The same, in the Enterprise build, for full credential sync and
+# credential.changed: the control plane's SyncCredentials handler is
+# Enterprise, so the Community run skips these, and the two-replica
+# full-sync test runs on Postgres only.
+ent-mgw-cluster|microgateway|enterprise|TestE2E_CredentialSync_|TestE2E_CredentialChanged_||./tests/cluster/
 # FIPS 140-3 cross-build migration (std -> FIPS -> std, on SQLite and
 # Postgres, with fips140=on and fips140=only): each test builds its package
 # as a standard and a GOFIPS140=v1.0.0 test binary and runs them in turn on
@@ -88,6 +94,10 @@ failover|.||TestFailover_||./pkg/studio/
 # reads the namespace licensing tables (entitlements), which the Community
 # build does not.
 ent-failover|.|enterprise|TestFailover_PushInFlight||./pkg/studio/
+# A refused license leaves the database untouched, in the Enterprise build
+# (the license is validated before the first write; its enterprise test is
+# linked into pkg/studio). The unit job runs it on SQLite only.
+ent-license-before-write|.|enterprise|TestRefusedLicenseLeavesTheDatabaseUntouched_Postgres||./pkg/studio/
 # Agent Call Tracing: the store and capture staging in core, and the
 # enterprise assembler, correlation goldens, JSON v1 and content API
 # (purge). Their gates read DATABASE_URL or AGENT_TRACE_TEST_POSTGRES_DSN,
@@ -118,7 +128,8 @@ psql_admin() { psql "$BASE/postgres" -v ON_ERROR_STOP=1 -qAt -c "$1"; }
 
 # ent_suite: the suite is an enterprise one (its own module, or the enterprise
 # tag). root_ent: an enterprise-tagged suite of the root module, which needs
-# the workspace and the linked files.
+# the workspace and the linked files. The microgateway module finds the
+# enterprise module through its own replace and is not in the workspace.
 has_ent_tag() {
 	case ",$1," in
 	*,enterprise,*) return 0 ;;
@@ -126,7 +137,7 @@ has_ent_tag() {
 	esac
 }
 ent_suite() { [ "$1" = enterprise ] || has_ent_tag "$2"; }
-root_ent() { [ "$1" != enterprise ] && has_ent_tag "$2"; }
+root_ent() { [ "$1" = . ] && has_ent_tag "$2"; }
 ROOT_GOWORK=$ROOT/enterprise.work
 
 # --- Expand the suites into one run per package. ---------------------------
