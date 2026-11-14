@@ -258,10 +258,18 @@ analyticsPulse:
   maxRetries: 3
   retryIntervalSecs: 5
 
+# The memory limit leaves room for an edge's working set (about 480 MB at
+# 3,000 requests/s in the 2.3 load tests), the analytics backlog
+# (analyticsPulse.maxBacklogBytes) and about 50 MB more, under the soft
+# GOMEMLIMIT the edge sets at 90% of the limit and its overload shedding
+# at 85%. Raise it with the backlog or the load. The request is a default
+# to override: set it to what your edges use under load. An edge well
+# above its request is an early candidate for node-pressure eviction,
+# which loses the analytics it holds in memory.
 resources:
   requests:
     cpu: 100m
-    memory: 128Mi
+    memory: 256Mi
   limits:
     cpu: 500m
-    memory: 512Mi
+    memory: 1Gi

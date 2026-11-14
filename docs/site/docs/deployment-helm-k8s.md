@@ -457,6 +457,19 @@ AI Studio a short retention loses nothing there: set
 `config.analyticsRetentionDays` to what the edge's own use needs, often `"1"`,
 and size the volume from the table.
 
+**Sizing the edge's memory.** The chart requests 256Mi and limits an edge to
+1Gi (`resources`). The request is a default to override: set it to what your
+edges use under load, since an edge well above its request is an early
+candidate for eviction when the node runs short of memory, and the analytics
+it holds in memory go with it. Size the limit for the edge's working set (about 480 MB
+at 3,000 requests per second in the load tests; more with many open
+streams), plus `analyticsPulse.maxBacklogBytes` (64 MiB), plus about 50 MB:
+the edge keeps undelivered analytics in memory through a control-plane
+outage. It sets a soft `GOMEMLIMIT` at 90% of the limit and starts refusing
+new requests at 85%, so keep that sum below 85% of the limit. Raise the
+limit and the backlog together. See
+[Analytics during a control-plane outage](./edge-gateways.md#analytics-during-a-control-plane-outage).
+
 **When the volume is full** the edge keeps serving, and says so: `/ready`
 stays 200 with `"database_full": true` and what is no longer stored,
 `microgateway_database_full` is 1, and the log has one error per kind of

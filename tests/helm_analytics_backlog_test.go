@@ -3,8 +3,8 @@
 // The microgateway chart's analytics backlog value (midsommar-clean-4x5y.36):
 // analyticsPulse.maxBacklogBytes renders into the pulse file's
 // max_backlog_bytes. The chart's default (64 MiB) is lower than the
-// microgateway's own (256 MiB) because the chart's default memory limit is
-// 512Mi. The first test reads the files and runs without helm; the other
+// microgateway's own (256 MiB): the chart's default memory limit (1Gi)
+// leaves the smaller backlog room. The first test reads the files and runs without helm; the other
 // renders the chart and skips when helm is missing.
 package tests
 
@@ -51,7 +51,7 @@ func pulseFileConfig(t *testing.T, rendered string) map[string]any {
 func TestHelmAnalyticsBacklogDefault(t *testing.T) {
 	gateway := readValues(t, "../helm/charts/microgateway/values.yaml")
 	assert.EqualValues(t, 64<<20, lookup(t, gateway, "analyticsPulse", "maxBacklogBytes"),
-		"64 MiB: the chart's default memory limit is 512Mi, too little for the microgateway's own 256 MiB default on top of an edge's working set")
+		"64 MiB in the chart; whether its 1Gi limit carries the microgateway's own 256 MiB is for the cluster measurement")
 
 	template, err := os.ReadFile("../helm/charts/microgateway/templates/analytics-configmap.yaml")
 	require.NoError(t, err)
