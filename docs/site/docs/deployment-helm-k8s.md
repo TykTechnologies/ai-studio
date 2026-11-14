@@ -457,8 +457,11 @@ AI Studio a short retention loses nothing there: set
 `config.analyticsRetentionDays` to what the edge's own use needs, often `"1"`,
 and size the volume from the table.
 
-**Sizing the edge's memory.** The chart requests 512Mi and limits an edge to
-1Gi (`resources`). Size the limit for the edge's working set (about 480 MB
+**Sizing the edge's memory.** The chart requests 256Mi and limits an edge to
+1Gi (`resources`). The request is a default to override: set it to what your
+edges use under load, since an edge well above its request is an early
+candidate for eviction when the node runs short of memory, and the analytics
+it holds in memory go with it. Size the limit for the edge's working set (about 480 MB
 at 3,000 requests per second in the load tests; more with many open
 streams), plus `analyticsPulse.maxBacklogBytes` (64 MiB), plus about 50 MB:
 the edge keeps undelivered analytics in memory through a control-plane

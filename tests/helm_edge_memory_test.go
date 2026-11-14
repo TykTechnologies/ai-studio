@@ -20,7 +20,7 @@ import (
 func TestHelmEdgeMemoryDefault(t *testing.T) {
 	gateway := readValues(t, "../helm/charts/microgateway/values.yaml")
 	assert.Equal(t, "1Gi", lookup(t, gateway, "resources", "limits", "memory"))
-	assert.Equal(t, "512Mi", lookup(t, gateway, "resources", "requests", "memory"))
+	assert.Equal(t, "256Mi", lookup(t, gateway, "resources", "requests", "memory"))
 	assert.Equal(t, "500m", lookup(t, gateway, "resources", "limits", "cpu"), "CPU unchanged")
 	assert.Equal(t, "100m", lookup(t, gateway, "resources", "requests", "cpu"), "CPU unchanged")
 }
@@ -39,7 +39,7 @@ func TestHelmEdgeMemoryRender(t *testing.T) {
 	t.Run("bundled edge, default", func(t *testing.T) {
 		request, limit := edgeMemory(t, helmTemplate(t))
 		assert.Equal(t, "1Gi", limit)
-		assert.Equal(t, "512Mi", request)
+		assert.Equal(t, "256Mi", request)
 	})
 	t.Run("StatefulSet", func(t *testing.T) {
 		_, limit := edgeMemory(t, helmTemplate(t, "--set", "microgateway.kind=StatefulSet", "--set", "microgateway.persistence.enabled=true"))
