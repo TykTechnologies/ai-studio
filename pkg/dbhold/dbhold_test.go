@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -157,6 +158,73 @@ func TestMaxHeld(t *testing.T) {
 	assert.Eventually(t, func() bool { return p.Held() == 1 }, time.Second, 5*time.Millisecond)
 	<-done
 	assert.EqualValues(t, 0, p.Held(), "released when it ends")
+}
+
+// Held never passes MaxHeld, even while statements over the cap are being
+// refused: a place is taken by compare-and-swap, not added and given back
+// (bead midsommar-clean-4x5y.51: a reader saw 513 for an instant).
+func TestHeldNeverPassesTheCap(t *testing.T) {
+	p, _ := fakePool(t, nil, time.Minute)
+	stop := make(chan struct{})
+	var over, peak atomic.Int64
+	watched := make(chan struct{})
+	go func() {
+		defer close(watched)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			n := p.Held()
+			if n > MaxHeld {
+				over.Add(1)
+			}
+			if n > peak.Load() {
+				peak.Store(n)
+			}
+		}
+	}()
+
+	// Held just below the cap, as in a failover under load: a few places
+	// free, many statements trying for them, most refused.
+	const free = 8
+	p.held.Store(MaxHeld - free)
+	const workers, rounds = 256, 2000
+	var entered, refused atomic.Int64
+	done := make(chan struct{})
+	for w := 0; w < workers; w++ {
+		go func() {
+			defer func() { done <- struct{}{} }()
+			for i := 0; i < rounds; i++ {
+				if p.enter() {
+					entered.Add(1)
+					runtime.Gosched() // hold the place for a moment
+					p.leave()
+				} else {
+					refused.Add(1)
+				}
+			}
+		}()
+	}
+	for w := 0; w < workers; w++ {
+		<-done
+	}
+	close(stop)
+	<-watched
+
+	assert.Zero(t, over.Load(), "Held() was seen above MaxHeld")
+	assert.LessOrEqual(t, peak.Load(), int64(MaxHeld))
+	assert.EqualValues(t, workers*rounds, entered.Load()+refused.Load())
+	assert.Positive(t, entered.Load())
+	assert.Positive(t, refused.Load(), "the cap was reached")
+	assert.EqualValues(t, MaxHeld-free, p.Held(), "every place given back")
+
+	// At the cap, enter refuses and the count stays at the cap.
+	p.held.Store(MaxHeld)
+	assert.False(t, p.enter())
+	assert.EqualValues(t, MaxHeld, p.Held())
+	p.held.Store(0)
 }
 
 // Once a hold has run out its window, statements failing within the next

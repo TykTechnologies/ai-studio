@@ -221,11 +221,18 @@ func (p *Pool) hold(ctx context.Context, repeatable bool, op func() error) error
 const MaxHeld = 512
 
 // enter takes a place among the held statements; false when MaxHeld are
-// held already.
+// held already. The place is taken by compare-and-swap, so Held never
+// passes MaxHeld, not even for the instant a statement over the cap is
+// being refused.
 func (p *Pool) enter() bool {
-	if p.held.Add(1) > MaxHeld {
-		p.held.Add(-1)
-		return false
+	for {
+		n := p.held.Load()
+		if n >= MaxHeld {
+			return false
+		}
+		if p.held.CompareAndSwap(n, n+1) {
+			break
+		}
 	}
 	metrics.AddDBWritesHeld(context.Background(), 1)
 	return true
