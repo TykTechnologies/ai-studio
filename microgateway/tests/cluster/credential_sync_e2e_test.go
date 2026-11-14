@@ -36,7 +36,7 @@ import (
 func requireSyncHandler(t *testing.T) {
 	t.Helper()
 	if credsync.Registered() == nil {
-		t.Skip("no SyncCredentials handler in this build: needs -tags 'enterprise credsync_e2e' and the Enterprise credential_sync package")
+		t.Skip("no SyncCredentials handler in this build: full credential sync is Enterprise (-tags enterprise)")
 	}
 }
 
