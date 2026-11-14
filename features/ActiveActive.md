@@ -1095,8 +1095,13 @@ credential migration, in "Before you upgrade":
   write, `models.CheckSchemaReadable`, and refuses a database whose
   minimum reader is above its own schema version, so later rollbacks fail
   safely; and an Enterprise Studio validates its license before that first
-  write too, after the reader check, so a refused license leaves the
-  database untouched); Edges
+  write too, after the reader check, so a refused license, like a refused
+  reader version, changes no table, row or schema and 2.2 runs on the
+  database again without a restore. On SQLite the file is not
+  byte-for-byte the same: the connection sets `journal_mode=WAL` before
+  either check, so the header's format bytes, change counter and version
+  stamp change (older releases read WAL) and empty `-wal` and `-shm`
+  files appear. PostgreSQL is unchanged); Edges
   (upgrade the hub first; new options are off by default); API (a write
   that cannot reach a writable database answers 503 `database_unavailable`
   with `Retry-After`, where it used to answer 500).
