@@ -129,7 +129,7 @@ On the test cluster (see [Measured on one test cluster](#measured-on-one-test-cl
 
 **A full volume, measured** (Community build, see the set-up below). One edge's volume was held full for 271 s at 3,000 short and 188 streaming requests per second. The edge kept serving: no errors, an added p99 of 3.1 ms, no restarts. `/ready` stayed 200 with `database_full` and what it could not store. A configuration pushed meanwhile left that edge with its old configuration, shown in Studio as not in sync. Once the volume had room, the next push applied within 5 s, without a restart. How fast the volume fills was not re-measured: size it with the table in [Scaling Edge Gateways](./deployment-helm-k8s.md#scaling-edge-gateways), or set a short retention.
 
-**Past capacity.** Overload was measured only on an earlier 2.3 build. Two edges driven at their combined benchmark capacity were restarted by their liveness probes instead of refusing requests with `503`. It was not repeated on the final build. Size each site's edges so that, after a site is lost, the remaining edges carry both sites' load below the benchmarked capacity in the [Reference Architecture](./reference-architecture.md).
+**Past capacity.** Overload was measured only on an earlier 2.3 build. Two edges driven at their combined benchmark capacity were restarted by their liveness probes instead of refusing requests with `503`. That test was not run again on the final build, so whether the final build refuses or restarts at that load is not known. Size each site's edges so that, after a site is lost, the remaining edges carry both sites' load below the benchmarked capacity in the [Reference Architecture](./reference-architecture.md).
 
 ### Keys an edge has never seen (full credential sync, Enterprise)
 
