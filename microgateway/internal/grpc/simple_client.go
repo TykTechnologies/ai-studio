@@ -59,11 +59,11 @@ type SimpleEdgeClient struct {
 	// control plane answered at start-up, and cleared when a control plane
 	// sends a configuration. lastContact is the time (Unix nanoseconds) of
 	// the last registration a control plane accepted or heartbeat it
-	// acknowledged; onContact, when set, is told of each.
-	lastKnownGood   atomic.Bool
-	lastContact     atomic.Int64
-	onContact       atomic.Pointer[func(time.Time)]
-	onRegistered    atomic.Pointer[func()]
+	// acknowledged; the onContact hooks are told of each.
+	lastKnownGood atomic.Bool
+	lastContact   atomic.Int64
+	onContact     hookList[func(time.Time)]
+	onRegistered  hookList[func()]
 	// startupDeadline and startupMinAttempt are set while StartWithin runs
 	// (main goroutine only): a registration then has until the deadline,
 	// and at least startupMinAttempt, to be answered.
@@ -352,9 +352,7 @@ func (c *SimpleEdgeClient) registerOn(ctx context.Context, client pb.Configurati
 	if !resp.Success {
 		return nil, fmt.Errorf("registration rejected: %s", resp.Message)
 	}
-	if fn := c.onRegistered.Load(); fn != nil {
-		(*fn)()
-	}
+	c.onRegistered.each(func(fn func()) { fn() })
 	c.controlContact()
 	return resp, nil
 }
@@ -1130,13 +1128,40 @@ func (c *SimpleEdgeClient) Stop() error {
 	}
 
 	// Close connection
+	var err error
 	if conn, _ := c.connection(); conn != nil {
 		log.Debug().Msg("Closing connection to control server")
-		return conn.Close()
+		err = conn.Close()
 	}
 
-	return nil
+	// Let the receive loop of the stream end and clean up (it stops the
+	// event bridge and closes its stream adapter), then let the bridge's
+	// loops end, so nothing of this client runs once Stop returns. Only
+	// Stop waits (process shutdown, or the control plane asking the edge
+	// to stop): a reconnect or a move to another control endpoint does not,
+	// and at most stopWaitTimeout in all.
+	deadline := time.Now().Add(stopWaitTimeout)
+	c.streamMu.RLock()
+	done := c.streamDone
+	c.streamMu.RUnlock()
+	if done != nil {
+		timer := time.NewTimer(stopWaitTimeout)
+		defer timer.Stop()
+		select {
+		case <-done:
+		case <-timer.C:
+			log.Warn().Msg("Stopping the edge client: the stream's receive loop did not end in time")
+			return err
+		}
+		if b := c.eventBridge; b != nil && !b.Wait(time.Until(deadline)) {
+			log.Warn().Msg("Stopping the edge client: the event bridge did not stop in time")
+		}
+	}
+	return err
 }
+
+// stopWaitTimeout bounds how long Stop waits for the stream's goroutines.
+const stopWaitTimeout = 5 * time.Second
 
 // heartbeatWorker sends periodic heartbeats to the control instance until
 // streamCtx, the context of the stream it was started for, is done.

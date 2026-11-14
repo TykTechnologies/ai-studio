@@ -87,8 +87,7 @@ func runSyncEdge(t *testing.T, path, id string, opts syncEdgeOptions, fwds ...*f
 	h.SetCredentialSync(list)
 
 	client := edgegrpc.NewSimpleEdgeClient(cfg, "e2e", "hash", "now")
-	client.SetRegisteredHook(list.Reset)
-	client.SetControlContactHook(func(time.Time) { list.Kick() })
+	client.SyncCredentialsOnContact(list)
 	syncService := services.NewEdgeSyncService(db, "")
 	client.SetOnConfigChange(func(snap *pb.ConfigurationSnapshot) { _ = syncService.SyncConfiguration(snap) })
 	lkg, err := client.StartWithLastKnownGood(db)

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -23,6 +25,30 @@ var (
 	_ services.CredentialSyncSource    = (*SimpleEdgeClient)(nil)
 	_ services.CredentialSyncRegistrar = (*SimpleEdgeClient)(nil)
 )
+
+// SyncCredentialsOnContact has list follow this client: a registration a
+// control plane accepts (at start, after a reconnect, after a move to
+// another control endpoint) forgets that a control plane did not offer the
+// sync, and every contact (the registration and each acknowledged
+// heartbeat) asks for a sync, counted by trigger. It adds to the client's
+// hooks, so the contact recording of RecordControlContactsIn keeps working.
+func (c *SimpleEdgeClient) SyncCredentialsOnContact(list *services.CredentialSync) {
+	// The registered hooks run just before the contact hooks of the same
+	// registration: that contact is the registration's, any other is a
+	// heartbeat acknowledged.
+	var registered atomic.Bool
+	c.AddRegisteredHook(func() {
+		list.Reset()
+		registered.Store(true)
+	})
+	c.AddControlContactHook(func(time.Time) {
+		if registered.Swap(false) {
+			list.KickFor(services.SyncTriggerRegistration)
+			return
+		}
+		list.KickFor(services.SyncTriggerHeartbeat)
+	})
+}
 
 // SyncCredentials streams the credentials changed since the watermark (0:
 // all of them) from the control plane and hands each page to onPage, in

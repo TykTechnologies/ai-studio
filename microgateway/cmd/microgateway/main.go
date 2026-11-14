@@ -294,11 +294,12 @@ func main() {
 					// sync (the full list the first time, the changes after).
 					if list := hybridGateway.CredentialSync(); list != nil {
 						serviceContainer.CredentialSync = list
-						edgeClient.SetRegisteredHook(list.Reset)
-						edgeClient.SetControlContactHook(func(time.Time) { list.Kick() })
+						// Added to the client's hooks: the contact recording
+						// of mustStartEdgeClient keeps working.
+						edgeClient.SyncCredentialsOnContact(list)
 						go list.Run(context.Background(), edgeClient, credentialSyncTimeout)
 						// The edge registered before the hooks were set.
-						list.Kick()
+						list.KickFor(services.SyncTriggerRegistration)
 						log.Info().Msg("Full credential sync: keys are validated from the synced, hashed list")
 					}
 				}
@@ -821,13 +822,7 @@ func licenseThenDatabase(cfg *config.Config, migrateOnly bool, newLicensing func
 func mustStartEdgeClient(edgeClient *grpc.SimpleEdgeClient, db *gorm.DB) *services.LastKnownGood {
 	// Each contact with a control plane is recorded, so that a later start
 	// without one knows how long the edge has been on its own.
-	edgeClient.SetControlContactHook(func(at time.Time) {
-		// A database with no room left is reported once where the write
-		// is made (database.NoteWrite), not at every heartbeat.
-		if err := services.RecordControlContact(db, at); err != nil && !database.IsStorageFull(err) {
-			log.Warn().Err(err).Msg("Could not record the contact with the control plane")
-		}
-	})
+	edgeClient.RecordControlContactsIn(db)
 	lastKnownGood, err := edgeClient.StartWithLastKnownGood(db)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to connect to control server - edge cannot start without configuration")

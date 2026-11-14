@@ -79,7 +79,7 @@ func runEdge(t *testing.T, path, id string, opts lkgEdgeOptions, fwds ...*forwar
 	}
 	require.NoError(t, services.PersistAppliedSnapshots(db, encryptionKey))
 	client := edgegrpc.NewSimpleEdgeClient(cfg, "e2e", "hash", "now")
-	client.SetControlContactHook(func(at time.Time) { _ = services.RecordControlContact(db, at) })
+	client.RecordControlContactsIn(db)
 	syncService := services.NewEdgeSyncService(db, "")
 
 	lkg, err := client.StartWithLastKnownGood(db)

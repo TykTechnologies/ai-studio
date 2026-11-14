@@ -880,9 +880,16 @@ Files: `proto/config_sync.proto`, `proto/common.proto`,
    A `FailedPrecondition` "register first" answer makes the edge register
    again and ask again, at most once a minute; it is not the on-demand
    fallback. Metrics `microgateway_credential_sync_last_success_timestamp`,
-   `microgateway_credentials_synced` and
+   `microgateway_credentials_synced`,
+   `microgateway_credential_sync_calls_total{trigger}` (registration,
+   heartbeat, event; bead .50) and
    `microgateway_credential_validations_total{source}` (local, control,
    stale; a list that never synced counts as stale).
+   Lookups run on a prepared statement and keep the rows found in memory,
+   cleared by every write to the list and every credential.changed
+   eviction, so a key in use costs no database read (bead .50: p99 of a
+   validation 82 us before, 10 us after, against 2.3 us on demand, in
+   `BenchmarkValidateAPIToken`).
 6. **Default stays `on_demand`.** In that mode nothing changes, except that
    the in-memory cache is keyed by the hash rather than the raw token.
    `full` is an **Enterprise** option: a Community edge given

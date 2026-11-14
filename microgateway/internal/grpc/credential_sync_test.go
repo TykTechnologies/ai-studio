@@ -169,8 +169,7 @@ func TestCredentialSyncSource_RegistersAgainWhenNotKnown(t *testing.T) {
 
 	list, err := services.NewCredentialSync(edgeListDB(t), time.Hour)
 	require.NoError(t, err)
-	client.SetRegisteredHook(list.Reset)
-	client.SetControlContactHook(func(time.Time) { list.Kick() })
+	client.SyncCredentialsOnContact(list)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go list.Run(ctx, client, time.Minute)

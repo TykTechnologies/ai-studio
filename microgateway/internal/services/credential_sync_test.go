@@ -853,3 +853,133 @@ func TestCredentialSync_RejectedUnknownKeyChangesNothing(t *testing.T) {
 	require.NoError(t, db.Model(&database.SyncedCredential{}).Count(&n).Error)
 	assert.Zero(t, n, "nothing added for a rejected key")
 }
+
+// Lookup caches the rows it found, so a key in use costs no database read
+// per request. Every way the list changes clears that cache, so the next
+// request sees the change (bead midsommar-clean-4x5y.50). Each path on its
+// own, with both keys looked up (cached) first.
+func TestCredentialSync_LookupCacheFollowsEveryWrite(t *testing.T) {
+	forEachEdgeDB(t, func(t *testing.T, db *gorm.DB) {
+		start := func(t *testing.T) (*syncedEdge, func(key string) (database.SyncedCredential, bool)) {
+			t.Helper()
+			require.NoError(t, db.Exec("DELETE FROM synced_credentials").Error)
+			require.NoError(t, db.Exec("DELETE FROM sync_states").Error)
+			e := newSyncedEdge(t, db, 24*time.Hour)
+			lookup := func(key string) (database.SyncedCredential, bool) {
+				t.Helper()
+				row, found, err := e.list.Lookup(e.hash(key))
+				require.NoError(t, err)
+				return row, found
+			}
+			now := time.Now()
+			require.NoError(t, e.list.Sync(context.Background(), pagesOf{{Full: true, Last: true, Watermark: 5, HashVersion: "v1",
+				Apps: []*pb.AppConfig{pbApp(1, "app", true)},
+				Credentials: []SyncedCredentialUpdate{
+					{CredentialID: 11, SecretHash: e.hash(keyA), AppID: 1, Active: true, UpdatedAt: now},
+					{CredentialID: 12, SecretHash: e.hash(keyB), AppID: 1, Active: true, UpdatedAt: now},
+				}}}))
+			for _, key := range []string{keyA, keyB} {
+				row, found := lookup(key)
+				require.True(t, found)
+				require.True(t, row.Active)
+			}
+			return e, lookup
+		}
+
+		t.Run("a page that deactivates a key", func(t *testing.T) {
+			e, lookup := start(t)
+			require.NoError(t, e.list.Sync(context.Background(), delta(6,
+				SyncedCredentialUpdate{CredentialID: 11, SecretHash: e.hash(keyA), AppID: 1, Active: false, UpdatedAt: time.Now()})))
+			row, found := lookup(keyA)
+			require.True(t, found)
+			assert.False(t, row.Active)
+		})
+
+		t.Run("a page that regenerates a key", func(t *testing.T) {
+			e, lookup := start(t)
+			require.NoError(t, e.list.Sync(context.Background(), delta(6,
+				SyncedCredentialUpdate{CredentialID: 11, SecretHash: e.hash(keyC), AppID: 1, Active: true, UpdatedAt: time.Now()})))
+			_, found := lookup(keyA)
+			assert.False(t, found, "the old hash is gone")
+		})
+
+		t.Run("a tombstone", func(t *testing.T) {
+			e, lookup := start(t)
+			require.NoError(t, e.list.Sync(context.Background(), delta(6, SyncedCredentialUpdate{CredentialID: 12, Deleted: true})))
+			_, found := lookup(keyB)
+			assert.False(t, found)
+		})
+
+		t.Run("a full sync without the key", func(t *testing.T) {
+			e, lookup := start(t)
+			time.Sleep(10 * time.Millisecond) // the rows were synced before this sync starts
+			require.NoError(t, e.list.Sync(context.Background(), pagesOf{{Full: true, Last: true, Watermark: 7, HashVersion: "v1",
+				Apps:        []*pb.AppConfig{pbApp(1, "app", true)},
+				Credentials: []SyncedCredentialUpdate{{CredentialID: 11, SecretHash: e.hash(keyA), AppID: 1, Active: true, UpdatedAt: time.Now()}}}}))
+			_, found := lookup(keyB)
+			assert.False(t, found, "what the full sync did not bring is gone")
+		})
+
+		t.Run("the control plane refuses a key (Learned)", func(t *testing.T) {
+			e, lookup := start(t)
+			e.list.Learned(e.hash(keyA), 1, false)
+			row, found := lookup(keyA)
+			require.True(t, found)
+			assert.False(t, row.Active)
+		})
+
+		t.Run("the control plane accepts a key the list had refused (Learned)", func(t *testing.T) {
+			e, lookup := start(t)
+			e.list.Learned(e.hash(keyA), 1, false)
+			row, _ := lookup(keyA)
+			require.False(t, row.Active, "the refusal is what is cached now")
+			e.list.Learned(e.hash(keyA), 1, true)
+			row, _ = lookup(keyA)
+			assert.True(t, row.Active)
+		})
+
+		t.Run("the cleanup of keys learned without an ID", func(t *testing.T) {
+			e, lookup := start(t)
+			e.list.Learned(e.hash(keyC), 1, true)
+			_, found := lookup(keyC)
+			require.True(t, found)
+			time.Sleep(10 * time.Millisecond) // learned before the sync starts
+			require.NoError(t, e.list.Sync(context.Background(), delta(7)))
+			_, found = lookup(keyC)
+			assert.False(t, found)
+		})
+
+		t.Run("a credential.changed eviction", func(t *testing.T) {
+			e, lookup := start(t)
+			// Changed behind the cache (by hand): served from the cache until
+			// an event names the key.
+			require.NoError(t, db.Model(&database.SyncedCredential{}).Where("secret_hash = ?", e.hash(keyA)).Update("active", false).Error)
+			row, _ := lookup(keyA)
+			require.True(t, row.Active, "the cache answered")
+			e.h.EvictCredential(e.hash(keyA))
+			row, _ = lookup(keyA)
+			assert.False(t, row.Active)
+		})
+	})
+}
+
+// A key in use, deactivated by a sync, is refused on the very next request.
+func TestCredentialSync_KeyDeactivatedBySyncIsRefusedOnTheNextRequest(t *testing.T) {
+	forEachEdgeDB(t, func(t *testing.T, db *gorm.DB) {
+		e := newSyncedEdge(t, db, 24*time.Hour)
+		now := time.Now()
+		require.NoError(t, e.list.Sync(context.Background(), pagesOf{{Full: true, Last: true, Watermark: 5, HashVersion: "v1",
+			Apps:        []*pb.AppConfig{pbApp(1, "app", true)},
+			Credentials: []SyncedCredentialUpdate{{CredentialID: 11, SecretHash: e.hash(keyA), AppID: 1, Active: true, UpdatedAt: now}}}}))
+		for i := 0; i < 3; i++ { // in use: cached
+			_, err := e.h.ValidateAPIToken(keyA)
+			require.NoError(t, err)
+		}
+		require.NoError(t, e.list.Sync(context.Background(), delta(6,
+			SyncedCredentialUpdate{CredentialID: 11, SecretHash: e.hash(keyA), AppID: 1, Active: false, UpdatedAt: now})))
+		_, err := e.h.ValidateAPIToken(keyA)
+		require.Error(t, err, "refused on the next request")
+		assert.NotErrorIs(t, err, coresvc.ErrCredentialCheckUnavailable, "refused from the list, not for want of a control plane")
+		assert.Zero(t, e.control.calls, "without asking the control plane")
+	})
+}

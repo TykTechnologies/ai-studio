@@ -183,7 +183,7 @@ On the edge:
 - **Past `EDGE_CREDENTIAL_SYNC_MAX_AGE`** without a successful sync, the edge stops trusting the list and validates as on demand until a sync succeeds.
 - **Across a restart.** The list is in the edge's database, so an edge restarted with no control plane (with `EDGE_START_FROM_LAST_KNOWN_GOOD`) validates from it, within the max age. This needs a database that survives the restart: the StatefulSet form of the Helm chart with persistence.
 - **Older or Community AI Studio.** It answers that it does not offer the sync: the edge logs that once and validates on demand.
-- **Metrics.** `microgateway_credential_sync_last_success_timestamp` (when the last sync completed), `microgateway_credentials_synced` (usable keys on the list), and `microgateway_credential_validations_total{source}`: `local` (the list answered), `control` (AI Studio or its cached answer did) and `stale` (the list was past its max age).
+- **Metrics.** `microgateway_credential_sync_last_success_timestamp` (when the last sync completed), `microgateway_credentials_synced` (usable keys on the list), and `microgateway_credential_validations_total{source}`: `local` (the list answered), `control` (AI Studio or its cached answer did) and `stale` (the list was past its max age). `microgateway_credential_sync_calls_total{trigger}` counts the syncs the edge asked for: `registration` (AI Studio accepted it), `heartbeat` (one acknowledged: one sync per heartbeat interval) and `event` (a change to a key on its list). A key change in another namespace adds nothing to `event`.
 
 ### Sync Status Values
 
