@@ -106,6 +106,10 @@ conventions, and keep their own names:
 | `aistudio_native_request_duration_seconds` | `vendor`, `operation`, `status_code` | Native API operation latency (histogram; results downloads can run for minutes) |
 | `aistudio_native_results_bytes_total` | `vendor`, `operation` | Bytes of batch results files streamed to clients |
 | `aistudio_native_reconcile_outcomes_total` | `vendor`, `resource_type`, `outcome` | Batches the background reconciler looked at; `outcome` is `accounted`, `settled`, `not_ended`, `unaccountable`, `lost` or `failed` |
+| `aistudio_db_write_retries_total` | `outcome` | Database statements tried again during a failover; `outcome` of the wait is `succeeded`, `gave_up` (answered `503`), `cancelled` or `failed` |
+| `aistudio_db_write_hold_seconds` | `outcome` | Time a statement waited for a writable database (histogram) |
+| `aistudio_db_writes_held` | | Statements waiting for a writable database now (at most 512) |
+| `aistudio_db_unavailable_responses_total` | | Admin API `500`s answered as `503 database_unavailable` because the database was unavailable while the request ran |
 | `aistudio_guardrail_latency_seconds` | `provider`, `outcome`, `action`, `segment_kind` | [Guardrail](./guardrails.md#compliance-events-and-metrics) provider call latency (histogram) |
 | `aistudio_guardrail_errors_total` | `provider`, `fail_mode` | Guardrail provider failures and how they were handled |
 | `aistudio_guardrail_segments_total` | `provider`, `segment_kind`, `result` | Request segments a guardrail screened: `scanned`, `cached` or `unscanned` |
@@ -113,6 +117,29 @@ conventions, and keep their own names:
 | `aistudio_guardrail_calls_abandoned_total` | `provider` | Guardrail provider calls given up on after their timeout because the provider did not return |
 | `aistudio_guardrail_templates_total` | `provider`, `result` | Messages tried against an App's trusted prompt templates: `hit`, `miss`, `mimicry`, `over_cap`, `backstop_only` |
 | `aistudio_guardrail_template_exempt_share` | `provider` | Histogram of the share of a matched message left unscored by its template |
+
+### Database metrics
+
+With PostgreSQL, each replica reports what its database can do, from the
+same check every 5 seconds that `/ready` answers from (see
+[Readiness during a failover](./configuration.md#postgres-with-a-standby-failover)). With SQLite neither
+series is reported.
+
+| Metric | Labels | Description |
+|---|---|---|
+| `aistudio_db_writable` | none | Gauge: 1 while this replica's database takes writes, 0 while it is read-only or unreachable |
+| `aistudio_db_failovers_total` | none | Times this replica saw the writable server change (another node, or a promotion behind the same address) since it started |
+
+For what else to watch in a two-site deployment (edges' control endpoints,
+last-known-good, replication) see
+[Monitoring](./deployment-active-active.md#monitoring) on the Active-Active page.
+
+Alert on `aistudio_db_writable == 0` lasting longer than your failover
+manager's promotion time: a replica that stays on a read-only or unreachable
+database fails every write. `/ready` (`"database"` in its body),
+`/ready?require=write` and the cluster status
+(`GET /api/v1/cluster/status`, which warns while the database is read-only)
+say the same.
 
 ### Migrating existing dashboards
 
@@ -255,6 +282,7 @@ are attributed per replica. See
 
 ## See also
 
+- [Active-Active (Two Sites)](./deployment-active-active.md#monitoring) — what to watch in a two-site deployment
 - [Kubernetes / Helm Deployment](./deployment-helm-k8s.md)
 - [Running Alongside the Kubernetes Inference Gateway](./deployment-kubernetes-inference-gateway.md)
 - [Analytics](./analytics.md) — dashboard reporting, sourced from the database

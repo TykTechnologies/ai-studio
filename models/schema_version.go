@@ -13,7 +13,11 @@ import (
 
 // The schema version lets an instance that does not migrate (a headless
 // control plane sharing a full Studio's database) check that the schema is
-// one it understands.
+// one it understands (CheckSchemaVersion), and lets a full Studio refuse,
+// before it writes anything, a database a newer build has made unreadable
+// for it (CheckSchemaReadable): a rollback after an upgrade that raised the
+// minimum reader. Builds from before that check, 2.2.x and the 2.3 release
+// candidates, start on such a database regardless.
 //
 // Rules for a change to the models:
 //   - Every change to the schema (the goldens in testdata/schema) bumps
@@ -122,8 +126,32 @@ const (
 	// 37: quota_locks.marked_at (nullable, additive): when the namespace
 	//     sweep last ran, so control-plane downtime never counts as idle
 	//     (midsommar-clean-zmwd.39).
-	SchemaVersion          = 37
-	MinReaderSchemaVersion = 26
+	// 38: cluster_counters (new table, additive): counters every replica
+	//     draws from; the budget sync sequence (midsommar-clean-4x5y.9).
+	// 39: cluster_nodes csrf_key_fp, csrf_key_set, secret_key_fp,
+	//     microgateway_key_fp and grpc_auth_token_fp (nullable, additive):
+	//     fingerprints of the secrets replicas must share, for the cluster
+	//     status to compare (midsommar-clean-4x5y.21).
+	// 40: branding_assets (new table, additive): the uploaded logo and
+	//     favicon, stored in the database so every replica serves them
+	//     (midsommar-clean-4x5y.20).
+	// 41: edge_analytics_batches (new table, additive): the analytics
+	//     batches stored from edges, so one sent again after a lost
+	//     acknowledgement is not stored twice (midsommar-clean-4x5y.11).
+	// 42: credentials.secret_hash (nullable, unique), data_key_salts (new
+	//     table: the database's salt for data-key encryption) and a data
+	//     format change: an App credential's secret is stored sealed under
+	//     the data key ($DK1/) when TYK_AI_SECRET_KEY is set and is found by
+	//     secret_hash, never by its value (midsommar-clean-4x5y.15). Older code looks credentials
+	//     up by the plaintext secret, which is no longer there (every App
+	//     key would be refused), and would show and send the ciphertext as
+	//     the key, so the minimum reader is 42 and an older headless
+	//     replica refuses the database.
+	// 43: index idx_apps_credential_id on apps.credential_id (additive): the
+	//     credential sync looks up each page's Apps by credential
+	//     (midsommar-clean-4x5y.16).
+	SchemaVersion          = 43
+	MinReaderSchemaVersion = 42
 )
 
 // studioSchemaRowID is the one row of studio_schema.
@@ -160,7 +188,8 @@ var (
 // schema. Call it after every migration has run, under the migration lock.
 // It never lowers the record: an older Studio started against a database a
 // newer one migrated leaves the newer version in place (its own migrations
-// only add), and logs that it did.
+// only add), and logs that it did. A full Studio only gets here on a newer
+// database it can still read: CheckSchemaReadable has refused the others.
 func RecordSchemaVersion(db *gorm.DB, writtenBy string) error {
 	var current StudioSchema
 	err := db.Take(&current, studioSchemaRowID).Error
@@ -190,6 +219,42 @@ func RecordSchemaVersion(db *gorm.DB, writtenBy string) error {
 	}).Create(&row).Error
 	if err != nil {
 		return fmt.Errorf("record schema version: %w", err)
+	}
+	return nil
+}
+
+// CheckSchemaReadable reports whether this build may start on the database
+// as a full Studio, which migrates it: it may unless a newer build has
+// recorded a minimum reader version above this build's schema version. It
+// only reads, and creates nothing: a full Studio calls it before its first
+// write, so that a build started on a database it cannot read (a rollback
+// after an upgrade that changed how data is stored) refuses, with the
+// database untouched, instead of migrating, serving and misreading it. The
+// error wraps ErrSchemaTooNew.
+//
+// A database with no record (new, or migrated only by a Studio from before
+// schema versions), one at this build's version or older, and a newer one
+// that still lists this build as a reader all pass: the last starts with
+// RecordSchemaVersion's warning, as before.
+//
+// Builds from before this check (2.2.x and the 2.3 release candidates) do
+// not have it: they start on such a database, which is why upgrades to 2.3
+// stop every older replica first.
+func CheckSchemaReadable(ctx context.Context, db *gorm.DB) error {
+	db = db.WithContext(ctx)
+	if !db.Migrator().HasTable(&StudioSchema{}) {
+		return ctx.Err()
+	}
+	var row StudioSchema
+	if err := db.Take(&row, studioSchemaRowID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		return fmt.Errorf("read schema version: %w", err)
+	}
+	if row.MinReaderVersion > SchemaVersion {
+		return fmt.Errorf("%w: the database is at schema version %d (recorded by Studio %s), which needs schema version %d or later to read; this build has %d. Nothing was changed. Run that Studio version or a later one, or restore the database backup taken before the upgrade",
+			ErrSchemaTooNew, row.Version, row.WrittenBy, row.MinReaderVersion, SchemaVersion)
 	}
 	return nil
 }

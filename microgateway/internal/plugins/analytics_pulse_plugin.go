@@ -15,7 +15,11 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/gatewayplugin/interfaces"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -43,6 +47,50 @@ type AnalyticsPulsePlugin struct {
 	complianceBuffer   []ComplianceEventBuffer
 	toolCallBuffer     []ToolCallBuffer
 	bufferMutex        sync.RWMutex
+	// held is the batch of a pulse that was not delivered, kept apart from
+	// the buffers so it is sent again as the same batch: the same records
+	// (less any that expired or were trimmed) under the same sequence
+	// number. The hub stores a batch once by (edge ID, boot ID, sequence
+	// number), so if it did store the first attempt and only its answer was
+	// lost, the repeat is recognised. Merged with newer records under a new
+	// number, as it used to be, those records were stored twice. Guarded by
+	// bufferMutex; nil while the pulse that took it is in flight.
+	held *heldPulse
+	// returned holds the newer part of a batch that was too large for one
+	// message, to be sent as the next batch, ahead of the buffers
+	// (putBackLocked). Guarded by bufferMutex.
+	returned pulseSnapshot
+	// backlog holds, serialized and oldest first, the pulses that were not
+	// delivered while max_backlog_bytes is set (analytics_pulse_backlog.go).
+	// The sender takes from its head; full batches spilled from the buffers
+	// join its tail (spillFullBatches). Guarded by bufferMutex.
+	backlog      []backlogBatch
+	backlogBytes int64
+	// headInFlight is set while the sender delivers the backlog's head, so
+	// that trimming, which a spill may run meanwhile, leaves it in place.
+	// Guarded by bufferMutex.
+	headInFlight bool
+	// attemptFailed is set when an attempt to send a pulse fails and cleared
+	// when one succeeds: from the first failed attempt on, full batches go
+	// to the backlog instead of waiting in the buffers.
+	attemptFailed atomic.Bool
+	// spillMu orders the moves of buffered records into the backlog's tail
+	// (spillToBacklog, spillFullBatches), which serialize outside
+	// bufferMutex. The request path never takes it.
+	spillMu sync.Mutex
+	// spillQueued is set while a spill of full batches is running.
+	spillQueued atomic.Bool
+	// spilledBatches counts the full batches spillFullBatches moved.
+	spilledBatches atomic.Uint64
+	// backlogFullHinted is set once the log has said, in this outage, how
+	// to raise max_backlog_bytes; a delivered pulse ends the outage and
+	// clears it. Guarded by bufferMutex.
+	backlogFullHinted bool
+
+	// bootID is drawn once per process and sent with every pulse: sequence
+	// numbers start at 1 again after a restart, and the boot ID keeps the
+	// batches of two runs apart.
+	bootID string
 
 	// Pulse management
 	// timerMu guards pulseTimer: the timer's own callback, a buffer-full
@@ -67,6 +115,10 @@ type AnalyticsPulsePlugin struct {
 	// unless the Enterprise microgateway enabled capture.
 	capture atomic.Pointer[captureOutbox]
 
+	// oversizedDropped counts records dropped because one alone was larger
+	// than a pulse may be.
+	oversizedDropped atomic.Uint64
+
 	// Statistics
 	totalRecordsSent uint64
 	totalPulsesSent  uint64
@@ -77,6 +129,8 @@ type AnalyticsPulsePlugin struct {
 // PulsePluginConfig holds configuration for the analytics pulse plugin
 type PulsePluginConfig struct {
 	IntervalSeconds             int      `json:"interval_seconds"`
+	// MaxBatchSize is unused: the setting is accepted but nothing reads it
+	// (a pulse is bounded by MaxBufferSize, see batchRecords).
 	MaxBatchSize                int      `json:"max_batch_size"`
 	MaxBufferSize               int      `json:"max_buffer_size"`
 	CompressionEnabled          bool     `json:"compression_enabled"`
@@ -87,6 +141,11 @@ type PulsePluginConfig struct {
 	TimeoutSeconds              int      `json:"timeout_seconds"`
 	MaxRetries                  int      `json:"max_retries"`
 	RetryIntervalSecs           int      `json:"retry_interval_secs"`
+	// MaxBacklogBytes bounds what is kept, serialized, while pulses fail
+	// (analytics_pulse_backlog.go). Unset in the pulse file it is 256 MiB;
+	// 0 turns the backlog off, and a failed pulse is then trimmed to
+	// MaxBufferSize records as before.
+	MaxBacklogBytes int64 `json:"max_backlog_bytes"`
 }
 
 // AnalyticsMetadata stores additional analytics data not in database.AnalyticsEvent
@@ -186,6 +245,7 @@ func NewAnalyticsPulsePlugin(
 		ctx:            ctx,
 		cancel:         cancel,
 		sequenceNumber: 1,
+		bootID:         uuid.NewString(),
 		lastPulseTime:  time.Now(),
 		retryInterval:  time.Duration(pluginConfig.RetryIntervalSecs) * time.Second,
 	}
@@ -233,6 +293,13 @@ func parsePluginConfig(config map[string]interface{}) (*PulsePluginConfig, error
 	}
 	if pluginConfig.EdgeRetentionHours == 0 {
 		pluginConfig.EdgeRetentionHours = 24
+	}
+	// Unset means the default; 0, set explicitly, turns the backlog off.
+	if _, set := config["max_backlog_bytes"]; !set {
+		pluginConfig.MaxBacklogBytes = defaultMaxBacklogBytes
+	}
+	if pluginConfig.MaxBacklogBytes < 0 {
+		return nil, fmt.Errorf("max_backlog_bytes must not be negative (0 turns the backlog off): %d", pluginConfig.MaxBacklogBytes)
 	}
 
 	return &pluginConfig, nil
@@ -417,7 +484,15 @@ func (p *AnalyticsPulsePlugin) HandleAnalytics(ctx context.Context, req *interfa
 	// has just failed; the timer picks the data up once the interval passes.
 	totalBuffered := p.totalBufferedLocked()
 	if totalBuffered >= p.config.MaxBufferSize {
-		if p.inBackoffLocked(time.Now()) {
+		if p.spillModeLocked() {
+			// Pulses are failing, or the backlog is being sent: a full
+			// batch would wait here as Go structs (about 2 KB a request)
+			// until the backlog is through. It joins the backlog instead,
+			// serialized, where max_backlog_bytes bounds it.
+			if p.spillQueued.CompareAndSwap(false, true) {
+				go p.spillFullBatches()
+			}
+		} else if p.inBackoffLocked(time.Now()) {
 			log.Debug().
 				Int("total_buffered", totalBuffered).
 				Msg("Analytics buffer is full but the last pulse failed recently - waiting for backoff")
@@ -557,7 +632,8 @@ func (p *AnalyticsPulsePlugin) flushFullBuffer() {
 
 // pulseSnapshot is one pulse's worth of buffered data, taken out of the
 // buffers under the lock so it can be sent without holding them. If the send
-// fails it is put back in front of whatever arrived in the meantime.
+// fails it is held (heldPulse) and sent again before whatever arrived in the
+// meantime.
 type pulseSnapshot struct {
 	analytics  []database.AnalyticsEvent
 	metadata   []AnalyticsMetadata
@@ -572,10 +648,25 @@ func (s *pulseSnapshot) empty() bool {
 		len(s.compliance) == 0 && len(s.toolCalls) == 0
 }
 
-// totalBufferedLocked counts every record waiting for a pulse. Caller holds bufferMutex.
+// heldPulse is an undelivered batch and the sequence number it was sent under.
+type heldPulse struct {
+	snap pulseSnapshot
+	seq  uint64
+}
+
+func (s *pulseSnapshot) size() int {
+	return len(s.analytics) + len(s.budget) + len(s.proxy) + len(s.compliance) + len(s.toolCalls)
+}
+
+// totalBufferedLocked counts every record waiting for a pulse: the buffers
+// and the batch held for a retry. Caller holds bufferMutex.
 func (p *AnalyticsPulsePlugin) totalBufferedLocked() int {
-	return len(p.analyticsBuffer) + len(p.budgetBuffer) + len(p.proxyBuffer) +
-		len(p.complianceBuffer) + len(p.toolCallBuffer)
+	n := len(p.analyticsBuffer) + len(p.budgetBuffer) + len(p.proxyBuffer) +
+		len(p.complianceBuffer) + len(p.toolCallBuffer) + p.returned.size()
+	if p.held != nil {
+		n += p.held.snap.size()
+	}
+	return n
 }
 
 // retryWait is the pause between attempts of one pulse, and the backoff after
@@ -593,9 +684,160 @@ func (p *AnalyticsPulsePlugin) inBackoffLocked(now time.Time) bool {
 	return p.lastError != nil && now.Sub(p.lastErrorTime) < p.retryWait()
 }
 
+// heldSizeLocked is the number of records in the batch held for a retry.
+// Caller holds bufferMutex.
+func (p *AnalyticsPulsePlugin) heldSizeLocked() int {
+	if p.held == nil {
+		return 0
+	}
+	return p.held.snap.size()
+}
+
 // stopping reports whether the plugin has been told to shut down.
 func (p *AnalyticsPulsePlugin) stopping() bool {
 	return p.ctx != nil && p.ctx.Err() != nil
+}
+
+// maxPulseBytes is the largest pulse message the edge sends. The control
+// plane refuses a message above its gRPC receive limit (16 MiB by default)
+// before any handler sees it, so a pulse above that can never be delivered;
+// half of it leaves room for a control plane set lower and for the
+// difference between this estimate and the bytes on the wire. A variable
+// so that tests can make it small.
+var maxPulseBytes = 8 << 20
+
+// batchRecords is the most records one pulse carries: MaxBufferSize, the
+// size at which a filling buffer is flushed, so the largest pulse normal
+// operation sends. A backlog (what gathered while pulses failed, or while
+// one slow pulse was in flight) is sent as several pulses of that size, one
+// after the other, not as one message of whatever size it has reached: the
+// control plane stores a pulse in one transaction, and one of a quarter of
+// a million records neither fits its message limit nor finishes within the
+// pulse timeout. 0 means no bound.
+func (p *AnalyticsPulsePlugin) batchRecords() int {
+	return p.config.MaxBufferSize
+}
+
+// takeBatchLocked moves up to max buffered records into a snapshot (all of
+// them when max is 0 or they are fewer), the oldest of each kind first and
+// each kind in proportion to what is buffered of it, so that no kind waits
+// behind another. Caller holds bufferMutex.
+func (p *AnalyticsPulsePlugin) takeBatchLocked(max int) pulseSnapshot {
+	// Records returned from a batch that was split come first, as a batch
+	// of their own: they are the oldest, and at most a batch.
+	if !p.returned.empty() {
+		r := p.returned
+		p.returned = pulseSnapshot{}
+		return r
+	}
+	total := len(p.analyticsBuffer) + len(p.budgetBuffer) + len(p.proxyBuffer) + len(p.complianceBuffer) + len(p.toolCallBuffer)
+	if max <= 0 || total <= max {
+		return p.takeSnapshotLocked()
+	}
+	// share is how many of n records of one kind go into this batch.
+	share := func(n int) int {
+		k := (n*max + total - 1) / total // rounded up, so a kind with records gets at least one
+		if k > n {
+			k = n
+		}
+		return k
+	}
+	var snap pulseSnapshot
+	n := share(len(p.analyticsBuffer))
+	snap.analytics, p.analyticsBuffer = p.analyticsBuffer[:n:n], p.analyticsBuffer[n:]
+	if n > len(p.analyticsMetadata) {
+		n = len(p.analyticsMetadata)
+	}
+	snap.metadata, p.analyticsMetadata = p.analyticsMetadata[:n:n], p.analyticsMetadata[n:]
+	n = share(len(p.budgetBuffer))
+	snap.budget, p.budgetBuffer = p.budgetBuffer[:n:n], p.budgetBuffer[n:]
+	n = share(len(p.proxyBuffer))
+	snap.proxy, p.proxyBuffer = p.proxyBuffer[:n:n], p.proxyBuffer[n:]
+	n = share(len(p.complianceBuffer))
+	snap.compliance, p.complianceBuffer = p.complianceBuffer[:n:n], p.complianceBuffer[n:]
+	n = share(len(p.toolCallBuffer))
+	snap.toolCalls, p.toolCallBuffer = p.toolCallBuffer[:n:n], p.toolCallBuffer[n:]
+	return snap
+}
+
+// halve splits a snapshot in two: the first gets half of the records
+// (rounded down, at least one), the oldest of each kind, kinds in a fixed
+// order; the second gets the rest. A snapshot of one record cannot be
+// split: second is then empty.
+func (s pulseSnapshot) halve() (first, second pulseSnapshot) {
+	if s.size() <= 1 {
+		return s, pulseSnapshot{}
+	}
+	left := s.size() / 2
+	// take says how many of n records of the next kind the first half gets.
+	take := func(n int) int {
+		k := n
+		if k > left {
+			k = left
+		}
+		left -= k
+		return k
+	}
+	a := take(len(s.analytics))
+	first.analytics, second.analytics = s.analytics[:a:a], s.analytics[a:]
+	// Analytics events and their metadata are paired by index.
+	m := a
+	if m > len(s.metadata) {
+		m = len(s.metadata)
+	}
+	first.metadata, second.metadata = s.metadata[:m:m], s.metadata[m:]
+	b := take(len(s.budget))
+	first.budget, second.budget = s.budget[:b:b], s.budget[b:]
+	c := take(len(s.proxy))
+	first.proxy, second.proxy = s.proxy[:c:c], s.proxy[c:]
+	d := take(len(s.compliance))
+	first.compliance, second.compliance = s.compliance[:d:d], s.compliance[d:]
+	e := take(len(s.toolCalls))
+	first.toolCalls, second.toolCalls = s.toolCalls[:e:e], s.toolCalls[e:]
+	return first, second
+}
+
+// putBackLocked returns records taken for a pulse: they are older than
+// anything buffered since, so they are the next batch. They wait in
+// p.returned, apart from the buffers: putting them back in front of the
+// buffers would copy the whole backlog at every split. What is already
+// waiting there is newer than s (it was split off before), so s goes in
+// front of it; both are at most a batch. Caller holds bufferMutex.
+func (p *AnalyticsPulsePlugin) putBackLocked(s pulseSnapshot) {
+	if s.empty() {
+		return
+	}
+	// Analytics events and their metadata are paired by index.
+	for len(s.metadata) < len(s.analytics) {
+		s.metadata = append(s.metadata, AnalyticsMetadata{})
+	}
+	r := p.returned
+	p.returned = pulseSnapshot{
+		analytics:  append(s.analytics[:len(s.analytics):len(s.analytics)], r.analytics...),
+		metadata:   append(s.metadata[:len(s.metadata):len(s.metadata)], r.metadata...),
+		budget:     append(s.budget[:len(s.budget):len(s.budget)], r.budget...),
+		proxy:      append(s.proxy[:len(s.proxy):len(s.proxy)], r.proxy...),
+		compliance: append(s.compliance[:len(s.compliance):len(s.compliance)], r.compliance...),
+		toolCalls:  append(s.toolCalls[:len(s.toolCalls):len(s.toolCalls)], r.toolCalls...),
+	}
+}
+
+// unreturnLocked moves the records waiting in p.returned to the front of
+// the buffers. It copies the buffers, so it is for the rare paths that
+// treat everything buffered as one (a failed pulse applying the cap), not
+// for the split of a batch. Caller holds bufferMutex.
+func (p *AnalyticsPulsePlugin) unreturnLocked() {
+	r := p.returned
+	if r.empty() {
+		return
+	}
+	p.returned = pulseSnapshot{}
+	p.analyticsBuffer = append(r.analytics[:len(r.analytics):len(r.analytics)], p.analyticsBuffer...)
+	p.analyticsMetadata = append(r.metadata[:len(r.metadata):len(r.metadata)], p.analyticsMetadata...)
+	p.budgetBuffer = append(r.budget[:len(r.budget):len(r.budget)], p.budgetBuffer...)
+	p.proxyBuffer = append(r.proxy[:len(r.proxy):len(r.proxy)], p.proxyBuffer...)
+	p.complianceBuffer = append(r.compliance[:len(r.compliance):len(r.compliance)], p.complianceBuffer...)
+	p.toolCallBuffer = append(r.toolCalls[:len(r.toolCalls):len(r.toolCalls)], p.toolCallBuffer...)
 }
 
 // takeSnapshotLocked moves everything buffered into a snapshot. Caller holds bufferMutex.
@@ -620,69 +862,86 @@ func (p *AnalyticsPulsePlugin) takeSnapshotLocked() pulseSnapshot {
 	return snap
 }
 
-// restoreSnapshotLocked puts an unsent snapshot back at the front of the
-// buffers (it is older than anything buffered since), drops records that have
-// aged past EdgeRetentionHours, and trims the buffers to MaxBufferSize by
-// discarding the oldest records. Caller holds bufferMutex.
-func (p *AnalyticsPulsePlugin) restoreSnapshotLocked(snap pulseSnapshot, now time.Time) {
+// nextBatchLocked returns the batch to send next: the held one, exactly as
+// it was left, under the sequence number it was first sent with; otherwise
+// the oldest buffered records, at most batchRecords of them, under a new
+// number. retried says which. An empty
+// snapshot means there is nothing to send. Caller holds bufferMutex.
+func (p *AnalyticsPulsePlugin) nextBatchLocked() (snap pulseSnapshot, seq uint64, retried bool) {
+	if h := p.held; h != nil {
+		p.held = nil
+		return h.snap, h.seq, true
+	}
+	snap = p.takeBatchLocked(p.batchRecords())
+	if snap.empty() {
+		return snap, 0, false
+	}
+	seq = p.sequenceNumber
+	p.sequenceNumber++
+	return snap, seq, false
+}
+
+// holdSnapshotLocked keeps an undelivered batch for the next pulse, which
+// sends it again under seq before anything newer. Records that have aged
+// past EdgeRetentionHours are dropped from it, and the held batch and the
+// buffers together are trimmed to MaxBufferSize by discarding the oldest
+// records (the held batch's first). A batch only ever loses records while
+// it is held: nothing newer is added to it, so the hub, which stores a
+// batch once by its sequence number, can tell a repeat from new data.
+// Caller holds bufferMutex.
+func (p *AnalyticsPulsePlugin) holdSnapshotLocked(snap pulseSnapshot, seq uint64, now time.Time) {
+	// The cap is applied to everything waiting, oldest first: the records
+	// returned from a split batch belong in front of the buffers for that.
+	p.unreturnLocked()
 	cutoff := now.Add(-time.Duration(p.config.EdgeRetentionHours) * time.Hour)
 	fresh := func(ts time.Time) bool { return p.config.EdgeRetentionHours <= 0 || !ts.Before(cutoff) }
 
 	// Analytics events and their metadata are paired by index; keep them in step.
-	analytics := make([]database.AnalyticsEvent, 0, len(snap.analytics))
-	metadata := make([]AnalyticsMetadata, 0, len(snap.analytics))
+	kept := pulseSnapshot{
+		analytics: make([]database.AnalyticsEvent, 0, len(snap.analytics)),
+		metadata:  make([]AnalyticsMetadata, 0, len(snap.analytics)),
+	}
 	for i, ev := range snap.analytics {
 		if !fresh(ev.TimeStamp) {
 			continue
 		}
-		analytics = append(analytics, ev)
+		kept.analytics = append(kept.analytics, ev)
 		if i < len(snap.metadata) {
-			metadata = append(metadata, snap.metadata[i])
+			kept.metadata = append(kept.metadata, snap.metadata[i])
 		} else {
-			metadata = append(metadata, AnalyticsMetadata{})
+			kept.metadata = append(kept.metadata, AnalyticsMetadata{})
 		}
 	}
-	budget := snap.budget[:0:0]
 	for _, b := range snap.budget {
 		if fresh(b.Timestamp) {
-			budget = append(budget, b)
+			kept.budget = append(kept.budget, b)
 		}
 	}
-	proxy := snap.proxy[:0:0]
 	for _, pr := range snap.proxy {
 		if fresh(pr.LastRequest) {
-			proxy = append(proxy, pr)
+			kept.proxy = append(kept.proxy, pr)
 		}
 	}
-	compliance := snap.compliance[:0:0]
 	for _, ce := range snap.compliance {
 		if fresh(ce.Timestamp) {
-			compliance = append(compliance, ce)
+			kept.compliance = append(kept.compliance, ce)
 		}
 	}
-	toolCalls := snap.toolCalls[:0:0]
 	for _, tc := range snap.toolCalls {
 		if fresh(tc.Timestamp) {
-			toolCalls = append(toolCalls, tc)
+			kept.toolCalls = append(kept.toolCalls, tc)
 		}
 	}
+	expired := snap.size() - kept.size()
+	p.held = &heldPulse{snap: kept, seq: seq}
 
-	expired := (len(snap.analytics) - len(analytics)) + (len(snap.budget) - len(budget)) +
-		(len(snap.proxy) - len(proxy)) + (len(snap.compliance) - len(compliance)) +
-		(len(snap.toolCalls) - len(toolCalls))
-
-	p.analyticsBuffer = append(analytics, p.analyticsBuffer...)
-	p.analyticsMetadata = append(metadata, p.analyticsMetadata...)
-	p.budgetBuffer = append(budget, p.budgetBuffer...)
-	p.proxyBuffer = append(proxy, p.proxyBuffer...)
-	p.complianceBuffer = append(compliance, p.complianceBuffer...)
-	p.toolCallBuffer = append(toolCalls, p.toolCallBuffer...)
-
-	// Trim to the cap, oldest first. Kinds are drained in order of how much
-	// the hub loses without them: a proxy summary is a rollup of an analytics
-	// event, a budget record is what spend enforcement runs on.
+	// Trim to the cap, oldest first: the held batch is older than anything
+	// buffered since. Kinds are drained in order of how much the hub loses
+	// without them: a proxy summary is a rollup of an analytics event, a
+	// budget record is what spend enforcement runs on.
 	dropped := 0
 	if max := p.config.MaxBufferSize; max > 0 {
+		// trim says how many of n records to drop to get back under the cap.
 		trim := func(n int) int {
 			over := p.totalBufferedLocked() - max
 			if over <= 0 || n == 0 {
@@ -691,45 +950,108 @@ func (p *AnalyticsPulsePlugin) restoreSnapshotLocked(snap pulseSnapshot, now tim
 			if over > n {
 				over = n
 			}
+			dropped += over
 			return over
 		}
-		if n := trim(len(p.proxyBuffer)); n > 0 {
-			p.proxyBuffer = p.proxyBuffer[n:]
-			dropped += n
+		h := &p.held.snap
+		h.proxy = h.proxy[trim(len(h.proxy)):]
+		p.proxyBuffer = p.proxyBuffer[trim(len(p.proxyBuffer)):]
+		if n := trim(len(h.analytics)); n > 0 {
+			h.analytics, h.metadata = h.analytics[n:], h.metadata[n:]
 		}
 		if n := trim(len(p.analyticsBuffer)); n > 0 {
 			p.analyticsBuffer = p.analyticsBuffer[n:]
 			if n <= len(p.analyticsMetadata) {
 				p.analyticsMetadata = p.analyticsMetadata[n:]
 			}
-			dropped += n
 		}
-		if n := trim(len(p.toolCallBuffer)); n > 0 {
-			p.toolCallBuffer = p.toolCallBuffer[n:]
-			dropped += n
-		}
-		if n := trim(len(p.complianceBuffer)); n > 0 {
-			p.complianceBuffer = p.complianceBuffer[n:]
-			dropped += n
-		}
-		if n := trim(len(p.budgetBuffer)); n > 0 {
-			p.budgetBuffer = p.budgetBuffer[n:]
-			dropped += n
-		}
+		h.toolCalls = h.toolCalls[trim(len(h.toolCalls)):]
+		p.toolCallBuffer = p.toolCallBuffer[trim(len(p.toolCallBuffer)):]
+		h.compliance = h.compliance[trim(len(h.compliance)):]
+		p.complianceBuffer = p.complianceBuffer[trim(len(p.complianceBuffer)):]
+		h.budget = h.budget[trim(len(h.budget)):]
+		p.budgetBuffer = p.budgetBuffer[trim(len(p.budgetBuffer)):]
+	}
+	// Nothing left of it: there is no batch to send again.
+	if p.held.snap.empty() {
+		p.held = nil
 	}
 
+	pulseDroppedOverCap.Add(uint64(dropped))
+	pulseDroppedExpired.Add(uint64(expired))
 	if expired > 0 || dropped > 0 {
 		log.Warn().
 			Int("expired", expired).
 			Int("dropped_over_cap", dropped).
 			Int("buffered", p.totalBufferedLocked()).
-			Msg("Analytics records discarded while the control server is unreachable")
+			Int("max_buffer_size", p.config.MaxBufferSize).
+			Str("pulses_fail_because", pulseFailureReason(p.lastError)).
+			AnErr("last_error", p.lastError).
+			Msg("Analytics records discarded: pulses are failing and the edge keeps at most max_buffer_size records for the next one")
+	}
+}
+
+// Records the pulse gave up, by reason, since the process started
+// (microgateway_analytics_pulse_dropped_records_total). They are lost to the
+// control plane: its analytics, and the spend it computes from them, are
+// that much short.
+var (
+	// pulseDroppedOverCap: discarded, oldest first, to keep the held batch
+	// and the buffers within max_buffer_size while pulses fail.
+	pulseDroppedOverCap atomic.Uint64
+	// pulseDroppedExpired: held for longer than edge_retention_hours.
+	pulseDroppedExpired atomic.Uint64
+	// pulseDroppedOversized: one record larger than a pulse may be.
+	pulseDroppedOversized atomic.Uint64
+)
+
+// PulseDroppedRecords returns how many records the analytics pulse has
+// given up since the process started, by reason: "over_backlog", "over_cap", "expired",
+// "oversized".
+func PulseDroppedRecords() map[string]uint64 {
+	return map[string]uint64{
+		"over_cap":  pulseDroppedOverCap.Load(),
+		"expired":   pulseDroppedExpired.Load(),
+		"oversized": pulseDroppedOversized.Load(),
+		// over_backlog: the oldest batches discarded to keep the backlog
+		// within max_backlog_bytes (analytics_pulse_backlog.go).
+		"over_backlog": pulseDroppedOverBacklog.Load(),
+	}
+}
+
+// pulseFailureReason says, for the log, why a pulse failed: the edge keeps
+// records the same way in each case, but an operator reading "discarded"
+// needs to know whether the control plane was away or answered and could
+// not store.
+func pulseFailureReason(err error) string {
+	switch {
+	case err == nil:
+		return "unknown"
+	case errors.Is(err, errNotConnected):
+		return "the edge has no connection to a control plane"
+	case status.Code(err) == codes.Unavailable && strings.Contains(err.Error(), "not stored"):
+		return "the control plane answered but could not store the pulse (its database is unavailable)"
+	case status.Code(err) == codes.Unavailable:
+		return "the control plane could not be reached"
+	case status.Code(err) == codes.DeadlineExceeded || errors.Is(err, context.DeadlineExceeded):
+		return "the control plane did not answer within timeout_seconds"
+	default:
+		return "the control plane refused or failed the call"
 	}
 }
 
 // errNotConnected fails a pulse attempt while the edge has no connection to
 // the control server (between a dropped connection and the reconnect).
 var errNotConnected = errors.New("not connected to the control server")
+
+// isMessageTooLarge reports whether err is the control plane (or this
+// edge's own client) refusing a message for its size: gRPC's
+// ResourceExhausted, "received message larger than max" or "trying to send
+// message larger than max". The control plane is reachable; it is the
+// message that cannot be delivered.
+func isMessageTooLarge(err error) bool {
+	return status.Code(err) == codes.ResourceExhausted && strings.Contains(err.Error(), "larger than max")
+}
 
 // sendWithRetry sends one pulse, retrying transport failures up to MaxRetries
 // times with retryWait between attempts. Once the plugin is stopping only the
@@ -747,7 +1069,13 @@ func (p *AnalyticsPulsePlugin) sendWithRetry(pulse *pb.AnalyticsPulse, sequenceN
 			cancel()
 		}
 		if err == nil {
+			p.attemptFailed.Store(false)
 			return resp, nil
+		}
+		if !isMessageTooLarge(err) {
+			// The control plane did not take it: from now on full batches
+			// go to the backlog (spillModeLocked).
+			p.attemptFailed.Store(true)
 		}
 		lastErr = err
 		log.Warn().
@@ -757,7 +1085,8 @@ func (p *AnalyticsPulsePlugin) sendWithRetry(pulse *pb.AnalyticsPulse, sequenceN
 			Int("max_retries", p.config.MaxRetries).
 			Msg("Failed to send analytics pulse")
 
-		if attempt >= p.config.MaxRetries || p.stopping() {
+		// The same message would be refused for its size again.
+		if attempt >= p.config.MaxRetries || p.stopping() || isMessageTooLarge(err) {
 			return nil, lastErr
 		}
 
@@ -774,8 +1103,10 @@ func (p *AnalyticsPulsePlugin) sendWithRetry(pulse *pb.AnalyticsPulse, sequenceN
 }
 
 // sendPulse creates and sends an analytics pulse to control server. Data is
-// only released once the hub has accepted it; a pulse the hub never received
-// goes back into the buffers for the next one.
+// only released once the hub has accepted it; a pulse the hub never
+// acknowledged is held and sent again, as the same batch, by the next one.
+// When that held batch is delivered, what was buffered meanwhile follows at
+// once as a batch of its own.
 func (p *AnalyticsPulsePlugin) sendPulse() {
 	if !p.sending.CompareAndSwap(false, true) {
 		log.Debug().Msg("Analytics pulse already in flight - skipping")
@@ -783,17 +1114,107 @@ func (p *AnalyticsPulsePlugin) sendPulse() {
 	}
 	defer p.sending.Store(false)
 
-	p.bufferMutex.Lock()
-	snap := p.takeSnapshotLocked()
-	if snap.empty() {
+	for {
+		// The backlog goes first, oldest batch first, one message at a
+		// time: it is older than anything buffered (a batch split for its
+		// size, p.held, is older still).
+		// Checked and taken under one lock: a spill in between would put
+		// older records in the backlog than the batch taken here.
+		p.bufferMutex.Lock()
+		if p.held == nil && len(p.backlog) > 0 {
+			p.bufferMutex.Unlock()
+			if p.deliverBacklogHead() == pulseFailed || p.stopping() {
+				return
+			}
+			continue
+		}
+		snap, sequenceNum, retried := p.nextBatchLocked()
 		p.bufferMutex.Unlock()
-		log.Debug().Msg("No analytics data to pulse - skipping")
-		return
+		if snap.empty() {
+			log.Debug().Msg("No analytics data to pulse - skipping")
+			return
+		}
+		switch p.deliver(snap, sequenceNum, retried) {
+		case pulseFailed:
+			return
+		case pulseSplit:
+			// Part of the batch is held under its number and the rest is
+			// back in the buffers: send on at once.
+			continue
+		}
+		if retried {
+			// The held batch is through: what was buffered meanwhile
+			// follows at once as batches of its own.
+			continue
+		}
+		// A backlog larger than one pulse is sent pulse after pulse; what
+		// is left below a full one waits for the timer, as always.
+		p.bufferMutex.Lock()
+		more := p.batchRecords() > 0 && p.totalBufferedLocked() >= p.batchRecords()
+		p.bufferMutex.Unlock()
+		if !more || p.stopping() {
+			return
+		}
 	}
-	sequenceNum := p.sequenceNumber
-	p.sequenceNumber++
-	p.bufferMutex.Unlock()
+}
 
+// pulseOutcome is what became of one batch.
+type pulseOutcome int
+
+const (
+	// pulseDelivered: the control plane answered (stored it, or refused the
+	// data itself, which a repeat would not change).
+	pulseDelivered pulseOutcome = iota
+	// pulseFailed: not delivered; the batch is held for the next pulse.
+	pulseFailed
+	// pulseSplit: the message was too large to deliver; the older half of
+	// the batch is held under its sequence number and the newer half is
+	// back in the buffers.
+	pulseSplit
+)
+
+// splitTooLarge deals with a batch whose message is too large to deliver:
+// its older half is held under the batch's sequence number, to be sent at
+// once, and its newer half goes back to the front of the buffers, to be
+// sent under a number of its own. Nothing is discarded for it, and the
+// buffer cap is not applied: the control plane is reachable. A single
+// record that is too large by itself can never be delivered and is dropped,
+// with an error in the log.
+//
+// The sequence number stays with the older half. The control plane stores
+// a batch once by that number, and a batch refused for its size was never
+// stored under it: a message is refused before anything is read from it.
+func (p *AnalyticsPulsePlugin) splitTooLarge(snap pulseSnapshot, sequenceNum uint64, size int, cause string) pulseOutcome {
+	first, second := snap.halve()
+	if second.empty() {
+		p.oversizedDropped.Add(uint64(first.size()))
+		pulseDroppedOversized.Add(uint64(first.size()))
+		log.Error().
+			Uint64("sequence", sequenceNum).
+			Int("message_bytes", size).
+			Int("limit_bytes", maxPulseBytes).
+			Str("cause", cause).
+			Msg("Analytics pulse: one record is larger than a pulse may be and cannot be delivered; it is dropped (stored request and response bodies are the usual reason: see ANALYTICS_STORE_REQUESTS / ANALYTICS_STORE_RESPONSES)")
+		return pulseDelivered
+	}
+	p.bufferMutex.Lock()
+	p.held = &heldPulse{snap: first, seq: sequenceNum}
+	p.putBackLocked(second)
+	p.bufferMutex.Unlock()
+	log.Warn().
+		Uint64("sequence", sequenceNum).
+		Int("message_bytes", size).
+		Int("limit_bytes", maxPulseBytes).
+		Int("records", snap.size()).
+		Int("sending_first", first.size()).
+		Str("cause", cause).
+		Msg("Analytics pulse too large for one message - sending it in parts")
+	return pulseSplit
+}
+
+// deliver sends one batch under sequenceNum and reports what became of it.
+// On failure the batch is held for the next pulse.
+func (p *AnalyticsPulsePlugin) deliver(snap pulseSnapshot, sequenceNum uint64, retried bool) pulseOutcome {
 	// Build and send pulse
 	pulse := p.buildPulseMessage(snap.analytics, snap.metadata, snap.budget, snap.proxy, snap.compliance, snap.toolCalls, sequenceNum)
 	if n := makeValidUTF8(pulse.ProtoReflect()); n > 0 {
@@ -802,9 +1223,15 @@ func (p *AnalyticsPulsePlugin) sendPulse() {
 			Int("strings", n).
 			Msg("Analytics pulse: replaced invalid UTF-8 so the pulse can be sent")
 	}
+	// Records are counted, not weighed, when a batch is taken: a batch of
+	// records with large bodies can still be too large for one message.
+	if size := proto.Size(pulse); size > maxPulseBytes {
+		return p.splitTooLarge(snap, sequenceNum, size, "over the edge's own limit")
+	}
 
 	log.Debug().
 		Uint64("sequence", sequenceNum).
+		Bool("retried_batch", retried).
 		Int("analytics_events", len(snap.analytics)).
 		Int("budget_events", len(snap.budget)).
 		Int("proxy_summaries", len(snap.proxy)).
@@ -814,11 +1241,34 @@ func (p *AnalyticsPulsePlugin) sendPulse() {
 		Msg("Sending analytics pulse to control server")
 
 	resp, err := p.sendWithRetry(pulse, sequenceNum)
+	if err != nil && isMessageTooLarge(err) {
+		// The control plane's limit is below this edge's: it answered, so
+		// this is not an outage, and nothing is discarded for it.
+		return p.splitTooLarge(snap, sequenceNum, proto.Size(pulse), err.Error())
+	}
+	if err != nil && p.backlogEnabled() {
+		now := time.Now()
+		p.bufferMutex.Lock()
+		p.lastError = err
+		p.lastErrorTime = now
+		p.bufferMutex.Unlock()
+		p.failToBacklog(pulse, snap, now)
+		p.bufferMutex.Lock()
+		bytes, batches := p.backlogBytes, len(p.backlog)
+		p.bufferMutex.Unlock()
+		log.Error().
+			Err(err).
+			Uint64("sequence", sequenceNum).
+			Int64("backlog_bytes", bytes).
+			Int("backlog_batches", batches).
+			Msg("Analytics pulse not delivered - data kept in the backlog for the next pulse")
+		return pulseFailed
+	}
 	if err != nil {
 		p.bufferMutex.Lock()
 		p.lastError = err
 		p.lastErrorTime = time.Now()
-		p.restoreSnapshotLocked(snap, p.lastErrorTime)
+		p.holdSnapshotLocked(snap, sequenceNum, p.lastErrorTime)
 		buffered := p.totalBufferedLocked()
 		p.bufferMutex.Unlock()
 		log.Error().
@@ -826,11 +1276,12 @@ func (p *AnalyticsPulsePlugin) sendPulse() {
 			Uint64("sequence", sequenceNum).
 			Int("buffered_for_retry", buffered).
 			Msg("Analytics pulse not delivered - data kept for the next pulse")
-		return
+		return pulseFailed
 	}
 
 	p.bufferMutex.Lock()
 	p.lastError = nil
+	p.backlogFullHinted = false
 	p.bufferMutex.Unlock()
 
 	p.totalPulsesSent++
@@ -844,12 +1295,13 @@ func (p *AnalyticsPulsePlugin) sendPulse() {
 			Msg("Analytics pulse sent successfully")
 	} else {
 		// The hub received the pulse and refused it. Retrying the same data
-		// would be refused again, so it is not restored.
+		// would be refused again, so it is not held.
 		log.Error().
 			Str("message", resp.Message).
 			Uint64("sequence", sequenceNum).
 			Msg("Analytics pulse rejected by control server")
 	}
+	return pulseDelivered
 }
 
 // buildPulseMessage constructs the analytics pulse protobuf message
@@ -1032,6 +1484,7 @@ func (p *AnalyticsPulsePlugin) buildPulseMessage(
 		DataFrom:         timestamppb.New(p.lastPulseTime),
 		DataTo:           timestamppb.New(now),
 		SequenceNumber:   sequenceNum,
+		BootId:           p.bootID,
 		AnalyticsEvents:  analyticsEvents,
 		BudgetEvents:     budgetEvents,
 		ProxySummaries:   proxySummaries,
@@ -1074,6 +1527,18 @@ func (p *AnalyticsPulsePlugin) Stop() error {
 	p.sendPulse()
 	p.stopCapture()
 
+	// The backlog is in memory: what a control plane did not take by now
+	// is lost with the process.
+	p.bufferMutex.Lock()
+	lostRecords, lostBytes := p.backlogRecordsLocked(), p.backlogBytes
+	p.bufferMutex.Unlock()
+	if lostRecords > 0 {
+		log.Warn().
+			Int("records", lostRecords).
+			Int64("backlog_bytes", lostBytes).
+			Msg("Analytics pulse stopping with a backlog no control plane took: these records are lost")
+	}
+
 	log.Debug().
 		Uint64("total_pulses_sent", p.totalPulsesSent).
 		Uint64("total_records_sent", p.totalRecordsSent).
@@ -1090,12 +1555,14 @@ func (p *AnalyticsPulsePlugin) GetStats() map[string]interface{} {
 	stats := map[string]interface{}{
 		"total_pulses_sent":     p.totalPulsesSent,
 		"total_records_sent":    p.totalRecordsSent,
-		"current_buffer_size":   len(p.analyticsBuffer) + len(p.budgetBuffer) + len(p.proxyBuffer) + len(p.complianceBuffer) + len(p.toolCallBuffer),
+		"current_buffer_size":   p.totalBufferedLocked(),
 		"analytics_buffered":    len(p.analyticsBuffer),
 		"budget_buffered":       len(p.budgetBuffer),
 		"proxy_buffered":        len(p.proxyBuffer),
 		"compliance_buffered":   len(p.complianceBuffer),
 		"tool_calls_buffered":   len(p.toolCallBuffer),
+		"held_for_retry":        p.heldSizeLocked(),
+		"oversized_dropped":     p.oversizedDropped.Load(),
 		"sequence_number":       p.sequenceNumber,
 		"last_pulse_time":       p.lastPulseTime,
 		"pulse_interval_seconds": p.config.IntervalSeconds,

@@ -95,7 +95,7 @@ func Paths(cfg *config.AppConf, envFile string) []pathcheck.Entry {
 			Value:   envOr("BRANDING_STORAGE_PATH", defaultBrandingStorage),
 			Default: defaultBrandingStorage,
 			Kind:    pathcheck.Dir,
-			Use:     "uploaded logo and favicon",
+			Use:     "logo and favicon uploaded before 2.3, imported into the database at start; not used afterwards",
 		},
 		pathcheck.Entry{
 			Name:    "EXPORT_STORAGE_PATH",

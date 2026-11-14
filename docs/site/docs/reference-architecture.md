@@ -5,7 +5,7 @@ weight: 1
 
 # Reference Architecture
 
-This page describes the recommended production deployment of Tyk AI Studio: one **control plane** (AI Studio) managing a fleet of **data-plane** gateways (the Microgateway, running in edge mode). It shows how the pieces connect, what happens when one of them fails, and how to size the data plane using the measured performance of Tyk AI Studio 2.2.
+This page describes the recommended production deployment of Tyk AI Studio: one **control plane** (AI Studio, one or more replicas) managing a fleet of **data-plane** gateways (the Microgateway, running in edge mode). To run the control plane in two sites at once, see [Active-Active (Two Sites)](./deployment-active-active.md). It shows how the pieces connect, what happens when one of them fails, and how to size the data plane using the measured performance of Tyk AI Studio 2.2.
 
 Two deployment shapes are left out on purpose:
 
@@ -21,7 +21,7 @@ Both work, but neither gives you central configuration with independently scaled
 - **Studio is the brain, not the pipe.** Application traffic to LLMs goes through the Microgateways. Studio holds configuration, identity, the portal, chat and analytics, and it is only on a request's path when an edge meets an access token it has not validated in the last five minutes. Tokens in use are revalidated in the background before their cache entry expires.
 - **Edges connect out; Studio never connects in.** Each edge opens one long-lived gRPC connection to Studio on port 50051. Edges can therefore sit in private networks, other clouds or on-premises with outbound-only access.
 - **Scale the data plane horizontally.** One 4-vCPU edge sustained **~690 streaming requests per second** (about 3,000 concurrent streams) or **~8,500 short non-streaming requests per second**, adding **about 0.55 ms at p50**. Both limits are CPU. Add nodes behind a load balancer for more.
-- **Run Studio as a hot / cold singleton and make its database highly available.** In 2.2 the control plane supports exactly one running instance: one hot instance serving traffic, with an optional cold standby that stays stopped until the hot one is lost. Replicated Studio instances are not supported in 2.2. Availability comes from a managed, replicated PostgreSQL and a fast restart or failover. Running edges keep serving while Studio is down, but new edges cannot start. Support for multiple active replicas is planned for 2.3.
+- **Make Studio's database highly available, and run as many Studio replicas as you need.** From 2.3 several Studio replicas can serve one PostgreSQL database, in one site or in two (see [Several replicas](#several-replicas-from-2-3) and [Active-Active](./deployment-active-active.md)); one instance, with an optional cold standby, remains a valid choice. Availability comes from a replicated PostgreSQL with automatic failover, which Studio follows without a restart. Running edges keep serving while Studio is down; edges set to start from their last-known-good configuration can start too.
 
 ## The picture
 
@@ -58,7 +58,7 @@ Each edge pool serves one **namespace**. A single-region deployment has one pool
 
 | Component | Role | Runs as | State |
 |---|---|---|---|
-| **AI Studio** | Control plane: configuration of LLMs, Apps, filters, plugins, budgets and routers; users, SSO and RBAC; AI Portal and Chat; analytics dashboards; the gRPC control server that edges connect to (`GATEWAY_MODE=control`) | One running instance (hot / cold singleton), `tykio/tyk-ai-studio-ent` | PostgreSQL, plus a small data directory (branding assets, exports, plugin cache) |
+| **AI Studio** | Control plane: configuration of LLMs, Apps, filters, plugins, budgets and routers; users, SSO and RBAC; AI Portal and Chat; analytics dashboards; the gRPC control server that edges connect to (`GATEWAY_MODE=control`) | One or more replicas on one PostgreSQL (from 2.3; one instance in 2.2), `tykio/tyk-ai-studio-ent` | PostgreSQL, plus a small data directory (branding assets, exports, plugin cache) |
 | **PostgreSQL** | System of record for configuration, credentials and all analytics shipped from edges | Managed service or HA cluster, PostgreSQL 14+ | Everything that matters |
 | **Microgateway (edge)** | Data plane: authenticates requests, applies access control, filters, guardrails, plugins and budgets, proxies to the LLM, records analytics (`GATEWAY_MODE=edge`) | N stateless-by-design nodes per namespace, `tykio/tyk-microgateway-ent` | A local SQLite file per node: a cache of the configuration snapshot, budget counters, and a local copy of recent analytics (`ANALYTICS_RETENTION_DAYS`). Configuration is rebuilt from Studio on every start. |
 | **Load balancer** | Spreads application traffic across the edges of one pool | Any L7 load balancer or Kubernetes Ingress/Gateway | None |
@@ -95,8 +95,8 @@ Everything between an edge and Studio goes over the single gRPC connection that 
 |---|---|---|---|
 | **Configuration snapshot** | Studio → edge | At edge start, and when an admin pushes configuration | Global objects plus the edge's own namespace: LLMs, Apps, filters, plugins, model prices, routers, tools, datasources. Secrets in the snapshot are encrypted with `MICROGATEWAY_ENCRYPTION_KEY`. Pushes are manual: admins decide when a change reaches the data plane. |
 | **Heartbeat** | edge → Studio | Every 30 s (`EDGE_HEARTBEAT_INTERVAL`) | Reports the loaded configuration checksum, so Studio can show each edge as In Sync, Pending or Stale. Also carries queued [edge-to-control plugin payloads](./plugins-edge-to-control.md). |
-| **Token validation** | edge → Studio → edge | On a cache miss, and ahead of expiry for tokens in use | Credentials are never bulk-synced. An edge asks Studio about a token the first time it sees it and caches the answer in memory for 5 minutes (`EDGE_TOKEN_CACHE_TTL`). Requests that miss together share one call, which times out after 5 s. From 80% of the TTL, the first request to use an entry triggers one background revalidation and is served from the cache, so a busy token never expires under load. A token revoked in Studio stops working on every edge within that TTL. |
-| **Analytics pulse** | edge → Studio | Every 10 s in the Helm chart and packaged example (`interval_seconds` in the file at `PLUGINS_CONFIG_PATH`), or sooner when the buffer fills | Token usage, cost, proxy logs and budget events. Up to 1,000 records per batch, buffered in memory (`max_buffer_size`, 10,000 records; each request adds two to three). A busy edge fills the buffer before the interval and sends early, logging `Analytics buffer is full` at WARN each time: size `max_buffer_size` to about three times your peak request rate times `interval_seconds` to keep the interval. |
+| **Token validation** | edge → Studio → edge | On a cache miss, and ahead of expiry for tokens in use | By default credentials are not bulk-synced (with `EDGE_CREDENTIAL_SYNC=full`, Enterprise, an edge keeps a hashed list of its namespace's keys instead: see [Active-Active](./deployment-active-active.md#keys-an-edge-has-never-seen-full-credential-sync-enterprise)). An edge asks Studio about a token the first time it sees it and caches the answer in memory for 5 minutes (`EDGE_TOKEN_CACHE_TTL`). Requests that miss together share one call, which times out after 5 s. From 80% of the TTL, the first request to use an entry triggers one background revalidation and is served from the cache, so a busy token never expires under load. A token revoked in Studio stops working on a connected edge within about a second (Studio sends every edge a `credential.changed` notice and the edge drops its cached entry), and on every edge within that TTL at the latest. |
+| **Analytics pulse** | edge → Studio | Every 10 s in the Helm chart and packaged example (`interval_seconds` in the file at `PLUGINS_CONFIG_PATH`), or sooner when the buffer fills | Token usage, cost, proxy logs and budget events. Buffered in memory (`max_buffer_size`, 10,000 records; each request adds two to three). One pulse carries at most `max_buffer_size` records and 8 MB; a larger backlog (after pulses failed, or behind one slow pulse) goes as several pulses, one after the other, so a pulse always fits the control plane's gRPC message limit (`GRPC_MAX_MESSAGE_SIZE`, 16 MB). `max_batch_size` is unused: the setting is accepted but nothing reads it. A busy edge fills the buffer before the interval and sends early, logging `Analytics buffer is full` at WARN each time: size `max_buffer_size` to about three times your peak request rate times `interval_seconds` to keep the interval. A batch that is not acknowledged is sent again unchanged, for up to `edge_retention_hours` (24), and Studio stores each batch once, so a lost acknowledgement does not count spend twice (2.3 on both sides). |
 | **Budget sync** | Studio → edge | Every 30 s (`BUDGET_SYNC_INTERVAL`, set on Studio) | Estate-wide spend per App and the current block list, so every edge enforces budgets on the total, not just its own traffic. |
 
 > **Set `PLUGINS_CONFIG_PATH`.** The analytics pulse is loaded from that file. An edge without it serves traffic normally but never reports analytics, so dashboards and budgets stay empty. If the file omits `interval_seconds`, the pulse runs every 5 minutes. Both Studio and the Microgateway log each configured path at startup (`grep 'startup path'`).
@@ -120,22 +120,23 @@ Plan the control plane's availability around this table.
 
 | Situation | What happens | What to plan for |
 |---|---|---|
-| **Studio unreachable, edges running** | Edges keep serving from their loaded configuration and reconnect in the background (5 s backoff doubling to at most 5 minutes). Tokens validated in the last 5 minutes keep working. Budgets are enforced on local counters. Analytics buffer in memory and are sent after reconnection. | Short Studio outages (restarts, upgrades, a database failover) are invisible to cached callers. |
-| **A token the edge has not seen, while Studio is down** | Rejected: validation fails closed, with `503` and `Retry-After` (error code `credential_check_unavailable`), which vendor SDKs retry. The same applies to a cached token once its cache entry and any stale grace have run out. `401` is reserved for a token Studio has actually rejected. | If availability matters more than prompt revocation, set `EDGE_TOKEN_CACHE_STALE_GRACE` (for example `30m`) to keep serving expired cache entries while Studio is unreachable. An explicit rejection from Studio always wins. |
-| **An edge starts while Studio is down** | The edge exits: it will not serve without a configuration from Studio, and it does not reuse the snapshot left in its local database. On Kubernetes the pod crash-loops until Studio is back. | Run enough edges to carry peak load **without** autoscaling, so that a Studio outage during a scale-up or a node replacement does not remove capacity. Treat Studio's availability as a prerequisite for scale-out. |
-| **Studio down for a long time** | Buffered analytics older than 24 hours (`edge_retention_hours`) or beyond 10,000 records (`max_buffer_size`) are dropped from the pulse with a warning; the edge's local database keeps its copy. Budget blocks decided by the estate-wide total stop updating. | Keep Studio outages short. Each request buffers two to three records, so at 400 req/s the default 10,000 hold only about 9 seconds of traffic: raise `max_buffer_size` in the pulse file if Studio's analytics must survive an outage of more than a few seconds. |
+| **Studio unreachable, edges running** | Edges keep serving from their loaded configuration and reconnect in the background (`EDGE_RECONNECT_INTERVAL`, 5 s by default, doubling to at most 30 seconds). Tokens validated in the last 5 minutes keep working. Budgets are enforced on local counters. Analytics buffer in memory and are sent after reconnection. | Short Studio outages (restarts, upgrades, a database failover) are invisible to cached callers. |
+| **A token the edge has not seen, while Studio is down** | Rejected: validation fails closed, with `503` and `Retry-After` (error code `credential_check_unavailable`), which vendor SDKs retry. The same applies to a cached token once its cache entry and any stale grace have run out. `401` is reserved for a token Studio has actually rejected. | On Enterprise, set `EDGE_CREDENTIAL_SYNC=full`: the edge holds the hashed list of its namespace's keys and accepts a key it has never seen while Studio is down, for up to `EDGE_CREDENTIAL_SYNC_MAX_AGE` (24 h) after its last sync ([full credential sync](./edge-gateways.md#full-credential-sync-enterprise)); a key created after that sync still gets `503`. Otherwise, if availability matters more than prompt revocation, set `EDGE_TOKEN_CACHE_STALE_GRACE` (for example `30m`) to keep serving expired cache entries while Studio is unreachable. An explicit rejection from Studio always wins. |
+| **An edge starts while Studio is down** | By default the edge exits: it will not serve without a configuration from Studio. On Kubernetes the pod crash-loops until Studio is back. With `EDGE_START_FROM_LAST_KNOWN_GOOD=true` an edge whose database survived the restart waits `EDGE_STARTUP_CONTROL_TIMEOUT` (30 s) for a control plane, then starts from the configuration snapshot it last applied (stored encrypted in its database), reports `config_source: last_known_good` on `/ready`, and takes the live configuration when it reconnects. It refuses, and exits as before, if it has no stored snapshot, if the snapshot is for another namespace or does not decrypt with its `ENCRYPTION_KEY`, or if it has been without a control plane for longer than `EDGE_LAST_KNOWN_GOOD_MAX_AGE` (72 h). Without full credential sync (Enterprise) that is every token: its token cache is in memory and empty after a restart, so every request gets `503` (the row above) until Studio answers. With full credential sync it validates tokens from the hashed list in its database. | Decide whether edges may start from last-known-good: such an edge serves what it last knew, so something removed in Studio since then keeps working on it until it reconnects, and with full credential sync so does a key revoked meanwhile (the same trade as `EDGE_TOKEN_CACHE_STALE_GRACE`). It needs a database that outlives the pod: the StatefulSet form of the chart with persistence. Without the option, run enough edges to carry peak load **without** autoscaling, so that a Studio outage during a scale-up or a node replacement does not remove capacity. |
+| **Studio down for a long time** | Undelivered analytics wait in the edge's memory as a backlog of serialized pulses, up to `max_backlog_bytes` (256 MiB, about 900,000 requests; 64 MiB in the Helm chart, whose default memory limit is 1Gi), and are sent, oldest first, when Studio answers. Beyond that bound, or older than 24 hours (`edge_retention_hours`), they are dropped with a warning that says why pulses were failing, and counted in `microgateway_analytics_pulse_dropped_records_total{reason}` on the edge's `/metrics`. The backlog is lost if the edge restarts during the outage; the edge's local database keeps its own copy. Budget blocks decided by the estate-wide total stop updating until the backlog arrives. | Size `max_backlog_bytes` for the longest outage whose analytics must survive (about 280 bytes per request without stored bodies) and give edges that much memory, plus about 50 MB; watch `microgateway_analytics_pulse_backlog_bytes` and the dropped counter. Sizing, memory and what it means for budgets: [Analytics during a control-plane outage](./edge-gateways.md#analytics-during-a-control-plane-outage). |
 | **An edge is pushed past its capacity** | Latency rises as the CPU fills. If Go memory passes 85% of the memory limit (`OVERLOAD_MEMORY_THRESHOLD`), new requests get 503 with `Retry-After: 1`, which vendor SDKs retry, until it falls; requests in flight complete. `MAX_INFLIGHT_REQUESTS` adds an optional cap. | Size for peak with the planning figure below, and alert on `microgateway_overload_shedding`. |
 | **An upstream provider fails** | A refused or dropped upstream connection is answered with 502, a timed-out one with 504. | Use LLM fallbacks or routers if a provider's availability matters. |
 | **An edge crashes or is killed** | Other edges carry the traffic. That edge's in-memory analytics buffer (up to one pulse interval of records) is lost; graceful shutdown flushes it. | Use graceful termination (the chart's 40 s grace period is enough). |
-| **PostgreSQL fails over** | Studio's readiness probe (`/ready`) fails until the database is back; Studio does not need restarting. Edges are unaffected apart from the token-miss and analytics behaviour above. | Use a managed or replicated PostgreSQL with automatic failover. |
+| **A whole site is lost** (two-site deployment) | Edges of that site move to the other site's control plane (`CONTROL_ENDPOINTS`); the surviving replicas follow the database failover, if there is one, without a restart. | See [When something fails](./deployment-active-active.md#when-something-fails) on the Active-Active page, including why automatic failover between two sites needs a witness in a third location. |
+| **PostgreSQL fails over** | From 2.3, Studio's readiness probe (`/ready`) stays 200 for `DATABASE_READY_GRACE` (30 s) after the database stopped taking writes, so a failover shorter than that keeps every replica in the load balancer and requests get an answer from Studio rather than a refused connection; after it, `/ready` fails until the database is back. The body says `"database": "writable"`, `"read_only"` or `"unreachable"`. Studio does not need restarting, and its liveness probe (`/health`) never fails for the database. Edges are unaffected apart from the token-miss and analytics behaviour above. | Use a managed or replicated PostgreSQL with automatic failover, and keep `DATABASE_READY_GRACE` longer than its promotion time (see [Readiness during a failover](./configuration.md#postgres-with-a-standby-failover)). |
 
 **Budget accuracy.** With several edges, a budget is enforced on the estate-wide total with a delay of roughly one analytics pulse plus one budget sync (about 40 seconds with the defaults). An App can overrun its budget by the spend it makes across all edges in that window. See [Budget Control](./budgeting.md).
 
 ## The control plane
 
-### Run Studio as a hot / cold singleton
+### One instance, with a cold standby
 
-> **Replicated Studio instances are not supported in 2.2.** Never run two Studio instances against the same database at the same time, including behind a load balancer and as a "warm" standby. Support for several active replicas is planned for 2.3.
+> **In 2.2 this is the only supported shape.** Never run two 2.2 Studio instances against the same database at the same time, including behind a load balancer and as a "warm" standby. From 2.3, several replicas can run at once ([below](#several-replicas-from-2-3)); a single instance remains a valid choice when one site is enough.
 
 Run AI Studio as a **hot / cold singleton**: exactly one **hot** instance serves the UI, the API and the edges, and an optional **cold** standby is installed and configured but stopped. Availability comes from the database and from fast restarts or failover, not from replicas:
 
@@ -153,20 +154,22 @@ Set up the pair like this:
 
 > This section describes 2.3. In 2.2, run the hot / cold singleton above.
 
-From 2.3, several AI Studio replicas can serve one PostgreSQL database behind a load balancer. The replicas coordinate through the database; there is nothing to configure beyond running them against the same database:
+From 2.3, several AI Studio replicas can serve one PostgreSQL database behind a load balancer, in one site or spread over two (see [Active-Active (Two Sites)](./deployment-active-active.md) for the second case: the database, the witness, what must match in both sites and the runbooks). The replicas coordinate through the database; there is nothing to configure beyond running them against the same database:
 
 - **Edges** connect to any replica. A configuration push is delivered by whichever replica holds each edge's connection, and its outcome can be read from any replica. An edge that reconnects to another replica during a push still gets it.
 - **Changes** made on one replica reach the others within about a second: their embedded gateways reload changed LLMs, datasources and filters, budget caches are cleared, and Studio plugins that were changed, deactivated or deleted are restarted or stopped. Events for edges (budget sync, plugin events) reach the edges of every replica.
 - **Work that must happen once** runs on one replica, the leader: budget aggregation and alerts, the budget sync to edges, marketplace sync and usage reports. If the leader stops, another replica takes over within about 30 seconds (at once on a clean shutdown). A replica restarted after a crash on the same host takes over from its dead predecessor at once (its process is gone), or 5 to 10 seconds after the crash when it is a new container in the same pod, and catches up on the leader's start-up work (marketplace sync, budget sync to edges) when it gets the lease. With SQLite, the one Studio process always leads. Scheduled plugin tasks have their own lease and move the same way.
-- **Upgrades** can roll one replica at a time: database migrations run under a lock, and a replica that stops hands its edges and pushes over to the others. Use a rolling update strategy (the Helm chart's `midsommar.strategy` defaults to `Recreate`, for the single instance it deploys).
+- **Upgrades** can roll one replica at a time: database migrations run under a lock, and a replica that stops hands its edges and pushes over to the others. Use a rolling update strategy: the Helm chart uses one when `replicaCount` is above 1, and `Recreate` for a single instance (see [Several Studio replicas](./deployment-helm-k8s.md#several-studio-replicas)).
 
-`GET /api/v1/cluster/status` (administrators) lists the live replicas, the edges each holds and which one is the leader, and warns about anything that needs attention.
+`GET /api/v1/cluster/status` (administrators) lists the live replicas, the edges each holds and which one is the leader, and warns about anything that needs attention, including replicas whose [shared secrets](#secrets-that-must-match) differ.
 
 What the deployment must provide:
 
 - **PostgreSQL.** Several replicas need PostgreSQL; SQLite is single-process.
 - **Session affinity for the UI.** Chat and agent conversations, and MCP connections over SSE, are held by the replica that started them. Route each browser session to one replica (sticky sessions on the load balancer).
-- **A shared `data/` volume**, if you use branding uploads or log exports: they are files on the replica that received them.
+- **Health checks on `/ready`.** The load balancer checks `GET /ready`, which stays 200 through a database failover shorter than `DATABASE_READY_GRACE` (30 s) and fails on a replica that cannot reach the database for longer; use `GET /ready?require=write` instead to send traffic only to replicas whose database takes writes. Use `GET /health` for liveness: it never looks at the database. See [Readiness during a failover](./configuration.md#postgres-with-a-standby-failover).
+- **Nothing shared for branding.** The logo and favicon are in the database: an upload through one replica is served by the others within a second or two.
+- **Log exports stay on the replica that made them.** Download an export through the replica that created it (session affinity does this), or give the replicas of one site a shared volume at `EXPORT_STORAGE_PATH`.
 - **Plugins from the marketplace or an OCI registry.** A plugin installed from a local file (`file://`) must exist at the same path on every replica.
 - **The same configuration and secrets** on every replica (the table below).
 
@@ -181,7 +184,9 @@ Two settings change on their own schedule rather than at once: team budget setti
 
 ### Persistent files
 
-Studio also writes a small amount to its working directory's `data/` folder: uploaded branding assets (`BRANDING_STORAGE_PATH`), log exports and the OCI plugin cache (`AI_STUDIO_OCI_CACHE_DIR`). Mount a persistent volume there so branding survives a restart. The OCI cache is also what enables the plugin marketplace: without `AI_STUDIO_OCI_CACHE_DIR`, the marketplace does not start.
+Studio also writes a small amount to its working directory's `data/` folder: log exports (`EXPORT_STORAGE_PATH`) and the OCI plugin cache (`AI_STUDIO_OCI_CACHE_DIR`). Log exports are per replica: an export is a file on the replica that made it, and is downloaded from that replica.
+
+From 2.3 the uploaded logo and favicon are stored in the database, not in `data/branding`, so they survive restarts and every replica serves them. When you upgrade an installation that has a custom logo or favicon, start the first 2.3 replica with the old `data/branding` volume (`BRANDING_STORAGE_PATH`) still mounted: it imports the files once. After that the directory is not used. The OCI cache is also what enables the plugin marketplace: without `AI_STUDIO_OCI_CACHE_DIR`, the marketplace does not start.
 
 ### Secrets that must match
 
@@ -189,8 +194,11 @@ Studio also writes a small amount to its working directory's `data/` folder: upl
 |---|---|---|
 | `GRPC_AUTH_TOKEN` (and `GRPC_AUTH_TOKEN_NEXT` during rotation) | `EDGE_AUTH_TOKEN` | Authenticates edges to the control server. Studio rejects all edges if neither is set. |
 | `MICROGATEWAY_ENCRYPTION_KEY` (exactly 32 characters) | `ENCRYPTION_KEY` | Encrypts provider API keys and other secrets inside configuration snapshots. |
-| `TYK_AI_LICENSE` | `TYK_AI_LICENSE` | Enterprise license. |
+| `TYK_AI_LICENSE` | `TYK_AI_LICENSE` | Enterprise license. The same license on every Studio replica and every edge. |
 | `TYK_AI_SECRET_KEY` | — | Encrypts secrets at rest in Studio's database. If it is unset, secrets are stored unencrypted. Back it up: losing it makes stored secrets unreadable. |
+| `CSRF_KEY` | — | Signs the CSRF tokens of the admin UI and portal. Required with more than one Studio replica: without it each replica generates its own key at start, and a form loaded from one replica is refused by another. |
+
+With several Studio replicas, every setting in the Studio column must have the same value on each replica, in every site. Each replica records a short keyed fingerprint (never the value) of `CSRF_KEY`, `TYK_AI_SECRET_KEY`, `MICROGATEWAY_ENCRYPTION_KEY` and `GRPC_AUTH_TOKEN` with its registration, and `GET /api/v1/cluster/status` warns, naming the setting and the replicas, when live replicas disagree or when more than one replica runs without `CSRF_KEY`. A replica that notices a disagreement when it starts logs the same warning. Replicas are never refused for it: during a rolling rotation they disagree for a while, and the warning goes when the last one has the new value.
 
 Rotate the edge token without downtime: set the new value as `GRPC_AUTH_TOKEN_NEXT` on Studio, roll the edges onto it, then promote it to `GRPC_AUTH_TOKEN`.
 
@@ -242,7 +250,7 @@ Adjust for your traffic:
 - **4 vCPU and a 4 GiB memory limit per edge** matches the benchmarked node with headroom. Memory stayed under 650 MB through the one-hour soak and reached 1.45 GB at streaming saturation, so a 4 GiB limit keeps overload protection out of the way until the CPU is full. Larger nodes should help both kinds of traffic, since both are CPU-bound, but only 4 vCPU was measured; more nodes is the proven lever.
 - **Leave headroom above the working set for overload protection.** In a container with a memory limit, the edge sets a soft `GOMEMLIMIT` at 90% of it and starts refusing new requests at 85% (see [Failure behaviour](#failure-behaviour)). With a limit close to the working set, shedding would start before the CPU is used.
 - **Garbage collection.** With `GOGC` unset the edge adapts it to its live heap, from 400 down to Go's default of 100 as open streams grow (`microgateway_gogc`). For streaming-heavy edges with memory to spare, `GOGC=400` measured about 9% more streaming capacity for about 2.4 times the memory (3.4 GB at saturation).
-- **The Helm chart's default resources (500m CPU, 512 MiB limit) are for evaluation.** Set requests and limits for production. A 512 MiB limit is below the benchmarked working set.
+- **The Helm chart's default resources (500m CPU; 256 MiB memory request, 1 GiB limit) are for evaluation.** Set requests and limits for production. The 1 GiB limit covers the working set measured at 3,000 requests per second (about 480 MB) with the chart's 64 MiB analytics backlog and about 50 MB more, under the 85% shedding line; it does not cover streaming saturation (1.45 GB above), nor the microgateway's own 256 MiB backlog with room to spare.
 - **Local disk for the SQLite file**, one per node, never shared between nodes. The edge rewrites its tables on every sync and its queued data carries no node identity, so two edges cannot share one database. A node-local volume (Kubernetes `emptyDir` or a PVC) is right: configuration is rebuilt from Studio on every start.
 - **Disk space.** The edge keeps one analytics row per request (about 360 bytes) for `ANALYTICS_RETENTION_DAYS`: 7 days by default when the analytics pulse ships every row to Studio, 90 days otherwise. At a steady 1,000 req/s that is about 31 GB a day, so about 220 GB for the default week. The rows back the edge's own analytics API; Studio's dashboards and budgets use the copies shipped to Studio. Set `ANALYTICS_RETENTION_DAYS=1` on busy edges unless you query the edge directly, and size the volume for your retention. The write-ahead log is capped at 64 MB. Watch `microgateway_sqlite_db_bytes`.
 
@@ -312,6 +320,19 @@ One Studio manages edge pools in several regions. Each region's pool uses its ow
 
 Prompts and completions pass through the regional edge to the regional provider and **do not cross to the control region** in the default configuration. What does cross is the analytics record for every request: App, model, token counts, cost, latency and status. If you turn on body storage (`ANALYTICS_STORE_REQUESTS` / `ANALYTICS_STORE_RESPONSES`), up to 4 KB of each request and response is shipped to Studio too, so keep it off for regions under residency rules, or place Studio in the most restrictive jurisdiction. Guardrails and filters run on the edge, inside the region.
 
+### Two sites (active-active)
+
+Two control planes, one per site, over one PostgreSQL replicated synchronously between the sites; edges list both control planes, their own site first, and keep serving when either site is lost. The whole design (database requirements, why automatic failover needs a witness in a third location, what must match, failure behaviour and runbooks) is on its own page: [Active-Active (Two Sites)](./deployment-active-active.md).
+
+```
+   Site A                              Site B
+   Studio replicas ─┐            ┌─ Studio replicas
+   Edges ───────────┤            ├─ Edges
+                    ▼            ▼
+   PostgreSQL primary ◄──sync──► PostgreSQL hot standby
+                    (witness in a third location for automatic failover)
+```
+
 ### Hybrid and on-premises edges
 
 Because edges only dial out, an edge can run in a customer data centre, a partner network or a different cloud from Studio, with no inbound firewall rules on that side. The site needs outbound access to Studio's gRPC endpoint and to its model providers (or its self-hosted models). This is the usual shape for keeping inference traffic next to on-premises GPUs while administering centrally.
@@ -350,9 +371,11 @@ Watch at least:
 
 **Control plane**
 
-- [ ] Studio: hot / cold singleton (never two running instances in 2.2), `GATEWAY_MODE=control`, `Recreate` upgrades, persistent `data/` volume
-- [ ] Cold standby, if used: same version, configuration, secrets and `data/` contents; stopped; a documented failover that stops the hot instance first and switches the UI and gRPC endpoints
-- [ ] PostgreSQL 14+, managed or replicated, with automatic failover and backups
+- [ ] Studio: one instance with an optional cold standby, or (from 2.3) several replicas; `GATEWAY_MODE=control`
+- [ ] One instance: `Recreate` upgrades and a persistent `data/` volume; a cold standby, if used, with the same version, configuration, secrets and `data/` contents, stopped, and a documented failover that stops the hot instance first and switches the UI and gRPC endpoints
+- [ ] Several replicas: PostgreSQL, the same secrets and `CSRF_KEY` on every replica, sticky sessions for the UI, `/ready` health checks, rolling upgrades (see [Several replicas](#several-replicas-from-2-3))
+- [ ] Two sites: synchronous replication between them, a witness in a third location (or a documented manual promotion), `CLUSTER_NODE_LABEL` per site, `CONTROL_ENDPOINTS` on edges with the own site first (see [Active-Active](./deployment-active-active.md))
+- [ ] PostgreSQL 14+, managed or replicated, with automatic failover and backups; `DATABASE_URL` naming every node with `target_session_attrs=read-write`, and `DATABASE_READY_GRACE` longer than the failover's promotion time
 - [ ] `TYK_AI_SECRET_KEY`, `MICROGATEWAY_ENCRYPTION_KEY` (32 characters), `GRPC_AUTH_TOKEN` and `TYK_AI_LICENSE` stored in a secret manager and backed up
 - [ ] gRPC `:50051` with TLS, reachable from edge networks only
 - [ ] UI/API ingress with TLS
@@ -368,6 +391,7 @@ Watch at least:
 - [ ] Load balancer: `/ready` health checks, idle timeout above your longest stream, no SSE buffering, `/metrics` protected
 - [ ] `minReplicas` covers normal peak; autoscaling for bursts only
 - [ ] Decide on `EDGE_TOKEN_CACHE_STALE_GRACE` (availability during a Studio outage versus prompt revocation)
+- [ ] Decide on `EDGE_START_FROM_LAST_KNOWN_GOOD` (edges that restart during a Studio outage start from their stored configuration, versus prompt removal and revocation); it needs edge databases on persistent volumes
 - [ ] Body storage left off unless you need it, especially in residency-sensitive regions
 
 ## See also

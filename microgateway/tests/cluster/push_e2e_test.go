@@ -44,6 +44,10 @@ const (
 // SQLite in a temp file, or a fresh schema on DATABASE_URL.
 type studioDB struct {
 	open func(t *testing.T) *gorm.DB
+	// name is "sqlite" or "postgres"; postgres is set for the latter,
+	// where replicas have a cluster event log.
+	name     string
+	postgres bool
 }
 
 func forEachStudioDB(t *testing.T, body func(t *testing.T, sdb studioDB)) {
@@ -51,7 +55,7 @@ func forEachStudioDB(t *testing.T, body func(t *testing.T, sdb studioDB)) {
 		path := filepath.Join(t.TempDir(), "studio.db")
 		var once sync.Once
 		var shared *gorm.DB
-		body(t, studioDB{open: func(t *testing.T) *gorm.DB {
+		body(t, studioDB{name: "sqlite", open: func(t *testing.T) *gorm.DB {
 			// One process, one SQLite file: the replicas share a handle.
 			// _txlock=immediate, as the microgateway's own SQLite DSN has: a
 			// transaction that reads before it writes (the LLM and tool slug
@@ -89,7 +93,7 @@ func forEachStudioDB(t *testing.T, body func(t *testing.T, sdb studioDB)) {
 		q.Set("search_path", schema)
 		u.RawQuery = q.Encode()
 		var once sync.Once
-		body(t, studioDB{open: func(t *testing.T) *gorm.DB {
+		body(t, studioDB{name: "postgres", postgres: true, open: func(t *testing.T) *gorm.DB {
 			db, err := gorm.Open(postgres.Open(u.String()), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 			require.NoError(t, err)
 			t.Cleanup(func() {
@@ -115,13 +119,19 @@ type replica struct {
 	stopOnce sync.Once
 }
 
-func startReplica(t *testing.T, sdb studioDB, id string) *replica {
+// startReplica starts a Studio replica's control server; configure, when
+// given, changes its settings first.
+func startReplica(t *testing.T, sdb studioDB, id string, configure ...func(*studiogrpc.Config)) *replica {
 	t.Helper()
 	t.Setenv("MICROGATEWAY_ENCRYPTION_KEY", encryptionKey)
 	db := sdb.open(t)
 	node, err := cluster.StartNode(db, id, "e2e")
 	require.NoError(t, err)
-	server, err := studiogrpc.NewControlServer(&studiogrpc.Config{AuthToken: authToken, MaxConcurrentStreams: 100, NodeID: id}, db)
+	cfg := &studiogrpc.Config{AuthToken: authToken, MaxConcurrentStreams: 100, NodeID: id}
+	for _, fn := range configure {
+		fn(cfg)
+	}
+	server, err := studiogrpc.NewControlServer(cfg, db)
 	require.NoError(t, err)
 	c := pushes.New(db, id, server, pushes.Options{PollInterval: 50 * time.Millisecond, JanitorInterval: 100 * time.Millisecond, Deadline: time.Minute})
 	server.SetPushDelivery(c)
@@ -231,11 +241,25 @@ func (f *forwarder) route(target string) {
 	f.mu.Unlock()
 }
 
-// setDown refuses new connections until route is called.
+// setDown refuses new connections until route or setUp is called.
 func (f *forwarder) setDown() {
 	f.mu.Lock()
 	f.down = true
 	f.mu.Unlock()
+}
+
+// setUp accepts new connections again, to the same target.
+func (f *forwarder) setUp() {
+	f.mu.Lock()
+	f.down = false
+	f.mu.Unlock()
+}
+
+// fail is the loss of what the forwarder leads to (a site's control plane):
+// its connections drop and new ones are refused, until setUp.
+func (f *forwarder) fail() {
+	f.setDown()
+	f.cut()
 }
 
 // edge is a real microgateway edge: the edge client, the reload handler and
@@ -245,6 +269,8 @@ type edge struct {
 	db     *gorm.DB
 	client *edgegrpc.SimpleEdgeClient
 	fwd    *forwarder
+	// fwdMore are the forwarders of the edge's further control planes.
+	fwdMore []*forwarder
 }
 
 func startEdge(t *testing.T, id, namespace string, fwd *forwarder) *edge {
@@ -258,6 +284,12 @@ type edgeOptions struct {
 	// connected, as cmd/microgateway does (it sets it once its services
 	// are up); zero sets it before the client starts.
 	handlerAfter time.Duration
+	// more are further control planes, after fwd, in CONTROL_ENDPOINTS
+	// order: an edge given two sites. Each has a forwarder of its own, so
+	// either site can be cut.
+	more []*forwarder
+	// failback is EDGE_CONTROL_FAILBACK_INTERVAL.
+	failback time.Duration
 }
 
 func startEdgeWith(t *testing.T, id, namespace string, fwd *forwarder, opts edgeOptions) *edge {
@@ -278,6 +310,14 @@ func startEdgeWith(t *testing.T, id, namespace string, fwd *forwarder, opts edge
 		ClientTLSEnabled:  false,
 		AllowInsecure:     true,
 	}}
+	if len(opts.more) > 0 {
+		cfg.HubSpoke.ControlEndpoint = ""
+		cfg.HubSpoke.ControlEndpoints = []string{fwd.addr()}
+		for _, f := range opts.more {
+			cfg.HubSpoke.ControlEndpoints = append(cfg.HubSpoke.ControlEndpoints, f.addr())
+		}
+		cfg.HubSpoke.ControlFailbackInterval = opts.failback
+	}
 	client := edgegrpc.NewSimpleEdgeClient(cfg, "e2e", "hash", "now")
 	syncService := services.NewEdgeSyncService(db, namespace)
 	client.SetOnConfigChange(func(snap *pb.ConfigurationSnapshot) {
@@ -296,7 +336,7 @@ func startEdgeWith(t *testing.T, id, namespace string, fwd *forwarder, opts edge
 	if opts.handlerAfter > 0 {
 		time.AfterFunc(opts.handlerAfter, func() { client.SetReloadHandler(handler) })
 	}
-	return &edge{id: id, db: db, client: client, fwd: fwd}
+	return &edge{id: id, db: db, client: client, fwd: fwd, fwdMore: opts.more}
 }
 
 // hasLLM reports whether the edge's own database holds the LLM.

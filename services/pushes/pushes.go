@@ -32,6 +32,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/cluster"
+	"github.com/TykTechnologies/midsommar/v2/pkg/dbhold"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pglisten"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
@@ -179,10 +180,15 @@ type Coordinator struct {
 	startErr  error
 
 	lastPrune time.Time // janitor goroutine only
+
+	// clock watches the database's clock for the step a failover to
+	// another server brings (clock.go).
+	clock dbClock
 }
 
 // New returns the coordinator for node. It does nothing until Start.
 func New(db *gorm.DB, node string, streams Streams, opts Options) *Coordinator {
+	db = dbhold.Unheld(db) // deliveries and the janitor: fail fast, retry later
 	if opts.Entitlements == nil {
 		opts.Entitlements = entitlements.NewService(entitlements.Deps{DB: db})
 	}
@@ -236,6 +242,7 @@ func (c *Coordinator) start(ctx context.Context) (err error) {
 				func(string) { c.poke() }, c.poke)
 		}
 	}
+	c.startClock()
 	go c.run()
 	return nil
 }
@@ -310,7 +317,13 @@ const idleJanitorRounds = 5
 func (c *Coordinator) now() time.Time {
 	if c.db.Dialector.Name() == "postgres" {
 		var t time.Time
-		if err := c.db.Raw("SELECT now()").Scan(&t).Error; err == nil {
+		before := time.Now()
+		// clock_timestamp(), not now(): outside a transaction they are the
+		// same, and this is also right inside one.
+		if err := c.db.Raw("SELECT clock_timestamp()").Scan(&t).Error; err == nil {
+			if step := c.clock.observe(before, time.Now(), t); step != 0 {
+				logger.Warnf("Edge pushes: the database's clock stepped by %s against this replica's (a failover to another server, or a correction)", step.Round(time.Millisecond))
+			}
 			return t.UTC()
 		}
 	}

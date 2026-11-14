@@ -1,6 +1,10 @@
 package models
 
-import "time"
+import (
+	"time"
+
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
+)
 
 // ClusterNode is one running Studio replica. Each replica refreshes its row
 // every few seconds (pkg/cluster); a row whose LastSeen is older than the
@@ -29,6 +33,17 @@ type ClusterNode struct {
 	// existed, which means eligible. A pointer without a gorm default: a
 	// bool with default:true would turn an explicit false into true.
 	LeaderEligible *bool `json:"leader_eligible" gorm:"column:leader_eligible"`
+	// Fingerprints of the secrets every replica must share
+	// (pkg/cluster.Fingerprint: keyed and truncated, never the value), so
+	// the cluster status can say when replicas disagree. Nil when the
+	// replica does not use the setting, and on rows written before the
+	// columns existed. CSRFKeySet is false when the replica generated its
+	// CSRF key because CSRF_KEY is unset; its fingerprint is then nil.
+	CSRFKeyFP         *string `json:"-" gorm:"column:csrf_key_fp;size:32"`
+	CSRFKeySet        *bool   `json:"-" gorm:"column:csrf_key_set"`
+	SecretKeyFP       *string `json:"-" gorm:"column:secret_key_fp;size:32"`
+	MicrogatewayKeyFP *string `json:"-" gorm:"column:microgateway_key_fp;size:32"`
+	GRPCAuthTokenFP   *string `json:"-" gorm:"column:grpc_auth_token_fp;size:32"`
 }
 
 // CanLead reports whether the replica may take the leader lease.
@@ -54,4 +69,33 @@ type ClusterLease struct {
 	AcquiredAt time.Time `json:"acquired_at"`
 	RenewedAt  time.Time `json:"renewed_at"`
 	ExpiresAt  time.Time `json:"expires_at" gorm:"not null"`
+}
+
+// ClusterCounter is a named counter that only ever increases, drawn from the
+// database so every replica continues where the last one stopped, whatever
+// its own clock says (the budget sync sequence edges order syncs by).
+type ClusterCounter struct {
+	Name  string `json:"name" gorm:"primaryKey;size:64"`
+	Value int64  `json:"value" gorm:"not null"`
+}
+
+// NextClusterCounter returns the next value of the named counter: one more
+// than the stored value, or floor when that is higher (and floor when the
+// counter has never been drawn). The value is always above every value
+// returned before, and never below floor. It is one statement, so replicas
+// drawing at the same moment never get the same value, on Postgres and
+// SQLite alike.
+func NextClusterCounter(db *gorm.DB, name string, floor int64) (int64, error) {
+	greatest := "MAX" // SQLite's two-argument MAX is the scalar maximum
+	if db.Dialector.Name() == "postgres" {
+		greatest = "GREATEST"
+	}
+	var value int64
+	err := db.Raw(`INSERT INTO cluster_counters (name, value) VALUES (?, ?)
+		ON CONFLICT (name) DO UPDATE SET value = `+greatest+`(cluster_counters.value + 1, excluded.value)
+		RETURNING value`, name, floor).Scan(&value).Error
+	if err != nil {
+		return 0, err
+	}
+	return value, nil
 }

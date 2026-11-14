@@ -362,6 +362,7 @@ TABLE apps
   column `guardrail_capability_reset_at` datetime
   constraint CONSTRAINT `fk_apps_credential` FOREIGN KEY (`credential_id`) REFERENCES `credentials`(`id`)
   index CREATE INDEX `idx_app_namespace` ON `apps`(`namespace`)
+  index CREATE INDEX `idx_apps_credential_id` ON `apps`(`credential_id`)
   index CREATE INDEX `idx_apps_deleted_at` ON `apps`(`deleted_at`)
   index CREATE INDEX `idx_apps_team_id` ON `apps`(`team_id`)
 TABLE attestation_templates
@@ -427,6 +428,16 @@ TABLE auth_codes
   column `app_id` integer
   index CREATE INDEX `idx_auth_codes_deleted_at` ON `auth_codes`(`deleted_at`)
   index CREATE UNIQUE INDEX `idx_auth_codes_code` ON `auth_codes`(`code`)
+TABLE branding_assets
+  column `kind` text
+  column `content_type` text NOT NULL
+  column `data` blob NOT NULL
+  column `hash` text NOT NULL
+  column `size` integer NOT NULL
+  column `created_at` datetime
+  column `updated_at` datetime
+  constraint PRIMARY KEY (`kind`)
+  autoindex origin=pk unique=1 (kind)
 TABLE branding_settings
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime
@@ -540,6 +551,11 @@ TABLE chats
   constraint CONSTRAINT `fk_chats_llm_settings` FOREIGN KEY (`llm_settings_id`) REFERENCES `llm_settings`(`id`)
   constraint CONSTRAINT `fk_chats_llm` FOREIGN KEY (`llm_id`) REFERENCES `llms`(`id`)
   index CREATE INDEX `idx_chats_deleted_at` ON `chats`(`deleted_at`)
+TABLE cluster_counters
+  column `name` text
+  column `value` integer NOT NULL
+  constraint PRIMARY KEY (`name`)
+  autoindex origin=pk unique=1 (name)
 TABLE cluster_events
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `topic` text NOT NULL
@@ -566,6 +582,11 @@ TABLE cluster_nodes
   column `pid_namespace` text
   column `label` text
   column `leader_eligible` numeric
+  column `csrf_key_fp` text
+  column `csrf_key_set` numeric
+  column `secret_key_fp` text
+  column `microgateway_key_fp` text
+  column `grpc_auth_token_fp` text
   constraint PRIMARY KEY (`node_id`)
   autoindex origin=pk unique=1 (node_id)
   index CREATE INDEX `idx_cluster_nodes_last_seen` ON `cluster_nodes`(`last_seen`)
@@ -603,9 +624,11 @@ TABLE credentials
   column `deleted_at` datetime
   column `key_id` text
   column `secret` text
+  column `secret_hash` text
   column `active` numeric DEFAULT false
   index CREATE INDEX `idx_credentials_deleted_at` ON `credentials`(`deleted_at`)
   index CREATE UNIQUE INDEX `idx_credentials_key_id` ON `credentials`(`key_id`)
+  index CREATE UNIQUE INDEX `idx_credentials_secret_hash` ON `credentials`(`secret_hash`)
 TABLE data_catalogue_data_sources
   column `data_catalogue_id` integer
   column `datasource_id` integer
@@ -630,6 +653,11 @@ TABLE data_catalogues
   column `long_description` text
   column `icon` text
   index CREATE INDEX `idx_data_catalogues_deleted_at` ON `data_catalogues`(`deleted_at`)
+TABLE data_key_salts
+  column `id` integer
+  column `salt` blob NOT NULL
+  column `created_at` datetime
+  constraint PRIMARY KEY (`id`)
 TABLE datasource_filestores
   column `datasource_id` integer
   column `file_store_id` integer
@@ -675,6 +703,13 @@ TABLE datasources
   index CREATE INDEX `idx_datasources_embedder_id` ON `datasources`(`embedder_id`)
   index CREATE INDEX `idx_datasources_name` ON `datasources`(`name`)
   index CREATE INDEX `idx_ds_user_community` ON `datasources`(`user_id`,`community_submitted`)
+TABLE edge_analytics_batches
+  column `key` text
+  column `edge_id` text
+  column `applied_at` datetime NOT NULL
+  constraint PRIMARY KEY (`key`)
+  autoindex origin=pk unique=1 (key)
+  index CREATE INDEX `idx_edge_analytics_batches_applied_at` ON `edge_analytics_batches`(`applied_at`)
 TABLE edge_instances
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime

@@ -7,10 +7,14 @@ image:
 
 replicaCount: 1
 
-# Workload kind. "Deployment" (default) is fine: the edge's SQLite is a cache
-# rebuilt from the hub on every start. Use "StatefulSet" when you want stable
-# per-replica edge identities and a PVC (see persistence below), so analytics
-# buffered between pulses survive a restart.
+# Workload kind. "Deployment" (default) is fine while the edge's SQLite is only
+# a cache rebuilt from the hub on every start. Use "StatefulSet" when you want
+# stable per-replica edge identities (the pod name, which is the edge ID, keeps
+# its ordinal) and a PVC (see persistence below), so analytics buffered between
+# pulses survive a restart. With config.startFromLastKnownGood or
+# config.credentialSync: full the database is more than a cache: use
+# StatefulSet with persistence, or a rescheduled pod starts empty and needs a
+# control plane (the chart prints a warning on install otherwise).
 kind: Deployment
 
 # Must be >= SHUTDOWN_TIMEOUT (30s) or the graceful drain is cut short.
@@ -65,7 +69,9 @@ topologySpreadConstraints: []
   #     matchLabels:
   #       app: microgateway
 
-# Only takes effect with kind: StatefulSet.
+# Only takes effect with kind: StatefulSet. Needed for
+# config.startFromLastKnownGood and config.credentialSync: full to cover a
+# rescheduled pod; a Deployment's emptyDir only covers a container restart.
 persistence:
   enabled: false
   storageClass: ""
@@ -131,7 +137,41 @@ ingress:
 # Edge configuration
 config:
   # Control endpoint — AI Studio service name and gRPC port
-  controlEndpoint: ""   # Auto-set in parent values, e.g. "midsommar:50051"
+  controlEndpoint: ""   # Empty: the parent chart's AI Studio Service, "<release>-midsommar:50051"; set it when this chart is installed on its own
+  # Several control planes (CONTROL_ENDPOINTS), tried in order: list this
+  # edge's own site first. When its connection fails the edge moves to the
+  # next. Used instead of controlEndpoint when not empty.
+  controlEndpoints: []
+  #  - studio.site-a.example.com:50051
+  #  - studio.site-b.example.com:50051
+  # How often an edge that is not on its first control endpoint tries to
+  # return to it (EDGE_CONTROL_FAILBACK_INTERVAL), e.g. "5m". Empty: it stays
+  # where it is until that connection ends.
+  controlFailbackInterval: ""
+  # Start from the configuration the edge last applied (stored encrypted in
+  # its database) when no control plane answers at start-up
+  # (EDGE_START_FROM_LAST_KNOWN_GOOD). Off by default: such an edge serves
+  # what it last knew, so something removed or revoked in AI Studio since
+  # keeps working on it until it reconnects. Needs a database that survives
+  # the restart: see kind and persistence above.
+  startFromLastKnownGood: false
+  # How long the edge keeps trying its control endpoints at start-up before it
+  # uses the stored configuration (EDGE_STARTUP_CONTROL_TIMEOUT). Empty: 30s.
+  # Keep probes.startup (periodSeconds x failureThreshold) above it.
+  startupControlTimeout: ""
+  # The longest the edge may have been without a control plane and still
+  # start that way (EDGE_LAST_KNOWN_GOOD_MAX_AGE). Empty: 72h. "0": no limit.
+  lastKnownGoodMaxAge: ""
+  # How the edge learns App keys (EDGE_CREDENTIAL_SYNC). Empty or
+  # "on_demand" (the default): it asks the control plane about a key it has
+  # not seen, and caches the answer. "full" (Enterprise): it keeps the hashed
+  # list of every App key of its namespace in its database and validates
+  # from it, so keys work with no control plane to ask. Needs a database
+  # that survives the restart: see kind and persistence above.
+  credentialSync: ""
+  # How long a synced credential list is trusted without a successful sync
+  # (EDGE_CREDENTIAL_SYNC_MAX_AGE). Empty: 24h. "0": no limit.
+  credentialSyncMaxAge: ""
   # edgeId is no longer set here: each pod derives EDGE_ID from its own name via
   # the downward API, because a single shared value made every replica register
   # with the hub under one identity.
@@ -151,7 +191,11 @@ config:
   analyticsFlushInterval: "10s"
   analyticsRetentionDays: "90"
 
-  # Database (SQLite for edge)
+  # Database (SQLite for edge). The data volume is mounted at
+  # /opt/tyk-microgateway/data; the relative path below resolves against the
+  # image's working directory, which is /opt/tyk-microgateway in the release
+  # images. With an image that has another working directory, give the
+  # absolute path: "file:/opt/tyk-microgateway/data/edge.db?mode=rwc".
   databaseType: "sqlite"
   databaseDsn: "file:./data/edge.db?mode=rwc"
   dbAutoMigrate: "true"
@@ -189,8 +233,19 @@ secrets:
 # Analytics pulse plugin configuration
 analyticsPulse:
   intervalSeconds: 10
-  maxBatchSize: 1000
+  maxBatchSize: 1000   # Unused: accepted, but nothing reads it (maxBufferSize bounds a pulse)
   maxBufferSize: 10000
+  # Analytics kept, in memory, for AI Studio while pulses fail (a control
+  # plane outage), sent oldest first when one answers: about 280 bytes per
+  # request, so 64 MiB keeps about 230,000 requests (75 s at 3,000/s).
+  # Memory during an outage and the drain after it is the backlog plus
+  # about 15 MB (at most two batches of maxBufferSize records in memory),
+  # on top of the edge's working set and the Go runtime's garbage
+  # headroom: size resources.limits.memory for the working set plus this
+  # value plus about 50 MB, and raise them together (the microgateway's own
+  # default, when the pulse file does not set it, is 256 MiB). 0 turns it
+  # off: only the newest maxBufferSize records are kept through an outage.
+  maxBacklogBytes: 67108864
   compressionEnabled: true
   includeProxySummaries: true
   # Forwards stored bodies only: set ANALYTICS_STORE_REQUESTS/RESPONSES=true via extraEnv to store them
@@ -203,10 +258,18 @@ analyticsPulse:
   maxRetries: 3
   retryIntervalSecs: 5
 
+# The memory limit leaves room for an edge's working set (about 480 MB at
+# 3,000 requests/s in the 2.3 load tests), the analytics backlog
+# (analyticsPulse.maxBacklogBytes) and about 50 MB more, under the soft
+# GOMEMLIMIT the edge sets at 90% of the limit and its overload shedding
+# at 85%. Raise it with the backlog or the load. The request is a default
+# to override: set it to what your edges use under load. An edge well
+# above its request is an early candidate for node-pressure eviction,
+# which loses the analytics it holds in memory.
 resources:
   requests:
     cpu: 100m
-    memory: 128Mi
+    memory: 256Mi
   limits:
     cpu: 500m
-    memory: 512Mi
+    memory: 1Gi

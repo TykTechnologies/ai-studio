@@ -3,7 +3,9 @@ package handlers
 
 import (
 	"net/http"
+	"time"
 
+	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
 	"github.com/TykTechnologies/midsommar/v2/pkg/fipsinfo"
 	"github.com/gin-gonic/gin"
@@ -49,6 +51,31 @@ func ReadinessCheck(services *services.ServiceContainer) gin.HandlerFunc {
 		// Add plugin health summary to readiness response
 		if services.PluginManager != nil {
 			response["plugin_health"] = services.PluginManager.GetPluginHealthSummary()
+		}
+
+		// An edge says which control endpoint it is on. It is ready either
+		// way: an edge keeps serving through a control-plane outage.
+		if services.ControlLink != nil {
+			endpoint, connected := services.ControlLink()
+			response["control_endpoint"] = endpoint
+			response["control_connected"] = connected
+		}
+		// ... and where its configuration came from: a control plane, or
+		// the snapshot it stored, when it started without one. Ready in
+		// both cases.
+		// A database with no room left: the gateway is ready (it serves
+		// from memory and from what is stored), and says what it can no
+		// longer store. Taking it out of service would turn a degraded
+		// gateway into an outage.
+		response["database_full"] = false
+		if full, since, failing := database.StorageStatus(); full {
+			response["database_full"] = true
+			response["database_full_since"] = since.UTC().Format(time.RFC3339)
+			response["database_full_not_stored"] = failing
+		}
+		if services.ConfigSource != nil {
+			source, _ := services.ConfigSource()
+			response["config_source"] = source
 		}
 
 		c.JSON(http.StatusOK, response)

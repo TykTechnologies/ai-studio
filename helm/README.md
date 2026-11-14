@@ -18,7 +18,19 @@ This Helm chart deploys Midsommar along with its optional components. It support
 | `midsommar.image.repository` | Docker image repository | `tykio/midsommar` |
 | `midsommar.image.tag` | Docker image tag | `latest` |
 | `midsommar.service.type` | Kubernetes service type | `ClusterIP` |
-| `midsommar.strategy` | Deployment strategy. `Recreate` stops the old pod before the new one starts, so two Studio instances never run side by side during an upgrade | `{type: Recreate}` |
+| `midsommar.strategy` | Deployment strategy. Empty: `Recreate` for one replica (the old pod stops before the new one starts, so two Studio instances never run side by side during an upgrade), a rolling update (`maxUnavailable: 0`, `maxSurge: 1`) for several | `{}` |
+| `replicaCount` | Studio replicas. Above 1 needs an external PostgreSQL and `config.csrfKey` (see [Several Studio replicas](#several-studio-replicas)); Studio has no autoscaler | `1` |
+| `podDisruptionBudget.minAvailable` / `.maxUnavailable` | PodDisruptionBudget, rendered when `replicaCount` is above 1 (or `podDisruptionBudget.enabled`) | `1` / unset |
+| `topologySpreadConstraints`, `affinity` | Scheduling of the Studio pods. Empty spread with several replicas: over nodes and zones, `ScheduleAnyway` | `[]`, `{}` |
+| `global.nodeSelector`, `global.tolerations`, `global.affinity` | Scheduling of the AI Studio pods and the bundled PostgreSQL pod (for example one site per node pool); `affinity` replaces `global.affinity` for AI Studio. The microgateway subchart has its own `microgateway.nodeSelector`, `.tolerations` and `.affinity` | `{}`, `[]`, `{}` |
+| `midsommar.ingress.sessionAffinity` | Cookie affinity on the nginx Ingress with several replicas (`enabled`, `cookieName`, `maxAge`) | on |
+| `config.clusterNodeLabel` | `CLUSTER_NODE_LABEL`: names this release's replicas on the cluster status (for example `site-a`) | `""` (`studio`) |
+| `config.csrfKey` | `CSRF_KEY`, stored in the Secret; required with several replicas | `""` |
+| `config.databaseMaxOpenConns`, `databaseMaxIdleConns`, `databaseConnMaxLifetime`, `databaseConnectTimeout`, `databaseReadyGrace`, `databaseStartupTimeout` | The `DATABASE_*` pool, readiness and start-up settings; empty keeps Studio's default, `0` is passed on | `""` |
+| `probes.startup` | Startup probe on `/health`: `periodSeconds` × `failureThreshold` must cover `DATABASE_STARTUP_TIMEOUT` plus the migrations | `5` × `36` (180 s) |
+| `shutdown.preStopDelaySeconds` | Seconds an AI Studio pod keeps serving after Kubernetes starts removing it from the Service, before it gets SIGTERM, so requests routed to it meanwhile are answered (`0`: none). Rendered on Kubernetes 1.30 and later (the `sleep` action); on an older cluster no hook is rendered and the install notes say so | `10` |
+| `shutdown.terminationGracePeriodSeconds` | Pod grace period. Empty: the delay plus Studio's 30-second drain plus 5 s; a smaller value fails the render | `""` (45) |
+| `probes.readiness.requireWrite` | Probe `/ready?require=write` instead of `/ready` | `false` |
 | `config.allowRegistrations` | Enable user registrations | `"true"` |
 | `config.adminEmail` | Admin email address | `"you@tyk.io"` |
 | `config.siteUrl` | Site URL | `"http://localhost:3000"` |
@@ -38,6 +50,7 @@ This Helm chart deploys Midsommar along with its optional components. It support
 | `database.name` | Database name | `"midsommar"` |
 | `database.user` | Database user | `"postgres"` |
 | `database.password` | Database password | `"postgres"` |
+| `database.existingSecret` / `database.existingSecretKey` | A Secret holding the whole `DATABASE_URL` (for example the multi-host form); the other `database.*` connection values are then not used | `""` / `DATABASE_URL` |
 
 ### SMTP Configuration
 
@@ -47,6 +60,21 @@ This Helm chart deploys Midsommar along with its optional components. It support
 | `config.smtpPort` | SMTP server port | `"587"` |
 | `config.smtpUser` | SMTP username | `"apikey"` |
 | `config.smtpPass` | SMTP password | `""` |
+
+## Several Studio replicas
+
+With an external PostgreSQL, Studio can run several replicas (from 2.3):
+
+```yaml
+replicaCount: 2
+database:
+  internal: false
+  existingSecret: studio-database   # a Secret with the key DATABASE_URL
+config:
+  csrfKey: "<openssl rand -hex 32>"
+```
+
+The chart then renders a rolling update, a PodDisruptionBudget, spread over nodes and zones, and cookie affinity on the nginx Ingress, and refuses to render with the bundled PostgreSQL, with SQLite, or without `config.csrfKey`. For two sites (one release per cluster on one replicated PostgreSQL, labelled with `config.clusterNodeLabel: site-a` and `site-b`), the probes, gRPC and the upgrade to 2.3, see "Several Studio replicas" in `docs/site/docs/deployment-helm-k8s.md`.
 
 ## Installation
 

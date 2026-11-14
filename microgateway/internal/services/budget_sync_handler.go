@@ -87,7 +87,10 @@ const BudgetSyncTopic = eventbridge.BudgetSyncTopic
 type BudgetSyncHandler struct {
 	db                 *gorm.DB
 	lastSequenceNumber uint64
-	mu                 sync.Mutex
+	// warnedLower is set once a sync with a sequence below the last one
+	// applied has been reported on the current stream.
+	warnedLower bool
+	mu          sync.Mutex
 	// blocks receives budget blocks; nil means the shared edge set.
 	blocks *BudgetBlocks
 	// blocksUnsaved is set when persisting the blocks failed, so the next
@@ -171,7 +174,8 @@ func (h *BudgetSyncHandler) persistSequenceNumber(seqNum uint64) {
 		"updated_at":      now,
 	}).FirstOrCreate(&state).Error
 
-	if err != nil {
+	// A full database is reported once (NoteWrite), not at every sync.
+	if database.NoteWrite(database.WriteBudgetSyncPosition, err) != nil && !database.IsStorageFull(err) {
 		log.Error().Err(err).Uint64("sequence", seqNum).Msg("Failed to persist budget sync sequence number")
 	}
 }
@@ -186,11 +190,30 @@ func (h *BudgetSyncHandler) HandleBudgetSync(event eventbridge.Event) {
 		return
 	}
 
+	// h.mu is held from here to the end: lastSequenceNumber and warnedLower
+	// are only read and written under it (as in StreamStarted and
+	// GetLastSequenceNumber), so syncs are handled one at a time.
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
 	// Check sequence number to prevent processing stale updates
 	if payload.SequenceNumber <= h.lastSequenceNumber {
+		// A repeat of the last sync is a duplicate delivery. A lower
+		// sequence means the control plane's sequence went backwards: a
+		// leader older than 2.3, which sends its wall clock, whose clock is
+		// behind the previous leader's. (From 2.3 the sequence continues
+		// from the last one stored in the control plane's database, so its
+		// leaders do not go backwards.) The budget figures and blocks are
+		// ignored until the sequence passes the stored value, so say so,
+		// once per stream.
+		if payload.SequenceNumber < h.lastSequenceNumber && !h.warnedLower {
+			h.warnedLower = true
+			log.Warn().
+				Uint64("received", payload.SequenceNumber).
+				Uint64("last", h.lastSequenceNumber).
+				Msg("Ignoring budget syncs from the control plane: their sequence is below the last one applied. Budget figures and blocks stay as they are until it is higher (reported once per connection)")
+			return
+		}
 		log.Debug().
 			Uint64("received", payload.SequenceNumber).
 			Uint64("last", h.lastSequenceNumber).
@@ -207,9 +230,15 @@ func (h *BudgetSyncHandler) HandleBudgetSync(event eventbridge.Event) {
 		// The set is sent every sync; only a change (or a write that
 		// failed last time) is written.
 		if h.budgetBlocks().Replace(blocks) || h.blocksUnsaved {
-			if err := persistBudgetBlocks(h.db, blocks); err != nil {
+			if err := database.NoteWrite(database.WriteBudgetBlocks, persistBudgetBlocks(h.db, blocks)); err != nil {
+				// The blocks are enforced from memory all the same; what is
+				// lost is that a restart would start from the old set. A
+				// full database is reported once (NoteWrite), not at every
+				// sync.
+				if !database.IsStorageFull(err) {
+					log.Error().Err(err).Msg("Failed to persist budget blocks")
+				}
 				h.blocksUnsaved = true
-				log.Error().Err(err).Msg("Failed to persist budget blocks")
 			} else {
 				h.blocksUnsaved = false
 			}
@@ -222,9 +251,11 @@ func (h *BudgetSyncHandler) HandleBudgetSync(event eventbridge.Event) {
 			llmBlocks[uint(llmID)] = reason
 		}
 		if h.llmBudgetBlocks().Replace(llmBlocks) || h.llmBlocksUnsaved {
-			if err := persistLLMBudgetBlocks(h.db, llmBlocks); err != nil {
+			if err := database.NoteWrite(database.WriteBudgetBlocks, persistLLMBudgetBlocks(h.db, llmBlocks)); err != nil {
+				if !database.IsStorageFull(err) {
+					log.Error().Err(err).Msg("Failed to persist LLM budget blocks")
+				}
 				h.llmBlocksUnsaved = true
-				log.Error().Err(err).Msg("Failed to persist LLM budget blocks")
 			} else {
 				h.llmBlocksUnsaved = false
 			}
@@ -318,6 +349,15 @@ func (h *BudgetSyncHandler) budgetLedger() *BudgetLedger {
 		return h.ledger
 	}
 	return edgeBudgetLedger.Load()
+}
+
+// StreamStarted is called when the edge opens a stream to a control plane:
+// the next sync with a sequence below the last one applied is reported
+// again.
+func (h *BudgetSyncHandler) StreamStarted() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.warnedLower = false
 }
 
 // GetLastSequenceNumber returns the last processed sequence number (for testing)

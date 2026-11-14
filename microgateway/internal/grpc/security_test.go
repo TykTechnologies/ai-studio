@@ -267,7 +267,9 @@ func BenchmarkControlServer_TokenValidation(b *testing.B) {
 		for pbench.Next() {
 			tokenIndex := i % 100
 			req := &pb.TokenValidationRequest{
-				Token:         tokens[tokenIndex].Token,
+				// The token, not tokens[i].Token: once created, the row
+				// holds a redacted reference in its place.
+				Token:         fmt.Sprintf("benchmark-token-%d", tokenIndex),
 				EdgeId:        "benchmark-edge",
 				EdgeNamespace: "benchmark",
 			}

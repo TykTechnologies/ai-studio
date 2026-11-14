@@ -141,9 +141,49 @@ Two properties keep the checksum meaningful:
 
 1. When a gateway receives a request with an unknown access token, it contacts AI Studio to validate and fetch the credential.
 2. The credential is then cached locally for subsequent requests.
-3. This ensures the admin retains ongoing control — disabling a credential in AI Studio takes effect as soon as the gateway's cache expires or the next pull-on-miss occurs.
+3. This ensures the admin retains ongoing control. From 2.3, when a key is created, regenerated, activated, deactivated or deleted, or its App is activated or deactivated, AI Studio tells every connected edge at once (the `credential.changed` event, carried to the edges of every replica), and the edge drops what it cached for that key: a revoked key is refused within about a second on a connected edge. An edge that is not connected when the change is made learns of it when its cache entry expires (`EDGE_TOKEN_CACHE_TTL`) or at the next pull-on-miss. The event names the key only by the hash edges hold for it, and needs `MICROGATEWAY_ENCRYPTION_KEY` set on AI Studio.
 
 This approach balances performance (no need to sync every credential change) with security (admin can revoke access without waiting for a full config push).
+
+#### Full credential sync (Enterprise)
+
+An edge set to `EDGE_CREDENTIAL_SYNC=full` asks AI Studio for the App keys of its namespace in advance and validates them locally, so a key it has never seen is accepted while no control plane is reachable. AI Studio never sends a key: it sends a keyed hash of each one (HMAC-SHA-256 under a key derived from `MICROGATEWAY_ENCRYPTION_KEY`), with the key's id, whether it is active, and its App. An edge cannot turn a hash back into a key.
+
+What AI Studio does:
+
+- **First, after a reconnect to another control plane, and at least every 15 minutes:** a full list, in pages of 500 keys. The edge drops whatever the list does not contain.
+- **In between:** only what changed since the last answer (a new key, a deactivated or re-activated one, a regenerated secret, a deleted key or App, a deactivated App).
+- **Only for the edge's registered namespace**, plus global Apps, and only if the namespace is licensed. An edge that has not registered gets nothing until it does.
+
+How long a revoked or deactivated key can still be accepted by an edge in this mode:
+
+| Situation | At most |
+|---|---|
+| Edge connected | About a second: Studio's `credential.changed` notice makes the edge sync (after a random delay of up to half a second; at most about one such sync per second per edge) |
+| Edge connected, the change notification was lost | Until the edge's next sync (its heartbeat interval) |
+| Edge connected, and a sync missed the change (clocks more than 30 seconds apart between control planes or the database) | 15 minutes plus one heartbeat interval |
+| Edge cannot reach any control plane | `EDGE_CREDENTIAL_SYNC_MAX_AGE` (24 hours by default) |
+
+Keep the clocks of both control planes and the database within 30 seconds of each other.
+
+Cost on AI Studio, measured with 50,000 keys: a full list is about 8 MB and takes about 4 seconds of one CPU core per edge, every 15 minutes, at a moment that differs from edge to edge (ten edges taking theirs at the same moment took about 12 seconds); memory use does not grow with the number of keys. For 100 edges that averages about half a core and 1 MB/s. A sync with nothing changed takes a few tens of milliseconds.
+
+A Community AI Studio does not offer this; an edge that asks for it stays on pull-on-miss.
+
+On the edge:
+
+- **Settings.** `EDGE_CREDENTIAL_SYNC=full` (default `on_demand`) and `EDGE_CREDENTIAL_SYNC_MAX_AGE` (default `24h`, `0` for no limit). A Community edge given `full` logs that it is an Enterprise option and validates on demand.
+- **When it syncs.** After every registration (at start, after a reconnect, after a move to another control plane), on every acknowledged heartbeat, and, within about a second, when AI Studio says a key the edge holds changed (the edge takes nothing from that message but the prompt to sync; a key it does not hold, such as another namespace's, starts no sync): the whole list the first time, the changes afterwards. A sync runs one at a time; one that fails is retried on the next heartbeat, and the edge keeps the list it has. An AI Studio that answers that it does not know the edge gets a new registration, then the sync again.
+- **What it stores.** In its own database: each key's hash, id, App, and whether it is active (`synced_credentials`), and the Apps of those keys. Never a key. A page of the list is written in one transaction; an App that has not changed since the edge last stored it is not written again.
+- **How it validates a key.**
+  1. On the list, active, App active: accepted, without asking AI Studio.
+  2. On the list, inactive or deleted, or its App inactive: refused (`401`, or `403` "app is inactive").
+  3. Not on the list (created a moment ago): AI Studio is asked, as on demand, and the answer is added to the list. An explicit refusal from AI Studio always wins and updates the list.
+  4. Not on the list, and no control plane answers: `503 credential_check_unavailable`, as on demand.
+- **Past `EDGE_CREDENTIAL_SYNC_MAX_AGE`** without a successful sync, the edge stops trusting the list and validates as on demand until a sync succeeds.
+- **Across a restart.** The list is in the edge's database, so an edge restarted with no control plane (with `EDGE_START_FROM_LAST_KNOWN_GOOD`) validates from it, within the max age. This needs a database that survives the restart: the StatefulSet form of the Helm chart with persistence.
+- **Older or Community AI Studio.** It answers that it does not offer the sync: the edge logs that once and validates on demand.
+- **Metrics.** `microgateway_credential_sync_last_success_timestamp` (when the last sync completed), `microgateway_credentials_synced` (usable keys on the list), and `microgateway_credential_validations_total{source}`: `local` (the list answered), `control` (AI Studio or its cached answer did) and `stale` (the list was past its max age). `microgateway_credential_sync_calls_total{trigger}` counts the syncs the edge asked for: `registration` (AI Studio accepted it), `heartbeat` (one acknowledged: one sync per heartbeat interval) and `event` (a change to a key on its list). A key change in another namespace adds nothing to `event`.
 
 ### Sync Status Values
 
@@ -184,7 +224,7 @@ The Edge Gateways list and each gateway's detail page show **Last pushed HH:MM**
 
 ### Push Process
 
-> **AI Studio 2.2 runs as a single instance.** Replicated AI Studio instances are not supported in 2.2: run one hot instance with an optional cold standby (see [Reference Architecture](./reference-architecture.md#run-studio-as-a-hot-cold-singleton)). Support for several active replicas is planned for 2.3; the notes on replicas below apply from then.
+> **Several replicas from 2.3.** The notes on replicas below apply to 2.3, where several AI Studio replicas can serve one database, in one site or in two (see [Several replicas](./reference-architecture.md#several-replicas-from-2-3) and [Active-Active](./deployment-active-active.md)). AI Studio 2.2 runs as a single instance (see [One instance, with a cold standby](./reference-architecture.md#one-instance-with-a-cold-standby)).
 
 When you push configuration:
 
@@ -349,13 +389,71 @@ The paths and the response envelope are unchanged, and every attribute 2.2 retur
 
 ## Connection Settings
 
+### Several control planes
+
+An edge can be given more than one control plane, for example one per site when AI Studio runs in two sites over one replicated database (see [Active-Active (Two Sites)](./deployment-active-active.md)):
+
+```bash
+# Ordered: the edge's own site first
+CONTROL_ENDPOINTS=cp-a.example.com:50051,cp-b.example.com:50051
+```
+
+| Edge setting | Default | Purpose |
+|---|---|---|
+| `CONTROL_ENDPOINTS` | unset | Ordered, comma-separated list of control planes (`host:port`). `CONTROL_ENDPOINT` still works and is a list of one; setting both stops the edge at start-up with an error. |
+| `EDGE_CONTROL_FAILBACK_INTERVAL` | off | How often an edge that is not on its first endpoint tries to return to it. |
+
+How an edge uses the list:
+
+- **At start** it tries each endpoint once, in order, and takes the first that accepts its registration. If none does, it exits, as an edge with one endpoint does.
+- **Failover.** When the connection to its control plane fails (the dial, the registration or the stream), the edge tries the other endpoints straight away, in list order after the one it was on. Only when every endpoint has failed does it back off (`EDGE_RECONNECT_INTERVAL`, doubling to at most 30 seconds), and it then tries the whole list, from the first endpoint, once per backoff. An endpoint that does not answer at all is given 5 seconds before the edge moves on.
+- **While it fails over** the edge keeps serving, as in any control-plane outage. Token validation, the analytics pulse and plugin payloads use the new connection as soon as it is up. A configuration push in flight is delivered again by the control plane the edge arrives at.
+- **Failback.** An edge stays on the control plane it moved to until that connection ends. To have edges return to their first endpoint on their own, set `EDGE_CONTROL_FAILBACK_INTERVAL` (for example `5m`): an edge that is not on its first endpoint then tries it at that interval and moves when it accepts a registration. Requests are not dropped by the move: calls in flight finish on the old connection, which stays open for 30 seconds. Alternatively, AI Studio's `GRPC_MAX_CONNECTION_AGE` ends every edge connection on a schedule, and an edge whose connection ends tries the endpoints after the one it was on first.
+- **A lost network is noticed by the keepalive** (see below): an edge whose control plane disappears without closing the connection moves on after about 35 seconds. Token validation does not wait for that; each call has its own 5 second limit.
+
+All endpoints must be replicas of one AI Studio deployment (one database), with the same `GRPC_AUTH_TOKEN` and `MICROGATEWAY_ENCRYPTION_KEY`. A single DNS name or load balancer in front of several control planes keeps working as before, with `CONTROL_ENDPOINT`; the list is for when the edge itself should choose.
+
+The endpoint an edge is on is shown in its log (`Connected to control plane`, with `control_endpoint`), in the body of its `/ready` endpoint (`control_endpoint`, `control_connected`; the probe stays 200 while the edge has no control plane) and in the metric `microgateway_control_connected{endpoint="..."}`, which is 1 for the endpoint in use and 0 for the others.
+
+### Starting without a control plane
+
+By default an edge exits if no control plane accepts it at start-up. With `EDGE_START_FROM_LAST_KNOWN_GOOD=true` it can start from the configuration it last applied instead:
+
+| Edge setting | Default | Purpose |
+|---|---|---|
+| `EDGE_START_FROM_LAST_KNOWN_GOOD` | `false` | Start from the stored configuration snapshot when no control plane answers at start-up. |
+| `EDGE_STARTUP_CONTROL_TIMEOUT` | `30s` | How long the edge keeps trying its control endpoints first. |
+| `EDGE_LAST_KNOWN_GOOD_MAX_AGE` | `72h` | The longest the edge may have been without a control plane and still start this way. `0` means no limit. |
+
+- **What is stored.** Every edge keeps the snapshot it last applied in its own database (table `applied_snapshots`), encrypted with a key derived from its `ENCRYPTION_KEY`, whether or not this option is on. So the option can be turned on later, and it works at the next restart.
+- **What happens.** The edge waits `EDGE_STARTUP_CONTROL_TIMEOUT` for a control plane, then applies the stored snapshot exactly as it would one from AI Studio (LLMs, Apps, filters, plugins, and what an edge holds only in memory, such as trusted prompt templates and guardrail exceptions), starts serving, and keeps trying to connect. It logs a warning with the age of the snapshot. `/ready` answers 200 with `config_source: last_known_good`, `microgateway_config_source{source="last_known_good"}` is 1, and `microgateway_config_age_seconds` shows how long the edge has been without a control plane. On the first registration a control plane accepts, the edge applies the live configuration and reports `control` again; AI Studio shows it In Sync or Pending as usual.
+- **When it refuses.** The edge exits with the reason, as it does without the option, when no snapshot is stored (a new or lost database), when the snapshot is for another `EDGE_NAMESPACE`, when it does not decrypt with this `ENCRYPTION_KEY`, when the edge has been without a control plane for longer than `EDGE_LAST_KNOWN_GOOD_MAX_AGE`, or when the stored snapshot's time is in the future by the edge's clock (the clock was set back, so no age can be worked out: correct the clock, or let the edge connect to a control plane once). That age is counted from the edge's last contact with a control plane (a registration accepted or a heartbeat acknowledged), not from when the configuration last changed: an edge with a stable configuration that was connected an hour ago is not stale.
+- **What it means.** An edge started this way serves the configuration it last knew: an LLM, App or filter removed in AI Studio since then keeps working on that edge until it reconnects. It is the same trade as `EDGE_TOKEN_CACHE_STALE_GRACE`, which is why both are off by default.
+- **Keys.** With credential validation on demand (the default), the edge **cannot validate any key** until a control plane answers: it remembers AI Studio's answers only in memory, so after the restart every request gets `503` with `Retry-After` (`credential_check_unavailable`), which SDKs retry. `EDGE_TOKEN_CACHE_STALE_GRACE` does not change that: the cache is empty. With [full credential sync](#full-credential-sync-enterprise) (`EDGE_CREDENTIAL_SYNC=full`, Enterprise) the edge validates keys from the hashed list in its database, so it serves them; a key revoked in the meantime then keeps working until the list is older than `EDGE_CREDENTIAL_SYNC_MAX_AGE` (24 hours).
+- **The rest.** Budgets use the edge's own counters and stored budget blocks. Heartbeats and plugin payloads queue as in any outage. Analytics wait in the edge's in-memory backlog, up to `max_backlog_bytes` (see [Analytics during a control-plane outage](#analytics-during-a-control-plane-outage)).
+- **What it needs.** A database that survives the restart. A container restart keeps an `emptyDir`; a rescheduled pod does not, so on Kubernetes use the StatefulSet form of the chart with persistence.
+
+### Analytics during a control-plane outage
+
+An edge keeps serving while no control plane answers, and keeps what it records about that traffic for AI Studio in a backlog, up to a bound you set.
+
+- **What is kept.** The records for AI Studio (one usage record, one budget record and one proxy summary per request, plus compliance events and tool calls) wait in the edge's memory. Each pulse is tried `max_retries` + 1 times, `retry_interval_secs` apart (4 attempts over 15 seconds with the packaged settings). When that fails, the pulse and everything buffered since go into the **backlog**: serialized pulses, oldest first, up to `max_backlog_bytes` (256 MiB by default). Without stored request and response bodies a request takes about 280 bytes there, so the default keeps about 900,000 requests: 5 minutes at 3,000 requests per second.
+- **What AI Studio gets afterwards.** Everything in the backlog, then what was buffered, one pulse at a time, oldest first, each pulse at most `max_buffer_size` records and 8 MB. Each pulse keeps the sequence number it was first sent with, and AI Studio stores a pulse once, so one sent again after a lost acknowledgement is not counted twice.
+- **It is the same when AI Studio answers but cannot store** (its database is failing over): the pulses wait in the backlog until it can.
+- **What is lost.** Records beyond `max_backlog_bytes`, the oldest first, and the whole backlog if the edge restarts or its pod is rescheduled during the outage: the backlog is in memory, and the edge does not resend from the copy of the analytics in its own database. Records older than `edge_retention_hours` (24) are dropped too.
+- **Memory.** During an outage, and while the backlog is sent afterwards, an edge holds the backlog, up to `max_backlog_bytes`, plus at most about two batches of records in their in-memory form (about 2 KB per request): the batch being sent and the one filling up, each at most `max_buffer_size` records (about 7 MB at the packaged 10,000). From a pulse's first failed attempt, and for as long as the backlog is not empty, a full batch goes into the backlog serialized instead of waiting in memory, so neither the retries nor the length of the drain add to this. Measured at 3,000 requests per second through a 3.5-minute outage and the drain, with the packaged settings: the analytics' live memory peaked at the backlog plus 17 MB (81 MB with a full 64 MiB backlog). On top of the live memory the Go runtime keeps room for garbage: up to about 256 MB with the gateway's own tuning, held under 90% of the memory limit when there is one. Size the edge's memory (`resources.limits.memory` in the Helm chart) for its working set plus `max_backlog_bytes` plus about 50 MB, or lower the bound. With stored request and response bodies (`ANALYTICS_STORE_REQUESTS`, `ANALYTICS_STORE_RESPONSES`, forwarded with `include_request_response_data`), the backlog holds those bodies too: more bytes per request, and prompts and completions kept in the edge's memory for as long as the outage lasts.
+- **How you see it.** `microgateway_analytics_pulse_backlog_bytes` and `microgateway_analytics_pulse_backlog_batches` on `/metrics` show what is waiting. What is discarded is logged (`Analytics records discarded`, with `dropped_over_backlog` and the reason pulses were failing) and counted in `microgateway_analytics_pulse_dropped_records_total{reason="over_backlog"}`. It counts records, not requests: a proxied request makes three (its usage record, budget record and proxy summary), so 3,000 dropped records are about 1,000 requests. Alert on that counter increasing, and on the backlog approaching its bound.
+- **Budgets.** Each edge enforces an App's or LLM's budget on its own count of what it served, which is complete, or on AI Studio's total when that is higher. AI Studio's total catches up when the backlog is delivered. Only what was discarded is missing from it for good, and an App can overrun its budget by what other edges served and could not keep.
+- **Settings.** `max_backlog_bytes` in the pulse file (`analyticsPulse.maxBacklogBytes` in the Helm chart). **Two defaults:** the microgateway keeps up to 256 MiB when the pulse file does not set it, but the Helm chart sets 64 MiB (about 230,000 requests: 75 seconds at 3,000 requests per second) with a default memory limit of 1Gi, which holds an edge's working set at that rate (about 480 MB), that backlog and the rest of the rule above under the edge's overload shedding (85% of the limit). On Kubernetes, raise `analyticsPulse.maxBacklogBytes` and `resources.limits.memory` together. When the backlog first discards records in an outage, the edge's log says how to raise the bound. `0` turns the backlog off: the edge then keeps only the newest `max_buffer_size` records through an outage, as before 2.3, and counts the rest as `reason="over_cap"`. `max_buffer_size` keeps its meaning: the size at which a filling buffer is sent early and the most records one pulse carries.
+
 ### The edge token is a hub-wide secret
 
 Every edge authenticates to AI Studio with the same token: `EDGE_AUTH_TOKEN` on the edge, matching `GRPC_AUTH_TOKEN` (or `GRPC_AUTH_TOKEN_NEXT` during a rotation) on AI Studio. The token is not bound to an edge or a namespace, so whoever holds it can:
 
 - register under any edge ID, including one that already exists;
 - claim any namespace and receive that namespace's configuration snapshot;
-- report analytics, budget usage and agent-trace captures for that namespace's Apps.
+- report analytics, budget usage and agent-trace captures for that namespace's Apps;
+- on Enterprise, receive the hashes of that namespace's App keys ([full credential sync](#full-credential-sync-enterprise)). These are not keys and cannot be turned into keys.
 
 The snapshot carries the namespace's secrets. Most are encrypted with `MICROGATEWAY_ENCRYPTION_KEY`, which every edge also holds, so the token plus that key decrypts them:
 
@@ -374,6 +472,7 @@ Treat the token and `MICROGATEWAY_ENCRYPTION_KEY` as secrets for the whole hub, 
 If an edge host is compromised:
 
 - rotate the edge token, with `GRPC_AUTH_TOKEN_NEXT`, and `MICROGATEWAY_ENCRYPTION_KEY`;
+- App keys need no rotation for this: the edge holds only their hashes ([full credential sync](#full-credential-sync-enterprise)), which cannot be turned into keys;
 - in every namespace the edge served, rotate the LLM provider keys and each LLM's resource-signing secrets, tool, datasource, embedder and guardrail provider credentials, and any secrets in plugin configuration;
 - revoke the OAuth access tokens issued to MCP clients in those namespaces;
 - optionally, rotate `AGENT_TRACING_KEY` (keeping the old value as `AGENT_TRACING_KEY_PREVIOUS` until payload retention has passed) if forged links into genuine agent sessions matter to you. Fingerprints and exported `user.id` pseudonyms change at the rotation, so sessions that span it lose cross-gateway correlation.
@@ -387,11 +486,11 @@ AI Studio serves the control connection with TLS unless `GRPC_TLS_INSECURE=true`
 | Edge setting | Purpose |
 |---|---|
 | `EDGE_TLS_CA_PATH` | PEM file of the CA(s) that issued the control plane's certificate, for a private CA. Unset uses the system roots. |
-| `EDGE_TLS_SERVER_NAME` | The name the certificate is checked against, when it differs from the host in `EDGE_CONTROL_ENDPOINT` (an IP address, or a load balancer's internal name). |
+| `EDGE_TLS_SERVER_NAME` | The name the certificate is checked against, when it differs from the host of the control endpoint (an IP address, or a load balancer's internal name). With `CONTROL_ENDPOINTS`, each endpoint's certificate is checked against that endpoint's own host; setting this name applies it to every endpoint. |
 | `EDGE_TLS_CERT_PATH`, `EDGE_TLS_KEY_PATH` | Client certificate for mutual TLS. |
 | `EDGE_SKIP_TLS_VERIFY` | Skips verification entirely. Development only. |
 
-The edge requires TLS 1.2 or later. An unreadable `EDGE_TLS_CA_PATH`, or one with no PEM certificates, stops the connection with an error naming the setting. Edges before 2026-10-01 checked that `EDGE_TLS_CA_PATH` existed but did not use it, so a certificate from a private CA only worked with `EDGE_SKIP_TLS_VERIFY`.
+The CA and the client certificate are the same for every endpoint of `CONTROL_ENDPOINTS`. The edge requires TLS 1.2 or later. An unreadable `EDGE_TLS_CA_PATH`, or one with no PEM certificates, stops the connection with an error naming the setting. Edges before 2026-10-01 checked that `EDGE_TLS_CA_PATH` existed but did not use it, so a certificate from a private CA only worked with `EDGE_SKIP_TLS_VERIFY`.
 
 ### Keepalive and message sizes
 
@@ -411,6 +510,7 @@ Edges ping the control plane every 30 seconds, also while no stream is open, and
 - Verify the edge gateway is running and healthy
 - Check edge gateway logs for connection errors
 - Ensure firewall rules allow gRPC traffic (default port 50051)
+- An edge with several control planes (`CONTROL_ENDPOINTS`) shows as connected on whichever replica holds its stream; see [Several control planes](#several-control-planes).
 - After a control plane restart or outage, edges reconnect on their own, retrying with exponential backoff: `EDGE_RECONNECT_INTERVAL` (default 5 seconds) doubling to at most 30 seconds (up to 2.2, and until the fix of 2026-09-30, at most 5 minutes, so an edge could come back minutes after the control plane). Edges older than the fix of 2026-09-24 stopped retrying after the first failed attempt and needed a restart once the outage lasted longer than about 5 seconds.
 
 ### Edge Analytics Missing in AI Studio
@@ -419,6 +519,7 @@ Edges send analytics and spend to the control plane in the analytics pulse, whic
 
 - Check that `PLUGINS_CONFIG_PATH` points at an existing pulse config; the startup path report flags it when it doesn't.
 - Check the edge logs for `Failed to send analytics pulse`.
+- From 2.3, AI Studio acknowledges a pulse only once it is stored, and stores each pulse once. An edge whose pulse is not acknowledged (the control plane went away, or could not write to its database) keeps that batch and sends it again, unchanged, with the next pulse, for up to `edge_retention_hours` (24 by default). If the first attempt was in fact stored, AI Studio recognises the repeat and does not store it again, so a control-plane failover does not double-count analytics or spend.
 - Edges built before 2026-09-27 kept sending the pulse over their first connection to the control plane. After any AI Studio restart that connection was closed, so no further analytics arrived until the edge was restarted, and a graceful edge shutdown dropped what the pulse had buffered. Upgrade the edge, or restart it after each AI Studio restart.
 
 ### Configuration Entries an Edge Cannot Store
@@ -469,5 +570,6 @@ An edge also reports, in its heartbeats, the configuration it applied rather tha
 ## See Also
 
 - [Observability](./observability.md) — metrics and traces emitted by each edge
+- [Active-Active (Two Sites)](./deployment-active-active.md) — edges with a control plane in each of two sites
 - [Kubernetes / Helm Deployment](./deployment-helm-k8s.md) — running edges on Kubernetes, including scale-out
 - [Running Alongside the Kubernetes Inference Gateway](./deployment-kubernetes-inference-gateway.md)

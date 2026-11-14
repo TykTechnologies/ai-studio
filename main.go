@@ -17,6 +17,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/docs"
 	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/TykTechnologies/midsommar/v2/pkg/cluster"
 	"github.com/TykTechnologies/midsommar/v2/pkg/fipsinfo"
 	"github.com/TykTechnologies/midsommar/v2/pkg/studio"
 	// SQLite for DATABASE_TYPE=sqlite; it needs cgo, so pkg/studio leaves it out.
@@ -46,19 +47,27 @@ func main() {
 	fips := fipsinfo.Current()
 	logger.Infof("FIPS 140-3: enabled=%t version=%s enforced=%t", fips.Enabled, fips.Version, fips.Enforced)
 
+	// A label the cluster registry would refuse: say which setting it is.
+	if err := cluster.ValidateLabel(appConf.ClusterNodeLabel); err != nil {
+		logger.FatalErr("Invalid CLUSTER_NODE_LABEL", err)
+	}
+
 	// Report every configured path (grep 'startup path'); problems are WARNs.
 	startup.ReportPaths(appConf, *envFile)
 
-	// Perform connectivity tests before proceeding with initialization
-	if err := startup.TestConnectivity(appConf); err != nil {
-		logger.FatalErr("Connectivity tests failed", err)
-	}
-
+	// The database first: OpenDatabase waits for it (up to
+	// DATABASE_STARTUP_TIMEOUT), which the one-shot connectivity tests
+	// below do not.
 	db, err := studio.OpenDatabase(appConf)
 	if err != nil {
 		logger.FatalErr("Failed to connect to the database", err)
 	}
 	logger.Info("Successfully connected to the database")
+
+	// Perform connectivity tests before proceeding with initialization
+	if err := startup.TestConnectivity(appConf); err != nil {
+		logger.FatalErr("Connectivity tests failed", err)
+	}
 
 	gin.SetMode(gin.ReleaseMode)
 	s, err := studio.New(studio.Options{
@@ -68,6 +77,7 @@ func main() {
 		BuildHash:       BuildHash,
 		BuildTime:       BuildTime,
 		SkipLLMDefaults: *noLLMDefaults,
+		NodeLabel:       appConf.ClusterNodeLabel,
 	})
 	if err != nil {
 		logger.FatalErr("Failed to start AI Studio", err)

@@ -18,10 +18,14 @@ data_collection_plugins:
       # How often to send analytics batches to control plane
       interval_seconds: 10
 
-      # Maximum events per batch
+      # Unused: the setting is accepted but nothing reads it (a pulse is
+      # bounded by max_buffer_size below).
       max_batch_size: 1000
 
-      # Maximum events to buffer before dropping oldest
+      # Records buffered in memory. A full buffer is sent at once, so this is
+      # also the most records one pulse carries: a larger backlog goes as
+      # several pulses. While pulses fail (no control plane), records above
+      # this number are dropped, oldest first.
       max_buffer_size: 10000
 
       # Enable gzip compression for gRPC payloads

@@ -77,7 +77,7 @@ GATEWAY_MODE=edge
 | `EDGE_AUTH_TOKEN` | If control requires | - | Authentication token |
 | `EDGE_RECONNECT_INTERVAL` | No | `5s` | First reconnection delay; doubles per failed attempt up to 30s (or this value, if longer) |
 | `EDGE_HEARTBEAT_INTERVAL` | No | `30s` | Heartbeat frequency |
-| `EDGE_SYNC_TIMEOUT` | No | `10s` | Configuration sync timeout |
+| `EDGE_SYNC_TIMEOUT` | No | `10s` | Unused: the setting is accepted but nothing reads it |
 
 ### Security Variables (Edge)
 
@@ -189,7 +189,6 @@ HOST=0.0.0.0
 # Connection behavior
 EDGE_RECONNECT_INTERVAL=5s
 EDGE_HEARTBEAT_INTERVAL=30s
-EDGE_SYNC_TIMEOUT=10s
 
 # Logging
 LOG_LEVEL=info

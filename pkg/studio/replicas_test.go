@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/TykTechnologies/midsommar/v2/pkg/replicas"
 )
 
 // A burst of triggers runs the work once; a trigger during a run runs it
@@ -165,4 +167,40 @@ func TestReloadsGateway(t *testing.T) {
 			t.Errorf("%s reloads the gateway", topic)
 		}
 	}
+}
+
+// A replica that could not read the cluster event log for longer than events
+// are kept rebuilds from the database what events keep current: the embedded
+// gateway is reloaded, the budget caches are cleared, every replica signal's
+// handlers run, and the plugins are checked against the database from before
+// it went away.
+func TestRelayedChangesAfterGap(t *testing.T) {
+	var gateway, budgets, signalled atomic.Int32
+	rc := &relayedChanges{
+		reloadGateway: newCoalescer("gateway", time.Millisecond, func() error { gateway.Add(1); return nil }),
+		clearBudgets:  newCoalescer("budgets", time.Millisecond, func() error { budgets.Add(1); return nil }),
+		plugins:       make(chan pluginChange, 1),
+		pluginsDone:   make(chan struct{}),
+		unsubscribe:   func() {},
+	}
+	remove := replicas.OnSignal(replicas.SignalBranding, func() { signalled.Add(1) })
+	t.Cleanup(remove)
+
+	before := time.Now()
+	rc.afterGap(20 * time.Minute)
+
+	require.Eventually(t, func() bool { return gateway.Load() == 1 && budgets.Load() == 1 }, time.Second, time.Millisecond)
+	assert.EqualValues(t, 1, signalled.Load())
+	ch := <-rc.plugins
+	assert.Zero(t, ch.id)
+	assert.WithinDuration(t, before.Add(-20*time.Minute-gapMargin), ch.reconcileSince, time.Second,
+		"plugins are checked from before the replica went away, with a margin for other replicas' clocks")
+
+	// A full queue is reported, not waited for; after stop nothing is queued.
+	rc.plugins <- pluginChange{id: 1}
+	rc.afterGap(20 * time.Minute)
+	<-rc.plugins
+	close(rc.pluginsDone)
+	rc.stop()
+	rc.afterGap(20 * time.Minute)
 }

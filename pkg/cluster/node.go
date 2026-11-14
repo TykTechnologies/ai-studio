@@ -22,6 +22,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/dbhold"
 	"github.com/TykTechnologies/midsommar/v2/pkg/safe"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/clause"
@@ -67,21 +68,29 @@ type NodeOptions struct {
 	// headless control plane). It is recorded for operators; the replica's
 	// own code decides whether it contends for the lease.
 	NeverLeads bool
+	// Secrets are the fingerprints of the shared secrets this replica uses
+	// (SharedSecrets.Fingerprints); nil records none.
+	Secrets *SecretFingerprints
 }
 
 // MaxLabelLength bounds NodeOptions.Label (the column's size).
 const MaxLabelLength = 64
 
 func (o NodeOptions) validate() error {
-	if len([]rune(o.Label)) > MaxLabelLength {
+	return ValidateLabel(o.Label)
+}
+
+// ValidateLabel reports why label cannot be a NodeOptions.Label, or nil.
+func ValidateLabel(label string) error {
+	if len([]rune(label)) > MaxLabelLength {
 		return fmt.Errorf("node label is longer than %d characters", MaxLabelLength)
 	}
 	// Operators read labels in the UI, logs and API output: nothing that
 	// means something to HTML, a shell or a query string, whatever renders
 	// it.
-	for _, r := range o.Label {
+	for _, r := range label {
 		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune(" ._-:/()", r) {
-			return fmt.Errorf("node label %q may contain only letters, digits, spaces and . _ - : / ( )", o.Label)
+			return fmt.Errorf("node label %q may contain only letters, digits, spaces and . _ - : / ( )", label)
 		}
 	}
 	return nil
@@ -95,6 +104,7 @@ type Node struct {
 	version  string
 	label    string
 	canLead  bool
+	secrets  SecretFingerprints
 	started  time.Time
 	interval time.Duration
 
@@ -108,6 +118,7 @@ type Node struct {
 // is reported rather than discovered later. At most one NodeOptions is used;
 // without one the replica is unlabelled and may lead.
 func StartNode(db *gorm.DB, id, version string, opts ...NodeOptions) (*Node, error) {
+	db = dbhold.Unheld(db) // a background loop: fail fast, retry on the next tick
 	var o NodeOptions
 	if len(opts) > 0 {
 		o = opts[0]
@@ -128,6 +139,9 @@ func StartNode(db *gorm.DB, id, version string, opts ...NodeOptions) (*Node, err
 		interval: HeartbeatInterval,
 		stop:     make(chan struct{}),
 		done:     make(chan struct{}),
+	}
+	if o.Secrets != nil {
+		n.secrets = *o.Secrets
 	}
 	if err := n.beat(); err != nil {
 		return nil, fmt.Errorf("cluster: register node %s: %w", id, err)
@@ -176,13 +190,11 @@ func (n *Node) heartbeat() {
 }
 
 func (n *Node) beat() error {
-	return n.db.Model(&models.ClusterNode{}).Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "node_id"}},
-		DoUpdates: clause.Assignments(map[string]interface{}{
-			"last_seen": nowExpr(n.db), "hostname": n.proc.Hostname, "version": n.version,
-			"label": n.label, "leader_eligible": n.canLead,
-		}),
-	}).Create(map[string]interface{}{
+	update := map[string]interface{}{
+		"last_seen": nowExpr(n.db), "hostname": n.proc.Hostname, "version": n.version,
+		"label": n.label, "leader_eligible": n.canLead,
+	}
+	create := map[string]interface{}{
 		"node_id":         n.id,
 		"hostname":        n.proc.Hostname,
 		"version":         n.version,
@@ -193,7 +205,14 @@ func (n *Node) beat() error {
 		"pid":             n.proc.PID,
 		"boot_id":         n.proc.BootID,
 		"pid_namespace":   n.proc.PIDNamespace,
-	}).Error
+	}
+	for column, value := range n.secrets.columns() {
+		update[column], create[column] = value, value
+	}
+	return n.db.Model(&models.ClusterNode{}).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "node_id"}},
+		DoUpdates: clause.Assignments(update),
+	}).Create(create).Error
 }
 
 // prune deletes the rows of nodes silent for NodeRetention. Every node runs

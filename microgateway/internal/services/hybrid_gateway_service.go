@@ -9,6 +9,8 @@ import (
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/config"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	"github.com/TykTechnologies/midsommar/v2/pkg/credhash"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	coresvc "github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/rs/zerolog/log"
@@ -40,17 +42,45 @@ type HybridGatewayService struct {
 	edgeClient     interface{}                               // Edge client for on-demand token validation
 	edgeNamespace  string                                    // Edge namespace for token validation
 	
-	// Token validation cache
-	tokenCache     map[string]*TokenCacheEntry              // token -> validation result
+	// Token validation cache. It is keyed by the token's credential hash
+	// (cacheKey), never by the token: the gateway holds a raw key only while
+	// it handles the request that carries it. The same hash is what a hub
+	// with full credential sync sends (features/ActiveActive.md, Phase 4).
+	hasher         *credhash.Hasher
+	tokenCache     map[string]*TokenCacheEntry              // credential hash -> validation result
+	// evictionsMu guards evictedAt and evictionsPruned, apart from
+	// cacheMutex so that pruning them never holds up the token cache.
+	// EvictCredential takes the two one after the other, never both;
+	// storeInCache holds cacheMutex and takes evictionsMu inside it, so
+	// whoever holds both takes cacheMutex first.
+	evictionsMu sync.Mutex
+	// evictedAt is when a credential.changed event last dropped a cache
+	// key: a validation that started before then does not cache its
+	// result (the control plane may have answered before the change).
+	// Pruned by the cleanup worker.
+	evictedAt map[string]time.Time
+	// evictionsPruned is when evictedAt was last pruned (EvictCredential).
+	evictionsPruned time.Time
+	// evictedAllAt is set when evictedAt was full (maxRememberedEvictions):
+	// the map is cleared and no validation that started before this moment
+	// caches its result, for any key. It bounds the memory a flood of
+	// events can take without weakening the guard.
+	evictedAllAt time.Time
 	cacheMutex     sync.RWMutex                            // Protects token cache
 	cacheConfig    config.HubSpokeConfig                    // Cache configuration
 	stopCleanup    chan bool                               // Signal to stop cleanup goroutine
 
 	// validations makes concurrent validations of one token share a single
-	// call to the control instance (and a single App upsert).
+	// call to the control instance (and a single App upsert). Keyed by the
+	// credential hash, as the cache is.
 	validations singleflight.Group
 	// warnings rate-limits the warnings for failed validations.
 	warnings warnLimiter
+
+	// credentials is the synced credential list of an edge with full
+	// credential sync (credential_sync.go); nil on an edge that validates on
+	// demand.
+	credentials *CredentialSync
 
 	// apps caches GetAppByTokenID, which runs on every authenticated request
 	// (the app with its LLMs, tools and datasources: five or more queries).
@@ -58,14 +88,18 @@ type HybridGatewayService struct {
 	apps *database.GenCache[uint, *database.App]
 }
 
-// NewHybridGatewayService creates a hybrid gateway service for edge instances
-func NewHybridGatewayService(db *gorm.DB, repo *database.Repository, edgeNamespace string, cacheConfig config.HubSpokeConfig) *HybridGatewayService {
+// NewHybridGatewayService creates a hybrid gateway service for edge instances.
+// hasher, made from the edge's ENCRYPTION_KEY, gives the keys of the token
+// cache.
+func NewHybridGatewayService(db *gorm.DB, repo *database.Repository, edgeNamespace string, cacheConfig config.HubSpokeConfig, hasher *credhash.Hasher) *HybridGatewayService {
 	dbService := NewDatabaseGatewayService(db, repo)
 	
 	service := &HybridGatewayService{
 		DatabaseGatewayService: dbService.(*DatabaseGatewayService),
 		edgeNamespace:         edgeNamespace,
+		hasher:               hasher,
 		tokenCache:           make(map[string]*TokenCacheEntry),
+		evictedAt:            make(map[string]time.Time),
 		cacheConfig:          cacheConfig,
 		stopCleanup:          make(chan bool),
 		apps:                 database.NewGenCache[uint, *database.App](),
@@ -104,17 +138,23 @@ func (h *HybridGatewayService) SetEdgeClient(edgeClient interface{}) {
 // for about a second every five minutes under load and, with a slow hub,
 // refused valid requests.
 func (h *HybridGatewayService) ValidateAPIToken(token string) (*TokenValidationResult, error) {
+	key := h.cacheKey(token)
+	if h.credentials != nil {
+		if res, err, answered := h.validateFromSyncedList(key); answered {
+			return res, err
+		}
+	}
 	if h.cacheConfig.TokenCacheEnabled {
-		if cachedResult, refresh := h.cachedForRequest(token); cachedResult != nil {
+		if cachedResult, refresh := h.cachedForRequest(key); cachedResult != nil {
 			if refresh {
-				go h.refreshAhead(token)
+				go h.refreshAhead(token, key)
 			}
 			return cachedResult, nil
 		}
 	}
 
-	v, err, _ := h.validations.Do(token, func() (interface{}, error) {
-		return h.validateWithControl(token)
+	v, err, _ := h.validations.Do(key, func() (interface{}, error) {
+		return h.validateWithControl(token, key)
 	})
 	if err != nil {
 		return nil, err
@@ -122,18 +162,98 @@ func (h *HybridGatewayService) ValidateAPIToken(token string) (*TokenValidationR
 	return v.(*TokenValidationResult), nil
 }
 
+// SetCredentialSync gives the service the synced credential list of an edge
+// with full credential sync. Requests are then validated from the list
+// first (validateFromSyncedList).
+func (h *HybridGatewayService) SetCredentialSync(credentials *CredentialSync) {
+	h.credentials = credentials
+}
+
+// CredentialSync returns the synced credential list this edge validates
+// from, nil when it validates on demand only.
+func (h *HybridGatewayService) CredentialSync() *CredentialSync { return h.credentials }
+
+// validateFromSyncedList answers a validation from the synced credential
+// list when it can; answered is false when the control plane has to be
+// asked, as on demand:
+//
+//   - the list is trusted and has the key, usable, and its App is active:
+//     accepted, with no control plane call;
+//   - the list is trusted and has the key, deactivated or deleted, or its
+//     App is inactive: refused (403 "app is inactive" for the App, as on
+//     demand);
+//   - the key is not on the list (it may have been created a moment ago),
+//     or its App is not in the edge's database yet: not answered;
+//   - the list is past EDGE_CREDENTIAL_SYNC_MAX_AGE, or no sync has
+//     completed: not answered.
+func (h *HybridGatewayService) validateFromSyncedList(key string) (res *TokenValidationResult, err error, answered bool) {
+	c := h.credentials
+	if !c.Trusted(time.Now()) {
+		c.counted(ValidationStale)
+		return nil, nil, false
+	}
+	row, found, err := c.Lookup(key)
+	if err != nil {
+		// The list cannot be read: ask the control plane rather than refuse.
+		if h.warnings.allow("synced-list") {
+			log.Warn().Err(err).Msg("Token validation: the synced credential list could not be read; asking the control instance")
+		}
+		c.counted(ValidationControl)
+		return nil, nil, false
+	}
+	if !found {
+		c.counted(ValidationControl)
+		return nil, nil, false
+	}
+	if !row.Active || row.Deleted {
+		c.counted(ValidationLocal)
+		return nil, fmt.Errorf("invalid token: the credential is not active"), true
+	}
+	// A credential the control plane sent without an App has none this
+	// edge may serve: refused here, like an inactive one.
+	if row.AppID == 0 {
+		c.counted(ValidationLocal)
+		return nil, fmt.Errorf("invalid token: the credential has no App on this gateway"), true
+	}
+	app, err := h.GetAppByTokenID(row.AppID)
+	if err != nil {
+		// The key is good but its App is not here yet: the control plane's
+		// answer brings it.
+		c.counted(ValidationControl)
+		return nil, nil, false
+	}
+	c.counted(ValidationLocal)
+	if !app.IsActive {
+		return nil, fmt.Errorf("invalid token: %w", coresvc.ErrAppInactive), true
+	}
+	return &TokenValidationResult{
+		TokenID:   row.AppID, // the App ID stands in for a token ID, as on demand
+		TokenName: "synced-credential",
+		AppID:     row.AppID,
+		App:       app,
+	}, nil, true
+}
+
 // refreshAhead revalidates a token whose cached result is near its expiry.
 // Success replaces the entry; a rejection removes it (validateWithControl);
 // any other failure leaves it to expire at its TTL as before.
-func (h *HybridGatewayService) refreshAhead(token string) {
-	_, _, _ = h.validations.Do(token, func() (interface{}, error) {
-		return h.validateWithControl(token)
+func (h *HybridGatewayService) refreshAhead(token, key string) {
+	_, _, _ = h.validations.Do(key, func() (interface{}, error) {
+		return h.validateWithControl(token, key)
 	})
 }
 
+// cacheKey returns the key of token in the token cache and in validations:
+// its credential hash (pkg/credhash).
+func (h *HybridGatewayService) cacheKey(token string) string {
+	return h.hasher.Hash(token)
+}
+
 // validateWithControl validates a token with the control instance, caches the
-// result and makes sure its App is in local SQLite.
-func (h *HybridGatewayService) validateWithControl(token string) (*TokenValidationResult, error) {
+// result under key (the token's cacheKey) and makes sure its App is in local
+// SQLite.
+func (h *HybridGatewayService) validateWithControl(token, key string) (*TokenValidationResult, error) {
+	started := time.Now()
 	tokenPrefix := token
 	if len(token) > 8 {
 		tokenPrefix = token[:8]
@@ -151,7 +271,7 @@ func (h *HybridGatewayService) validateWithControl(token string) (*TokenValidati
 	// client its key is wrong.
 	staleFallback := func(cause error) (*TokenValidationResult, error) {
 		cause = fmt.Errorf("%w: %w", coresvc.ErrCredentialCheckUnavailable, cause)
-		if stale, age := h.getStaleFromCache(token); stale != nil {
+		if stale, age := h.getStaleFromCache(key); stale != nil {
 			log.Warn().
 				Str("token_prefix", tokenPrefix).
 				Dur("stale_for", age).
@@ -181,7 +301,10 @@ func (h *HybridGatewayService) validateWithControl(token string) (*TokenValidati
 				log.Warn().Str("reason", resp.ErrorMessage).Msg("Token validation: rejected by the control instance")
 			}
 			// The hub has spoken: whatever we cached for this token is no longer true.
-			h.removeFromCache(token)
+			h.removeFromCache(key)
+			if h.credentials != nil {
+				h.credentials.Learned(key, 0, false)
+			}
 			// The hub names an inactive App, so the edge can refuse it the way
 			// the embedded gateway does (403 "app is inactive"), not as a bad key.
 			if resp.ErrorMessage == coresvc.AppInactiveMessage {
@@ -195,6 +318,21 @@ func (h *HybridGatewayService) validateWithControl(token string) (*TokenValidati
 			Uint32("app_id", resp.AppId).
 			Str("app_name", resp.AppName).
 			Msg("On-demand token validation successful")
+
+		// With full credential sync the edge serves a key only when the
+		// control plane says, for this edge, both that the key is valid and
+		// which App it belongs to. A valid answer without the App means the
+		// App is not one this edge's namespace may serve (the list has no
+		// row for the key for the same reason): refused, whatever this
+		// edge's database still holds for that App ID, and not cached.
+		if h.credentials != nil && resp.App == nil {
+			h.removeFromCache(key)
+			h.credentials.Learned(key, 0, false)
+			if h.warnings.allow("valid-no-app") {
+				log.Warn().Uint32("app_id", resp.AppId).Msg("Token validation: the control instance accepted the key but did not send its App (the App is not served in this edge's namespace); refused")
+			}
+			return nil, fmt.Errorf("invalid token: the key's App is not served by this gateway")
+		}
 
 		// Store App if provided in response (pull-on-miss sync)
 		if resp.App != nil {
@@ -236,9 +374,15 @@ func (h *HybridGatewayService) validateWithControl(token string) (*TokenValidati
 			App:       app,
 		}
 
+		// A key the synced list did not have (created a moment ago) is on
+		// it from now on.
+		if h.credentials != nil {
+			h.credentials.Learned(key, uint(resp.AppId), true)
+		}
+
 		// Cache the result if caching is enabled
 		if h.cacheConfig.TokenCacheEnabled {
-			h.storeInCache(token, result)
+			h.storeInCache(key, result, started)
 			log.Debug().Str("token_prefix", tokenPrefix).Dur("ttl", h.cacheConfig.TokenCacheTTL).Msg("Token validation result cached")
 		}
 
@@ -282,12 +426,12 @@ func (h *HybridGatewayService) loadAppByTokenID(tokenID uint) (*database.App, er
 	return &app, nil
 }
 
-// cachedForRequest returns the cached result for a token if it is still valid,
+// cachedForRequest returns the cached result for a cache key if it is still valid,
 // and whether this request should start its refresh-ahead: the entry is past
 // refreshAheadFraction of its TTL and no refresh has been started for it.
-func (h *HybridGatewayService) cachedForRequest(token string) (*TokenValidationResult, bool) {
+func (h *HybridGatewayService) cachedForRequest(key string) (*TokenValidationResult, bool) {
 	h.cacheMutex.RLock()
-	entry, exists := h.tokenCache[token]
+	entry, exists := h.tokenCache[key]
 	h.cacheMutex.RUnlock()
 	if !exists {
 		return nil, false
@@ -325,7 +469,7 @@ func (l *warnLimiter) allow(key string) bool {
 }
 
 // getFromCache retrieves a token validation result from cache if valid
-func (h *HybridGatewayService) getFromCache(token string) *TokenValidationResult {
+func (h *HybridGatewayService) getFromCache(key string) *TokenValidationResult {
 	if !h.cacheConfig.TokenCacheEnabled {
 		return nil
 	}
@@ -333,7 +477,7 @@ func (h *HybridGatewayService) getFromCache(token string) *TokenValidationResult
 	h.cacheMutex.RLock()
 	defer h.cacheMutex.RUnlock()
 
-	entry, exists := h.tokenCache[token]
+	entry, exists := h.tokenCache[key]
 	if !exists {
 		return nil
 	}
@@ -349,7 +493,7 @@ func (h *HybridGatewayService) getFromCache(token string) *TokenValidationResult
 // getStaleFromCache returns an expired entry that is still within the stale
 // grace, together with how long ago it expired. Only the hub-unreachable path
 // asks for one; a fresh entry is served by getFromCache before we get here.
-func (h *HybridGatewayService) getStaleFromCache(token string) (*TokenValidationResult, time.Duration) {
+func (h *HybridGatewayService) getStaleFromCache(key string) (*TokenValidationResult, time.Duration) {
 	if !h.cacheConfig.TokenCacheEnabled || h.cacheConfig.TokenCacheStaleGrace <= 0 {
 		return nil, 0
 	}
@@ -357,7 +501,7 @@ func (h *HybridGatewayService) getStaleFromCache(token string) (*TokenValidation
 	h.cacheMutex.RLock()
 	defer h.cacheMutex.RUnlock()
 
-	entry, exists := h.tokenCache[token]
+	entry, exists := h.tokenCache[key]
 	if !exists {
 		return nil, 0
 	}
@@ -370,8 +514,8 @@ func (h *HybridGatewayService) getStaleFromCache(token string) (*TokenValidation
 	return entry.Result, now.Sub(entry.ExpiresAt)
 }
 
-// removeFromCache drops a token's cached result, fresh or stale.
-func (h *HybridGatewayService) removeFromCache(token string) {
+// removeFromCache drops the cached result under a cache key, fresh or stale.
+func (h *HybridGatewayService) removeFromCache(key string) {
 	if !h.cacheConfig.TokenCacheEnabled {
 		return
 	}
@@ -379,7 +523,92 @@ func (h *HybridGatewayService) removeFromCache(token string) {
 	h.cacheMutex.Lock()
 	defer h.cacheMutex.Unlock()
 
-	delete(h.tokenCache, token)
+	delete(h.tokenCache, key)
+}
+
+// evictionMemory is how long an eviction by a credential.changed event
+// keeps a validation that started before it from caching its result: far
+// longer than one call to the control instance can take.
+const evictionMemory = 10 * time.Minute
+
+// maxRememberedEvictions bounds evictedAt. Past it the remembered evictions
+// are replaced by one for every key (evictedAllAt): validations in flight
+// then do not cache their results, which costs one more call to the
+// control plane each, never a stale answer.
+const maxRememberedEvictions = 10000
+
+// EvictCredential drops everything the edge holds in memory for the
+// credential with this hash (pkg/credhash, the token cache's key): its
+// cached validation, fresh or stale, so neither the cache TTL nor the stale
+// grace keeps serving a key that was revoked; a validation in flight for
+// it, which may carry the control plane's answer from before the change;
+// and the right of any validation that started before now to cache its
+// result. The next request for the key asks the control plane again.
+//
+// It only ever drops: whatever an event says, nothing is added or made
+// valid here.
+func (h *HybridGatewayService) EvictCredential(hash string) {
+	if hash == "" {
+		return
+	}
+	// Record the eviction first, then drop the entry: a validation that
+	// checks the record (storeInCache, under cacheMutex) before it is
+	// written stores its result before the drop below, which removes it.
+	now := time.Now()
+	h.evictionsMu.Lock()
+	// Forget evictions older than evictionMemory here, where they are
+	// added, at most once a minute, under the evictions' own lock: a burst
+	// of events costs one walk of the map per minute and never holds up
+	// the token cache.
+	if now.Sub(h.evictionsPruned) >= time.Minute {
+		for key, at := range h.evictedAt {
+			if now.Sub(at) > evictionMemory {
+				delete(h.evictedAt, key)
+			}
+		}
+		h.evictionsPruned = now
+	}
+	if len(h.evictedAt) >= maxRememberedEvictions {
+		clear(h.evictedAt)
+		h.evictedAllAt = now
+	}
+	h.evictedAt[hash] = now
+	h.evictionsMu.Unlock()
+
+	h.cacheMutex.Lock()
+	delete(h.tokenCache, hash)
+	h.cacheMutex.Unlock()
+	h.validations.Forget(hash)
+	if h.credentials != nil {
+		h.credentials.Forget(hash)
+	}
+}
+
+// HandleCredentialChanged acts on a credential.changed event from the
+// control plane (eventbridge.CredentialChangedTopic): the edge drops what
+// it cached for that credential, whatever the change and whichever App or
+// namespace the event names. A credential this edge never cached costs a
+// map lookup. A payload that cannot be read is logged and ignored: the
+// cache TTL still bounds what is cached.
+//
+// With full credential sync the event is a hint for the synced list too:
+// when the list holds the hash, the edge asks for a sync, spaced
+// (CredentialSync.KickForChange), and the delta brings the change with the
+// credential's ID, as any sync does. A hash the list does not hold starts
+// no sync. Nothing is added to or changed on the list from the payload.
+func (h *HybridGatewayService) HandleCredentialChanged(event eventbridge.Event) {
+	change, err := eventbridge.ParseCredentialChanged(event.Payload)
+	if err != nil {
+		if h.warnings.allow("credential-changed") {
+			log.Warn().Err(err).Str("event_id", event.ID).Msg("Ignoring a credential.changed event that cannot be read")
+		}
+		return
+	}
+	h.EvictCredential(change.Hash)
+	if h.credentials != nil {
+		h.credentials.KickForChange(change.Hash)
+	}
+	log.Debug().Msg("credential.changed: dropped what the edge cached for the credential")
 }
 
 // retireAt is the moment an entry is of no further use: its expiry plus the
@@ -391,14 +620,27 @@ func (h *HybridGatewayService) retireAt(entry *TokenCacheEntry) time.Time {
 	return entry.ExpiresAt.Add(h.cacheConfig.TokenCacheStaleGrace)
 }
 
-// storeInCache stores a token validation result in cache
-func (h *HybridGatewayService) storeInCache(token string, result *TokenValidationResult) {
+// storeInCache stores a token validation result in cache under its cache
+// key. A result from a validation that started before a credential.changed
+// event dropped the key is not stored: the control plane may have answered
+// before the change.
+func (h *HybridGatewayService) storeInCache(key string, result *TokenValidationResult, started time.Time) {
 	if !h.cacheConfig.TokenCacheEnabled {
 		return
 	}
 
 	h.cacheMutex.Lock()
 	defer h.cacheMutex.Unlock()
+
+	h.evictionsMu.Lock()
+	evicted, wasEvicted := h.evictedAt[key]
+	if !h.evictedAllAt.IsZero() && (!wasEvicted || h.evictedAllAt.After(evicted)) {
+		evicted, wasEvicted = h.evictedAllAt, true
+	}
+	h.evictionsMu.Unlock()
+	if wasEvicted && !started.After(evicted) {
+		return
+	}
 
 	// Check cache size limit and evict oldest entries if needed
 	if len(h.tokenCache) >= h.cacheConfig.TokenCacheMaxSize {
@@ -407,7 +649,7 @@ func (h *HybridGatewayService) storeInCache(token string, result *TokenValidatio
 
 	// Store new entry
 	now := time.Now()
-	h.tokenCache[token] = &TokenCacheEntry{
+	h.tokenCache[key] = &TokenCacheEntry{
 		Result:    result,
 		CachedAt:  now,
 		ExpiresAt: now.Add(h.cacheConfig.TokenCacheTTL),
@@ -417,23 +659,23 @@ func (h *HybridGatewayService) storeInCache(token string, result *TokenValidatio
 // evictOldestEntry removes the oldest cache entry (simple LRU). An entry that
 // is past its stale grace is useless on every path and goes first.
 func (h *HybridGatewayService) evictOldestEntry() {
-	var oldestToken string
+	var oldestKey string
 	var oldestTime time.Time
 
 	now := time.Now()
-	for token, entry := range h.tokenCache {
+	for key, entry := range h.tokenCache {
 		if now.After(h.retireAt(entry)) {
-			delete(h.tokenCache, token)
+			delete(h.tokenCache, key)
 			return
 		}
-		if oldestToken == "" || entry.CachedAt.Before(oldestTime) {
-			oldestToken = token
+		if oldestKey == "" || entry.CachedAt.Before(oldestTime) {
+			oldestKey = key
 			oldestTime = entry.CachedAt
 		}
 	}
 
-	if oldestToken != "" {
-		delete(h.tokenCache, oldestToken)
+	if oldestKey != "" {
+		delete(h.tokenCache, oldestKey)
 	}
 }
 
@@ -461,9 +703,9 @@ func (h *HybridGatewayService) cleanupExpiredEntries() {
 	now := time.Now()
 	expiredCount := 0
 
-	for token, entry := range h.tokenCache {
+	for key, entry := range h.tokenCache {
 		if now.After(h.retireAt(entry)) {
-			delete(h.tokenCache, token)
+			delete(h.tokenCache, key)
 			expiredCount++
 		}
 	}

@@ -8,10 +8,18 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
-// APIToken represents an API token for gateway access
+// APIToken represents an API token for gateway access. The token itself is
+// not stored (api_token_hash.go).
 type APIToken struct {
 	ID         uint           `gorm:"primaryKey"`
+	// Token is a redacted reference to the token (RedactedAPIToken), not
+	// the token: the column held the token before tokens were hashed and
+	// keeps its name, NOT NULL and unique index.
 	Token      string         `gorm:"uniqueIndex;not null"`
+	// TokenHash is the token's credential hash, by which it is looked up.
+	// NULL only in a row an older version wrote, until HashStoredAPITokens
+	// converts it at the next start.
+	TokenHash  string         `gorm:"size:67;uniqueIndex:idx_api_tokens_token_hash;default:null"`
 	Name       string         `gorm:"not null"`
 	AppID      uint           `gorm:"not null"`
 	App        *App           `gorm:"foreignKey:AppID"`
@@ -25,14 +33,6 @@ type APIToken struct {
 	
 	// Hub-and-Spoke Configuration
 	Namespace  string         `gorm:"default:'';index:idx_token_namespace"` // Empty = global, specific = filtered to edge
-}
-
-// TokenCache for persistent cache backing
-type TokenCache struct {
-	Token     string         `gorm:"primaryKey"`
-	CacheData JSON `gorm:"not null;type:json"`
-	ExpiresAt time.Time      `gorm:"not null;index"`
-	CreatedAt time.Time
 }
 
 // LLM represents an LLM configuration
@@ -440,7 +440,6 @@ const (
 
 // TableName methods to ensure consistent table naming
 func (APIToken) TableName() string     { return "api_tokens" }
-func (TokenCache) TableName() string   { return "token_cache" }
 func (LLM) TableName() string          { return "llms" }
 func (App) TableName() string          { return "apps" }
 func (Credential) TableName() string   { return "credentials" }
@@ -506,10 +505,73 @@ type ControlPayload struct {
 type SyncState struct {
 	ID             uint      `gorm:"primaryKey"`
 	Topic          string    `gorm:"uniqueIndex;not null"` // e.g., "budget.sync"
+	// For the topic "control.contact" (the edge's last contact with a
+	// control plane) this is not a sequence: it holds the MAC that
+	// authenticates LastSyncAt (services.RecordControlContact).
 	SequenceNumber uint64    `gorm:"default:0"`
 	LastSyncAt     time.Time
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+}
+
+// AppliedSnapshotID is the ID of the one row of applied_snapshots.
+const AppliedSnapshotID = 1
+
+// AppliedSnapshot is the configuration snapshot an edge last applied: the
+// snapshot itself, not only the tables it produced, because part of an
+// edge's configuration lives in memory only (prompt templates, guardrail
+// exceptions and capabilities, tracing keys) and is rebuilt by applying a
+// snapshot. The table holds one row (AppliedSnapshotID), replaced in the
+// transaction that applies a snapshot, so it always matches the tables.
+// See features/ActiveActive.md, Phase 3.
+type AppliedSnapshot struct {
+	ID uint `gorm:"primaryKey;autoIncrement:false"`
+	// Checksum is what the edge reports to the hub in heartbeats for this
+	// configuration: the hub's checksum, or one of its own when entries
+	// were left out.
+	Checksum  string `gorm:"size:64"`
+	Version   string `gorm:"size:255"`
+	Namespace string `gorm:"size:255"`
+	AppliedAt time.Time
+	// Snapshot is the ConfigurationSnapshot protobuf as received, encrypted
+	// with a key derived from ENCRYPTION_KEY (AES-256-GCM, random nonce
+	// prepended). Up to GRPC_MAX_MESSAGE_SIZE (16 MB by default): a BLOB on
+	// SQLite, bytea on Postgres.
+	Snapshot []byte
+}
+
+// SyncedCredential is one App key as an edge with full credential sync
+// (EDGE_CREDENTIAL_SYNC=full) knows it: the key's credential hash
+// (pkg/credhash), never the key, and whether it may be used. The control
+// plane sends the list and its changes; the edge validates from it. See
+// features/ActiveActive.md, Phase 4.
+type SyncedCredential struct {
+	// SecretHash is the key's credential hash: what a request's key is
+	// hashed to and looked up by.
+	SecretHash   string `gorm:"primaryKey;size:67"`
+	CredentialID uint   `gorm:"index"`
+	AppID        uint   `gorm:"index"`
+	Active       bool
+	Deleted      bool
+	// UpdatedAt is when the credential last changed on the control plane.
+	UpdatedAt time.Time `gorm:"autoUpdateTime:false"`
+	// SyncedAt is when the edge last received the row. A full sync removes
+	// the rows it did not bring.
+	SyncedAt time.Time `gorm:"index"`
+}
+
+// SyncedAppFingerprint is what the credential sync last stored for an App:
+// a hash of the App as the control plane sent it (its deterministic
+// protobuf encoding), and the updated_at the sync wrote on the App's row. A
+// later sync skips an App whose fingerprint is unchanged and whose row still
+// has that updated_at; any other write of the row (the configuration
+// snapshot, a key validated on demand, a plugin) changes updated_at, so the
+// App is stored again. A field added to the App later changes the
+// fingerprint and is never silently skipped.
+type SyncedAppFingerprint struct {
+	AppID        uint      `gorm:"primaryKey;autoIncrement:false"`
+	Fingerprint  string    `gorm:"size:64;not null"`
+	AppUpdatedAt time.Time `gorm:"not null"`
 }
 
 // BudgetBlock is an App the control plane says this gateway must refuse on
@@ -735,6 +797,8 @@ func (EdgeInstance) TableName() string      { return "edge_instances" }
 func (PluginKV) TableName() string          { return "plugin_kv" }
 func (ControlPayload) TableName() string    { return "control_payloads" }
 func (SyncState) TableName() string         { return "sync_states" }
+func (AppliedSnapshot) TableName() string   { return "applied_snapshots" }
+func (SyncedCredential) TableName() string  { return "synced_credentials" }
 func (ModelRouter) TableName() string       { return "model_routers" }
 func (ModelPool) TableName() string         { return "model_pools" }
 func (PoolVendor) TableName() string        { return "pool_vendors" }

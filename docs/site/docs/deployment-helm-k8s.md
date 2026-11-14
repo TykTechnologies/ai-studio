@@ -408,6 +408,105 @@ Pod names change when a Deployment rolls, which leaves behind stale edge
 registrations; AI Studio reaps these automatically. Use `kind: StatefulSet` if
 you would rather have stable per-replica identities.
 
+**When to use the StatefulSet form.** A Deployment keeps the edge's database on
+an `emptyDir`: it survives a container restart, but a rescheduled pod (a node
+drain, an eviction, a rollout) starts with an empty one. That is fine while the
+database is only a cache of what AI Studio sends. Use `kind: StatefulSet` with
+`persistence.enabled: true` when the edge must keep something across a
+rescheduling:
+
+- **Starting without a control plane** (`config.startFromLastKnownGood`). The
+  configuration snapshot the edge starts from is in its database. Without a
+  persistent volume a rescheduled pod has none and crash-loops until a control
+  plane answers, exactly as without the setting.
+- **Full credential sync** (`config.credentialSync: full`, Enterprise). The
+  hashed list of keys the edge validates from is in its database. Without a
+  persistent volume a rescheduled pod starts with none, and validates on
+  demand until its first sync completes.
+- **A stable edge identity.** The edge ID is the pod name. A StatefulSet pod
+  keeps its name (`<release>-microgateway-0`, `-1`, ...) across restarts and
+  rescheduling, so the edge keeps its row, its history and its sync state in
+  AI Studio; a Deployment pod gets a new name, and so a new edge, every time.
+- **Buffered analytics and budget counters** that should survive a restart.
+
+The chart prints a warning after `helm install` or `helm upgrade` when
+`startFromLastKnownGood` or `credentialSync: full` is set without StatefulSet
+persistence. It still installs: an `emptyDir` does cover container restarts.
+
+**Sizing the edge's volume.** What fills it is the edge's own copy of the
+analytics: one row per request, kept for `config.analyticsRetentionDays`
+(`ANALYTICS_RETENTION_DAYS`; the chart sets 90 days, an edge without the
+setting keeps 7). Configuration, the stored snapshot and budget state are
+small beside it. Measured under load: about 2 GB per 5 to 6 million
+requests, so roughly 400 bytes per request.
+
+    volume size ≈ 400 bytes × requests per second × 86,400 × retention days
+
+| Requests per second | 1 day | 7 days | 90 days |
+|---|---|---|---|
+| 1 | 35 MB | 240 MB | 3 GB |
+| 10 | 350 MB | 2.4 GB | 31 GB |
+| 100 | 3.5 GB | 24 GB | 310 GB |
+| 1,000 | 35 GB | 240 GB | 3 TB |
+
+The default `persistence.size` of 2Gi with the chart's 90 days holds about
+0.7 requests per second sustained; in a load test at 3,000 to 6,000
+requests per second it was full in 30 to 45 minutes. AI Studio has these
+records too (the analytics pulse sends them), so on an edge that reports to
+AI Studio a short retention loses nothing there: set
+`config.analyticsRetentionDays` to what the edge's own use needs, often `"1"`,
+and size the volume from the table.
+
+**Sizing the edge's memory.** The chart requests 256Mi and limits an edge to
+1Gi (`resources`). The request is a default to override: set it to what your
+edges use under load, since an edge well above its request is an early
+candidate for eviction when the node runs short of memory, and the analytics
+it holds in memory go with it. Size the limit for the edge's working set (about 480 MB
+at 3,000 requests per second in the load tests; more with many open
+streams), plus `analyticsPulse.maxBacklogBytes` (64 MiB), plus about 50 MB:
+the edge keeps undelivered analytics in memory through a control-plane
+outage. It sets a soft `GOMEMLIMIT` at 90% of the limit and starts refusing
+new requests at 85%, so keep that sum below 85% of the limit. Raise the
+limit and the backlog together. See
+[Analytics during a control-plane outage](./edge-gateways.md#analytics-during-a-control-plane-outage).
+
+**When the volume is full** the edge keeps serving, and says so: `/ready`
+stays 200 with `"database_full": true` and what is no longer stored,
+`microgateway_database_full` is 1, and the log has one error per kind of
+write. What stops: its own analytics rows are dropped, **a configuration
+push cannot be applied** (the edge keeps the configuration it had and
+reports that one, so AI Studio shows it as not in sync and the push as
+failed), and the last control contact and budget blocks are no longer
+stored for a restart. See
+[the microgateway's database guide](https://github.com/TykTechnologies/ai-studio/blob/main/microgateway/docs/config/database.md#when-the-database-is-full).
+
+**Several control planes.** For an active-active AI Studio, give the edge both
+sites, its own first, and decide whether it may start without either:
+
+```yaml
+microgateway:
+  kind: StatefulSet
+  persistence:
+    enabled: true
+  config:
+    controlEndpoints:
+      - studio.site-a.example.com:50051
+      - studio.site-b.example.com:50051
+    controlFailbackInterval: "5m"     # optional: return to the first when it is back
+    startFromLastKnownGood: true      # optional: start from the stored configuration
+    # startupControlTimeout: "30s"
+    # lastKnownGoodMaxAge: "72h"
+    # credentialSync: "full"          # Enterprise: validate keys from the synced, hashed list
+    # credentialSyncMaxAge: "24h"     # how long that list is trusted without a sync ("0": no limit)
+```
+
+`controlEndpoints` replaces `controlEndpoint` when it is not empty. Keep
+`probes.startup` (`periodSeconds` x `failureThreshold`, 150 s by default) above
+`startupControlTimeout`: with `startFromLastKnownGood` the edge spends that
+long looking for a control plane before it starts from its stored
+configuration. See [Several control planes](./edge-gateways.md#several-control-planes)
+and [Starting without a control plane](./edge-gateways.md#starting-without-a-control-plane).
+
 **Separate edges per region.** Deploy separate Helm releases and override
 `edgeNamespace` per instance. Each edge receives only the configuration assigned
 to its namespace:
@@ -452,8 +551,10 @@ microgateway:
         matchLabels:
           app: microgateway
 
-  # Keeps analytics buffered between pulses across a restart. Optional: the edge
-  # rebuilds its configuration from the hub on every start regardless.
+  # Keeps analytics buffered between pulses across a restart. Optional while
+  # the edge rebuilds its configuration from the hub on every start; required
+  # for config.startFromLastKnownGood and config.credentialSync: full to cover
+  # a rescheduled pod (see "When to use the StatefulSet form").
   kind: StatefulSet
   persistence:
     enabled: true
@@ -558,6 +659,78 @@ postgres:
 database:
   internal: false
   url: "postgres://user:password@your-db-host:5432/tyk_ai_studio?sslmode=require"
+```
+
+To keep the credentials out of values, put the whole URL in a Secret of your own and name it with `database.existingSecret` (key `DATABASE_URL`, or `database.existingSecretKey`). It is then passed to Studio from the Secret only, not through the ConfigMap.
+
+### Several Studio replicas
+
+From 2.3 several AI Studio replicas can serve one PostgreSQL database (see [Several replicas](./reference-architecture.md#several-replicas-from-2-3)). Set `replicaCount` above 1. The chart then needs:
+
+- **An external PostgreSQL** (`database.internal: false`). The bundled PostgreSQL is a single pod, and SQLite serves one process, so the render fails with either.
+- **One `CSRF_KEY`** for every replica (`config.csrfKey`, generate it with `openssl rand -hex 32`). Without it each replica generates its own and a form loaded from one replica is refused by another, so the render fails without it. The other shared secrets (`config.tykAiSecretKey`, `config.grpcAuthToken`, `config.microgatewayEncryptionKey`) are the same for every replica of a release already.
+
+And it renders, with `replicaCount` above 1:
+
+- **A rolling update** that starts a new replica before stopping an old one (`maxUnavailable: 0`, `maxSurge: 1`), unless `midsommar.strategy` is set. With one replica the default stays `Recreate`.
+- **A PodDisruptionBudget** keeping `podDisruptionBudget.minAvailable` (1) replicas through node drains, or allowing `podDisruptionBudget.maxUnavailable` when that is set.
+- **Spread** of the replicas over nodes and zones (`ScheduleAnyway`). A `topologySpreadConstraints` list replaces it; `affinity` is passed through as given.
+- **Cookie affinity on the Ingress** for the nginx class (`midsommar.ingress.sessionAffinity`), because chat, agent and MCP SSE sessions are held by the replica that started them. Annotations you set in `midsommar.ingress.annotations` win. For another ingress controller, set its own affinity annotations.
+
+**Probes.** Studio waits for its database at start-up (`DATABASE_STARTUP_TIMEOUT`, 60 seconds by default) and runs its migrations before it listens, so neither `/health` nor `/ready` answers during that time. A startup probe on `/health` allows `probes.startup.periodSeconds` × `probes.startup.failureThreshold`, 180 seconds by default; keep it longer than `DATABASE_STARTUP_TIMEOUT` plus the migration time plus one more connection attempt (`DATABASE_CONNECT_TIMEOUT` per host, twice with `sslmode=prefer`), and raise it for the first start of a new version on a large database. Readiness is `/ready`, which stays 200 through a database failover shorter than `DATABASE_READY_GRACE` (30 seconds; see [Readiness during a failover](./configuration.md#postgres-with-a-standby-failover)). `probes.readiness.requireWrite: true` probes `/ready?require=write` instead, which takes a replica whose database is read-only out of the Service after the grace.
+
+**Stopping a replica.** On SIGTERM AI Studio stops accepting connections and lets the requests in flight finish, for up to 30 seconds. Kubernetes takes the pod out of the Service at the same moment, which takes a few seconds to reach every node, so the chart has the pod sleep first (`shutdown.preStopDelaySeconds`, 10 seconds, with the `sleep` preStop action; on a cluster older than Kubernetes 1.30, which lacks that action, no hook is rendered and the install notes say a rolling update may refuse a few requests there) and sets `terminationGracePeriodSeconds` to cover the sleep and the drain (45 seconds by default). Without the sleep, a rolling restart refused 2 of 600 requests at the moment an old pod began terminating.
+
+**gRPC.** Each edge holds one long-lived stream to port 50051. The Service spreads new connections over the replicas, and a replica that stops hands its edges to the others, which reconnect within seconds. A load balancer in front of port 50051 must support HTTP/2 and keep idle streams open for at least a minute (edges ping every 30 seconds). Set `appProtocol: grpc` on the `grpc` port in `midsommar.service.ports` when a service mesh or a Gateway API route needs to know the port speaks gRPC.
+
+**Upgrading to 2.3.** Stop every older replica before the first 2.3 replica starts (see the 2.3 upgrade notes): for that one upgrade, set `midsommar.strategy.type: Recreate`, or scale to one replica first. Later upgrades can roll.
+
+```yaml
+replicaCount: 3
+
+database:
+  internal: false
+  existingSecret: studio-database   # key DATABASE_URL
+
+config:
+  csrfKey: "<openssl rand -hex 32>"
+  databaseMaxOpenConns: "30"        # all replicas together under the server's max_connections
+  databaseConnectTimeout: "3s"
+```
+
+#### Two clusters, one replicated PostgreSQL
+
+The active-active layout (see [Active-Active (Two Sites)](./deployment-active-active.md) for the database, the witness and the runbooks): one release in each site's cluster, both on the same replicated PostgreSQL, each site's replicas labelled with its name so the cluster status (`GET /api/v1/cluster/status`) and the Edge Gateways page tell them apart. The two releases must share every secret: put them in values both sites use, or in Secrets with the same contents.
+
+```yaml
+# values-site-a.yaml. values-site-b.yaml is the same with site-b as the label
+# and site-b's control endpoint first.
+replicaCount: 2
+
+database:
+  internal: false
+  # postgres://studio:...@pg-a.example.internal,pg-b.example.internal/tyk_ai_studio?target_session_attrs=read-write&sslmode=require&connect_timeout=3
+  existingSecret: studio-database
+
+config:
+  clusterNodeLabel: site-a
+  csrfKey: "<the same in both sites>"
+  tykAiSecretKey: "<the same in both sites>"
+  grpcAuthToken: "<the same in both sites>"
+  microgatewayEncryptionKey: "<the same in both sites>"
+  databaseConnectTimeout: "3s"
+
+microgateway:
+  config:
+    # Each site's edges try their own site's Studio first.
+    controlEndpoints:
+      - studio-site-a.example.internal:50051
+      - studio-site-b.example.internal:50051
+```
+
+```bash
+helm upgrade --install studio ./helm -f values-site-a.yaml --kube-context site-a
+helm upgrade --install studio ./helm -f values-site-b.yaml --kube-context site-b
 ```
 
 ---

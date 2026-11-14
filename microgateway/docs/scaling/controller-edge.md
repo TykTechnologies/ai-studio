@@ -96,7 +96,6 @@ EDGE_SKIP_TLS_VERIFY=false
 # Reconnection settings
 EDGE_RECONNECT_INTERVAL=5s
 EDGE_HEARTBEAT_INTERVAL=30s
-EDGE_SYNC_TIMEOUT=10s
 EDGE_MAX_RECONNECT_ATTEMPTS=10
 ```
 
@@ -562,33 +561,59 @@ Edge global receives: LLM 1 (if namespace="")
 4. Edge registers with control (sends edge_id, namespace, metadata)
 5. Control validates edge and adds to active edges list
 6. Control sends initial configuration (filtered by namespace)
-7. Edge caches configuration locally
+7. Edge stores the configuration in its own database
 8. Edge becomes ready to serve requests
 9. Edge starts heartbeat process
 ```
 
 ### Edge Caching
-```bash
-# Edge cache structure
-/var/lib/microgateway/edge-cache/
-├── llms.json           # Cached LLM configurations
-├── apps.json           # Cached application configurations
-├── tokens.json         # Cached token configurations
-├── model_prices.json   # Cached pricing information
-└── sync_state.json     # Synchronization state
-```
+
+An edge keeps two things locally. Neither is a set of JSON files.
+
+- **Configuration, in the edge's own database.** The snapshot received from
+  control (LLMs, Apps, model prices, filters, plugins and the rest) is written
+  to the edge's database (`DATABASE_TYPE` / `DATABASE_DSN`: SQLite or
+  PostgreSQL) and served from there. It is replaced on every configuration
+  push and on every reconnection. The snapshot itself is also kept, encrypted
+  with a key derived from `ENCRYPTION_KEY`, in the table `applied_snapshots`:
+  it is what an edge with `EDGE_START_FROM_LAST_KNOWN_GOOD=true` starts from
+  when control is unreachable (see Edge Failover below).
+- **Validated tokens, in memory.** App credentials are not part of the
+  snapshot and are never written to the edge's disk. The first request with a
+  token asks control to validate it; the answer is cached in memory for
+  `EDGE_TOKEN_CACHE_TTL` (default `5m`, at most `EDGE_TOKEN_CACHE_MAX_SIZE`
+  entries, default `1000`). The cache is empty after a restart.
 
 ### Edge Failover
-```bash
-# Edge cache fallback
-# If control is unavailable:
-# 1. Edge continues using cached configuration
-# 2. Edge logs warnings about control unavailability
-# 3. Edge attempts reconnection per EDGE_RECONNECT_INTERVAL
-# 4. Edge resumes normal operation when control returns
 
-# Cache persistence ensures continued operation
-```
+While control is unreachable, a **running** edge:
+
+1. Keeps serving from the configuration it has loaded, and logs the lost
+   connection.
+2. Reconnects in the background: the first retry after
+   `EDGE_RECONNECT_INTERVAL` (default `5s`), doubling per failed attempt to at
+   most 30 seconds (or the interval itself, if that is longer).
+3. Accepts tokens it validated within `EDGE_TOKEN_CACHE_TTL`. A token it has
+   not seen, or whose cache entry has expired, is answered `503` with
+   `Retry-After` (error code `credential_check_unavailable`): the edge cannot
+   know whether it is valid. `EDGE_TOKEN_CACHE_STALE_GRACE` (default `0`, off)
+   keeps expired entries usable for that long while control is unreachable.
+4. Receives the current configuration again when control returns.
+
+An edge that **starts or restarts** while control is unreachable exits by
+default. Run enough edges that a restart during a control outage does not
+remove needed capacity, or set `EDGE_START_FROM_LAST_KNOWN_GOOD=true`: the edge
+then waits `EDGE_STARTUP_CONTROL_TIMEOUT` (default `30s`) for control and
+starts from the configuration snapshot it last applied, which it keeps
+encrypted in its database. It refuses, and exits as before, when it has no
+stored snapshot, when the snapshot is for another `EDGE_NAMESPACE` or does not
+decrypt with its `ENCRYPTION_KEY`, when it has been without control for longer
+than `EDGE_LAST_KNOWN_GOOD_MAX_AGE` (default `72h`), or when the snapshot's
+time is in the future by the edge's clock. An edge started this way serves
+what it last knew, so something removed or revoked on control since keeps
+working on it until it reconnects; tokens it has to ask control about still
+answer `503`, because the token cache is empty after a restart. It needs a
+database that survives the restart.
 
 ## Explicit Configuration Push System
 

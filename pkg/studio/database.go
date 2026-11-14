@@ -1,8 +1,11 @@
 package studio
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"net/url"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -13,6 +16,8 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/TykTechnologies/midsommar/v2/pkg/dbhold"
+	"github.com/TykTechnologies/midsommar/v2/pkg/dbstate"
 )
 
 // databaseDrivers maps a DatabaseType to the function that makes its gorm
@@ -39,11 +44,14 @@ func RegisterDatabaseDriver(name string, open func(dsn string) gorm.Dialector) {
 // or "sqlite" once pkg/studio/sqlitedb is imported, at DatabaseURL) and checks
 // it responds. With DatabaseSchema set (postgres only) Studio's tables live
 // in that schema: OpenDatabase creates it when missing and pins every
-// connection's search_path to it alone. The result is what Options.DB takes. A host opens Studio's
+// connection's search_path to it alone. On Postgres it waits up to
+// DatabaseStartupTimeout (DATABASE_STARTUP_TIMEOUT) for a server that answers
+// and takes writes (database_wait.go); a server that only reads is never
+// returned, since New migrates. The result is what Options.DB takes. A host opens Studio's
 // database with it rather than with gorm itself: Studio builds with its own
 // copy of gorm (third_party/gorm.io), which the host's gorm cannot stand in
 // for. The caller closes it after Stop, through DB().
-func OpenDatabase(conf *config.AppConf) (*gorm.DB, error) {
+func OpenDatabase(conf *config.AppConf) (db *gorm.DB, err error) {
 	databaseDriversMu.RLock()
 	open, ok := databaseDrivers[conf.DatabaseType]
 	databaseDriversMu.RUnlock()
@@ -60,24 +68,105 @@ func OpenDatabase(conf *config.AppConf) (*gorm.DB, error) {
 			return nil, fmt.Errorf("studio: DATABASE_SCHEMA is for postgres only (DatabaseType is %q)", conf.DatabaseType)
 		}
 		var err error
-		if dsn, err = withSchema(open, dsn, conf.DatabaseSchema); err != nil {
+		if dsn, err = schemaDSN(dsn, conf.DatabaseSchema); err != nil {
 			return nil, err
 		}
 	}
 
-	db, err := gorm.Open(open(dsn), logger.GetGormConfig())
+	dialector := open(dsn)
+	if conf.DatabaseType == "postgres" && isBuiltinPostgres(open) {
+		// The pool is Studio's own, so it follows a database failover
+		// (database_postgres.go).
+		var pool *sql.DB
+		var err error
+		if dialector, pool, err = openPostgres(conf, dsn); err != nil {
+			return nil, err
+		}
+		defer func() {
+			if db == nil {
+				pool.Close() // also ends the tracker
+			}
+		}()
+	}
+
+	// No ping in gorm.Open: waitForDatabase pings, as often as the start-up
+	// timeout allows.
+	gormConfig := logger.GetGormConfig()
+	gormConfig.DisableAutomaticPing = true
+	opened, err := gorm.Open(dialector, gormConfig)
 	if err != nil {
 		return nil, err
 	}
-	sqlDB, err := db.DB()
+	sqlDB, err := opened.DB()
 	if err != nil {
 		return nil, err
 	}
-	if err := sqlDB.Ping(); err != nil {
+	if err := waitForDatabase(conf, opened, func(ctx context.Context) error {
+		if conf.DatabaseSchema == "" {
+			return nil
+		}
+		return ensureSchema(ctx, open, conf.DatabaseURL, conf.DatabaseSchema)
+	}); err != nil {
 		sqlDB.Close()
 		return nil, err
 	}
-	return db, nil
+	if err := watchReadOnly(opened); err != nil {
+		sqlDB.Close()
+		return nil, err
+	}
+	if err := noteUnavailable(opened); err != nil {
+		sqlDB.Close()
+		return nil, err
+	}
+	holdAcrossFailover(conf, opened, sqlDB)
+	return opened, nil
+}
+
+// holdAcrossFailover makes statements outside a transaction wait, up to
+// DatabaseWriteRetryWindow, for a writable server when they fail before
+// reaching one (pkg/dbhold). Only on Studio's own Postgres pool, which has
+// a tracker to retire connections to a read-only server.
+func holdAcrossFailover(conf *config.AppConf, db *gorm.DB, pool *sql.DB) {
+	tracker := dbstate.For(db)
+	if tracker == nil || conf.DatabaseWriteRetryWindow <= 0 {
+		return
+	}
+	held := dbhold.New(pool, conf.DatabaseWriteRetryWindow, tracker, conf.DatabaseMaxIdleConns)
+	db.ConnPool = held
+	db.Statement.ConnPool = held
+}
+
+// noteUnavailable records every statement that fails because the database
+// could not be used (dbhold.IsUnavailable), including one inside a
+// transaction, which the hold does not retry: the API then answers the
+// request's 500 as 503 database_unavailable.
+func noteUnavailable(db *gorm.DB) error {
+	note := func(tx *gorm.DB) {
+		if tx.Error != nil && dbhold.IsUnavailable(tx.Error) {
+			dbhold.NoteUnavailable()
+		}
+	}
+	const name = "studio:database_unavailable"
+	cb := db.Callback()
+	for _, register := range []func() error{
+		func() error { return cb.Create().After("gorm:create").Register(name, note) },
+		func() error { return cb.Query().After("gorm:query").Register(name, note) },
+		func() error { return cb.Update().After("gorm:update").Register(name, note) },
+		func() error { return cb.Delete().After("gorm:delete").Register(name, note) },
+		func() error { return cb.Row().After("gorm:row").Register(name, note) },
+		func() error { return cb.Raw().After("gorm:raw").Register(name, note) },
+	} {
+		if err := register(); err != nil {
+			return fmt.Errorf("studio: note an unavailable database: %w", err)
+		}
+	}
+	return nil
+}
+
+// isBuiltinPostgres reports whether open is the built-in Postgres driver (a
+// test or host may have registered another under the name).
+func isBuiltinPostgres(open func(string) gorm.Dialector) bool {
+	return reflect.ValueOf(open).Pointer() == reflect.ValueOf(postgres.Open).Pointer()
 }
 
 func registeredDatabaseTypes() string {
@@ -95,40 +184,45 @@ func registeredDatabaseTypes() string {
 // in lower case, so it means the same quoted and unquoted.
 var schemaName = regexp.MustCompile(`^[a-z_][a-z0-9_]{0,62}$`)
 
-// withSchema creates schema in the database dsn names when it does not
-// exist yet, and returns dsn with search_path set to that schema alone.
-// Only that schema: Postgres skips search_path entries that do not exist,
-// and gorm's migrator creates tables in current_schema(), so a fallback such
-// as "studio,public" would put tables in public whenever the schema is
-// missing.
-func withSchema(open func(string) gorm.Dialector, dsn, schema string) (string, error) {
+// schemaDSN checks schema is a name DatabaseSchema accepts and returns dsn
+// with search_path set to that schema alone. Only that schema: Postgres
+// skips search_path entries that do not exist, and gorm's migrator creates
+// tables in current_schema(), so a fallback such as "studio,public" would
+// put tables in public whenever the schema is missing. Nothing is
+// connected to: ensureSchema creates the schema once the database answers.
+func schemaDSN(dsn, schema string) (string, error) {
 	if !schemaName.MatchString(schema) {
 		return "", fmt.Errorf("studio: DATABASE_SCHEMA %q must be a lower-case identifier (letters, digits, underscores; at most 63)", schema)
 	}
-	scoped, err := dsnWithSearchPath(dsn, schema)
-	if err != nil {
-		return "", err
-	}
+	return dsnWithSearchPath(dsn, schema)
+}
 
-	admin, err := gorm.Open(open(dsn), logger.GetGormConfig())
+// ensureSchema creates schema in the database dsn names when it does not
+// exist yet.
+func ensureSchema(ctx context.Context, open func(string) gorm.Dialector, dsn, schema string) error {
+	// No ping in gorm.Open: the first statement dials, bounded by ctx.
+	gormConfig := logger.GetGormConfig()
+	gormConfig.DisableAutomaticPing = true
+	db, err := gorm.Open(open(dsn), gormConfig)
 	if err != nil {
-		return "", err
+		return err
 	}
+	admin := db.WithContext(ctx)
 	if sqlDB, err := admin.DB(); err == nil {
 		defer sqlDB.Close()
 	}
 	var exists bool
 	if err := admin.Raw("SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = ?)", schema).Scan(&exists).Error; err != nil {
-		return "", fmt.Errorf("studio: look up schema %q: %w", schema, err)
+		return fmt.Errorf("studio: look up schema %q: %w", schema, err)
 	}
 	if !exists {
 		// IF NOT EXISTS: replicas starting together may both get here.
 		if err := admin.Exec(`CREATE SCHEMA IF NOT EXISTS "` + schema + `"`).Error; err != nil {
-			return "", fmt.Errorf("studio: create schema %q: %w", schema, err)
+			return fmt.Errorf("studio: create schema %q: %w", schema, err)
 		}
 		logger.Infof("Created database schema %q", schema)
 	}
-	return scoped, nil
+	return nil
 }
 
 // dsnWithSearchPath sets search_path in a Postgres DSN, either a URL

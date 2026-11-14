@@ -1,0 +1,6 @@
+{{- if and (gt (int .Values.shutdown.preStopDelaySeconds) 0) (not (semverCompare ">=1.30-0" .Capabilities.KubeVersion.Version)) }}
+NOTE: this cluster's Kubernetes ({{ .Capabilities.KubeVersion.Version }}) is older than 1.30, so the AI Studio pods get no preStop
+delay (shutdown.preStopDelaySeconds needs the sleep action of Kubernetes 1.30). A rolling update or a pod
+deletion may refuse the few requests routed to a pod in the moment it begins terminating. Studio still
+drains the requests it has accepted within terminationGracePeriodSeconds.
+{{- end }}

@@ -21,11 +21,13 @@ import (
 	"github.com/TykTechnologies/midsommar/microgateway/internal/providers"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/server"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
 	"github.com/TykTechnologies/midsommar/v2/pkg/filterscript"
 	"github.com/TykTechnologies/midsommar/v2/pkg/fipsinfo"
 	"github.com/TykTechnologies/midsommar/v2/pkg/pathcheck"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -122,71 +124,33 @@ func main() {
 	}
 	applyEdgeReferencePolicy(cfg)
 
-	// Connect to database
-	dbConfig := database.DatabaseConfig{
-		Type:            cfg.Database.Type,
-		DSN:             cfg.Database.DSN,
-		MaxOpenConns:    cfg.Database.MaxOpenConns,
-		MaxIdleConns:    cfg.Database.MaxIdleConns,
-		ConnMaxLifetime: cfg.Database.ConnMaxLifetime,
-		AutoMigrate:     cfg.Database.AutoMigrate,
-		LogLevel:        cfg.Database.LogLevel,
-	}
-
-	db, err := database.Connect(dbConfig)
-	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to connect to database")
-	}
+	// The license first, then the database (licenseThenDatabase).
+	licensingService, db := licenseThenDatabase(cfg, *migrate, licensing.NewService)
 	defer func() {
 		if err := database.Close(db); err != nil {
 			log.Error().Err(err).Msg("Failed to close database connection")
 		}
 	}()
-
-	// Run migrations if requested or auto-migrate is enabled
-	if *migrate || cfg.Database.AutoMigrate {
-		log.Info().Msg("Running database migrations...")
-		if err := database.Migrate(db); err != nil {
-			log.Fatal().Err(err).Msg("Failed to run migrations")
-		}
-		if *migrate {
-			log.Info().Msg("Migrations completed successfully")
-			os.Exit(0)
-		}
-	}
-
-	// Check database health
-	if err := database.IsHealthy(db); err != nil {
-		log.Fatal().Err(err).Msg("Database health check failed")
-	}
-
-	// Initialize and start licensing service (ENT: validates license, CE: no-op)
-	licensingConfig := licensing.Config{
-		LicenseKey:          os.Getenv("TYK_AI_LICENSE"),
-		ValidityCheckPeriod: 24 * time.Hour, // Re-validate every 24 hours
-	}
-	licensingService := licensing.NewService(licensingConfig)
-	if err := licensingService.Start(); err != nil {
-		log.Fatal().Err(err).Msg("License validation failed")
-	}
 	defer licensingService.Stop()
 	log.Debug().Msg("Licensing service initialized")
 
 	// Initialize edge client FIRST if in edge mode (before creating services)
 	var edgeClient *grpc.SimpleEdgeClient
+	// lastKnownGood is set when no control plane answered and the edge
+	// starts from the snapshot stored in its database instead
+	// (EDGE_START_FROM_LAST_KNOWN_GOOD).
+	var lastKnownGood *services.LastKnownGood
 	if cfg.IsEdge() {
 		log.Debug().
-			Str("control_endpoint", cfg.HubSpoke.ControlEndpoint).
+			Strs("control_endpoints", cfg.HubSpoke.Endpoints()).
 			Str("edge_id", cfg.HubSpoke.EdgeID).
 			Msg("Connecting to control server before initializing services")
 
 		edgeClient = grpc.NewSimpleEdgeClient(cfg, Version, BuildHash, BuildTime)
-
-		if err := edgeClient.Start(); err != nil {
-			log.Fatal().Err(err).Msg("Failed to connect to control server - edge cannot start without configuration")
+		lastKnownGood = mustStartEdgeClient(edgeClient, db)
+		if lastKnownGood == nil {
+			log.Debug().Msg("Successfully connected to control server")
 		}
-
-		log.Debug().Msg("Successfully connected to control server")
 	}
 
 	// Initialize hub-spoke service container based on gateway mode
@@ -260,6 +224,17 @@ func main() {
 
 				grpcProvider.SetEdgeClient(edgeClient)
 
+				// /ready and microgateway_control_connected say which control
+				// endpoint the edge is on.
+				serviceContainer.ControlLink = func() (string, bool) {
+					link := edgeClient.ControlLink()
+					return link.Endpoint, link.Connected
+				}
+				// ... and /ready, microgateway_config_source and
+				// microgateway_config_age_seconds where its configuration
+				// came from and when it last had a control plane.
+				serviceContainer.ConfigSource = edgeClient.ConfigSource
+
 				// Heartbeats report the configuration applied to SQLite: a
 				// snapshot that failed, or was applied without entries the
 				// edge could not store, shows on the hub as not in sync.
@@ -306,6 +281,27 @@ func main() {
 				if hybridGateway, ok := hubSpokeContainer.GatewayService.(*services.HybridGatewayService); ok {
 					hybridGateway.SetEdgeClient(edgeClient)
 					log.Debug().Msg("Edge client connected to hybrid gateway service for token validation")
+					// A credential changed on the control plane: drop what
+					// this edge cached for it now, not at the cache TTL.
+					edgeClient.GetEventBus().Subscribe(eventbridge.CredentialChangedTopic, hybridGateway.HandleCredentialChanged)
+
+					// Full credential sync (Enterprise): the list syncs from
+					// the control plane the edge is connected to. A
+					// registration accepted (at start, after a reconnect or a
+					// move to another control endpoint) forgets that a control
+					// plane did not offer the sync; every contact, the
+					// registration and each acknowledged heartbeat, asks for a
+					// sync (the full list the first time, the changes after).
+					if list := hybridGateway.CredentialSync(); list != nil {
+						serviceContainer.CredentialSync = list
+						// Added to the client's hooks: the contact recording
+						// of mustStartEdgeClient keeps working.
+						edgeClient.SyncCredentialsOnContact(list)
+						go list.Run(context.Background(), edgeClient, credentialSyncTimeout)
+						// The edge registered before the hooks were set.
+						list.KickFor(services.SyncTriggerRegistration)
+						log.Info().Msg("Full credential sync: keys are validated from the synced, hashed list")
+					}
 				}
 
 				// Create and connect edge reload handler for distributed reload operations
@@ -327,6 +323,13 @@ func main() {
 				edgeReloadHandler.SetPluginReconciler(func() error {
 					return serviceContainer.PluginManager.ReconcilePlugins(context.Background())
 				})
+
+				// An edge that started from last-known-good keeps looking for
+				// a control plane now that it can apply what one sends. The
+				// first registration brings the live configuration.
+				if lastKnownGood != nil {
+					edgeClient.StartReconnecting()
+				}
 				log.Debug().Msg("Edge reload handler created - gateway reloader will be set after server creation")
 
 				// Create and connect budget sync handler for multi-edge budget synchronization
@@ -405,7 +408,7 @@ func main() {
 
 	// Background writes (analytics, budget usage) get their own connection so
 	// they never hold the connections request-path reads need.
-	writeDB, err := database.OpenWriter(dbConfig, db)
+	writeDB, err := database.OpenWriter(databaseConfig(cfg), db)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to open database writer")
 	}
@@ -600,6 +603,10 @@ type shutdownSteps struct {
 // control server through the edge client. Stopping the edge client earlier
 // (as this used to) closed that connection first, so every graceful shutdown
 // lost up to one pulse interval of edge analytics at the hub.
+// credentialSyncTimeout bounds one credential sync: a full stream of 50,000
+// credentials is about 8 MB and takes seconds.
+const credentialSyncTimeout = 5 * time.Minute
+
 func runShutdown(ctx context.Context, s shutdownSteps) {
 	if s.stopServer != nil {
 		if err := s.stopServer(ctx); err != nil {
@@ -743,4 +750,82 @@ func applyEdgeReferencePolicy(cfg *config.Config) {
 	if cfg.IsEdge() {
 		secrets.DisableEnvRefs()
 	}
+}
+
+// databaseConfig is the database part of the configuration as the database
+// package takes it.
+func databaseConfig(cfg *config.Config) database.DatabaseConfig {
+	return database.DatabaseConfig{
+		Type:            cfg.Database.Type,
+		DSN:             cfg.Database.DSN,
+		MaxOpenConns:    cfg.Database.MaxOpenConns,
+		MaxIdleConns:    cfg.Database.MaxIdleConns,
+		ConnMaxLifetime: cfg.Database.ConnMaxLifetime,
+		AutoMigrate:     cfg.Database.AutoMigrate,
+		LogLevel:        cfg.Database.LogLevel,
+	}
+}
+
+// licenseThenDatabase is the start of the microgateway in the order that
+// matters: the license is validated before the database is opened.
+//
+// Starting on a database changes it: the migration adds what this version
+// needs, and since 2.3 a standalone gateway's first start replaces the API
+// tokens it stored with their hashes, which an earlier version cannot use.
+// A microgateway that will not run (Enterprise, with a license that is
+// missing, expired or not valid for it) must exit before any of that, so
+// the database is still the one the previous version left and that version
+// can be started on it again. Validating a license needs no database.
+//
+// It exits the process when the license is refused, when the database
+// cannot be opened or migrated, and, with migrateOnly, after the migration.
+// newLicensing is licensing.NewService (Community: nothing to validate).
+func licenseThenDatabase(cfg *config.Config, migrateOnly bool, newLicensing func(licensing.Config) licensing.Service) (licensing.Service, *gorm.DB) {
+	// Initialize and start licensing service (ENT: validates license, CE: no-op)
+	licensingService := newLicensing(licensing.Config{
+		LicenseKey:          os.Getenv("TYK_AI_LICENSE"),
+		ValidityCheckPeriod: 24 * time.Hour, // Re-validate every 24 hours
+	})
+	if err := licensingService.Start(); err != nil {
+		log.Fatal().Err(err).Msg("License validation failed; the database was not opened")
+	}
+
+	// Connect to database
+	db, err := database.Connect(databaseConfig(cfg))
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to connect to database")
+	}
+
+	// Run migrations if requested or auto-migrate is enabled
+	if migrateOnly || cfg.Database.AutoMigrate {
+		log.Info().Msg("Running database migrations...")
+		if err := database.Migrate(db); err != nil {
+			log.Fatal().Err(err).Msg("Failed to run migrations")
+		}
+		if migrateOnly {
+			log.Info().Msg("Migrations completed successfully")
+			os.Exit(0)
+		}
+	}
+
+	// Check database health
+	if err := database.IsHealthy(db); err != nil {
+		log.Fatal().Err(err).Msg("Database health check failed")
+	}
+	return licensingService, db
+}
+
+// mustStartEdgeClient connects the edge to a control plane, or, with
+// EDGE_START_FROM_LAST_KNOWN_GOOD and no control plane answering, returns
+// the stored snapshot the edge will serve (nil when connected). When neither
+// is possible the edge cannot run: it logs the reason and exits non-zero.
+func mustStartEdgeClient(edgeClient *grpc.SimpleEdgeClient, db *gorm.DB) *services.LastKnownGood {
+	// Each contact with a control plane is recorded, so that a later start
+	// without one knows how long the edge has been on its own.
+	edgeClient.RecordControlContactsIn(db)
+	lastKnownGood, err := edgeClient.StartWithLastKnownGood(db)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to connect to control server - edge cannot start without configuration")
+	}
+	return lastKnownGood
 }

@@ -14,5 +14,8 @@ func AnalyticsModels() []interface{} {
 		&ProxyLog{},
 		&ComplianceEvent{},
 		&MCPCallRecord{},
+		// Which edge analytics batches were stored, written with their
+		// records so one sent again is not stored twice.
+		&EdgeAnalyticsBatch{},
 	}, AgentTraceModels()...)
 }

@@ -269,7 +269,12 @@ func (s *Service) CreateAppWithNamespace(name, description string, userID uint, 
 	return finalApp, nil
 }
 
-// UpdateApp updates an existing app with validity checks
+// UpdateApp updates an existing app with validity checks.
+//
+// UpdateApp does not change an App's namespace. If that is ever added, the
+// change must raise credential.changed for the App's key
+// (s.appCredentialChanged): edges of the old namespace may hold a cached
+// "valid" answer for it.
 func (s *Service) UpdateApp(id uint, name, description string, userID uint, datasourceIDs []uint, llmIDs []uint, toolIDs []uint, monthlyBudget *float64, budgetStartDate *time.Time, metadata map[string]interface{}, opts ...AppOption) (*models.App, error) {
 	app, err := s.GetAppByID(id)
 	if err != nil {
@@ -754,6 +759,7 @@ func (s *Service) ActivateAppCredential(appID uint) error {
 		return err
 	}
 	s.syncAppMCPGrants(app.ID)
+	s.appCredentialChanged(app)
 
 	// Emit app approved event (credential activated)
 	if s.SystemEvents != nil {
@@ -774,6 +780,7 @@ func (s *Service) DeactivateAppCredential(appID uint) error {
 		return err
 	}
 	s.syncAppMCPGrants(app.ID)
+	s.appCredentialChanged(app)
 	return nil
 }
 

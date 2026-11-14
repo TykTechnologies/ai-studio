@@ -59,6 +59,17 @@ type ServiceContainer struct {
 	// Edge identity (populated in edge mode)
 	EdgeID        string
 	EdgeNamespace string
+	// ControlLink, set in edge mode, reports the control endpoint the edge
+	// is on and whether its stream is open (for /ready).
+	ControlLink func() (endpoint string, connected bool)
+	// ConfigSource, set in edge mode, reports where the configuration the
+	// edge runs came from ("control" or "last_known_good") and when the
+	// edge last had contact with a control plane (zero if never).
+	ConfigSource func() (source string, lastControlContact time.Time)
+	// CredentialSync, set on an edge with full credential sync
+	// (EDGE_CREDENTIAL_SYNC=full, Enterprise), is its synced credential
+	// list; nil otherwise.
+	CredentialSync *CredentialSync
 }
 
 // NewServiceContainer creates a new service container with essential dependencies only
@@ -69,6 +80,13 @@ func NewServiceContainer(db *gorm.DB, cfg *config.Config) (*ServiceContainer, er
 	// Initialize crypto service
 	crypto := NewCryptoService(cfg.Security.EncryptionKey)
 	setAgentTracingKeyCrypto(crypto)
+
+	// API tokens are stored and looked up as hashes made with
+	// ENCRYPTION_KEY. Rows written by a version that stored the tokens
+	// themselves are converted now, before anything looks one up.
+	if err := prepareAPITokenHashing(db, cfg.Security.EncryptionKey); err != nil {
+		return nil, err
+	}
 
 	// Initialize auth provider (no caching)
 	authProvider := auth.NewTokenAuthProvider(db)

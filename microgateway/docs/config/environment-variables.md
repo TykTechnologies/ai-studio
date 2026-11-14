@@ -200,12 +200,19 @@ Complete reference for all microgateway environment variables organized by funct
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `CONTROL_ENDPOINT` | - | Control instance gRPC endpoint |
+| `CONTROL_ENDPOINTS` | - | Ordered, comma-separated list of control planes (`host:port`), the edge's own site first. The edge connects to the first that accepts it and moves to the next when its connection fails. Use this or `CONTROL_ENDPOINT`, not both |
+| `EDGE_CONTROL_FAILBACK_INTERVAL` | 0 (off) | With `CONTROL_ENDPOINTS`: how often an edge that is not on its first endpoint tries to return to it |
+| `EDGE_START_FROM_LAST_KNOWN_GOOD` | false | Let an edge that finds no control plane at start-up serve the configuration snapshot it last applied (stored encrypted in its database) instead of exiting. It then serves what it last knew: something removed or revoked on the control plane since keeps working until the edge reconnects. Needs a database that survives the restart |
+| `EDGE_STARTUP_CONTROL_TIMEOUT` | 30s | With `EDGE_START_FROM_LAST_KNOWN_GOOD`: how long the edge keeps trying its control endpoints at start-up before it uses the stored snapshot |
+| `EDGE_LAST_KNOWN_GOOD_MAX_AGE` | 72h | With `EDGE_START_FROM_LAST_KNOWN_GOOD`: the longest the edge may have been without a control plane (since its last accepted registration or acknowledged heartbeat) and still start from the stored snapshot; past it the edge exits. `0` means no limit |
+| `EDGE_CREDENTIAL_SYNC` | on_demand | How the edge learns App keys. `on_demand`: it asks the control plane about a key it has not seen and caches the answer. `full` (Enterprise): it keeps the hashed list of every App key of its namespace in its database, synced on every registration and heartbeat, and validates from it, so keys work while no control plane answers. A Community edge given `full` validates on demand. Any other value stops start-up |
+| `EDGE_CREDENTIAL_SYNC_MAX_AGE` | 24h | With `EDGE_CREDENTIAL_SYNC=full`: how long the synced list is trusted after the last successful sync; past it the edge validates on demand until a sync succeeds. `0` means no limit |
 | `EDGE_ID` | - | Unique edge instance identifier |
 | `EDGE_NAMESPACE` | - | Edge namespace for configuration filtering |
 | `EDGE_AUTH_TOKEN` | - | Authentication token for control connection |
-| `EDGE_RECONNECT_INTERVAL` | 5s | Reconnection interval |
+| `EDGE_RECONNECT_INTERVAL` | 5s | First reconnection delay; doubles up to 30s. With `CONTROL_ENDPOINTS` it applies once per pass over the list, after every endpoint has failed |
 | `EDGE_HEARTBEAT_INTERVAL` | 30s | Heartbeat interval |
-| `EDGE_SYNC_TIMEOUT` | 10s | Configuration sync timeout |
+| `EDGE_SYNC_TIMEOUT` | 10s | Unused: the setting is accepted but nothing reads it |
 
 ### Edge TLS Settings
 | Variable | Default | Description |
@@ -214,7 +221,7 @@ Complete reference for all microgateway environment variables organized by funct
 | `EDGE_TLS_CERT_PATH` | - | Client certificate path |
 | `EDGE_TLS_KEY_PATH` | - | Client key path |
 | `EDGE_TLS_CA_PATH` | - | CA certificate path (PEM) the control plane's certificate is checked against; unset uses the system roots |
-| `EDGE_TLS_SERVER_NAME` | - | Name the control plane's certificate is checked against, when it differs from the host in `EDGE_CONTROL_ENDPOINT` |
+| `EDGE_TLS_SERVER_NAME` | - | Name the control plane's certificate is checked against, when it differs from the host of the control endpoint. Unset, each endpoint of `CONTROL_ENDPOINTS` is checked against its own host; set, the name applies to all of them |
 | `EDGE_SKIP_TLS_VERIFY` | false | Skip TLS certificate verification |
 
 ## Plugin Configuration

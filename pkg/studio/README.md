@@ -142,6 +142,26 @@ shares the one-instance-per-process rule with `New`. See
   (`DATABASE_SCHEMA`) to keep Studio's tables in a schema of their own inside
   the host's database; `OpenDatabase` creates it. Replicas may share it:
   `New` migrates and seeds under a Postgres advisory lock.
+- **Database failover.** A pool opened with `OpenDatabase` follows a
+  Postgres failover without a restart: `DatabaseURL` may name several
+  hosts with `target_session_attrs=read-write`, connections left on a
+  demoted primary are closed and dialled again, and the pool is sized by
+  `Config.DatabaseMaxOpenConns`, `DatabaseMaxIdleConns`,
+  `DatabaseConnMaxLifetime` and `DatabaseConnectTimeout` (zero values keep
+  the driver's defaults; a `Config` built by hand gets no 30-minute
+  lifetime unless it sets one). `/ready` rides out a failover shorter
+  than `Config.DatabaseReadyGrace` (`DATABASE_READY_GRACE`): 30 seconds
+  from `config.LoadFrom`, but 0 in a `Config` built by hand, which keeps
+  the readiness of before 2.3 (a ping in each request; `/ready` fails as
+  soon as the database does not answer). `dbstate.For(db).Status()`
+  (`pkg/dbstate`) says whether the database is writable, read-only or
+  unreachable. A pool the host opens some other way has none of this.
+- **Waiting for the database at start-up.** On Postgres, `OpenDatabase`
+  waits up to `Config.DatabaseStartupTimeout` (`DATABASE_STARTUP_TIMEOUT`;
+  `config.LoadFrom` sets 60 seconds, a `Config` built by hand has 0, one
+  attempt) for a server that answers and takes writes, and never returns a
+  read-only one, since `New` migrates. Nothing serves HTTP during the wait,
+  so size a startup probe to cover it.
 - **Databases and cgo.** `OpenDatabase` opens Postgres. SQLite needs cgo,
   so it is in `pkg/studio/sqlitedb`: import that package for its side effect
   to use `DatabaseType` `sqlite`. Studio builds with `CGO_ENABLED=0`, but

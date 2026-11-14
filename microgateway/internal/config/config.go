@@ -218,6 +218,45 @@ type HubSpokeConfig struct {
 	
 	// Edge Instance Configuration (for edge mode)
 	ControlEndpoint    string        `env:"CONTROL_ENDPOINT" envDefault:""`
+	// ControlEndpoints is an ordered list of control planes (host:port),
+	// the edge's own site first. The edge connects to the first that
+	// accepts it and moves down the list (and round again) when the one it
+	// is on fails. CONTROL_ENDPOINT is a list of one; setting both is a
+	// start-up error. Read the list through Endpoints.
+	ControlEndpoints []string `env:"CONTROL_ENDPOINTS" envSeparator:","`
+	// ControlFailbackInterval, when positive, makes an edge that is not on
+	// its first endpoint try that endpoint this often and move back when it
+	// accepts a registration. Off by default (0): the edge stays where it
+	// is until that connection ends (Studio's GRPC_MAX_CONNECTION_AGE ends
+	// connections on a schedule, which also rebalances edges).
+	ControlFailbackInterval time.Duration `env:"EDGE_CONTROL_FAILBACK_INTERVAL" envDefault:"0"`
+
+	// StartFromLastKnownGood lets an edge that finds no control plane at
+	// start-up serve the configuration snapshot it last applied (kept,
+	// encrypted, in its own database) instead of exiting. Off by default:
+	// such an edge can serve something an administrator has removed since,
+	// until it reconnects. The same trade as EDGE_TOKEN_CACHE_STALE_GRACE.
+	StartFromLastKnownGood bool `env:"EDGE_START_FROM_LAST_KNOWN_GOOD" envDefault:"false"`
+	// StartupControlTimeout is how long an edge with
+	// StartFromLastKnownGood keeps trying its control endpoints at start-up
+	// before it falls back to the stored snapshot.
+	StartupControlTimeout time.Duration `env:"EDGE_STARTUP_CONTROL_TIMEOUT" envDefault:"30s"`
+	// LastKnownGoodMaxAge is the longest an edge may have been without a
+	// control plane and still start from its stored snapshot; past it the
+	// edge exits as it does without the option. 0 means no limit.
+	LastKnownGoodMaxAge time.Duration `env:"EDGE_LAST_KNOWN_GOOD_MAX_AGE" envDefault:"72h"`
+
+	// CredentialSync is how an edge learns App keys. "on_demand" (the
+	// default) asks the control plane about a key it has not seen and
+	// caches the answer. "full" (Enterprise) keeps the hashed list of every
+	// key of the edge's namespace in its own database and validates from
+	// it, with or without a control plane; a key not on the list is still
+	// asked about.
+	CredentialSync string `env:"EDGE_CREDENTIAL_SYNC" envDefault:"on_demand"`
+	// CredentialSyncMaxAge is how long the synced list is trusted after
+	// the last successful sync; past it the edge behaves as on_demand
+	// until a sync succeeds. 0 means no limit.
+	CredentialSyncMaxAge time.Duration `env:"EDGE_CREDENTIAL_SYNC_MAX_AGE" envDefault:"24h"`
 	EdgeID            string        `env:"EDGE_ID" envDefault:""`
 	EdgeNamespace     string        `env:"EDGE_NAMESPACE" envDefault:""`
 	ReconnectInterval time.Duration `env:"EDGE_RECONNECT_INTERVAL" envDefault:"5s"`
@@ -232,7 +271,8 @@ type HubSpokeConfig struct {
 	ClientTLSKeyPath  string        `env:"EDGE_TLS_KEY_PATH"`
 	ClientTLSCAPath   string        `env:"EDGE_TLS_CA_PATH"`
 	// ClientTLSServerName is the name the control plane's certificate is
-	// checked against, when it differs from EDGE_CONTROL_ENDPOINT's host.
+	// checked against, when it differs from the host of the control endpoint
+	// in use. Set, it applies to every endpoint of CONTROL_ENDPOINTS.
 	ClientTLSServerName string      `env:"EDGE_TLS_SERVER_NAME"`
 	SkipTLSVerify     bool          `env:"EDGE_SKIP_TLS_VERIFY" envDefault:"false"`
 	AllowInsecure     bool          `env:"EDGE_ALLOW_INSECURE" envDefault:"false"` // Security: Explicit opt-in for development
@@ -254,6 +294,68 @@ type HubSpokeConfig struct {
 	// gRPC message size limits (bytes). Default 16MB.
 	// Increase if config snapshots exceed the limit (many plugins, LLMs, tools, apps).
 	MaxMessageSize int `env:"GRPC_MAX_MESSAGE_SIZE" envDefault:"16777216"` // 16MB
+}
+
+// Values of EDGE_CREDENTIAL_SYNC.
+const (
+	CredentialSyncOnDemand = "on_demand"
+	CredentialSyncFull     = "full"
+)
+
+// Endpoints returns the control planes of an edge in the order it tries
+// them: CONTROL_ENDPOINTS, or CONTROL_ENDPOINT as a list of one. Entries are
+// trimmed. Empty when neither is set.
+func (h HubSpokeConfig) Endpoints() []string {
+	if len(h.ControlEndpoints) == 0 {
+		if e := strings.TrimSpace(h.ControlEndpoint); e != "" {
+			return []string{e}
+		}
+		return nil
+	}
+	out := make([]string, 0, len(h.ControlEndpoints))
+	for _, e := range h.ControlEndpoints {
+		out = append(out, strings.TrimSpace(e))
+	}
+	return out
+}
+
+// validateEndpoints checks an edge's control endpoints.
+func (h HubSpokeConfig) validateEndpoints() error {
+	if len(h.ControlEndpoints) > 0 && strings.TrimSpace(h.ControlEndpoint) != "" {
+		return fmt.Errorf("set CONTROL_ENDPOINTS or CONTROL_ENDPOINT, not both")
+	}
+	endpoints := h.Endpoints()
+	if len(endpoints) == 0 {
+		return fmt.Errorf("control endpoint is required for edge mode")
+	}
+	seen := make(map[string]bool, len(endpoints))
+	for _, e := range endpoints {
+		if e == "" {
+			return fmt.Errorf("CONTROL_ENDPOINTS has an empty entry")
+		}
+		if seen[e] {
+			return fmt.Errorf("CONTROL_ENDPOINTS lists %s twice", e)
+		}
+		seen[e] = true
+	}
+	if h.ControlFailbackInterval < 0 {
+		return fmt.Errorf("EDGE_CONTROL_FAILBACK_INTERVAL must not be negative: %s", h.ControlFailbackInterval)
+	}
+	if h.StartupControlTimeout < 0 {
+		return fmt.Errorf("EDGE_STARTUP_CONTROL_TIMEOUT must not be negative: %s", h.StartupControlTimeout)
+	}
+	if h.LastKnownGoodMaxAge < 0 {
+		return fmt.Errorf("EDGE_LAST_KNOWN_GOOD_MAX_AGE must not be negative (0 means no limit): %s", h.LastKnownGoodMaxAge)
+	}
+	switch h.CredentialSync {
+	case "", CredentialSyncOnDemand, CredentialSyncFull:
+	default:
+		return fmt.Errorf("EDGE_CREDENTIAL_SYNC must be %s or %s, not %q", CredentialSyncOnDemand, CredentialSyncFull, h.CredentialSync)
+	}
+	if h.CredentialSyncMaxAge < 0 {
+		return fmt.Errorf("EDGE_CREDENTIAL_SYNC_MAX_AGE must not be negative (0 means no limit): %s", h.CredentialSyncMaxAge)
+	}
+	return nil
 }
 
 // IsTLSVerificationDisabled reports whether the hub-spoke client will use TLS
@@ -588,8 +690,8 @@ func (c *Config) validateHubSpokeConfig() error {
 	
 	// Validate edge mode specific settings
 	if c.HubSpoke.Mode == "edge" {
-		if c.HubSpoke.ControlEndpoint == "" {
-			return fmt.Errorf("control endpoint is required for edge mode")
+		if err := c.HubSpoke.validateEndpoints(); err != nil {
+			return err
 		}
 		if c.HubSpoke.EdgeID == "" {
 			return fmt.Errorf("edge ID is required for edge mode")

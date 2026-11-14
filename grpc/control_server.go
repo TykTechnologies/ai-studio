@@ -18,9 +18,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/dbhold"
 	"github.com/TykTechnologies/midsommar/v2/pkg/fipsinfo"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/pkg/config"
@@ -279,6 +279,10 @@ func validateEncryptionKey(key string) error {
 // NewControlServer creates a new control server for AI Studio. It fails when
 // the microgateway encryption key is missing or insecure.
 func NewControlServer(cfg *Config, db *gorm.DB) (*ControlServer, error) {
+	// Edges' RPCs fail fast during a database failover rather than wait
+	// for a new primary: an edge answered "unavailable" moves to its other
+	// control plane (pkg/dbhold).
+	db = dbhold.Unheld(db)
 	// Set default connection limit if not specified
 	maxStreams := cfg.MaxConcurrentStreams
 	if maxStreams <= 0 {
@@ -1161,8 +1165,10 @@ func (s *ControlServer) ValidateToken(ctx context.Context, req *pb.TokenValidati
 	}
 
 	// Query credential (secret) - tokens are global in AI Studio
+	// Found by the secret's lookup hash: the secret is encrypted at rest,
+	// and it is not read here (nothing is decrypted to validate a key).
 	var credential models.Credential
-	err := s.db.Where("secret = ? AND active = ?", req.Token, true).
+	err := s.db.Omit("secret").Where("secret_hash = ? AND active = ?", secrets.LookupHash(req.Token), true).
 		First(&credential).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -1262,6 +1268,11 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 	if err != nil {
 		return nil, err
 	}
+
+	// The pulse's records are built first and stored together below
+	// (storePulseRecords): a batch that carries an identity is stored in
+	// one transaction and at most once.
+	var records pulseRecords
 
 	// Process analytics events using AI Studio's native analytics system with batch processing
 	if len(req.AnalyticsEvents) > 0 {
@@ -1398,9 +1409,8 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 			}
 		}
 
-		// Use batch processing for improved performance
-		analytics.RecordProxyLogsBatch(ctx, proxyLogs)
-		analytics.RecordChatRecordsBatch(ctx, withUsage)
+		records.proxyLogs = proxyLogs
+		records.chatRecords = withUsage
 		processedRecords += uint64(len(req.AnalyticsEvents))
 
 		logger.Log.Debug().
@@ -1428,7 +1438,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 				TimeStamp:   ce.Timestamp.AsTime(),
 			}
 		}
-		analytics.RecordComplianceEvents(ctx, complianceEvents)
+		records.complianceEvents = complianceEvents
 		processedRecords += uint64(len(req.ComplianceEvents))
 
 		logger.Log.Debug().
@@ -1446,7 +1456,12 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 		if tc.Timestamp != nil {
 			timestamp = tc.Timestamp.AsTime()
 		}
-		analytics.RecordToolCall(ctx, tc.OperationId, timestamp, int(tc.ExecTimeMs), uint(tc.ToolId))
+		records.toolCalls = append(records.toolCalls, &models.ToolCallRecord{
+			ToolID:    uint(tc.ToolId),
+			Name:      tc.OperationId,
+			ExecTime:  int(tc.ExecTimeMs),
+			TimeStamp: timestamp,
+		})
 		processedRecords++
 	}
 	if len(req.ToolCalls) > 0 {
@@ -1480,12 +1495,25 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 		processedRecords++
 	}
 
+	// Store what was built above. A batch this hub (any replica) has stored
+	// before is acknowledged without being stored again: the edge sent it
+	// again because it never got the first acknowledgement.
+	message := "Analytics pulse processed successfully"
+	repeated, err := s.storePulseRecords(ctx, req, &records)
+	if err != nil {
+		return nil, err
+	}
+	if repeated {
+		message = "Analytics pulse already processed"
+	}
+
 	// Performance monitoring: calculate total processing time
 	totalProcessingTime := time.Since(startTime)
 
 	logger.Log.Debug().
 		Str("edge_id", req.EdgeId).
 		Uint64("sequence_number", req.SequenceNumber).
+		Bool("repeated", repeated).
 		Uint64("processed_records", processedRecords).
 		Int64("total_processing_time_ms", totalProcessingTime.Milliseconds()).
 		Float64("records_per_second", float64(processedRecords)/totalProcessingTime.Seconds()).
@@ -1493,7 +1521,7 @@ func (s *ControlServer) SendAnalyticsPulse(ctx context.Context, req *pb.Analytic
 
 	return &pb.AnalyticsPulseResponse{
 		Success:          true,
-		Message:          "Analytics pulse processed successfully",
+		Message:          message,
 		ProcessedRecords: processedRecords,
 		SequenceNumber:   req.SequenceNumber,
 		ProcessedAt:      timestamppb.Now(),

@@ -1,0 +1,96 @@
+package services
+
+import (
+	"sync/atomic"
+
+	"github.com/TykTechnologies/midsommar/v2/logger"
+	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/credhash"
+	"github.com/TykTechnologies/midsommar/v2/pkg/eventbridge"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/clause"
+)
+
+// credential.changed (eventbridge.CredentialChangedTopic): when an App
+// credential is created, regenerated, activated, deactivated or deleted, or
+// its App is activated or deactivated, Studio tells the edges at once, so
+// they drop what they cached for the key instead of serving it until their
+// cache TTL or their next credential sync (features/ActiveActive.md, Phase
+// 4 item 4). The event is DirDown: the cluster relay carries it to every
+// replica, and each replica to the edges it holds. It is an accelerator;
+// validation and the sync stay what decides.
+
+// edgeCredentialHasher makes the hash an edge holds for a credential:
+// pkg/credhash under MICROGATEWAY_ENCRYPTION_KEY, the hash SyncCredentials
+// sends and an edge's token cache is keyed by. Nil when the key is not set
+// or too short: no event is raised then.
+var edgeCredentialHasher atomic.Pointer[credhash.Hasher]
+
+// SetEdgeCredentialHasher sets the hasher from MICROGATEWAY_ENCRYPTION_KEY
+// (pkg/studio calls it at start). A key that cannot make hashes leaves
+// credential.changed events off.
+func SetEdgeCredentialHasher(encryptionKey string) {
+	h, err := credhash.New(encryptionKey)
+	if err != nil {
+		edgeCredentialHasher.Store(nil)
+		return
+	}
+	edgeCredentialHasher.Store(h)
+}
+
+// credentialChange is the credential.changed event for cred: the hash an
+// edge holds for its key, and nothing else. The event reaches every edge of
+// every namespace, and an edge only ever drops what it cached under that
+// hash, so it carries no credential ID, App or namespace (the payload's
+// other fields stay zero). ok is false when no event can be raised: no edge
+// hasher, or a secret this replica cannot read.
+func credentialChange(cred *models.Credential) (eventbridge.CredentialChanged, bool) {
+	h := edgeCredentialHasher.Load()
+	if h == nil || cred == nil || cred.Secret == "" || cred.Secret == secrets.RefusedCredential {
+		return eventbridge.CredentialChanged{}, false
+	}
+	return eventbridge.CredentialChanged{Hash: h.Hash(cred.Secret)}, true
+}
+
+// publishCredentialChanged raises credential.changed for each change.
+func (s *Service) publishCredentialChanged(changes ...eventbridge.CredentialChanged) {
+	if s.EventBus == nil {
+		return
+	}
+	for _, c := range changes {
+		if err := eventbridge.PublishDown(s.EventBus, "control", eventbridge.CredentialChangedTopic, c); err != nil {
+			logger.Log.Warn().Err(err).Msg("credential.changed: the event could not be raised; edges learn of the change at their next sync or cache expiry")
+		}
+	}
+}
+
+// credentialChanged raises credential.changed for cred's key.
+func (s *Service) credentialChanged(cred *models.Credential) {
+	if change, ok := credentialChange(cred); ok {
+		s.publishCredentialChanged(change)
+	}
+}
+
+// appCredentialChanged raises credential.changed for app's key (after the
+// App or its credential changed).
+func (s *Service) appCredentialChanged(app *models.App) {
+	if app == nil || app.CredentialID == 0 {
+		return
+	}
+	cred, err := s.GetCredentialByID(app.CredentialID)
+	if err != nil {
+		return
+	}
+	s.credentialChanged(cred)
+}
+
+// lockCredential locks the credential's row for the rest of tx on
+// PostgreSQL (SQLite serializes writers already), so the secret an event
+// is made from is the one the write replaces.
+func lockCredential(tx *gorm.DB) *gorm.DB {
+	if tx.Dialector.Name() == "postgres" {
+		return tx.Clauses(clause.Locking{Strength: "UPDATE"})
+	}
+	return tx
+}

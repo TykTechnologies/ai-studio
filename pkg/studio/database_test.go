@@ -4,11 +4,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/TykTechnologies/midsommar/v2/config"
+	"github.com/TykTechnologies/midsommar/v2/pkg/dbstate"
 )
 
 func TestOpenDatabase(t *testing.T) {
@@ -46,4 +49,23 @@ func TestOpenDatabaseSQLiteNotRegistered(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "pkg/studio/sqlitedb") {
 		t.Fatalf("err = %v, want one naming pkg/studio/sqlitedb", err)
 	}
+}
+
+// The tracker's probe may have to dial every host in turn, twice each when
+// sslmode allows a TLS and a plain attempt.
+func TestProbeTimeoutCoversEveryAttempt(t *testing.T) {
+	c, err := pgx.ParseConfig("postgres://u:p@pg-a:5432,pg-b:5432/db?target_session_attrs=read-write&connect_timeout=10&sslmode=disable")
+	require.NoError(t, err)
+	assert.Equal(t, 23*time.Second, probeTimeout(c), "two hosts, one attempt each")
+	assert.Equal(t, 2, hostCount(c))
+
+	c, err = pgx.ParseConfig("postgres://u:p@pg-a:5432,pg-b:5432/db?target_session_attrs=read-write&connect_timeout=10&sslmode=prefer")
+	require.NoError(t, err)
+	assert.Equal(t, 43*time.Second, probeTimeout(c), "two hosts, a TLS and a plain attempt each")
+	assert.Equal(t, 2, hostCount(c), "still two servers")
+
+	c, err = pgx.ParseConfig("postgres://u:p@pg-a:5432/db")
+	require.NoError(t, err)
+	c.ConnectTimeout = 0
+	assert.Equal(t, dbstate.DefaultProbeTimeout, probeTimeout(c))
 }

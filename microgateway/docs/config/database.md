@@ -157,6 +157,16 @@ DB_AUTO_MIGRATE=true
 mgw system health | grep database
 ```
 
+**Enterprise: the migration needs the license.** The microgateway validates
+its license before it opens the database, whether it is starting or only
+migrating. Give `./microgateway -migrate` the same `TYK_AI_LICENSE` as the
+gateway itself (in the environment, or the env file you pass with `-env`):
+without a valid license it exits with "License validation failed; the
+database was not opened" and the database is left as it was. That is
+deliberate: since 2.3 a start changes the database in ways an earlier
+version cannot read, so a microgateway that will not run must not have
+touched it. Community builds have no license and migrate as before.
+
 ## Performance Tuning
 
 ### Connection Pool Optimization
@@ -301,6 +311,53 @@ mgw system metrics | grep db_
 SELECT * FROM pg_stat_activity WHERE application_name = 'microgateway';
 SELECT * FROM pg_stat_database WHERE datname = 'microgateway';
 ```
+
+### When the database is full
+
+A gateway whose volume is full (or whose database has reached a size limit)
+keeps serving requests: it proxies from memory and from what the database
+already holds. What it can no longer do is store what is new.
+
+**What stops, on an edge:**
+
+- **Configuration pushes are not applied.** A new configuration and the
+  encrypted snapshot the edge starts from without a control plane are
+  written in one transaction; with no room, neither is. The edge keeps
+  serving the configuration it had and its heartbeats report that one, so
+  AI Studio shows the edge as not in sync and the push as failed, with the
+  reason. On a really full volume this is so even for a small change:
+  SQLite cannot extend its write-ahead log.
+- **The last control contact is not recorded.** That time bounds a start
+  without a control plane (`EDGE_LAST_KNOWN_GOOD_MAX_AGE`, 72 hours): an
+  edge whose volume stays full for longer than that, and is then restarted
+  while no control plane answers, refuses to start.
+- **Budget blocks and the budget sync's position are not stored.** They are
+  enforced from memory as they arrive; after a restart the edge would
+  enforce the set it last stored until the next sync.
+- **The gateway's own analytics rows are dropped** (one error per row in
+  the log). The analytics pulse to AI Studio is sent from memory and is not
+  affected.
+
+**How you see it:**
+
+- `/ready` stays 200 and carries `"database_full": true`,
+  `"database_full_since"` and `"database_full_not_stored"` (the kinds of
+  write being refused). The probe does not fail: taking the gateway out of
+  service would turn a degraded gateway into an outage.
+- Metrics: `microgateway_database_full` (1 while any write is refused for
+  lack of room) and `microgateway_database_full_writes_total{write}`, with
+  `write` one of `configuration`, `control_contact`, `budget_blocks`,
+  `budget_sync_position`, `analytics`. Alert on the first.
+- The log has one error per kind of write when it begins ("The gateway's
+  database has no room left ...") and one line when that kind is stored
+  again; not one per request or per heartbeat.
+
+**What to do:** enlarge the volume, or lower `ANALYTICS_RETENTION_DAYS` so
+the next cleanup removes old analytics rows (the gateway's own copy; AI
+Studio keeps what the pulse sent). Nothing needs restarting: the next push,
+heartbeat and budget sync store again, and the condition clears by itself.
+For sizing, the rule is about 400 bytes per request times the request rate
+times the retention; see the Helm guide's "Sizing the edge's volume".
 
 ### Cleanup and Maintenance
 ```bash

@@ -192,6 +192,12 @@ func NewControlPlane(opts ControlPlaneOptions) (_ *ControlPlane, err error) {
 	if err := c.joinCluster(backgroundCtx, c.db, nodeID, opts.Version, cluster.NodeOptions{
 		Label:      nodeLabel(opts.NodeLabel, DefaultControlPlaneLabel),
 		NeverLeads: true,
+		// No CSRF fingerprint: a headless control plane serves no forms.
+		Secrets: cluster.SharedSecrets{
+			SecretKey:                 conf.SecretKey,
+			MicrogatewayEncryptionKey: conf.MicrogatewayEncryptionKey,
+			GRPCAuthToken:             conf.GRPCAuthToken,
+		}.Fingerprints(),
 	}); err != nil {
 		return nil, err
 	}

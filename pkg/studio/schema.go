@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services/licensing"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -43,3 +44,7 @@ func schemaWriter(version string) string {
 	}
 	return version
 }
+
+// newLicensingService builds the licensing service; tests replace it to
+// start a Studio whose license is refused.
+var newLicensingService = licensing.NewService

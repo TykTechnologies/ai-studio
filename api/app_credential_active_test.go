@@ -113,7 +113,7 @@ func TestApps_ListCredentialIsNotNPlusOne(t *testing.T) {
 
 	addApps := func(n int) {
 		for i := 0; i < n; i++ {
-			cred := &models.Credential{KeyID: "k-" + idStr(uint(i)) + "-" + idStr(uint(n)), Secret: "s", Active: i%2 == 0}
+			cred := &models.Credential{KeyID: "k-" + idStr(uint(i)) + "-" + idStr(uint(n)), Secret: "s-" + idStr(uint(i)) + "-" + idStr(uint(n)), Active: i%2 == 0}
 			require.NoError(t, db.Create(cred).Error)
 			require.NoError(t, db.Create(&models.App{Name: "App", UserID: 1, CredentialID: cred.ID}).Error)
 		}

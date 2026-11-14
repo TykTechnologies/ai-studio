@@ -114,6 +114,42 @@ type AppConf struct {
 	// instance sharing its database to finish migrating before it gives up
 	// with an error.
 	MigrationLockTimeout time.Duration
+	// Postgres connection pool (inert for SQLite). DatabaseMaxOpenConns
+	// (DATABASE_MAX_OPEN_CONNS) and DatabaseMaxIdleConns
+	// (DATABASE_MAX_IDLE_CONNS) of 0 keep database/sql's defaults (no limit;
+	// 2 idle). DatabaseConnMaxLifetime (DATABASE_CONN_MAX_LIFETIME, default
+	// 30m when loaded from the environment; 0 is no limit) closes
+	// connections of that age, so they also move to the new primary after a
+	// planned switchover. DatabaseConnectTimeout (DATABASE_CONNECT_TIMEOUT,
+	// default 10s; 0 keeps the driver's) bounds each connection attempt
+	// when DATABASE_URL sets no connect_timeout of its own: with several
+	// hosts, the time an unreachable one costs before the next is tried.
+	DatabaseMaxOpenConns    int
+	DatabaseMaxIdleConns    int
+	DatabaseConnMaxLifetime time.Duration
+	DatabaseConnectTimeout  time.Duration
+	// DatabaseStartupTimeout (DATABASE_STARTUP_TIMEOUT, default 60s when
+	// loaded from the environment; 0 tries once) is how long a starting
+	// Studio waits for its Postgres database to answer and take writes
+	// before it exits: a database that is failing over, or not up yet.
+	DatabaseStartupTimeout time.Duration
+	// DatabaseReadyGrace (DATABASE_READY_GRACE, default 30s) is how long
+	// the database may be unreachable (or, for /ready?require=write, not
+	// writable) before /ready fails: a failover shorter than it keeps the
+	// replica in the load balancer, so a held write or a 503 with
+	// Retry-After reaches the client instead of a refused connection. 0
+	// pings the database in the request and fails as soon as the ping
+	// does, as before 2.3; a Config built by hand (not by Load or
+	// LoadFrom) has 0 unless it sets the field. It should be longer than the time a write is
+	// held for a writable primary (DATABASE_WRITE_RETRY_WINDOW, 15s).
+	DatabaseReadyGrace time.Duration
+	// DatabaseWriteRetryWindow (DATABASE_WRITE_RETRY_WINDOW, default 15s
+	// when loaded from the environment; 0 disables) is how long a
+	// statement outside a transaction that failed before reaching a
+	// writable Postgres server (a failover) is held and tried again, and
+	// how long beginning a transaction waits, before the request answers
+	// 503 database_unavailable.
+	DatabaseWriteRetryWindow time.Duration
 	FilterSignupDomains   []string
 	EchoConversation      bool
 	ProxyOnly             bool
@@ -171,6 +207,11 @@ type AppConf struct {
 	// (GRPC_MAX_CONNECTION_AGE, GRPC_MAX_CONNECTION_AGE_GRACE; default off).
 	GRPCMaxConnectionAge      time.Duration
 	GRPCMaxConnectionAgeGrace time.Duration
+	// ClusterNodeLabel names this replica (its site, for example) on the
+	// cluster status and the Edge Gateways page (CLUSTER_NODE_LABEL; empty
+	// means the default label, "studio"). The Studio binary validates it at
+	// start-up.
+	ClusterNodeLabel string
 
 	// Licensing Configuration (Enterprise Edition)
 	LicenseKey                  string
@@ -587,6 +628,16 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 			cfgLog.Warn().Msgf("Warning: Invalid MIGRATION_LOCK_TIMEOUT value: %s, using default 15m", v)
 		}
 	}
+	conf.DatabaseMaxOpenConns = parseNonNegativeInt(getenv, "DATABASE_MAX_OPEN_CONNS")
+	conf.DatabaseMaxIdleConns = parseNonNegativeInt(getenv, "DATABASE_MAX_IDLE_CONNS")
+	conf.DatabaseConnMaxLifetime = parseNonNegativeDuration(getenv, "DATABASE_CONN_MAX_LIFETIME", 30*time.Minute)
+	conf.DatabaseConnectTimeout = parseNonNegativeDuration(getenv, "DATABASE_CONNECT_TIMEOUT", 10*time.Second)
+	conf.DatabaseStartupTimeout = parseNonNegativeDuration(getenv, "DATABASE_STARTUP_TIMEOUT", 60*time.Second)
+	conf.DatabaseReadyGrace = parseNonNegativeDuration(getenv, "DATABASE_READY_GRACE", DefaultDatabaseReadyGrace)
+	conf.DatabaseWriteRetryWindow = parseNonNegativeDuration(getenv, "DATABASE_WRITE_RETRY_WINDOW", 15*time.Second)
+	if msg := readyGraceWarning(conf.DatabaseReadyGrace, conf.DatabaseWriteRetryWindow); msg != "" {
+		cfgLog.Warn().Msg(msg)
+	}
 
 	filterDomains := getenv("FILTER_SIGNUP_DOMAINS")
 	if filterDomains != "" {
@@ -850,6 +901,7 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 	}
 	conf.GRPCMaxConnectionAge = parseDurationWithDefault(getenv, "GRPC_MAX_CONNECTION_AGE", 0)
 	conf.GRPCMaxConnectionAgeGrace = parseDurationWithDefault(getenv, "GRPC_MAX_CONNECTION_AGE_GRACE", 0)
+	conf.ClusterNodeLabel = strings.TrimSpace(getenv("CLUSTER_NODE_LABEL"))
 
 	// Plugin source lockdown: the deployment types this installation
 	// accepts. A security setting, so an invalid value refuses to start.
@@ -1632,6 +1684,47 @@ func Get(envFile string) *AppConf {
 func ResetGlobalConfig() {
 	globalConfig.Store(nil)
 }
+
+// parseNonNegativeInt reads a whole number of 0 or more; unset or invalid is 0.
+func parseNonNegativeInt(getenv func(string) string, envVar string) int {
+	value := getenv(envVar)
+	if value == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(value)
+	if err != nil || n < 0 {
+		cfgLog.Warn().Msgf("Invalid %s value %q; using the default", envVar, value)
+		return 0
+	}
+	return n
+}
+
+// parseNonNegativeDuration reads a duration of 0 or more; unset or invalid
+// is def.
+func parseNonNegativeDuration(getenv func(string) string, envVar string, def time.Duration) time.Duration {
+	d := parseDurationWithDefault(getenv, envVar, def)
+	if d < 0 {
+		cfgLog.Warn().Msgf("Invalid duration for %s: %s, using default %s", envVar, d, def)
+		return def
+	}
+	return d
+}
+
+// readyGraceWarning is the start-up warning when DATABASE_READY_GRACE is
+// set but not longer than DATABASE_WRITE_RETRY_WINDOW: /ready could then
+// fail while the replica's requests are still being held for a new
+// primary, and a load balancer would take it out of rotation during a
+// failover it was riding out. A warning, not a refusal; "" when fine.
+func readyGraceWarning(grace, window time.Duration) string {
+	if grace <= 0 || grace > window {
+		return ""
+	}
+	return fmt.Sprintf("DATABASE_READY_GRACE (%s) is not longer than DATABASE_WRITE_RETRY_WINDOW (%s): /ready can fail while requests are still held for a new primary, taking this replica out of the load balancer during a failover it would ride out. Make the grace longer than the window", grace, window)
+}
+
+// DefaultDatabaseReadyGrace is DATABASE_READY_GRACE when it is not set:
+// twice the time a write is held for a writable primary.
+const DefaultDatabaseReadyGrace = 30 * time.Second
 
 // parseDurationWithDefault parses a duration from an environment variable with a default fallback
 func parseDurationWithDefault(getenv func(string) string, envVar string, defaultDuration time.Duration) time.Duration {

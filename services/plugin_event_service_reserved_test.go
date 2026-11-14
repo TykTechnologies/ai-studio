@@ -21,7 +21,7 @@ func TestPluginEventServer_GuardrailAlertTopicRefused(t *testing.T) {
 	defer bus.Unsubscribe(sub)
 	server := NewPluginEventServer(bus, "hub")
 
-	for _, topic := range []string{"guardrail.alert.visor-pr-flag", "guardrail.outcome.blocked", "guardrail.outcome.judge_softened"} {
+	for _, topic := range []string{"guardrail.alert.visor-pr-flag", "guardrail.outcome.blocked", "guardrail.outcome.judge_softened", "credential.changed"} {
 		resp, err := server.Publish(context.Background(), &pb.PublishRequest{Topic: topic, Payload: []byte(`{"alert":"visor-pr-flag"}`), PluginId: "3"})
 		require.NoError(t, err)
 		assert.False(t, resp.Success, topic)

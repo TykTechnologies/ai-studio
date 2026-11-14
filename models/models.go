@@ -67,6 +67,8 @@ func InitModels(db *gorm.DB) error {
 		&ClusterNode{},        // Running Studio replicas (pkg/cluster)
 		&ClusterEvent{},       // Cluster event log (pkg/cluster)
 		&ClusterLease{},       // Leader lease for singleton jobs (pkg/cluster)
+		&ClusterCounter{},     // Counters shared by every replica (budget sync sequence)
+		&DataKeySalt{},        // The database's salt for data-key encryption (App credentials)
 		&StudioSchema{},       // Schema version (see schema_version.go)
 		&PushOperation{},      // Configuration pushes (services/pushes)
 		&EdgePushCommand{},    // One per push and target edge
@@ -84,6 +86,7 @@ func InitModels(db *gorm.DB) error {
 		&InstalledPluginVersion{}, // Installed plugin version tracking
 		&MarketplaceConfig{},      // Marketplace configuration
 		&BrandingSettings{},       // UI branding customization
+		&BrandingAsset{}, // Uploaded logo and favicon (bytes in the database)
 		// Sync Status Models
 		&NamespaceSyncStatus{}, // Namespace configuration sync status tracking
 		&SyncAuditLog{},        // Sync audit log for control-edge synchronization

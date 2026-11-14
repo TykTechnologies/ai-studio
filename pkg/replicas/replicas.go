@@ -42,6 +42,9 @@ const (
 	// that recalculated also delivers it to itself (Deliver), since its
 	// budget sync is not the code that changed the data.
 	SignalSpendRecalculated = "spend_recalculated"
+	// SignalBranding: the logo or favicon was uploaded or reset; replicas
+	// drop the copies they hold in memory.
+	SignalBranding = "branding"
 )
 
 // Backend is the cluster behind the package (pkg/studio provides it).
@@ -121,6 +124,22 @@ func Deliver(name string) {
 	}
 	mu.Unlock()
 	run(fns, fmt.Sprintf("replica signal %q", name))
+}
+
+// DeliverAll runs the handlers of every signal: for a replica that may have
+// missed signals (it could not read the cluster event log for longer than
+// events are kept), so that everything a signal would have refreshed is
+// refreshed.
+func DeliverAll() {
+	mu.Lock()
+	var fns []func()
+	for _, byID := range handlers {
+		for _, fn := range byID {
+			fns = append(fns, fn)
+		}
+	}
+	mu.Unlock()
+	run(fns, "replica signals after a gap")
 }
 
 // OnLeading registers fn to run each time this replica becomes the leader.

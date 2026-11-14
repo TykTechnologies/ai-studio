@@ -13,7 +13,7 @@ import (
 // with: the control plane's certificate is checked against EDGE_TLS_CA_PATH
 // when set (a private CA) or the system roots, under the name in
 // EDGE_TLS_SERVER_NAME when set (a load balancer or IP address in
-// EDGE_CONTROL_ENDPOINT), and an optional client certificate is presented
+// CONTROL_ENDPOINT), and an optional client certificate is presented
 // for mutual TLS.
 func clientTLSConfig(hs config.HubSpokeConfig) (*tls.Config, error) {
 	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12}

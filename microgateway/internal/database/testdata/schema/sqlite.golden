@@ -76,6 +76,7 @@ TABLE analytics_events
 TABLE api_tokens
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `token` text NOT NULL
+  column `token_hash` text DEFAULT null
   column `name` text NOT NULL
   column `app_id` integer NOT NULL
   column `scopes` JSON
@@ -90,6 +91,7 @@ TABLE api_tokens
   index CREATE INDEX `idx_api_tokens_deleted_at` ON `api_tokens`(`deleted_at`)
   index CREATE INDEX `idx_token_active` ON `api_tokens`(`is_active`)
   index CREATE INDEX `idx_token_namespace` ON `api_tokens`(`namespace`)
+  index CREATE UNIQUE INDEX `idx_api_tokens_token_hash` ON `api_tokens`(`token_hash`)
   index CREATE UNIQUE INDEX `idx_api_tokens_token` ON `api_tokens`(`token`)
 TABLE app_datasources
   column `app_id` integer
@@ -123,6 +125,14 @@ TABLE app_tools
   column `created_at` datetime
   constraint PRIMARY KEY (`app_id`,`tool_id`)
   autoindex origin=pk unique=1 (app_id, tool_id)
+TABLE applied_snapshots
+  column `id` integer
+  column `checksum` text
+  column `version` text
+  column `namespace` text
+  column `applied_at` datetime
+  column `snapshot` blob
+  constraint PRIMARY KEY (`id`)
 TABLE apps
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime
@@ -491,6 +501,24 @@ TABLE sync_states
   column `created_at` datetime
   column `updated_at` datetime
   index CREATE UNIQUE INDEX `idx_sync_states_topic` ON `sync_states`(`topic`)
+TABLE synced_app_fingerprints
+  column `app_id` integer
+  column `fingerprint` text NOT NULL
+  column `app_updated_at` datetime NOT NULL
+  constraint PRIMARY KEY (`app_id`)
+TABLE synced_credentials
+  column `secret_hash` text
+  column `credential_id` integer
+  column `app_id` integer
+  column `active` numeric
+  column `deleted` numeric
+  column `updated_at` datetime
+  column `synced_at` datetime
+  constraint PRIMARY KEY (`secret_hash`)
+  autoindex origin=pk unique=1 (secret_hash)
+  index CREATE INDEX `idx_synced_credentials_app_id` ON `synced_credentials`(`app_id`)
+  index CREATE INDEX `idx_synced_credentials_credential_id` ON `synced_credentials`(`credential_id`)
+  index CREATE INDEX `idx_synced_credentials_synced_at` ON `synced_credentials`(`synced_at`)
 TABLE tool_filters
   column `tool_id` integer
   column `filter_id` integer

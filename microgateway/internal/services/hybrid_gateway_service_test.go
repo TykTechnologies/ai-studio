@@ -35,7 +35,7 @@ func createTestHybridService(t *testing.T, db *gorm.DB, repo *database.Repositor
 		TokenCacheCleanupInt: time.Minute,
 	}
 
-	return NewHybridGatewayService(db, repo, "test-namespace", cacheConfig)
+	return NewHybridGatewayService(db, repo, "test-namespace", cacheConfig, testCredentialHasher(t))
 }
 
 func TestHybridGatewayService_storeAppFromPullOnMiss(t *testing.T) {
@@ -273,7 +273,7 @@ func seedExpiredEntry(h *HybridGatewayService, token string, expiredFor time.Dur
 	result := &TokenValidationResult{TokenID: 42, TokenName: "seeded", AppID: 42}
 	h.cacheMutex.Lock()
 	defer h.cacheMutex.Unlock()
-	h.tokenCache[token] = &TokenCacheEntry{
+	h.tokenCache[h.cacheKey(token)] = &TokenCacheEntry{
 		Result:    result,
 		CachedAt:  time.Now().Add(-expiredFor - time.Minute),
 		ExpiresAt: time.Now().Add(-expiredFor),
@@ -288,7 +288,9 @@ func newStaleGraceService(t *testing.T, grace time.Duration) *HybridGatewayServi
 	// Built by hand so no cleanup goroutine runs during the test.
 	return &HybridGatewayService{
 		DatabaseGatewayService: dbService.(*DatabaseGatewayService),
+		hasher:                 testCredentialHasher(t),
 		tokenCache:             make(map[string]*TokenCacheEntry),
+		evictedAt:              make(map[string]time.Time),
 		cacheConfig: config.HubSpokeConfig{
 			TokenCacheEnabled:    true,
 			TokenCacheTTL:        time.Minute,
@@ -343,7 +345,7 @@ func TestHybridGatewayService_ValidateAPIToken_StaleGrace(t *testing.T) {
 		assert.Contains(t, err.Error(), "revoked")
 
 		h.cacheMutex.RLock()
-		_, still := h.tokenCache["tok-revoked"]
+		_, still := h.tokenCache[h.cacheKey("tok-revoked")]
 		h.cacheMutex.RUnlock()
 		assert.False(t, still, "a rejected token must not linger in the cache")
 
@@ -368,7 +370,7 @@ func TestHybridGatewayService_ValidateAPIToken_StaleGrace(t *testing.T) {
 		client := &fakeEdgeClient{err: assert.AnError}
 		h.SetEdgeClient(client)
 		fresh := &TokenValidationResult{TokenID: 7, AppID: 7}
-		h.storeInCache("tok-fresh", fresh)
+		h.storeInCache(h.cacheKey("tok-fresh"), fresh, time.Now())
 
 		got, err := h.ValidateAPIToken("tok-fresh")
 		require.NoError(t, err)
@@ -385,8 +387,8 @@ func TestHybridGatewayService_ValidateAPIToken_StaleGrace(t *testing.T) {
 
 		h.cacheMutex.RLock()
 		defer h.cacheMutex.RUnlock()
-		_, keep := h.tokenCache["tok-keep"]
-		_, drop := h.tokenCache["tok-drop"]
+		_, keep := h.tokenCache[h.cacheKey("tok-keep")]
+		_, drop := h.tokenCache[h.cacheKey("tok-drop")]
 		assert.True(t, keep)
 		assert.False(t, drop)
 	})

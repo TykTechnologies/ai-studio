@@ -16,6 +16,7 @@ data:
           interval_seconds: {{ .Values.analyticsPulse.intervalSeconds }}
           max_batch_size: {{ .Values.analyticsPulse.maxBatchSize }}
           max_buffer_size: {{ .Values.analyticsPulse.maxBufferSize }}
+          max_backlog_bytes: {{ .Values.analyticsPulse.maxBacklogBytes | int64 }}
           compression_enabled: {{ .Values.analyticsPulse.compressionEnabled }}
           include_proxy_summaries: {{ .Values.analyticsPulse.includeProxySummaries }}
           include_request_response_data: {{ .Values.analyticsPulse.includeRequestResponseData }}
