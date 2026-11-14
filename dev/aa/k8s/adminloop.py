@@ -4,7 +4,7 @@ For each Studio in STUDIOS, two threads with a user of their own (Studio keeps
 one session per user, so sharing one would log the other out):
   write   update a setting (the branding title: one UPDATE), every WRITE_INTERVAL seconds
   login   log in, every LOGIN_INTERVAL seconds
-  create  (CREATE_INTERVAL > 0 only) create an App with a unique name, with the
+  create  (CREATE_INTERVAL > 0 only; CREATE_MAX caps the count per Studio) create an App with a unique name, with the
           write user's session; the name is on the line, so the 201s can be
           counted against the rows (a held write applied twice shows as two)
 Every request is one JSON line on stdout: time, site, kind, status, error code
@@ -93,8 +93,13 @@ def create_loop(site, base, interval):
     # A user of its own: sharing the write loop's would log each other out.
     user = "aa-probe-create-%s@tyk.io" % site
     client, logged_in, n, run = Client(base), False, 0, os.environ.get("RUN_ID", str(int(time.time())))
+    # CREATE_MAX: at most this many creates per Studio (a licensed App quota).
+    cap = int(os.environ.get("CREATE_MAX", "0") or 0)
     while True:
         tick = time.time()
+        if cap and n >= cap:
+            time.sleep(interval)
+            continue
         if not logged_in:
             status, _ = timed(site, "create-login", lambda: client.call("POST", "/auth/login", login_body(user)))
             logged_in = status == 200

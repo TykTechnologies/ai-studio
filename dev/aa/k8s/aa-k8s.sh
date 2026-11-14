@@ -35,6 +35,7 @@
 #   aa-k8s.sh drop-sync-at EPOCH      fault 7: the primary's own pod drops the synchronous requirement at that time
 #   aa-k8s.sh fill-disk a|b           #976 check: fill that edge's data volume (files /opt/tyk-microgateway/data/aa-fill-*)
 #   aa-k8s.sh unfill-disk a|b         remove those files
+#   aa-k8s.sh resync                  fault 7 (ii) undo: synchronous again once the standby has caught up
 #   aa-k8s.sh wait SECONDS [MSG]      sleep through a run, touching the watchdog heartbeat every minute
 #   aa-k8s.sh teardown                delete the namespace (asks for the namespace name)
 set -euo pipefail
@@ -535,6 +536,18 @@ cmd_wait() {
 	hb
 }
 
+# After the partition of run (ii): the standby streams again; once it has
+# caught up, the primary waits for it again (synchronous back on).
+cmd_resync() {
+	local p o
+	p=$(primary) || die "no primary"; o=$(other "$p")
+	hb
+	WAIT_TRIES=600 wait_sql "$p" "SELECT count(*) = 1 FROM pg_stat_replication WHERE application_name = 'pg-$o' AND state = 'streaming' AND pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn) < 8 * 1024 * 1024" "see pg-$o streaming and caught up"
+	set_sync "$p" on
+	wait_sql "$p" "SELECT count(*) = 1 FROM pg_stat_replication WHERE application_name = 'pg-$o' AND sync_state = 'sync'" "get a synchronous standby"
+	stamp "pg-$o is the synchronous standby of pg-$p again"
+}
+
 cmd_teardown() {
 	[ "${1:-}" = "$NS" ] || die "to delete the namespace and everything in it, run: aa-k8s.sh teardown $NS"
 	kubectl --context "$CTX" delete namespace "$NS"
@@ -564,6 +577,7 @@ cut-cp) cmd_cp 0 "${2:-}" ;;
 restore-cp) cmd_cp 1 "${2:-}" ;;
 kill-edge) cmd_kill_edge "${2:-}" ;;
 teardown) cmd_teardown "${2:-}" ;;
+resync) cmd_resync ;;
 wait) cmd_wait "${2:-}" "${3:-}" ;;
 fill-disk) cmd_fill_disk "${2:-}" ;;
 unfill-disk) cmd_unfill_disk "${2:-}" ;;
@@ -571,5 +585,5 @@ pulse) cmd_pulse "${2:-/dev/stdout}" ;;
 zone-b) cmd_zone_b "${2:-}" ;;
 drop-sync-at) cmd_drop_sync_at "${2:-}" ;;
 run-partition) cmd_run_partition "${2:-}" "${3:-}" ;;
-*) sed -n '2,39p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+*) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
