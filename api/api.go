@@ -800,7 +800,7 @@ func (a *API) setupRoutes() error {
 	v1.POST("/apps/:id/activate", authz.Publish("apps"), a.activateApp)
 	v1.POST("/apps/:id/deactivate", authz.Publish("apps"), a.deactivateApp)
 	v1.DELETE("/apps/:id", authz.Delete("apps"), a.deleteApp)
-	v1.GET("/users/:id/apps", authz.Read("apps"), a.getAppsByUserID) // Note: Param is "id" here, not "userId" as in some other handlers
+	v1.GET("/users/:id/apps", authz.Read("apps"), a.getAppsByUserID)
 	v1.GET("/apps/by-name", authz.Read("apps"), a.getAppByName)
 	v1.POST("/apps/:id/activate-credential", authz.Write("apps"), a.activateAppCredential)
 	v1.POST("/apps/:id/deactivate-credential", authz.Write("apps"), a.deactivateAppCredential)
@@ -810,7 +810,7 @@ func (a *API) setupRoutes() error {
 	v1.GET("/apps/count", authz.Read("apps"), a.countApps)
 	v1.GET("/apps/:id/dependents", authz.Read("apps"), a.getAppDependents)
 	v1.HandleFn("POST", "/apps/bulk", bulkActionPermission("apps"), a.bulkApps)
-	v1.GET("/users/:id/apps/count", authz.Read("apps"), a.countAppsByUserID) // Note: Param is "id" here
+	v1.GET("/users/:id/apps/count", authz.Read("apps"), a.countAppsByUserID)
 
 	// App-Tool routes
 	v1.POST("/apps/:id/tools/:tool_id", authz.Write("apps"), a.addToolToApp)
