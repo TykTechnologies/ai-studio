@@ -150,6 +150,16 @@ func TestWorkspaceB4c_Credentials(t *testing.T) {
 	assert.Equal(t, http.StatusOK, f.do("GET", fmt.Sprintf("/api/v1/credentials/%d", mineApp.CredentialID), nil, f.inW1).Code)
 	assert.Equal(t, http.StatusOK, f.do("GET", fmt.Sprintf("/api/v1/credentials/%d", orphan.ID), nil, f.owner).Code)
 
+	// A credential held by two Apps (hand-written SQL) has no single
+	// Workspace: hidden from a scoped caller even next to their own App.
+	require.NoError(t, db.Model(&models.App{}).Where("id = ?", theirs).UpdateColumn("credential_id", mineApp.CredentialID).Error)
+	sameNotFound(t, f.do("GET", fmt.Sprintf("/api/v1/credentials/%d", mineApp.CredentialID), nil, f.inW1), f.do("GET", fmt.Sprintf("/api/v1/credentials/%d", missing), nil, f.inW1))
+	assert.Equal(t, http.StatusOK, f.do("GET", fmt.Sprintf("/api/v1/credentials/%d", mineApp.CredentialID), nil, f.owner).Code)
+	w := f.do("GET", "/api/v1/credentials?all=true", nil, f.inW1)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	assert.NotContains(t, w.Body.String(), fmt.Sprintf(`"id":"%d"`, mineApp.CredentialID), "not listed either")
+	require.NoError(t, db.Model(&models.App{}).Where("id = ?", theirs).UpdateColumn("credential_id", theirsApp.CredentialID).Error)
+
 	ids := func(w *httptest.ResponseRecorder) []string {
 		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 		var resp struct{ Data []struct{ ID string } }

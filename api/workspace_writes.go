@@ -311,10 +311,13 @@ func (a *API) appWorkspaceOfCredential(rawID string) (ws uint, credFound, appFou
 		return 0, false, false, err
 	}
 	var ids []uint
-	if err := a.service.DB.Model(&models.App{}).Where("credential_id = ?", id).Order("id").Limit(1).Pluck("workspace_id", &ids).Error; err != nil {
+	if err := a.service.DB.Model(&models.App{}).Where("credential_id = ?", id).Order("id").Limit(2).Pluck("workspace_id", &ids).Error; err != nil {
 		return 0, true, false, err
 	}
-	if len(ids) == 0 {
+	if len(ids) != 1 {
+		// None, or (only through hand-written SQL) more than one App: no
+		// single owning Workspace, so it is treated as standalone (global
+		// holders only), failing closed rather than picking one.
 		return 0, true, false, nil
 	}
 	return ids[0], true, true, nil
@@ -403,6 +406,8 @@ func (a *API) credentialListScopes(c *gin.Context) ([]func(*gorm.DB) *gorm.DB, b
 	return []func(*gorm.DB) *gorm.DB{func(db *gorm.DB) *gorm.DB {
 		sub := db.Session(&gorm.Session{NewDB: true}).Model(&models.App{}).Select("1").
 			Where("apps.credential_id = credentials.id").Scopes(appScopes...)
-		return db.Where("EXISTS (?)", sub)
+		// Exactly one live App holds it (see appWorkspaceOfCredential).
+		return db.Where("EXISTS (?)", sub).
+			Where("(SELECT COUNT(*) FROM apps holders WHERE holders.credential_id = credentials.id AND holders.deleted_at IS NULL) = 1")
 	}}, true
 }
