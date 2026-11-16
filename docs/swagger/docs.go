@@ -31382,6 +31382,10 @@ const docTemplate = `{
                         },
                         "user_id": {
                             "type": "integer"
+                        },
+                        "workspace_id": {
+                            "description": "WorkspaceID is the Workspace that owns the datasource (admin\nresponses).",
+                            "type": "integer"
                         }
                     }
                 },
@@ -31774,6 +31778,10 @@ const docTemplate = `{
                     "items": {
                         "type": "integer"
                     }
+                },
+                "workspace_id": {
+                    "description": "WorkspaceID is the Workspace that owns the filter.",
+                    "type": "integer"
                 }
             }
         },
@@ -32363,6 +32371,9 @@ const docTemplate = `{
                         },
                         "vendor_workspace_id": {
                             "type": "string"
+                        },
+                        "workspace_id": {
+                            "type": "integer"
                         }
                     }
                 },
@@ -34324,6 +34335,10 @@ const docTemplate = `{
                         },
                         "var_name": {
                             "type": "string"
+                        },
+                        "workspace_id": {
+                            "description": "WorkspaceID is the Workspace that owns the secret.",
+                            "type": "integer"
                         }
                     }
                 },
@@ -34928,6 +34943,10 @@ const docTemplate = `{
                 "tracing_content_mode_max": {
                     "description": "Agent tracing content mode cap (Enterprise); \"\" is no cap.",
                     "type": "string"
+                },
+                "workspace_id": {
+                    "description": "WorkspaceID is the Workspace that owns the tool (admin responses).",
+                    "type": "integer"
                 }
             }
         },

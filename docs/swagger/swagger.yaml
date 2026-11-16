@@ -1617,6 +1617,11 @@ definitions:
             type: string
           user_id:
             type: integer
+          workspace_id:
+            description: |-
+              WorkspaceID is the Workspace that owns the datasource (admin
+              responses).
+            type: integer
         type: object
       governed_metadata:
         description: Governed metadata (Enterprise); see LLMResponse.
@@ -1883,6 +1888,9 @@ definitions:
         items:
           type: integer
         type: array
+      workspace_id:
+        description: WorkspaceID is the Workspace that owns the filter.
+        type: integer
     type: object
   api.FilterInput:
     description: Filter input model
@@ -2295,6 +2303,8 @@ definitions:
             type: string
           vendor_workspace_id:
             type: string
+          workspace_id:
+            type: integer
         type: object
       governed_metadata:
         description: |-
@@ -3636,6 +3646,9 @@ definitions:
             type: string
           var_name:
             type: string
+          workspace_id:
+            description: WorkspaceID is the Workspace that owns the secret.
+            type: integer
         type: object
       id:
         type: string
@@ -4069,6 +4082,9 @@ definitions:
       tracing_content_mode_max:
         description: Agent tracing content mode cap (Enterprise); "" is no cap.
         type: string
+      workspace_id:
+        description: WorkspaceID is the Workspace that owns the tool (admin responses).
+        type: integer
     type: object
   api.UpdateBrandingSettingsRequest:
     properties:
