@@ -24,11 +24,6 @@ DELETE /api/v1/semantic-routers/:id
 DELETE /api/v1/tool-catalogues/:id
 DELETE /api/v1/tool-catalogues/:id/tags/:tagId
 DELETE /api/v1/tool-catalogues/:id/tools/:toolId
-DELETE /api/v1/tools/:id
-DELETE /api/v1/tools/:id/dependencies/:dependency_id
-DELETE /api/v1/tools/:id/filestores/:filestore_id
-DELETE /api/v1/tools/:id/filters/:filter_id
-DELETE /api/v1/tools/:id/operations
 GET /api/v1/agents
 GET /api/v1/agents/:id
 GET /api/v1/agents/:id/stream
@@ -104,20 +99,9 @@ GET /api/v1/tool-catalogues/:id/groups
 GET /api/v1/tool-catalogues/:id/tags
 GET /api/v1/tool-catalogues/:id/tools
 GET /api/v1/tool-catalogues/search
-GET /api/v1/tools
-GET /api/v1/tools/:id
-GET /api/v1/tools/:id/auth-plugins
-GET /api/v1/tools/:id/dependencies
-GET /api/v1/tools/:id/dependents
-GET /api/v1/tools/:id/filestores
-GET /api/v1/tools/:id/filters
-GET /api/v1/tools/:id/operations
-GET /api/v1/tools/:id/spec-operations
-GET /api/v1/tools/by-type
 GET /api/v1/tools/import/tyk/connections
 GET /api/v1/tools/import/tyk/connections/:id/apis
 GET /api/v1/tools/import/tyk/connections/:id/apis/:api_id
-GET /api/v1/tools/search
 GET /api/v1/users/:id/apps  # Workspace-checked only together with workspaceListScope (B4c)
 GET /api/v1/users/:id/apps/count  # Workspace-checked only together with workspaceListScope (B4c)
 GET /api/v1/vendors/embedders
@@ -140,7 +124,6 @@ PATCH /api/v1/secrets/:id
 PATCH /api/v1/semantic-routers/:id
 PATCH /api/v1/semantic-routers/:id/toggle
 PATCH /api/v1/tool-catalogues/:id
-PATCH /api/v1/tools/:id
 PATCH /api/v1/tyk-connections/:id/policies/:pid  # stays global: acts on a global Tyk connection (.37)
 POST /api/v1/agents
 POST /api/v1/agents/:id/activate
@@ -195,14 +178,6 @@ POST /api/v1/semantic-routers/test
 POST /api/v1/tool-catalogues
 POST /api/v1/tool-catalogues/:id/tags
 POST /api/v1/tool-catalogues/:id/tools
-POST /api/v1/tools
-POST /api/v1/tools/:id/activate
-POST /api/v1/tools/:id/call-operation
-POST /api/v1/tools/:id/deactivate
-POST /api/v1/tools/:id/dependencies/:dependency_id
-POST /api/v1/tools/:id/filestores/:filestore_id
-POST /api/v1/tools/:id/filters/:filter_id
-POST /api/v1/tools/:id/operations
 POST /api/v1/tyk-connections/:id/policies  # stays global: acts on a global Tyk connection (.37)
 PUT /api/v1/agents/:id
 PUT /api/v1/catalogues/:id/routers
@@ -214,7 +189,3 @@ PUT /api/v1/model-routers/:id/auth-plugins
 PUT /api/v1/model-routers/:id/catalogues
 PUT /api/v1/semantic-routers/:id/auth-plugins
 PUT /api/v1/semantic-routers/:id/catalogues
-PUT /api/v1/tools/:id/auth-plugins
-PUT /api/v1/tools/:id/dependencies
-PUT /api/v1/tools/:id/filestores
-PUT /api/v1/tools/:id/filters

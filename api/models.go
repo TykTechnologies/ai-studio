@@ -751,6 +751,8 @@ type ToolResponseAttributes struct {
 	// AllowInternalHost: the tool's own API hosts may be internal addresses
 	// (an administrator's switch).
 	AllowInternalHost bool `json:"allow_internal_host"`
+	// WorkspaceID is the Workspace that owns the tool (admin responses).
+	WorkspaceID uint `json:"workspace_id,omitempty"`
 
 	// Flattened into the attributes; see toolGatewayAccess.
 	ToolGatewayAccess

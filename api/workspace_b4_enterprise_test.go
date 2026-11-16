@@ -193,3 +193,59 @@ func TestWorkspaceB4_SecretReferences(t *testing.T) {
 	ws, _ := f.stored(t, &models.LLM{}, id)
 	assert.Equal(t, f.w1, ws)
 }
+
+func toolAttrs(name string, extra map[string]any) map[string]any {
+	a := map[string]any{"name": name, "tool_type": models.ToolTypeREST, "privacy_score": 10,
+		"oas_spec": "eyJvcGVuYXBpIjoiMy4wLjAiLCJpbmZvIjp7InRpdGxlIjoidCIsInZlcnNpb24iOiIxIn0sInNlcnZlcnMiOlt7InVybCI6Imh0dHBzOi8vYXBpLmV4YW1wbGUifV0sInBhdGhzIjp7fX0="}
+	for k, v := range extra {
+		a[k] = v
+	}
+	return a
+}
+
+func TestWorkspaceB4_Tools(t *testing.T) {
+	f := setupWSB4(t)
+
+	mine, ws := f.created(t, f.do("POST", "/api/v1/tools", body(toolAttrs("Mine", nil)), f.inW1))
+	assert.Equal(t, f.w1, ws)
+	assertCode(t, f.do("POST", "/api/v1/tools", body(toolAttrs("Elsewhere", map[string]any{"workspace_id": f.w2})), f.inW1),
+		http.StatusUnprocessableEntity, authz.CodeInvalidWorkspace)
+	assertCode(t, f.do("POST", "/api/v1/tools", body(toolAttrs("Ambiguous", nil)), f.inW1W2),
+		http.StatusUnprocessableEntity, authz.CodeWorkspaceRequired)
+	_, ws = f.created(t, f.do("POST", "/api/v1/tools", body(toolAttrs("Global", nil)), f.owner))
+	assert.Equal(t, f.def, ws)
+	theirs, _ := f.created(t, f.do("POST", "/api/v1/tools", body(toolAttrs("Theirs", map[string]any{"workspace_id": f.w2})), f.owner))
+
+	path := func(id uint, suffix string) string { return fmt.Sprintf("/api/v1/tools/%d%s", id, suffix) }
+	assert.Equal(t, http.StatusOK, f.do("GET", path(theirs, ""), nil, f.inW1).Code)
+	for _, req := range []struct {
+		method, path string
+		body         any
+	}{
+		{"PATCH", path(theirs, ""), body(map[string]any{"description": "x"})},
+		{"DELETE", path(theirs, ""), nil},
+		{"POST", path(theirs, "/deactivate"), nil},
+		{"POST", path(theirs, "/operations"), map[string]any{"operation": "x"}},
+		{"PUT", path(theirs, "/filters"), map[string]any{"data": []any{}}},
+		{"POST", path(theirs, "/call-operation"), map[string]any{}},
+	} {
+		assertCode(t, f.do(req.method, req.path, req.body, f.inW1), http.StatusForbidden, authz.CodePermissionDenied)
+	}
+	assert.Equal(t, http.StatusOK, f.do("PATCH", path(mine, ""), body(map[string]any{"description": "edited"}), f.inW1).Code)
+	assert.Equal(t, http.StatusOK, f.do("POST", path(mine, "/deactivate"), nil, f.inW1).Code)
+
+	for _, q := range []string{"/api/v1/tools?all=true", "/api/v1/tools/search?query=Theirs", "/api/v1/tools/by-type?type=" + models.ToolTypeREST} {
+		w := f.do("GET", fmt.Sprintf("%s&workspace_id=%d", q, f.w1), nil, f.owner)
+		require.Equal(t, http.StatusOK, w.Code, q)
+		assert.NotContains(t, w.Body.String(), `"Theirs"`, q)
+	}
+
+	assertCode(t, f.do("PATCH", path(mine, ""), body(map[string]any{"workspace_id": f.w2}), f.inW1),
+		http.StatusUnprocessableEntity, authz.CodeInvalidWorkspace)
+	_, before := f.stored(t, &models.Tool{}, mine)
+	time.Sleep(10 * time.Millisecond)
+	require.Equal(t, http.StatusOK, f.do("PATCH", path(mine, ""), body(map[string]any{"workspace_id": f.w2}), f.inW1W2).Code)
+	ws, after := f.stored(t, &models.Tool{}, mine)
+	assert.Equal(t, f.w2, ws)
+	assert.True(t, after.After(before))
+}

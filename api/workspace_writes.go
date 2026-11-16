@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -165,6 +166,32 @@ func (a *API) responseWorkspaceID(stored uint) uint {
 	}
 	if def, err := a.service.DefaultWorkspaceID(); err == nil {
 		return def
+	}
+	return stored
+}
+
+// onObject is route middleware for an action on the object named by the
+// :id path parameter: perm must cover the object's Workspace (403
+// permission_denied). A malformed or unknown id passes, for the handler to
+// answer as it always has.
+func (a *API) onObject(model interface{}, perm authz.Permission) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+		if err == nil && !a.requireOnObject(c, model, uint(id), perm) {
+			return
+		}
+		c.Next()
+	}
+}
+
+// responseWorkspaceIDFrom is responseWorkspaceID for serializers that have
+// only a database handle.
+func responseWorkspaceIDFrom(db *gorm.DB, stored uint) uint {
+	if stored != 0 || db == nil {
+		return stored
+	}
+	if def, err := models.GetDefaultWorkspace(db); err == nil {
+		return def.ID
 	}
 	return stored
 }
