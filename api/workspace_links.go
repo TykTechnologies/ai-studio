@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
@@ -145,4 +146,32 @@ func (a *API) workspaceListFilters(c *gin.Context, resource string) ([]func(*gor
 		}
 	}
 	return out, true
+}
+
+// onVisibleObject is route middleware for a route on the object named by
+// :id: hidden (notFound) unless the caller's read covers its Workspace,
+// then perm in that Workspace (403). A malformed or unknown id passes, for
+// the handler to answer as it always has.
+func (a *API) onVisibleObject(resource string, model interface{}, perm authz.Permission, notFound func(*gin.Context)) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !a.workspaceChecksOn(c) {
+			c.Next()
+			return
+		}
+		id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+		if err != nil {
+			c.Next()
+			return
+		}
+		ws, found, err := a.storedWorkspaceID(model, uint(id))
+		if err != nil {
+			simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+			c.Abort()
+			return
+		}
+		if found && (!a.requireVisible(c, resource, ws, notFound) || !a.requireInWorkspace(c, perm, ws)) {
+			return
+		}
+		c.Next()
+	}
 }
