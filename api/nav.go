@@ -96,6 +96,7 @@ func adminNav(in navInputs) []NavItem {
 			when(f("feature_groups") && (!f("feature_gateway") || f("feature_portal") || f("feature_chat")),
 				page("groups", "Teams", "/admin/groups", r("groups"))),
 			when(f("feature_rbac"), page("roles", "Roles", "/admin/roles", r("roles"))),
+			when(f("feature_rbac"), page("workspaces", "Workspaces", "/admin/workspaces", r("workspaces"))),
 			when(in.identityProviders, page("sso-profiles", "Identity providers", "/admin/sso-profiles", r("sso-profiles"))),
 		),
 	)

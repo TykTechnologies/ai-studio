@@ -100,6 +100,10 @@ export const P = Object.freeze({
   ROLES_READ: p('roles', 'read'),
   ROLES_WRITE: p('roles', 'write'),
   ROLES_DELETE: p('roles', 'delete'),
+  // Workspaces (Enterprise): the Workspace objects themselves.
+  WORKSPACES_READ: p('workspaces', 'read'),
+  WORKSPACES_WRITE: p('workspaces', 'write'),
+  WORKSPACES_DELETE: p('workspaces', 'delete'),
   SSO_PROFILES_READ: p('sso-profiles', 'read'),
   SSO_PROFILES_WRITE: p('sso-profiles', 'write'),
   SSO_PROFILES_DELETE: p('sso-profiles', 'delete'),

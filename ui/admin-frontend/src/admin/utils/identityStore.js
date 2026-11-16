@@ -12,6 +12,18 @@ import { hasPermission, toArray, FULL_ADMIN } from '../rbac/permissions';
 let identity = null;
 const listeners = new Set();
 
+/**
+ * Maps /common/me's workspaces (Enterprise): per Workspace, the permissions
+ * the user holds there through Workspace-scoped roles. The global
+ * permissions cover every Workspace and are not repeated here.
+ */
+const buildWorkspaces = (list) =>
+  (Array.isArray(list) ? list : []).map((w) => ({
+    id: Number(w.id),
+    name: w.name || '',
+    permissions: new Set(Array.isArray(w.permissions) ? w.permissions : []),
+  }));
+
 /** Builds the identity view from a raw /common/me payload ({ id, attributes }). */
 export const buildIdentity = (me) => {
   if (!me) return null;
@@ -35,6 +47,9 @@ export const buildIdentity = (me) => {
     isOwner: attributes.is_owner === true,
     permissions,
     roles: Array.isArray(attributes.roles) ? attributes.roles : [],
+    workspaces: buildWorkspaces(attributes.workspaces),
+    // "" for a person, "service" for a service account.
+    accountType: attributes.account_type || '',
     uiOptions: attributes.ui_options || {},
     entitlements: attributes.entitlements || null,
     raw: me,
