@@ -38,7 +38,8 @@ var (
 	// ErrOwnerScopeForbidden: the Owner role is always global (decision D3).
 	ErrOwnerScopeForbidden = errors.New("the Owner role cannot be assigned within a Workspace")
 	// ErrServiceAccountOwner refuses the Owner role for a service account
-	// (Enterprise; answered 422 service_account).
+	// (Enterprise; answered 409 service_account, like the other Owner
+	// rules).
 	ErrServiceAccountOwner = errors.New("the Owner role cannot be given to a service account")
 )
 

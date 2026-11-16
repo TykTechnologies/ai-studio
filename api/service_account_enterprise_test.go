@@ -13,6 +13,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
+	"github.com/TykTechnologies/midsommar/v2/services"
 )
 
 // A caller with users:write but not roles:write who sends role_ids is
@@ -64,21 +65,27 @@ func TestUserAPI_RoleIDsWithoutRolesWriteCreatesNoUser(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, w.Code)
 }
 
-// role_ids are validated before the user exists: an unknown role, or the
-// Owner role for a service account, is refused and leaves no account (and
-// no unseen key) behind.
+// role_ids are validated before the user exists: an unknown role (422) or
+// the Owner role for a service account (409) is refused and leaves no
+// account (and no unseen key) behind.
 func TestUserAPI_RoleIDsValidatedBeforeCreate(t *testing.T) {
 	f := setupRBACFixture(t)
 	for name, attrs := range map[string]map[string]any{
 		"unknown role":          {"name": "Bot", "account_type": models.AccountTypeService, "role_ids": []uint{99999}},
 		"unknown role (person)": {"email": "new@example.com", "name": "New", "password": "Sup3r-secret-pw!", "role_ids": []uint{99999}},
-		"owner for a bot":       {"name": "Bot", "account_type": models.AccountTypeService, "role_ids": []uint{f.roles[models.SystemRoleOwner]}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			w := f.do("POST", "/api/v1/users", map[string]any{"data": map[string]any{"type": "users", "attributes": attrs}}, f.owner)
 			assert.Equal(t, http.StatusUnprocessableEntity, w.Code, w.Body.String())
 		})
 	}
+	// Owner for a service account is one of the Owner rules: 409, code
+	// service_account.
+	w := f.do("POST", "/api/v1/users", map[string]any{"data": map[string]any{"type": "users", "attributes": map[string]any{
+		"name": "Bot", "account_type": models.AccountTypeService, "role_ids": []uint{f.roles[models.SystemRoleOwner]},
+	}}}, f.owner)
+	assert.Equal(t, http.StatusConflict, w.Code, w.Body.String())
+	assert.Equal(t, services.ServiceAccountCode, decodeErrorCode(t, w.Body.Bytes()))
 	var n int64
 	require.NoError(t, f.api.service.DB.Model(&models.User{}).
 		Where("email = ? OR name = ?", "new@example.com", "Bot").Count(&n).Error)

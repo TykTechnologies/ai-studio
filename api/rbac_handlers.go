@@ -42,7 +42,7 @@ func rbacErrorResponse(c *gin.Context, err error) {
 	case errors.Is(err, rbac.ErrOwnerUserOnly):
 		c.JSON(http.StatusConflict, authz.Body("Owner Is User-Only", err.Error(), authz.CodeOwnerUserOnly))
 	case errors.Is(err, rbac.ErrServiceAccountOwner):
-		c.JSON(http.StatusUnprocessableEntity, authz.Body("Service Account", err.Error(), services.ServiceAccountCode))
+		c.JSON(http.StatusConflict, authz.Body("Service Account", err.Error(), services.ServiceAccountCode))
 	case errors.Is(err, rbac.ErrOwnerRequired):
 		c.JSON(http.StatusForbidden, authz.Body("Owner Required", err.Error(), authz.CodeOwnerRequired))
 	case errors.Is(err, rbac.ErrOwnerScopeForbidden):
