@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/agent_session"
 	"github.com/TykTechnologies/midsommar/v2/chat_session"
@@ -83,8 +82,8 @@ func (a *API) requireAgentInWorkspace(c *gin.Context, ag *models.AgentConfig, pe
 
 // redactAgent withholds credential material from an admin API response
 // (.46): the agent's plugin configuration needs agents:write in its
-// Workspace, and the embedded plugin's own configuration needs plugins:write.
-// Readers get the metadata.
+// Workspace, and the embedded plugin's own configuration the same rule as
+// everywhere else (mayReadPluginConfig). Readers get the metadata.
 func (a *API) redactAgent(c *gin.Context, ag *models.AgentConfig) {
 	if !onAdminAPI(c) {
 		return
@@ -92,7 +91,7 @@ func (a *API) redactAgent(c *gin.Context, ag *models.AgentConfig) {
 	if !a.holdsIn(c, ag.WorkspaceID, authz.Write("agents")) {
 		ag.Config = nil
 	}
-	if ag.Plugin != nil && !a.holds(c, authz.Write("plugins")) {
+	if ag.Plugin != nil && !a.mayReadPluginConfig(c) {
 		ag.Plugin.Config = nil
 	}
 }
@@ -845,6 +844,7 @@ func (a *API) HandleUpdateAgent(c *gin.Context) {
 		return
 	}
 	// A different workspace_id is a move: write in both Workspaces.
+	storedWorkspaceID := agentConfig.WorkspaceID // raw: the move is guarded on it
 	move := req.WorkspaceID != nil && *req.WorkspaceID != agentConfig.WorkspaceID
 	if move && !a.requireMove(c, "agents", agentConfig.WorkspaceID, *req.WorkspaceID) {
 		return
@@ -870,8 +870,20 @@ func (a *API) HandleUpdateAgent(c *gin.Context) {
 		agentConfig.Namespace = req.Namespace
 	}
 
+	// A move goes first (workspace_id with updated_at, guarded on the stored
+	// value) and is undone if the update then fails.
+	var moveTo *uint
+	if move {
+		moveTo = req.WorkspaceID
+	}
+	finishMove, ok := a.beginMove(c, &models.AgentConfig{}, agentConfig.ID, storedWorkspaceID, moveTo)
+	if !ok {
+		return
+	}
+
 	// Update in database
 	if err := agentConfig.Update(a.service.DB); err != nil {
+		finishMove(false)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -880,21 +892,7 @@ func (a *API) HandleUpdateAgent(c *gin.Context) {
 		})
 		return
 	}
-
-	// The move writes workspace_id with updated_at (ordinary updates never
-	// write workspace_id, and a move must show as a pending change).
-	if move {
-		if err := a.service.DB.Model(&agentConfig).Select("workspace_id", "updated_at").
-			Updates(map[string]interface{}{"workspace_id": *req.WorkspaceID, "updated_at": time.Now()}).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Database error", Detail: err.Error()}},
-			})
-			return
-		}
-	}
+	finishMove(true)
 
 	// Update groups if specified
 	if req.GroupIDs != nil {
