@@ -28,6 +28,22 @@ func TestCommunity_ResolveByAdminFlag(t *testing.T) {
 	assert.True(t, ResolveByAdminFlag(nil).IsEmpty())
 }
 
+func TestCommunity_ResolveGrantsIsGlobalOnly(t *testing.T) {
+	s := newCommunityService(nil)
+
+	g, err := s.ResolveGrants(context.Background(), &models.User{IsAdmin: true})
+	require.NoError(t, err)
+	assert.True(t, g.Global.IsFullAdmin())
+	assert.Empty(t, g.Workspaces)
+	assert.True(t, g.CanIn(42, authz.Write("llms")), "an admin covers every Workspace")
+
+	g, err = s.ResolveGrants(context.Background(), &models.User{IsAdmin: false})
+	require.NoError(t, err)
+	assert.True(t, g.Global.IsEmpty())
+	assert.Empty(t, g.Workspaces)
+	assert.False(t, g.CanAnywhere(authz.Read("llms")))
+}
+
 func TestCommunity_ManagementIsEnterpriseOnly(t *testing.T) {
 	s := newCommunityService(nil)
 	ctx := context.Background()

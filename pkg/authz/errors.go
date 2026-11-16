@@ -11,6 +11,13 @@ const (
 	CodeLastOwner          = "last_owner"
 	CodeOwnerUserOnly      = "owner_user_only"
 	CodeOwnerRequired      = "owner_required"
+
+	// Workspaces.
+	CodeWorkspaceRequired      = "workspace_required"       // create is ambiguous: name a Workspace
+	CodeInvalidWorkspace       = "invalid_workspace"        // unknown, or not covered by the caller's grant
+	CodeDefaultWorkspaceLocked = "default_workspace_locked" // the Default workspace cannot be deleted or replaced
+	CodeWorkspaceInUse         = "workspace_in_use"         // a binding is still scoped to the Workspace
+	CodeOwnerScopeForbidden    = "owner_scope_forbidden"    // the Owner role cannot be bound with a scope
 )
 
 // Error is one entry in the API error envelope. Title and Detail match the
