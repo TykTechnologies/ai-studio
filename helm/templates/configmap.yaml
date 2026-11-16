@@ -17,6 +17,13 @@ data:
   FROM_EMAIL: {{ .Values.config.fromEmail | quote }}
   DEVMODE: {{ .Values.config.devMode | quote }}
   LOG_LEVEL: {{ default "info" .Values.config.logLevel | quote }}
+  {{- /* Metrics. Studio registers /metrics only with a token (the
+         Deployment's METRICS_AUTH_TOKEN) or the opt-out below. */}}
+  METRICS_ENABLED: {{ ternary "false" "true" (eq (toString .Values.metrics.enabled) "false") | quote }}
+  METRICS_PATH: {{ default "/metrics" .Values.metrics.path | quote }}
+  {{- if eq (toString .Values.metrics.allowUnauthenticated) "true" }}
+  METRICS_ALLOW_UNAUTHENTICATED: "true"
+  {{- end }}
   DATABASE_TYPE: {{ .Values.config.databaseType | quote }}
   {{- if .Values.config.filterSignupDomains }}
   FILTER_SIGNUP_DOMAINS: {{ .Values.config.filterSignupDomains | quote }}

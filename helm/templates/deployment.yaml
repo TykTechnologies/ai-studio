@@ -82,6 +82,14 @@ spec:
                 (default "midsommar" .Values.database.name))
                 .Values.database.url }}
             {{- end }}
+            {{- with .Values.metrics.bearerTokenSecret.name }}
+            {{- /* The token the ServiceMonitor sends, from the same Secret */}}
+            - name: METRICS_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: {{ default "token" $.Values.metrics.bearerTokenSecret.key }}
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
