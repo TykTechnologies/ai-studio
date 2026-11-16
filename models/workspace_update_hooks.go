@@ -1,6 +1,9 @@
 package models
 
 import (
+	"sync/atomic"
+	"testing"
+
 	"github.com/TykTechnologies/midsommar/v2/models/wsstamp"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -48,6 +51,9 @@ func (m *MCPServer) BeforeCreate(tx *gorm.DB) error {
 func (p *Plugin) BeforeCreate(tx *gorm.DB) error        { return stampOnCreate(tx, &p.WorkspaceID) }
 func (w *WebhookTarget) BeforeCreate(tx *gorm.DB) error { return stampOnCreate(tx, &w.WorkspaceID) }
 
+// mcpDefaultWorkspaceID caches the Default's id for stampMCPServerOnCreate.
+var mcpDefaultWorkspaceID atomic.Uint64
+
 // stampMCPServerOnCreate is stampOnCreate for MCP servers, which are also
 // created with no acting user (Dashboard sync): one that would be written
 // with 0 takes the Default workspace's id instead, so a catalogued server
@@ -57,10 +63,19 @@ func stampMCPServerOnCreate(tx *gorm.DB, workspaceID *uint) error {
 	if err := stampOnCreate(tx, workspaceID); err != nil || *workspaceID != 0 {
 		return err
 	}
+	if id := mcpDefaultWorkspaceID.Load(); id != 0 {
+		*workspaceID = uint(id)
+		return nil
+	}
 	var ids []uint
 	if err := tx.Session(&gorm.Session{NewDB: true}).Table("workspaces").Where("is_default = ?", true).Limit(1).Pluck("id", &ids).Error; err != nil || len(ids) == 0 {
 		return nil
 	}
 	*workspaceID = ids[0]
+	if !testing.Testing() {
+		// The Default can never be deleted or replaced, so its id is
+		// read once per process (tests open many databases).
+		mcpDefaultWorkspaceID.Store(uint64(ids[0]))
+	}
 	return nil
 }

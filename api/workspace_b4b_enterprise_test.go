@@ -55,8 +55,8 @@ func TestWorkspaceB4b_FileStores(t *testing.T) {
 	assertCode(t, f.uploadFileStore(t, "theirs.txt", &f.w2, f.inW1), http.StatusUnprocessableEntity, authz.CodeInvalidWorkspace)
 	theirs, ws := f.created(t, f.uploadFileStore(t, "theirs.txt", &f.w2, f.owner))
 	assert.Equal(t, f.w2, ws)
-	bad := uint(9999)
-	assertCode(t, f.uploadFileStore(t, "nowhere.txt", &bad, f.owner), http.StatusUnprocessableEntity, authz.CodeInvalidWorkspace)
+	noSuchWorkspace := f.w2 + 1000
+	assertCode(t, f.uploadFileStore(t, "nowhere.txt", &noSuchWorkspace, f.owner), http.StatusUnprocessableEntity, authz.CodeInvalidWorkspace)
 
 	// Read-global: a W1 writer reads and lists W2's entry.
 	assert.Equal(t, http.StatusOK, f.do("GET", fmt.Sprintf("/api/v1/filestore/%d", theirs), nil, f.inW1).Code)
@@ -184,7 +184,7 @@ func TestWorkspaceB4b_MCPServers(t *testing.T) {
 
 	// A move needs write in both Workspaces and advances updated_at.
 	_, before := f.stored(t, &models.MCPServer{}, mine.ID)
-	w := f.do("PATCH", fmt.Sprintf("/api/v1/mcp-servers/%d", mine.ID), map[string]any{"workspace_id": f.w2, "lock_version": 0}, f.inW1W2)
+	w := f.do("PATCH", fmt.Sprintf("/api/v1/mcp-servers/%d", mine.ID), map[string]any{"workspace_id": f.w2, "lock_version": mine.LockVersion}, f.inW1W2)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	var view models.MCPServerResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &view))
