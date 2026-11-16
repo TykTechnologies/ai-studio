@@ -2,15 +2,21 @@ package services
 
 import (
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // CreateFileStore creates a new filestore entry with validity checks
-func (s *Service) CreateFileStore(fileName, description, content string, length int) (*models.FileStore, error) {
+// workspaceID, when given, is the Workspace the entry lands in (0 or
+// omitted: the Default).
+func (s *Service) CreateFileStore(fileName, description, content string, length int, workspaceID ...uint) (*models.FileStore, error) {
 	fileStore := &models.FileStore{
 		FileName:    fileName,
 		Description: description,
 		Content:     content,
 		Length:      length,
+	}
+	if len(workspaceID) > 0 {
+		fileStore.WorkspaceID = workspaceID[0]
 	}
 
 	if err := fileStore.Create(s.DB); err != nil {
@@ -68,9 +74,10 @@ func (s *Service) GetFileStoreByFileName(fileName string) (*models.FileStore, er
 }
 
 // GetAllFileStores retrieves all filestore entries with pagination
-func (s *Service) GetAllFileStores(pageSize int, pageNumber int, all bool) ([]models.FileStore, int64, int, error) {
+// scopes narrow the list (the API's Workspace filter).
+func (s *Service) GetAllFileStores(pageSize int, pageNumber int, all bool, scopes ...func(*gorm.DB) *gorm.DB) ([]models.FileStore, int64, int, error) {
 	var fileStores models.FileStores
-	totalCount, totalPages, err := fileStores.GetAll(s.DB, pageSize, pageNumber, all)
+	totalCount, totalPages, err := fileStores.GetAll(s.DB.Scopes(scopes...), pageSize, pageNumber, all)
 	if err != nil {
 		return nil, 0, 0, err
 	}
@@ -78,9 +85,9 @@ func (s *Service) GetAllFileStores(pageSize int, pageNumber int, all bool) ([]mo
 }
 
 // SearchFileStores searches for filestore entries matching the given query in filename or description
-func (s *Service) SearchFileStores(query string) ([]models.FileStore, error) {
+func (s *Service) SearchFileStores(query string, scopes ...func(*gorm.DB) *gorm.DB) ([]models.FileStore, error) {
 	var fileStores models.FileStores
-	if err := fileStores.Search(s.DB, query); err != nil {
+	if err := fileStores.Search(s.DB.Scopes(scopes...), query); err != nil {
 		return nil, err
 	}
 	return fileStores, nil

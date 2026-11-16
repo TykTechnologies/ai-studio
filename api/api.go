@@ -1231,22 +1231,26 @@ func (a *API) setupRoutes() error {
 	v1.GET("/tyk-connections/:id/gateway-tags", authz.Read("tyk-connections"), a.listTykGatewayTags)
 	v1.POST("/tyk-connections/:id/policies", authz.Execute("mcp-servers"), a.createTykPolicy)
 	v1.PATCH("/tyk-connections/:id/policies/:pid", authz.Execute("mcp-servers"), a.updateTykPolicy)
-	v1.GET("/mcp-servers", authz.Read("mcp-servers"), a.listMCPServers)
-	v1.GET("/mcp-servers/:id", authz.Read("mcp-servers"), a.getMCPServer)
-	v1.PATCH("/mcp-servers/:id", authz.Write("mcp-servers"), a.updateMCPServer)
-	v1.DELETE("/mcp-servers/:id", authz.Delete("mcp-servers"), a.deleteMCPServer)
-	v1.POST("/mcp-servers/:id/activate", authz.Publish("mcp-servers"), a.publishMCPServer)
-	v1.POST("/mcp-servers/:id/deactivate", authz.Publish("mcp-servers"), a.unpublishMCPServer)
-	v1.PUT("/mcp-servers/:id/catalogues", authz.Write("mcp-servers"), a.setMCPServerCatalogues)
-	v1.PUT("/mcp-servers/:id/bundle", authz.Write("mcp-servers"), a.setMCPServerBundle)
-	v1.PUT("/mcp-servers/:id/key-access", authz.Write("mcp-servers"), a.setMCPServerKeyAccess)
-	v1.POST("/mcp-servers/register", authz.Execute("mcp-servers"), a.registerMCPServer)
+	// MCP servers are Workspace objects (read-global, write-scoped: B4b):
+	// actions on one server need the permission in its Workspace (onObject;
+	// PATCH checks in the handler, where a changed workspace_id is a move).
+	v1.InWorkspace().GET("/mcp-servers", authz.Read("mcp-servers"), a.listMCPServers)
+	v1.InWorkspace().GET("/mcp-servers/:id", authz.Read("mcp-servers"), a.getMCPServer)
+	v1.InWorkspace().PATCH("/mcp-servers/:id", authz.Write("mcp-servers"), a.updateMCPServer)
+	v1.InWorkspace().DELETE("/mcp-servers/:id", authz.Delete("mcp-servers"), a.onObject(&models.MCPServer{}, authz.Delete("mcp-servers")), a.deleteMCPServer)
+	v1.InWorkspace().POST("/mcp-servers/:id/activate", authz.Publish("mcp-servers"), a.onObject(&models.MCPServer{}, authz.Publish("mcp-servers")), a.publishMCPServer)
+	v1.InWorkspace().POST("/mcp-servers/:id/deactivate", authz.Publish("mcp-servers"), a.onObject(&models.MCPServer{}, authz.Publish("mcp-servers")), a.unpublishMCPServer)
+	v1.InWorkspace().PUT("/mcp-servers/:id/catalogues", authz.Write("mcp-servers"), a.onObject(&models.MCPServer{}, authz.Write("mcp-servers")), a.setMCPServerCatalogues)
+	v1.InWorkspace().PUT("/mcp-servers/:id/bundle", authz.Write("mcp-servers"), a.onObject(&models.MCPServer{}, authz.Write("mcp-servers")), a.setMCPServerBundle)
+	v1.InWorkspace().PUT("/mcp-servers/:id/key-access", authz.Write("mcp-servers"), a.onObject(&models.MCPServer{}, authz.Write("mcp-servers")), a.setMCPServerKeyAccess)
+	// Registration lands the catalogued server by the landing rule (D5).
+	v1.InWorkspace().POST("/mcp-servers/register", authz.Execute("mcp-servers"), a.registerMCPServer)
 	// Discovery calls the upstream MCP server from Studio, so it needs the
 	// same permission as registering the proxy.
-	v1.POST("/mcp-servers/discover-tools", authz.Execute("mcp-servers"), a.discoverMCPServerTools)
-	v1.POST("/mcp-servers/:id/push", authz.Execute("mcp-servers"), a.pushMCPServer)
-	v1.GET("/mcp-servers/:id/handoff", authz.Read("mcp-servers"), a.getMCPServerHandoff)
-	v1.POST("/mcp-servers/:id/link", authz.Execute("mcp-servers"), a.linkMCPServer)
+	v1.InWorkspace().POST("/mcp-servers/discover-tools", authz.Execute("mcp-servers"), a.discoverMCPServerTools)
+	v1.InWorkspace().POST("/mcp-servers/:id/push", authz.Execute("mcp-servers"), a.onObject(&models.MCPServer{}, authz.Execute("mcp-servers")), a.pushMCPServer)
+	v1.InWorkspace().GET("/mcp-servers/:id/handoff", authz.Read("mcp-servers"), a.getMCPServerHandoff)
+	v1.InWorkspace().POST("/mcp-servers/:id/link", authz.Execute("mcp-servers"), a.onObject(&models.MCPServer{}, authz.Execute("mcp-servers")), a.linkMCPServer)
 	// Minted Tyk keys: minting, rotating, suspending, revoking and applying
 	// widening changes reach the Dashboard, so they are execute permissions.
 	v1.GET("/mcp-credentials", authz.Read("mcp-credentials"), a.listMCPCredentials)
@@ -1327,12 +1331,12 @@ func (a *API) setupRoutes() error {
 	v1.GET("/exports/:id/download", authz.Read("exports"), a.downloadExport)
 
 	// FileStore routes
-	v1.POST("/filestore", authz.Write("filestores"), a.createFileStore)
-	v1.GET("/filestore/:id", authz.Read("filestores"), a.getFileStore)
-	v1.PATCH("/filestore/:id", authz.Write("filestores"), a.updateFileStore)
-	v1.DELETE("/filestore/:id", authz.Delete("filestores"), a.deleteFileStore)
-	v1.GET("/filestore", authz.Read("filestores"), a.getAllFileStores)
-	v1.GET("/filestore/search", authz.Read("filestores"), a.searchFileStores)
+	v1.InWorkspace().POST("/filestore", authz.Write("filestores"), a.createFileStore)
+	v1.InWorkspace().GET("/filestore/:id", authz.Read("filestores"), a.getFileStore)
+	v1.InWorkspace().PATCH("/filestore/:id", authz.Write("filestores"), a.updateFileStore)
+	v1.InWorkspace().DELETE("/filestore/:id", authz.Delete("filestores"), a.onObject(&models.FileStore{}, authz.Delete("filestores")), a.deleteFileStore)
+	v1.InWorkspace().GET("/filestore", authz.Read("filestores"), a.getAllFileStores)
+	v1.InWorkspace().GET("/filestore/search", authz.Read("filestores"), a.searchFileStores)
 
 	v1.InWorkspace().POST("/secrets", authz.Write("secrets"), a.createSecret)
 	v1.InWorkspace().GET("/secrets/:id", authz.Read("secrets"), a.getSecret)

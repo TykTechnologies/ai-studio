@@ -1460,6 +1460,9 @@ type FileStoreResponse struct {
 		Content         string    `json:"-"`
 		Length          int       `json:"length"`
 		LastProcessedOn time.Time `json:"last_processed_on"`
+		// WorkspaceID is the Workspace that owns the entry (Enterprise
+		// Workspaces); a stored 0 reads as the Default.
+		WorkspaceID uint `json:"workspace_id,omitempty"`
 	} `json:"attributes"`
 }
 

@@ -36,8 +36,20 @@ func (a *API) registerMCPServer(c *gin.Context) {
 		return
 	}
 	var in tykmcp.RegisterInput
-	if err := c.ShouldBindJSON(&in); err != nil || in.ConnectionID == 0 {
+	if err := c.ShouldBindBodyWith(&in, binding.JSON); err != nil || in.ConnectionID == 0 {
 		webhookBadRequest(c, "connection_id and the proxy fields are required")
+		return
+	}
+	// The Workspace the catalogued server lands in (decision D5): an
+	// optional top-level workspace_id.
+	var probe struct {
+		WorkspaceID *uint `json:"workspace_id"`
+	}
+	if err := c.ShouldBindBodyWith(&probe, binding.JSON); err != nil {
+		webhookBadRequest(c, "workspace_id must be a Workspace id")
+		return
+	}
+	if actor.WorkspaceID, ok = a.resolveCreateWorkspace(c, "mcp-servers", probe.WorkspaceID); !ok {
 		return
 	}
 	if _, ok := allowInternalHostUpdate(c, false, in.AllowInternalHost); !ok {
@@ -45,6 +57,10 @@ func (a *API) registerMCPServer(c *gin.Context) {
 	}
 	dryRun := isDryRun(c)
 	preview, srv, err := a.tykMCPService().RegisterServer(c.Request.Context(), actor, in, dryRun)
+	if isWorkspaceNotFound(err) {
+		invalidWorkspace(c)
+		return
+	}
 	if err != nil {
 		tykMCPErrorResponse(c, err, "Failed to register MCP server")
 		return
@@ -101,7 +117,7 @@ func (a *API) discoverMCPServerTools(c *gin.Context) {
 // @Success 200 {object} models.MCPServerResponse
 // @Router /mcp-servers/{id}/push [post]
 func (a *API) pushMCPServer(c *gin.Context) {
-	actor, ok := requireTykMCPActor(c, "mcp-servers")
+	actor, ok := a.requireTykMCPServerActor(c)
 	if !ok {
 		return
 	}

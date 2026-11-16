@@ -17069,7 +17069,13 @@ const docTemplate = `{
                         "description": "Description of the file",
                         "name": "description",
                         "in": "formData"
-                    }
+                    },
+                        {
+                            "type": "integer",
+                            "description": "Workspace the entry lands in (Enterprise Workspaces)",
+                            "name": "workspace_id",
+                            "in": "formData"
+                        }
                 ],
                 "responses": {
                     "201": {
@@ -31770,7 +31776,11 @@ const docTemplate = `{
                         },
                         "length": {
                             "type": "integer"
-                        }
+                        },
+                            "workspace_id": {
+                                "description": "WorkspaceID is the Workspace that owns the entry (Enterprise\nWorkspaces); a stored 0 reads as the Default.",
+                                "type": "integer"
+                            }
                     }
                 },
                 "id": {
@@ -37352,6 +37362,10 @@ const docTemplate = `{
                 },
                 "upstream_url": {
                     "type": "string"
+                },
+                "workspace_id": {
+                    "description": "WorkspaceID is the Workspace that owns the server (Enterprise\nWorkspaces); a stored 0 reads as the Default.",
+                    "type": "integer"
                 }
             }
         },
