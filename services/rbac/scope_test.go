@@ -18,3 +18,11 @@ func TestWorkspaceScopeID_Canonical(t *testing.T) {
 		assert.False(t, valid, "%q", bad)
 	}
 }
+
+func TestGlobalBinding(t *testing.T) {
+	assert.True(t, IsGlobalBinding("", ""))
+	assert.False(t, IsGlobalBinding("", "5"), "a stray scope_id makes the row malformed, not global")
+	assert.False(t, IsGlobalBinding(ScopeTypeWorkspace, "5"))
+	assert.Equal(t, "(scope_type = '' AND scope_id = '')", GlobalBindingSQL(""))
+	assert.Equal(t, "(rb.scope_type = '' AND rb.scope_id = '')", GlobalBindingSQL("rb"))
+}

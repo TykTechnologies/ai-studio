@@ -22,3 +22,23 @@ func ParseWorkspaceScopeID(s string) (uint, bool) {
 	}
 	return uint(id), true
 }
+
+// IsGlobalBinding reports whether a binding is global (covers every
+// Workspace): both scope fields empty. Every reader of role_bindings uses
+// this test (or GlobalBindingSQL), so the evaluator, the is_admin sync, host
+// roles and the role selectors agree on every row. A row with an empty
+// scope_type but a stray scope_id is malformed and grants nothing; nothing
+// writes one (CreateBinding refuses it).
+func IsGlobalBinding(scopeType, scopeID string) bool {
+	return scopeType == ScopeTypeGlobal && scopeID == ""
+}
+
+// GlobalBindingSQL is IsGlobalBinding as a SQL condition on the
+// role_bindings columns, qualified with alias when given ("rb",
+// "role_bindings"); it takes no arguments.
+func GlobalBindingSQL(alias string) string {
+	if alias != "" {
+		alias += "."
+	}
+	return "(" + alias + "scope_type = '' AND " + alias + "scope_id = '')"
+}

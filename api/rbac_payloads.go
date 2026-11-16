@@ -142,7 +142,7 @@ func (a *API) hostManagedRoles(c *gin.Context, userIDs []uint) map[uint]map[uint
 		RoleID    uint
 	}
 	if err := a.service.DB.WithContext(c.Request.Context()).Model(&models.RoleBinding{}).Select("subject_id, role_id").
-		Where("subject_type = ? AND subject_id IN ? AND source = ? AND scope_type = ''", models.RoleBindingSubjectUser, userIDs, models.RoleBindingSourceHost).
+		Where("subject_type = ? AND subject_id IN ? AND source = ? AND "+rbac.GlobalBindingSQL(""), models.RoleBindingSubjectUser, userIDs, models.RoleBindingSourceHost).
 		Scan(&rows).Error; err != nil {
 		logger.Warnf("users: host-managed roles not marked, lookup failed: %v", err)
 		return out
@@ -324,7 +324,7 @@ func (a *API) reconcileUserRoles(c *gin.Context, userID uint, desired []uint) bo
 	have := map[uint]uint{} // roleID -> bindingID
 	hostManaged := map[uint]bool{}
 	for _, b := range current {
-		if b.ScopeType != "" {
+		if !rbac.IsGlobalBinding(b.ScopeType, b.ScopeID) {
 			continue
 		}
 		if b.Source == models.RoleBindingSourceHost {
