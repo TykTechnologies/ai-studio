@@ -635,13 +635,63 @@ func GetSecretByID(db *gorm.DB, id uint, preserveRef bool) (*Secret, error) {
 	return &settings, nil
 }
 
-// GetSecretByVarName retrieves a Secret record from the database by it's name.
+// ErrSecretNameAmbiguous: live secrets in more than one Workspace share
+// the name (grandfathered from before names were unique), so a reference
+// to it resolves to none of them.
+var ErrSecretNameAmbiguous = errors.New("secret name is held in more than one Workspace")
+
+// FindSecretByVarName returns the live secret named name (exact match).
+// Names are unique for new writes (midsommar-clean-oztk.47); of
+// grandfathered duplicates it picks the lowest id when they are all in one
+// Workspace (0 read as the Default) and refuses with ErrSecretNameAmbiguous
+// when they span Workspaces. gorm.ErrRecordNotFound when there is none.
+// The value is returned as stored (encrypted).
+func FindSecretByVarName(db *gorm.DB, name string) (*Secret, error) {
+	var rows []Secret
+	if err := db.Where("var_name = ?", name).Order("id").Limit(maxNameCandidates).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	switch len(rows) {
+	case 0:
+		return nil, gorm.ErrRecordNotFound
+	case 1:
+		return &rows[0], nil
+	case maxNameCandidates:
+		return nil, ErrSecretNameAmbiguous // more than it reads: fail closed
+	}
+	ws := map[uint]bool{}
+	for _, r := range rows {
+		ws[r.WorkspaceID] = true
+	}
+	if ws[0] && len(ws) > 1 {
+		// 0 is the Default: read it as the Default's id.
+		var def []uint
+		if err := db.Table("workspaces").Where("is_default = ?", true).Limit(1).Pluck("id", &def).Error; err != nil || len(def) == 0 {
+			return nil, ErrSecretNameAmbiguous
+		}
+		delete(ws, 0)
+		ws[def[0]] = true
+	}
+	if len(ws) > 1 {
+		return nil, ErrSecretNameAmbiguous
+	}
+	return &rows[0], nil
+}
+
+// maxNameCandidates bounds the duplicates FindSecretByVarName reads; at the
+// bound it refuses rather than decide on a partial list.
+const maxNameCandidates = 50
+
+// GetSecretByVarName retrieves a Secret record from the database by its
+// name (FindSecretByVarName). It is the one place a $SECRET/ reference is
+// resolved (GetValue, ResolveRef, CredentialRefForEdge and so the edge
+// snapshot; microgateways get the hub's resolved values).
 func GetSecretByVarName(db *gorm.DB, name string, preserveRef bool) (*Secret, error) {
-	var settings Secret
-	err := db.Where("var_name = (?)", name).First(&settings).Error
+	found, err := FindSecretByVarName(db, name)
 	if err != nil {
 		return nil, err
 	}
+	settings := *found
 
 	if preserveRef {
 		settings.PreserveReference()

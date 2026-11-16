@@ -22651,6 +22651,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
+                    "409": {
+                        "description": "Another secret has the name, or objects in another Workspace reference it",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -22813,6 +22819,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
+                    "409": {
+                        "description": "The secret is referenced",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -22877,6 +22889,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Renaming a referenced secret, a name another secret has or objects in another Workspace reference, a concurrent move, or moving a duplicate name",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }

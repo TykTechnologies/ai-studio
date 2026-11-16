@@ -6,6 +6,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Plugin config references stay global-only: plugins are global (.36), so
+// a $SECRET/ reference in a plugin's config (or a per-LLM override of it)
+// needs global secrets:read here and is not tied to a Workspace. It is not
+// a holder for the secret-name rules either (services.SecretHoldersOf).
+
 // requireSecretReadForReferences refuses a plugin config write that adds a
 // $SECRET/ reference unless the caller may read secrets: AI Studio resolves
 // references for the plugin, so writing one hands the plugin (and anything

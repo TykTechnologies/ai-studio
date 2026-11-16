@@ -1,11 +1,13 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
 )
 
@@ -96,14 +98,16 @@ func (a *API) requireSecretRefsStayIn(c *gin.Context, destination uint, fields m
 	return true
 }
 
-// secretWorkspace returns the stored workspace_id of the secret named name.
+// secretWorkspace returns the stored workspace_id of the secret named name,
+// as a reference to it resolves (secrets.FindSecretByVarName): a name held
+// by grandfathered duplicates in different Workspaces is not found.
 func (a *API) secretWorkspace(name string) (uint, bool, error) {
-	var rows []secrets.Secret
-	if err := a.service.DB.Select("id", "workspace_id").Where("var_name = ?", name).Limit(1).Find(&rows).Error; err != nil {
-		return 0, false, err
-	}
-	if len(rows) == 0 {
+	secret, err := secrets.FindSecretByVarName(a.service.DB, name)
+	if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, secrets.ErrSecretNameAmbiguous) {
 		return 0, false, nil
 	}
-	return rows[0].WorkspaceID, true, nil
+	if err != nil {
+		return 0, false, err
+	}
+	return secret.WorkspaceID, true, nil
 }
