@@ -304,13 +304,13 @@ func (s *Service) RemoveCatalogueFromGroup(catalogueID, groupID uint) error {
 	return group.RemoveCatalogue(s.DB, catalogue)
 }
 
-func (s *Service) GetGroupCatalogues(groupID uint) (models.Catalogues, error) {
+func (s *Service) GetGroupCatalogues(groupID uint, scopes ...func(*gorm.DB) *gorm.DB) (models.Catalogues, error) {
 	group, err := s.GetGroupByID(groupID)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := group.GetCatalogues(s.DB); err != nil {
+	if err := group.GetCatalogues(s.DB.Scopes(scopes...).Session(&gorm.Session{})); err != nil {
 		return nil, err
 	}
 
@@ -354,13 +354,13 @@ func (s *Service) RemoveDataCatalogueFromGroup(dataCatalogueID, groupID uint) er
 	return group.RemoveDataCatalogue(s.DB, dataCatalogue)
 }
 
-func (s *Service) GetGroupDataCatalogues(groupID uint) (models.DataCatalogues, error) {
+func (s *Service) GetGroupDataCatalogues(groupID uint, scopes ...func(*gorm.DB) *gorm.DB) (models.DataCatalogues, error) {
 	group, err := s.GetGroupByID(groupID)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := group.GetDataCatalogues(s.DB); err != nil {
+	if err := group.GetDataCatalogues(s.DB.Scopes(scopes...).Session(&gorm.Session{})); err != nil {
 		return nil, err
 	}
 
@@ -395,13 +395,15 @@ func (s *Service) RemoveToolCatalogueFromGroup(toolCatalogueID, groupID uint) er
 	return group.RemoveToolCatalogue(s.DB, toolCatalogue)
 }
 
-func (s *Service) GetGroupToolCatalogues(groupID uint, pageSize int, pageNumber int, all bool) (models.ToolCatalogues, int64, int, error) {
+// GetGroupToolCatalogues pages a team's tool catalogues; scopes narrow them
+// before the count (e.g. the caller's Workspaces).
+func (s *Service) GetGroupToolCatalogues(groupID uint, pageSize int, pageNumber int, all bool, scopes ...func(*gorm.DB) *gorm.DB) (models.ToolCatalogues, int64, int, error) {
 	group, err := s.GetGroupByID(groupID)
 	if err != nil {
 		return nil, 0, 0, err
 	}
 
-	totalCount, totalPages, err := group.GetToolCatalogues(s.DB, pageSize, pageNumber, all)
+	totalCount, totalPages, err := group.GetToolCatalogues(s.DB.Scopes(scopes...).Session(&gorm.Session{}), pageSize, pageNumber, all)
 	if err != nil {
 		return nil, 0, 0, err
 	}

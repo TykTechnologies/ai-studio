@@ -2,14 +2,20 @@ package services
 
 import (
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
-func (s *Service) CreateToolCatalogue(name, shortDescription, longDescription, icon string) (*models.ToolCatalogue, error) {
+// workspaceID, when given, is the Workspace the catalogue lands in (the
+// API's landing rule); otherwise it lands in the Default workspace.
+func (s *Service) CreateToolCatalogue(name, shortDescription, longDescription, icon string, workspaceID ...uint) (*models.ToolCatalogue, error) {
 	toolCatalogue := &models.ToolCatalogue{
 		Name:             name,
 		ShortDescription: shortDescription,
 		LongDescription:  longDescription,
 		Icon:             icon,
+	}
+	if len(workspaceID) > 0 {
+		toolCatalogue.WorkspaceID = workspaceID[0]
 	}
 
 	if err := toolCatalogue.Create(s.DB); err != nil {
@@ -64,9 +70,9 @@ func (s *Service) GetAllToolCatalogues(pageSize int, pageNumber int, all bool, o
 	return toolCatalogues, totalCount, totalPages, nil
 }
 
-func (s *Service) SearchToolCatalogues(query string) (models.ToolCatalogues, error) {
+func (s *Service) SearchToolCatalogues(query string, scopes ...func(*gorm.DB) *gorm.DB) (models.ToolCatalogues, error) {
 	var toolCatalogues models.ToolCatalogues
-	if err := toolCatalogues.Search(s.DB, query); err != nil {
+	if err := toolCatalogues.Search(s.DB.Scopes(scopes...), query); err != nil {
 		return nil, err
 	}
 	return toolCatalogues, nil
