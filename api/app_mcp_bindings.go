@@ -16,12 +16,32 @@ import (
 // error mapping and on the reload.
 
 // adminAppActor identifies the caller of an admin App handler for the
-// visibility check: an administrator, or anyone who may write Apps, sees
-// every server; other callers are limited to their teams' catalogues.
+// visibility check: an administrator, or anyone who may write Apps (held
+// anywhere), sees every server; other callers are limited to their teams'
+// catalogues. App handlers use adminAppActorIn.
 func adminAppActor(c *gin.Context) (uint, bool) {
 	actorUser, _ := c.Get("user")
 	if u, ok := actorUser.(*models.User); ok && u != nil {
 		return u.ID, u.IsAdmin || authz.Can(c, authz.Write("apps"))
+	}
+	return 0, true
+}
+
+// adminAppActorIn is adminAppActor for an App: an administrator, or anyone
+// who may write Apps in the
+// App's Workspace (workspaceID, a stored value; with Workspace checks on,
+// never merely somewhere), sees every server; other callers are limited to
+// their teams' catalogues.
+func (a *API) adminAppActorIn(c *gin.Context, workspaceID uint) (uint, bool) {
+	actorUser, _ := c.Get("user")
+	if u, ok := actorUser.(*models.User); ok && u != nil {
+		if u.IsAdmin {
+			return u.ID, true
+		}
+		if a.workspaceCheckMode(c) == workspaceCheck {
+			return u.ID, a.holdsIn(c, workspaceID, authz.Write("apps"))
+		}
+		return u.ID, authz.Can(c, authz.Write("apps"))
 	}
 	return 0, true
 }

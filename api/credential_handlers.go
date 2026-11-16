@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/templates"
 	"github.com/gin-gonic/gin"
@@ -92,12 +93,11 @@ func (a *API) getCredentialByKeyID(c *gin.Context) {
 
 	credential, err := a.service.GetCredentialByKeyID(keyID)
 	if err != nil {
-		c.JSON(http.StatusNotFound, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Not Found", Detail: "Credential not found"}},
-		})
+		credentialNotFound(c)
+		return
+	}
+	// A credential whose App the caller may not see answers as a missing one.
+	if !a.requireOnAppCredential(c, strconv.FormatUint(uint64(credential.ID), 10), authz.Read("credentials"), a.appWorkspaceOfCredential, credentialNotFound) {
 		return
 	}
 
@@ -402,7 +402,11 @@ func (a *API) deactivateCredential(c *gin.Context) {
 func (a *API) listCredentials(c *gin.Context) {
 	pageSize, pageNumber, all := getPaginationParams(c)
 
-	credentials, totalCount, totalPages, err := a.service.GetAllCredentials(pageSize, pageNumber, all)
+	scopes, ok := a.credentialListScopes(c)
+	if !ok {
+		return
+	}
+	credentials, totalCount, totalPages, err := a.service.GetAllCredentials(pageSize, pageNumber, all, scopes...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -428,7 +432,11 @@ func (a *API) listCredentials(c *gin.Context) {
 // @Router /credentials/active [get]
 // @Security BearerAuth
 func (a *API) listActiveCredentials(c *gin.Context) {
-	credentials, err := a.service.GetActiveCredentials()
+	scopes, ok := a.credentialListScopes(c)
+	if !ok {
+		return
+	}
+	credentials, err := a.service.GetActiveCredentials(scopes...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -477,3 +485,7 @@ func serializeCredentials(credentials models.Credentials) []CredentialResponse {
 	}
 	return result
 }
+
+// credentialNotFound is the credential routes' not-found answer, also given
+// for a credential whose App the caller may not see (onAppCredential).
+var credentialNotFound = notFoundBody("Credential not found")

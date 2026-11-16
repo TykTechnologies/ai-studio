@@ -786,64 +786,69 @@ func (a *API) setupRoutes() error {
 	v1.InWorkspace().GET("/tool-catalogues/:id/tags", authz.Read("tool-catalogues"), a.onVisibleObject("tool-catalogues", &models.ToolCatalogue{}, authz.Read("tool-catalogues"), toolCatalogueNotFound), a.getToolCatalogueTags)
 	v1.InWorkspace().GET("/tool-catalogues/:id/groups", authz.Read("tool-catalogues"), a.onVisibleObject("tool-catalogues", &models.ToolCatalogue{}, authz.Read("tool-catalogues"), toolCatalogueNotFound), a.getToolCatalogueGroups)
 
-	// Credential routes
+	// Credential routes. API credentials belong to their App's Workspace
+	// (ScopeWorkspaceParent): a credential whose App the caller cannot see
+	// answers as a missing one. Creating a standalone credential (no App)
+	// stays global-only.
 	v1.POST("/credentials", authz.Write("credentials"), a.createCredential)
-	v1.GET("/credentials/:id", authz.Read("credentials"), a.getCredential)
-	v1.GET("/credentials/key/:keyId", authz.Read("credentials"), a.getCredentialByKeyID)
-	v1.PATCH("/credentials/:id", authz.Write("credentials"), a.updateCredential)
-	v1.DELETE("/credentials/:id", authz.Delete("credentials"), a.deleteCredential)
-	v1.POST("/credentials/:id/activate", authz.Write("credentials"), a.activateCredential)
-	v1.POST("/credentials/:id/deactivate", authz.Write("credentials"), a.deactivateCredential)
-	v1.GET("/credentials", authz.Read("credentials"), a.listCredentials)
-	v1.GET("/credentials/active", authz.Read("credentials"), a.listActiveCredentials)
+	v1.InWorkspace().GET("/credentials/:id", authz.Read("credentials"), a.onAppCredential(authz.Read("credentials"), a.appWorkspaceOfCredential, credentialNotFound), a.getCredential)
+	v1.InWorkspace().GET("/credentials/key/:keyId", authz.Read("credentials"), a.getCredentialByKeyID)
+	v1.InWorkspace().PATCH("/credentials/:id", authz.Write("credentials"), a.onAppCredential(authz.Write("credentials"), a.appWorkspaceOfCredential, credentialNotFound), a.updateCredential)
+	v1.InWorkspace().DELETE("/credentials/:id", authz.Delete("credentials"), a.onAppCredential(authz.Delete("credentials"), a.appWorkspaceOfCredential, credentialNotFound), a.deleteCredential)
+	v1.InWorkspace().POST("/credentials/:id/activate", authz.Write("credentials"), a.onAppCredential(authz.Write("credentials"), a.appWorkspaceOfCredential, credentialNotFound), a.activateCredential)
+	v1.InWorkspace().POST("/credentials/:id/deactivate", authz.Write("credentials"), a.onAppCredential(authz.Write("credentials"), a.appWorkspaceOfCredential, credentialNotFound), a.deactivateCredential)
+	v1.InWorkspace().GET("/credentials", authz.Read("credentials"), a.listCredentials)
+	v1.InWorkspace().GET("/credentials/active", authz.Read("credentials"), a.listActiveCredentials)
 
-	// App routes
-	v1.POST("/apps", authz.Write("apps"), a.createApp)
-	v1.GET("/apps/:id", authz.Read("apps"), a.getApp)
-	v1.PATCH("/apps/:id", authz.Write("apps"), a.updateApp)
-	v1.POST("/apps/:id/activate", authz.Publish("apps"), a.activateApp)
-	v1.POST("/apps/:id/deactivate", authz.Publish("apps"), a.deactivateApp)
-	v1.DELETE("/apps/:id", authz.Delete("apps"), a.deleteApp)
-	v1.GET("/users/:id/apps", authz.Read("apps"), a.getAppsByUserID) // Note: Param is "id" here, not "userId" as in some other handlers
-	v1.GET("/apps/by-name", authz.Read("apps"), a.getAppByName)
-	v1.POST("/apps/:id/activate-credential", authz.Write("apps"), a.activateAppCredential)
-	v1.POST("/apps/:id/deactivate-credential", authz.Write("apps"), a.deactivateAppCredential)
-	v1.POST("/apps/:id/reset-budget", authz.Write("apps"), a.resetAppBudget)
-	v1.GET("/apps", authz.Read("apps"), a.listApps)
-	v1.GET("/apps/search", authz.Read("apps"), a.searchApps)
-	v1.GET("/apps/count", authz.Read("apps"), a.countApps)
-	v1.GET("/apps/:id/dependents", authz.Read("apps"), a.getAppDependents)
+	// App routes. Apps are hidden outside the caller's Workspaces
+	// (workspace_full): an action on an App the caller cannot see answers as
+	// a missing App (onObject with the handlers' own 404).
+	v1.InWorkspace().POST("/apps", authz.Write("apps"), a.createApp)
+	v1.InWorkspace().GET("/apps/:id", authz.Read("apps"), a.onObject(&models.App{}, authz.Read("apps"), appNotFound), a.getApp)
+	v1.InWorkspace().PATCH("/apps/:id", authz.Write("apps"), a.updateApp)
+	v1.InWorkspace().POST("/apps/:id/activate", authz.Publish("apps"), a.onObject(&models.App{}, authz.Publish("apps"), appNotFound), a.activateApp)
+	v1.InWorkspace().POST("/apps/:id/deactivate", authz.Publish("apps"), a.onObject(&models.App{}, authz.Publish("apps"), appNotFound), a.deactivateApp)
+	v1.InWorkspace().DELETE("/apps/:id", authz.Delete("apps"), a.onObject(&models.App{}, authz.Delete("apps"), appNotFound), a.deleteApp)
+	v1.InWorkspace().GET("/users/:id/apps", authz.Read("apps"), a.getAppsByUserID) // Note: Param is "id" here, not "userId" as in some other handlers
+	v1.InWorkspace().GET("/apps/by-name", authz.Read("apps"), a.getAppByName)
+	v1.InWorkspace().POST("/apps/:id/activate-credential", authz.Write("apps"), a.onObject(&models.App{}, authz.Write("apps"), appNotFound), a.activateAppCredential)
+	v1.InWorkspace().POST("/apps/:id/deactivate-credential", authz.Write("apps"), a.onObject(&models.App{}, authz.Write("apps"), appNotFound), a.deactivateAppCredential)
+	v1.InWorkspace().POST("/apps/:id/reset-budget", authz.Write("apps"), a.onObject(&models.App{}, authz.Write("apps"), appNotFound), a.resetAppBudget)
+	v1.InWorkspace().GET("/apps", authz.Read("apps"), a.listApps)
+	v1.InWorkspace().GET("/apps/search", authz.Read("apps"), a.searchApps)
+	v1.InWorkspace().GET("/apps/count", authz.Read("apps"), a.countApps)
+	v1.InWorkspace().GET("/apps/:id/dependents", authz.Read("apps"), a.onObject(&models.App{}, authz.Read("apps"), appNotFound), a.getAppDependents)
 	v1.HandleFn("POST", "/apps/bulk", bulkActionPermission("apps"), a.bulkApps)
-	v1.GET("/users/:id/apps/count", authz.Read("apps"), a.countAppsByUserID) // Note: Param is "id" here
+	v1.InWorkspace().GET("/users/:id/apps/count", authz.Read("apps"), a.countAppsByUserID) // Note: Param is "id" here
 
 	// App-Tool routes
-	v1.POST("/apps/:id/tools/:tool_id", authz.Write("apps"), a.addToolToApp)
-	v1.DELETE("/apps/:id/tools/:tool_id", authz.Delete("apps"), a.removeToolFromApp)
-	v1.GET("/apps/:id/tools", authz.Read("apps"), a.getAppTools)
+	v1.InWorkspace().POST("/apps/:id/tools/:tool_id", authz.Write("apps"), a.onObject(&models.App{}, authz.Write("apps"), appNotFound), a.addToolToApp)
+	v1.InWorkspace().DELETE("/apps/:id/tools/:tool_id", authz.Delete("apps"), a.onObject(&models.App{}, authz.Delete("apps"), appNotFound), a.removeToolFromApp)
+	v1.InWorkspace().GET("/apps/:id/tools", authz.Read("apps"), a.onObject(&models.App{}, authz.Read("apps"), appNotFound), a.getAppTools)
 
 	// Trusted prompt templates (features/TrustedPromptTemplates.md). Only a
 	// full administrator approves: approving exempts the bytes from scoring.
-	v1.GET("/apps/:id/prompt-templates", authz.Read("apps"), a.listAppPromptTemplates)
-	v1.POST("/apps/:id/prompt-templates", authz.Write("apps"), a.createAppPromptTemplate)
-	v1.GET("/apps/:id/prompt-templates/:template_id", authz.Read("apps"), a.getAppPromptTemplate)
-	v1.PATCH("/apps/:id/prompt-templates/:template_id", authz.Write("apps"), a.updateAppPromptTemplate)
-	v1.DELETE("/apps/:id/prompt-templates/:template_id", authz.Delete("apps"), a.deleteAppPromptTemplate)
+	v1.InWorkspace().GET("/apps/:id/prompt-templates", authz.Read("apps"), a.onObject(&models.App{}, authz.Read("apps"), appNotFound), a.listAppPromptTemplates)
+	v1.InWorkspace().POST("/apps/:id/prompt-templates", authz.Write("apps"), a.onObject(&models.App{}, authz.Write("apps"), appNotFound), a.createAppPromptTemplate)
+	v1.InWorkspace().GET("/apps/:id/prompt-templates/:template_id", authz.Read("apps"), a.onObject(&models.App{}, authz.Read("apps"), appNotFound), a.getAppPromptTemplate)
+	v1.InWorkspace().PATCH("/apps/:id/prompt-templates/:template_id", authz.Write("apps"), a.onObject(&models.App{}, authz.Write("apps"), appNotFound), a.updateAppPromptTemplate)
+	v1.InWorkspace().DELETE("/apps/:id/prompt-templates/:template_id", authz.Delete("apps"), a.onObject(&models.App{}, authz.Delete("apps"), appNotFound), a.deleteAppPromptTemplate)
 	v1.POST("/apps/:id/prompt-templates/:template_id/approve", authz.FullAdmin, a.approveAppPromptTemplate)
-	v1.POST("/apps/:id/prompt-templates/:template_id/retire", authz.Write("apps"), a.retireAppPromptTemplate)
-	v1.GET("/apps/:id/guardrail-capability", authz.Read("apps"), a.getAppGuardrailCapability)
+	v1.InWorkspace().POST("/apps/:id/prompt-templates/:template_id/retire", authz.Write("apps"), a.onObject(&models.App{}, authz.Write("apps"), appNotFound), a.retireAppPromptTemplate)
+	v1.InWorkspace().GET("/apps/:id/guardrail-capability", authz.Read("apps"), a.onObject(&models.App{}, authz.Read("apps"), appNotFound), a.getAppGuardrailCapability)
 	v1.PUT("/apps/:id/guardrail-capability", authz.FullAdmin, a.setAppGuardrailCapability)
-	v1.GET("/apps/:id/guardrail-exceptions", authz.Read("apps"), a.listGuardrailExceptions)
-	v1.POST("/apps/:id/guardrail-exceptions", authz.Write("apps"), a.createGuardrailException)
-	v1.GET("/apps/:id/guardrail-exceptions/:eid", authz.Read("apps"), a.getGuardrailException)
-	v1.PATCH("/apps/:id/guardrail-exceptions/:eid", authz.Write("apps"), a.updateGuardrailException)
-	v1.DELETE("/apps/:id/guardrail-exceptions/:eid", authz.Delete("apps"), a.deleteGuardrailException)
+	v1.InWorkspace().GET("/apps/:id/guardrail-exceptions", authz.Read("apps"), a.onObject(&models.App{}, authz.Read("apps"), appNotFound), a.listGuardrailExceptions)
+	v1.InWorkspace().POST("/apps/:id/guardrail-exceptions", authz.Write("apps"), a.onObject(&models.App{}, authz.Write("apps"), appNotFound), a.createGuardrailException)
+	v1.InWorkspace().GET("/apps/:id/guardrail-exceptions/:eid", authz.Read("apps"), a.onObject(&models.App{}, authz.Read("apps"), appNotFound), a.getGuardrailException)
+	v1.InWorkspace().PATCH("/apps/:id/guardrail-exceptions/:eid", authz.Write("apps"), a.onObject(&models.App{}, authz.Write("apps"), appNotFound), a.updateGuardrailException)
+	v1.InWorkspace().DELETE("/apps/:id/guardrail-exceptions/:eid", authz.Delete("apps"), a.onObject(&models.App{}, authz.Delete("apps"), appNotFound), a.deleteGuardrailException)
 	v1.POST("/apps/:id/guardrail-exceptions/:eid/approve", authz.FullAdmin, a.approveGuardrailException)
-	v1.POST("/apps/:id/guardrail-exceptions/:eid/retire", authz.Write("apps"), a.retireGuardrailException)
+	v1.InWorkspace().POST("/apps/:id/guardrail-exceptions/:eid/retire", authz.Write("apps"), a.onObject(&models.App{}, authz.Write("apps"), appNotFound), a.retireGuardrailException)
 
 	// Plugin Resource Type routes
 	v1.GET("/plugin-resource-types", authz.Read("plugins"), a.listPluginResourceTypes)
 	v1.GET("/plugin-resource-types/:plugin_id/:slug/instances", authz.Read("plugins"), a.listPluginResourceInstances)
-	v1.GET("/apps/:id/plugin-resources", authz.Read("apps"), a.getAppPluginResources)
+	v1.InWorkspace().GET("/apps/:id/plugin-resources", authz.Read("apps"), a.onObject(&models.App{}, authz.Read("apps"), appNotFound), a.getAppPluginResources)
 	v1.GET("/groups/:id/plugin-resources", authz.Read("groups"), a.getGroupPluginResources)
 	v1.PUT("/groups/:id/plugin-resources", authz.Write("groups"), a.setGroupPluginResources)
 
@@ -1253,15 +1258,15 @@ func (a *API) setupRoutes() error {
 	v1.InWorkspace().POST("/mcp-servers/:id/link", authz.Execute("mcp-servers"), a.onObject(&models.MCPServer{}, authz.Execute("mcp-servers")), a.linkMCPServer)
 	// Minted Tyk keys: minting, rotating, suspending, revoking and applying
 	// widening changes reach the Dashboard, so they are execute permissions.
-	v1.GET("/mcp-credentials", authz.Read("mcp-credentials"), a.listMCPCredentials)
-	v1.POST("/mcp-credentials", authz.Execute("mcp-credentials"), a.mintMCPCredential)
-	v1.GET("/mcp-credentials/:id", authz.Read("mcp-credentials"), a.getMCPCredential)
-	v1.POST("/mcp-credentials/:id/rotate", authz.Execute("mcp-credentials"), a.rotateMCPCredential)
-	v1.POST("/mcp-credentials/:id/suspend", authz.Execute("mcp-credentials"), a.suspendMCPCredential)
-	v1.POST("/mcp-credentials/:id/resume", authz.Execute("mcp-credentials"), a.resumeMCPCredential)
-	v1.POST("/mcp-credentials/:id/revoke", authz.Execute("mcp-credentials"), a.revokeMCPCredential)
-	v1.POST("/mcp-credentials/:id/apply-drift", authz.Execute("mcp-credentials"), a.applyMCPCredentialDrift)
-	v1.GET("/mcp-access-report", authz.Read("mcp-credentials"), a.getMCPAccessReport)
+	v1.InWorkspace().GET("/mcp-credentials", authz.Read("mcp-credentials"), a.listMCPCredentials)
+	v1.InWorkspace().POST("/mcp-credentials", authz.Execute("mcp-credentials"), a.mintMCPCredential)
+	v1.InWorkspace().GET("/mcp-credentials/:id", authz.Read("mcp-credentials"), a.onAppCredential(authz.Read("mcp-credentials"), a.appWorkspaceOfMCPCredential, mcpCredentialNotFound), a.getMCPCredential)
+	v1.InWorkspace().POST("/mcp-credentials/:id/rotate", authz.Execute("mcp-credentials"), a.onAppCredential(authz.Execute("mcp-credentials"), a.appWorkspaceOfMCPCredential, mcpCredentialNotFound), a.rotateMCPCredential)
+	v1.InWorkspace().POST("/mcp-credentials/:id/suspend", authz.Execute("mcp-credentials"), a.onAppCredential(authz.Execute("mcp-credentials"), a.appWorkspaceOfMCPCredential, mcpCredentialNotFound), a.suspendMCPCredential)
+	v1.InWorkspace().POST("/mcp-credentials/:id/resume", authz.Execute("mcp-credentials"), a.onAppCredential(authz.Execute("mcp-credentials"), a.appWorkspaceOfMCPCredential, mcpCredentialNotFound), a.resumeMCPCredential)
+	v1.InWorkspace().POST("/mcp-credentials/:id/revoke", authz.Execute("mcp-credentials"), a.onAppCredential(authz.Execute("mcp-credentials"), a.appWorkspaceOfMCPCredential, mcpCredentialNotFound), a.revokeMCPCredential)
+	v1.InWorkspace().POST("/mcp-credentials/:id/apply-drift", authz.Execute("mcp-credentials"), a.onAppCredential(authz.Execute("mcp-credentials"), a.appWorkspaceOfMCPCredential, mcpCredentialNotFound), a.applyMCPCredentialDrift)
+	v1.InWorkspace().GET("/mcp-access-report", authz.Read("mcp-credentials"), a.getMCPAccessReport)
 
 	// RBAC routes (Enterprise feature; the permission catalogue is served in both editions)
 	v1.GET("/rbac/permissions", authz.AnyAdmin, a.getPermissionCatalogue)

@@ -102,11 +102,12 @@ func (a *API) validateAppRouterBindings(c *gin.Context, actorID uint, actorAdmin
 // update asks for (nil: the request leaves that kind alone) and returns them
 // as service options. It writes the error response itself and reports whether
 // the caller may go on.
-func (a *API) adminAppRouterOptions(c *gin.Context, modelIDs, semanticIDs *[]uint) ([]services.AppOption, bool) {
+// workspaceID is the App's Workspace (stored value) after the request.
+func (a *API) adminAppRouterOptions(c *gin.Context, workspaceID uint, modelIDs, semanticIDs *[]uint) ([]services.AppOption, bool) {
 	if modelIDs == nil && semanticIDs == nil {
 		return nil, true
 	}
-	actorID, actorAdmin := adminAppActor(c)
+	actorID, actorAdmin := a.adminAppActorIn(c, workspaceID)
 	if !a.validateAppRouterBindings(c, actorID, actorAdmin, modelIDs, semanticIDs) {
 		return nil, false
 	}

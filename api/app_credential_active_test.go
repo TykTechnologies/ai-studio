@@ -126,6 +126,7 @@ func TestApps_ListCredentialIsNotNPlusOne(t *testing.T) {
 	}
 
 	addApps(2)
+	count() // warm the once-per-process caches (the Default workspace id)
 	small := count()
 	addApps(6)
 	large := count()

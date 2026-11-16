@@ -581,6 +581,9 @@ type AppResponse struct {
 		IsOrphaned       bool                   `json:"is_orphaned"`
 		Metadata         map[string]interface{} `json:"metadata,omitempty"`
 		Namespace        string                 `json:"namespace,omitempty"`
+		// WorkspaceID is the Workspace that owns the App (Enterprise
+		// Workspaces); a stored 0 reads as the Default.
+		WorkspaceID uint `json:"workspace_id,omitempty"`
 		PluginResources  []PluginResourceOutput `json:"plugin_resources,omitempty"`
 		// Tyk-managed MCP servers bound to the app (Enterprise).
 		MCPServerIDs []uint               `json:"mcp_server_ids"`

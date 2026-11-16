@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services/tykmcp"
 	"github.com/gin-gonic/gin"
 )
@@ -56,6 +57,10 @@ func (a *API) listMCPCredentials(c *gin.Context) {
 			return
 		}
 	}
+	// Only credentials of Apps the caller may see (ScopeWorkspaceParent).
+	if f.AppScopes, ok = a.parentAppScopes(c, "mcp-credentials"); !ok {
+		return
+	}
 	list, err := a.tykMCPService().ListCredentials(c.Request.Context(), f)
 	if err != nil {
 		tykMCPErrorResponse(c, err, "Failed to list credentials")
@@ -104,6 +109,14 @@ func (a *API) mintMCPCredential(c *gin.Context) {
 		webhookBadRequest(c, "app_id and connection_id are required")
 		return
 	}
+	// Minting is an action on the App's credentials: execute in the App's
+	// Workspace; an App the caller cannot see answers as a missing one.
+	if !a.requireOnObject(c, &models.App{}, in.AppID, authz.Execute("mcp-credentials"), appNotFound) {
+		return
+	}
+	if !a.scopeMCPCredentialActor(c, &actor, func() (uint, bool, error) { return a.storedWorkspaceID(&models.App{}, in.AppID) }) {
+		return
+	}
 	minted, err := a.tykMCPService().MintCredential(c.Request.Context(), actor, in)
 	if err != nil {
 		tykMCPErrorResponse(c, err, "Failed to mint credential")
@@ -132,6 +145,12 @@ func (a *API) credentialAction(c *gin.Context, fallback string, fn func(actor ty
 		webhookBadRequest(c, "reason is too long")
 		return
 	}
+	if !a.scopeMCPCredentialActor(c, &actor, func() (uint, bool, error) {
+		ws, _, appFound, err := a.appWorkspaceOfMCPCredential(c.Param("id"))
+		return ws, appFound, err
+	}) {
+		return
+	}
 	view, err := fn(actor, c.Param("id"), reason)
 	if err != nil {
 		tykMCPErrorResponse(c, err, fallback)
@@ -150,6 +169,12 @@ func (a *API) credentialAction(c *gin.Context, fallback string, fn func(actor ty
 func (a *API) rotateMCPCredential(c *gin.Context) {
 	actor, ok := requireTykMCPActor(c, "mcp-credentials")
 	if !ok {
+		return
+	}
+	if !a.scopeMCPCredentialActor(c, &actor, func() (uint, bool, error) {
+		ws, _, appFound, err := a.appWorkspaceOfMCPCredential(c.Param("id"))
+		return ws, appFound, err
+	}) {
 		return
 	}
 	minted, err := a.tykMCPService().RotateCredential(c.Request.Context(), actor, c.Param("id"))
@@ -228,6 +253,9 @@ func (a *API) getMCPAccessReport(c *gin.Context) {
 			webhookBadRequest(c, "invalid "+name)
 			return
 		}
+	}
+	if f.AppScopes, ok = a.parentAppScopes(c, "mcp-credentials"); !ok {
+		return
 	}
 	rows, err := a.tykMCPService().AccessReport(c.Request.Context(), f)
 	if err != nil {
@@ -357,4 +385,28 @@ func (a *API) revokeUserAppMCPCredential(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, view)
+}
+
+// mcpCredentialNotFound is the MCP credential routes' not-found answer, also
+// given for a credential whose App the caller may not see.
+func mcpCredentialNotFound(c *gin.Context) { tykMCPErrorResponse(c, tykmcp.ErrNotFound, "") }
+
+// scopeMCPCredentialActor narrows actor.CanExecute (widening changes apply
+// without review) to the execute permission in the App's Workspace, which
+// appWorkspace reads, instead of anywhere. A credential with no live App
+// keeps the global check.
+func (a *API) scopeMCPCredentialActor(c *gin.Context, actor *tykmcp.Actor, appWorkspace func() (uint, bool, error)) bool {
+	if a.workspaceCheckMode(c) != workspaceCheck {
+		return true
+	}
+	ws, found, err := appWorkspace()
+	if err != nil {
+		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		c.Abort()
+		return false
+	}
+	if found {
+		actor.CanExecute = a.holdsIn(c, ws, authz.Execute("mcp-credentials"))
+	}
+	return true
 }

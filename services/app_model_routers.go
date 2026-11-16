@@ -40,6 +40,16 @@ type appOptions struct {
 	// selfService marks a create made by the App's owner (portal, plugin
 	// SDK) rather than an administrator; see WithSelfService.
 	selfService bool
+	// workspaceID is the Workspace a new App lands in (WithAppWorkspace);
+	// nil leaves it to the create hook (0: the Default).
+	workspaceID *uint
+}
+
+// WithAppWorkspace lands a new App in the Workspace (Enterprise Workspaces,
+// the API's landing rule). It has no effect on an update: a move is the
+// API's explicit workspace_id change.
+func WithAppWorkspace(workspaceID uint) AppOption {
+	return func(o *appOptions) { o.workspaceID = &workspaceID }
 }
 
 func resolveAppOptions(opts []AppOption) appOptions {

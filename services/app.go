@@ -734,15 +734,16 @@ func (s *Service) DeleteApp(id uint) error {
 }
 
 // GetAppsByUserID retrieves all apps for a specific user
-func (s *Service) GetAppsByUserID(userID uint) ([]models.App, error) {
+func (s *Service) GetAppsByUserID(userID uint, scopes ...func(*gorm.DB) *gorm.DB) ([]models.App, error) {
 	app := models.NewApp()
-	return app.GetByUserID(s.DB, userID)
+	return app.GetByUserID(s.DB.Scopes(scopes...), userID)
 }
 
 // GetAppByName retrieves an app by its name
-func (s *Service) GetAppByName(name string) (*models.App, error) {
+// scopes narrow the lookup (the API's Workspace scope).
+func (s *Service) GetAppByName(name string, scopes ...func(*gorm.DB) *gorm.DB) (*models.App, error) {
 	app := models.NewApp()
-	if err := app.GetByName(s.DB, name); err != nil {
+	if err := app.GetByName(s.DB.Scopes(scopes...), name); err != nil {
 		return nil, err
 	}
 	return app, nil
@@ -1008,9 +1009,11 @@ func (s *Service) ListApps() (models.Apps, error) {
 }
 
 // ListAppsWithPagination returns a paginated list of apps
-func (s *Service) ListAppsWithPagination(pageSize, pageNumber int, all bool, sort string) (models.Apps, int64, int, error) {
+// scopes narrow the list (the API's Workspace scope and filter); counts and
+// pages follow them.
+func (s *Service) ListAppsWithPagination(pageSize, pageNumber int, all bool, sort string, scopes ...func(*gorm.DB) *gorm.DB) (models.Apps, int64, int, error) {
 	var apps models.Apps
-	totalCount, totalPages, err := apps.ListWithPagination(s.DB, pageSize, pageNumber, all, sort)
+	totalCount, totalPages, err := apps.ListWithPagination(s.DB.Scopes(scopes...), pageSize, pageNumber, all, sort)
 	return apps, totalCount, totalPages, err
 }
 
@@ -1022,9 +1025,9 @@ func (s *Service) ListAppsByUserID(userID uint, pageSize, pageNumber int, all bo
 }
 
 // SearchApps returns apps matching the given search term with pagination
-func (s *Service) SearchApps(searchTerm string, pageSize, pageNumber int, all bool, sort string) (models.Apps, int64, int, error) {
+func (s *Service) SearchApps(searchTerm string, pageSize, pageNumber int, all bool, sort string, scopes ...func(*gorm.DB) *gorm.DB) (models.Apps, int64, int, error) {
 	var apps models.Apps
-	totalCount, totalPages, err := apps.Search(s.DB, searchTerm, pageSize, pageNumber, all, sort)
+	totalCount, totalPages, err := apps.Search(s.DB.Scopes(scopes...), searchTerm, pageSize, pageNumber, all, sort)
 	return apps, totalCount, totalPages, err
 }
 
@@ -1040,15 +1043,15 @@ func (s *Service) ListAppsWithFilters(pageSize, pageNumber int, all bool, sort, 
 }
 
 // CountApps returns the total number of apps
-func (s *Service) CountApps() (int64, error) {
+func (s *Service) CountApps(scopes ...func(*gorm.DB) *gorm.DB) (int64, error) {
 	app := models.NewApp()
-	return app.Count(s.DB)
+	return app.Count(s.DB.Scopes(scopes...))
 }
 
 // CountAppsByUserID returns the total number of apps for a specific user
-func (s *Service) CountAppsByUserID(userID uint) (int64, error) {
+func (s *Service) CountAppsByUserID(userID uint, scopes ...func(*gorm.DB) *gorm.DB) (int64, error) {
 	app := models.NewApp()
-	return app.CountByUserID(s.DB, userID)
+	return app.CountByUserID(s.DB.Scopes(scopes...), userID)
 }
 
 // GetAppsInNamespace returns apps in a specific namespace (including global)
