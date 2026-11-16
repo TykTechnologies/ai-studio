@@ -1215,12 +1215,21 @@ type UserWithEntitlementsResponse struct {
 		// HasAdminAccess is true when the user holds at least one permission
 		// and may therefore open the administration surface.
 		HasAdminAccess bool `json:"has_admin_access"`
+		// AdminNavHint tells the UI to show the admin navigation: the user
+		// holds some permission, globally or within a Workspace. A UI hint
+		// only: it is not is_admin, and nothing on the server authorizes on it.
+		AdminNavHint bool `json:"admin_nav_hint"`
 		// Permissions is the effective permission set; ["*"] for full admins.
 		Permissions []string `json:"permissions"`
 		// Roles lists the roles behind the permissions (Enterprise only).
 		Roles []rbac.RoleSummary `json:"roles"`
 		// RBACEnabled reports whether fine-grained roles are active.
 		RBACEnabled bool `json:"rbac_enabled"`
+		// Workspaces lists, per Workspace, the permissions the user holds
+		// there through Workspace-scoped roles, for per-object UI gating
+		// (Enterprise). Permissions above are global and cover every
+		// Workspace.
+		Workspaces []WorkspaceAccess `json:"workspaces"`
 		// IsOwner: the user holds the Owner role (the Super Admin without
 		// roles), and so may open the License page.
 		IsOwner bool `json:"is_owner"`

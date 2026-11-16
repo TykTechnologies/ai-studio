@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"sort"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/services/entitlements"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -127,6 +129,14 @@ type EffectiveAccessResponse struct {
 	IsFullAdmin    bool                               `json:"is_full_admin"`
 	HasAdminAccess bool                               `json:"has_admin_access"`
 	Enabled        bool                               `json:"enabled"`
+	// AdminNavHint tells the UI to show the admin navigation: the user holds
+	// some permission, globally or within a Workspace. A UI hint only: it is
+	// not users.is_admin, and nothing on the server authorizes on it.
+	AdminNavHint bool `json:"admin_nav_hint"`
+	// Workspaces lists the access Workspace-scoped bindings grant, per
+	// Workspace (Enterprise). Permissions above are global and cover every
+	// Workspace; they are not repeated here.
+	Workspaces []WorkspaceAccess `json:"workspaces"`
 }
 
 func serializeRole(r *models.Role, counts rbac.RoleCounts) RoleResponse {
@@ -182,7 +192,7 @@ func serializeBinding(b *models.RoleBinding) RoleBindingResponse {
 	}
 }
 
-func effectiveResponse(userID uint, eff *rbac.Effective, enabled bool) EffectiveAccessResponse {
+func effectiveResponse(userID uint, eff *rbac.Effective, enabled bool, names map[uint]string) EffectiveAccessResponse {
 	roles := eff.Roles
 	if roles == nil {
 		roles = []rbac.RoleSummary{}
@@ -198,8 +208,31 @@ func effectiveResponse(userID uint, eff *rbac.Effective, enabled bool) Effective
 		Sources:        sources,
 		IsFullAdmin:    eff.Permissions.IsFullAdmin(),
 		HasAdminAccess: !eff.Permissions.IsEmpty(),
+		AdminNavHint:   !eff.Permissions.IsEmpty() || len(eff.Workspaces) > 0,
 		Enabled:        enabled,
+		Workspaces:     workspaceAccessList(eff.Workspaces, names),
 	}
+}
+
+// workspaceAccessList orders an Effective's per-Workspace section by
+// Workspace id for the API.
+func workspaceAccessList(ws map[uint]rbac.WorkspaceEffective, names map[uint]string) []WorkspaceAccess {
+	out := make([]WorkspaceAccess, 0, len(ws))
+	for id, we := range ws {
+		out = append(out, WorkspaceAccess{ID: id, Name: names[id], Permissions: we.Permissions.List(), Roles: we.Roles, Sources: we.Sources})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+// effectiveAccess builds the effective-access response for a user,
+// resolving the names of the Workspaces they hold scoped roles in.
+func (a *API) effectiveAccess(ctx context.Context, userID uint, eff *rbac.Effective) EffectiveAccessResponse {
+	ids := make([]uint, 0, len(eff.Workspaces))
+	for id := range eff.Workspaces {
+		ids = append(ids, id)
+	}
+	return effectiveResponse(userID, eff, a.service.Authz().Enabled(), a.workspaceNames(ctx, ids))
 }
 
 func parseUintParam(c *gin.Context, name string) (uint, bool) {
@@ -262,7 +295,7 @@ func (a *API) getMyAccess(c *gin.Context) {
 		rbacErrorResponse(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, effectiveResponse(user.ID, eff, a.service.Authz().Enabled()))
+	c.JSON(http.StatusOK, a.effectiveAccess(c.Request.Context(), user.ID, eff))
 }
 
 // @Summary Get a user's effective access
@@ -282,7 +315,7 @@ func (a *API) getUserEffectiveAccess(c *gin.Context) {
 		rbacErrorResponse(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, effectiveResponse(id, eff, a.service.Authz().Enabled()))
+	c.JSON(http.StatusOK, a.effectiveAccess(c.Request.Context(), id, eff))
 }
 
 // --- roles ---------------------------------------------------------------------
@@ -471,6 +504,11 @@ type RoleBindingInput struct {
 	SubjectType string `json:"subject_type"`
 	SubjectID   uint   `json:"subject_id"`
 	RoleID      uint   `json:"role_id"`
+	// ScopeType is empty for a global binding (every Workspace) or
+	// "workspace"; ScopeID is then the Workspace id in canonical decimal
+	// form ("7"). Managing scoped bindings needs roles:write globally (D10).
+	ScopeType string `json:"scope_type"`
+	ScopeID   string `json:"scope_id"`
 }
 
 // @Summary List role bindings
@@ -479,6 +517,8 @@ type RoleBindingInput struct {
 // @Param subject_type query string false "user or group"
 // @Param subject_id query int false "Subject ID"
 // @Param role_id query int false "Role ID"
+// @Param scope_type query string false "global (unscoped bindings only) or workspace"
+// @Param scope_id query string false "Workspace id (with scope_type=workspace)"
 // @Success 200 {object} map[string][]RoleBindingResponse
 // @Router /rbac/bindings [get]
 // @Security BearerAuth
@@ -499,6 +539,23 @@ func (a *API) listRoleBindings(c *gin.Context) {
 			return
 		}
 		f.RoleID = uint(n)
+	}
+	switch st := c.Query("scope_type"); st {
+	case "":
+	case "global":
+		f.GlobalOnly = true
+	case rbac.ScopeTypeWorkspace:
+		f.ScopeType = st
+	default:
+		rbacBadRequest(c, "invalid scope_type: use global or workspace")
+		return
+	}
+	if v := c.Query("scope_id"); v != "" {
+		if _, ok := rbac.ParseWorkspaceScopeID(v); !ok || f.GlobalOnly {
+			rbacBadRequest(c, "invalid scope_id")
+			return
+		}
+		f.ScopeID = v
 	}
 	bindings, err := a.service.Authz().ListBindings(c.Request.Context(), f)
 	if err != nil {
@@ -532,8 +589,10 @@ func (a *API) createRoleBinding(c *gin.Context) {
 	err := a.service.EntitlementsService().GuardUserChange(a.service.DB, func(tx *gorm.DB) error {
 		var err error
 		b, err = a.service.Authz().CreateBinding(rbac.WithTx(c.Request.Context(), tx), actor, rbac.BindingInput{
-			Subject: rbac.Subject{Type: in.SubjectType, ID: in.SubjectID},
-			RoleID:  in.RoleID,
+			Subject:   rbac.Subject{Type: in.SubjectType, ID: in.SubjectID},
+			RoleID:    in.RoleID,
+			ScopeType: in.ScopeType,
+			ScopeID:   in.ScopeID,
 		})
 		return err
 	})

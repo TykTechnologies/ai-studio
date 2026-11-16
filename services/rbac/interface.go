@@ -77,9 +77,11 @@ type BindingFilter struct {
 	SubjectID   uint
 	RoleID      uint
 	// ScopeType and ScopeID filter by binding scope. ScopeType "" means no
-	// filter (it does not select global bindings only).
+	// filter (it does not select global bindings only; GlobalOnly does).
 	ScopeType string
 	ScopeID   string
+	// GlobalOnly keeps global bindings only (IsGlobalBinding).
+	GlobalOnly bool
 }
 
 // RoleSummary is the compact role shape returned alongside users, groups and
