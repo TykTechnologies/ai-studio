@@ -766,3 +766,9 @@ func ListSecrets(db *gorm.DB, pageSize int, pageNumber int, all bool, scopes ...
 func (s *Secret) BeforeUpdate(tx *gorm.DB) error {
 	return wsstamp.KeepOnUpdate(tx)
 }
+
+// BeforeCreate stamps the secret's Workspace and locks it for the insert
+// (wsstamp.OnCreate).
+func (s *Secret) BeforeCreate(tx *gorm.DB) error {
+	return wsstamp.OnCreate(tx, &s.WorkspaceID)
+}

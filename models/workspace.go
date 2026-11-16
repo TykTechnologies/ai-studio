@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/models/wsstamp"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -145,4 +146,19 @@ func KeepWorkspaceID(original, modified any) {
 		return
 	}
 	mf.SetUint(of.Uint())
+}
+
+// ErrWorkspaceNotFound is returned when a Workspace an insert targets does
+// not exist (LockWorkspaceForInsert).
+var ErrWorkspaceNotFound = wsstamp.ErrWorkspaceNotFound
+
+// LockWorkspaceForInsert checks, inside tx, that the Workspace exists and
+// holds it until tx ends; see wsstamp.LockForInsert.
+func LockWorkspaceForInsert(tx *gorm.DB, id uint) error {
+	return wsstamp.LockForInsert(tx, id)
+}
+
+// stampOnCreate is every stamped model's create hook (wsstamp.OnCreate).
+func stampOnCreate(tx *gorm.DB, workspaceID *uint) error {
+	return wsstamp.OnCreate(tx, workspaceID)
 }
