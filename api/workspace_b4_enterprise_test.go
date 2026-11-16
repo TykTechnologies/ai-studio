@@ -63,15 +63,17 @@ func body(attrs map[string]any) map[string]any {
 func (f *wsB4Fixture) created(t *testing.T, w *httptest.ResponseRecorder) (uint, uint) {
 	t.Helper()
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
-	var resp struct {
-		Data struct {
-			ID         string
-			Attributes struct {
-				WorkspaceID uint `json:"workspace_id"`
-			}
+	type object struct {
+		ID         string
+		Attributes struct {
+			WorkspaceID uint `json:"workspace_id"`
 		}
 	}
+	var resp struct{ Data object }
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	if resp.Data.ID == "" { // some create routes answer the object itself
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp.Data))
+	}
 	return uintFromString(t, resp.Data.ID), resp.Data.Attributes.WorkspaceID
 }
 
@@ -306,4 +308,76 @@ func TestWorkspaceB4_Datasources(t *testing.T) {
 	require.NoError(t, secrets.CreateSecret(f.api.service.DB, &secrets.Secret{VarName: "W2CONN", Value: "v", WorkspaceID: f.w2}))
 	assertCode(t, f.do("POST", "/api/v1/datasources", body(dsAttrs("Cross", map[string]any{"db_conn_api_key": "$SECRET/W2CONN"})), f.inW1),
 		http.StatusForbidden, authz.CodePermissionDenied)
+}
+
+// The landing, write and move rules on filters, embedders and secrets.
+func TestWorkspaceB4_FiltersEmbeddersSecrets(t *testing.T) {
+	t.Setenv("TYK_AI_SECRET_KEY", "workspace-b4-test-key")
+	f := setupWSB4(t)
+	cases := []struct {
+		name, base string
+		model      interface{}
+		attrs      func(name string) map[string]any
+		patch      map[string]any
+	}{
+		{"filters", "/api/v1/filters", &models.Filter{},
+			func(n string) map[string]any {
+				return map[string]any{"name": n, "description": "d", "script": "ZmlsdGVyID0gdHJ1ZQ=="}
+			},
+			map[string]any{"description": "edited"}},
+		{"embedders", "/api/v1/embedders", &models.Embedder{},
+			func(n string) map[string]any {
+				return map[string]any{"name": n, "vendor": "openai", "endpoint": "https://embed.example", "model": "m", "privacy_score": 10}
+			},
+			map[string]any{"description": "edited"}},
+		{"secrets", "/api/v1/secrets", &secrets.Secret{},
+			func(n string) map[string]any { return map[string]any{"var_name": n, "value": "v"} },
+			map[string]any{"value": "new"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mine, ws := f.created(t, f.do("POST", tc.base, body(tc.attrs("MINE_"+tc.name)), f.inW1))
+			assert.Equal(t, f.w1, ws)
+			elsewhere := tc.attrs("ELSE_" + tc.name)
+			elsewhere["workspace_id"] = f.w2
+			assertCode(t, f.do("POST", tc.base, body(elsewhere), f.inW1), http.StatusUnprocessableEntity, authz.CodeInvalidWorkspace)
+			assertCode(t, f.do("POST", tc.base, body(tc.attrs("AMB_"+tc.name)), f.inW1W2), http.StatusUnprocessableEntity, authz.CodeWorkspaceRequired)
+			theirsAttrs := tc.attrs("THEIRS_" + tc.name)
+			theirsAttrs["workspace_id"] = f.w2
+			theirs, _ := f.created(t, f.do("POST", tc.base, body(theirsAttrs), f.owner))
+
+			at := func(id uint) string { return fmt.Sprintf("%s/%d", tc.base, id) }
+			assert.Equal(t, http.StatusOK, f.do("GET", at(theirs), nil, f.inW1).Code, "reads are global")
+			assertCode(t, f.do("PATCH", at(theirs), body(tc.patch), f.inW1), http.StatusForbidden, authz.CodePermissionDenied)
+			assertCode(t, f.do("DELETE", at(theirs), nil, f.inW1), http.StatusForbidden, authz.CodePermissionDenied)
+			assert.Equal(t, http.StatusOK, f.do("PATCH", at(mine), body(tc.patch), f.inW1).Code)
+
+			w := f.do("GET", fmt.Sprintf("%s?all=true&workspace_id=%d", tc.base, f.w1), nil, f.owner)
+			require.Equal(t, http.StatusOK, w.Code)
+			assert.NotContains(t, w.Body.String(), "THEIRS_"+tc.name)
+			assert.Contains(t, w.Body.String(), "MINE_"+tc.name)
+
+			_, before := f.stored(t, tc.model, mine)
+			time.Sleep(10 * time.Millisecond)
+			move := map[string]any{"workspace_id": f.w2}
+			assertCode(t, f.do("PATCH", at(mine), body(move), f.inW1), http.StatusUnprocessableEntity, authz.CodeInvalidWorkspace)
+			require.Equal(t, http.StatusOK, f.do("PATCH", at(mine), body(move), f.inW1W2).Code)
+			ws, after := f.stored(t, tc.model, mine)
+			assert.Equal(t, f.w2, ws)
+			assert.True(t, after.After(before))
+		})
+	}
+}
+
+// A referenced secret does not move: its references would point across
+// Workspaces.
+func TestWorkspaceB4_ReferencedSecretDoesNotMove(t *testing.T) {
+	t.Setenv("TYK_AI_SECRET_KEY", "workspace-b4-test-key")
+	f := setupWSB4(t)
+	id, _ := f.created(t, f.do("POST", "/api/v1/secrets", body(map[string]any{"var_name": "USED", "value": "v"}), f.inW1))
+	f.created(t, f.do("POST", "/api/v1/llms", body(llmAttrs("User", map[string]any{"api_key": "$SECRET/USED"})), f.inW1))
+	assertCode(t, f.do("PATCH", fmt.Sprintf("/api/v1/secrets/%d", id), body(map[string]any{"workspace_id": f.w2}), f.inW1W2),
+		http.StatusUnprocessableEntity, authz.CodeInvalidWorkspace)
+	ws, _ := f.stored(t, &secrets.Secret{}, id)
+	assert.Equal(t, f.w1, ws)
 }

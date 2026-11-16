@@ -28,6 +28,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/middleware"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
 	"github.com/TykTechnologies/midsommar/v2/services/marketplace_management"
@@ -935,15 +936,15 @@ func (a *API) setupRoutes() error {
 	v1.GET("/vendors/vector-stores", authz.Read("datasources"), a.getAvailableVectorStores)
 
 	// Filter routes
-	v1.POST("/filters", authz.Write("filters"), a.createFilter)
-	v1.GET("/filters/:id", authz.Read("filters"), a.getFilter)
-	v1.PATCH("/filters/:id", authz.Write("filters"), a.updateFilter)
-	v1.DELETE("/filters/:id", authz.Delete("filters"), a.deleteFilter)
-	v1.GET("/filters", authz.Read("filters"), a.listFilters)
-	v1.POST("/filters/test", authz.Execute("filters"), a.testFilter)
-	v1.GET("/filters/guardrail-providers", authz.Read("filters"), a.listGuardrailProviders)
-	v1.GET("/filters/:id/dependents", authz.Read("filters"), a.getFilterDependents)
-	v1.GET("/filters/:id/exceptions", authz.Read("filters"), a.listFilterGuardrailExceptions)
+	v1.InWorkspace().POST("/filters", authz.Write("filters"), a.createFilter)
+	v1.InWorkspace().GET("/filters/:id", authz.Read("filters"), a.getFilter)
+	v1.InWorkspace().PATCH("/filters/:id", authz.Write("filters"), a.updateFilter)
+	v1.InWorkspace().DELETE("/filters/:id", authz.Delete("filters"), a.onObject(&models.Filter{}, authz.Delete("filters")), a.deleteFilter)
+	v1.InWorkspace().GET("/filters", authz.Read("filters"), a.listFilters)
+	v1.InWorkspace().POST("/filters/test", authz.Execute("filters"), a.testFilter)
+	v1.InWorkspace().GET("/filters/guardrail-providers", authz.Read("filters"), a.listGuardrailProviders)
+	v1.InWorkspace().GET("/filters/:id/dependents", authz.Read("filters"), a.getFilterDependents)
+	v1.InWorkspace().GET("/filters/:id/exceptions", authz.Read("filters"), a.listFilterGuardrailExceptions)
 	v1.HandleFn("POST", "/filters/bulk", bulkActionPermission("filters"), a.bulkFilters)
 
 	// Plugin routes
@@ -1046,13 +1047,13 @@ func (a *API) setupRoutes() error {
 
 	// Semantic Router routes (Enterprise only)
 	// Embedders: reusable embedding configurations
-	v1.GET("/embedders/vendors", authz.Read("embedders"), a.listEmbedderVendors)
-	v1.POST("/embedders", authz.Write("embedders"), a.createEmbedder)
-	v1.GET("/embedders", authz.Read("embedders"), a.listEmbedders)
-	v1.GET("/embedders/:id", authz.Read("embedders"), a.getEmbedder)
-	v1.PATCH("/embedders/:id", authz.Write("embedders"), a.updateEmbedder)
-	v1.DELETE("/embedders/:id", authz.Delete("embedders"), a.deleteEmbedder)
-	v1.GET("/embedders/:id/dependents", authz.Read("embedders"), a.getEmbedderDependents)
+	v1.InWorkspace().GET("/embedders/vendors", authz.Read("embedders"), a.listEmbedderVendors)
+	v1.InWorkspace().POST("/embedders", authz.Write("embedders"), a.createEmbedder)
+	v1.InWorkspace().GET("/embedders", authz.Read("embedders"), a.listEmbedders)
+	v1.InWorkspace().GET("/embedders/:id", authz.Read("embedders"), a.getEmbedder)
+	v1.InWorkspace().PATCH("/embedders/:id", authz.Write("embedders"), a.updateEmbedder)
+	v1.InWorkspace().DELETE("/embedders/:id", authz.Delete("embedders"), a.onObject(&models.Embedder{}, authz.Delete("embedders")), a.deleteEmbedder)
+	v1.InWorkspace().GET("/embedders/:id/dependents", authz.Read("embedders"), a.getEmbedderDependents)
 
 	v1.POST("/semantic-routers", authz.Write("semantic-routers"), a.createSemanticRouter)
 	v1.GET("/semantic-routers", authz.Read("semantic-routers"), a.listSemanticRouters)
@@ -1328,12 +1329,12 @@ func (a *API) setupRoutes() error {
 	v1.GET("/filestore", authz.Read("filestores"), a.getAllFileStores)
 	v1.GET("/filestore/search", authz.Read("filestores"), a.searchFileStores)
 
-	v1.POST("/secrets", authz.Write("secrets"), a.createSecret)
-	v1.GET("/secrets/:id", authz.Read("secrets"), a.getSecret)
-	v1.PATCH("/secrets/:id", authz.Write("secrets"), a.updateSecret)
-	v1.DELETE("/secrets/:id", authz.Delete("secrets"), a.deleteSecret)
-	v1.GET("/secrets", authz.Read("secrets"), a.listSecrets)
-	v1.GET("/secrets/:id/dependents", authz.Read("secrets"), a.getSecretDependents)
+	v1.InWorkspace().POST("/secrets", authz.Write("secrets"), a.createSecret)
+	v1.InWorkspace().GET("/secrets/:id", authz.Read("secrets"), a.getSecret)
+	v1.InWorkspace().PATCH("/secrets/:id", authz.Write("secrets"), a.updateSecret)
+	v1.InWorkspace().DELETE("/secrets/:id", authz.Delete("secrets"), a.onObject(&secrets.Secret{}, authz.Delete("secrets")), a.deleteSecret)
+	v1.InWorkspace().GET("/secrets", authz.Read("secrets"), a.listSecrets)
+	v1.InWorkspace().GET("/secrets/:id/dependents", authz.Read("secrets"), a.getSecretDependents)
 	v1.HandleFn("POST", "/secrets/bulk", bulkActionPermission("secrets"), a.bulkSecrets)
 
 	// Branding routes

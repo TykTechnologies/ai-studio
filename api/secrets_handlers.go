@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"net/http"
 	"strconv"
 	"strings"
@@ -43,7 +44,8 @@ func (a *API) createSecret(c *gin.Context) {
 		return
 	}
 	var input SecretInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	// Bound with the body kept, so workspace_id can be read from it too.
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		log.Printf("[DEBUG] Failed to bind JSON input: %v", err)
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
@@ -54,13 +56,24 @@ func (a *API) createSecret(c *gin.Context) {
 		return
 	}
 
+	// The Workspace the secret lands in (decision D5).
+	workspaceID, ok := a.resolveCreateFromBody(c, "secrets")
+	if !ok {
+		return
+	}
 	secret := &secrets.Secret{
-		VarName: input.Data.Attributes.VarName,
-		Value:   input.Data.Attributes.Value,
+		VarName:     input.Data.Attributes.VarName,
+		Value:       input.Data.Attributes.Value,
+		WorkspaceID: workspaceID,
 	}
 
 	log.Printf("[DEBUG] Creating secret with name: %s", secret.VarName)
-	if err := secrets.CreateSecret(a.config.DB, secret); err != nil {
+	err := secrets.CreateSecret(a.config.DB, secret)
+	if isWorkspaceNotFound(err) {
+		invalidWorkspace(c)
+		return
+	}
+	if err != nil {
 		log.Printf("[DEBUG] Failed to create secret: %v", err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -166,6 +179,22 @@ func (a *API) updateSecret(c *gin.Context) {
 		})
 		return
 	}
+	// Write in the secret's Workspace; a changed workspace_id is a move. A
+	// referenced secret does not move: its references would then point
+	// across Workspaces (.38).
+	requested, ok := boundWorkspaceID(c)
+	if !ok {
+		return
+	}
+	moveTo, ok := a.checkObjectUpdate(c, "secrets", secret.WorkspaceID, requested)
+	if !ok {
+		return
+	}
+	if moveTo != nil && len(a.secretReferencesFor([]string{secret.VarName})[secret.VarName]) > 0 {
+		c.AbortWithStatusJSON(http.StatusUnprocessableEntity, authz.Body("Invalid Workspace",
+			"the secret is referenced; change the references before moving it to another Workspace", authz.CodeInvalidWorkspace))
+		return
+	}
 
 	// An omitted var_name keeps the stored name (96e); an empty one would
 	// break every $SECRET/ reference to the secret, so it is refused.
@@ -208,6 +237,12 @@ func (a *API) updateSecret(c *gin.Context) {
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
 		})
 		return
+	}
+	if moveTo != nil {
+		if !a.moveObject(c, &secrets.Secret{}, secret.ID, *moveTo) {
+			return
+		}
+		secret.WorkspaceID = *moveTo
 	}
 
 	a.emitSecretChanged(c, services.TopicSecretUpdated, "updated", secret.ID)
@@ -291,6 +326,9 @@ func (a *API) listSecrets(c *gin.Context) {
 		return
 	}
 
+	if opts.Filters, ok = a.listWorkspaceScopes(c, "secrets"); !ok {
+		return
+	}
 	secrets, totalCount, totalPages, err := secrets.ListSecrets(a.config.DB, pageSize, pageNumber, all, opts.Scopes("var_name")...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -357,6 +395,7 @@ func serializeSecret(secret *secrets.Secret, refs map[string][]services.SecretRe
 	response.Attributes.Value = secret.GetValue() // Use GetValue() to handle reference format
 	response.Attributes.VarName = secret.VarName
 	response.Attributes.HasValue = secret.HasValue()
+	response.Attributes.WorkspaceID = secret.WorkspaceID
 	response.Attributes.ReferencedBy = make([]SecretReferenceResponse, 0, len(refs[secret.VarName]))
 	for _, ref := range refs[secret.VarName] {
 		response.Attributes.ReferencedBy = append(response.Attributes.ReferencedBy, SecretReferenceResponse{

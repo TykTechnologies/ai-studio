@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"context"
 	"encoding/json"
 	"errors"
@@ -43,11 +44,17 @@ func (a *API) createFilter(c *gin.Context) {
 	}
 
 	var input FilterInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	// Bound with the body kept, so workspace_id can be read from it too.
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
 			Detail string `json:"detail"`
 		}{{"Bad Request", err.Error()}}})
+		return
+	}
+	// The Workspace the filter lands in (decision D5).
+	workspaceID, ok := a.resolveCreateFromBody(c, "filters")
+	if !ok {
 		return
 	}
 
@@ -68,7 +75,7 @@ func (a *API) createFilter(c *gin.Context) {
 		return
 	}
 
-	if !requireSecretReadForGuardrailReferences(c, nil, input.Data.Attributes.Config) {
+	if _, ok := a.requireGuardrailSecretRefsIn(c, workspaceID, nil, input.Data.Attributes.Config); !ok {
 		return
 	}
 	allow := guardrailAllowInternalHost(input.Data.Attributes.Config)
@@ -76,7 +83,13 @@ func (a *API) createFilter(c *gin.Context) {
 		return
 	}
 
-	filter, err := a.service.CreateFilterFromSpec(filterSpecFromInput(input))
+	spec := filterSpecFromInput(input)
+	spec.WorkspaceID = workspaceID
+	filter, err := a.service.CreateFilterFromSpec(spec)
+	if isWorkspaceNotFound(err) {
+		invalidWorkspace(c)
+		return
+	}
 	if err != nil {
 		c.JSON(filterErrorStatus(err), ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
@@ -279,6 +292,19 @@ func (a *API) updateFilter(c *gin.Context) {
 		}{{"Invalid filter", filterErrorDetail(err)}}})
 		return
 	}
+	// Write in the filter's Workspace; a changed workspace_id is a move.
+	requested, ok := boundWorkspaceID(c)
+	if !ok {
+		return
+	}
+	moveTo, ok := a.checkObjectUpdate(c, "filters", existing.WorkspaceID, requested)
+	if !ok {
+		return
+	}
+	refsIn := existing.WorkspaceID
+	if moveTo != nil {
+		refsIn = *moveTo
+	}
 	// An omitted attribute keeps the stored one (96e): a rename must not
 	// blank the script or the guardrail config. The stored filter's JSON
 	// names are the input's.
@@ -310,7 +336,11 @@ func (a *API) updateFilter(c *gin.Context) {
 	input.Data.Attributes.Config = restored
 
 	allow := guardrailAllowInternalHost(input.Data.Attributes.Config)
-	if !requireSecretReadForGuardrailReferences(c, existing.Config, input.Data.Attributes.Config) {
+	newConn, ok := a.requireGuardrailSecretRefsIn(c, refsIn, existing.Config, input.Data.Attributes.Config)
+	if !ok {
+		return
+	}
+	if moveTo != nil && !a.requireSecretRefsStayIn(c, *moveTo, newConn) {
 		return
 	}
 	if _, ok := allowInternalHostUpdate(c, guardrailAllowInternalHost(existing.Config), &allow); !ok {
@@ -324,6 +354,12 @@ func (a *API) updateFilter(c *gin.Context) {
 			Detail string `json:"detail"`
 		}{{"Invalid filter", filterErrorDetail(err)}}})
 		return
+	}
+	if moveTo != nil {
+		if !a.moveObject(c, &models.Filter{}, filter.ID, *moveTo) {
+			return
+		}
+		filter.WorkspaceID = *moveTo
 	}
 
 	c.JSON(http.StatusOK, toFilterResponse(filter))
@@ -376,6 +412,9 @@ func (a *API) listFilters(c *gin.Context) {
 		return
 	}
 
+	if opts.Filters, ok = a.listWorkspaceScopes(c, "filters"); !ok {
+		return
+	}
 	filters, totalCount, totalPages, err := a.service.ListFilters(pageSize, pageNumber, all, opts)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
@@ -408,7 +447,8 @@ func toFilterResponse(filter *models.Filter) FilterResponse {
 			// Literal guardrail connection secrets (API keys, secret access
 			// keys) read CredentialRedacted, as an LLM's api_key does; an
 			// update that sends the redaction back keeps the stored value.
-			Config: models.RedactFilterCredentials(filter).Config,
+			Config:      models.RedactFilterCredentials(filter).Config,
+			WorkspaceID: filter.WorkspaceID,
 		},
 	}
 }
@@ -555,6 +595,11 @@ func (a *API) testFilter(c *gin.Context) {
 		if len(redactedConnectionFields(input.Config)) > 0 {
 			var stored map[string]interface{}
 			if input.FilterID != 0 {
+				// Testing with a saved filter's stored secret is executing
+				// that filter: execute in its Workspace.
+				if !a.requireOnObject(c, &models.Filter{}, input.FilterID, authz.Execute("filters")) {
+					return
+				}
 				if saved, err := a.service.GetFilterByID(input.FilterID); err == nil && saved.IsGuardrail() {
 					stored = saved.Config
 				}

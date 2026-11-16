@@ -920,6 +920,8 @@ type FilterAttributes struct {
 	Namespace      string                 `json:"namespace"`
 	Kind           string                 `json:"kind"`
 	Config         map[string]interface{} `json:"config,omitempty"`
+	// WorkspaceID is the Workspace that owns the filter.
+	WorkspaceID uint `json:"workspace_id,omitempty"`
 }
 
 // FilterResponse represents the response for filter-related operations
@@ -1488,6 +1490,8 @@ type SecretResponse struct {
 		// ReferencedBy lists the objects that read this secret through a
 		// $SECRET/<name> reference. Always present, empty when nothing does.
 		ReferencedBy []SecretReferenceResponse `json:"referenced_by"`
+		// WorkspaceID is the Workspace that owns the secret.
+		WorkspaceID uint `json:"workspace_id"`
 	} `json:"attributes"`
 }
 
