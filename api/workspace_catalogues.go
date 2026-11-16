@@ -5,7 +5,6 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
-	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
 )
 
@@ -26,19 +25,6 @@ func dataCatalogueNotFound(c *gin.Context) {
 
 func toolCatalogueNotFound(c *gin.Context) {
 	simpleError(c, http.StatusNotFound, "Not Found", "Tool Catalogue not found")
-}
-
-// qualifiedListScopes are the list scopes of a read-scoped resource whose
-// queries may join other stamped tables: the caller's Workspace scope and
-// the ?workspace_id= filter on table.workspace_id. false when it has
-// answered 400.
-func (a *API) qualifiedListScopes(c *gin.Context, resource, table string) ([]func(*gorm.DB) *gorm.DB, bool) {
-	column := table + ".workspace_id"
-	filter, ok := a.workspaceFilterParam(c, column)
-	if !ok {
-		return nil, false
-	}
-	return []func(*gorm.DB) *gorm.DB{a.workspaceListScope(c, resource, column), filter}, true
 }
 
 // requireMemberRead: adding a building block (an LLM, datasource, tool or

@@ -238,7 +238,7 @@ func (a *API) listCatalogues(c *gin.Context) {
 		return
 	}
 
-	scopes, ok := a.qualifiedListScopes(c, "catalogues", "catalogues")
+	scopes, ok := a.listWorkspaceScopes(c, "catalogues", "catalogues.workspace_id")
 	if !ok {
 		return
 	}
@@ -284,7 +284,7 @@ func (a *API) searchCatalogues(c *gin.Context) {
 		return
 	}
 
-	scopes, ok := a.qualifiedListScopes(c, "catalogues", "catalogues")
+	scopes, ok := a.listWorkspaceScopes(c, "catalogues", "catalogues.workspace_id")
 	if !ok {
 		return
 	}
@@ -490,7 +490,7 @@ func (a *API) searchCataloguesByNameStub(c *gin.Context) {
 		return
 	}
 
-	scopes, ok := a.qualifiedListScopes(c, "catalogues", "catalogues")
+	scopes, ok := a.listWorkspaceScopes(c, "catalogues", "catalogues.workspace_id")
 	if !ok {
 		return
 	}

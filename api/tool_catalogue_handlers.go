@@ -355,7 +355,7 @@ func (a *API) listToolCatalogues(c *gin.Context) {
 		return
 	}
 
-	scopes, ok := a.qualifiedListScopes(c, "tool-catalogues", "tool_catalogues")
+	scopes, ok := a.listWorkspaceScopes(c, "tool-catalogues", "tool_catalogues.workspace_id")
 	if !ok {
 		return
 	}
@@ -393,7 +393,7 @@ func (a *API) searchToolCatalogues(c *gin.Context) {
 		return
 	}
 
-	scopes, ok := a.qualifiedListScopes(c, "tool-catalogues", "tool_catalogues")
+	scopes, ok := a.listWorkspaceScopes(c, "tool-catalogues", "tool_catalogues.workspace_id")
 	if !ok {
 		return
 	}

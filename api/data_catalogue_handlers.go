@@ -250,7 +250,7 @@ func (a *API) listDataCatalogues(c *gin.Context) {
 		return
 	}
 
-	scopes, ok := a.qualifiedListScopes(c, "data-catalogues", "data_catalogues")
+	scopes, ok := a.listWorkspaceScopes(c, "data-catalogues", "data_catalogues.workspace_id")
 	if !ok {
 		return
 	}
@@ -294,7 +294,7 @@ func (a *API) searchDataCatalogues(c *gin.Context) {
 		return
 	}
 
-	scopes, ok := a.qualifiedListScopes(c, "data-catalogues", "data_catalogues")
+	scopes, ok := a.listWorkspaceScopes(c, "data-catalogues", "data_catalogues.workspace_id")
 	if !ok {
 		return
 	}
@@ -556,7 +556,7 @@ func (a *API) getDataCataloguesByTag(c *gin.Context) {
 		return
 	}
 
-	scopes, ok := a.qualifiedListScopes(c, "data-catalogues", "data_catalogues")
+	scopes, ok := a.listWorkspaceScopes(c, "data-catalogues", "data_catalogues.workspace_id")
 	if !ok {
 		return
 	}
@@ -597,7 +597,7 @@ func (a *API) getDataCataloguesByDatasource(c *gin.Context) {
 		return
 	}
 
-	scopes, ok := a.qualifiedListScopes(c, "data-catalogues", "data_catalogues")
+	scopes, ok := a.listWorkspaceScopes(c, "data-catalogues", "data_catalogues.workspace_id")
 	if !ok {
 		return
 	}
