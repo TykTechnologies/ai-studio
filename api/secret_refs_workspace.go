@@ -1,13 +1,11 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
-	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
 )
 
@@ -39,6 +37,20 @@ func (a *API) requireSecretRefsIn(c *gin.Context, workspaceID uint, old, updated
 		c.AbortWithStatusJSON(http.StatusForbidden, authz.Denied(authz.Read("secrets")))
 		return false
 	}
+	// One query for every referenced name (secrets.SecretWorkspacesByVarNames
+	// resolves as a reference does: unknown and ambiguous names are absent).
+	var names []string
+	for _, k := range keys {
+		if v := updated[k]; strings.HasPrefix(v, secrets.SecretRefPrefix) {
+			names = append(names, strings.TrimPrefix(v, secrets.SecretRefPrefix))
+		}
+	}
+	held, err := secrets.SecretWorkspacesByVarNames(a.service.DB, names)
+	if err != nil {
+		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		c.Abort()
+		return false
+	}
 	for _, k := range keys {
 		v := updated[k]
 		if !strings.HasPrefix(v, secrets.SecretRefPrefix) {
@@ -48,12 +60,7 @@ func (a *API) requireSecretRefsIn(c *gin.Context, workspaceID uint, old, updated
 			}
 			continue
 		}
-		ws, found, err := a.secretWorkspace(strings.TrimPrefix(v, secrets.SecretRefPrefix))
-		if err != nil {
-			simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
-			c.Abort()
-			return false
-		}
+		ws, found := held[strings.TrimPrefix(v, secrets.SecretRefPrefix)]
 		if !found {
 			return deny()
 		}
@@ -75,16 +82,23 @@ func (a *API) requireSecretRefsStayIn(c *gin.Context, destination uint, fields m
 	if a.workspaceCheckMode(c) != workspaceCheck {
 		return true
 	}
+	var names []string
 	for _, v := range fields {
-		if !strings.HasPrefix(v, secrets.SecretRefPrefix) {
-			continue
+		if strings.HasPrefix(v, secrets.SecretRefPrefix) {
+			names = append(names, strings.TrimPrefix(v, secrets.SecretRefPrefix))
 		}
-		ws, found, err := a.secretWorkspace(strings.TrimPrefix(v, secrets.SecretRefPrefix))
-		if err != nil {
-			simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
-			c.Abort()
-			return false
-		}
+	}
+	if len(names) == 0 {
+		return true
+	}
+	held, err := secrets.SecretWorkspacesByVarNames(a.service.DB, names)
+	if err != nil {
+		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		c.Abort()
+		return false
+	}
+	for _, name := range names {
+		ws, found := held[name]
 		eff, ok := a.effectiveWorkspaceID(c, ws)
 		if !ok {
 			return false
@@ -96,18 +110,4 @@ func (a *API) requireSecretRefsStayIn(c *gin.Context, destination uint, fields m
 		}
 	}
 	return true
-}
-
-// secretWorkspace returns the stored workspace_id of the secret named name,
-// as a reference to it resolves (secrets.FindSecretByVarName): a name held
-// by grandfathered duplicates in different Workspaces is not found.
-func (a *API) secretWorkspace(name string) (uint, bool, error) {
-	secret, err := secrets.FindSecretByVarName(a.service.DB, name)
-	if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, secrets.ErrSecretNameAmbiguous) {
-		return 0, false, nil
-	}
-	if err != nil {
-		return 0, false, err
-	}
-	return secret.WorkspaceID, true, nil
 }

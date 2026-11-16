@@ -651,6 +651,12 @@ func FindSecretByVarName(db *gorm.DB, name string) (*Secret, error) {
 	if err := db.Where("var_name = ?", name).Order("id").Limit(maxNameCandidates).Find(&rows).Error; err != nil {
 		return nil, err
 	}
+	return pickByName(db, rows)
+}
+
+// pickByName applies FindSecretByVarName's rule to the live secrets of one
+// name, in id order.
+func pickByName(db *gorm.DB, rows []Secret) (*Secret, error) {
 	switch len(rows) {
 	case 0:
 		return nil, gorm.ErrRecordNotFound
@@ -676,6 +682,38 @@ func FindSecretByVarName(db *gorm.DB, name string) (*Secret, error) {
 		return nil, ErrSecretNameAmbiguous
 	}
 	return &rows[0], nil
+}
+
+// SecretWorkspacesByVarNames is FindSecretByVarName for several names in
+// one query, returning only the stored workspace_id of the secret each name
+// resolves to. A name that resolves to nothing (unknown or ambiguous) is
+// absent.
+func SecretWorkspacesByVarNames(db *gorm.DB, names []string) (map[string]uint, error) {
+	out := map[string]uint{}
+	if len(names) == 0 {
+		return out, nil
+	}
+	var rows []Secret
+	if err := db.Select("id", "var_name", "workspace_id").Where("var_name IN ?", names).Order("id").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	byName := map[string][]Secret{}
+	for _, r := range rows {
+		if len(byName[r.VarName]) < maxNameCandidates {
+			byName[r.VarName] = append(byName[r.VarName], r)
+		}
+	}
+	for name, list := range byName {
+		picked, err := pickByName(db, list)
+		if errors.Is(err, ErrSecretNameAmbiguous) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		out[name] = picked.WorkspaceID
+	}
+	return out, nil
 }
 
 // maxNameCandidates bounds the duplicates FindSecretByVarName reads; at the
