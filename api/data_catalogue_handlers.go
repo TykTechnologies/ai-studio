@@ -4,11 +4,13 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 )
@@ -166,6 +168,10 @@ func (a *API) updateDataCatalogue(c *gin.Context) {
 	)
 	if err != nil {
 		finishMove(false)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			simpleError(c, http.StatusNotFound, "Not Found", "Data catalogue not found")
+			return
+		}
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
