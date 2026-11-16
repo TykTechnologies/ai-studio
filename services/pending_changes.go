@@ -393,14 +393,42 @@ type pendingTotal struct {
 // and owning Workspace. The union is the listing's, narrowed to the rows
 // classifyPendingChange reports (a row deleted at or before the reference
 // point is no change), so the counts agree with what is listed.
+//
+// With no reference point (since nil: a first push) every live row is a
+// change, so the neverStains sources (OAuth clients and access tokens, which
+// can be large and carry no Workspace) are left out of the union and counted
+// with a plain COUNT(*) each instead: the union does not scan them a second
+// time for a GROUP BY.
 func (s *SyncStatusService) pendingTotals(namespace string, since *time.Time, defaultWorkspaceID uint) ([]pendingTotal, error) {
-	union, args, err := s.pendingUnion(namespace, since, defaultWorkspaceID, true)
+	var counted []pendingChangeSource
+	include := func(src pendingChangeSource) bool { return true }
+	if since == nil {
+		include = func(src pendingChangeSource) bool { return !src.neverStains }
+		for _, src := range pendingChangeSources {
+			if src.neverStains {
+				counted = append(counted, src)
+			}
+		}
+	}
+	union, args, err := s.pendingUnionOf(namespace, since, defaultWorkspaceID, true, include)
 	if err != nil {
 		return nil, err
 	}
 	var totals []pendingTotal
-	err = s.db.Raw("SELECT c.typ, c.ws, COUNT(*) AS n FROM ("+union+") AS c GROUP BY c.typ, c.ws", args...).Scan(&totals).Error
-	return totals, err
+	if err := s.db.Raw("SELECT c.typ, c.ws, COUNT(*) AS n FROM ("+union+") AS c GROUP BY c.typ, c.ws", args...).Scan(&totals).Error; err != nil {
+		return nil, err
+	}
+	for _, src := range counted {
+		// Not namespaced and unstamped: live rows, no Workspace.
+		var n int64
+		if err := s.db.Model(src.model).Count(&n).Error; err != nil {
+			return nil, err
+		}
+		if n > 0 {
+			totals = append(totals, pendingTotal{Typ: src.typ, N: n})
+		}
+	}
+	return totals, nil
 }
 
 // pendingUnion builds one query over every source table: a UNION ALL of the
@@ -418,9 +446,17 @@ func (s *SyncStatusService) pendingTotals(namespace string, since *time.Time, de
 // so a row created after the push is also updated after it, and a soft
 // delete leaves updated_at alone.
 func (s *SyncStatusService) pendingUnion(namespace string, since *time.Time, defaultWorkspaceID uint, exact bool) (string, []interface{}, error) {
+	return s.pendingUnionOf(namespace, since, defaultWorkspaceID, exact, func(pendingChangeSource) bool { return true })
+}
+
+// pendingUnionOf is pendingUnion over the sources include accepts.
+func (s *SyncStatusService) pendingUnionOf(namespace string, since *time.Time, defaultWorkspaceID uint, exact bool, include func(pendingChangeSource) bool) (string, []interface{}, error) {
 	branches := make([]string, 0, len(pendingChangeSources))
 	args := make([]interface{}, 0, 4*len(pendingChangeSources))
 	for _, src := range pendingChangeSources {
+		if !include(src) {
+			continue
+		}
 		table, err := tableOf(s.db, src.model)
 		if err != nil {
 			return "", nil, err

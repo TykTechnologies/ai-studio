@@ -205,3 +205,55 @@ func TestPendingChangeIsForeign(t *testing.T) {
 	assert.False(t, services.PendingChangeIsForeign("access_token", nil, w1))
 	assert.True(t, services.PendingChangeIsForeign("a_source_added_later", nil, w1), "fail closed")
 }
+
+// A first push (no push, no edge ack): every live row is a change. The
+// totals count OAuth clients and access tokens with a plain COUNT(*) rather
+// than through the union, and still agree with the listing.
+func TestPendingChanges_FirstPushTotalsAgreeWithTheListing(t *testing.T) {
+	f := newWSFixture(t)
+	const ns = "edge-new"
+	for _, row := range []struct {
+		llm *models.LLM
+		ws  uint
+	}{
+		{&models.LLM{Name: "w1 llm", Namespace: ns}, f.w1},
+		{&models.LLM{Name: "w2 llm", Namespace: ns}, f.w2},
+		{&models.LLM{Name: "legacy llm", Namespace: ns}, 0},
+	} {
+		require.NoError(t, f.db.Create(row.llm).Error)
+		require.NoError(t, f.db.Model(row.llm).UpdateColumn("workspace_id", row.ws).Error)
+	}
+	require.NoError(t, f.db.Create(&models.Plugin{Name: "Guard", Command: "file:///bin/true", HookType: "post_auth", Namespace: ns}).Error)
+	require.NoError(t, f.db.Create(&models.OAuthClient{ClientID: "c1", ClientSecret: "s", ClientName: "Client", RedirectURIs: "https://x"}).Error)
+	require.NoError(t, f.db.Create(&models.AccessToken{Token: "t1", ClientID: "c1", UserID: 1, ExpiresAt: time.Now().Add(time.Hour)}).Error)
+	gone := &models.AccessToken{Token: "t2", ClientID: "c1", UserID: 1, ExpiresAt: time.Now().Add(time.Hour)}
+	require.NoError(t, f.db.Create(gone).Error)
+	require.NoError(t, f.db.Delete(gone).Error)
+
+	pc, err := f.svc.GetPendingChangesFor(ns, &f.w1)
+	require.NoError(t, err)
+	require.Nil(t, pc.Since, "first push: no reference point")
+
+	listed := map[string]int{}
+	attributed := map[uint]int{}
+	unattributed := 0
+	for _, c := range pc.Changes {
+		listed[c.Type]++
+		if c.WorkspaceID != nil {
+			attributed[*c.WorkspaceID]++
+		} else {
+			unattributed++
+		}
+	}
+	assert.Equal(t, map[string]int{"llm": 3, "plugin": 1, "oauth_client": 1, "access_token": 1}, listed)
+	totals := map[uint]int{}
+	for _, w := range pc.ByWorkspace {
+		totals[w.WorkspaceID] = w.Total
+	}
+	assert.Equal(t, attributed, totals, "by_workspace matches the listing")
+	assert.Equal(t, map[uint]int{f.def: 1, f.w1: 1, f.w2: 1}, totals)
+	assert.Equal(t, unattributed, pc.UnattributedTotal, "plugin + OAuth client + live token")
+	assert.Equal(t, 3, pc.UnattributedTotal)
+	assert.Equal(t, 3, *pc.OutsideTotal, "Default llm, W2 llm and the plugin; OAuth never stains")
+	assert.True(t, *pc.Stained)
+}
