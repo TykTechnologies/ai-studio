@@ -11,6 +11,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/pushes"
 	"github.com/gin-gonic/gin"
 )
 
@@ -175,16 +176,10 @@ func (a *API) triggerEdgeReload(c *gin.Context) {
 		return
 	}
 
-	only, ok := a.pushOnlyWorkspace(c)
+	res, ok := a.push(c, func(only ...uint) (*pushes.Result, error) {
+		return a.service.NamespaceService.TriggerEdgeReload(edgeID, initiatedBy(c), only...)
+	})
 	if !ok {
-		return
-	}
-	res, err := a.service.NamespaceService.TriggerEdgeReload(edgeID, initiatedBy(c), only...)
-	if err != nil {
-		if a.sendPushStained(c, err) {
-			return
-		}
-		sendPushError(c, err)
 		return
 	}
 	pushAccepted(c, res)
@@ -252,16 +247,10 @@ func (a *API) listReloadOperations(c *gin.Context) {
 // @Security BearerAuth
 func (a *API) reloadAllEdges(c *gin.Context) {
 	// CE: every edge is in the "default" namespace.
-	only, ok := a.pushOnlyWorkspace(c)
+	res, ok := a.push(c, func(only ...uint) (*pushes.Result, error) {
+		return a.service.NamespaceService.TriggerNamespaceReload(models.DefaultNamespace, initiatedBy(c), only...)
+	})
 	if !ok {
-		return
-	}
-	res, err := a.service.NamespaceService.TriggerNamespaceReload(models.DefaultNamespace, initiatedBy(c), only...)
-	if err != nil {
-		if a.sendPushStained(c, err) {
-			return
-		}
-		sendPushError(c, err)
 		return
 	}
 	pushAccepted(c, res)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services/pushes"
 	"github.com/gin-gonic/gin"
 )
 
@@ -132,16 +133,10 @@ func (a *API) triggerNamespaceReload(c *gin.Context) {
 		return
 	}
 
-	only, ok := a.pushOnlyWorkspace(c)
+	res, ok := a.push(c, func(only ...uint) (*pushes.Result, error) {
+		return a.service.NamespaceService.TriggerNamespaceReload(namespace, initiatedBy(c), only...)
+	})
 	if !ok {
-		return
-	}
-	res, err := a.service.NamespaceService.TriggerNamespaceReload(namespace, initiatedBy(c), only...)
-	if err != nil {
-		if a.sendPushStained(c, err) {
-			return
-		}
-		sendPushError(c, err)
 		return
 	}
 	pushAccepted(c, res)
