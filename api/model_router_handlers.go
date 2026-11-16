@@ -308,17 +308,7 @@ func (a *API) deleteModelRouter(c *gin.Context) {
 		return
 	}
 
-	if a.workspaceChecksOn(c) {
-		existing, err := a.service.ModelRouterService.GetRouter(uint(id))
-		if err != nil || existing == nil {
-			a.respondModelRouterLookupError(c, uint(id), err)
-			return
-		}
-		if !a.requireVisible(c, "model-routers", existing.WorkspaceID, modelRouterNotFound) ||
-			!a.requireInWorkspace(c, authz.Delete("model-routers"), existing.WorkspaceID) {
-			return
-		}
-	}
+	// The router's Workspace is checked by the route (onVisibleObject).
 	if err := a.service.ModelRouterService.DeleteRouter(uint(id)); err != nil {
 		a.respondModelRouterLookupError(c, uint(id), err)
 		return
@@ -428,17 +418,7 @@ func (a *API) toggleModelRouterActive(c *gin.Context) {
 		return
 	}
 
-	if a.workspaceChecksOn(c) {
-		existing, err := a.service.ModelRouterService.GetRouter(uint(id))
-		if err != nil || existing == nil {
-			a.respondModelRouterLookupError(c, uint(id), err)
-			return
-		}
-		if !a.requireVisible(c, "model-routers", existing.WorkspaceID, modelRouterNotFound) ||
-			!a.requireInWorkspace(c, authz.Publish("model-routers"), existing.WorkspaceID) {
-			return
-		}
-	}
+	// The router's Workspace is checked by the route (onVisibleObject).
 	if err := a.service.ModelRouterService.ToggleRouterActive(uint(id), *input.Active); err != nil {
 		a.respondModelRouterLookupError(c, uint(id), err)
 		return

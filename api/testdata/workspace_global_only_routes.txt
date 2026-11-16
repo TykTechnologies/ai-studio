@@ -59,8 +59,6 @@ GET /api/v1/mcp-credentials/:id
 GET /api/v1/mcp-servers
 GET /api/v1/mcp-servers/:id
 GET /api/v1/mcp-servers/:id/handoff
-GET /api/v1/model-routers/:id/dependents
-GET /api/v1/semantic-routers/:id/dependents
 GET /api/v1/tool-catalogues
 GET /api/v1/tool-catalogues/:id
 GET /api/v1/tool-catalogues/:id/groups

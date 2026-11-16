@@ -367,11 +367,7 @@ func (a *API) deleteSemanticRouter(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if a.workspaceChecksOn(c) {
-		if _, ok := a.loadVisibleSemanticRouter(c, id, authz.Delete("semantic-routers")); !ok {
-			return
-		}
-	}
+	// The router's Workspace is checked by the route (onVisibleObject).
 	if err := a.semanticRouters().DeleteRouter(id); err != nil {
 		respondSemanticRouterError(c, err)
 		return
@@ -448,11 +444,7 @@ func (a *API) toggleSemanticRouterActive(c *gin.Context) {
 		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
 		return
 	}
-	if a.workspaceChecksOn(c) {
-		if _, ok := a.loadVisibleSemanticRouter(c, id, authz.Publish("semantic-routers")); !ok {
-			return
-		}
-	}
+	// The router's Workspace is checked by the route (onVisibleObject).
 	if err := a.semanticRouters().ToggleRouterActive(id, *input.Active); err != nil {
 		respondSemanticRouterError(c, err)
 		return
