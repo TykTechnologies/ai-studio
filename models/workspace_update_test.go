@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/TykTechnologies/midsommar/v2/models/wsstamp"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/callbacks"
 )
@@ -31,9 +32,10 @@ func storedWorkspaceID(t *testing.T, db *gorm.DB, m interface{}) uint {
 	return ids[0]
 }
 
-// A struct rebuilt from a request (WorkspaceID 0) and saved, or an Updates
-// carrying another WorkspaceID, leaves the stamp alone; a move names the
-// column (Select) or writes it directly (UpdateColumn).
+// A struct rebuilt from a request (WorkspaceID 0) and saved, or an
+// Updates(struct) carrying another WorkspaceID, leaves the stamp alone; a
+// map update naming it is refused; a move names the column (Select) or
+// writes it directly (UpdateColumn).
 func TestWorkspaceID_OnlyAnExplicitUpdateChangesIt(t *testing.T) {
 	db := setupTestDB(t)
 	w1 := &Workspace{Name: "W1"}
@@ -59,8 +61,9 @@ func TestWorkspaceID_OnlyAnExplicitUpdateChangesIt(t *testing.T) {
 			other.Elem().FieldByName("WorkspaceID").SetUint(uint64(w2.ID))
 			require.NoError(t, db.Model(row).Updates(other.Interface()).Error)
 			assert.Equal(t, w1.ID, storedWorkspaceID(t, db, row), "Updates(struct) keeps the stamp")
-			require.NoError(t, db.Model(row).Updates(map[string]interface{}{"workspace_id": w2.ID}).Error)
-			assert.Equal(t, w1.ID, storedWorkspaceID(t, db, row), "Updates(map) keeps the stamp")
+			err := db.Model(row).Updates(map[string]interface{}{"workspace_id": w2.ID}).Error
+			assert.ErrorIs(t, err, wsstamp.ErrImplicitMove, "a map update naming the stamp is refused loudly")
+			assert.Equal(t, w1.ID, storedWorkspaceID(t, db, row))
 
 			// An explicit move.
 			require.NoError(t, db.Model(row).Select("workspace_id").Updates(map[string]interface{}{"workspace_id": w2.ID}).Error)

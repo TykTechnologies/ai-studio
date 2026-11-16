@@ -764,6 +764,5 @@ func ListSecrets(db *gorm.DB, pageSize int, pageNumber int, all bool, scopes ...
 // BeforeUpdate keeps the Workspace stamp out of ordinary updates
 // (wsstamp.KeepOnUpdate).
 func (s *Secret) BeforeUpdate(tx *gorm.DB) error {
-	wsstamp.KeepOnUpdate(tx)
-	return nil
+	return wsstamp.KeepOnUpdate(tx)
 }
