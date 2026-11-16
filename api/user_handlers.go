@@ -1,6 +1,8 @@
 package api
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"net/mail"
 	"strconv"
@@ -103,7 +105,7 @@ func (a *API) createUser(c *gin.Context) {
 	// Roles are checked before the user exists, so a caller without
 	// roles:write is refused with nothing left behind.
 	roleIDs := bindRoleIDs(c)
-	if roleIDs != nil && !a.mayAssignRolesOnCreate(c, *roleIDs, isAdmin) {
+	if roleIDs != nil && !a.mayAssignRolesOnCreate(c, *roleIDs, isAdmin, accountType) {
 		return
 	}
 
@@ -171,17 +173,51 @@ func bindAccountType(c *gin.Context) string {
 }
 
 // mayAssignRolesOnCreate checks, before a user is created, what
-// reconcileUserRoles would refuse afterwards: role_ids needs Enterprise and,
-// unless it asks for nothing beyond what creation itself grants, roles:write.
-// Returns false after writing the response.
-func (a *API) mayAssignRolesOnCreate(c *gin.Context, roleIDs []uint, isAdmin bool) bool {
-	if !a.service.Authz().Enabled() {
+// reconcileUserRoles would refuse afterwards, so a refusal leaves no account
+// (and no unseen API key) behind: role_ids needs Enterprise; unless it asks
+// for nothing beyond what creation itself grants, roles:write; every role
+// must exist; and the Owner role needs an Owner as the caller and is never a
+// service account's. Returns false after writing the response.
+func (a *API) mayAssignRolesOnCreate(c *gin.Context, roleIDs []uint, isAdmin bool, accountType string) bool {
+	svc := a.service.Authz()
+	if !svc.Enabled() {
 		c.JSON(http.StatusPaymentRequired, authz.EnterpriseRequired(rbac.ErrEnterpriseFeature.Error()))
 		return false
 	}
 	if (len(roleIDs) > 0 || isAdmin) && !authz.Can(c, authz.Write("roles")) {
 		c.JSON(http.StatusForbidden, authz.Denied(authz.Write("roles")))
 		return false
+	}
+	ctx := c.Request.Context()
+	for _, id := range roleIDs {
+		role, err := svc.GetRole(ctx, id)
+		if errors.Is(err, rbac.ErrNotFound) {
+			helpers.SendErrorResponse(c, helpers.NewUnprocessableEntityError(fmt.Sprintf("role %d does not exist", id), ""))
+			return false
+		}
+		if err != nil {
+			rbacErrorResponse(c, err)
+			return false
+		}
+		if role.Slug != models.SystemRoleOwner {
+			continue
+		}
+		if accountType == models.AccountTypeService {
+			helpers.SendErrorResponse(c, helpers.NewUnprocessableEntityError(
+				"the Owner role cannot be given to a service account", services.ServiceAccountCode))
+			return false
+		}
+		if actor, ok := auth.UserFromContext(c); ok {
+			owner, err := svc.IsOwner(ctx, actor.ID)
+			if err != nil {
+				rbacErrorResponse(c, err)
+				return false
+			}
+			if !owner {
+				rbacErrorResponse(c, rbac.ErrOwnerRequired)
+				return false
+			}
+		}
 	}
 	return true
 }

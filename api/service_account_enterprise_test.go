@@ -63,3 +63,24 @@ func TestUserAPI_RoleIDsWithoutRolesWriteCreatesNoUser(t *testing.T) {
 	w = f.do("POST", "/api/v1/llms", map[string]any{"data": map[string]any{"attributes": map[string]any{"name": "x"}}}, &models.User{APIKey: key})
 	assert.Equal(t, http.StatusForbidden, w.Code)
 }
+
+// role_ids are validated before the user exists: an unknown role, or the
+// Owner role for a service account, is refused and leaves no account (and
+// no unseen key) behind.
+func TestUserAPI_RoleIDsValidatedBeforeCreate(t *testing.T) {
+	f := setupRBACFixture(t)
+	for name, attrs := range map[string]map[string]any{
+		"unknown role":          {"name": "Bot", "account_type": models.AccountTypeService, "role_ids": []uint{99999}},
+		"unknown role (person)": {"email": "new@example.com", "name": "New", "password": "Sup3r-secret-pw!", "role_ids": []uint{99999}},
+		"owner for a bot":       {"name": "Bot", "account_type": models.AccountTypeService, "role_ids": []uint{f.roles[models.SystemRoleOwner]}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			w := f.do("POST", "/api/v1/users", map[string]any{"data": map[string]any{"type": "users", "attributes": attrs}}, f.owner)
+			assert.Equal(t, http.StatusUnprocessableEntity, w.Code, w.Body.String())
+		})
+	}
+	var n int64
+	require.NoError(t, f.api.service.DB.Model(&models.User{}).
+		Where("email = ? OR name = ?", "new@example.com", "Bot").Count(&n).Error)
+	assert.Zero(t, n, "no user is left behind")
+}
