@@ -2,6 +2,7 @@ package services
 
 import (
 	"database/sql/driver"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -265,7 +266,10 @@ func (s *SyncStatusService) GetPendingChangesFor(namespace string, workspaceID *
 		}
 	}
 
-	defaultWorkspaceID := s.defaultWorkspaceID()
+	defaultWorkspaceID, err := s.defaultWorkspaceID()
+	if err != nil {
+		return nil, err
+	}
 	rows, err := s.pendingRows(namespace, result.Since, defaultWorkspaceID)
 	if err != nil {
 		return nil, err
@@ -382,7 +386,9 @@ func (s *SyncStatusService) pendingTotals(namespace string, since *time.Time, de
 // columns. ws is the owning Workspace for stamped types, a stored 0 read as
 // the Default workspace (rows an older replica wrote during a rolling
 // upgrade), and NULL otherwise. exact also drops the rows deleted at or
-// before since, which classifyPendingChange does not report.
+// before since: classifyPendingChange reports no change for them, so the
+// totals (pendingTotals, exact) must leave them out to agree with the
+// listing (pendingRows, not exact, whose Total keeps its old meaning).
 //
 // Soft-deleted rows are included only when there is a reference point to
 // compare their deletion against. The time filter uses updated_at and
@@ -440,12 +446,17 @@ func (s *SyncStatusService) WorkspaceExists(id uint) (bool, error) {
 }
 
 // defaultWorkspaceID is the Default workspace's id (0 when it does not
-// exist yet, before the start-up bootstrap).
-func (s *SyncStatusService) defaultWorkspaceID() uint {
-	if w, err := models.GetDefaultWorkspace(s.db); err == nil {
-		return w.ID
+// exist yet, before the start-up bootstrap). A lookup failure is an error:
+// guessing would misattribute every change written with workspace_id 0.
+func (s *SyncStatusService) defaultWorkspaceID() (uint, error) {
+	w, err := models.GetDefaultWorkspace(s.db)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, nil
 	}
-	return 0
+	if err != nil {
+		return 0, fmt.Errorf("pending changes: load the default workspace: %w", err)
+	}
+	return w.ID, nil
 }
 
 // workspaceNames names the Workspaces the rows and totals mention.
