@@ -461,7 +461,8 @@ func (a *API) handleMe(c *gin.Context) {
 	// Effective permissions: the wildcard for admins in CE, the resolved
 	// role set in Enterprise. Resolving also repairs a stale is_admin flag,
 	// so read the flag after this.
-	perms, err := authz.Permissions(c)
+	grants, err := requestGrants(c)
+	perms := grants.Global
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -482,9 +483,11 @@ func (a *API) handleMe(c *gin.Context) {
 	response.Attributes.IsAdmin = u.IsAdmin
 	response.Attributes.IsSuperAdmin = isSuperAdmin
 	response.Attributes.HasAdminAccess = !perms.IsEmpty()
+	response.Attributes.AdminNavHint = grants.CanAnywhere(authz.AnyAdmin)
 	response.Attributes.Permissions = perms.List()
 	response.Attributes.Roles = []rbac.RoleSummary{}
 	response.Attributes.RBACEnabled = rbacSvc.Enabled()
+	response.Attributes.Workspaces = a.workspaceAccessOf(c.Request.Context(), grants)
 	if response.Attributes.IsOwner, err = rbacSvc.IsOwner(c.Request.Context(), u.ID); err != nil {
 		log.Printf("Owner check for user %d failed: %v", u.ID, err)
 	}

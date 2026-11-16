@@ -1267,6 +1267,16 @@ func (a *API) setupRoutes() error {
 	v1.DELETE("/rbac/bindings/:id", authz.Delete("roles"), a.deleteRoleBinding)
 	v1.GET("/rbac/users/:id/effective", authz.Read("users"), a.getUserEffectiveAccess)
 
+	// Workspaces (Enterprise; 402 in Community Edition). Listing is open to
+	// anyone on the admin surface and shows the Workspaces they can work in;
+	// managing Workspaces needs workspaces:* globally (D10).
+	v1.GET("/workspaces", authz.AnyAdmin, a.listWorkspaces)
+	v1.POST("/workspaces", authz.Write("workspaces"), a.createWorkspace)
+	v1.GET("/workspaces/:id", authz.Read("workspaces"), a.getWorkspace)
+	v1.PATCH("/workspaces/:id", authz.Write("workspaces"), a.updateWorkspace)
+	v1.DELETE("/workspaces/:id", authz.Delete("workspaces"), a.deleteWorkspace)
+	v1.GET("/workspaces/:id/objects", authz.Read("workspaces"), a.getWorkspaceObjects)
+
 	// Compliance routes (Enterprise feature)
 	a.InitComplianceService()
 	v1.GET("/compliance/available", authz.AnyAdmin, a.isComplianceAvailable)
