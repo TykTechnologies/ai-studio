@@ -8,9 +8,11 @@ import (
 )
 
 // ScopeKind says how Workspaces bound a resource's permissions. Objects of
-// a non-global resource carry an ownership stamp (workspace_id); a binding
-// scoped to a Workspace grants permissions on them only inside that
-// Workspace. A scoped binding grants nothing on a global resource.
+// a non-global resource belong to a Workspace: their own ownership stamp
+// (workspace_id), or for ScopeWorkspaceParent the stamp of their parent
+// object. A binding scoped to a Workspace grants permissions on them only
+// inside that Workspace. A scoped binding grants nothing on a global
+// resource.
 type ScopeKind string
 
 const (
@@ -25,20 +27,35 @@ const (
 	// ScopeWorkspaceFull resources are read- and write-scoped: objects in a
 	// Workspace the caller's read does not cover are hidden (404).
 	ScopeWorkspaceFull ScopeKind = "workspace_full"
+	// ScopeWorkspaceParent resources have no stamp of their own: they belong
+	// to the Workspace of a parent object (Resource.ScopeParent, a
+	// ScopeWorkspaceFull resource) and follow it when it moves. Read and
+	// write are scoped like the parent's: a hidden parent hides them (404),
+	// and every action needs the permission in the parent's Workspace.
+	// App credentials and MCP credentials (parent: apps).
+	ScopeWorkspaceParent ScopeKind = "workspace_parent"
 )
 
-// Valid reports whether k is one of the three known kinds.
+// Valid reports whether k is one of the known kinds.
 func (k ScopeKind) Valid() bool {
 	switch k {
-	case ScopeGlobal, ScopeWorkspaceWrite, ScopeWorkspaceFull:
+	case ScopeGlobal, ScopeWorkspaceWrite, ScopeWorkspaceFull, ScopeWorkspaceParent:
 		return true
 	}
 	return false
 }
 
-// Stamped reports whether objects of a resource of this kind belong to a
-// Workspace.
-func (k ScopeKind) Stamped() bool { return k != ScopeGlobal }
+// InWorkspace reports whether permissions on a resource of this kind can be
+// granted inside a Workspace (by a Workspace-scoped binding).
+func (k ScopeKind) InWorkspace() bool { return k != ScopeGlobal }
+
+// Stamped reports whether objects of a resource of this kind carry their
+// own ownership stamp (workspace_id).
+func (k ScopeKind) Stamped() bool { return k == ScopeWorkspaceWrite || k == ScopeWorkspaceFull }
+
+// ReadScoped reports whether reading an object of this kind needs read
+// covering its Workspace (otherwise the object is hidden, 404).
+func (k ScopeKind) ReadScoped() bool { return k == ScopeWorkspaceFull || k == ScopeWorkspaceParent }
 
 // Resource is one row of the permission catalogue.
 type Resource struct {
@@ -72,6 +89,9 @@ type Resource struct {
 	// Workspace-scoped bindings apply to it; see ScopeKind. Plugin resources
 	// are always global.
 	Scope ScopeKind `json:"scope,omitempty"`
+	// ScopeParent is, for ScopeWorkspaceParent, the key of the resource whose
+	// objects own this one's ("apps" for credentials). Empty otherwise.
+	ScopeParent string `json:"scope_parent,omitempty"`
 }
 
 // PluginResourcePrefix starts every plugin-contributed resource key. The
@@ -103,11 +123,11 @@ var (
 	mu       sync.RWMutex
 	registry = map[string]Resource{}
 	version  uint64
-	// stampedCache holds StampedResources; nil means "recompute". Register
-	// clears it. Plugin resources are never stamped, so Replace and
-	// Unregister leave it alone.
-	stampedCache []string
-	groupRank    = func() map[string]int {
+	// scopedCache holds the keys of every non-global resource, sorted; nil
+	// means "recompute". Register clears it. Plugin resources are always
+	// global, so Replace and Unregister leave it alone.
+	scopedCache []string
+	groupRank   = func() map[string]int {
 		m := make(map[string]int, len(Groups))
 		for i, g := range Groups {
 			m[g] = i
@@ -142,6 +162,9 @@ func validate(r Resource) error {
 	if !r.Scope.Valid() {
 		return fmt.Errorf("authz: resource %q has unknown scope kind %q", r.Key, r.Scope)
 	}
+	if (r.Scope == ScopeWorkspaceParent) != (r.ScopeParent != "") || (r.ScopeParent != "" && r.ScopeParent == r.Key) {
+		return fmt.Errorf("authz: resource %q: a parent scope needs a parent resource, and only it may name one", r.Key)
+	}
 	if r.Dynamic && r.Scope != ScopeGlobal {
 		return fmt.Errorf("authz: plugin resource %q must be global", r.Key)
 	}
@@ -165,7 +188,7 @@ func Register(r Resource) {
 		panic(fmt.Sprintf("authz: resource %q registered twice", r.Key))
 	}
 	registry[r.Key] = r
-	stampedCache = nil
+	scopedCache = nil
 }
 
 // Replace upserts a plugin resource. It returns an error instead of
@@ -328,28 +351,41 @@ func ResourceScope(key string) ScopeKind {
 	return r.Scope
 }
 
-// StampedResources returns the keys of every resource whose objects belong
-// to a Workspace, sorted. Only built-in resources can be stamped, so the
-// list is computed once and recomputed only after a Register.
-func StampedResources() []string {
+// WorkspaceResources returns, sorted, the keys of every resource whose
+// permissions a Workspace-scoped binding can grant (every non-global
+// kind). Only built-in resources can be non-global, so the list is computed
+// once and recomputed only after a Register.
+func WorkspaceResources() []string {
 	mu.RLock()
-	cached := stampedCache
+	cached := scopedCache
 	mu.RUnlock()
 	if cached == nil {
 		mu.Lock()
-		if stampedCache == nil {
-			stampedCache = []string{}
+		if scopedCache == nil {
+			scopedCache = []string{}
 			for k, r := range registry {
-				if r.Scope.Stamped() {
-					stampedCache = append(stampedCache, k)
+				if r.Scope.InWorkspace() {
+					scopedCache = append(scopedCache, k)
 				}
 			}
-			sort.Strings(stampedCache)
+			sort.Strings(scopedCache)
 		}
-		cached = stampedCache
+		cached = scopedCache
 		mu.Unlock()
 	}
 	return append([]string(nil), cached...)
+}
+
+// StampedResources returns, sorted, the keys of every resource whose
+// objects carry their own workspace_id stamp.
+func StampedResources() []string {
+	var out []string
+	for _, key := range WorkspaceResources() {
+		if ResourceScope(key).Stamped() {
+			out = append(out, key)
+		}
+	}
+	return out
 }
 
 // All returns every concrete permission in the catalogue, sorted.
@@ -498,9 +534,9 @@ func init() {
 	// AI Portal
 	Register(Resource{Key: "apps", Scope: ScopeWorkspaceFull, Label: "Apps", Group: "AI Portal", Actions: crudp,
 		Description: "Publish sets an app active; inactive apps cannot authenticate against the gateway."})
-	Register(Resource{Key: "credentials", Label: "Credentials", Group: "AI Portal", Actions: crud, Sensitive: true,
+	Register(Resource{Key: "credentials", Scope: ScopeWorkspaceParent, ScopeParent: "apps", Label: "Credentials", Group: "AI Portal", Actions: crud, Sensitive: true,
 		Description: "App credentials. Reading a credential reveals its secret."})
-	Register(Resource{Key: "mcp-credentials", Label: "MCP credentials", Group: "AI Portal", Actions: crudx, Sensitive: true, Privileged: true,
+	Register(Resource{Key: "mcp-credentials", Scope: ScopeWorkspaceParent, ScopeParent: "apps", Label: "MCP credentials", Group: "AI Portal", Actions: crudx, Sensitive: true, Privileged: true,
 		Description: "Tyk access keys minted for Apps that use MCP servers. Execute mints, rotates, suspends, revokes and applies widening changes."})
 	Register(Resource{Key: "edges", Label: "Edge gateways", Group: "AI Portal", Actions: crudx,
 		Description: "Edge gateway instances, namespaces and configuration sync."})

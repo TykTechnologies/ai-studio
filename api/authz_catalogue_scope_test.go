@@ -31,4 +31,6 @@ func TestAuthzMiddleware_PermissionCatalogueScopes(t *testing.T) {
 	assert.Equal(t, authz.ScopeWorkspaceWrite, byKey["llms"].Scope)
 	assert.Equal(t, authz.ScopeWorkspaceFull, byKey["apps"].Scope)
 	assert.Equal(t, authz.ScopeGlobal, byKey["plugins"].Scope)
+	assert.Equal(t, authz.ScopeWorkspaceParent, byKey["credentials"].Scope)
+	assert.Equal(t, "apps", byKey["credentials"].ScopeParent)
 }

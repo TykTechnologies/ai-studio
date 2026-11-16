@@ -10,10 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// expectedScopes is the scope kind of every stamped resource (the 17
-// stamped tables; plugins and webhooks carry the stamp but stay global
-// because they act on, or receive events from, every Workspace). Every
-// other catalogue resource must be ScopeGlobal. Registering a resource, or
+// expectedScopes is the scope kind of every resource tied to a Workspace:
+// the 17 stamped tables (plugins and webhooks carry the stamp but stay
+// global because they act on, or receive events from, every Workspace) and
+// the App credentials, which follow their App. Every other catalogue
+// resource must be ScopeGlobal. Registering a resource, or
 // changing a kind, means updating this table: that is the point.
 var expectedScopes = map[string]ScopeKind{
 	"llms":             ScopeWorkspaceWrite,
@@ -31,6 +32,8 @@ var expectedScopes = map[string]ScopeKind{
 	"catalogues":       ScopeWorkspaceFull,
 	"data-catalogues":  ScopeWorkspaceFull,
 	"tool-catalogues":  ScopeWorkspaceFull,
+	"credentials":      ScopeWorkspaceParent,
+	"mcp-credentials":  ScopeWorkspaceParent,
 	"plugins":          ScopeGlobal,
 	"webhooks":         ScopeGlobal,
 }
@@ -45,8 +48,31 @@ func TestCatalogue_ScopeKinds(t *testing.T) {
 	}
 	for key := range expectedScopes {
 		_, ok := ResourceByKey(key)
-		assert.True(t, ok, "stamped resource %q is not registered", key)
+		assert.True(t, ok, "resource %q is not registered", key)
 	}
+	var wantScoped []string
+	for key, kind := range expectedScopes {
+		if kind.InWorkspace() {
+			wantScoped = append(wantScoped, key)
+		}
+	}
+	assert.ElementsMatch(t, wantScoped, WorkspaceResources())
+
+	// Parent-scoped resources name a fully scoped parent; no other kind
+	// names a parent.
+	for _, r := range Catalogue() {
+		if r.Scope == ScopeWorkspaceParent {
+			assert.Equal(t, "apps", r.ScopeParent, r.Key)
+			assert.Equal(t, ScopeWorkspaceFull, ResourceScope(r.ScopeParent), r.Key)
+		} else {
+			assert.Empty(t, r.ScopeParent, r.Key)
+		}
+	}
+	assert.True(t, ScopeWorkspaceParent.ReadScoped())
+	assert.True(t, ScopeWorkspaceFull.ReadScoped())
+	assert.False(t, ScopeWorkspaceWrite.ReadScoped())
+	assert.False(t, ScopeWorkspaceParent.Stamped())
+	assert.True(t, ScopeWorkspaceParent.InWorkspace())
 	var wantStamped []string
 	for key, kind := range expectedScopes {
 		if kind.Stamped() {
@@ -70,6 +96,15 @@ func TestCatalogue_ScopeKinds(t *testing.T) {
 func TestRegister_RejectsBadScope(t *testing.T) {
 	assert.Panics(t, func() {
 		Register(Resource{Key: "zz-bad-scope", Label: "x", Group: "Settings", Actions: readOnly, Scope: "galaxy"})
+	})
+	assert.Panics(t, func() {
+		Register(Resource{Key: "zz-no-parent", Label: "x", Group: "Settings", Actions: readOnly, Scope: ScopeWorkspaceParent})
+	}, "a parent scope needs a parent")
+	assert.Panics(t, func() {
+		Register(Resource{Key: "zz-stray-parent", Label: "x", Group: "Settings", Actions: readOnly, Scope: ScopeWorkspaceFull, ScopeParent: "apps"})
+	}, "only a parent scope names a parent")
+	assert.Panics(t, func() {
+		Register(Resource{Key: "zz-self", Label: "x", Group: "Settings", Actions: readOnly, Scope: ScopeWorkspaceParent, ScopeParent: "zz-self"})
 	})
 	const key = "plugin:com.example.scoped"
 	t.Cleanup(func() { UnregisterPlugin(key) })
@@ -161,13 +196,27 @@ func TestGrants_CanAnywhereAndWorkspacesWith(t *testing.T) {
 	assert.False(t, nobody.CanAnywhere(AnyAdmin))
 }
 
+func TestGrants_ParentScopedCredentials(t *testing.T) {
+	// D2 keeps credentials in a scoped binding; the check takes the parent
+	// App's Workspace.
+	s := NewScopedSetFromStrings([]string{"credentials:read", "credentials:write", "mcp-credentials:execute"})
+	assert.Equal(t, []string{"credentials:read", "credentials:write", "mcp-credentials:execute"}, s.List())
+	g := Grants{Global: NewSet(), Workspaces: map[uint]Set{1: s}}
+	assert.True(t, g.CanIn(1, Write("credentials")))
+	assert.False(t, g.CanIn(2, Read("credentials")), "another Workspace's App credentials")
+	assert.True(t, g.CanAnywhere(Execute("mcp-credentials")))
+	all, ids := g.WorkspacesWith(Read("credentials"))
+	assert.False(t, all)
+	assert.Equal(t, []uint{1}, ids)
+}
+
 func TestNewScopedSetFromStrings(t *testing.T) {
 	s := NewScopedSetFromStrings([]string{"llms:write", "users:write", "edges:execute", "plugins:execute", "webhooks:execute", "nope:read"})
 	assert.Equal(t, []string{"llms:write"}, s.List(), "D2: global permissions are dropped")
 
 	wild := NewScopedSetFromStrings([]string{"*"})
 	assert.False(t, wild.IsFullAdmin(), "a scoped wildcard is never full admin")
-	for _, key := range StampedResources() {
+	for _, key := range WorkspaceResources() {
 		r, _ := ResourceByKey(key)
 		for _, a := range r.Actions {
 			assert.True(t, wild.Has(P(key, a)), "%s:%s", key, a)
@@ -177,6 +226,7 @@ func TestNewScopedSetFromStrings(t *testing.T) {
 	assert.False(t, wild.Has(Read("plugins")))
 	assert.False(t, wild.Has(Read("webhooks")))
 	assert.False(t, wild.Has(Read("workspaces")))
+	assert.True(t, wild.Has(Read("credentials")), "credentials follow their App")
 }
 
 func TestContext_GrantsAndPackageHelpers(t *testing.T) {

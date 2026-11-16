@@ -7,8 +7,9 @@ import "sort"
 // permissions held only inside that Workspace (from Workspace-scoped
 // bindings).
 //
-// A Workspace set only ever counts for permissions on stamped resources
-// (ScopeOf(p).Stamped()). Every method below enforces that, whatever the
+// A Workspace set only ever counts for permissions on Workspace resources
+// (ScopeOf(p).InWorkspace(): stamped ones, and credentials through their
+// App). Every method below enforces that, whatever the
 // sets contain, so a global permission (users, roles, edges, plugins,
 // webhooks, plugin-contributed resources, the sentinels) can never be
 // satisfied by a scoped binding. That also confines the plugins:execute
@@ -31,12 +32,13 @@ func (g Grants) Can(p Permission) bool {
 }
 
 // CanIn reports whether p is held in the given Workspace: globally, or by a
-// binding scoped to that Workspace when p is on a stamped resource.
+// binding scoped to that Workspace when p is on a Workspace resource. For a
+// ScopeWorkspaceParent resource pass the parent object's Workspace.
 func (g Grants) CanIn(workspaceID uint, p Permission) bool {
 	if g.Global.Has(p) {
 		return true
 	}
-	if workspaceID == 0 || !ScopeOf(p).Stamped() {
+	if workspaceID == 0 || !ScopeOf(p).InWorkspace() {
 		return false
 	}
 	s, ok := g.Workspaces[workspaceID]
@@ -60,7 +62,7 @@ func (g Grants) CanAnywhere(p Permission) bool {
 		}
 		return false
 	}
-	if !ScopeOf(p).Stamped() {
+	if !ScopeOf(p).InWorkspace() {
 		return false
 	}
 	for id, s := range g.Workspaces {
@@ -78,7 +80,7 @@ func (g Grants) WorkspacesWith(p Permission) (all bool, ids []uint) {
 	if g.Global.Has(p) {
 		return true, nil
 	}
-	if !ScopeOf(p).Stamped() {
+	if !ScopeOf(p).InWorkspace() {
 		return false, nil
 	}
 	for id, s := range g.Workspaces {
@@ -92,8 +94,8 @@ func (g Grants) WorkspacesWith(p Permission) (all bool, ids []uint) {
 
 // NewScopedSetFromStrings builds the set a Workspace-scoped binding of a
 // role grants (decision D2): permissions on global resources are dropped,
-// and the wildcard expands to every action of every stamped resource, never
-// to the full-admin wildcard. Unknown strings are skipped, as in
+// and the wildcard expands to every action of every Workspace resource
+// (WorkspaceResources), never to the full-admin wildcard. Unknown strings are skipped, as in
 // NewSetFromStrings.
 func NewScopedSetFromStrings(raw []string) Set {
 	s := NewSet()
@@ -103,7 +105,7 @@ func NewScopedSetFromStrings(raw []string) Set {
 			continue
 		}
 		if p == FullAdmin {
-			for _, key := range StampedResources() {
+			for _, key := range WorkspaceResources() {
 				if res, ok := ResourceByKey(key); ok {
 					for _, a := range res.Actions {
 						s.add(P(key, a))
@@ -112,7 +114,7 @@ func NewScopedSetFromStrings(raw []string) Set {
 			}
 			continue
 		}
-		if ScopeOf(p).Stamped() {
+		if ScopeOf(p).InWorkspace() {
 			s.add(p)
 		}
 	}
