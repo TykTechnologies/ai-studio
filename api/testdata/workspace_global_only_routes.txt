@@ -1,7 +1,6 @@
 # Routes on a Workspace resource that are NOT Workspace-checked: the route
 # gate requires the permission globally (fail closed for scoped callers).
 # See TestAuthzRoutes_WorkspaceClassification. Union over both editions.
-DELETE /api/v1/agents/:id
 DELETE /api/v1/apps/:id
 DELETE /api/v1/apps/:id/guardrail-exceptions/:eid
 DELETE /api/v1/apps/:id/prompt-templates/:template_id
@@ -17,9 +16,6 @@ DELETE /api/v1/mcp-servers/:id
 DELETE /api/v1/tool-catalogues/:id
 DELETE /api/v1/tool-catalogues/:id/tags/:tagId
 DELETE /api/v1/tool-catalogues/:id/tools/:toolId
-GET /api/v1/agents
-GET /api/v1/agents/:id
-GET /api/v1/agents/:id/stream
 GET /api/v1/apps
 GET /api/v1/apps/:id
 GET /api/v1/apps/:id/dependents
@@ -83,10 +79,6 @@ PATCH /api/v1/filestore/:id
 PATCH /api/v1/mcp-servers/:id
 PATCH /api/v1/tool-catalogues/:id
 PATCH /api/v1/tyk-connections/:id/policies/:pid  # stays global: acts on a global Tyk connection (.37)
-POST /api/v1/agents
-POST /api/v1/agents/:id/activate
-POST /api/v1/agents/:id/deactivate
-POST /api/v1/agents/:id/message
 POST /api/v1/apps
 POST /api/v1/apps/:id/activate
 POST /api/v1/apps/:id/activate-credential
@@ -124,7 +116,6 @@ POST /api/v1/tool-catalogues
 POST /api/v1/tool-catalogues/:id/tags
 POST /api/v1/tool-catalogues/:id/tools
 POST /api/v1/tyk-connections/:id/policies  # stays global: acts on a global Tyk connection (.37)
-PUT /api/v1/agents/:id
 PUT /api/v1/catalogues/:id/routers
 PUT /api/v1/mcp-servers/:id/bundle
 PUT /api/v1/mcp-servers/:id/catalogues

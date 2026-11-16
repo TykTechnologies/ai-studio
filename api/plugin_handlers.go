@@ -2668,8 +2668,15 @@ func (a *API) getPluginPolicy(c *gin.Context) {
 // object alone, possibly through a grant scoped to its Workspace, sees the
 // plugin without its config, which may hold secrets (.46).
 func (a *API) pluginForObjectRead(c *gin.Context, p PluginResponse) PluginResponse {
-	if !a.holds(c, authz.Read("plugins")) {
+	if !a.mayReadPluginConfig(c) {
 		p.Attributes.Config = nil
 	}
 	return p
+}
+
+// mayReadPluginConfig is the one rule for a plugin's own configuration
+// embedded in another object's response (an endpoint's auth plugins, an
+// agent's plugin): global plugins:read, as GET /plugins requires.
+func (a *API) mayReadPluginConfig(c *gin.Context) bool {
+	return a.holds(c, authz.Read("plugins"))
 }
