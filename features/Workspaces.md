@@ -103,15 +103,17 @@ The helpers allow everything in TestMode and for a legacy caller outside `/api/v
 
 ### Credential material
 
-Read-global reads are metadata. A route that returns raw credential material of an object needs **write** in the object's Workspace: an LLM's `config_override`, an agent's plugin configuration (`agents:write`), and so on. The configuration of an embedded plugin is shown only to holders of global `plugins:read` (the same rule as `GET /plugins`). Secret values are never returned.
+Read-global reads are metadata. A route that returns raw credential material of an object needs **write** in the object's Workspace: an LLM's `config_override` and resource-signing key, an agent's configuration (`agents:write`), and so on. The upstream credential of an MCP server (`GET /mcp-servers/:id/handoff?include_secrets=true`) needs `mcp-servers:execute` in the server's Workspace; the handoff without secrets is read-global. The configuration of an embedded plugin is shown only to holders of global `plugins:read` (the same rule as `GET /plugins`). Secret values are never returned.
 
 ### Secrets
 
 - A `$SECRET/<name>` reference in an object must name a secret of the object's own Workspace (no Default fallback). An unknown name answers 403, so names in other Workspaces cannot be probed.
-- Secret names are unique across Workspaces.
-- A secret cannot be deleted or moved while an object references it.
+- Secret names are unique among live secrets across Workspaces: exact and case-sensitive, under a per-name lock.
+- A secret that objects reference cannot be deleted or renamed (409) and does not move (422).
+- Creating or renaming a secret to a name that objects outside the new secret's Workspace reference is refused (409), so a dangling reference never picks up another Workspace's secret.
+- Grandfathered duplicate names (from before uniqueness) resolve to the lowest id within one Workspace, are refused (unresolved) across Workspaces, and a duplicate cannot move (409).
 - Moving an object re-checks its references (422 if any would point outside the destination).
-- Cloning an object across Workspaces is refused (403).
+- Cloning a datasource needs write in the source's Workspace; the copy lands by D5 (a global writer's clone lands in the Default), and its secret references must be allowed in the landing Workspace.
 
 ---
 
@@ -154,9 +156,9 @@ Every `/api/v1` route on a Workspace resource follows the pattern of section 3: 
 | Resources | Kind | Notes |
 |---|---|---|
 | LLMs, tools, datasources, filters, embedders, secrets (.7) | `workspace_write` | Reads are read-global (D4) with credentials redacted. Write, delete, publish and execute need the permission in the object's Workspace. Raw credential material (an LLM's `config_override`, its resource-signing key) needs write in the object's Workspace. `$SECRET/` references, secret moves and datasource clones follow section 3 "Secrets". |
-| File stores, MCP servers (.8) | `workspace_write` | As above. MCP-server actions (register, push, link, discover) run as execute in the server's Workspace; the Tyk connection they use is global (accepted risk, section 10). |
+| File stores, MCP servers (.8) | `workspace_write` | As above. Push and link (and the per-server `CanExecute`) are `mcp-servers:execute` in the server's Workspace. Register creates a server, so it is execute at the route plus write in the landing Workspace (D5). Discover has no object: execute in any scope. The upstream credential in the handoff needs execute in the server's Workspace (see "Credential material"). The Tyk connection these actions use is global (accepted risk, section 10). |
 | Plugins, webhook targets (.8) | `global` | Stamped for pushes only; the stamp is neither enforced nor shown. |
-| Apps and their credentials (.9) | `workspace_full`, `workspace_parent` | Every `/apps/:id` route checks the App (`onObject`, the handlers' own "App not found"). API and MCP credentials are checked in their App's Workspace, and lists and the MCP access report are limited to visible Apps. Binding routers or MCP servers and publishing are checked in the App's Workspace. Portal-created Apps land in the Default. |
+| Apps and their credentials (.9) | `workspace_full`, `workspace_parent` | Every `/apps/:id` route checks the App (`onObject`, the handlers' own "App not found"). Publishing and binding MCP servers are checked in the App's Workspace. Router grants (.49): every router named must be visible to the caller (404 like a missing one); the "may grant any active router" path is for administrators and global `apps:write` only, so a writer scoped to the App's Workspace goes through the team-catalogue rule; stored grants to hidden routers are kept on update. Linking LLMs, tools and datasources needs read on them in some scope. API and MCP credentials are checked in their App's Workspace; a credential held by no live App, or by more than one, is reachable only with the permission held globally (404 otherwise). Minting an MCP credential needs `mcp-credentials:execute` in the App's Workspace. Credential lists and the MCP access report are limited to visible Apps. Portal-created Apps land in the Default. |
 | Agents (.10) | `workspace_full` | On the admin API, agent lists and reads are scoped by Workspace, not by team. The agent's App must be visible (422 otherwise). The agent configuration is shown only with `agents:write` in its Workspace, an embedded plugin configuration only with global `plugins:read`. Changing an agent's teams (`group_ids`) needs the global `groups:write` (403, .48). The plugin must be enabled and agent-capable (422). The run routes check visibility, then `agents:execute` in the agent's Workspace. `/common` agent routes are unchanged (portal, team access). |
 | Model routers, semantic routers (.11) | `workspace_full` | Router ↔ catalogue saves keep links to catalogues the caller cannot see; router responses leave out the names of hidden catalogues. Pool and target LLMs are read-global. |
 | LLM, data and tool catalogues (.12) | `workspace_full` | Team ↔ catalogue saves keep links to hidden catalogues. Team responses list only visible catalogues; the team catalogue lists filter in the query, so totals match the page. Catalogue members (LLMs, datasources, tools) are read-global. |
@@ -218,6 +220,8 @@ An internal comparison with interop notes is kept by the security role for the O
 
 - **File store content is read-global (D4).** A caller with `filestores:read` in any Workspace can read the content of every file store. Do not put secrets or confidential data in file stores; the user docs say so.
 - **Tyk connections are global.** A caller who may execute MCP-server actions in one Workspace (register, push, link, discover) can use any Tyk connection, and the Dashboard credentials it holds. Tying connections to Workspaces is a later design item.
+- **Names across Workspaces (D6).** Object names stay unique across Workspaces, so a 409 on create can reveal that a hidden object has that name.
+- **Counts of hidden objects.** Dependents' `total` and the per-Workspace counts in pending changes include objects the caller cannot see (counts only, never ids or names).
 - **Linked building blocks.** An App can link another Workspace's read-global building blocks and use the credentials they hold at runtime (until the `use` action below).
 
 **Deferred**, in intended order: Workspace Owners (a scoped `workspaces:write`); escalation and protection rules (no self-escalation, a role in use cannot be deleted); SSO membership provenance; the vocabulary pass (Team → User Group); a `use` action and ID-and-name link pickers (read scoping for building blocks); Workspace scoping of analytics, logs, traces and chat history; Tyk connections owned by Workspaces (so MCP actions in one Workspace use only its connections).
