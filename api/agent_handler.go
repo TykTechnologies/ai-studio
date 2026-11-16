@@ -736,6 +736,17 @@ func (a *API) HandleCreateAgent(c *gin.Context) {
 		})
 		return
 	}
+	// Saving an agent needs no plugin read (plugins are global, .36); the
+	// plugin must be enabled and agent-capable instead (security .33).
+	if !plugin.IsActive {
+		c.JSON(http.StatusUnprocessableEntity, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Invalid plugin", Detail: "Plugin is not enabled"}},
+		})
+		return
+	}
 
 	// The Workspace the agent lands in (decision D5): agents:write there.
 	workspaceID, ok := a.resolveCreateWorkspace(c, "agents", req.WorkspaceID)
