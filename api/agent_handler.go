@@ -53,8 +53,44 @@ func (r *AgentConfigRequest) wantsActive() bool { return r.IsActive == nil || *r
 // API only: on /common an authorization context exists too, and portal
 // visibility stays with agent groups.
 
-// onAdminAPI reports whether the request came in on the admin API.
-func onAdminAPI(c *gin.Context) bool { return strings.HasPrefix(c.FullPath(), "/api/v1/") }
+// onAdminAPI reports whether the request came in on the admin API: it
+// passed the admin route gate (requireRoutePermission marks it). /common
+// requests never pass that gate.
+func onAdminAPI(c *gin.Context) bool {
+	_, gated := c.Get(authzGatedKey)
+	return gated
+}
+
+// requireTeamsWrite: an agent's teams decide who may use it in the Portal
+// and Chat. Teams are global, so changing an agent's team set needs the
+// global groups:write (.48); an unchanged or omitted set needs nothing.
+func (a *API) requireTeamsWrite(c *gin.Context, stored []models.Group, requested []uint) bool {
+	if requested == nil || sameTeamSet(stored, requested) || a.holds(c, authz.Write("groups")) {
+		return true
+	}
+	c.AbortWithStatusJSON(http.StatusForbidden, authz.Denied(authz.Write("groups")))
+	return false
+}
+
+func sameTeamSet(stored []models.Group, requested []uint) bool {
+	have := map[uint]bool{}
+	for _, g := range stored {
+		have[g.ID] = true
+	}
+	want := map[uint]bool{}
+	for _, id := range requested {
+		want[id] = true
+	}
+	if len(have) != len(want) {
+		return false
+	}
+	for id := range want {
+		if !have[id] {
+			return false
+		}
+	}
+	return true
+}
 
 // agentNotFound is the not-found answer for an agent, also given for an
 // agent in a Workspace the caller cannot see.
@@ -706,6 +742,9 @@ func (a *API) HandleCreateAgent(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if len(req.GroupIDs) > 0 && !a.requireTeamsWrite(c, nil, req.GroupIDs) {
+		return
+	}
 
 	// Verify app exists and the caller can see it: an App in a Workspace
 	// the caller cannot see is reported as not found, never as forbidden.
@@ -842,6 +881,21 @@ func (a *API) HandleUpdateAgent(c *gin.Context) {
 	// Hidden (404) unless the caller sees its Workspace; write there.
 	if !a.requireAgentInWorkspace(c, &agentConfig, authz.Write("agents")) {
 		return
+	}
+	if req.GroupIDs != nil {
+		var teams []models.Group
+		if err := a.service.DB.Model(&agentConfig).Association("Groups").Find(&teams); err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Database error", Detail: err.Error()}},
+			})
+			return
+		}
+		if !a.requireTeamsWrite(c, teams, req.GroupIDs) {
+			return
+		}
 	}
 	// A different workspace_id is a move: write in both Workspaces.
 	storedWorkspaceID := agentConfig.WorkspaceID // raw: the move is guarded on it
