@@ -558,6 +558,8 @@ func (a *API) HandleListAgents(c *gin.Context) {
 		db = db.Scopes(a.workspaceListScope(c, "agents", ""), filter)
 	}
 	var agents models.AgentConfigs
+	// Relationships load with the page (no per-agent query).
+	db = db.Preload("Groups").Preload("Plugin").Preload("App")
 	total, totalPages, err := agents.ListWithPagination(db, limit, page, true, namespace, nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -573,9 +575,6 @@ func (a *API) HandleListAgents(c *gin.Context) {
 	// Filter agents by user access (groups)
 	accessibleAgents := make([]models.AgentConfig, 0)
 	for i := range agents {
-		// Load groups and relationships for this agent
-		a.service.DB.Preload("Groups").Preload("Plugin").Preload("App").First(&agents[i], agents[i].ID)
-
 		// Check access. On the admin API the Workspace scope (in SQL, above)
 		// is the visibility rule, so totals match the page; the team check
 		// is the Portal and Chat audience rule.
@@ -644,7 +643,7 @@ func (a *API) HandleGetAgent(c *gin.Context) {
 
 	// Get agent config
 	var agentConfig models.AgentConfig
-	if err := agentConfig.Get(a.service.DB, uint(agentID)); err != nil {
+	if err := a.service.DB.Preload("Plugin").Preload("App").Preload("Groups").First(&agentConfig, uint(agentID)).Error; err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -656,8 +655,6 @@ func (a *API) HandleGetAgent(c *gin.Context) {
 	if !a.requireAgentInWorkspace(c, &agentConfig, authz.Read("agents")) {
 		return
 	}
-	// Load relationships
-	a.service.DB.Preload("Plugin").Preload("App").Preload("Groups").First(&agentConfig, agentConfig.ID)
 
 	// Check user has access: on the admin API the Workspace checks above
 	// are the rule; elsewhere the agent's teams.
@@ -896,20 +893,9 @@ func (a *API) HandleUpdateAgent(c *gin.Context) {
 	if !a.requireAgentInWorkspace(c, &agentConfig, authz.Write("agents")) {
 		return
 	}
-	if req.GroupIDs != nil {
-		var teams []models.Group
-		if err := a.service.DB.Model(&agentConfig).Association("Groups").Find(&teams); err != nil {
-			c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Database error", Detail: err.Error()}},
-			})
-			return
-		}
-		if !a.requireTeamsWrite(c, teams, req.GroupIDs) {
-			return
-		}
+	// agentConfig.Get preloaded the agent's teams.
+	if req.GroupIDs != nil && !a.requireTeamsWrite(c, agentConfig.Groups, req.GroupIDs) {
+		return
 	}
 	// A different workspace_id is a move: write in both Workspaces.
 	storedWorkspaceID := agentConfig.WorkspaceID // raw: the move is guarded on it
