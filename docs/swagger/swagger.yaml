@@ -1862,6 +1862,11 @@ definitions:
             type: string
           length:
             type: integer
+          workspace_id:
+            description: |-
+              WorkspaceID is the Workspace that owns the entry (Enterprise
+              Workspaces); a stored 0 reads as the Default.
+            type: integer
         type: object
       id:
         type: string
@@ -5758,6 +5763,11 @@ definitions:
         type: string
       upstream_url:
         type: string
+      workspace_id:
+        description: |-
+          WorkspaceID is the Workspace that owns the server (Enterprise
+          Workspaces); a stored 0 reads as the Default.
+        type: integer
     type: object
   models.MCPSyncRun:
     properties:
@@ -19215,6 +19225,10 @@ paths:
         in: formData
         name: description
         type: string
+      - description: Workspace the entry lands in (Enterprise Workspaces)
+        in: formData
+        name: workspace_id
+        type: integer
       produces:
       - application/json
       responses:

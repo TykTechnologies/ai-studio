@@ -11,8 +11,6 @@ DELETE /api/v1/credentials/:id
 DELETE /api/v1/data-catalogues/:id
 DELETE /api/v1/data-catalogues/:id/datasources/:datasourceId
 DELETE /api/v1/data-catalogues/:id/tags/:tagId
-DELETE /api/v1/filestore/:id
-DELETE /api/v1/mcp-servers/:id
 DELETE /api/v1/tool-catalogues/:id
 DELETE /api/v1/tool-catalogues/:id/tags/:tagId
 DELETE /api/v1/tool-catalogues/:id/tools/:toolId
@@ -46,15 +44,9 @@ GET /api/v1/data-catalogues/:id/groups
 GET /api/v1/data-catalogues/by-datasource
 GET /api/v1/data-catalogues/by-tag
 GET /api/v1/data-catalogues/search
-GET /api/v1/filestore
-GET /api/v1/filestore/:id
-GET /api/v1/filestore/search
 GET /api/v1/mcp-access-report
 GET /api/v1/mcp-credentials
 GET /api/v1/mcp-credentials/:id
-GET /api/v1/mcp-servers
-GET /api/v1/mcp-servers/:id
-GET /api/v1/mcp-servers/:id/handoff
 GET /api/v1/tool-catalogues
 GET /api/v1/tool-catalogues/:id
 GET /api/v1/tool-catalogues/:id/groups
@@ -75,8 +67,6 @@ PATCH /api/v1/apps/:id/prompt-templates/:template_id
 PATCH /api/v1/catalogues/:id
 PATCH /api/v1/credentials/:id
 PATCH /api/v1/data-catalogues/:id
-PATCH /api/v1/filestore/:id
-PATCH /api/v1/mcp-servers/:id
 PATCH /api/v1/tool-catalogues/:id
 PATCH /api/v1/tyk-connections/:id/policies/:pid  # stays global: acts on a global Tyk connection (.37)
 POST /api/v1/apps
@@ -98,25 +88,15 @@ POST /api/v1/credentials/:id/deactivate
 POST /api/v1/data-catalogues
 POST /api/v1/data-catalogues/:id/datasources
 POST /api/v1/data-catalogues/:id/tags
-POST /api/v1/filestore
 POST /api/v1/mcp-credentials
 POST /api/v1/mcp-credentials/:id/apply-drift
 POST /api/v1/mcp-credentials/:id/resume
 POST /api/v1/mcp-credentials/:id/revoke
 POST /api/v1/mcp-credentials/:id/rotate
 POST /api/v1/mcp-credentials/:id/suspend
-POST /api/v1/mcp-servers/:id/activate
-POST /api/v1/mcp-servers/:id/deactivate
-POST /api/v1/mcp-servers/:id/link
-POST /api/v1/mcp-servers/:id/push
-POST /api/v1/mcp-servers/discover-tools
-POST /api/v1/mcp-servers/register
 POST /api/v1/semantic-routers/test
 POST /api/v1/tool-catalogues
 POST /api/v1/tool-catalogues/:id/tags
 POST /api/v1/tool-catalogues/:id/tools
 POST /api/v1/tyk-connections/:id/policies  # stays global: acts on a global Tyk connection (.37)
 PUT /api/v1/catalogues/:id/routers
-PUT /api/v1/mcp-servers/:id/bundle
-PUT /api/v1/mcp-servers/:id/catalogues
-PUT /api/v1/mcp-servers/:id/key-access

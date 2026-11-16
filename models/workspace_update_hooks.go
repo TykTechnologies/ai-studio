@@ -42,6 +42,25 @@ func (c *Catalogue) BeforeCreate(tx *gorm.DB) error      { return stampOnCreate(
 func (d *DataCatalogue) BeforeCreate(tx *gorm.DB) error  { return stampOnCreate(tx, &d.WorkspaceID) }
 func (t *ToolCatalogue) BeforeCreate(tx *gorm.DB) error  { return stampOnCreate(tx, &t.WorkspaceID) }
 func (f *FileStore) BeforeCreate(tx *gorm.DB) error      { return stampOnCreate(tx, &f.WorkspaceID) }
-func (m *MCPServer) BeforeCreate(tx *gorm.DB) error      { return stampOnCreate(tx, &m.WorkspaceID) }
-func (p *Plugin) BeforeCreate(tx *gorm.DB) error         { return stampOnCreate(tx, &p.WorkspaceID) }
-func (w *WebhookTarget) BeforeCreate(tx *gorm.DB) error  { return stampOnCreate(tx, &w.WorkspaceID) }
+func (m *MCPServer) BeforeCreate(tx *gorm.DB) error {
+	return stampMCPServerOnCreate(tx, &m.WorkspaceID)
+}
+func (p *Plugin) BeforeCreate(tx *gorm.DB) error        { return stampOnCreate(tx, &p.WorkspaceID) }
+func (w *WebhookTarget) BeforeCreate(tx *gorm.DB) error { return stampOnCreate(tx, &w.WorkspaceID) }
+
+// stampMCPServerOnCreate is stampOnCreate for MCP servers, which are also
+// created with no acting user (Dashboard sync): one that would be written
+// with 0 takes the Default workspace's id instead, so a catalogued server
+// always names its Workspace (Workspaces B4b). Without a Default row (a
+// test database without Workspaces) it stays 0, which reads as the Default.
+func stampMCPServerOnCreate(tx *gorm.DB, workspaceID *uint) error {
+	if err := stampOnCreate(tx, workspaceID); err != nil || *workspaceID != 0 {
+		return err
+	}
+	var ids []uint
+	if err := tx.Session(&gorm.Session{NewDB: true}).Table("workspaces").Where("is_default = ?", true).Limit(1).Pluck("id", &ids).Error; err != nil || len(ids) == 0 {
+		return nil
+	}
+	*workspaceID = ids[0]
+	return nil
+}
