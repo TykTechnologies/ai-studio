@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -90,23 +91,42 @@ func (a *API) checkObjectUpdate(c *gin.Context, resource string, stored uint, re
 	return requested, true
 }
 
-// moveObject moves the row of model with the id to the Workspace: workspace_id
-// and updated_at together, so the move shows as a pending change (moves
-// stain), with the destination locked for the write so it cannot land in a
-// Workspace a concurrent delete is removing (422 invalid_workspace then).
-// It writes the error response and returns false on failure.
-func (a *API) moveObject(c *gin.Context, model interface{}, id uint, to uint) bool {
+// errMoveRaced reports that the object was no longer in the Workspace the
+// move was checked against: a concurrent request moved it first.
+var errMoveRaced = errors.New("the object was moved by another request")
+
+// moveObject moves the row of model with the id from the Workspace from (its
+// stored workspace_id, the one the caller's permissions were checked in) to
+// the Workspace to: workspace_id and updated_at together, so the move shows
+// as a pending change (moves stain), with the destination locked for the
+// write so it cannot land in a Workspace a concurrent delete is removing
+// (422 invalid_workspace then). The UPDATE only matches while the row is
+// still in from; when a concurrent move got there first nothing changes
+// and the answer is 409 Conflict. It writes the error response and returns
+// false on failure.
+func (a *API) moveObject(c *gin.Context, model interface{}, id uint, from, to uint) bool {
 	err := a.service.DB.Transaction(func(tx *gorm.DB) error {
 		if err := models.LockWorkspaceForInsert(tx, to); err != nil {
 			return err
 		}
-		return tx.Model(model).Where("id = ?", id).Select("workspace_id", "updated_at").
-			Updates(map[string]interface{}{"workspace_id": to, "updated_at": time.Now()}).Error
+		res := tx.Model(model).Where("id = ? AND workspace_id = ?", id, from).Select("workspace_id", "updated_at").
+			Updates(map[string]interface{}{"workspace_id": to, "updated_at": time.Now()})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return errMoveRaced
+		}
+		return nil
 	})
-	if err == nil {
+	switch {
+	case err == nil:
 		return true
-	}
-	if isWorkspaceNotFound(err) || err == wsstamp.ErrWorkspaceNotFound {
+	case errors.Is(err, errMoveRaced):
+		simpleError(c, http.StatusConflict, "Conflict", "The object was moved to another Workspace by a concurrent request; reload it and try again.")
+		c.Abort()
+		return false
+	case isWorkspaceNotFound(err) || err == wsstamp.ErrWorkspaceNotFound:
 		invalidWorkspace(c)
 		return false
 	}
@@ -201,21 +221,22 @@ func responseWorkspaceIDFrom(db *gorm.DB, stored uint) uint {
 // before the handler applies the rest of the update, so the update's checks
 // (secret references were checked against the destination) and the stored
 // Workspace agree. finish(true) keeps the move; finish(false), when the
-// update then fails, puts the object back where it was. With to nil it does
-// nothing. It writes the error response and returns false when the move
-// itself fails.
+// update then fails, puts the object back where it was, but only while it
+// is still in *to (a later concurrent move is left alone). With to nil it
+// does nothing. It writes the error response and returns false when the
+// move itself fails (409 when a concurrent move got there first).
 func (a *API) beginMove(c *gin.Context, model interface{}, id uint, from uint, to *uint) (finish func(updated bool), ok bool) {
 	if to == nil {
 		return func(bool) {}, true
 	}
-	if !a.moveObject(c, model, id, *to) {
+	if !a.moveObject(c, model, id, from, *to) {
 		return nil, false
 	}
 	return func(updated bool) {
 		if updated {
 			return
 		}
-		if err := a.service.DB.Model(model).Where("id = ?", id).Select("workspace_id", "updated_at").
+		if err := a.service.DB.Model(model).Where("id = ? AND workspace_id = ?", id, *to).Select("workspace_id", "updated_at").
 			Updates(map[string]interface{}{"workspace_id": from, "updated_at": time.Now()}).Error; err != nil {
 			logger.Errorf("Workspace move of %T %d could not be undone after a failed update: %v", model, id, err)
 		}

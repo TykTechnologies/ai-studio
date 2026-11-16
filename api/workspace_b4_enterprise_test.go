@@ -15,6 +15,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services/rbac"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -443,6 +444,46 @@ func TestWorkspaceB4_FailedUpdateUndoesTheMove(t *testing.T) {
 	require.NotEqual(t, http.StatusOK, w.Code, w.Body.String())
 	ws, _ := f.stored(t, &models.Tool{}, a)
 	assert.Equal(t, f.w1, ws, "the move was undone")
+}
+
+// A move checked against the object's stored Workspace must not land when
+// a concurrent request moved the object in between: the move matches only
+// while the row is still where it was checked (409, nothing written), and
+// the undo after a failed update only while the row is still where the
+// move put it.
+func TestWorkspaceB4_ConcurrentMoveConflicts(t *testing.T) {
+	f := setupWSB4(t)
+	db := f.api.service.DB
+	id, _ := f.created(t, f.do("POST", "/api/v1/tools", body(toolAttrs("Raced", nil)), f.inW1))
+	gin.SetMode(gin.TestMode)
+
+	// The caller checked the tool in the Default Workspace, but a concurrent
+	// request has since moved it to W1.
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	assert.False(t, f.api.moveObject(c, &models.Tool{}, id, f.def, f.w2))
+	assert.Equal(t, http.StatusConflict, w.Code, w.Body.String())
+	ws, _ := f.stored(t, &models.Tool{}, id)
+	assert.Equal(t, f.w1, ws, "the concurrent move stands")
+
+	// Moved W1 -> W2, then a concurrent request moves it to the Default
+	// before the failed update's undo runs: the undo leaves it there.
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	to := f.w2
+	finish, ok := f.api.beginMove(c, &models.Tool{}, id, f.w1, &to)
+	require.True(t, ok, w.Body.String())
+	require.NoError(t, db.Model(&models.Tool{}).Where("id = ?", id).UpdateColumn("workspace_id", f.def).Error)
+	finish(false)
+	ws, _ = f.stored(t, &models.Tool{}, id)
+	assert.Equal(t, f.def, ws, "the undo does not overwrite a later move")
+
+	// Without a concurrent move the undo puts it back.
+	finish, ok = f.api.beginMove(c, &models.Tool{}, id, f.def, &to)
+	require.True(t, ok)
+	finish(false)
+	ws, _ = f.stored(t, &models.Tool{}, id)
+	assert.Equal(t, f.def, ws, "undone")
 }
 
 // Testing with a saved filter's stored connection is executing that filter:
