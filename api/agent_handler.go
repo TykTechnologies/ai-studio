@@ -576,11 +576,13 @@ func (a *API) HandleListAgents(c *gin.Context) {
 		// Load groups and relationships for this agent
 		a.service.DB.Preload("Groups").Preload("Plugin").Preload("App").First(&agents[i], agents[i].ID)
 
-		// Check access
-		hasAccess := false
-		if len(agents[i].Groups) == 0 {
+		// Check access. On the admin API the Workspace scope (in SQL, above)
+		// is the visibility rule, so totals match the page; the team check
+		// is the Portal and Chat audience rule.
+		hasAccess := onAdminAPI(c)
+		if !hasAccess && len(agents[i].Groups) == 0 {
 			hasAccess = true // Public
-		} else {
+		} else if !hasAccess {
 			for _, agentGroup := range agents[i].Groups {
 				for _, userGroup := range thisUser.Groups {
 					if agentGroup.ID == userGroup.ID {
@@ -657,11 +659,12 @@ func (a *API) HandleGetAgent(c *gin.Context) {
 	// Load relationships
 	a.service.DB.Preload("Plugin").Preload("App").Preload("Groups").First(&agentConfig, agentConfig.ID)
 
-	// Check user has access
-	hasAccess := false
-	if len(agentConfig.Groups) == 0 {
+	// Check user has access: on the admin API the Workspace checks above
+	// are the rule; elsewhere the agent's teams.
+	hasAccess := onAdminAPI(c)
+	if !hasAccess && len(agentConfig.Groups) == 0 {
 		hasAccess = true
-	} else {
+	} else if !hasAccess {
 		for _, agentGroup := range agentConfig.Groups {
 			for _, userGroup := range thisUser.Groups {
 				if agentGroup.ID == userGroup.ID {
