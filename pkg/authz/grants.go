@@ -34,6 +34,8 @@ func (g Grants) Can(p Permission) bool {
 // CanIn reports whether p is held in the given Workspace: globally, or by a
 // binding scoped to that Workspace when p is on a Workspace resource. For a
 // ScopeWorkspaceParent resource pass the parent object's Workspace.
+// Workspace id 0 never matches a Workspace set: callers map a stored
+// workspace_id of 0 to the Default workspace first (EffectiveWorkspaceID).
 func (g Grants) CanIn(workspaceID uint, p Permission) bool {
 	if g.Global.Has(p) {
 		return true
