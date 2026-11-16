@@ -99,15 +99,13 @@ Every helper reads the object's stored `workspace_id` from the database (never a
 
 The helpers allow everything in TestMode and for a legacy caller outside `/api/v1` with no authorization context. A request that passed the gate, or any `/api/v1` request, without a context fails closed. In Community Edition grants are global only, so every check reduces to admin-or-not.
 
-The rules below marked **(B4)** land with the per-resource work (.7-.13) and are described as designed.
+**Inserts lock their Workspace.** Every stamped model's `BeforeCreate` takes the Workspace row `FOR SHARE` (Postgres) inside the create's transaction (`wsstamp`), so an object never lands in a Workspace a concurrent delete is removing (422 `invalid_workspace` then). Never create stamped rows on a `SkipDefaultTransaction` session.
 
-**Inserts lock their Workspace (B4).** Every stamped model's `BeforeCreate` takes the Workspace row `FOR SHARE` (Postgres) inside the create's transaction (`wsstamp`), so an object never lands in a Workspace a concurrent delete is removing (422 `invalid_workspace` then). Never create stamped rows on a `SkipDefaultTransaction` session.
-
-### Credential material (B4)
+### Credential material
 
 Read-global reads are metadata. A route that returns raw credential material of an object needs **write** in the object's Workspace: an LLM's `config_override`, an agent's plugin configuration (`agents:write`), and so on. The configuration of an embedded plugin is shown only to holders of global `plugins:read` (the same rule as `GET /plugins`). Secret values are never returned.
 
-### Secrets (B4)
+### Secrets
 
 - A `$SECRET/<name>` reference in an object must name a secret of the object's own Workspace (no Default fallback). An unknown name answers 403, so names in other Workspaces cannot be probed.
 - Secret names are unique across Workspaces.
@@ -117,12 +115,12 @@ Read-global reads are metadata. A route that returns raw credential material of 
 
 ---
 
-## 4. Moves (B4)
+## 4. Moves
 
 A move is a `PATCH` (or `PUT`) of the object with a different `workspace_id`:
 
 - The caller's write must cover **both** Workspaces (`requireMove`); the destination must exist (422 `invalid_workspace`, the same body when it is missing or not covered).
-- The move writes `workspace_id` and `updated_at` together, guarded on the stored value (a concurrent move answers 409), so it shows as a **pending change** and stains pushes (section 6).
+- The move writes `workspace_id` and `updated_at` together, guarded on the stored value (a concurrent move answers 409), so it shows as a **pending change** and stains pushes (section 7).
 - A move is attributed to its **destination** Workspace; no record of the previous Workspace is kept.
 - App credentials follow their App; nothing else moves with an object.
 
@@ -151,7 +149,26 @@ The audit trail records Workspace create, update and delete with field diffs (`w
 
 ## 6. Per-resource enforcement
 
-TODO (Slice B4: .7-.13). Per resource: create (landing rule), get (visibility), update/delete/publish/execute (in the object's Workspace), lists, moves, link-replacing saves that keep links the caller cannot see (team ↔ catalogues, catalogue ↔ routers, agent ↔ App), bulk actions, dependents, governed-metadata object routes, submission approval, and the list of exempt runtime, portal and edge paths.
+Every `/api/v1` route on a Workspace resource follows the pattern of section 3: the route is registered Workspace-checked, the handler (or route middleware such as `onObject` / `onVisibleObject`) checks each object it touches, creates land by D5, and lists show only what the caller may read. A hidden object and a missing one answer with byte-identical 404s on every route (no existence oracle).
+
+| Resources | Kind | Notes |
+|---|---|---|
+| LLMs, tools, datasources, filters, embedders, secrets (.7) | `workspace_write` | Reads are read-global (D4) with credentials redacted. Write, delete, publish and execute need the permission in the object's Workspace. Raw credential material (an LLM's `config_override`, its resource-signing key) needs write in the object's Workspace. `$SECRET/` references, secret moves and datasource clones follow section 3 "Secrets". |
+| File stores, MCP servers (.8) | `workspace_write` | As above. MCP-server actions (register, push, link, discover) run as execute in the server's Workspace; the Tyk connection they use is global (accepted risk, section 10). |
+| Plugins, webhook targets (.8) | `global` | Stamped for pushes only; the stamp is neither enforced nor shown. |
+| Apps and their credentials (.9) | `workspace_full`, `workspace_parent` | Every `/apps/:id` route checks the App (`onObject`, the handlers' own "App not found"). API and MCP credentials are checked in their App's Workspace, and lists and the MCP access report are limited to visible Apps. Binding routers or MCP servers and publishing are checked in the App's Workspace. Portal-created Apps land in the Default. |
+| Agents (.10) | `workspace_full` | On the admin API, agent lists and reads are scoped by Workspace, not by team. The agent's App must be visible (422 otherwise). The agent configuration is shown only with `agents:write` in its Workspace, an embedded plugin configuration only with global `plugins:read`. Changing an agent's teams (`group_ids`) needs the global `groups:write` (403, .48). The plugin must be enabled and agent-capable (422). The run routes check visibility, then `agents:execute` in the agent's Workspace. `/common` agent routes are unchanged (portal, team access). |
+| Model routers, semantic routers (.11) | `workspace_full` | Router ↔ catalogue saves keep links to catalogues the caller cannot see; router responses leave out the names of hidden catalogues. Pool and target LLMs are read-global. |
+| LLM, data and tool catalogues (.12) | `workspace_full` | Team ↔ catalogue saves keep links to hidden catalogues. Team responses list only visible catalogues; the team catalogue lists filter in the query, so totals match the page. Catalogue members (LLMs, datasources, tools) are read-global. |
+
+**Link-replacing saves.** A save that replaces a set of links (team ↔ catalogues, catalogue ↔ routers, router ↔ catalogues, App ↔ routers) validates the submitted ids the caller can see (404 for one they cannot, the same as a missing one) and keeps the stored links the caller cannot see (`mergeVisibleLinks`). Linking needs write on the object being edited and read on the linked object. Links to read-global objects are never hidden.
+
+### Cross-cutting paths (B4g, .13)
+
+- **Bulk actions** (`POST /{llms,tools,datasources,apps,filters,secrets,model-routers}/bulk`): before anything changes, every id is checked with the action's permission (publish for activate/deactivate, delete for delete) in its Workspace, in one query. The first **visible** object the caller cannot act on refuses the whole request with 403, and nothing changes. An object the caller may not see answers exactly like a missing id: a per-id "not found" in the 200, left untouched.
+- **Dependents** (`GET /{resource}/:id/dependents`): Apps, catalogues, agents and routers the caller may not see are left out of the lists and counted in `hidden`; `total` counts every dependent. No ids or names of hidden dependents are returned.
+- **Governed metadata on objects** (`/metadata/objects/{llm,tool,datasource}/:id`): writes need the object's write permission in its Workspace (403); a non-numeric id is a 400. Reads stay read-global. Other object types (`mcp_server`, `plugin_resource:*`) need the global `metadata` permission.
+- **Submission approval** (UGC): a new tool, datasource or MCP server lands by the reviewer's landing rule, or in the `workspace_id` they name (422 when their write does not cover it). Approving is the global `submissions:write`, so a reviewer who holds no write on the resource anywhere approves into the Default. Update submissions change the object where it is. Assigning catalogues needs write in each catalogue's Workspace: a missing or hidden catalogue answers the same 404, a visible one they cannot write 403; nothing is created. See `features/UGC.md`.
 
 ### Exempt paths (B4g)
 
@@ -213,4 +230,5 @@ An internal comparison with interop notes is kept by the security role for the O
 - `api/authz_workspace_test.go`, `api/authz_workspace_routes_test.go` — helpers, the gate, the classification registry.
 - `enterprise/features/workspaces/service_test.go` — CRUD, delete (moves, `updated_at`), counts, and the Postgres delete-vs-binding race.
 - `enterprise/_coretests/api/workspace_api_entlink_test.go` — the API, visibility, per-Workspace access, audit; Community: `api/workspace_handlers_community_test.go` (402).
-- TODO: the B4 per-resource matrices and the Slice C tests.
+- B4 per-resource (Enterprise, real middleware chain): `api/workspace_b4_enterprise_test.go`, `api/llm_workspace_test.go` (.7: write-scoped building blocks, secrets, clone), `api/workspace_b4b_enterprise_test.go` (.8: file stores, MCP servers), `api/workspace_b4c_enterprise_test.go` (.9: Apps and credentials), and in `enterprise/_coretests/api/`: `workspace_agents_entlink_test.go` (.10), `workspace_routers_entlink_test.go` (.11), `workspace_catalogues_entlink_test.go` (.12), `workspace_crosscutting_entlink_test.go` (.13: bulk, dependents, metadata objects, submission approval, hidden/missing parity).
+- TODO: the Slice C tests.
