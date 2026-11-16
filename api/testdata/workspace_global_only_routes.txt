@@ -17,7 +17,6 @@ DELETE /api/v1/datasources/:id/filestores/:filestore_id
 DELETE /api/v1/embedders/:id
 DELETE /api/v1/filestore/:id
 DELETE /api/v1/filters/:id
-DELETE /api/v1/llms/:id
 DELETE /api/v1/mcp-servers/:id
 DELETE /api/v1/model-routers/:id
 DELETE /api/v1/secrets/:id
@@ -81,16 +80,7 @@ GET /api/v1/filters/:id
 GET /api/v1/filters/:id/dependents
 GET /api/v1/filters/:id/exceptions
 GET /api/v1/filters/guardrail-providers
-GET /api/v1/llms
-GET /api/v1/llms/:id
-GET /api/v1/llms/:id/dependents
-GET /api/v1/llms/:id/plugins
-GET /api/v1/llms/:id/plugins/:pluginId/config
 GET /api/v1/llms/:id/resource-signing-key
-GET /api/v1/llms/max-privacy-score
-GET /api/v1/llms/min-privacy-score
-GET /api/v1/llms/privacy-score-range
-GET /api/v1/llms/search
 GET /api/v1/mcp-access-report
 GET /api/v1/mcp-credentials
 GET /api/v1/mcp-credentials/:id
@@ -143,7 +133,6 @@ PATCH /api/v1/datasources/:id
 PATCH /api/v1/embedders/:id
 PATCH /api/v1/filestore/:id
 PATCH /api/v1/filters/:id
-PATCH /api/v1/llms/:id
 PATCH /api/v1/mcp-servers/:id
 PATCH /api/v1/model-routers/:id
 PATCH /api/v1/model-routers/:id/toggle
@@ -186,10 +175,6 @@ POST /api/v1/embedders
 POST /api/v1/filestore
 POST /api/v1/filters
 POST /api/v1/filters/test
-POST /api/v1/llms
-POST /api/v1/llms/:id/activate
-POST /api/v1/llms/:id/deactivate
-POST /api/v1/llms/:id/resource-signing-key/rotate
 POST /api/v1/mcp-credentials
 POST /api/v1/mcp-credentials/:id/apply-drift
 POST /api/v1/mcp-credentials/:id/resume
@@ -222,8 +207,6 @@ POST /api/v1/tyk-connections/:id/policies  # stays global: acts on a global Tyk 
 PUT /api/v1/agents/:id
 PUT /api/v1/catalogues/:id/routers
 PUT /api/v1/datasources/:id/auth-plugins
-PUT /api/v1/llms/:id/plugins
-PUT /api/v1/llms/:id/plugins/:pluginId/config
 PUT /api/v1/mcp-servers/:id/bundle
 PUT /api/v1/mcp-servers/:id/catalogues
 PUT /api/v1/mcp-servers/:id/key-access

@@ -1026,6 +1026,9 @@ func (a *API) updateLLMPlugins(c *gin.Context) {
 		})
 		return
 	}
+	if !a.requireOnObject(c, &models.LLM{}, uint(id), authz.Write("llms")) {
+		return
+	}
 
 	var req struct {
 		PluginIDs []uint `json:"plugin_ids"`

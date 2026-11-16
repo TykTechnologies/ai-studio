@@ -696,20 +696,20 @@ func (a *API) setupRoutes() error {
 	v1.DELETE("/groups/:id/app-quota", authz.Delete("groups"), a.deleteTeamAppQuota)
 
 	// LLM routes
-	v1.POST("/llms", authz.Write("llms"), a.createLLM)
-	v1.GET("/llms/:id", authz.Read("llms"), a.getLLM)
-	v1.PATCH("/llms/:id", authz.Write("llms"), a.updateLLM)
-	v1.POST("/llms/:id/activate", authz.Publish("llms"), a.activateLLM)
-	v1.POST("/llms/:id/deactivate", authz.Publish("llms"), a.deactivateLLM)
-	v1.DELETE("/llms/:id", authz.Delete("llms"), a.deleteLLM)
-	v1.GET("/llms", authz.Read("llms"), a.listLLMs)
-	v1.GET("/llms/search", authz.Read("llms"), a.searchLLMs)
-	v1.GET("/llms/max-privacy-score", authz.Read("llms"), a.getLLMsByMaxPrivacyScore)
-	v1.GET("/llms/min-privacy-score", authz.Read("llms"), a.getLLMsByMinPrivacyScore)
-	v1.GET("/llms/privacy-score-range", authz.Read("llms"), a.getLLMsByPrivacyScoreRange)
-	v1.GET("/llms/:id/dependents", authz.Read("llms"), a.getLLMDependents)
+	v1.InWorkspace().POST("/llms", authz.Write("llms"), a.createLLM)
+	v1.InWorkspace().GET("/llms/:id", authz.Read("llms"), a.getLLM)
+	v1.InWorkspace().PATCH("/llms/:id", authz.Write("llms"), a.updateLLM)
+	v1.InWorkspace().POST("/llms/:id/activate", authz.Publish("llms"), a.activateLLM)
+	v1.InWorkspace().POST("/llms/:id/deactivate", authz.Publish("llms"), a.deactivateLLM)
+	v1.InWorkspace().DELETE("/llms/:id", authz.Delete("llms"), a.deleteLLM)
+	v1.InWorkspace().GET("/llms", authz.Read("llms"), a.listLLMs)
+	v1.InWorkspace().GET("/llms/search", authz.Read("llms"), a.searchLLMs)
+	v1.InWorkspace().GET("/llms/max-privacy-score", authz.Read("llms"), a.getLLMsByMaxPrivacyScore)
+	v1.InWorkspace().GET("/llms/min-privacy-score", authz.Read("llms"), a.getLLMsByMinPrivacyScore)
+	v1.InWorkspace().GET("/llms/privacy-score-range", authz.Read("llms"), a.getLLMsByPrivacyScoreRange)
+	v1.InWorkspace().GET("/llms/:id/dependents", authz.Read("llms"), a.getLLMDependents)
 	v1.GET("/llms/:id/resource-signing-key", authz.Read("llms"), a.getLLMResourceSigningKey)
-	v1.POST("/llms/:id/resource-signing-key/rotate", authz.Write("llms"), a.rotateLLMResourceSigningKey)
+	v1.InWorkspace().POST("/llms/:id/resource-signing-key/rotate", authz.Write("llms"), a.rotateLLMResourceSigningKey)
 	// Bulk actions resolve their permission from the body: publish for
 	// activate/deactivate, delete for delete (bulk_handlers.go).
 	v1.HandleFn("POST", "/llms/bulk", bulkActionPermission("llms"), a.bulkLLMs)
@@ -1014,8 +1014,8 @@ func (a *API) setupRoutes() error {
 	v1.GET("/plugins/assets/:id/*filepath", authz.AnyAdmin, a.servePluginAsset)
 
 	// LLM-Plugin association routes (extend existing LLM routes)
-	v1.GET("/llms/:id/plugins", authz.Read("llms"), a.getLLMPlugins)
-	v1.PUT("/llms/:id/plugins", authz.Write("llms"), a.updateLLMPlugins)
+	v1.InWorkspace().GET("/llms/:id/plugins", authz.Read("llms"), a.getLLMPlugins)
+	v1.InWorkspace().PUT("/llms/:id/plugins", authz.Write("llms"), a.updateLLMPlugins)
 
 	// Auth plugins on the other gateway endpoints (models.EndpointType*)
 	v1.GET("/datasources/:id/auth-plugins", authz.Read("datasources"), a.getEndpointAuthPlugins(models.EndpointTypeDatasource))
@@ -1030,8 +1030,8 @@ func (a *API) setupRoutes() error {
 	v1.PUT("/plugins/:id/auth-plugins", authz.Write("plugins"), a.updateEndpointAuthPlugins(models.EndpointTypePlugin))
 
 	// LLM-Plugin configuration routes
-	v1.GET("/llms/:id/plugins/:pluginId/config", authz.Read("llms"), a.getLLMPluginConfig)
-	v1.PUT("/llms/:id/plugins/:pluginId/config", authz.Write("llms"), a.updateLLMPluginConfig)
+	v1.InWorkspace().GET("/llms/:id/plugins/:pluginId/config", authz.Read("llms"), a.getLLMPluginConfig)
+	v1.InWorkspace().PUT("/llms/:id/plugins/:pluginId/config", authz.Write("llms"), a.updateLLMPluginConfig)
 
 	// Model Router routes (Enterprise only)
 	v1.POST("/model-routers", authz.Write("model-routers"), a.createModelRouter)

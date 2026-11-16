@@ -267,6 +267,7 @@ type LLMResponse struct {
 		TracingContentModeMax    string `json:"tracing_content_mode_max"`
 		TracingPropagationOptOut bool   `json:"tracing_propagation_opt_out"`
 		AllowInternalHost        bool   `json:"allow_internal_host"`
+		WorkspaceID              uint   `json:"workspace_id"`
 	} `json:"attributes"`
 }
 

@@ -14,9 +14,11 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/entitlements"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
 // @Summary Create a new LLM
@@ -32,7 +34,8 @@ import (
 // @Security BearerAuth
 func (a *API) createLLM(c *gin.Context) {
 	var input LLMInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	// Bound with the body kept, so workspace_id can be read from it too.
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -48,7 +51,12 @@ func (a *API) createLLM(c *gin.Context) {
 	if !a.validateGovernedMetadataInput(c, models.GovernedObjectTypeLLM, input.Data.Attributes.GovernedMetadata, true) {
 		return
 	}
-	if !requireSecretReadForCredentials(c, nil, llmCredentialFields(input.Data.Attributes.APIKey,
+	// The Workspace the provider lands in (decision D5).
+	workspaceID, ok := a.resolveCreateFromBody(c, "llms")
+	if !ok {
+		return
+	}
+	if !a.requireSecretRefsIn(c, workspaceID, nil, llmCredentialFields(input.Data.Attributes.APIKey,
 		input.Data.Attributes.APIEndpoint, input.Data.Attributes.Metadata)) {
 		return
 	}
@@ -62,6 +70,7 @@ func (a *API) createLLM(c *gin.Context) {
 		services.WithVendorWorkspaceID(input.Data.Attributes.VendorWorkspaceID),
 		services.WithPriceMultipliers(input.Data.Attributes.PriceMultipliers),
 		services.WithLLMTracing(input.Data.Attributes.TracingContentModeMax, input.Data.Attributes.TracingPropagationOptOut),
+		services.WithWorkspace(workspaceID),
 	}
 	if allow, ok := internalHostRequested(input.Data.Attributes.AllowInternalHost); ok {
 		llmOpts = append(llmOpts, services.WithAllowInternalHost(allow))
@@ -69,7 +78,7 @@ func (a *API) createLLM(c *gin.Context) {
 
 	// Creating a provider already active is the publish action on llms, and
 	// needs every "required to publish" metadata field.
-	if !a.requirePublishToCreateLive(c, "llms", input.Data.Attributes.Active) {
+	if !a.requirePublishToCreateLiveIn(c, "llms", workspaceID, input.Data.Attributes.Active) {
 		return
 	}
 	if input.Data.Attributes.Active && !a.publishGateOpen(c, models.GovernedObjectTypeLLM, "", input.Data.Attributes.GovernedMetadata) {
@@ -128,6 +137,10 @@ func (a *API) createLLM(c *gin.Context) {
 			input.Data.Attributes.Failover,
 			llmOpts...,
 		)
+	}
+	if isWorkspaceNotFound(err) {
+		invalidWorkspace(c)
+		return
 	}
 	if err != nil {
 		respondLLMServiceError(c, err)
@@ -246,9 +259,25 @@ func (a *API) updateLLM(c *gin.Context) {
 	// values rather than pointers, meant an omitted field arrived as its zero
 	// value and was written -- so {"filters":[3]} wiped the provider.
 	mergeLLMPatch(&input, thisLLM, llmPatchAttributeKeys(rawBody))
-	if !requireSecretReadForCredentials(c,
-		llmCredentialFields(thisLLM.APIKey, thisLLM.APIEndpoint, thisLLM.Metadata),
-		llmCredentialFields(input.Data.Attributes.APIKey, input.Data.Attributes.APIEndpoint, input.Data.Attributes.Metadata)) {
+	// Write in the provider's Workspace; a changed workspace_id is a move.
+	requested, ok := requestedWorkspaceID(c, rawBody)
+	if !ok {
+		return
+	}
+	moveTo, ok := a.checkObjectUpdate(c, "llms", thisLLM.WorkspaceID, requested)
+	if !ok {
+		return
+	}
+	refsIn := thisLLM.WorkspaceID
+	if moveTo != nil {
+		refsIn = *moveTo
+	}
+	newFields := llmCredentialFields(input.Data.Attributes.APIKey, input.Data.Attributes.APIEndpoint, input.Data.Attributes.Metadata)
+	if !a.requireSecretRefsIn(c, refsIn,
+		llmCredentialFields(thisLLM.APIKey, thisLLM.APIEndpoint, thisLLM.Metadata), newFields) {
+		return
+	}
+	if moveTo != nil && !a.requireSecretRefsStayIn(c, *moveTo, newFields) {
 		return
 	}
 	if !validatePrivacyScore(c, input.Data.Attributes.PrivacyScore) {
@@ -273,7 +302,7 @@ func (a *API) updateLLM(c *gin.Context) {
 
 	// Flipping the active switch is the publish action on llms; editing an
 	// already-active provider without touching the switch is plain write.
-	if !a.requirePublishIfChanged(c, "llms", thisLLM.Active, input.Data.Attributes.Active) {
+	if !a.requirePublishIfChangedIn(c, "llms", thisLLM.WorkspaceID, thisLLM.Active, input.Data.Attributes.Active) {
 		return
 	}
 	// Going live also needs every "required to publish" metadata field.
@@ -317,6 +346,12 @@ func (a *API) updateLLM(c *gin.Context) {
 	if err != nil {
 		respondLLMServiceError(c, err)
 		return
+	}
+	if moveTo != nil {
+		if !a.moveObject(c, &models.LLM{}, llm.ID, *moveTo) {
+			return
+		}
+		llm.WorkspaceID = *moveTo
 	}
 
 	// Reload proxy if:
@@ -458,6 +493,9 @@ func (a *API) deleteLLM(c *gin.Context) {
 		})
 		return
 	}
+	if !a.requireOnObject(c, &models.LLM{}, uint(id), authz.Delete("llms")) {
+		return
+	}
 
 	err = a.service.DeleteLLM(uint(id))
 	if err != nil {
@@ -504,6 +542,9 @@ func (a *API) listLLMs(c *gin.Context) {
 	pageSize, pageNumber, all := getPaginationParams(c)
 	opts, ok := parseListQuery(c, llmSortFields)
 	if !ok {
+		return
+	}
+	if opts.Filters, ok = a.listWorkspaceScopes(c, "llms"); !ok {
 		return
 	}
 
@@ -768,6 +809,7 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 			TracingContentModeMax    string                     `json:"tracing_content_mode_max"`
 			TracingPropagationOptOut bool                       `json:"tracing_propagation_opt_out"`
 			AllowInternalHost        bool                       `json:"allow_internal_host"`
+			WorkspaceID              uint                       `json:"workspace_id"`
 		}{
 			Name:                     llm.Name,
 			APIKey:                   services.REDACTED_VALUE,
@@ -797,6 +839,7 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 			TracingContentModeMax:    llm.TracingContentModeMax,
 			TracingPropagationOptOut: llm.TracingPropagationOptOut,
 			AllowInternalHost:        llm.AllowInternalHost,
+			WorkspaceID:              a.responseWorkspaceID(llm.WorkspaceID),
 		},
 	}
 }
@@ -901,6 +944,7 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 				TracingContentModeMax    string                     `json:"tracing_content_mode_max"`
 				TracingPropagationOptOut bool                       `json:"tracing_propagation_opt_out"`
 				AllowInternalHost        bool                       `json:"allow_internal_host"`
+				WorkspaceID              uint                       `json:"workspace_id"`
 			}{
 				Name:                     llm.Name,
 				APIKey:                   services.REDACTED_VALUE,
@@ -930,6 +974,7 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 				TracingContentModeMax:    llm.TracingContentModeMax,
 				TracingPropagationOptOut: llm.TracingPropagationOptOut,
 				AllowInternalHost:        llm.AllowInternalHost,
+				WorkspaceID:              a.responseWorkspaceID(llm.WorkspaceID),
 			},
 		}
 	}
@@ -1042,6 +1087,9 @@ func (a *API) updateLLMPluginConfig(c *gin.Context) {
 				Detail string `json:"detail"`
 			}{{Title: "Bad Request", Detail: "Invalid Plugin ID"}},
 		})
+		return
+	}
+	if !a.requireOnObject(c, &models.LLM{}, uint(llmID), authz.Write("llms")) {
 		return
 	}
 
