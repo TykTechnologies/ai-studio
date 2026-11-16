@@ -150,17 +150,9 @@ func (a *API) getModelRouter(c *gin.Context) {
 	}
 
 	router, err := a.service.ModelRouterService.GetRouter(uint(id))
-	if err != nil {
-		statusCode := http.StatusNotFound
-		if err == model_router.ErrEnterpriseFeature {
-			statusCode = http.StatusPaymentRequired
-		}
-		c.JSON(statusCode, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Error", Detail: err.Error()}},
-		})
+	if err != nil || router == nil {
+		// A missing router answers like a hidden one (modelRouterNotFound).
+		a.respondModelRouterLookupError(c, uint(id), err)
 		return
 	}
 
@@ -604,7 +596,7 @@ func (a *API) respondModelRouterLookupError(c *gin.Context, id uint, err error) 
 		return
 	}
 	if exists, lookupErr := a.rowExists(&models.ModelRouter{}, id); lookupErr == nil && !exists {
-		simpleError(c, http.StatusNotFound, "Not Found", "Model router not found")
+		modelRouterNotFound(c)
 		return
 	}
 	if err == nil {

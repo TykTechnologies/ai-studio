@@ -150,8 +150,9 @@ func (a *API) workspaceListFilters(c *gin.Context, resource string) ([]func(*gor
 
 // onVisibleObject is route middleware for a route on the object named by
 // :id: hidden (notFound) unless the caller's read covers its Workspace,
-// then perm in that Workspace (403). A malformed or unknown id passes, for
-// the handler to answer as it always has.
+// then perm in that Workspace (403). An unknown id answers notFound too,
+// byte-identical to a hidden one; a malformed id passes, for the handler to
+// answer as it always has.
 func (a *API) onVisibleObject(resource string, model interface{}, perm authz.Permission, notFound func(*gin.Context)) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if !a.workspaceChecksOn(c) {
@@ -169,7 +170,18 @@ func (a *API) onVisibleObject(resource string, model interface{}, perm authz.Per
 			c.Abort()
 			return
 		}
-		if found && (!a.requireVisible(c, resource, ws, notFound) || !a.requireInWorkspace(c, perm, ws)) {
+		if !found {
+			// A missing object answers with the same writer as a hidden
+			// one, so the two are byte-identical on every guarded route.
+			if notFound != nil {
+				notFound(c)
+			} else {
+				simpleError(c, http.StatusNotFound, "Not Found", "not found")
+			}
+			c.Abort()
+			return
+		}
+		if !a.requireVisible(c, resource, ws, notFound) || !a.requireInWorkspace(c, perm, ws) {
 			return
 		}
 		c.Next()

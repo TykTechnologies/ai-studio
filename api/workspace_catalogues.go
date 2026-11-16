@@ -24,7 +24,7 @@ func dataCatalogueNotFound(c *gin.Context) {
 }
 
 func toolCatalogueNotFound(c *gin.Context) {
-	simpleError(c, http.StatusNotFound, "Not Found", "Tool Catalogue not found")
+	simpleError(c, http.StatusNotFound, "Not Found", "Tool catalogue not found")
 }
 
 // requireMemberRead: adding a building block (an LLM, datasource, tool or
