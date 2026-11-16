@@ -226,3 +226,18 @@ func TestKeepWorkspaceID(t *testing.T) {
 	KeepWorkspaceID(&LLM{WorkspaceID: 4}, (*LLM)(nil))
 	assert.Equal(t, uint(9), l.WorkspaceID)
 }
+
+// Workspace ids are never reused (AUTOINCREMENT on SQLite, a sequence on
+// Postgres): a binding or stamp left pointing at a deleted Workspace must
+// never come to mean a new one.
+func TestWorkspaceIDsAreNotReused(t *testing.T) {
+	db := setupTestDB(t)
+	_, err := EnsureDefaultWorkspace(db)
+	require.NoError(t, err)
+	first := &Workspace{Name: "Short-lived"}
+	require.NoError(t, db.Create(first).Error)
+	require.NoError(t, db.Delete(first).Error)
+	second := &Workspace{Name: "Next"}
+	require.NoError(t, db.Create(second).Error)
+	assert.Greater(t, second.ID, first.ID)
+}
