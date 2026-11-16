@@ -60,6 +60,9 @@ func (a *API) createApp(c *gin.Context) {
 	llmIDs := input.Data.Attributes.LLMIDs
 	toolIDs := input.Data.Attributes.ToolIDs // Added toolIDs
 	metadata := input.Data.Attributes.Metadata
+	if !a.requireAppMemberRead(c, llmIDs, toolIDs, datasourceIDs) {
+		return
+	}
 
 	// Convert plugin resource inputs to service selections
 	var pluginResources []services.PluginResourceSelection
@@ -80,7 +83,7 @@ func (a *API) createApp(c *gin.Context) {
 		}
 	}
 	// So are router grants.
-	routerOpts, ok := a.adminAppRouterOptions(c, workspaceID, input.Data.Attributes.ModelRouterIDs, input.Data.Attributes.SemanticRouterIDs)
+	routerOpts, ok := a.adminAppRouterOptions(c, 0, input.Data.Attributes.ModelRouterIDs, input.Data.Attributes.SemanticRouterIDs)
 	if !ok {
 		return
 	}
@@ -345,6 +348,9 @@ func (a *API) updateApp(c *gin.Context) {
 	llmIDs := input.Data.Attributes.LLMIDs
 	toolIDs := input.Data.Attributes.ToolIDs // Added toolIDs
 	metadata := input.Data.Attributes.Metadata
+	if !a.requireAppMemberRead(c, llmIDs, toolIDs, datasourceIDs) {
+		return
+	}
 
 	// Flipping the active switch is the publish action on apps; an omitted
 	// switch keeps its value.
@@ -380,7 +386,7 @@ func (a *API) updateApp(c *gin.Context) {
 			return
 		}
 	}
-	routerOpts, ok := a.adminAppRouterOptions(c, dest, input.Data.Attributes.ModelRouterIDs, input.Data.Attributes.SemanticRouterIDs)
+	routerOpts, ok := a.adminAppRouterOptions(c, stored.ID, input.Data.Attributes.ModelRouterIDs, input.Data.Attributes.SemanticRouterIDs)
 	if !ok {
 		return
 	}
@@ -1087,6 +1093,9 @@ func (a *API) addToolToApp(c *gin.Context) {
 		return
 	}
 
+	if !a.requireMemberRead(c, "tools") {
+		return
+	}
 	app, err := a.service.AddToolToApp(uint(appID), uint(toolID), capabilityActorOption(c))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -1292,4 +1301,19 @@ func (a *API) serializeAppsIn(apps []models.App) []AppResponse {
 		out[i] = a.serializeAppIn(&apps[i])
 	}
 	return out
+}
+
+// requireAppMemberRead: linking LLMs, tools and datasources to an App needs
+// read on each kind it names, in some scope (they are read-global, D4), as
+// for catalogue members (requireMemberRead).
+func (a *API) requireAppMemberRead(c *gin.Context, llmIDs, toolIDs, datasourceIDs []uint) bool {
+	for _, m := range []struct {
+		ids      []uint
+		resource string
+	}{{llmIDs, "llms"}, {toolIDs, "tools"}, {datasourceIDs, "datasources"}} {
+		if len(m.ids) > 0 && !a.requireMemberRead(c, m.resource) {
+			return false
+		}
+	}
+	return true
 }

@@ -101,14 +101,57 @@ func (a *API) validateAppRouterBindings(c *gin.Context, actorID uint, actorAdmin
 // adminAppRouterOptions validates the router grants an admin App create or
 // update asks for (nil: the request leaves that kind alone) and returns them
 // as service options. It writes the error response itself and reports whether
-// the caller may go on.
-// workspaceID is the App's Workspace (stored value) after the request.
-func (a *API) adminAppRouterOptions(c *gin.Context, workspaceID uint, modelIDs, semanticIDs *[]uint) ([]services.AppOption, bool) {
+// the caller may go on. appID is the App being updated (0 on create).
+//
+// With Workspace checks on (.49), routers are read-scoped: every router the
+// request names must be visible to the caller (404 as a missing one
+// otherwise), and on update the stored grants the caller cannot see are kept
+// (mergeVisibleLinks). Only the visible, requested routers then go through
+// the grant rule, and the "may grant any active router" path is for
+// administrators and global App writers only, never for a writer scoped to
+// the App's Workspace.
+func (a *API) adminAppRouterOptions(c *gin.Context, appID uint, modelIDs, semanticIDs *[]uint) ([]services.AppOption, bool) {
 	if modelIDs == nil && semanticIDs == nil {
 		return nil, true
 	}
-	actorID, actorAdmin := a.adminAppActorIn(c, workspaceID)
+	merge := func(resource string, model interface{}, table, col string, submitted *[]uint, notFound string) (*[]uint, bool) {
+		if submitted == nil || !a.workspaceChecksOn(c) {
+			return submitted, true
+		}
+		var existing []uint
+		if appID != 0 {
+			var err error
+			if existing, err = a.linkedIDs(table, "app_id", col, appID); err != nil {
+				simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+				c.Abort()
+				return nil, false
+			}
+		}
+		ids, ok := a.mergeVisibleLinks(c, resource, model, *submitted, existing, notFound)
+		return &ids, ok
+	}
+	// Visibility first: a hidden router answers as a missing one before the
+	// grant rule could say anything about it.
+	if modelIDs != nil && a.workspaceChecksOn(c) {
+		if _, ok := a.mergeVisibleLinks(c, "model-routers", &models.ModelRouter{}, *modelIDs, nil, "Model router not found"); !ok {
+			return nil, false
+		}
+	}
+	if semanticIDs != nil && a.workspaceChecksOn(c) {
+		if _, ok := a.mergeVisibleLinks(c, "semantic-routers", &models.SemanticRouter{}, *semanticIDs, nil, "Semantic router not found"); !ok {
+			return nil, false
+		}
+	}
+	actorID, actorAdmin := adminAppActor(c) // global, never the App's Workspace
 	if !a.validateAppRouterBindings(c, actorID, actorAdmin, modelIDs, semanticIDs) {
+		return nil, false
+	}
+	modelIDs, ok := merge("model-routers", &models.ModelRouter{}, "app_model_routers", "model_router_id", modelIDs, "Model router not found")
+	if !ok {
+		return nil, false
+	}
+	semanticIDs, ok = merge("semantic-routers", &models.SemanticRouter{}, "app_semantic_routers", "semantic_router_id", semanticIDs, "Semantic router not found")
+	if !ok {
 		return nil, false
 	}
 	return appRouterOptions(modelIDs, semanticIDs), true

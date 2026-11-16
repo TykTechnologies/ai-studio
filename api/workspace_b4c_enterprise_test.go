@@ -14,6 +14,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
+	"github.com/TykTechnologies/midsommar/v2/services/rbac"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -213,4 +214,59 @@ func TestWorkspaceB4c_PortalAppLandsInDefault(t *testing.T) {
 	var app models.App
 	require.NoError(t, f.api.service.DB.Where("name = ?", "Portal app").First(&app).Error)
 	assert.Equal(t, f.def, app.WorkspaceID)
+}
+
+// Router grants on an App (.49): a router the caller cannot see is refused
+// as a missing one (never granted through the "any active router" path),
+// and an update keeps the stored grants the caller cannot see.
+func TestWorkspaceB4c_AppRouterGrantsRespectVisibility(t *testing.T) {
+	f := setupWSB4(t)
+	db := f.api.service.DB
+	hidden := &models.ModelRouter{Name: "Hidden", Slug: "hidden", Active: true, WorkspaceID: f.w2}
+	require.NoError(t, db.Create(hidden).Error)
+	hiddenSR := &models.SemanticRouter{Name: "Hidden SR", Slug: "hidden-sr", Active: true, WorkspaceID: f.w2}
+	require.NoError(t, db.Create(hiddenSR).Error)
+
+	// Granting a hidden router answers as granting a missing one.
+	sameNotFound(t,
+		f.do("POST", "/api/v1/apps", body(appAttrs("Grab", f.owner.ID, map[string]any{"model_router_ids": []uint{hidden.ID}})), f.inW1),
+		f.do("POST", "/api/v1/apps", body(appAttrs("Grab", f.owner.ID, map[string]any{"model_router_ids": []uint{999999}})), f.inW1))
+	sameNotFound(t,
+		f.do("POST", "/api/v1/apps", body(appAttrs("Grab", f.owner.ID, map[string]any{"semantic_router_ids": []uint{hiddenSR.ID}})), f.inW1),
+		f.do("POST", "/api/v1/apps", body(appAttrs("Grab", f.owner.ID, map[string]any{"semantic_router_ids": []uint{999999}})), f.inW1))
+	var n int64
+	require.NoError(t, db.Model(&models.App{}).Where("name = ?", "Grab").Count(&n).Error)
+	assert.Zero(t, n, "nothing created")
+
+	// A W1 App that an administrator granted the hidden routers keeps them
+	// when a W1 writer replaces the grants it can see.
+	id, _ := f.created(t, f.do("POST", "/api/v1/apps", body(appAttrs("Shared", f.owner.ID, nil)), f.inW1))
+	app := &models.App{}
+	require.NoError(t, db.First(app, id).Error)
+	require.NoError(t, db.Model(app).Association("ModelRouters").Append(hidden))
+	require.NoError(t, db.Model(app).Association("SemanticRouters").Append(hiddenSR))
+	w := f.do("PATCH", fmt.Sprintf("/api/v1/apps/%d", id), body(map[string]any{"model_router_ids": []uint{}, "semantic_router_ids": []uint{}}), f.inW1)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var mr, sr []uint
+	require.NoError(t, db.Table("app_model_routers").Where("app_id = ?", id).Pluck("model_router_id", &mr).Error)
+	require.NoError(t, db.Table("app_semantic_routers").Where("app_id = ?", id).Pluck("semantic_router_id", &sr).Error)
+	assert.Equal(t, []uint{hidden.ID}, mr, "the hidden Model Router grant survives")
+	assert.Equal(t, []uint{hiddenSR.ID}, sr, "the hidden Semantic Router grant survives")
+}
+
+// Linking LLMs, tools and datasources needs read on them somewhere.
+func TestWorkspaceB4c_AppMembersNeedRead(t *testing.T) {
+	f := setupWSB4(t)
+	db := f.api.service.DB
+	// A role bound in W1 with apps write but no llms read.
+	role := &models.Role{Name: "App writer", Slug: "app-writer", Permissions: []string{"apps:read", "apps:write"}}
+	require.NoError(t, db.Create(role).Error)
+	u := models.NewUser()
+	u.Email, u.Name, u.Password, u.EmailVerified = "aw@tyk.io", "aw", "hash", true
+	require.NoError(t, u.Create(db))
+	require.NoError(t, db.Create(&models.RoleBinding{SubjectType: models.RoleBindingSubjectUser, SubjectID: u.ID, RoleID: role.ID,
+		ScopeType: rbac.ScopeTypeWorkspace, ScopeID: rbac.WorkspaceScopeID(f.w1)}).Error)
+	w := f.do("POST", "/api/v1/apps", body(appAttrs("Linked", f.owner.ID, map[string]any{"llm_ids": []uint{1}})), u)
+	assertCode(t, w, http.StatusForbidden, authz.CodePermissionDenied)
+	assert.Contains(t, w.Body.String(), "llms:read")
 }
