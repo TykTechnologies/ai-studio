@@ -709,7 +709,8 @@ func (a *API) setupRoutes() error {
 	v1.InWorkspace().GET("/llms/min-privacy-score", authz.Read("llms"), a.getLLMsByMinPrivacyScore)
 	v1.InWorkspace().GET("/llms/privacy-score-range", authz.Read("llms"), a.getLLMsByPrivacyScoreRange)
 	v1.InWorkspace().GET("/llms/:id/dependents", authz.Read("llms"), a.getLLMDependents)
-	v1.GET("/llms/:id/resource-signing-key", authz.Read("llms"), a.getLLMResourceSigningKey)
+	// Key material: write in the LLM's Workspace, who can rotate it anyway.
+	v1.InWorkspace().GET("/llms/:id/resource-signing-key", authz.Write("llms"), a.onObject(&models.LLM{}, authz.Write("llms")), a.getLLMResourceSigningKey)
 	v1.InWorkspace().POST("/llms/:id/resource-signing-key/rotate", authz.Write("llms"), a.rotateLLMResourceSigningKey)
 	// Bulk actions resolve their permission from the body: publish for
 	// activate/deactivate, delete for delete (bulk_handlers.go).
@@ -1031,7 +1032,9 @@ func (a *API) setupRoutes() error {
 	v1.PUT("/plugins/:id/auth-plugins", authz.Write("plugins"), a.updateEndpointAuthPlugins(models.EndpointTypePlugin))
 
 	// LLM-Plugin configuration routes
-	v1.InWorkspace().GET("/llms/:id/plugins/:pluginId/config", authz.Read("llms"), a.getLLMPluginConfig)
+	// Raw plugin config (config_override) may hold secrets: write in the
+	// LLM's Workspace, not read-global llms:read (.46).
+	v1.InWorkspace().GET("/llms/:id/plugins/:pluginId/config", authz.Write("llms"), a.onObject(&models.LLM{}, authz.Write("llms")), a.getLLMPluginConfig)
 	v1.InWorkspace().PUT("/llms/:id/plugins/:pluginId/config", authz.Write("llms"), a.updateLLMPluginConfig)
 
 	// Model Router routes (Enterprise only)

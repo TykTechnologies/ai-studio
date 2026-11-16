@@ -55,7 +55,6 @@ GET /api/v1/data-catalogues/search
 GET /api/v1/filestore
 GET /api/v1/filestore/:id
 GET /api/v1/filestore/search
-GET /api/v1/llms/:id/resource-signing-key
 GET /api/v1/mcp-access-report
 GET /api/v1/mcp-credentials
 GET /api/v1/mcp-credentials/:id

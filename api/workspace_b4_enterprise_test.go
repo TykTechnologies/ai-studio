@@ -381,3 +381,37 @@ func TestWorkspaceB4_ReferencedSecretDoesNotMove(t *testing.T) {
 	ws, _ := f.stored(t, &secrets.Secret{}, id)
 	assert.Equal(t, f.w1, ws)
 }
+
+// Plugin config and key material on a Workspace object (.46): an LLM's
+// plugin config_override and its resource-signing key need write in the
+// LLM's Workspace; plugins listed on an object show their own config only
+// to a caller who may read plugins (global).
+func TestWorkspaceB4_PluginConfigAndSigningKey(t *testing.T) {
+	f := setupWSB4(t)
+	db := f.api.service.DB
+	mine, _ := f.created(t, f.do("POST", "/api/v1/llms", body(llmAttrs("Mine", nil)), f.inW1))
+	theirs, _ := f.created(t, f.do("POST", "/api/v1/llms", body(llmAttrs("Theirs", map[string]any{"workspace_id": f.w2})), f.owner))
+	plugin := &models.Plugin{Name: "Guard", Command: "file:///bin/true", HookType: "post_auth", IsActive: true,
+		Config: map[string]interface{}{"token": "plugin-secret"}}
+	require.NoError(t, db.Create(plugin).Error)
+	for _, llm := range []uint{mine, theirs} {
+		require.NoError(t, db.Create(&models.LLMPlugin{LLMID: llm, PluginID: plugin.ID, ConfigOverride: map[string]interface{}{"token": "override-secret"}}).Error)
+	}
+
+	cfg := func(id uint) string { return fmt.Sprintf("/api/v1/llms/%d/plugins/%d/config", id, plugin.ID) }
+	key := func(id uint) string { return fmt.Sprintf("/api/v1/llms/%d/resource-signing-key", id) }
+	assertCode(t, f.do("GET", cfg(theirs), nil, f.inW1), http.StatusForbidden, authz.CodePermissionDenied)
+	assertCode(t, f.do("GET", key(theirs), nil, f.inW1), http.StatusForbidden, authz.CodePermissionDenied)
+	w := f.do("GET", cfg(mine), nil, f.inW1)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "override-secret")
+	assert.Equal(t, http.StatusOK, f.do("GET", key(mine), nil, f.inW1).Code)
+
+	// The plugin list on an LLM: readable, without the plugin's config.
+	w = f.do("GET", fmt.Sprintf("/api/v1/llms/%d/plugins", theirs), nil, f.inW1)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), `"Guard"`)
+	assert.NotContains(t, w.Body.String(), "plugin-secret")
+	w = f.do("GET", fmt.Sprintf("/api/v1/llms/%d/plugins", theirs), nil, f.owner)
+	assert.Contains(t, w.Body.String(), "plugin-secret", "a plugins reader sees it")
+}
