@@ -714,7 +714,7 @@ func (a *API) setupRoutes() error {
 	v1.InWorkspace().POST("/llms/:id/resource-signing-key/rotate", authz.Write("llms"), a.rotateLLMResourceSigningKey)
 	// Bulk actions resolve their permission from the body: publish for
 	// activate/deactivate, delete for delete (bulk_handlers.go).
-	v1.HandleFn("POST", "/llms/bulk", bulkActionPermission("llms"), a.bulkLLMs)
+	v1.InWorkspace().HandleFn("POST", "/llms/bulk", bulkActionPermission("llms"), a.bulkLLMs)
 
 	// Catalogue routes
 	v1.InWorkspace().POST("/catalogues", authz.Write("catalogues"), a.createCatalogue)
@@ -754,7 +754,7 @@ func (a *API) setupRoutes() error {
 	v1.InWorkspace().POST("/datasources/:id/process-embeddings", authz.Execute("datasources"), a.onObject(&models.Datasource{}, authz.Execute("datasources")), a.ProcessFileEmbeddingHandler)
 	v1.InWorkspace().POST("/datasources/:id/clone", authz.Write("datasources"), a.onObject(&models.Datasource{}, authz.Write("datasources")), a.cloneDatasource)
 	v1.InWorkspace().GET("/datasources/:id/dependents", authz.Read("datasources"), a.getDatasourceDependents)
-	v1.HandleFn("POST", "/datasources/bulk", bulkActionPermission("datasources"), a.bulkDatasources)
+	v1.InWorkspace().HandleFn("POST", "/datasources/bulk", bulkActionPermission("datasources"), a.bulkDatasources)
 
 	// Data Catalogue routes
 	v1.InWorkspace().POST("/data-catalogues", authz.Write("data-catalogues"), a.createDataCatalogue)
@@ -818,7 +818,7 @@ func (a *API) setupRoutes() error {
 	v1.InWorkspace().GET("/apps/search", authz.Read("apps"), a.searchApps)
 	v1.InWorkspace().GET("/apps/count", authz.Read("apps"), a.countApps)
 	v1.InWorkspace().GET("/apps/:id/dependents", authz.Read("apps"), a.onObject(&models.App{}, authz.Read("apps"), appNotFound), a.getAppDependents)
-	v1.HandleFn("POST", "/apps/bulk", bulkActionPermission("apps"), a.bulkApps)
+	v1.InWorkspace().HandleFn("POST", "/apps/bulk", bulkActionPermission("apps"), a.bulkApps)
 	v1.InWorkspace().GET("/users/:id/apps/count", authz.Read("apps"), a.countAppsByUserID) // Note: Param is "id" here
 
 	// App-Tool routes
@@ -920,7 +920,7 @@ func (a *API) setupRoutes() error {
 	v1.InWorkspace().GET("/tools/:id/filters", authz.Read("tools"), a.getToolFilters)
 	v1.InWorkspace().PUT("/tools/:id/filters", authz.Write("tools"), a.onObject(&models.Tool{}, authz.Write("tools")), a.setToolFilters)
 	v1.InWorkspace().GET("/tools/:id/dependents", authz.Read("tools"), a.getToolDependents)
-	v1.HandleFn("POST", "/tools/bulk", bulkActionPermission("tools"), a.bulkTools)
+	v1.InWorkspace().HandleFn("POST", "/tools/bulk", bulkActionPermission("tools"), a.bulkTools)
 
 	// Tools import from a Tyk Dashboard connection (Enterprise; CE answers 403)
 	v1.GET("/tools/import/tyk/connections", authz.Write("tools"), a.listToolImportConnections)
@@ -953,7 +953,7 @@ func (a *API) setupRoutes() error {
 	v1.InWorkspace().GET("/filters/guardrail-providers", authz.Read("filters"), a.listGuardrailProviders)
 	v1.InWorkspace().GET("/filters/:id/dependents", authz.Read("filters"), a.getFilterDependents)
 	v1.InWorkspace().GET("/filters/:id/exceptions", authz.Read("filters"), a.listFilterGuardrailExceptions)
-	v1.HandleFn("POST", "/filters/bulk", bulkActionPermission("filters"), a.bulkFilters)
+	v1.InWorkspace().HandleFn("POST", "/filters/bulk", bulkActionPermission("filters"), a.bulkFilters)
 
 	// Plugin routes
 	v1.POST("/plugins", authz.Write("plugins"), a.createPlugin)
@@ -1053,7 +1053,7 @@ func (a *API) setupRoutes() error {
 	v1.InWorkspace().PATCH("/model-routers/:id/toggle", authz.Publish("model-routers"), a.onVisibleObject("model-routers", &models.ModelRouter{}, authz.Publish("model-routers"), modelRouterNotFound), a.toggleModelRouterActive)
 	v1.InWorkspace().GET("/model-routers/:id/dependents", authz.Read("model-routers"), a.onVisibleObject("model-routers", &models.ModelRouter{}, authz.Read("model-routers"), modelRouterNotFound), a.getModelRouterDependents)
 	v1.InWorkspace().PUT("/model-routers/:id/catalogues", authz.Write("model-routers"), a.setModelRouterCatalogues)
-	v1.HandleFn("POST", "/model-routers/bulk", bulkActionPermission("model-routers"), a.bulkModelRouters)
+	v1.InWorkspace().HandleFn("POST", "/model-routers/bulk", bulkActionPermission("model-routers"), a.bulkModelRouters)
 
 	// Semantic Router routes (Enterprise only)
 	// Embedders: reusable embedding configurations
@@ -1324,10 +1324,10 @@ func (a *API) setupRoutes() error {
 	v1.PATCH("/metadata/vocabularies/:id", authz.Write("metadata"), a.updateMetadataVocabulary)
 	v1.DELETE("/metadata/vocabularies/:id", authz.Delete("metadata"), a.deleteMetadataVocabulary)
 	v1.POST("/metadata/validate", authz.Write("metadata"), a.validateObjectMetadata)
-	v1.HandleFn("GET", "/metadata/objects/:object_type/:object_id", metadataObjectPermission(authz.ActionRead), a.getObjectMetadata)
-	v1.HandleFn("PUT", "/metadata/objects/:object_type/:object_id", metadataObjectPermission(authz.ActionWrite), a.setObjectMetadata)
-	v1.HandleFn("DELETE", "/metadata/objects/:object_type/:object_id", metadataObjectPermission(authz.ActionWrite), a.deleteObjectMetadata)
-	v1.HandleFn("GET", "/metadata/objects/:object_type/:object_id/audit", metadataObjectPermission(authz.ActionRead), a.getObjectMetadataAudit)
+	v1.InWorkspace().HandleFn("GET", "/metadata/objects/:object_type/:object_id", metadataObjectPermission(authz.ActionRead), a.onMetadataObject(authz.ActionRead), a.getObjectMetadata)
+	v1.InWorkspace().HandleFn("PUT", "/metadata/objects/:object_type/:object_id", metadataObjectPermission(authz.ActionWrite), a.onMetadataObject(authz.ActionWrite), a.setObjectMetadata)
+	v1.InWorkspace().HandleFn("DELETE", "/metadata/objects/:object_type/:object_id", metadataObjectPermission(authz.ActionWrite), a.onMetadataObject(authz.ActionWrite), a.deleteObjectMetadata)
+	v1.InWorkspace().HandleFn("GET", "/metadata/objects/:object_type/:object_id/audit", metadataObjectPermission(authz.ActionRead), a.onMetadataObject(authz.ActionRead), a.getObjectMetadataAudit)
 	v1.GET("/metadata/compliance", authz.Read("metadata"), a.getMetadataComplianceReport)
 
 	// Export routes (Enterprise feature)
@@ -1349,7 +1349,7 @@ func (a *API) setupRoutes() error {
 	v1.InWorkspace().DELETE("/secrets/:id", authz.Delete("secrets"), a.onObject(&secrets.Secret{}, authz.Delete("secrets")), a.deleteSecret)
 	v1.InWorkspace().GET("/secrets", authz.Read("secrets"), a.listSecrets)
 	v1.InWorkspace().GET("/secrets/:id/dependents", authz.Read("secrets"), a.getSecretDependents)
-	v1.HandleFn("POST", "/secrets/bulk", bulkActionPermission("secrets"), a.bulkSecrets)
+	v1.InWorkspace().HandleFn("POST", "/secrets/bulk", bulkActionPermission("secrets"), a.bulkSecrets)
 
 	// Branding routes
 	// Public endpoints (for frontend config loading and asset serving)

@@ -45,6 +45,9 @@ type AdminReviewInput struct {
 			// whether to publish the created server right away.
 			GatewayTags *[]string `json:"gateway_tags"`
 			Publish     bool      `json:"publish"`
+			// WorkspaceID is the Workspace a new datasource, tool or MCP
+			// server lands in; omitted, the reviewer's landing rule applies.
+			WorkspaceID *uint `json:"workspace_id"`
 		} `json:"attributes"`
 	} `json:"data"`
 }

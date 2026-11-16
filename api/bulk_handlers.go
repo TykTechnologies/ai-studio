@@ -86,8 +86,9 @@ type BulkActionResponse struct {
 // deactivate a 400 for them. before runs once, ahead of the loop, and may
 // end the request (the secrets store's key check, the router edition gate).
 type bulkTarget struct {
-	what      string // singular, for messages: "LLM", "tool"
-	resource  string // authz resource: "llms"
+	what      string      // singular, for messages: "LLM", "tool"
+	resource  string      // authz resource: "llms"
+	model     interface{} // stored model, for the Workspace check
 	before    func(c *gin.Context) bool
 	setActive func(c *gin.Context, id uint, active bool) error
 	remove    func(c *gin.Context, id uint) error
@@ -129,6 +130,41 @@ func bulkErrorMessage(err error, what string) string {
 	return err.Error()
 }
 
+// requireBulkInWorkspace checks perm on every id of a bulk request, with one
+// query for the stored Workspaces, in request order. It answers the first
+// refusal: 404 (as the single routes do) for an object of a read-scoped
+// resource the caller may not see, else 403 permission_denied.
+func (a *API) requireBulkInWorkspace(c *gin.Context, target bulkTarget, perm authz.Permission, bulkIDs []BulkID) bool {
+	if a.workspaceCheckMode(c) == workspaceOpen {
+		return true
+	}
+	ids := make([]uint, len(bulkIDs))
+	for i, id := range bulkIDs {
+		ids[i] = uint(id)
+	}
+	stored, err := a.workspaceOf(target.model, ids)
+	if err != nil {
+		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		c.Abort()
+		return false
+	}
+	for _, id := range ids {
+		ws, found := stored[id]
+		if !found {
+			continue
+		}
+		if !a.requireVisible(c, target.resource, ws, func(c *gin.Context) {
+			simpleError(c, http.StatusNotFound, "Not Found", fmt.Sprintf("%s %d not found", target.what, id))
+		}) {
+			return false
+		}
+		if !a.requireInWorkspace(c, perm, ws) {
+			return false
+		}
+	}
+	return true
+}
+
 // runBulkAction is the shared handler body.
 func (a *API) runBulkAction(c *gin.Context, target bulkTarget) {
 	if target.before != nil && !target.before(c) {
@@ -162,10 +198,16 @@ func (a *API) runBulkAction(c *gin.Context, target bulkTarget) {
 		return
 	}
 
-	// The per-object permission checks that a single route performs in its
-	// handler (rather than its annotation) apply once here: activating needs
-	// publish exactly as the dedicated route does.
-	if input.Action != bulkDelete && !a.requirePublish(c, target.resource) {
+	// Every object is checked before anything changes: the action's
+	// permission must cover each object's Workspace. The first object the
+	// caller cannot act on refuses the whole request (404 when the caller
+	// may not see it, 403 otherwise), so a refused request changes nothing.
+	// Unknown ids pass and get their per-id "not found" below.
+	perm := authz.Delete(target.resource)
+	if input.Action != bulkDelete {
+		perm = authz.Publish(target.resource)
+	}
+	if !a.requireBulkInWorkspace(c, target, perm, input.IDs) {
 		return
 	}
 
@@ -219,6 +261,7 @@ func (a *API) bulkLLMs(c *gin.Context) {
 	a.runBulkAction(c, bulkTarget{
 		what:     "LLM",
 		resource: "llms",
+		model:    &models.LLM{},
 		setActive: func(c *gin.Context, id uint, active bool) error {
 			// Going live needs every "required to publish" metadata field,
 			// as on the single route.
@@ -258,6 +301,7 @@ func (a *API) bulkTools(c *gin.Context) {
 	a.runBulkAction(c, bulkTarget{
 		what:     "tool",
 		resource: "tools",
+		model:    &models.Tool{},
 		setActive: func(c *gin.Context, id uint, active bool) error {
 			if active {
 				if err := a.publishGateError(c.Request.Context(), models.GovernedObjectTypeTool, models.BuiltinObjectID(id)); err != nil {
@@ -292,6 +336,7 @@ func (a *API) bulkDatasources(c *gin.Context) {
 	a.runBulkAction(c, bulkTarget{
 		what:     "datasource",
 		resource: "datasources",
+		model:    &models.Datasource{},
 		setActive: func(c *gin.Context, id uint, active bool) error {
 			if active {
 				if err := a.publishGateError(c.Request.Context(), models.GovernedObjectTypeDatasource, models.BuiltinObjectID(id)); err != nil {
@@ -326,6 +371,7 @@ func (a *API) bulkApps(c *gin.Context) {
 	a.runBulkAction(c, bulkTarget{
 		what:     "app",
 		resource: "apps",
+		model:    &models.App{},
 		setActive: func(c *gin.Context, id uint, active bool) error {
 			_, err := a.service.SetAppActive(id, active, currentUserID(c))
 			return err
@@ -349,6 +395,7 @@ func (a *API) bulkFilters(c *gin.Context) {
 	a.runBulkAction(c, bulkTarget{
 		what:     "filter",
 		resource: "filters",
+		model:    &models.Filter{},
 		remove:   func(c *gin.Context, id uint) error { return a.service.DeleteFilter(id) },
 	})
 }
@@ -369,6 +416,7 @@ func (a *API) bulkSecrets(c *gin.Context) {
 	a.runBulkAction(c, bulkTarget{
 		what:     "secret",
 		resource: "secrets",
+		model:    &secrets.Secret{},
 		before:   checkSecretKey,
 		remove: func(c *gin.Context, id uint) error {
 			// DeleteSecretByID is silent about a missing row; the single
@@ -406,6 +454,7 @@ func (a *API) bulkModelRouters(c *gin.Context) {
 	a.runBulkAction(c, bulkTarget{
 		what:     "model router",
 		resource: "model-routers",
+		model:    &models.ModelRouter{},
 		setActive: func(c *gin.Context, id uint, active bool) error {
 			return a.service.ModelRouterService.ToggleRouterActive(id, active)
 		},

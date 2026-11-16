@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/config"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/models/wsstamp"
 	"github.com/TykTechnologies/midsommar/v2/pkg/plugin_sdk"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 )
@@ -503,8 +505,13 @@ func (s *Service) ApproveSubmissionWithOptions(submissionID, reviewerID uint, fi
 	}
 	actorName := s.ResolveActorName(reviewerID, "")
 
-	// Begin transaction — all writes must succeed or all roll back
-	tx := s.DB.Begin()
+	// Begin transaction — all writes must succeed or all roll back. A
+	// created resource lands in opts.WorkspaceID (wsstamp; 0 is the Default).
+	db := s.DB
+	if opts.WorkspaceID != 0 {
+		db = s.DB.WithContext(wsstamp.WithWorkspace(context.Background(), opts.WorkspaceID))
+	}
+	tx := db.Begin()
 	if tx.Error != nil {
 		return nil, tx.Error
 	}

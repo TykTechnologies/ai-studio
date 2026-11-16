@@ -14,7 +14,8 @@ import (
 
 // DependentsResponse is the JSON:API-style envelope for a dependents lookup.
 // Every array in attributes is always present (empty when nothing references
-// the object) and total is their sum.
+// the object). Dependents the caller may not see are left out of the arrays
+// and counted in hidden; total counts them all.
 // @Description Dependents response model
 type DependentsResponse struct {
 	Data struct {
@@ -29,6 +30,58 @@ type DependentsResponse struct {
 type dependentsLookup struct {
 	exists func(id uint) (bool, error)
 	fetch  func(id uint) (*services.Dependents, error)
+	// catalogues is the kind of the Catalogues list (LLM catalogues when
+	// nil): tool dependents list tool catalogues, datasource dependents
+	// data catalogues.
+	catalogues *catalogueKind
+}
+
+// hideDependents drops, from each list of a Workspace-scoped kind, the
+// dependents the caller may not see, and counts them in Hidden (Total is
+// unchanged). Kinds that are read-global (LLMs, tools, datasources,
+// embedders: D4) and chats are left as they are.
+func (a *API) hideDependents(c *gin.Context, d *services.Dependents, catalogues catalogueKind) bool {
+	if !a.workspaceChecksOn(c) {
+		return true
+	}
+	lists := []struct {
+		refs     *[]services.DependentRef
+		resource string
+		model    interface{}
+	}{
+		{&d.Apps, "apps", &models.App{}},
+		{&d.Catalogues, catalogues.resource, catalogues.model},
+		{&d.Agents, "agents", &models.AgentConfig{}},
+		{&d.ModelRouters, "model-routers", &models.ModelRouter{}},
+		{&d.SemanticRouters, "semantic-routers", &models.SemanticRouter{}},
+	}
+	for _, l := range lists {
+		if len(*l.refs) == 0 {
+			continue
+		}
+		ids := make([]uint, len(*l.refs))
+		for i, r := range *l.refs {
+			ids[i] = r.ID
+		}
+		ws, err := a.workspaceOf(l.model, ids)
+		if err != nil {
+			simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+			return false
+		}
+		kept := make([]services.DependentRef, 0, len(*l.refs))
+		for _, r := range *l.refs {
+			if a.visibleIn(c, l.resource, ws[r.ID]) {
+				kept = append(kept, r)
+			} else {
+				d.Hidden++
+			}
+		}
+		if c.IsAborted() {
+			return false
+		}
+		*l.refs = kept
+	}
+	return true
 }
 
 func (a *API) rowExists(model interface{}, id uint) (bool, error) {
@@ -77,6 +130,14 @@ func (a *API) respondDependents(c *gin.Context, lookup dependentsLookup) {
 		return
 	}
 
+	kind := llmCatalogueKind
+	if lookup.catalogues != nil {
+		kind = *lookup.catalogues
+	}
+	if !a.hideDependents(c, deps, kind) {
+		return
+	}
+
 	var response DependentsResponse
 	response.Data.Type = "dependents"
 	response.Data.ID = strconv.FormatUint(id, 10)
@@ -113,8 +174,9 @@ func (a *API) getLLMDependents(c *gin.Context) {
 // @Security BearerAuth
 func (a *API) getToolDependents(c *gin.Context) {
 	a.respondDependents(c, dependentsLookup{
-		exists: func(id uint) (bool, error) { return a.rowExists(&models.Tool{}, id) },
-		fetch:  a.service.GetToolDependents,
+		exists:     func(id uint) (bool, error) { return a.rowExists(&models.Tool{}, id) },
+		fetch:      a.service.GetToolDependents,
+		catalogues: &toolCatalogueKind,
 	})
 }
 
@@ -130,8 +192,9 @@ func (a *API) getToolDependents(c *gin.Context) {
 // @Security BearerAuth
 func (a *API) getDatasourceDependents(c *gin.Context) {
 	a.respondDependents(c, dependentsLookup{
-		exists: func(id uint) (bool, error) { return a.rowExists(&models.Datasource{}, id) },
-		fetch:  a.service.GetDatasourceDependents,
+		exists:     func(id uint) (bool, error) { return a.rowExists(&models.Datasource{}, id) },
+		fetch:      a.service.GetDatasourceDependents,
+		catalogues: &dataCatalogueKind,
 	})
 }
 

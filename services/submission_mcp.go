@@ -20,6 +20,9 @@ type SubmissionApproveOptions struct {
 	GatewayTags *[]string
 	// Publish publishes the created MCP server to the portal straight away.
 	Publish bool
+	// WorkspaceID is the Workspace a created datasource, tool or MCP server
+	// lands in (resolved by the API); 0 is the Default.
+	WorkspaceID uint
 }
 
 func (s *Service) mcpSubmissionsAvailable() error {
@@ -67,6 +70,7 @@ func (s *Service) approveMCPSubmission(submission *models.Submission, reviewerID
 	}
 	ctx := context.Background()
 	actor := s.mcpActor(reviewerID)
+	actor.WorkspaceID = opts.WorkspaceID
 	if submission.ResourceID == nil {
 		in := tykmcp.RegisterInputFromPayload(submission.ResourcePayload)
 		score := finalPrivacyScore
