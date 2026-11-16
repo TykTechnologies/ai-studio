@@ -249,3 +249,61 @@ func TestWorkspaceB4_Tools(t *testing.T) {
 	assert.Equal(t, f.w2, ws)
 	assert.True(t, after.After(before))
 }
+
+func dsAttrs(name string, extra map[string]any) map[string]any {
+	a := map[string]any{"name": name, "privacy_score": 10, "db_source_type": "pinecone", "db_conn_string": "https://vec.example", "db_name": "idx"}
+	for k, v := range extra {
+		a[k] = v
+	}
+	return a
+}
+
+func TestWorkspaceB4_Datasources(t *testing.T) {
+	f := setupWSB4(t)
+
+	mine, ws := f.created(t, f.do("POST", "/api/v1/datasources", body(dsAttrs("Mine", nil)), f.inW1))
+	assert.Equal(t, f.w1, ws)
+	assertCode(t, f.do("POST", "/api/v1/datasources", body(dsAttrs("Elsewhere", map[string]any{"workspace_id": f.w2})), f.inW1),
+		http.StatusUnprocessableEntity, authz.CodeInvalidWorkspace)
+	theirs, _ := f.created(t, f.do("POST", "/api/v1/datasources", body(dsAttrs("Theirs", map[string]any{"workspace_id": f.w2})), f.owner))
+
+	path := func(id uint, suffix string) string { return fmt.Sprintf("/api/v1/datasources/%d%s", id, suffix) }
+	assert.Equal(t, http.StatusOK, f.do("GET", path(theirs, ""), nil, f.inW1).Code)
+	for _, req := range []struct{ method, path string }{
+		{"PATCH", path(theirs, "")}, {"DELETE", path(theirs, "")}, {"POST", path(theirs, "/activate")},
+		{"POST", path(theirs, "/process-embeddings")},
+	} {
+		var b any
+		if req.method == "PATCH" {
+			b = body(map[string]any{"short_description": "x"})
+		}
+		assertCode(t, f.do(req.method, req.path, b, f.inW1), http.StatusForbidden, authz.CodePermissionDenied)
+	}
+	assert.Equal(t, http.StatusOK, f.do("PATCH", path(mine, ""), body(map[string]any{"short_description": "edited"}), f.inW1).Code)
+
+	// Clone: write on the source's Workspace; the copy lands by the landing
+	// rule.
+	assertCode(t, f.do("POST", path(theirs, "/clone"), nil, f.inW1), http.StatusForbidden, authz.CodePermissionDenied)
+	_, ws = f.created(t, f.do("POST", path(mine, "/clone"), nil, f.inW1))
+	assert.Equal(t, f.w1, ws, "a clone of a W1 datasource lands in W1")
+	_, ws = f.created(t, f.do("POST", path(theirs, "/clone"), nil, f.owner))
+	assert.Equal(t, f.def, ws, "a global writer's clone lands by the landing rule, not in the source's Workspace")
+
+	for _, q := range []string{"/api/v1/datasources?all=true", "/api/v1/datasources/search?query=Theirs"} {
+		w := f.do("GET", fmt.Sprintf("%s&workspace_id=%d", q, f.w1), nil, f.owner)
+		require.Equal(t, http.StatusOK, w.Code, q)
+		assert.NotContains(t, w.Body.String(), `"Theirs"`, q)
+	}
+
+	_, before := f.stored(t, &models.Datasource{}, mine)
+	time.Sleep(10 * time.Millisecond)
+	require.Equal(t, http.StatusOK, f.do("PATCH", path(mine, ""), body(map[string]any{"workspace_id": f.w2}), f.inW1W2).Code)
+	ws, after := f.stored(t, &models.Datasource{}, mine)
+	assert.Equal(t, f.w2, ws)
+	assert.True(t, after.After(before))
+
+	// A connection string referencing another Workspace's secret.
+	require.NoError(t, secrets.CreateSecret(f.api.service.DB, &secrets.Secret{VarName: "W2CONN", Value: "v", WorkspaceID: f.w2}))
+	assertCode(t, f.do("POST", "/api/v1/datasources", body(dsAttrs("Cross", map[string]any{"db_conn_api_key": "$SECRET/W2CONN"})), f.inW1),
+		http.StatusForbidden, authz.CodePermissionDenied)
+}

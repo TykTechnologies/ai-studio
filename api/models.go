@@ -421,6 +421,9 @@ type DatasourceResponse struct {
 		// AllowInternalHost: the datasource's own host may be an internal
 		// address (an administrator's switch).
 		AllowInternalHost bool `json:"allow_internal_host"`
+		// WorkspaceID is the Workspace that owns the datasource (admin
+		// responses).
+		WorkspaceID uint `json:"workspace_id,omitempty"`
 	} `json:"attributes"`
 }
 

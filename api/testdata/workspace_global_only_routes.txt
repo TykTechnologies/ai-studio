@@ -12,8 +12,6 @@ DELETE /api/v1/credentials/:id
 DELETE /api/v1/data-catalogues/:id
 DELETE /api/v1/data-catalogues/:id/datasources/:datasourceId
 DELETE /api/v1/data-catalogues/:id/tags/:tagId
-DELETE /api/v1/datasources/:id
-DELETE /api/v1/datasources/:id/filestores/:filestore_id
 DELETE /api/v1/embedders/:id
 DELETE /api/v1/filestore/:id
 DELETE /api/v1/filters/:id
@@ -57,12 +55,6 @@ GET /api/v1/data-catalogues/:id/groups
 GET /api/v1/data-catalogues/by-datasource
 GET /api/v1/data-catalogues/by-tag
 GET /api/v1/data-catalogues/search
-GET /api/v1/datasources
-GET /api/v1/datasources/:id
-GET /api/v1/datasources/:id/auth-plugins
-GET /api/v1/datasources/:id/dependents
-GET /api/v1/datasources/by-tag
-GET /api/v1/datasources/search
 GET /api/v1/embedders
 GET /api/v1/embedders/:id
 GET /api/v1/embedders/:id/dependents
@@ -113,7 +105,6 @@ PATCH /api/v1/apps/:id/prompt-templates/:template_id
 PATCH /api/v1/catalogues/:id
 PATCH /api/v1/credentials/:id
 PATCH /api/v1/data-catalogues/:id
-PATCH /api/v1/datasources/:id
 PATCH /api/v1/embedders/:id
 PATCH /api/v1/filestore/:id
 PATCH /api/v1/filters/:id
@@ -148,12 +139,6 @@ POST /api/v1/credentials/:id/deactivate
 POST /api/v1/data-catalogues
 POST /api/v1/data-catalogues/:id/datasources
 POST /api/v1/data-catalogues/:id/tags
-POST /api/v1/datasources
-POST /api/v1/datasources/:id/activate
-POST /api/v1/datasources/:id/clone
-POST /api/v1/datasources/:id/deactivate
-POST /api/v1/datasources/:id/filestores/:filestore_id
-POST /api/v1/datasources/:id/process-embeddings
 POST /api/v1/embedders
 POST /api/v1/filestore
 POST /api/v1/filters
@@ -181,7 +166,6 @@ POST /api/v1/tool-catalogues/:id/tools
 POST /api/v1/tyk-connections/:id/policies  # stays global: acts on a global Tyk connection (.37)
 PUT /api/v1/agents/:id
 PUT /api/v1/catalogues/:id/routers
-PUT /api/v1/datasources/:id/auth-plugins
 PUT /api/v1/mcp-servers/:id/bundle
 PUT /api/v1/mcp-servers/:id/catalogues
 PUT /api/v1/mcp-servers/:id/key-access
