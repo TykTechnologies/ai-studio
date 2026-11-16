@@ -388,6 +388,44 @@ definitions:
       type:
         type: string
     type: object
+  api.AppGuardrailCapabilityInput:
+    properties:
+      value:
+        description: Value is read_only, read_tools or acting; "" clears the attestation.
+        type: string
+    type: object
+  api.AppGuardrailCapabilityResponse:
+    properties:
+      effective:
+        description: Effective is the capability the guardrail floors apply ("" is
+          acting).
+        type: string
+      guardrails_apply:
+        description: |-
+          GuardrailsApply is true when a guardrail filter is attached to one of
+          the App's LLMs: only then does a resource change by someone who is not
+          a full administrator clear the attestation visibly.
+        type: boolean
+      reasons:
+        items:
+          type: string
+        type: array
+      reset_at:
+        type: string
+      reset_by:
+        description: |-
+          ResetBy and ResetAt record the last visible reset of the attestation
+          after a resource change (ResetBy null when no user is known, such as a
+          plugin); both null once the capability is attested again.
+        type: integer
+      suggestion:
+        type: string
+      value:
+        description: |-
+          Value is the attested capability: read_only, read_tools, acting, or ""
+          when nobody has attested one (treated as acting).
+        type: string
+    type: object
   api.AppInput:
     description: App input model
     properties:
@@ -597,6 +635,17 @@ definitions:
             type: array
           description:
             type: string
+          guardrail_capability:
+            description: |-
+              GuardrailCapability is the attested capability ("" = unattested,
+              treated as acting); set with PUT /apps/{id}/guardrail-capability.
+            type: string
+          guardrail_capability_reset:
+            description: |-
+              GuardrailCapabilityReset is true on the response to a change that
+              cleared the attested capability (a resource change by someone who
+              is not a full administrator, on an App whose LLMs run guardrails).
+            type: boolean
           is_active:
             description: live switch (apps:publish)
             type: boolean
@@ -687,11 +736,25 @@ definitions:
       app_id:
         type: string
       budget_start_date:
+        description: |-
+          BudgetStartDate is the start of the current budget period, which
+          CurrentSpend covers.
+        type: string
+      currency:
+        description: |-
+          Currency is the currency of CurrentSpend: a budget's currency is
+          implied by its spend. When the period mixes currencies,
+          MixedCurrencySpend has the spend by currency instead, CurrentSpend is
+          0, and the budget refuses requests (costs are not converted).
         type: string
       current_spend:
         type: number
       last_access_at:
         type: string
+      mixed_currency_spend:
+        additionalProperties:
+          type: number
+        type: object
       monthly_budget:
         type: number
       percentage:
@@ -730,6 +793,24 @@ definitions:
         type: boolean
     required:
     - approved
+    type: object
+  api.BackfillModelPriceInput:
+    properties:
+      from:
+        type: string
+      to:
+        type: string
+    type: object
+  api.BackfillModelPriceResponse:
+    properties:
+      data:
+        properties:
+          model_price:
+            $ref: '#/definitions/api.ModelPriceResponse'
+          rows_priced:
+            description: RowsPriced is the number of chat records that were priced.
+            type: integer
+        type: object
     type: object
   api.BrandingSettingsAttributes:
     properties:
@@ -1159,6 +1240,8 @@ definitions:
             type: array
           name:
             type: string
+          workspace_id:
+            type: integer
         type: object
       id:
         type: string
@@ -1469,6 +1552,8 @@ definitions:
             items:
               $ref: '#/definitions/api.TagResponse'
             type: array
+          workspace_id:
+            type: integer
         type: object
       id:
         type: string
@@ -1692,6 +1777,8 @@ definitions:
             type: string
           last_sync_ack:
             type: string
+          license_state:
+            type: string
           loaded_checksum:
             type: string
           loaded_version:
@@ -1700,7 +1787,6 @@ definitions:
             additionalProperties: true
             type: object
           namespace:
-            description: Always "default" in CE
             type: string
           owner_label:
             description: |-
@@ -1732,6 +1818,12 @@ definitions:
   api.EffectiveAccessResponse:
     description: Effective permissions for a user
     properties:
+      admin_nav_hint:
+        description: |-
+          AdminNavHint tells the UI to show the admin navigation: the user holds
+          some permission, globally or within a Workspace. A UI hint only: it is
+          not users.is_admin, and nothing on the server authorizes on it.
+        type: boolean
       enabled:
         type: boolean
       has_admin_access:
@@ -1754,6 +1846,14 @@ definitions:
         type: object
       user_id:
         type: integer
+      workspaces:
+        description: |-
+          Workspaces lists the access Workspace-scoped bindings grant, per
+          Workspace (Enterprise). Permissions above are global and cover every
+          Workspace; they are not repeated here.
+        items:
+          $ref: '#/definitions/api.WorkspaceAccess'
+        type: array
     type: object
   api.EmbedderAttributes:
     properties:
@@ -2144,13 +2244,109 @@ definitions:
         type: string
       filter:
         type: string
+      id:
+        description: ID is the compliance event's, for reporting it as a false positive.
+        type: integer
       reason:
         type: string
       reason_code:
         type: string
+      reportable:
+        description: |-
+          Reportable is true when the owner can report the block as a false
+          positive: a detector's verdict on the App's request, from a filter
+          the event names.
+        type: boolean
       request_id:
         type: string
       timestamp:
+        type: string
+    type: object
+  api.GuardrailBlockReportInput:
+    properties:
+      justification:
+        type: string
+    type: object
+  api.GuardrailBlockReportResponse:
+    properties:
+      id:
+        type: integer
+      status:
+        type: string
+    type: object
+  api.GuardrailExceptionApproveInput:
+    properties:
+      content_hash:
+        description: |-
+          ContentHash is the content_hash of the exception the administrator
+          reviewed, as the API returned it. Required.
+        type: string
+    type: object
+  api.GuardrailExceptionInput:
+    properties:
+      action:
+        type: string
+      alert_event:
+        type: string
+      channel:
+        type: string
+      detector:
+        type: string
+      expires_after_days:
+        type: integer
+      filter_id:
+        type: integer
+      justification:
+        type: string
+      source_event:
+        type: integer
+      tool_name:
+        type: string
+    type: object
+  api.GuardrailExceptionResponse:
+    properties:
+      action:
+        type: string
+      alert_event:
+        description: AlertEvent names the event the alert action raises.
+        type: string
+      app_id:
+        type: integer
+      approved_at:
+        type: string
+      approved_by:
+        type: integer
+      channel:
+        type: string
+      content_hash:
+        description: ContentHash identifies the reviewed content; approving takes
+          it back.
+        type: string
+      created_at:
+        type: string
+      detector:
+        type: string
+      expires_after_days:
+        type: integer
+      filter_id:
+        type: integer
+      hit_count:
+        type: integer
+      id:
+        type: integer
+      justification:
+        type: string
+      last_hit_at:
+        type: string
+      proposed_by:
+        type: integer
+      source_event:
+        type: integer
+      status:
+        type: string
+      tool_name:
+        type: string
+      updated_at:
         type: string
     type: object
   api.LLMInput:
@@ -2636,6 +2832,15 @@ definitions:
             type: string
         type: object
     type: object
+  api.ModelPriceMeta:
+    properties:
+      unpriced_rows:
+        description: |-
+          UnpricedRows is the number of chat records this price prices that were
+          recorded at no cost (before the model had a price): what
+          POST /model-prices/{id}/backfill would price.
+        type: integer
+    type: object
   api.ModelPriceResponse:
     description: Model Price response model
     properties:
@@ -2666,6 +2871,10 @@ definitions:
         type: object
       id:
         type: string
+      meta:
+        allOf:
+        - $ref: '#/definitions/api.ModelPriceMeta'
+        description: Meta is set on the list response only.
       type:
         type: string
     type: object
@@ -2702,10 +2911,24 @@ definitions:
                 type: string
               slug:
                 type: string
+              workspace_id:
+                description: |-
+                  WorkspaceID places the router (create) or moves it
+                  (update); omitted = the landing rule / no move.
+                type: integer
             type: object
           type:
             type: string
         type: object
+    type: object
+  api.MyAppQuota:
+    properties:
+      max:
+        type: integer
+      unlimited:
+        type: boolean
+      used:
+        type: integer
     type: object
   api.NamespaceListResponse:
     properties:
@@ -2722,6 +2945,11 @@ definitions:
             type: integer
           edge_count:
             type: integer
+          licensed:
+            description: |-
+              Licensed is false for a namespace holding no licensed slot: its
+              edges get no configuration and are not push targets.
+            type: boolean
           llm_count:
             type: integer
           name:
@@ -2774,6 +3002,13 @@ definitions:
       surfaces:
         items:
           $ref: '#/definitions/api.NavItem'
+        type: array
+    type: object
+  api.NoticesResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/entitlements.Notice'
         type: array
     type: object
   api.OAuthErrorResponse:
@@ -3577,6 +3812,14 @@ definitions:
     properties:
       role_id:
         type: integer
+      scope_id:
+        type: string
+      scope_type:
+        description: |-
+          ScopeType is empty for a global binding (every Workspace) or
+          "workspace"; ScopeID is then the Workspace id in canonical decimal
+          form ("7"). Managing scoped bindings needs roles:write globally (D10).
+        type: string
       subject_id:
         type: integer
       subject_type:
@@ -3732,6 +3975,11 @@ definitions:
         type: string
       slug:
         type: string
+      workspace_id:
+        description: |-
+          WorkspaceID places the router (create) or moves it (update);
+          omitted = the landing rule / no move.
+        type: integer
     type: object
   api.SemanticRouterInput:
     properties:
@@ -3924,6 +4172,8 @@ definitions:
             items:
               $ref: '#/definitions/api.ToolResponse'
             type: array
+          workspace_id:
+            type: integer
         type: object
       id:
         type: string
@@ -4293,6 +4543,12 @@ definitions:
               the legacy role label the users list shows as "role"; the key
               itself is never included here (see POST /common/me/api-key/roll).
             type: string
+          admin_nav_hint:
+            description: |-
+              AdminNavHint tells the UI to show the admin navigation: the user
+              holds some permission, globally or within a Workspace. A UI hint
+              only: it is not is_admin, and nothing on the server authorizes on it.
+            type: boolean
           api_key_last_used_at:
             type: string
           auth_source:
@@ -4328,6 +4584,11 @@ definitions:
           has_api_key:
             type: boolean
           is_admin:
+            type: boolean
+          is_owner:
+            description: |-
+              IsOwner: the user holds the Owner role (the Super Admin without
+              roles), and so may open the License page.
             type: boolean
           is_super_admin:
             type: boolean
@@ -4366,6 +4627,15 @@ definitions:
               skip_quick_start:
                 type: boolean
             type: object
+          workspaces:
+            description: |-
+              Workspaces lists, per Workspace, the permissions the user holds
+              there through Workspace-scoped roles, for per-object UI gating
+              (Enterprise). Permissions above are global and cover every
+              Workspace.
+            items:
+              $ref: '#/definitions/api.WorkspaceAccess'
+            type: array
         type: object
       id:
         type: string
@@ -4451,6 +4721,70 @@ definitions:
           status:
             type: string
         type: object
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  api.WorkspaceAccess:
+    description: Access inside one Workspace
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+      permissions:
+        items:
+          type: string
+        type: array
+      roles:
+        items:
+          $ref: '#/definitions/rbac.RoleSummary'
+        type: array
+      sources:
+        additionalProperties:
+          items:
+            $ref: '#/definitions/rbac.PermissionSource'
+          type: array
+        type: object
+    type: object
+  api.WorkspaceAttributes:
+    description: Workspace attributes
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      is_default:
+        type: boolean
+      name:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  api.WorkspaceInput:
+    description: Workspace create or update payload
+    properties:
+      description:
+        type: string
+      name:
+        type: string
+    type: object
+  api.WorkspaceObjectsResponse:
+    description: Object counts of a Workspace, keyed by permission resource
+    properties:
+      counts:
+        additionalProperties:
+          type: integer
+        type: object
+      workspace_id:
+        type: integer
+    type: object
+  api.WorkspaceResponse:
+    description: Workspace response model
+    properties:
+      attributes:
+        $ref: '#/definitions/api.WorkspaceAttributes'
       id:
         type: string
       type:
@@ -4673,6 +5007,13 @@ definitions:
       title:
         type: string
     type: object
+  authz.ErrorBody:
+    properties:
+      errors:
+        items:
+          $ref: '#/definitions/authz.Error'
+        type: array
+    type: object
   authz.Resource:
     properties:
       actions:
@@ -4714,12 +5055,36 @@ definitions:
           Privileged marks resources whose write/delete can escalate access
           (users, groups, roles, identity providers, plugins). The UI warns.
         type: boolean
+      scope:
+        allOf:
+        - $ref: '#/definitions/authz.ScopeKind'
+        description: |-
+          Scope says whether the resource's objects belong to a Workspace and how
+          Workspace-scoped bindings apply to it; see ScopeKind. Plugin resources
+          are always global.
+      scope_parent:
+        description: |-
+          ScopeParent is, for ScopeWorkspaceParent, the key of the resource whose
+          objects own this one's ("apps" for credentials). Empty otherwise.
+        type: string
       sensitive:
         description: |-
           Sensitive marks a data class (transcripts, logs, secrets) that is split
           out so read can be withheld independently. The UI shows a shield.
         type: boolean
     type: object
+  authz.ScopeKind:
+    enum:
+    - ""
+    - workspace_write
+    - workspace_full
+    - workspace_parent
+    type: string
+    x-enum-varnames:
+    - ScopeGlobal
+    - ScopeWorkspaceWrite
+    - ScopeWorkspaceFull
+    - ScopeWorkspaceParent
   compliance.AccessIssue:
     properties:
       app_id:
@@ -5053,6 +5418,150 @@ definitions:
       violation_type:
         description: filter_block, model_access, budget_exceeded, auth_failure
         type: string
+    type: object
+  entitlements.Feature:
+    properties:
+      enabled:
+        type: boolean
+      key:
+        type: string
+      label:
+        type: string
+    type: object
+  entitlements.Limit:
+    properties:
+      key:
+        description: Key identifies the limit (stable, for the UI's React keys and
+          tests).
+        type: string
+      label:
+        type: string
+      max:
+        description: Max is the licensed maximum; ignore it when Unlimited.
+        type: integer
+      parts:
+        description: |-
+          Parts break Used down where a kind of holder is worth showing on its
+          own (the service accounts within admin seats). Omitted when none.
+        items:
+          $ref: '#/definitions/entitlements.LimitPart'
+        type: array
+      unlimited:
+        type: boolean
+      used:
+        type: integer
+    type: object
+  entitlements.LimitPart:
+    properties:
+      key:
+        type: string
+      label:
+        type: string
+      used:
+        type: integer
+    type: object
+  entitlements.NamespaceSlot:
+    properties:
+      claimed_at:
+        type: string
+      connected_edges:
+        description: |-
+          ConnectedEdges counts the namespace's edges; a slot with connected
+          edges cannot be released.
+        type: integer
+      frees_at:
+        type: string
+      idle_since:
+        description: |-
+          IdleSince is set while no edge is connected, and FreesAt is when the
+          slot is then released automatically.
+        type: string
+      namespace:
+        type: string
+    type: object
+  entitlements.NamespaceWait:
+    properties:
+      connected_edges:
+        type: integer
+      namespace:
+        type: string
+      position:
+        type: integer
+      waiting_since:
+        type: string
+    type: object
+  entitlements.Notice:
+    properties:
+      key:
+        type: string
+      label:
+        type: string
+      max:
+        type: integer
+      message:
+        type: string
+      unlimited:
+        type: boolean
+      used:
+        type: integer
+    type: object
+  entitlements.Report:
+    properties:
+      days_left:
+        type: integer
+      expires_at:
+        type: string
+      features:
+        items:
+          $ref: '#/definitions/entitlements.Feature'
+        type: array
+      limits:
+        items:
+          $ref: '#/definitions/entitlements.Limit'
+        type: array
+      namespaces:
+        description: Namespaces lists the namespaces holding a slot.
+        items:
+          $ref: '#/definitions/entitlements.NamespaceSlot'
+        type: array
+      skus:
+        items:
+          type: string
+        type: array
+      valid:
+        type: boolean
+      waiting:
+        description: Waiting lists the namespaces waiting for a slot, in admission
+          order.
+        items:
+          $ref: '#/definitions/entitlements.NamespaceWait'
+        type: array
+    type: object
+  entitlements.TeamAppQuota:
+    properties:
+      default_max:
+        description: The global default, for showing what members inherit.
+        type: integer
+      default_unlimited:
+        type: boolean
+      group_id:
+        type: integer
+      max_apps_per_member:
+        type: integer
+      set:
+        description: |-
+          Set reports whether the team has its own quota; otherwise its members
+          get the global default.
+        type: boolean
+      unlimited:
+        type: boolean
+    type: object
+  entitlements.TeamAppQuotaInput:
+    properties:
+      max_apps_per_member:
+        type: integer
+      unlimited:
+        type: boolean
     type: object
   fipsinfo.Status:
     properties:
@@ -5444,12 +5953,34 @@ definitions:
         type: number
       budget_start_date:
         type: string
+      currency:
+        description: |-
+          Currency is the currency of Spent: the one currency of the period's
+          spend (a budget's currency is implied by its spend). Empty when there
+          is no spend, or when the period mixes currencies.
+        type: string
       entity_id:
         type: integer
       entity_type:
         description: '"LLM" or "App"'
         type: string
+      mixed_currency_spend:
+        additionalProperties:
+          type: number
+        description: |-
+          MixedCurrencySpend is set when the period mixes currencies: the spend
+          by currency. Costs are not converted, so Spent and Usage are 0 and the
+          budget refuses requests.
+        type: object
       name:
+        type: string
+      period_end:
+        type: string
+      period_start:
+        description: |-
+          PeriodStart and PeriodEnd are the current budget period Spent covers,
+          as enforcement computes it (budget.Period): PeriodEnd is the start of
+          the next period (exclusive).
         type: string
       spent:
         type: number
@@ -6770,6 +7301,12 @@ definitions:
         items:
           $ref: '#/definitions/services.DependentRef'
         type: array
+      hidden:
+        description: |-
+          Hidden counts the dependents left out of the lists because the caller
+          may not see them (Workspace-scoped objects in other Workspaces); only
+          the count is given, never their ids or names.
+        type: integer
       llms:
         items:
           $ref: '#/definitions/services.DependentRef'
@@ -6789,6 +7326,7 @@ definitions:
           $ref: '#/definitions/services.DependentRef'
         type: array
       total:
+        description: Total counts every dependent, including Hidden ones.
         type: integer
     type: object
   services.PendingChange:
@@ -11600,6 +12138,64 @@ paths:
       summary: Remove user from group
       tags:
       - groups
+  /api/v1/license:
+    get:
+      description: The licence's SKUs, expiry, features, and each limit with its usage,
+        plus the namespaces holding a licensed slot. Owner only; Community Edition
+        answers 402.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/entitlements.Report'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Licence report
+      tags:
+      - license
+  /api/v1/license/namespaces/{namespace}:
+    delete:
+      description: Frees the namespace's licensed slot so another namespace can claim
+        it. Refused (409) while edges in the namespace are connected. Owner only;
+        Community Edition answers 402.
+      parameters:
+      - description: Namespace
+        in: path
+        name: namespace
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Release a namespace's licensed slot
+      tags:
+      - license
   /api/v1/llms/{id}/plugins:
     get:
       consumes:
@@ -14571,10 +15167,268 @@ paths:
       summary: Get app dependents
       tags:
       - apps
+  /apps/{id}/guardrail-capability:
+    get:
+      description: The capability a full administrator attested for the app (value,
+        "" when unattested and treated as acting) and the one Studio suggests from
+        its tools, MCP servers and datasources, with the reasons.
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AppGuardrailCapabilityResponse'
+      security:
+      - BearerAuth: []
+      summary: Get an app's guardrail capability
+      tags:
+      - apps
+    put:
+      consumes:
+      - application/json
+      description: Attests what the app can do (read_only, read_tools or acting; ""
+        clears it). Full administrators only.
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Capability
+        in: body
+        name: capability
+        required: true
+        schema:
+          $ref: '#/definitions/api.AppGuardrailCapabilityInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.AppGuardrailCapabilityResponse'
+      security:
+      - BearerAuth: []
+      summary: Set an app's guardrail capability
+      tags:
+      - apps
+  /apps/{id}/guardrail-exceptions:
+    get:
+      description: Lists the guardrail exceptions of an app, optionally by status
+        (proposed, approved, retired). The response's meta holds the rules the API
+        applies (GuardrailExceptionMeta).
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Status filter
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.GuardrailExceptionResponse'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: List an app's guardrail exceptions
+      tags:
+      - apps
+    post:
+      consumes:
+      - application/json
+      description: Softens a guardrail filter's action on a verdict for this app,
+        one filter, detector ("" = any) and channel (text_user, text_system, tool_result,
+        tool_call, tool_definition; tool_name narrows a tool channel). The action
+        must be within the floor for the app's guardrail capability. A full administrator's
+        exception is approved at once; anyone else's is proposed and the administrators
+        are notified.
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Exception
+        in: body
+        name: exception
+        required: true
+        schema:
+          $ref: '#/definitions/api.GuardrailExceptionInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.GuardrailExceptionResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a guardrail exception
+      tags:
+      - apps
+  /apps/{id}/guardrail-exceptions/{eid}:
+    delete:
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Exception ID
+        in: path
+        name: eid
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+      security:
+      - BearerAuth: []
+      summary: Delete a guardrail exception
+      tags:
+      - apps
+    get:
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Exception ID
+        in: path
+        name: eid
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.GuardrailExceptionResponse'
+      security:
+      - BearerAuth: []
+      summary: Get an app's guardrail exception
+      tags:
+      - apps
+    patch:
+      consumes:
+      - application/json
+      description: Changes an exception. A change to an approved exception returns
+        it to proposed, unless a full administrator makes it. A retired exception
+        cannot change.
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Exception ID
+        in: path
+        name: eid
+        required: true
+        type: integer
+      - description: Changes
+        in: body
+        name: exception
+        required: true
+        schema:
+          $ref: '#/definitions/api.GuardrailExceptionInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.GuardrailExceptionResponse'
+      security:
+      - BearerAuth: []
+      summary: Change a guardrail exception
+      tags:
+      - apps
+  /apps/{id}/guardrail-exceptions/{eid}/approve:
+    post:
+      consumes:
+      - application/json
+      description: Approves a proposed exception (full administrators only). content_hash
+        must be the content_hash of the exception as reviewed; an exception that changed
+        since is refused with 409.
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Exception ID
+        in: path
+        name: eid
+        required: true
+        type: integer
+      - description: Reviewed content hash
+        in: body
+        name: approval
+        required: true
+        schema:
+          $ref: '#/definitions/api.GuardrailExceptionApproveInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.GuardrailExceptionResponse'
+      security:
+      - BearerAuth: []
+      summary: Approve a guardrail exception
+      tags:
+      - apps
+  /apps/{id}/guardrail-exceptions/{eid}/retire:
+    post:
+      description: 'Retires an exception: it is kept for the record and never applies
+        again.'
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Exception ID
+        in: path
+        name: eid
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.GuardrailExceptionResponse'
+      security:
+      - BearerAuth: []
+      summary: Retire a guardrail exception
+      tags:
+      - apps
   /apps/{id}/prompt-templates:
     get:
       description: Lists the trusted prompt template versions of an app, optionally
-        by status (proposed, approved, retired).
+        by status (proposed, approved, retired). The response's meta holds the constant
+        lengths this Studio accepts (AppPromptTemplateLimits).
       parameters:
       - description: App ID
         in: path
@@ -14727,6 +15581,12 @@ paths:
         name: template_id
         required: true
         type: integer
+      - description: The reviewed version's content_hash
+        in: body
+        name: approval
+        required: true
+        schema:
+          $ref: '#/definitions/api.AppPromptTemplateApproveInput'
       produces:
       - application/json
       responses:
@@ -14762,12 +15622,6 @@ paths:
         name: template_id
         required: true
         type: integer
-      - description: The reviewed version's content_hash
-        in: body
-        name: approval
-        required: true
-        schema:
-          $ref: '#/definitions/api.AppPromptTemplateApproveInput'
       produces:
       - application/json
       responses:
@@ -16541,6 +17395,43 @@ paths:
       summary: List the guardrail blocks of one of the user's Apps
       tags:
       - Portal
+  /common/apps/{id}/guardrail-blocks/{event_id}/report:
+    post:
+      consumes:
+      - application/json
+      description: 'Proposes a guardrail exception for the App from one of its blocks
+        (GET .../guardrail-blocks, reportable): the event''s filter, detector, channel
+        and tool, softened to the softest action the App''s capability allows there.
+        Proposed for an administrator to approve; App owners cannot approve it.'
+      parameters:
+      - description: App ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Compliance event ID
+        in: path
+        name: event_id
+        required: true
+        type: integer
+      - description: Why it is a false positive
+        in: body
+        name: report
+        required: true
+        schema:
+          $ref: '#/definitions/api.GuardrailBlockReportInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.GuardrailBlockReportResponse'
+      security:
+      - BearerAuth: []
+      summary: Report a guardrail block of one of the user's Apps as a false positive
+      tags:
+      - portal
   /common/apps/{id}/mcp:
     get:
       parameters:
@@ -17131,6 +18022,26 @@ paths:
       summary: Roll my API key
       tags:
       - me
+  /common/me/app-quota:
+    get:
+      description: How many Apps the signed-in user owns and how many they may create
+        through the portal (Enterprise)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.MyAppQuota'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: My App quota
+      tags:
+      - portal
   /common/me/preferences:
     get:
       description: Notification preferences of the signed-in user.
@@ -17201,6 +18112,48 @@ paths:
       summary: Get the navigation manifest
       tags:
       - system
+  /common/notices:
+    get:
+      description: Licence limits and App quota near their maximum that the signed-in
+        user has not dismissed; always empty in Community Edition
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.NoticesResponse'
+      security:
+      - BearerAuth: []
+      summary: My near-limit notices
+      tags:
+      - common
+  /common/notices/{key}/dismiss:
+    post:
+      description: Hides the notice for the signed-in user for good; a licence with
+        a different maximum shows it again (Enterprise)
+      parameters:
+      - description: Notice key
+        in: path
+        name: key
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Dismiss a notice
+      tags:
+      - common
   /common/sessions/{session_id}/messages:
     get:
       consumes:
@@ -17562,6 +18515,44 @@ paths:
           schema:
             $ref: '#/definitions/models.ErrorResponse'
       summary: Get script-reported compliance events
+      tags:
+      - Compliance
+  /compliance/events/{id}:
+    get:
+      description: Get a script-reported compliance event by id, as the events list
+        returns it (Enterprise). Guardrail alerts and outcome events link to it.
+      parameters:
+      - description: Compliance event ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/compliance.ComplianceEventRecord'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get one compliance event
       tags:
       - Compliance
   /compliance/export:
@@ -19663,6 +20654,34 @@ paths:
       summary: Get filter dependents
       tags:
       - filters
+  /filters/{id}/exceptions:
+    get:
+      description: Lists the exceptions that soften this filter's verdicts, across
+        apps, optionally by status.
+      parameters:
+      - description: Filter ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Status filter
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.GuardrailExceptionResponse'
+            type: array
+      security:
+      - BearerAuth: []
+      summary: List a filter's guardrail exceptions
+      tags:
+      - filters
   /filters/bulk:
     post:
       consumes:
@@ -19886,6 +20905,93 @@ paths:
       security:
       - BearerAuth: []
       summary: Update a group
+      tags:
+      - groups
+  /groups/{id}/app-quota:
+    delete:
+      description: Members get the global default again (Enterprise)
+      parameters:
+      - description: Team ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Remove a team's App quota
+      tags:
+      - groups
+    get:
+      description: The team's own per-member quota of self-service Apps, and the global
+        default its members get without one (Enterprise)
+      parameters:
+      - description: Team ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/entitlements.TeamAppQuota'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a team's App quota
+      tags:
+      - groups
+    put:
+      consumes:
+      - application/json
+      description: Members may create this many Apps each through the portal; the
+        most generous of a user's teams applies (Enterprise)
+      parameters:
+      - description: Team ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Quota
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/entitlements.TeamAppQuotaInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/entitlements.TeamAppQuota'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Set a team's App quota
       tags:
       - groups
   /groups/{id}/budget:
@@ -21817,7 +22923,10 @@ paths:
     post:
       consumes:
       - application/json
-      description: Create a new model price with the provided information
+      description: Create a new model price with the provided information. Traffic
+        auto-creates an unpriced (all zero) price for every model it sees; when the
+        model and vendor have one, it is filled in and 200 is returned. When they
+        already have a priced row, 409 names it.
       parameters:
       - description: Model Price information
         in: body
@@ -21828,12 +22937,20 @@ paths:
       produces:
       - application/json
       responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ModelPriceResponse'
         "201":
           description: Created
           schema:
             $ref: '#/definitions/api.ModelPriceResponse'
         "400":
           description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: Conflict
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "500":
@@ -21939,6 +23056,49 @@ paths:
       security:
       - BearerAuth: []
       summary: Update a model price
+      tags:
+      - model-prices
+  /model-prices/{id}/backfill:
+    post:
+      consumes:
+      - application/json
+      description: Price the chat records this price prices that were recorded at
+        no cost (traffic from before the model had a price), at the current price,
+        optionally only within a date range (inclusive dates, UTC). Records that have
+        a cost are left alone; to reprice those, use PATCH /model-prices/{id}/recalculate.
+      parameters:
+      - description: Model Price ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Optional date range
+        in: body
+        name: range
+        schema:
+          $ref: '#/definitions/api.BackfillModelPriceInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.BackfillModelPriceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Backfill a model price's unpriced history
       tags:
       - model-prices
   /model-prices/{id}/recalculate:
@@ -22655,6 +23815,14 @@ paths:
         in: query
         name: role_id
         type: integer
+      - description: global (unscoped bindings only) or workspace
+        in: query
+        name: scope_type
+        type: string
+      - description: Workspace id (with scope_type=workspace)
+        in: query
+        name: scope_id
+        type: string
       produces:
       - application/json
       responses:
@@ -22974,7 +24142,8 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "409":
-          description: Another secret has the name, or objects in another Workspace reference it
+          description: Another secret has the name, or objects in another Workspace
+            reference it
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "500":
@@ -23093,7 +24262,9 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "409":
-          description: Renaming a referenced secret, a name another secret has or objects in another Workspace reference, a concurrent move, or moving a duplicate name
+          description: Renaming a referenced secret, a name another secret has or
+            objects in another Workspace reference, a concurrent move, or moving a
+            duplicate name
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "500":
@@ -27177,6 +28348,209 @@ paths:
       summary: Topics a target can subscribe to
       tags:
       - Webhooks
+  /workspaces:
+    get:
+      description: 'Lists the Workspaces the caller can work in: every Workspace for
+        a caller whose access covers them all (workspaces:read, or any global permission
+        on Workspace objects), otherwise those the caller holds a Workspace-scoped
+        role in. The Default workspace comes first. Enterprise Edition.'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              items:
+                $ref: '#/definitions/api.WorkspaceResponse'
+              type: array
+            type: object
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/authz.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: List Workspaces
+      tags:
+      - workspaces
+    post:
+      consumes:
+      - application/json
+      description: Creates a Workspace. Names are unique without regard to case. Enterprise
+        Edition.
+      parameters:
+      - description: Workspace
+        in: body
+        name: workspace
+        required: true
+        schema:
+          $ref: '#/definitions/api.WorkspaceInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/api.WorkspaceResponse'
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/authz.ErrorBody'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/authz.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/authz.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Create a Workspace
+      tags:
+      - workspaces
+  /workspaces/{id}:
+    delete:
+      description: Deletes a Workspace and moves every object it owns to the Default
+        workspace. Refused (409 default_workspace_locked) for the Default, and (409
+        workspace_in_use) while a role is assigned within it. Enterprise Edition.
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/authz.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/authz.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/authz.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Delete a Workspace
+      tags:
+      - workspaces
+    get:
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/api.WorkspaceResponse'
+            type: object
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/authz.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/authz.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Get a Workspace
+      tags:
+      - workspaces
+    patch:
+      consumes:
+      - application/json
+      description: Renames or re-describes a Workspace. is_default cannot be changed.
+        Enterprise Edition.
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Fields to change
+        in: body
+        name: workspace
+        required: true
+        schema:
+          $ref: '#/definitions/api.WorkspaceInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/api.WorkspaceResponse'
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/authz.ErrorBody'
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/authz.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/authz.ErrorBody'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/authz.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Update a Workspace
+      tags:
+      - workspaces
+  /workspaces/{id}/objects:
+    get:
+      description: Counts the objects a Workspace owns, per resource (llms, apps,
+        ...), for the Workspace page. Enterprise Edition.
+      parameters:
+      - description: Workspace ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/api.WorkspaceObjectsResponse'
+            type: object
+        "402":
+          description: Payment Required
+          schema:
+            $ref: '#/definitions/authz.ErrorBody'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/authz.ErrorBody'
+      security:
+      - BearerAuth: []
+      summary: Count a Workspace's objects
+      tags:
+      - workspaces
 securityDefinitions:
   BearerAuth:
     in: header

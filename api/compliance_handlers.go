@@ -707,6 +707,7 @@ func (a *API) getComplianceEvents(c *gin.Context) {
 // @Failure 404 {object} models.ErrorResponse
 // @Failure 500 {object} models.ErrorResponse
 // @Router /compliance/events/{id} [get]
+// @Security BearerAuth
 func (a *API) getComplianceEvent(c *gin.Context) {
 	fail := func(code int, title, detail string) {
 		c.JSON(code, models.ErrorResponse{
