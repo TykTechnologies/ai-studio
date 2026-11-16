@@ -210,8 +210,7 @@ func (a *API) mayAssignRolesOnCreate(c *gin.Context, roleIDs []uint, isAdmin boo
 		}
 		ownerChecked = true
 		if accountType == models.AccountTypeService {
-			helpers.SendErrorResponse(c, helpers.NewUnprocessableEntityError(
-				"the Owner role cannot be given to a service account", services.ServiceAccountCode))
+			rbacErrorResponse(c, rbac.ErrServiceAccountOwner)
 			return false
 		}
 		if actor, ok := auth.UserFromContext(c); ok {
