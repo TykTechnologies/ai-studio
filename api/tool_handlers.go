@@ -415,6 +415,14 @@ func (a *API) updateTool(c *gin.Context) {
 		tool.AddOperation(op)
 	}
 
+	// The move goes first, so the stored Workspace matches the checks
+	// made against the destination; a failed update puts it back.
+	finishMove, ok := a.beginMove(c, &models.Tool{}, tool.ID, tool.WorkspaceID, moveTo)
+	if !ok {
+		return
+	}
+	updated := false
+	defer func() { finishMove(updated) }()
 	// Save changes
 	if err := tool.Update(a.config.DB); err != nil {
 		if respondToolSlugConflict(c, err) {
@@ -429,11 +437,9 @@ func (a *API) updateTool(c *gin.Context) {
 		return
 	}
 	if moveTo != nil {
-		if !a.moveObject(c, &models.Tool{}, tool.ID, *moveTo) {
-			return
-		}
 		tool.WorkspaceID = *moveTo
 	}
+	updated = true
 	a.emitToolUpdated(tool)
 
 	meta := a.persistGovernedMetadata(c, models.GovernedObjectTypeTool, models.BuiltinObjectID(tool.ID), input.Data.Attributes.GovernedMetadata)

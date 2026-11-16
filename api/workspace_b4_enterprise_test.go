@@ -415,3 +415,42 @@ func TestWorkspaceB4_PluginConfigAndSigningKey(t *testing.T) {
 	w = f.do("GET", fmt.Sprintf("/api/v1/llms/%d/plugins", theirs), nil, f.owner)
 	assert.Contains(t, w.Body.String(), "plugin-secret", "a plugins reader sees it")
 }
+
+// An embedder a datasource update creates for new embedding settings lands
+// in the datasource's Workspace, where its writer can manage it.
+func TestWorkspaceB4_InlineEmbedderLandsWithTheDatasource(t *testing.T) {
+	f := setupWSB4(t)
+	id, _ := f.created(t, f.do("POST", "/api/v1/datasources", body(dsAttrs("Embeds", nil)), f.inW1))
+	w := f.do("PATCH", fmt.Sprintf("/api/v1/datasources/%d", id), body(map[string]any{
+		"embed_vendor": "openai", "embed_url": "https://embed.example", "embed_model": "text-embedding-3-small",
+	}), f.inW1)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var ds models.Datasource
+	require.NoError(t, f.api.service.DB.First(&ds, id).Error)
+	require.NotNil(t, ds.EmbedderID, "the update created an embedder")
+	ws, _ := f.stored(t, &models.Embedder{}, *ds.EmbedderID)
+	assert.Equal(t, f.w1, ws)
+}
+
+// A move goes first and is undone when the rest of the update fails, so the
+// object never stays moved with its update refused.
+func TestWorkspaceB4_FailedUpdateUndoesTheMove(t *testing.T) {
+	f := setupWSB4(t)
+	a, _ := f.created(t, f.do("POST", "/api/v1/tools", body(toolAttrs("Alpha", nil)), f.inW1))
+	f.created(t, f.do("POST", "/api/v1/tools", body(toolAttrs("Beta", nil)), f.inW1))
+	// Renaming to an existing tool's name fails after the move was made.
+	w := f.do("PATCH", fmt.Sprintf("/api/v1/tools/%d", a), body(map[string]any{"name": "Beta", "workspace_id": f.w2}), f.inW1W2)
+	require.NotEqual(t, http.StatusOK, w.Code, w.Body.String())
+	ws, _ := f.stored(t, &models.Tool{}, a)
+	assert.Equal(t, f.w1, ws, "the move was undone")
+}
+
+// Testing with a saved filter's stored connection is executing that filter:
+// execute in its Workspace.
+func TestWorkspaceB4_FilterTestOfAnotherWorkspacesFilter(t *testing.T) {
+	f := setupWSB4(t)
+	theirs, _ := f.created(t, f.do("POST", "/api/v1/filters",
+		body(map[string]any{"name": "Theirs", "description": "d", "script": "ZmlsdGVyID0gdHJ1ZQ==", "workspace_id": f.w2}), f.owner))
+	assertCode(t, f.do("POST", "/api/v1/filters/test", map[string]any{"script": "filter = true", "filter_id": theirs, "input": map[string]any{"text": "x"}}, f.inW1),
+		http.StatusForbidden, authz.CodePermissionDenied)
+}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/models/wsstamp"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -203,7 +204,10 @@ func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url
 		targetNS = namespace[0]
 	}
 	embed.VectorConn, embed.VectorAPIKey, embed.Namespace = datasource.DBConnString, datasource.DBConnAPIKey, targetNS
-	embedder, err := s.resolveDatasourceEmbedder(s.DB, datasource.Embedder, embed, name, privacyScore, userID)
+	// An embedder created for the datasource here lands in the datasource's
+	// Workspace (wsstamp.WithWorkspace), as one created with it does.
+	embedDB := s.DB.WithContext(wsstamp.WithWorkspace(context.Background(), datasource.WorkspaceID))
+	embedder, err := s.resolveDatasourceEmbedder(embedDB, datasource.Embedder, embed, name, privacyScore, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +245,7 @@ func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url
 		// Use modified object if hooks modified it
 		if hookResult.ModifiedObject != nil {
 			if modified, ok := hookResult.ModifiedObject.(*models.Datasource); ok {
-				if err := s.applyHookEmbedEdits(s.DB, datasource.Embedder, modified, userID); err != nil {
+				if err := s.applyHookEmbedEdits(embedDB, datasource.Embedder, modified, userID); err != nil {
 					return nil, err
 				}
 				datasource = modified

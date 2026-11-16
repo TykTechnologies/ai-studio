@@ -347,6 +347,14 @@ func (a *API) updateFilter(c *gin.Context) {
 		return
 	}
 
+	// The move goes first, so the stored Workspace matches the checks
+	// made against the destination; a failed update puts it back.
+	finishMove, ok := a.beginMove(c, &models.Filter{}, uint(id), existing.WorkspaceID, moveTo)
+	if !ok {
+		return
+	}
+	updated := false
+	defer func() { finishMove(updated) }()
 	filter, err := a.service.UpdateFilterFromSpec(uint(id), filterSpecFromInput(input))
 	if err != nil {
 		c.JSON(filterErrorStatus(err), ErrorResponse{Errors: []struct {
@@ -356,11 +364,9 @@ func (a *API) updateFilter(c *gin.Context) {
 		return
 	}
 	if moveTo != nil {
-		if !a.moveObject(c, &models.Filter{}, filter.ID, *moveTo) {
-			return
-		}
 		filter.WorkspaceID = *moveTo
 	}
+	updated = true
 
 	c.JSON(http.StatusOK, toFilterResponse(filter))
 }
@@ -566,6 +572,12 @@ func (a *API) testFilter(c *gin.Context) {
 		}{{"Bad Request", err.Error()}}})
 		return
 	}
+	// A test that names a saved filter runs with that filter's stored
+	// connection (its secret, its references): executing that filter, so
+	// execute in its Workspace.
+	if input.FilterID != 0 && !a.requireOnObject(c, &models.Filter{}, input.FilterID, authz.Execute("filters")) {
+		return
+	}
 
 	// Create a temporary filter for testing. A guardrail test calls the real
 	// provider with the composed input; the UI says so next to the button.
@@ -595,11 +607,6 @@ func (a *API) testFilter(c *gin.Context) {
 		if len(redactedConnectionFields(input.Config)) > 0 {
 			var stored map[string]interface{}
 			if input.FilterID != 0 {
-				// Testing with a saved filter's stored secret is executing
-				// that filter: execute in its Workspace.
-				if !a.requireOnObject(c, &models.Filter{}, input.FilterID, authz.Execute("filters")) {
-					return
-				}
 				if saved, err := a.service.GetFilterByID(input.FilterID); err == nil && saved.IsGuardrail() {
 					stored = saved.Config
 				}

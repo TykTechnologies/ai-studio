@@ -321,6 +321,14 @@ func (a *API) updateLLM(c *gin.Context) {
 		filters = append(filters, &models.Filter{ID: uint(f)})
 	}
 
+	// The move goes first, so the stored Workspace matches the checks
+	// made against the destination; a failed update puts it back.
+	finishMove, ok := a.beginMove(c, &models.LLM{}, uint(id), thisLLM.WorkspaceID, moveTo)
+	if !ok {
+		return
+	}
+	updated := false
+	defer func() { finishMove(updated) }()
 	llm, err := a.service.UpdateLLM(
 		uint(id),
 		input.Data.Attributes.Name,
@@ -348,11 +356,9 @@ func (a *API) updateLLM(c *gin.Context) {
 		return
 	}
 	if moveTo != nil {
-		if !a.moveObject(c, &models.LLM{}, llm.ID, *moveTo) {
-			return
-		}
 		llm.WorkspaceID = *moveTo
 	}
+	updated = true
 
 	// Reload proxy if:
 	// 1. Active state changed (either way)

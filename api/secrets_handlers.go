@@ -229,6 +229,14 @@ func (a *API) updateSecret(c *gin.Context) {
 		secret.Value = input.Data.Attributes.Value
 	}
 
+	// The move goes first, so the stored Workspace matches the checks
+	// made against the destination; a failed update puts it back.
+	finishMove, ok := a.beginMove(c, &secrets.Secret{}, secret.ID, secret.WorkspaceID, moveTo)
+	if !ok {
+		return
+	}
+	updated := false
+	defer func() { finishMove(updated) }()
 	if err := secrets.UpdateSecret(a.config.DB, secret, valueChanged); err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -239,11 +247,9 @@ func (a *API) updateSecret(c *gin.Context) {
 		return
 	}
 	if moveTo != nil {
-		if !a.moveObject(c, &secrets.Secret{}, secret.ID, *moveTo) {
-			return
-		}
 		secret.WorkspaceID = *moveTo
 	}
+	updated = true
 
 	a.emitSecretChanged(c, services.TopicSecretUpdated, "updated", secret.ID)
 	c.JSON(http.StatusOK, gin.H{"data": serializeSecret(secret, a.secretReferencesFor([]string{secret.VarName}))})

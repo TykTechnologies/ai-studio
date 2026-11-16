@@ -219,17 +219,23 @@ func (a *API) updateEmbedder(c *gin.Context) {
 	if allow, ok := internalHostRequested(input.Data.Attributes.AllowInternalHost); ok {
 		changes.AllowInternalHost = allow
 	}
+	// The move goes first, so the stored Workspace matches the checks
+	// made against the destination; a failed update puts it back.
+	finishMove, ok := a.beginMove(c, &models.Embedder{}, id, current.WorkspaceID, moveTo)
+	if !ok {
+		return
+	}
+	updated := false
+	defer func() { finishMove(updated) }()
 	e, err := a.service.UpdateEmbedder(id, changes, currentUserID(c))
 	if err != nil {
 		respondEmbedderError(c, err)
 		return
 	}
 	if moveTo != nil {
-		if !a.moveObject(c, &models.Embedder{}, e.ID, *moveTo) {
-			return
-		}
 		e.WorkspaceID = *moveTo
 	}
+	updated = true
 	c.JSON(http.StatusOK, gin.H{"data": serializeEmbedder(e)})
 }
 

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/models/wsstamp"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
@@ -194,4 +195,29 @@ func responseWorkspaceIDFrom(db *gorm.DB, stored uint) uint {
 		return def.ID
 	}
 	return stored
+}
+
+// beginMove moves the object (model, id) from its stored Workspace to *to
+// before the handler applies the rest of the update, so the update's checks
+// (secret references were checked against the destination) and the stored
+// Workspace agree. finish(true) keeps the move; finish(false), when the
+// update then fails, puts the object back where it was. With to nil it does
+// nothing. It writes the error response and returns false when the move
+// itself fails.
+func (a *API) beginMove(c *gin.Context, model interface{}, id uint, from uint, to *uint) (finish func(updated bool), ok bool) {
+	if to == nil {
+		return func(bool) {}, true
+	}
+	if !a.moveObject(c, model, id, *to) {
+		return nil, false
+	}
+	return func(updated bool) {
+		if updated {
+			return
+		}
+		if err := a.service.DB.Model(model).Where("id = ?", id).Select("workspace_id", "updated_at").
+			Updates(map[string]interface{}{"workspace_id": from, "updated_at": time.Now()}).Error; err != nil {
+			logger.Errorf("Workspace move of %T %d could not be undone after a failed update: %v", model, id, err)
+		}
+	}, true
 }

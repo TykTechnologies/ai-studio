@@ -344,6 +344,14 @@ func (a *API) updateDatasource(c *gin.Context) {
 		}
 	}
 
+	// The move goes first, so the stored Workspace matches the checks
+	// made against the destination; a failed update puts it back.
+	finishMove, ok := a.beginMove(c, &models.Datasource{}, uint(id), existingDS.WorkspaceID, moveTo)
+	if !ok {
+		return
+	}
+	updated := false
+	defer func() { finishMove(updated) }()
 	datasource, err := a.service.UpdateDatasource(
 		uint(id),
 		input.Data.Attributes.Name,
@@ -373,11 +381,9 @@ func (a *API) updateDatasource(c *gin.Context) {
 		return
 	}
 	if moveTo != nil {
-		if !a.moveObject(c, &models.Datasource{}, datasource.ID, *moveTo) {
-			return
-		}
 		datasource.WorkspaceID = *moveTo
 	}
+	updated = true
 
 	meta := a.persistGovernedMetadata(c, models.GovernedObjectTypeDatasource, models.BuiltinObjectID(datasource.ID), input.Data.Attributes.GovernedMetadata)
 	c.JSON(http.StatusOK, dataWithMeta(a.withDatasourceGovernedMetadataOne(serializeDatasource(datasource)), meta))
