@@ -502,7 +502,7 @@ func (a *API) getAllTools(c *gin.Context) {
 		return
 	}
 
-	if opts.Filters, ok = a.listWorkspaceScopes(c, "tools"); !ok {
+	if opts.Filters, ok = a.listWorkspaceScopes(c, "tools", ""); !ok {
 		return
 	}
 	tools, totalCount, totalPages, err := a.service.GetAllTools(pageSize, pageNumber, all, opts)
@@ -544,7 +544,7 @@ func (a *API) getToolsByType(c *gin.Context) {
 		return
 	}
 
-	filters, ok := a.listWorkspaceScopes(c, "tools")
+	filters, ok := a.listWorkspaceScopes(c, "tools", "")
 	if !ok {
 		return
 	}
@@ -585,7 +585,7 @@ func (a *API) searchTools(c *gin.Context) {
 		return
 	}
 
-	filters, ok := a.listWorkspaceScopes(c, "tools")
+	filters, ok := a.listWorkspaceScopes(c, "tools", "")
 	if !ok {
 		return
 	}

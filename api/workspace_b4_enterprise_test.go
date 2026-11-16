@@ -484,6 +484,45 @@ func TestWorkspaceB4_ConcurrentMoveConflicts(t *testing.T) {
 	finish(false)
 	ws, _ = f.stored(t, &models.Tool{}, id)
 	assert.Equal(t, f.def, ws, "undone")
+
+	// A row still at 0 (the Default, before the backfill) moves: the guard
+	// compares the raw column.
+	require.NoError(t, db.Model(&models.Tool{}).Where("id = ?", id).UpdateColumn("workspace_id", 0).Error)
+	w = httptest.NewRecorder()
+	c, _ = gin.CreateTestContext(w)
+	require.True(t, f.api.moveObject(c, &models.Tool{}, id, 0, f.w1), w.Body.String())
+	ws, _ = f.stored(t, &models.Tool{}, id)
+	assert.Equal(t, f.w1, ws)
+}
+
+// onObject on a read-scoped (workspace_full) resource answers 404 before
+// any 403: a caller who may not see the object never learns it exists; one
+// who sees it but lacks the action gets 403.
+func TestWorkspaceB4_OnObjectHidesReadScopedObjects(t *testing.T) {
+	f := setupWSB4(t)
+	db := f.api.service.DB
+	viewerW1 := models.NewUser()
+	viewerW1.Email, viewerW1.Name, viewerW1.Password, viewerW1.EmailVerified = "v1@tyk.io", "v1", "hash", true
+	require.NoError(t, viewerW1.Create(db))
+	require.NoError(t, db.Create(&models.RoleBinding{
+		SubjectType: models.RoleBindingSubjectUser, SubjectID: viewerW1.ID, RoleID: f.roles[models.SystemRoleViewer],
+		ScopeType: rbac.ScopeTypeWorkspace, ScopeID: rbac.WorkspaceScopeID(f.w1),
+	}).Error)
+	inW1 := &models.App{Name: "Mine", UserID: f.owner.ID, WorkspaceID: f.w1}
+	inW2 := &models.App{Name: "Theirs", UserID: f.owner.ID, WorkspaceID: f.w2}
+	require.NoError(t, db.Create(inW1).Error)
+	require.NoError(t, db.Create(inW2).Error)
+
+	f.api.router.POST("/ws-onobject-test/apps/:id", f.api.auth.AuthMiddleware(), f.api.rbacContext(),
+		f.api.onObject(&models.App{}, authz.Write("apps")), func(c *gin.Context) { c.Status(http.StatusOK) })
+	call := func(id uint, as *models.User) int {
+		return f.do("POST", fmt.Sprintf("/ws-onobject-test/apps/%d", id), nil, as).Code
+	}
+	assert.Equal(t, http.StatusNotFound, call(inW2.ID, f.inW1), "hidden: 404, not 403")
+	assert.Equal(t, http.StatusNotFound, call(inW2.ID, viewerW1))
+	assert.Equal(t, http.StatusForbidden, call(inW1.ID, viewerW1), "visible without write: 403")
+	assert.Equal(t, http.StatusOK, call(inW1.ID, f.inW1))
+	assert.Equal(t, http.StatusOK, call(inW2.ID, f.owner))
 }
 
 // Testing with a saved filter's stored connection is executing that filter:

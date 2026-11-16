@@ -446,7 +446,7 @@ func (a *API) listDatasources(c *gin.Context) {
 		return
 	}
 
-	if opts.Filters, ok = a.listWorkspaceScopes(c, "datasources"); !ok {
+	if opts.Filters, ok = a.listWorkspaceScopes(c, "datasources", ""); !ok {
 		return
 	}
 	datasources, totalCount, totalPages, err := a.service.GetAllDatasources(pageSize, pageNumber, all, opts)
@@ -488,7 +488,7 @@ func (a *API) searchDatasources(c *gin.Context) {
 		return
 	}
 
-	filters, ok := a.listWorkspaceScopes(c, "datasources")
+	filters, ok := a.listWorkspaceScopes(c, "datasources", "")
 	if !ok {
 		return
 	}
@@ -529,7 +529,7 @@ func (a *API) getDatasourcesByTag(c *gin.Context) {
 		return
 	}
 
-	filters, ok := a.listWorkspaceScopes(c, "datasources")
+	filters, ok := a.listWorkspaceScopes(c, "datasources", "")
 	if !ok {
 		return
 	}

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -322,4 +323,35 @@ func (s *Service) RequireSecretMovable(secret *secrets.Secret) error {
 		return ErrSecretDuplicateName
 	}
 	return nil
+}
+
+// DefaultSecretNameBlocked reports whether a default secret (seeded at boot
+// in the Default Workspace) must not be recreated under name: an object
+// outside the Default references the name, and would resolve the new
+// secret. It logs a warning when it blocks. For
+// secrets.GetOrCreateDefaultSecrets.
+func DefaultSecretNameBlocked(db *gorm.DB) func(name string) (bool, error) {
+	return func(name string) (bool, error) {
+		holders, err := secretHoldersOf(db, name)
+		if err != nil || len(holders) == 0 {
+			return false, err
+		}
+		// Without a Default row yet, every non-zero holder counts as
+		// outside (skip rather than fail the boot).
+		var defID uint
+		if def, err := models.GetDefaultWorkspace(db); err == nil {
+			defID = def.ID
+		}
+		outside := 0
+		for _, h := range holders {
+			if h.WorkspaceID != 0 && h.WorkspaceID != defID {
+				outside++
+			}
+		}
+		if outside == 0 {
+			return false, nil
+		}
+		logger.Warnf("Default secret %s not recreated: %d object(s) outside the Default Workspace reference the name; create the secret in their Workspace instead", name, outside)
+		return true, nil
+	}
 }
