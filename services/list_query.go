@@ -100,7 +100,7 @@ func applySort(db *gorm.DB, column string, desc bool) *gorm.DB {
 // gate: Community Edition answers ErrEnterpriseFeature as ListRouters does.
 func (s *Service) ListModelRouters(pageSize int, pageNumber int, all bool, opts ...ListOptions) ([]models.ModelRouter, int64, int, error) {
 	o := firstListOptions(opts)
-	if o.Search == "" && o.Sort == "" && s.ModelRouterService != nil {
+	if o.Search == "" && o.Sort == "" && len(o.Filters) == 0 && s.ModelRouterService != nil {
 		return s.ModelRouterService.ListRouters(pageSize, pageNumber, all)
 	}
 	if !model_router.IsEnterpriseAvailable() {

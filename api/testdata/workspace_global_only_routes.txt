@@ -14,8 +14,6 @@ DELETE /api/v1/data-catalogues/:id/datasources/:datasourceId
 DELETE /api/v1/data-catalogues/:id/tags/:tagId
 DELETE /api/v1/filestore/:id
 DELETE /api/v1/mcp-servers/:id
-DELETE /api/v1/model-routers/:id
-DELETE /api/v1/semantic-routers/:id
 DELETE /api/v1/tool-catalogues/:id
 DELETE /api/v1/tool-catalogues/:id/tags/:tagId
 DELETE /api/v1/tool-catalogues/:id/tools/:toolId
@@ -61,12 +59,8 @@ GET /api/v1/mcp-credentials/:id
 GET /api/v1/mcp-servers
 GET /api/v1/mcp-servers/:id
 GET /api/v1/mcp-servers/:id/handoff
-GET /api/v1/model-routers
-GET /api/v1/model-routers/:id
 GET /api/v1/model-routers/:id/auth-plugins
 GET /api/v1/model-routers/:id/dependents
-GET /api/v1/semantic-routers
-GET /api/v1/semantic-routers/:id
 GET /api/v1/semantic-routers/:id/auth-plugins
 GET /api/v1/semantic-routers/:id/dependents
 GET /api/v1/tool-catalogues
@@ -91,10 +85,6 @@ PATCH /api/v1/credentials/:id
 PATCH /api/v1/data-catalogues/:id
 PATCH /api/v1/filestore/:id
 PATCH /api/v1/mcp-servers/:id
-PATCH /api/v1/model-routers/:id
-PATCH /api/v1/model-routers/:id/toggle
-PATCH /api/v1/semantic-routers/:id
-PATCH /api/v1/semantic-routers/:id/toggle
 PATCH /api/v1/tool-catalogues/:id
 PATCH /api/v1/tyk-connections/:id/policies/:pid  # stays global: acts on a global Tyk connection (.37)
 POST /api/v1/agents
@@ -133,9 +123,6 @@ POST /api/v1/mcp-servers/:id/link
 POST /api/v1/mcp-servers/:id/push
 POST /api/v1/mcp-servers/discover-tools
 POST /api/v1/mcp-servers/register
-POST /api/v1/model-routers
-POST /api/v1/semantic-routers
-POST /api/v1/semantic-routers/:id/test
 POST /api/v1/semantic-routers/test
 POST /api/v1/tool-catalogues
 POST /api/v1/tool-catalogues/:id/tags
@@ -147,6 +134,4 @@ PUT /api/v1/mcp-servers/:id/bundle
 PUT /api/v1/mcp-servers/:id/catalogues
 PUT /api/v1/mcp-servers/:id/key-access
 PUT /api/v1/model-routers/:id/auth-plugins
-PUT /api/v1/model-routers/:id/catalogues
 PUT /api/v1/semantic-routers/:id/auth-plugins
-PUT /api/v1/semantic-routers/:id/catalogues

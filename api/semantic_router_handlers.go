@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	sr "github.com/TykTechnologies/midsommar/v2/pkg/semanticrouting"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/semantic_router"
@@ -35,6 +36,10 @@ type SemanticRouterAttributes struct {
 
 	Settings sr.Settings `json:"settings"`
 	Routes   []sr.Route  `json:"routes"`
+
+	// WorkspaceID places the router (create) or moves it (update);
+	// omitted = the landing rule / no move.
+	WorkspaceID *uint `json:"workspace_id"`
 
 	// EmbedderID is the embedder of the embedding stage (0 or omitted: none).
 	// A settings.embedding naming an LLM ({llm_id, model}) is still accepted
@@ -152,6 +157,42 @@ func parseSemanticRouterID(c *gin.Context) (uint, bool) {
 // @Failure 500 {object} ErrorResponse
 // @Router /semantic-routers [post]
 // @Security BearerAuth
+// semanticRouterNotFound is the not-found answer, also given for a router
+// in a Workspace the caller cannot see.
+func semanticRouterNotFound(c *gin.Context) {
+	simpleError(c, http.StatusNotFound, "Not Found", "Semantic router not found")
+}
+
+// requireSemanticRouterReads: a semantic router names LLMs (judge and
+// embedding stages) and possibly an embedder, read-global building blocks
+// (D4): the caller needs read on them in some scope.
+func (a *API) requireSemanticRouterReads(c *gin.Context, r *models.SemanticRouter) bool {
+	if !a.requireRouterLLMRead(c, true) {
+		return false
+	}
+	if r.EmbedderID != nil && *r.EmbedderID != 0 && !a.holdsAnywhere(c, authz.Read("embedders")) {
+		c.AbortWithStatusJSON(http.StatusForbidden, authz.Denied(authz.Read("embedders")))
+		return false
+	}
+	return true
+}
+
+// loadVisibleSemanticRouter loads a router, answering 404 when it is
+// missing or in a Workspace the caller cannot see, and requires perm in its
+// Workspace.
+func (a *API) loadVisibleSemanticRouter(c *gin.Context, id uint, perm authz.Permission) (*models.SemanticRouter, bool) {
+	router, err := a.semanticRouters().GetRouter(id)
+	if err != nil {
+		respondSemanticRouterError(c, err)
+		return nil, false
+	}
+	if !a.requireVisible(c, "semantic-routers", router.WorkspaceID, semanticRouterNotFound) ||
+		!a.requireInWorkspace(c, perm, router.WorkspaceID) {
+		return nil, false
+	}
+	return router, true
+}
+
 func (a *API) createSemanticRouter(c *gin.Context) {
 	var input SemanticRouterInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -163,8 +204,17 @@ func (a *API) createSemanticRouter(c *gin.Context) {
 		respondSemanticRouterError(c, err)
 		return
 	}
-	// Creating a router already active is the publish action.
-	if !a.requirePublishToCreateLive(c, "semantic-routers", router.Active) {
+	workspaceID, ok := a.resolveCreateWorkspace(c, "semantic-routers", input.Data.Attributes.WorkspaceID)
+	if !ok {
+		return
+	}
+	router.WorkspaceID = workspaceID
+	if !a.requireSemanticRouterReads(c, router) {
+		return
+	}
+	// Creating a router already active is the publish action, in its
+	// Workspace.
+	if !a.requirePublishToCreateLiveIn(c, "semantic-routers", workspaceID, router.Active) {
 		return
 	}
 	if err := a.linkLegacyEmbedding(c, router); err != nil {
@@ -182,6 +232,7 @@ func (a *API) createSemanticRouter(c *gin.Context) {
 	if a.service.SystemEvents != nil {
 		a.service.SystemEvents.EmitSemanticRouterCreated(router, router.ID, 0)
 	}
+	router.Catalogues = a.visibleCatalogues(c, router.Catalogues)
 	c.JSON(http.StatusCreated, gin.H{"data": serializeSemanticRouter(router)})
 }
 
@@ -205,6 +256,10 @@ func (a *API) getSemanticRouter(c *gin.Context) {
 		respondSemanticRouterError(c, err)
 		return
 	}
+	if !a.requireVisible(c, "semantic-routers", router.WorkspaceID, semanticRouterNotFound) {
+		return
+	}
+	router.Catalogues = a.visibleCatalogues(c, router.Catalogues)
 	c.JSON(http.StatusOK, gin.H{"data": serializeSemanticRouter(router)})
 }
 
@@ -231,9 +286,12 @@ func (a *API) updateSemanticRouter(c *gin.Context) {
 		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
 		return
 	}
-	existing, err := a.semanticRouters().GetRouter(id)
-	if err != nil {
-		respondSemanticRouterError(c, err)
+	existing, ok := a.loadVisibleSemanticRouter(c, id, authz.Write("semantic-routers"))
+	if !ok {
+		return
+	}
+	move := input.Data.Attributes.WorkspaceID != nil && *input.Data.Attributes.WorkspaceID != existing.WorkspaceID
+	if move && !a.requireMove(c, "semantic-routers", existing.WorkspaceID, *input.Data.Attributes.WorkspaceID) {
 		return
 	}
 	// An omitted attribute keeps the stored one (96e): a rename must not
@@ -250,8 +308,12 @@ func (a *API) updateSemanticRouter(c *gin.Context) {
 		respondSemanticRouterError(c, err)
 		return
 	}
-	// Changing the live switch through an update is the publish action.
-	if !a.requirePublishIfChanged(c, "semantic-routers", existing.Active, router.Active) {
+	if !a.requireSemanticRouterReads(c, router) {
+		return
+	}
+	// Changing the live switch through an update is the publish action, in
+	// the router's Workspace.
+	if !a.requirePublishIfChangedIn(c, "semantic-routers", existing.WorkspaceID, existing.Active, router.Active) {
 		return
 	}
 	if err := a.linkLegacyEmbedding(c, router); err != nil {
@@ -262,10 +324,22 @@ func (a *API) updateSemanticRouter(c *gin.Context) {
 		respondSemanticRouterError(c, err)
 		return
 	}
+	// A move goes first (guarded on the stored value) and is undone if the
+	// update fails; the update itself never writes workspace_id (.42).
+	var moveTo *uint
+	if move {
+		moveTo = input.Data.Attributes.WorkspaceID
+	}
+	finishMove, ok := a.beginMove(c, &models.SemanticRouter{}, id, existing.WorkspaceID, moveTo)
+	if !ok {
+		return
+	}
 	if err := a.semanticRouters().UpdateRouter(router); err != nil {
+		finishMove(false)
 		respondSemanticRouterError(c, err)
 		return
 	}
+	finishMove(true)
 	updated, err := a.semanticRouters().GetRouter(id)
 	if err != nil {
 		respondSemanticRouterError(c, err)
@@ -274,6 +348,7 @@ func (a *API) updateSemanticRouter(c *gin.Context) {
 	if a.service.SystemEvents != nil {
 		a.service.SystemEvents.EmitSemanticRouterUpdated(updated, id, 0)
 	}
+	updated.Catalogues = a.visibleCatalogues(c, updated.Catalogues)
 	c.JSON(http.StatusOK, gin.H{"data": serializeSemanticRouter(updated)})
 }
 
@@ -291,6 +366,11 @@ func (a *API) deleteSemanticRouter(c *gin.Context) {
 	id, ok := parseSemanticRouterID(c)
 	if !ok {
 		return
+	}
+	if a.workspaceChecksOn(c) {
+		if _, ok := a.loadVisibleSemanticRouter(c, id, authz.Delete("semantic-routers")); !ok {
+			return
+		}
 	}
 	if err := a.semanticRouters().DeleteRouter(id); err != nil {
 		respondSemanticRouterError(c, err)
@@ -323,6 +403,11 @@ func (a *API) listSemanticRouters(c *gin.Context) {
 	if !ok {
 		return
 	}
+	filters, ok := a.workspaceListFilters(c, "semantic-routers")
+	if !ok {
+		return
+	}
+	opts.Filters = append(opts.Filters, filters...)
 	routers, total, pages, err := a.service.ListSemanticRouters(pageSize, pageNumber, all, opts)
 	if err != nil {
 		respondSemanticRouterError(c, err)
@@ -330,6 +415,7 @@ func (a *API) listSemanticRouters(c *gin.Context) {
 	}
 	out := make([]map[string]interface{}, len(routers))
 	for i := range routers {
+		routers[i].Catalogues = a.visibleCatalogues(c, routers[i].Catalogues)
 		out[i] = serializeSemanticRouter(&routers[i])
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -362,6 +448,11 @@ func (a *API) toggleSemanticRouterActive(c *gin.Context) {
 		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
 		return
 	}
+	if a.workspaceChecksOn(c) {
+		if _, ok := a.loadVisibleSemanticRouter(c, id, authz.Publish("semantic-routers")); !ok {
+			return
+		}
+	}
 	if err := a.semanticRouters().ToggleRouterActive(id, *input.Active); err != nil {
 		respondSemanticRouterError(c, err)
 		return
@@ -374,6 +465,7 @@ func (a *API) toggleSemanticRouterActive(c *gin.Context) {
 	if a.service.SystemEvents != nil {
 		a.service.SystemEvents.EmitSemanticRouterUpdated(router, id, 0)
 	}
+	router.Catalogues = a.visibleCatalogues(c, router.Catalogues)
 	c.JSON(http.StatusOK, gin.H{"data": serializeSemanticRouter(router)})
 }
 
@@ -404,7 +496,19 @@ func (a *API) setSemanticRouterCatalogues(c *gin.Context) {
 		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
 		return
 	}
-	cats, err := a.service.SetSemanticRouterCatalogues(id, in.CatalogueIDs)
+	if _, ok := a.loadVisibleSemanticRouter(c, id, authz.Write("semantic-routers")); !ok {
+		return
+	}
+	existing, err := a.linkedIDs("catalogue_semantic_routers", "semantic_router_id", "catalogue_id", id)
+	if err != nil {
+		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		return
+	}
+	ids, ok := a.mergeVisibleLinks(c, "catalogues", &models.Catalogue{}, in.CatalogueIDs, existing, "Catalogue not found")
+	if !ok {
+		return
+	}
+	cats, err := a.service.SetSemanticRouterCatalogues(id, ids)
 	switch {
 	case errors.Is(err, gorm.ErrRecordNotFound):
 		simpleError(c, http.StatusNotFound, "Not Found", "Semantic router not found")
@@ -416,7 +520,7 @@ func (a *API) setSemanticRouterCatalogues(c *gin.Context) {
 		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"catalogues": routerCatalogueRefs(cats)}})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"catalogues": routerCatalogueRefs(a.visibleCatalogues(c, cats))}})
 }
 
 // @Summary Get semantic router dependents
@@ -460,9 +564,8 @@ func (a *API) testSemanticRouter(c *gin.Context) {
 		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
 		return
 	}
-	router, err := a.semanticRouters().GetRouter(id)
-	if err != nil {
-		respondSemanticRouterError(c, err)
+	router, ok := a.loadVisibleSemanticRouter(c, id, authz.Write("semantic-routers"))
+	if !ok {
 		return
 	}
 	a.runSemanticRouterTest(c, router, &input)
@@ -549,6 +652,7 @@ func serializeSemanticRouter(r *models.SemanticRouter) map[string]interface{} {
 			"description":       r.Description,
 			"active":            r.Active,
 			"namespace":         r.Namespace,
+			"workspace_id":      r.WorkspaceID,
 			"short_description": r.ShortDescription,
 			"long_description":  r.LongDescription,
 			"logo_url":          r.LogoURL,

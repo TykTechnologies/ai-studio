@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/model_router"
 	"github.com/TykTechnologies/midsommar/v2/services/semantic_router"
@@ -31,14 +32,20 @@ type CatalogueRoutersInput struct {
 	SemanticRouterIDs *[]uint `json:"semantic_router_ids"`
 }
 
-func catalogueRoutersResponse(r *services.CatalogueRouters) gin.H {
+// catalogueRoutersResponse lists the catalogue's routers the caller can
+// see; routers in Workspaces the caller cannot see are left out (B4e).
+func (a *API) catalogueRoutersResponse(c *gin.Context, r *services.CatalogueRouters) gin.H {
 	mr := make([]CatalogueRouterRef, 0, len(r.ModelRouters))
 	for _, x := range r.ModelRouters {
-		mr = append(mr, CatalogueRouterRef{ID: x.ID, Name: x.Name, Slug: x.Slug, Active: x.Active})
+		if a.visibleIn(c, "model-routers", x.WorkspaceID) {
+			mr = append(mr, CatalogueRouterRef{ID: x.ID, Name: x.Name, Slug: x.Slug, Active: x.Active})
+		}
 	}
 	sr := make([]CatalogueRouterRef, 0, len(r.SemanticRouters))
 	for _, x := range r.SemanticRouters {
-		sr = append(sr, CatalogueRouterRef{ID: x.ID, Name: x.Name, Slug: x.Slug, Active: x.Active})
+		if a.visibleIn(c, "semantic-routers", x.WorkspaceID) {
+			sr = append(sr, CatalogueRouterRef{ID: x.ID, Name: x.Name, Slug: x.Slug, Active: x.Active})
+		}
 	}
 	return gin.H{"data": gin.H{"model_routers": mr, "semantic_routers": sr}}
 }
@@ -78,7 +85,7 @@ func (a *API) getCatalogueRouters(c *gin.Context) {
 		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, catalogueRoutersResponse(r))
+	c.JSON(http.StatusOK, a.catalogueRoutersResponse(c, r))
 }
 
 // @Summary Set the routers published in an LLM catalogue
@@ -109,6 +116,32 @@ func (a *API) setCatalogueRouters(c *gin.Context) {
 		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
 		return
 	}
+	// Each named router must be visible to the caller (404 otherwise);
+	// links to routers the caller cannot see are kept (B4e).
+	if in.ModelRouterIDs != nil {
+		existing, err := a.linkedIDs("catalogue_model_routers", "catalogue_id", "model_router_id", uint(id))
+		if err != nil {
+			simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+			return
+		}
+		ids, ok := a.mergeVisibleLinks(c, "model-routers", &models.ModelRouter{}, *in.ModelRouterIDs, existing, "Model router not found")
+		if !ok {
+			return
+		}
+		in.ModelRouterIDs = &ids
+	}
+	if in.SemanticRouterIDs != nil {
+		existing, err := a.linkedIDs("catalogue_semantic_routers", "catalogue_id", "semantic_router_id", uint(id))
+		if err != nil {
+			simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+			return
+		}
+		ids, ok := a.mergeVisibleLinks(c, "semantic-routers", &models.SemanticRouter{}, *in.SemanticRouterIDs, existing, "Semantic router not found")
+		if !ok {
+			return
+		}
+		in.SemanticRouterIDs = &ids
+	}
 	r, err := a.service.SetCatalogueRouters(uint(id), in.ModelRouterIDs, in.SemanticRouterIDs)
 	switch {
 	case errors.Is(err, gorm.ErrRecordNotFound):
@@ -121,5 +154,5 @@ func (a *API) setCatalogueRouters(c *gin.Context) {
 		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, catalogueRoutersResponse(r))
+	c.JSON(http.StatusOK, a.catalogueRoutersResponse(c, r))
 }

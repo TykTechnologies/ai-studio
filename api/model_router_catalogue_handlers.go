@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 )
 
@@ -58,7 +59,28 @@ func (a *API) setModelRouterCatalogues(c *gin.Context) {
 		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
 		return
 	}
-	cats, err := a.service.SetModelRouterCatalogues(uint(id), in.CatalogueIDs)
+	// The router: visible, and write in its Workspace. The catalogues: each
+	// named one visible (404 otherwise); links to catalogues the caller
+	// cannot see are kept.
+	var router models.ModelRouter
+	if err := a.service.DB.Select("id", "workspace_id").First(&router, uint(id)).Error; err != nil {
+		simpleError(c, http.StatusNotFound, "Not Found", "Model router not found")
+		return
+	}
+	if !a.requireVisible(c, "model-routers", router.WorkspaceID, modelRouterNotFound) ||
+		!a.requireInWorkspace(c, authz.Write("model-routers"), router.WorkspaceID) {
+		return
+	}
+	existing, err := a.linkedIDs("catalogue_model_routers", "model_router_id", "catalogue_id", router.ID)
+	if err != nil {
+		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		return
+	}
+	ids, ok := a.mergeVisibleLinks(c, "catalogues", &models.Catalogue{}, in.CatalogueIDs, existing, "Catalogue not found")
+	if !ok {
+		return
+	}
+	cats, err := a.service.SetModelRouterCatalogues(uint(id), ids)
 	switch {
 	case errors.Is(err, gorm.ErrRecordNotFound):
 		simpleError(c, http.StatusNotFound, "Not Found", "Model router not found")
@@ -70,5 +92,5 @@ func (a *API) setModelRouterCatalogues(c *gin.Context) {
 		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": gin.H{"catalogues": routerCatalogueRefs(cats)}})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"catalogues": routerCatalogueRefs(a.visibleCatalogues(c, cats))}})
 }
