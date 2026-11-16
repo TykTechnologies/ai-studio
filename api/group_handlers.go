@@ -1177,7 +1177,7 @@ func serializeToolCatalogue(tc *models.ToolCatalogue, db *gorm.DB) ToolCatalogue
 			Icon             string         `json:"icon"`
 			Tools            []ToolResponse `json:"tools"`
 			Tags             []TagResponse  `json:"tags"`
-			WorkspaceID uint `json:"workspace_id,omitempty"`
+			WorkspaceID      uint           `json:"workspace_id,omitempty"`
 		}{
 			Name:             tc.Name,
 			ShortDescription: tc.ShortDescription,

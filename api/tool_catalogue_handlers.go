@@ -248,6 +248,12 @@ func (a *API) updateToolCatalogue(c *gin.Context) {
 		return
 	}
 
+	// A move goes first (guarded on the stored value) and is undone if the
+	// update fails.
+	finishMove, ok := a.beginMove(c, &models.ToolCatalogue{}, uint(id), stored.WorkspaceID, moveTo)
+	if !ok {
+		return
+	}
 	toolCatalogue, err := a.service.UpdateToolCatalogue(
 		uint(id),
 		input.Data.Attributes.Name,
@@ -256,6 +262,7 @@ func (a *API) updateToolCatalogue(c *gin.Context) {
 		input.Data.Attributes.Icon,
 	)
 	if err != nil {
+		finishMove(false)
 		if err == gorm.ErrRecordNotFound {
 			c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
 				Title  string `json:"title"`
@@ -270,10 +277,8 @@ func (a *API) updateToolCatalogue(c *gin.Context) {
 		return
 	}
 
+	finishMove(true)
 	if moveTo != nil {
-		if !a.moveObject(c, &models.ToolCatalogue{}, uint(id), *moveTo) {
-			return
-		}
 		toolCatalogue.WorkspaceID = *moveTo
 	}
 
@@ -416,7 +421,7 @@ func toToolCatalogueResponse(tc *models.ToolCatalogue) ToolCatalogueResponse {
 			Icon             string         `json:"icon"`
 			Tools            []ToolResponse `json:"tools"`
 			Tags             []TagResponse  `json:"tags"`
-			WorkspaceID uint `json:"workspace_id,omitempty"`
+			WorkspaceID      uint           `json:"workspace_id,omitempty"`
 		}{
 			Name:             tc.Name,
 			ShortDescription: tc.ShortDescription,

@@ -151,6 +151,12 @@ func (a *API) updateDataCatalogue(c *gin.Context) {
 		return
 	}
 
+	// A move goes first (guarded on the stored value) and is undone if the
+	// update fails.
+	finishMove, ok := a.beginMove(c, &models.DataCatalogue{}, uint(id), stored.WorkspaceID, moveTo)
+	if !ok {
+		return
+	}
 	dataCatalogue, err := a.service.UpdateDataCatalogue(
 		uint(id),
 		input.Data.Attributes.Name,
@@ -159,6 +165,7 @@ func (a *API) updateDataCatalogue(c *gin.Context) {
 		input.Data.Attributes.Icon,
 	)
 	if err != nil {
+		finishMove(false)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -168,10 +175,8 @@ func (a *API) updateDataCatalogue(c *gin.Context) {
 		return
 	}
 
+	finishMove(true)
 	if moveTo != nil {
-		if !a.moveObject(c, &models.DataCatalogue{}, uint(id), *moveTo) {
-			return
-		}
 		dataCatalogue.WorkspaceID = *moveTo
 	}
 
@@ -621,7 +626,7 @@ func serializeDataCatalogue(dataCatalogue *models.DataCatalogue) DataCatalogueRe
 			Icon             string               `json:"icon"`
 			Datasources      []DatasourceResponse `json:"datasources"`
 			Tags             []TagResponse        `json:"tags"`
-			WorkspaceID uint `json:"workspace_id,omitempty"`
+			WorkspaceID      uint                 `json:"workspace_id,omitempty"`
 		}{
 			Name:             dataCatalogue.Name,
 			ShortDescription: dataCatalogue.ShortDescription,
