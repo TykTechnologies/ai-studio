@@ -189,7 +189,12 @@ func deriveKeyPBKDF2(input string, salt []byte, iter int) ([]byte, error) {
 
 type Secret struct {
 	gorm.Model
-	ID      uint   `gorm:"primaryKey" json:"id" access:"secrets"`
+	ID uint `gorm:"primaryKey" json:"id" access:"secrets"`
+
+	// WorkspaceID is the Workspace that owns the secret (models.Workspace);
+	// 0 reads as the Default workspace.
+	WorkspaceID uint `json:"workspace_id" gorm:"not null;default:0;index"`
+
 	VarName string `json:"name"`
 	Value   string `json:"value"`
 

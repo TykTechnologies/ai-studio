@@ -158,6 +158,8 @@ func InitModels(db *gorm.DB) error {
 		&AppPromptTemplate{},
 		// Guardrail exceptions (features/GuardrailExceptions.md)
 		&GuardrailException{},
+		// Workspaces: the owner of every stamped object (workspace.go)
+		&Workspace{},
 	); err != nil {
 		return err
 	}
@@ -165,6 +167,15 @@ func InitModels(db *gorm.DB) error {
 	// Migration: attribute Apps and spend recorded before team budgets
 	// existed to their team (runs once).
 	if err := BackfillTeamAttribution(db); err != nil {
+		return err
+	}
+
+	// Workspaces: the Default workspace exists, and every row an older build
+	// wrote (workspace_id 0) belongs to it. Runs on every start.
+	if _, err := EnsureDefaultWorkspace(db); err != nil {
+		return err
+	}
+	if err := BackfillWorkspaceIDs(db); err != nil {
 		return err
 	}
 

@@ -123,6 +123,11 @@ type MCPKeyAccess struct {
 // Studio-owned presentation and governance columns never do.
 type MCPServer struct {
 	gorm.Model
+
+	// WorkspaceID is the Workspace that owns the object (Workspace); 0 reads
+	// as the Default workspace (EffectiveWorkspaceID).
+	WorkspaceID uint `json:"workspace_id" gorm:"not null;default:0;index"`
+
 	ConnectionID *uint          `gorm:"index;uniqueIndex:idx_mcp_servers_live_conn_api,where:deleted_at IS NULL" json:"connection_id"`
 	Connection   *TykConnection `gorm:"foreignKey:ConnectionID" json:"-"`
 	// TykAPIID is x-tyk-api-gateway.info.id; empty while pending_platform.

@@ -272,6 +272,9 @@ func payloadToUpdatesMap(payload models.JSONMap) map[string]interface{} {
 		"active": true, // admin-controlled, not settable via UGC
 		// The "Allow internal host" switch is an administrator's (w4e)
 		"allow_internal_host": true, "embed_allow_internal_host": true,
+		// The owning Workspace changes only through an authorized move, never
+		// through a contributor's payload or a version rollback.
+		"workspace_id": true,
 	}
 	for k, v := range payload {
 		if skipFields[k] {

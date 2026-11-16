@@ -119,6 +119,8 @@ func (m *HookManager) ExecuteHooks(
 				models.RestoreObjectCredentials(currentObject, modifiedObj)
 				// Nor may a hook change the "Allow internal host" switch.
 				models.KeepAllowInternalHost(currentObject, modifiedObj)
+				// Nor move it to another Workspace (or out of one).
+				models.KeepWorkspaceID(currentObject, modifiedObj)
 				currentObject = modifiedObj
 				result.ModifiedObject = modifiedObj
 			}

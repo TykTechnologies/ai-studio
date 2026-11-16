@@ -64,7 +64,12 @@ const (
 // BeforeSave/AfterFind hooks (same scheme as Submission credentials) and are
 // never serialised to the API: see ToResponse.
 type WebhookTarget struct {
-	ID          string `gorm:"primaryKey;size:36" json:"id"`
+	ID string `gorm:"primaryKey;size:36" json:"id"`
+
+	// WorkspaceID is the Workspace that owns the object (Workspace); 0 reads
+	// as the Default workspace (EffectiveWorkspaceID).
+	WorkspaceID uint `json:"workspace_id" gorm:"not null;default:0;index"`
+
 	Name        string `gorm:"size:200;not null" json:"name"`
 	Description string `gorm:"size:1024" json:"description"`
 	URL         string `gorm:"size:2048;not null" json:"url"`

@@ -507,6 +507,12 @@ func New(opts Options) (_ *Studio, err error) {
 	if err := service.Authz().Seed(backgroundCtx); err != nil {
 		return nil, fmt.Errorf("studio: seed RBAC roles: %w", err)
 	}
+	// The defaults seeded above (catalogues, filters, LLMs) belong to the
+	// Default workspace too: on a fresh install they were written after
+	// InitModels' backfill.
+	if err := models.BackfillWorkspaceIDs(s.db); err != nil {
+		return nil, fmt.Errorf("studio: stamp seeded defaults with the default workspace: %w", err)
+	}
 	// Last under the lock: the schema is now this build's (CheckSchema
 	// reads it back for instances that do not migrate).
 	if err := models.RecordSchemaVersion(s.db, schemaWriter(opts.Version)); err != nil {

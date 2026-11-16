@@ -6,7 +6,12 @@ const DefaultDataCatalogueName = "Default"
 
 type DataCatalogue struct {
 	gorm.Model
-	ID               uint         `json:"id" gorm:"primaryKey"`
+	ID uint `json:"id" gorm:"primaryKey"`
+
+	// WorkspaceID is the Workspace that owns the object (Workspace); 0 reads
+	// as the Default workspace (EffectiveWorkspaceID).
+	WorkspaceID uint `json:"workspace_id" gorm:"not null;default:0;index"`
+
 	Name             string       `json:"name"`
 	ShortDescription string       `json:"short_description"`
 	LongDescription  string       `json:"long_description"`
