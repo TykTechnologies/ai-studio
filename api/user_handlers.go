@@ -483,7 +483,10 @@ func serializeUser(user *models.User) UserResponse {
 			ShowChat:             user.ShowChat,
 			ShowPortal:           user.ShowPortal,
 			EmailVerified:        user.EmailVerified,
-			APIKey:               user.APIKey,
+			// The key itself is never serialized: only the response that
+			// issues it (create, roll) carries it, once (.45). Every other
+			// payload shows the last four characters.
+			APIKeyHint:           apiKeyHint(user.APIKey),
 			HasAPIKey:            user.APIKey != "",
 			NotificationsEnabled: user.NotificationsEnabled,
 			AccessToSSOConfig:    user.AccessToSSOConfig,
