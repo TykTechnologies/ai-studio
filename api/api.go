@@ -1372,6 +1372,7 @@ func (a *API) setupRoutes() error {
 
 	// Sync status routes (admin only - for edge gateway sync monitoring)
 	syncStatusHandlers := NewSyncStatusHandlers(a.service.SyncStatusService)
+	syncStatusHandlers.redactPending = a.redactPendingChanges
 	v1.GET("/cluster/status", authz.Read("edges"), a.getClusterStatus)
 	v1.GET("/sync/status", authz.Read("edges"), syncStatusHandlers.GetSyncStatus)
 	v1.GET("/sync/pending-changes", authz.Read("edges"), syncStatusHandlers.GetPendingChanges)

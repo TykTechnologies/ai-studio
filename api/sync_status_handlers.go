@@ -11,6 +11,9 @@ import (
 // SyncStatusHandlers handles sync status API endpoints
 type SyncStatusHandlers struct {
 	syncStatusService *services.SyncStatusService
+	// redactPending, when set, hides from the caller what its grants do
+	// not let it see (API.redactPendingChanges).
+	redactPending func(*gin.Context, *services.PendingChanges)
 }
 
 // NewSyncStatusHandlers creates a new SyncStatusHandlers
@@ -47,11 +50,13 @@ func (h *SyncStatusHandlers) GetSyncStatus(c *gin.Context) {
 
 // GetPendingChanges handles GET /api/v1/sync/pending-changes?namespace=default
 // @Summary Preview what a push would change
-// @Description List the gateway-visible objects created, updated or deleted in a namespace since its last configuration push. Use "global" (or omit) for the global namespace.
+// @Description List the gateway-visible objects created, updated or deleted in a namespace since its last configuration push. Use "global" (or omit) for the global namespace. Each change names its owning Workspace (none for plugins, model prices, OAuth clients and access tokens), and by_workspace / unattributed_total count every change. With workspace_id, outside_total and stained report the changes a push limited to that Workspace would carry from outside it: changes owned by another Workspace, and plugin and model price changes (OAuth clients and access tokens never count).
 // @Tags sync
 // @Param namespace query string false "Namespace (default: global)"
+// @Param workspace_id query int false "Workspace to report the stain for"
 // @Produce json
 // @Success 200 {object} map[string]services.PendingChanges
+// @Failure 422 {object} map[string]interface{} "invalid_workspace: unknown Workspace"
 // @Router /api/v1/sync/pending-changes [get]
 // @Security BearerAuth
 func (h *SyncStatusHandlers) GetPendingChanges(c *gin.Context) {
@@ -63,10 +68,38 @@ func (h *SyncStatusHandlers) GetPendingChanges(c *gin.Context) {
 		}
 	}
 
-	changes, err := h.syncStatusService.GetPendingChanges(namespace)
+	var workspaceID *uint
+	if raw := c.Query("workspace_id"); raw != "" {
+		// One invalid_workspace body for a malformed and an unknown id, so
+		// Workspace ids cannot be probed.
+		id, err := strconv.ParseUint(raw, 10, 32)
+		if err != nil || id == 0 {
+			invalidWorkspace(c)
+			return
+		}
+		exists, err := h.syncStatusService.WorkspaceExists(uint(id))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if !exists {
+			invalidWorkspace(c)
+			return
+		}
+		wid := uint(id)
+		workspaceID = &wid
+	}
+
+	changes, err := h.syncStatusService.GetPendingChangesFor(namespace, workspaceID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+	if h.redactPending != nil {
+		h.redactPending(c, changes)
+		if c.IsAborted() {
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": changes})
