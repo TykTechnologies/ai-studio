@@ -153,6 +153,22 @@ The audit trail records Workspace create, update and delete with field diffs (`w
 
 TODO (Slice B4: .7-.13). Per resource: create (landing rule), get (visibility), update/delete/publish/execute (in the object's Workspace), lists, moves, link-replacing saves that keep links the caller cannot see (team ↔ catalogues, catalogue ↔ routers, agent ↔ App), bulk actions, dependents, governed-metadata object routes, submission approval, and the list of exempt runtime, portal and edge paths.
 
+### Exempt paths (B4g)
+
+Every `/api/v1` route on a Workspace resource is either Workspace-checked (`permRouter.InWorkspace()` plus the object helpers) or listed in `api/testdata/workspace_global_only_routes.txt`, where the route gate requires the permission globally (fails closed for scoped callers). These paths read stamped tables without a Workspace check, on purpose:
+
+| Path | Where | Why |
+|------|-------|-----|
+| Portal (`/common`) | `api/common.go` (catalogue LLMs, data catalogue datasources, tool catalogue tools, accessible LLMs and datasources, user Apps, chat history, App usage), `api/portal_catalog_handlers.go`, `api/nav.go` (agents in the nav), the `/common` agent list, get, stream and message (`api/agent_handler.go` off the admin API), `api/agent_v2_handlers.go` | Portal access is team membership (team ↔ catalogue, team ↔ agent); portal users hold no bindings. Portal-created Apps land in the Default. |
+| Runtime (data plane) | `proxy/`, the gateway and microgateway config sync (gRPC), chat sessions (`api/chat_session_handler.go`), agent sessions | Workspaces govern the admin API, not request serving. |
+| Edge | `api/edge_owner.go`, edge and namespace handlers | Edges and namespaces are not Workspace resources. |
+| Analytics | `api/analytics_handlers.go`, `mcp_analytics_handlers.go`, service-tier and decision analytics, guardrail block reports, `compliance_handlers.go` | Analytics stays a global resource in this release (§10). |
+| Other global resources | webhooks and webhook deliveries; the audit trail; agent traces; proxy logs and their exports; pending changes (redacted per §7, .44) | Global resources, gated by their global permission at the route. |
+| Plugins | `plugin_handlers.go`, `plugin_workflow_handlers.go`, `plugin_upgrade_handlers.go`, `plugin_marketplace_info.go` | Plugins are global; the `plugins` row is stamped only for pushes. |
+| Access management | `rbac_payloads.go`, `group_handlers_community.go`, `app_quota_handlers.go`, `user_handlers.go`, `license_handlers.go` | Global; not Workspace resources. |
+| Read-global links (D4) | e.g. `toolCatalogueMCPServers` in `api/tool_catalogue_handlers.go` | LLMs, tools, datasources, filters, embedders and MCP servers are read-global, so they never count as hidden in link merges or dependents. The catalogue itself is checked (`onVisibleObject`). |
+| Governed metadata on other object types | `mcp_server`, `plugin_resource:*` | They resolve to the global `metadata` permission at the route gate (fails closed for scoped callers). |
+
 ## 7. Pending changes and stained pushes
 
 TODO (Slice C: .14, .15). Each pending change reports its Workspace; `GET /api/v1/sync/pending-changes?workspace_id=` adds `outside_total` and `stained`; pushes accept `{"only_workspace_id": W}` and answer 409 `push_stained`. Redaction (.44): for read-scoped types outside the caller's read, ids and names are left out; Workspace names show only where the caller has a binding or global `workspaces:read`; counts are always shown (the same in the `push_stained` body). Moves are attributed to their destination; plugin changes count as foreign; OAuth and access-token artifacts never do; an unflagged source counts as foreign (fail closed).
