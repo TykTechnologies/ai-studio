@@ -324,6 +324,15 @@ func (s *SyncStatusService) GetPendingChangesFor(namespace string, workspaceID *
 		}
 	}
 
+	if result.Since == nil {
+		// The first-push listing carries no window count (pendingRows):
+		// every live row is a change, so the total is the totals' sum.
+		result.Total = 0
+		for _, t := range totals {
+			result.Total += int(t.N)
+		}
+	}
+
 	byWorkspace := map[uint]int{}
 	outside := 0
 	for _, t := range totals {
@@ -367,6 +376,24 @@ func (s *SyncStatusService) GetPendingChangesFor(namespace string, workspaceID *
 // own indexed columns before the union, so the cap and the count cost one
 // round-trip rather than one or two per table (pendingUnion).
 func (s *SyncStatusService) pendingRows(namespace string, since *time.Time, defaultWorkspaceID uint) ([]pendingChangeRow, error) {
+	if since == nil {
+		// First push: every live row is a change. Each branch takes only
+		// its newest maxPendingChanges rows (deleted_at is NULL, so the
+		// listing order is updated_at, on the pending-change index), so no
+		// table is read and sorted in full; the global newest are among
+		// them. The uncapped count comes from pendingTotals instead.
+		union, args, err := s.pendingUnionOf(namespace, since, defaultWorkspaceID, false, includeAllSources, maxPendingChanges)
+		if err != nil {
+			return nil, err
+		}
+		sql := "SELECT c.*, 0 AS total FROM (" + union + ") AS c ORDER BY c.updated_at DESC LIMIT ?"
+		args = append(args, maxPendingChanges)
+		var rows []pendingChangeRow
+		if err := s.db.Raw(sql, args...).Scan(&rows).Error; err != nil {
+			return nil, err
+		}
+		return rows, nil
+	}
 	union, args, err := s.pendingUnion(namespace, since, defaultWorkspaceID, false)
 	if err != nil {
 		return nil, err
@@ -410,7 +437,7 @@ func (s *SyncStatusService) pendingTotals(namespace string, since *time.Time, de
 			}
 		}
 	}
-	union, args, err := s.pendingUnionOf(namespace, since, defaultWorkspaceID, true, include)
+	union, args, err := s.pendingUnionOf(namespace, since, defaultWorkspaceID, true, include, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -446,11 +473,15 @@ func (s *SyncStatusService) pendingTotals(namespace string, since *time.Time, de
 // so a row created after the push is also updated after it, and a soft
 // delete leaves updated_at alone.
 func (s *SyncStatusService) pendingUnion(namespace string, since *time.Time, defaultWorkspaceID uint, exact bool) (string, []interface{}, error) {
-	return s.pendingUnionOf(namespace, since, defaultWorkspaceID, exact, func(pendingChangeSource) bool { return true })
+	return s.pendingUnionOf(namespace, since, defaultWorkspaceID, exact, includeAllSources, 0)
 }
 
-// pendingUnionOf is pendingUnion over the sources include accepts.
-func (s *SyncStatusService) pendingUnionOf(namespace string, since *time.Time, defaultWorkspaceID uint, exact bool, include func(pendingChangeSource) bool) (string, []interface{}, error) {
+func includeAllSources(pendingChangeSource) bool { return true }
+
+// pendingUnionOf is pendingUnion over the sources include accepts. With
+// branchLimit > 0 each branch keeps only its branchLimit most recently
+// updated rows.
+func (s *SyncStatusService) pendingUnionOf(namespace string, since *time.Time, defaultWorkspaceID uint, exact bool, include func(pendingChangeSource) bool, branchLimit int) (string, []interface{}, error) {
 	branches := make([]string, 0, len(pendingChangeSources))
 	args := make([]interface{}, 0, 4*len(pendingChangeSources))
 	for _, src := range pendingChangeSources {
@@ -489,9 +520,14 @@ func (s *SyncStatusService) pendingUnionOf(namespace string, since *time.Time, d
 			}
 		}
 
-		branches = append(branches, fmt.Sprintf(
+		branch := fmt.Sprintf(
 			"SELECT ? AS typ, %s AS name, id, %s AS ws, created_at, updated_at, deleted_at FROM %s WHERE %s",
-			src.nameExpr, ws, table, strings.Join(where, " AND ")))
+			src.nameExpr, ws, table, strings.Join(where, " AND "))
+		if branchLimit > 0 {
+			branch = fmt.Sprintf("SELECT * FROM (%s ORDER BY updated_at DESC LIMIT ?) AS b%d", branch, len(branches))
+			args = append(args, branchLimit)
+		}
+		branches = append(branches, branch)
 	}
 	return strings.Join(branches, " UNION ALL "), args, nil
 }

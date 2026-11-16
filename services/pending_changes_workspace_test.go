@@ -256,4 +256,28 @@ func TestPendingChanges_FirstPushTotalsAgreeWithTheListing(t *testing.T) {
 	assert.Equal(t, 3, pc.UnattributedTotal)
 	assert.Equal(t, 3, *pc.OutsideTotal, "Default llm, W2 llm and the plugin; OAuth never stains")
 	assert.True(t, *pc.Stained)
+	assert.Equal(t, len(pc.Changes), pc.Total)
+}
+
+// On a first push each source contributes at most the cap to the listing,
+// newest first, and the total still counts every live row.
+func TestPendingChanges_FirstPushBeyondTheCap(t *testing.T) {
+	f := newWSFixture(t)
+	const ns, n = "edge-new", 205
+	base := time.Now().Add(-time.Hour)
+	for i := 0; i < n; i++ {
+		llm := &models.LLM{Name: fmt.Sprintf("llm %d", i), Namespace: ns}
+		require.NoError(t, f.db.Create(llm).Error)
+		at := base.Add(time.Duration(i) * time.Second)
+		require.NoError(t, f.db.Model(llm).UpdateColumns(map[string]interface{}{"created_at": at, "updated_at": at}).Error)
+	}
+	require.NoError(t, f.db.Create(&models.OAuthClient{ClientID: "c1", ClientSecret: "s", ClientName: "Newest", RedirectURIs: "https://x"}).Error)
+
+	pc, err := f.svc.GetPendingChanges(ns)
+	require.NoError(t, err)
+	require.Len(t, pc.Changes, 200)
+	assert.Equal(t, n+1, pc.Total)
+	assert.Equal(t, "Newest", pc.Changes[0].Name)
+	assert.Equal(t, fmt.Sprintf("llm %d", n-1), pc.Changes[1].Name)
+	assert.Equal(t, fmt.Sprintf("llm %d", n-199), pc.Changes[199].Name)
 }
