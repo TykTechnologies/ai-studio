@@ -3,6 +3,7 @@ package models
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
@@ -128,22 +129,20 @@ func BackfillWorkspaceIDs(db *gorm.DB) error {
 }
 
 // KeepWorkspaceID puts original's workspace_id back in modified (an object
-// hook's result): moving an object between Workspaces is an authorized
-// API operation, never a plugin's side effect. Objects without the stamp
-// are left alone.
+// hook's result): moving an object between Workspaces is an authorized API
+// operation, never a plugin's side effect. It covers every model with a
+// uint WorkspaceID field (all of WorkspaceStampedModels, whichever of them
+// object hooks reach); anything else, or a pair of different types, is
+// left alone.
 func KeepWorkspaceID(original, modified any) {
-	switch m := modified.(type) {
-	case *LLM:
-		if o, ok := original.(*LLM); ok && o != nil && m != nil {
-			m.WorkspaceID = o.WorkspaceID
-		}
-	case *Tool:
-		if o, ok := original.(*Tool); ok && o != nil && m != nil {
-			m.WorkspaceID = o.WorkspaceID
-		}
-	case *Datasource:
-		if o, ok := original.(*Datasource); ok && o != nil && m != nil {
-			m.WorkspaceID = o.WorkspaceID
-		}
+	o, m := reflect.ValueOf(original), reflect.ValueOf(modified)
+	if o.Kind() != reflect.Pointer || m.Kind() != reflect.Pointer || o.IsNil() || m.IsNil() ||
+		o.Type() != m.Type() || o.Elem().Kind() != reflect.Struct {
+		return
 	}
+	of, mf := o.Elem().FieldByName("WorkspaceID"), m.Elem().FieldByName("WorkspaceID")
+	if !of.IsValid() || of.Kind() != reflect.Uint || !mf.CanSet() {
+		return
+	}
+	mf.SetUint(of.Uint())
 }

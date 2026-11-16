@@ -2,6 +2,7 @@ package models
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -201,27 +202,27 @@ func TestEffectiveWorkspaceID(t *testing.T) {
 }
 
 func TestKeepWorkspaceID(t *testing.T) {
-	cases := []struct{ original, modified any }{
-		{&LLM{WorkspaceID: 4}, &LLM{WorkspaceID: 9}},
-		{&Tool{WorkspaceID: 4}, &Tool{}},
-		{&Datasource{WorkspaceID: 4}, &Datasource{WorkspaceID: 1}},
+	// Every stamped model: the original's workspace_id wins.
+	for _, m := range WorkspaceStampedModels() {
+		original := reflect.New(reflect.TypeOf(m).Elem())
+		original.Elem().FieldByName("WorkspaceID").SetUint(4)
+		modified := reflect.New(reflect.TypeOf(m).Elem())
+		modified.Elem().FieldByName("WorkspaceID").SetUint(9)
+		KeepWorkspaceID(original.Interface(), modified.Interface())
+		assert.Equal(t, uint64(4), modified.Elem().FieldByName("WorkspaceID").Uint(), "%T", m)
 	}
-	for _, c := range cases {
-		KeepWorkspaceID(c.original, c.modified)
-		switch m := c.modified.(type) {
-		case *LLM:
-			assert.Equal(t, uint(4), m.WorkspaceID)
-		case *Tool:
-			assert.Equal(t, uint(4), m.WorkspaceID)
-		case *Datasource:
-			assert.Equal(t, uint(4), m.WorkspaceID)
-		}
-	}
-	// Other types and mismatched pairs are left alone.
+	zeroed := &Tool{}
+	KeepWorkspaceID(&Tool{WorkspaceID: 4}, zeroed)
+	assert.Equal(t, uint(4), zeroed.WorkspaceID, "a hook cannot zero it either")
+
+	// Unstamped types, mismatched pairs and nil are left alone.
 	u := &User{Name: "x"}
 	KeepWorkspaceID(&User{}, u)
 	assert.Equal(t, "x", u.Name)
 	l := &LLM{WorkspaceID: 9}
 	KeepWorkspaceID(&Tool{WorkspaceID: 4}, l)
+	assert.Equal(t, uint(9), l.WorkspaceID)
+	KeepWorkspaceID((*LLM)(nil), l)
+	KeepWorkspaceID(&LLM{WorkspaceID: 4}, (*LLM)(nil))
 	assert.Equal(t, uint(9), l.WorkspaceID)
 }
