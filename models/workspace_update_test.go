@@ -63,6 +63,8 @@ func TestWorkspaceID_OnlyAnExplicitUpdateChangesIt(t *testing.T) {
 			assert.Equal(t, w1.ID, storedWorkspaceID(t, db, row), "Updates(struct) keeps the stamp")
 			err := db.Model(row).Updates(map[string]interface{}{"workspace_id": w2.ID}).Error
 			assert.ErrorIs(t, err, wsstamp.ErrImplicitMove, "a map update naming the stamp is refused loudly")
+			err = db.Model(row).Updates(map[string]interface{}{"WorkspaceID": w2.ID}).Error
+			assert.ErrorIs(t, err, wsstamp.ErrImplicitMove, "by field name too")
 			assert.Equal(t, w1.ID, storedWorkspaceID(t, db, row))
 
 			// An explicit move.

@@ -34,8 +34,11 @@ func KeepOnUpdate(tx *gorm.DB) error {
 		}
 	}
 	if values, ok := tx.Statement.Dest.(map[string]interface{}); ok {
-		if _, named := values[Column]; named {
-			return ErrImplicitMove
+		for k := range values {
+			// gorm takes the column or the field name as a map key.
+			if k == Column || k == "WorkspaceID" {
+				return ErrImplicitMove
+			}
 		}
 	}
 	tx.Statement.Omits = append(tx.Statement.Omits, Column)
