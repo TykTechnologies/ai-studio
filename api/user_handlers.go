@@ -1,7 +1,6 @@
 package api
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"net/mail"
@@ -189,40 +188,44 @@ func (a *API) mayAssignRolesOnCreate(c *gin.Context, roleIDs []uint, isAdmin boo
 		return false
 	}
 	ctx := c.Request.Context()
-	ownerChecked := false
-	seen := make(map[uint]bool, len(roleIDs))
+	if len(roleIDs) == 0 {
+		return true
+	}
+	// One query for every requested role.
+	var roles []models.Role
+	if err := a.service.DB.WithContext(ctx).Select("id", "slug").Where("id IN ?", roleIDs).Find(&roles).Error; err != nil {
+		helpers.SendErrorResponse(c, err)
+		return false
+	}
+	found := make(map[uint]string, len(roles))
+	for _, r := range roles {
+		found[r.ID] = r.Slug
+	}
+	wantsOwner := false
 	for _, id := range roleIDs {
-		if seen[id] {
-			continue
-		}
-		seen[id] = true
-		role, err := svc.GetRole(ctx, id)
-		if errors.Is(err, rbac.ErrNotFound) {
+		slug, ok := found[id]
+		if !ok {
 			helpers.SendErrorResponse(c, helpers.NewUnprocessableEntityError(fmt.Sprintf("role %d does not exist", id), ""))
 			return false
 		}
+		wantsOwner = wantsOwner || slug == models.SystemRoleOwner
+	}
+	if !wantsOwner {
+		return true
+	}
+	if accountType == models.AccountTypeService {
+		rbacErrorResponse(c, rbac.ErrServiceAccountOwner)
+		return false
+	}
+	if actor, ok := auth.UserFromContext(c); ok {
+		owner, err := svc.IsOwner(ctx, actor.ID)
 		if err != nil {
 			rbacErrorResponse(c, err)
 			return false
 		}
-		if role.Slug != models.SystemRoleOwner || ownerChecked {
-			continue
-		}
-		ownerChecked = true
-		if accountType == models.AccountTypeService {
-			rbacErrorResponse(c, rbac.ErrServiceAccountOwner)
+		if !owner {
+			rbacErrorResponse(c, rbac.ErrOwnerRequired)
 			return false
-		}
-		if actor, ok := auth.UserFromContext(c); ok {
-			owner, err := svc.IsOwner(ctx, actor.ID)
-			if err != nil {
-				rbacErrorResponse(c, err)
-				return false
-			}
-			if !owner {
-				rbacErrorResponse(c, rbac.ErrOwnerRequired)
-				return false
-			}
 		}
 	}
 	return true
