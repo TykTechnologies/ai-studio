@@ -131,12 +131,16 @@ func bulkErrorMessage(err error, what string) string {
 }
 
 // requireBulkInWorkspace checks perm on every id of a bulk request, with one
-// query for the stored Workspaces, in request order. It answers the first
-// refusal: 404 (as the single routes do) for an object of a read-scoped
-// resource the caller may not see, else 403 permission_denied.
-func (a *API) requireBulkInWorkspace(c *gin.Context, target bulkTarget, perm authz.Permission, bulkIDs []BulkID) bool {
+// query for the stored Workspaces, in request order. An object of a
+// read-scoped resource the caller may not see is returned in hidden: it is
+// answered exactly like a missing id (per-id "not found", left untouched),
+// so a bulk call never tells whether a hidden object exists. The first
+// visible object the caller cannot act on refuses the whole request (403
+// permission_denied).
+func (a *API) requireBulkInWorkspace(c *gin.Context, target bulkTarget, perm authz.Permission, bulkIDs []BulkID) (hidden map[uint]bool, ok bool) {
+	hidden = map[uint]bool{}
 	if a.workspaceCheckMode(c) == workspaceOpen {
-		return true
+		return hidden, true
 	}
 	ids := make([]uint, len(bulkIDs))
 	for i, id := range bulkIDs {
@@ -146,23 +150,25 @@ func (a *API) requireBulkInWorkspace(c *gin.Context, target bulkTarget, perm aut
 	if err != nil {
 		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
 		c.Abort()
-		return false
+		return nil, false
 	}
 	for _, id := range ids {
 		ws, found := stored[id]
 		if !found {
 			continue
 		}
-		if !a.requireVisible(c, target.resource, ws, func(c *gin.Context) {
-			simpleError(c, http.StatusNotFound, "Not Found", fmt.Sprintf("%s %d not found", target.what, id))
-		}) {
-			return false
+		if !a.visibleIn(c, target.resource, ws) {
+			if c.IsAborted() {
+				return nil, false
+			}
+			hidden[id] = true
+			continue
 		}
 		if !a.requireInWorkspace(c, perm, ws) {
-			return false
+			return nil, false
 		}
 	}
-	return true
+	return hidden, true
 }
 
 // runBulkAction is the shared handler body.
@@ -199,15 +205,16 @@ func (a *API) runBulkAction(c *gin.Context, target bulkTarget) {
 	}
 
 	// Every object is checked before anything changes: the action's
-	// permission must cover each object's Workspace. The first object the
-	// caller cannot act on refuses the whole request (404 when the caller
-	// may not see it, 403 otherwise), so a refused request changes nothing.
-	// Unknown ids pass and get their per-id "not found" below.
+	// permission must cover each object's Workspace. The first visible
+	// object the caller cannot act on refuses the whole request (403), so a
+	// refused request changes nothing. Unknown ids, and objects the caller
+	// may not see, get the same per-id "not found" below.
 	perm := authz.Delete(target.resource)
 	if input.Action != bulkDelete {
 		perm = authz.Publish(target.resource)
 	}
-	if !a.requireBulkInWorkspace(c, target, perm, input.IDs) {
+	hidden, ok := a.requireBulkInWorkspace(c, target, perm, input.IDs)
+	if !ok {
 		return
 	}
 
@@ -217,8 +224,10 @@ func (a *API) runBulkAction(c *gin.Context, target bulkTarget) {
 	for _, bulkID := range input.IDs {
 		id := uint(bulkID)
 		var err error
-		switch input.Action {
-		case bulkDelete:
+		switch {
+		case hidden[id]:
+			err = gorm.ErrRecordNotFound
+		case input.Action == bulkDelete:
 			err = target.remove(c, id)
 		default:
 			err = target.setActive(c, id, input.Action == bulkActivate)

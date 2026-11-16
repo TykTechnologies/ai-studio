@@ -474,9 +474,9 @@ func submissionTargetFor(resourceType string) (submissionTarget, bool) {
 }
 
 // requireApprovalCatalogues checks the catalogues an approval would add the
-// resource to: write in each catalogue's Workspace (404 for one the reviewer
-// may not see, 403 otherwise; an unknown id is left to the approval, which
-// refuses it). Submissions:write alone must not let a reviewer publish a
+// resource to: write in each catalogue's Workspace (404 for one that does
+// not exist or that the reviewer may not see, with the same body; 403 for
+// one they see but cannot write). Submissions:write alone must not let a reviewer publish a
 // resource into catalogues they cannot edit. A plugin resource hands the ids
 // to the plugin, whose meaning it decides, so it needs every catalogue write
 // permission globally (fail closed). Admins hold all of them.
@@ -492,8 +492,25 @@ func (a *API) requireApprovalCatalogues(c *gin.Context, resourceType string, ids
 		return true
 	}
 	k := *target.catalogue
+	if a.workspaceCheckMode(c) == workspaceOpen {
+		return true
+	}
+	stored, err := a.workspaceOf(k.model, ids)
+	if err != nil {
+		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		c.Abort()
+		return false
+	}
+	// A missing catalogue and one the reviewer may not see answer alike.
+	notFound := func(c *gin.Context) { simpleError(c, http.StatusNotFound, "Not Found", k.notFound) }
 	for _, id := range ids {
-		if !a.requireOnObject(c, k.model, id, authz.Write(k.resource)) {
+		ws, found := stored[id]
+		if !found {
+			notFound(c)
+			c.Abort()
+			return false
+		}
+		if !a.requireVisible(c, k.resource, ws, notFound) || !a.requireInWorkspace(c, authz.Write(k.resource), ws) {
 			return false
 		}
 	}
