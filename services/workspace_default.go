@@ -1,0 +1,64 @@
+package services
+
+import (
+	"errors"
+	"fmt"
+
+	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/clause"
+)
+
+// ErrWorkspaceNotFound is returned when a Workspace id names no Workspace.
+var ErrWorkspaceNotFound = errors.New("workspace not found")
+
+// DefaultWorkspaceID returns the id of the Default workspace, loaded once
+// per process. The Default is created at start-up under the migration lock
+// and can never be deleted or replaced, so the id never changes and every
+// replica reads the same value. A failed load is not cached.
+func (s *Service) DefaultWorkspaceID() (uint, error) {
+	if id := s.defaultWorkspaceID.Load(); id != 0 {
+		return uint(id), nil
+	}
+	w, err := models.GetDefaultWorkspace(s.DB)
+	if err != nil {
+		return 0, fmt.Errorf("load the default workspace: %w", err)
+	}
+	s.defaultWorkspaceID.Store(uint64(w.ID))
+	return w.ID, nil
+}
+
+// WorkspaceExists reports whether id names a Workspace.
+func (s *Service) WorkspaceExists(id uint) (bool, error) {
+	if id == 0 {
+		return false, nil
+	}
+	var n int64
+	if err := s.DB.Model(&models.Workspace{}).Where("id = ?", id).Count(&n).Error; err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+// LockWorkspaceForInsert checks, inside tx, that the Workspace exists and
+// holds it until tx ends (FOR SHARE on Postgres; SQLite serializes writes),
+// so an object or binding created in tx can never land in a Workspace that
+// a concurrent delete (on any replica) is removing. Call it in the same
+// transaction as the insert. ErrWorkspaceNotFound when it does not exist.
+func LockWorkspaceForInsert(tx *gorm.DB, id uint) error {
+	if id == 0 {
+		return ErrWorkspaceNotFound
+	}
+	q := tx.Model(&models.Workspace{}).Where("id = ?", id)
+	if tx.Dialector.Name() == "postgres" {
+		q = q.Clauses(clause.Locking{Strength: "SHARE"})
+	}
+	var ids []uint
+	if err := q.Pluck("id", &ids).Error; err != nil {
+		return err
+	}
+	if len(ids) == 0 {
+		return ErrWorkspaceNotFound
+	}
+	return nil
+}

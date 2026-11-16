@@ -100,6 +100,10 @@ type Service struct {
 	// the TykMCP service InitTykMCP builds.
 	tykMCPHost *tykmcp.HostConnection
 
+	// defaultWorkspaceID caches the Default workspace's id (0: not loaded
+	// yet); see DefaultWorkspaceID.
+	defaultWorkspaceID atomic.Uint64
+
 	// auditService is the audit trail owned by the API and attached through
 	// SetAuditService so background services (webhooks) can record non-HTTP
 	// actions. Guarded because the API is built after plugins have started.
