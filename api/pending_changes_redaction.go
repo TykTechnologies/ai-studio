@@ -60,10 +60,14 @@ func (a *API) redactPendingChanges(c *gin.Context, pc *services.PendingChanges) 
 	}
 }
 
-// mayNameWorkspace reports whether the caller may see a Workspace's name:
-// with global workspaces:read, or a binding scoped to that Workspace. A
-// global role without workspaces:read (the Operator's edges role) names no
-// Workspace it is not bound in.
+// mayNameWorkspace reports whether the caller may see a Workspace's name.
+// It is the one rule for every place that names Workspaces (pending
+// changes, the push_stained body) and matches GET /workspaces: a caller
+// whose access covers every Workspace (coversEveryWorkspace: global
+// workspaces:read, full admin, or a global read on any Workspace object
+// type) sees every name; anyone else only those of the Workspaces they
+// hold a scoped role in. A global role with no Workspace-object read (the
+// Operator's edges role) names no Workspace it is not bound in.
 func (a *API) mayNameWorkspace(c *gin.Context, workspaceID uint) bool {
 	switch a.workspaceCheckMode(c) {
 	case workspaceOpen:
@@ -79,7 +83,7 @@ func (a *API) mayNameWorkspace(c *gin.Context, workspaceID uint) bool {
 	if err != nil {
 		return false
 	}
-	if g.Can(authz.Read("workspaces")) {
+	if coversEveryWorkspace(g) {
 		return true
 	}
 	ws, ok := g.Workspaces[workspaceID]

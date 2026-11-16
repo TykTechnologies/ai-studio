@@ -11,6 +11,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/pushes"
 	"github.com/gin-gonic/gin"
 )
 
@@ -161,6 +162,9 @@ func (a *API) getEdge(c *gin.Context) {
 // @Failure 404 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
+// @Param body body PushPreconditionInput false "Optional push precondition (Enterprise Workspaces): refuse the push while changes from outside this Workspace are pending"
+// @Failure 409 {object} PushStainedBody "push_stained (only_workspace_id), or no edges to push to"
+// @Failure 422 {object} ErrorResponse "only_workspace_id names no Workspace"
 // @Router /api/v1/edges/{edge_id}/reload [post]
 // @Security BearerAuth
 func (a *API) triggerEdgeReload(c *gin.Context) {
@@ -172,9 +176,10 @@ func (a *API) triggerEdgeReload(c *gin.Context) {
 		return
 	}
 
-	res, err := a.service.NamespaceService.TriggerEdgeReload(edgeID, initiatedBy(c))
-	if err != nil {
-		sendPushError(c, err)
+	res, ok := a.push(c, func(only ...uint) (*pushes.Result, error) {
+		return a.service.NamespaceService.TriggerEdgeReload(edgeID, initiatedBy(c), only...)
+	})
+	if !ok {
 		return
 	}
 	pushAccepted(c, res)
@@ -234,15 +239,18 @@ func (a *API) listReloadOperations(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Success 202 {object} map[string]interface{}
-// @Failure 409 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
+// @Param body body PushPreconditionInput false "Optional push precondition (Enterprise Workspaces): refuse the push while changes from outside this Workspace are pending"
+// @Failure 409 {object} PushStainedBody "push_stained (only_workspace_id), or no edges to push to"
+// @Failure 422 {object} ErrorResponse "only_workspace_id names no Workspace"
 // @Router /api/v1/edges/reload-all [post]
 // @Security BearerAuth
 func (a *API) reloadAllEdges(c *gin.Context) {
 	// CE: every edge is in the "default" namespace.
-	res, err := a.service.NamespaceService.TriggerNamespaceReload(models.DefaultNamespace, initiatedBy(c))
-	if err != nil {
-		sendPushError(c, err)
+	res, ok := a.push(c, func(only ...uint) (*pushes.Result, error) {
+		return a.service.NamespaceService.TriggerNamespaceReload(models.DefaultNamespace, initiatedBy(c), only...)
+	})
+	if !ok {
 		return
 	}
 	pushAccepted(c, res)

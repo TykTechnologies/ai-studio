@@ -4180,6 +4180,16 @@ const docTemplate = `{
                     "edges"
                 ],
                 "summary": "Reload all edge gateways",
+                "parameters": [
+                    {
+                        "description": "Optional push precondition (Enterprise Workspaces): refuse the push while changes from outside this Workspace are pending",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.PushPreconditionInput"
+                        }
+                    }
+                ],
                 "responses": {
                     "202": {
                         "description": "Accepted",
@@ -4189,7 +4199,13 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "Conflict",
+                        "description": "push_stained (only_workspace_id), or no edges to push to",
+                        "schema": {
+                            "$ref": "#/definitions/api.PushStainedBody"
+                        }
+                    },
+                    "422": {
+                        "description": "only_workspace_id names no Workspace",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -4355,6 +4371,14 @@ const docTemplate = `{
                         "name": "edge_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Optional push precondition (Enterprise Workspaces): refuse the push while changes from outside this Workspace are pending",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.PushPreconditionInput"
+                        }
                     }
                 ],
                 "responses": {
@@ -4367,6 +4391,18 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "push_stained (only_workspace_id), or no edges to push to",
+                        "schema": {
+                            "$ref": "#/definitions/api.PushStainedBody"
+                        }
+                    },
+                    "422": {
+                        "description": "only_workspace_id names no Workspace",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -33839,6 +33875,49 @@ const docTemplate = `{
                 }
             }
         },
+        "api.PushPreconditionInput": {
+            "type": "object",
+            "properties": {
+                "only_workspace_id": {
+                    "description": "OnlyWorkspaceID refuses the push while changes from outside this\nWorkspace are pending in a target namespace.",
+                    "type": "integer"
+                }
+            }
+        },
+        "api.PushStainedBody": {
+            "type": "object",
+            "properties": {
+                "by_workspace": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/services.PendingWorkspaceTotal"
+                    }
+                },
+                "changes": {
+                    "description": "Changes lists up to 20 foreign changes, newest first.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.stainedChange"
+                    }
+                },
+                "errors": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/authz.Error"
+                    }
+                },
+                "outside_total": {
+                    "description": "OutsideTotal counts every foreign change; ByWorkspace splits those\nowned by a Workspace, UnattributedTotal the rest (global types).",
+                    "type": "integer"
+                },
+                "unattributed_total": {
+                    "type": "integer"
+                },
+                "workspace_id": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.RegisterInput": {
             "description": "Register input model",
             "type": "object",
@@ -35513,6 +35592,45 @@ const docTemplate = `{
                 }
             }
         },
+        "api.stainedChange": {
+            "type": "object",
+            "properties": {
+                "at": {
+                    "description": "when that change happened",
+                    "type": "string"
+                },
+                "change": {
+                    "description": "created | updated | deleted",
+                    "type": "string"
+                },
+                "hidden": {
+                    "description": "Hidden marks a change whose object the caller cannot see; its type,\nkind, time and Workspace id are still reported.",
+                    "type": "boolean"
+                },
+                "id": {
+                    "description": "ID and Name are left out (Hidden set) for an object the caller cannot\nsee: an App or router in a Workspace their read does not cover.",
+                    "type": "integer"
+                },
+                "name": {
+                    "description": "display name at the time of the query",
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "type": {
+                    "description": "llm, app, filter, tool, datasource, plugin, model_router, semantic_router, model_price, oauth_client, access_token",
+                    "type": "string"
+                },
+                "workspace_id": {
+                    "description": "WorkspaceID is the Workspace that owns the object (a stored 0 reads\nas the Default workspace); nil for types with no owning Workspace\n(plugin, model_price, oauth_client, access_token).",
+                    "type": "integer"
+                },
+                "workspace_name": {
+                    "type": "string"
+                }
+            }
+        },
         "api.updateWebhookTargetInput": {
             "type": "object",
             "properties": {
@@ -35721,6 +35839,23 @@ const docTemplate = `{
                 "ActionExecute",
                 "ActionPublish"
             ]
+        },
+        "authz.Error": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "detail": {
+                    "type": "string"
+                },
+                "permission": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
         },
         "authz.Resource": {
             "type": "object",
