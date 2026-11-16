@@ -28,6 +28,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/middleware"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
+	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
 	"github.com/TykTechnologies/midsommar/v2/services/marketplace_management"
@@ -696,20 +697,21 @@ func (a *API) setupRoutes() error {
 	v1.DELETE("/groups/:id/app-quota", authz.Delete("groups"), a.deleteTeamAppQuota)
 
 	// LLM routes
-	v1.POST("/llms", authz.Write("llms"), a.createLLM)
-	v1.GET("/llms/:id", authz.Read("llms"), a.getLLM)
-	v1.PATCH("/llms/:id", authz.Write("llms"), a.updateLLM)
-	v1.POST("/llms/:id/activate", authz.Publish("llms"), a.activateLLM)
-	v1.POST("/llms/:id/deactivate", authz.Publish("llms"), a.deactivateLLM)
-	v1.DELETE("/llms/:id", authz.Delete("llms"), a.deleteLLM)
-	v1.GET("/llms", authz.Read("llms"), a.listLLMs)
-	v1.GET("/llms/search", authz.Read("llms"), a.searchLLMs)
-	v1.GET("/llms/max-privacy-score", authz.Read("llms"), a.getLLMsByMaxPrivacyScore)
-	v1.GET("/llms/min-privacy-score", authz.Read("llms"), a.getLLMsByMinPrivacyScore)
-	v1.GET("/llms/privacy-score-range", authz.Read("llms"), a.getLLMsByPrivacyScoreRange)
-	v1.GET("/llms/:id/dependents", authz.Read("llms"), a.getLLMDependents)
-	v1.GET("/llms/:id/resource-signing-key", authz.Read("llms"), a.getLLMResourceSigningKey)
-	v1.POST("/llms/:id/resource-signing-key/rotate", authz.Write("llms"), a.rotateLLMResourceSigningKey)
+	v1.InWorkspace().POST("/llms", authz.Write("llms"), a.createLLM)
+	v1.InWorkspace().GET("/llms/:id", authz.Read("llms"), a.getLLM)
+	v1.InWorkspace().PATCH("/llms/:id", authz.Write("llms"), a.updateLLM)
+	v1.InWorkspace().POST("/llms/:id/activate", authz.Publish("llms"), a.activateLLM)
+	v1.InWorkspace().POST("/llms/:id/deactivate", authz.Publish("llms"), a.deactivateLLM)
+	v1.InWorkspace().DELETE("/llms/:id", authz.Delete("llms"), a.deleteLLM)
+	v1.InWorkspace().GET("/llms", authz.Read("llms"), a.listLLMs)
+	v1.InWorkspace().GET("/llms/search", authz.Read("llms"), a.searchLLMs)
+	v1.InWorkspace().GET("/llms/max-privacy-score", authz.Read("llms"), a.getLLMsByMaxPrivacyScore)
+	v1.InWorkspace().GET("/llms/min-privacy-score", authz.Read("llms"), a.getLLMsByMinPrivacyScore)
+	v1.InWorkspace().GET("/llms/privacy-score-range", authz.Read("llms"), a.getLLMsByPrivacyScoreRange)
+	v1.InWorkspace().GET("/llms/:id/dependents", authz.Read("llms"), a.getLLMDependents)
+	// Key material: write in the LLM's Workspace, who can rotate it anyway.
+	v1.InWorkspace().GET("/llms/:id/resource-signing-key", authz.Write("llms"), a.onObject(&models.LLM{}, authz.Write("llms")), a.getLLMResourceSigningKey)
+	v1.InWorkspace().POST("/llms/:id/resource-signing-key/rotate", authz.Write("llms"), a.rotateLLMResourceSigningKey)
 	// Bulk actions resolve their permission from the body: publish for
 	// activate/deactivate, delete for delete (bulk_handlers.go).
 	v1.HandleFn("POST", "/llms/bulk", bulkActionPermission("llms"), a.bulkLLMs)
@@ -738,20 +740,20 @@ func (a *API) setupRoutes() error {
 	v1.GET("/tags/search", authz.Read("tags"), a.searchTags)
 
 	// Datasource routes
-	v1.POST("/datasources", authz.Write("datasources"), a.createDatasource)
-	v1.GET("/datasources/:id", authz.Read("datasources"), a.getDatasource)
-	v1.PATCH("/datasources/:id", authz.Write("datasources"), a.updateDatasource)
-	v1.POST("/datasources/:id/activate", authz.Publish("datasources"), a.activateDatasource)
-	v1.POST("/datasources/:id/deactivate", authz.Publish("datasources"), a.deactivateDatasource)
-	v1.DELETE("/datasources/:id", authz.Delete("datasources"), a.deleteDatasource)
-	v1.GET("/datasources", authz.Read("datasources"), a.listDatasources)
-	v1.GET("/datasources/search", authz.Read("datasources"), a.searchDatasources)
-	v1.GET("/datasources/by-tag", authz.Read("datasources"), a.getDatasourcesByTag)
-	v1.POST("/datasources/:id/filestores/:filestore_id", authz.Write("datasources"), a.addFileStoreToDatasource)
-	v1.DELETE("/datasources/:id/filestores/:filestore_id", authz.Delete("datasources"), a.removeFileStoreFromDatasource)
-	v1.POST("/datasources/:id/process-embeddings", authz.Execute("datasources"), a.ProcessFileEmbeddingHandler)
-	v1.POST("/datasources/:id/clone", authz.Write("datasources"), a.cloneDatasource)
-	v1.GET("/datasources/:id/dependents", authz.Read("datasources"), a.getDatasourceDependents)
+	v1.InWorkspace().POST("/datasources", authz.Write("datasources"), a.createDatasource)
+	v1.InWorkspace().GET("/datasources/:id", authz.Read("datasources"), a.getDatasource)
+	v1.InWorkspace().PATCH("/datasources/:id", authz.Write("datasources"), a.updateDatasource)
+	v1.InWorkspace().POST("/datasources/:id/activate", authz.Publish("datasources"), a.onObject(&models.Datasource{}, authz.Publish("datasources")), a.activateDatasource)
+	v1.InWorkspace().POST("/datasources/:id/deactivate", authz.Publish("datasources"), a.onObject(&models.Datasource{}, authz.Publish("datasources")), a.deactivateDatasource)
+	v1.InWorkspace().DELETE("/datasources/:id", authz.Delete("datasources"), a.onObject(&models.Datasource{}, authz.Delete("datasources")), a.deleteDatasource)
+	v1.InWorkspace().GET("/datasources", authz.Read("datasources"), a.listDatasources)
+	v1.InWorkspace().GET("/datasources/search", authz.Read("datasources"), a.searchDatasources)
+	v1.InWorkspace().GET("/datasources/by-tag", authz.Read("datasources"), a.getDatasourcesByTag)
+	v1.InWorkspace().POST("/datasources/:id/filestores/:filestore_id", authz.Write("datasources"), a.onObject(&models.Datasource{}, authz.Write("datasources")), a.addFileStoreToDatasource)
+	v1.InWorkspace().DELETE("/datasources/:id/filestores/:filestore_id", authz.Delete("datasources"), a.onObject(&models.Datasource{}, authz.Delete("datasources")), a.removeFileStoreFromDatasource)
+	v1.InWorkspace().POST("/datasources/:id/process-embeddings", authz.Execute("datasources"), a.onObject(&models.Datasource{}, authz.Execute("datasources")), a.ProcessFileEmbeddingHandler)
+	v1.InWorkspace().POST("/datasources/:id/clone", authz.Write("datasources"), a.onObject(&models.Datasource{}, authz.Write("datasources")), a.cloneDatasource)
+	v1.InWorkspace().GET("/datasources/:id/dependents", authz.Read("datasources"), a.getDatasourceDependents)
 	v1.HandleFn("POST", "/datasources/bulk", bulkActionPermission("datasources"), a.bulkDatasources)
 
 	// Data Catalogue routes
@@ -880,37 +882,37 @@ func (a *API) setupRoutes() error {
 	v1.POST("/agents/:id/deactivate", authz.Publish("agents"), a.HandleDeactivateAgent) // Deactivate agent (publish)
 
 	// Tool routes
-	v1.POST("/tools", authz.Write("tools"), a.createTool)
-	v1.GET("/tools/:id", authz.Read("tools"), a.getTool)
-	v1.PATCH("/tools/:id", authz.Write("tools"), a.updateTool)
-	v1.POST("/tools/:id/activate", authz.Publish("tools"), a.activateTool)
-	v1.POST("/tools/:id/deactivate", authz.Publish("tools"), a.deactivateTool)
-	v1.DELETE("/tools/:id", authz.Delete("tools"), a.deleteTool)
-	v1.GET("/tools", authz.Read("tools"), a.getAllTools)
-	v1.GET("/tools/by-type", authz.Read("tools"), a.getToolsByType)
-	v1.GET("/tools/search", authz.Read("tools"), a.searchTools)
-	v1.POST("/tools/:id/operations", authz.Write("tools"), a.addOperationToTool)
-	v1.DELETE("/tools/:id/operations", authz.Delete("tools"), a.removeOperationFromTool)
-	v1.GET("/tools/:id/operations", authz.Read("tools"), a.getToolOperations)
+	v1.InWorkspace().POST("/tools", authz.Write("tools"), a.createTool)
+	v1.InWorkspace().GET("/tools/:id", authz.Read("tools"), a.getTool)
+	v1.InWorkspace().PATCH("/tools/:id", authz.Write("tools"), a.updateTool)
+	v1.InWorkspace().POST("/tools/:id/activate", authz.Publish("tools"), a.onObject(&models.Tool{}, authz.Publish("tools")), a.activateTool)
+	v1.InWorkspace().POST("/tools/:id/deactivate", authz.Publish("tools"), a.onObject(&models.Tool{}, authz.Publish("tools")), a.deactivateTool)
+	v1.InWorkspace().DELETE("/tools/:id", authz.Delete("tools"), a.onObject(&models.Tool{}, authz.Delete("tools")), a.deleteTool)
+	v1.InWorkspace().GET("/tools", authz.Read("tools"), a.getAllTools)
+	v1.InWorkspace().GET("/tools/by-type", authz.Read("tools"), a.getToolsByType)
+	v1.InWorkspace().GET("/tools/search", authz.Read("tools"), a.searchTools)
+	v1.InWorkspace().POST("/tools/:id/operations", authz.Write("tools"), a.onObject(&models.Tool{}, authz.Write("tools")), a.addOperationToTool)
+	v1.InWorkspace().DELETE("/tools/:id/operations", authz.Delete("tools"), a.onObject(&models.Tool{}, authz.Delete("tools")), a.removeOperationFromTool)
+	v1.InWorkspace().GET("/tools/:id/operations", authz.Read("tools"), a.getToolOperations)
 
-	v1.GET("/tools/:id/spec-operations", authz.Read("tools"), a.listToolSpecOperations)
-	v1.POST("/tools/:id/call-operation", authz.Execute("tools"), a.callToolOperation)
+	v1.InWorkspace().GET("/tools/:id/spec-operations", authz.Read("tools"), a.listToolSpecOperations)
+	v1.InWorkspace().POST("/tools/:id/call-operation", authz.Execute("tools"), a.onObject(&models.Tool{}, authz.Execute("tools")), a.callToolOperation)
 
-	v1.POST("/tools/:id/dependencies/:dependency_id", authz.Write("tools"), a.addDependencyToTool)
-	v1.DELETE("/tools/:id/dependencies/:dependency_id", authz.Delete("tools"), a.removeDependencyFromTool)
-	v1.GET("/tools/:id/dependencies", authz.Read("tools"), a.getToolDependencies)
-	v1.PUT("/tools/:id/dependencies", authz.Write("tools"), a.setToolDependencies)
+	v1.InWorkspace().POST("/tools/:id/dependencies/:dependency_id", authz.Write("tools"), a.onObject(&models.Tool{}, authz.Write("tools")), a.addDependencyToTool)
+	v1.InWorkspace().DELETE("/tools/:id/dependencies/:dependency_id", authz.Delete("tools"), a.onObject(&models.Tool{}, authz.Delete("tools")), a.removeDependencyFromTool)
+	v1.InWorkspace().GET("/tools/:id/dependencies", authz.Read("tools"), a.getToolDependencies)
+	v1.InWorkspace().PUT("/tools/:id/dependencies", authz.Write("tools"), a.onObject(&models.Tool{}, authz.Write("tools")), a.setToolDependencies)
 
-	v1.POST("/tools/:id/filestores/:filestore_id", authz.Write("tools"), a.addFileStoreToTool)
-	v1.DELETE("/tools/:id/filestores/:filestore_id", authz.Delete("tools"), a.removeFileStoreFromTool)
-	v1.GET("/tools/:id/filestores", authz.Read("tools"), a.getToolFileStores)
-	v1.PUT("/tools/:id/filestores", authz.Write("tools"), a.setToolFileStores)
+	v1.InWorkspace().POST("/tools/:id/filestores/:filestore_id", authz.Write("tools"), a.onObject(&models.Tool{}, authz.Write("tools")), a.addFileStoreToTool)
+	v1.InWorkspace().DELETE("/tools/:id/filestores/:filestore_id", authz.Delete("tools"), a.onObject(&models.Tool{}, authz.Delete("tools")), a.removeFileStoreFromTool)
+	v1.InWorkspace().GET("/tools/:id/filestores", authz.Read("tools"), a.getToolFileStores)
+	v1.InWorkspace().PUT("/tools/:id/filestores", authz.Write("tools"), a.onObject(&models.Tool{}, authz.Write("tools")), a.setToolFileStores)
 
-	v1.POST("/tools/:id/filters/:filter_id", authz.Write("tools"), a.addFilterToTool)
-	v1.DELETE("/tools/:id/filters/:filter_id", authz.Delete("tools"), a.removeFilterFromTool)
-	v1.GET("/tools/:id/filters", authz.Read("tools"), a.getToolFilters)
-	v1.PUT("/tools/:id/filters", authz.Write("tools"), a.setToolFilters)
-	v1.GET("/tools/:id/dependents", authz.Read("tools"), a.getToolDependents)
+	v1.InWorkspace().POST("/tools/:id/filters/:filter_id", authz.Write("tools"), a.onObject(&models.Tool{}, authz.Write("tools")), a.addFilterToTool)
+	v1.InWorkspace().DELETE("/tools/:id/filters/:filter_id", authz.Delete("tools"), a.onObject(&models.Tool{}, authz.Delete("tools")), a.removeFilterFromTool)
+	v1.InWorkspace().GET("/tools/:id/filters", authz.Read("tools"), a.getToolFilters)
+	v1.InWorkspace().PUT("/tools/:id/filters", authz.Write("tools"), a.onObject(&models.Tool{}, authz.Write("tools")), a.setToolFilters)
+	v1.InWorkspace().GET("/tools/:id/dependents", authz.Read("tools"), a.getToolDependents)
 	v1.HandleFn("POST", "/tools/bulk", bulkActionPermission("tools"), a.bulkTools)
 
 	// Tools import from a Tyk Dashboard connection (Enterprise; CE answers 403)
@@ -935,15 +937,15 @@ func (a *API) setupRoutes() error {
 	v1.GET("/vendors/vector-stores", authz.Read("datasources"), a.getAvailableVectorStores)
 
 	// Filter routes
-	v1.POST("/filters", authz.Write("filters"), a.createFilter)
-	v1.GET("/filters/:id", authz.Read("filters"), a.getFilter)
-	v1.PATCH("/filters/:id", authz.Write("filters"), a.updateFilter)
-	v1.DELETE("/filters/:id", authz.Delete("filters"), a.deleteFilter)
-	v1.GET("/filters", authz.Read("filters"), a.listFilters)
-	v1.POST("/filters/test", authz.Execute("filters"), a.testFilter)
-	v1.GET("/filters/guardrail-providers", authz.Read("filters"), a.listGuardrailProviders)
-	v1.GET("/filters/:id/dependents", authz.Read("filters"), a.getFilterDependents)
-	v1.GET("/filters/:id/exceptions", authz.Read("filters"), a.listFilterGuardrailExceptions)
+	v1.InWorkspace().POST("/filters", authz.Write("filters"), a.createFilter)
+	v1.InWorkspace().GET("/filters/:id", authz.Read("filters"), a.getFilter)
+	v1.InWorkspace().PATCH("/filters/:id", authz.Write("filters"), a.updateFilter)
+	v1.InWorkspace().DELETE("/filters/:id", authz.Delete("filters"), a.onObject(&models.Filter{}, authz.Delete("filters")), a.deleteFilter)
+	v1.InWorkspace().GET("/filters", authz.Read("filters"), a.listFilters)
+	v1.InWorkspace().POST("/filters/test", authz.Execute("filters"), a.testFilter)
+	v1.InWorkspace().GET("/filters/guardrail-providers", authz.Read("filters"), a.listGuardrailProviders)
+	v1.InWorkspace().GET("/filters/:id/dependents", authz.Read("filters"), a.getFilterDependents)
+	v1.InWorkspace().GET("/filters/:id/exceptions", authz.Read("filters"), a.listFilterGuardrailExceptions)
 	v1.HandleFn("POST", "/filters/bulk", bulkActionPermission("filters"), a.bulkFilters)
 
 	// Plugin routes
@@ -1014,14 +1016,14 @@ func (a *API) setupRoutes() error {
 	v1.GET("/plugins/assets/:id/*filepath", authz.AnyAdmin, a.servePluginAsset)
 
 	// LLM-Plugin association routes (extend existing LLM routes)
-	v1.GET("/llms/:id/plugins", authz.Read("llms"), a.getLLMPlugins)
-	v1.PUT("/llms/:id/plugins", authz.Write("llms"), a.updateLLMPlugins)
+	v1.InWorkspace().GET("/llms/:id/plugins", authz.Read("llms"), a.getLLMPlugins)
+	v1.InWorkspace().PUT("/llms/:id/plugins", authz.Write("llms"), a.updateLLMPlugins)
 
 	// Auth plugins on the other gateway endpoints (models.EndpointType*)
-	v1.GET("/datasources/:id/auth-plugins", authz.Read("datasources"), a.getEndpointAuthPlugins(models.EndpointTypeDatasource))
-	v1.PUT("/datasources/:id/auth-plugins", authz.Write("datasources"), a.updateEndpointAuthPlugins(models.EndpointTypeDatasource))
-	v1.GET("/tools/:id/auth-plugins", authz.Read("tools"), a.getEndpointAuthPlugins(models.EndpointTypeTool))
-	v1.PUT("/tools/:id/auth-plugins", authz.Write("tools"), a.updateEndpointAuthPlugins(models.EndpointTypeTool))
+	v1.InWorkspace().GET("/datasources/:id/auth-plugins", authz.Read("datasources"), a.getEndpointAuthPlugins(models.EndpointTypeDatasource))
+	v1.InWorkspace().PUT("/datasources/:id/auth-plugins", authz.Write("datasources"), a.onObject(&models.Datasource{}, authz.Write("datasources")), a.updateEndpointAuthPlugins(models.EndpointTypeDatasource))
+	v1.InWorkspace().GET("/tools/:id/auth-plugins", authz.Read("tools"), a.getEndpointAuthPlugins(models.EndpointTypeTool))
+	v1.InWorkspace().PUT("/tools/:id/auth-plugins", authz.Write("tools"), a.onObject(&models.Tool{}, authz.Write("tools")), a.updateEndpointAuthPlugins(models.EndpointTypeTool))
 	v1.GET("/model-routers/:id/auth-plugins", authz.Read("model-routers"), a.getEndpointAuthPlugins(models.EndpointTypeModelRouter))
 	v1.PUT("/model-routers/:id/auth-plugins", authz.Write("model-routers"), a.updateEndpointAuthPlugins(models.EndpointTypeModelRouter))
 	v1.GET("/semantic-routers/:id/auth-plugins", authz.Read("semantic-routers"), a.getEndpointAuthPlugins(models.EndpointTypeSemanticRouter))
@@ -1030,8 +1032,10 @@ func (a *API) setupRoutes() error {
 	v1.PUT("/plugins/:id/auth-plugins", authz.Write("plugins"), a.updateEndpointAuthPlugins(models.EndpointTypePlugin))
 
 	// LLM-Plugin configuration routes
-	v1.GET("/llms/:id/plugins/:pluginId/config", authz.Read("llms"), a.getLLMPluginConfig)
-	v1.PUT("/llms/:id/plugins/:pluginId/config", authz.Write("llms"), a.updateLLMPluginConfig)
+	// Raw plugin config (config_override) may hold secrets: write in the
+	// LLM's Workspace, not read-global llms:read (.46).
+	v1.InWorkspace().GET("/llms/:id/plugins/:pluginId/config", authz.Write("llms"), a.onObject(&models.LLM{}, authz.Write("llms")), a.getLLMPluginConfig)
+	v1.InWorkspace().PUT("/llms/:id/plugins/:pluginId/config", authz.Write("llms"), a.updateLLMPluginConfig)
 
 	// Model Router routes (Enterprise only)
 	v1.POST("/model-routers", authz.Write("model-routers"), a.createModelRouter)
@@ -1046,13 +1050,13 @@ func (a *API) setupRoutes() error {
 
 	// Semantic Router routes (Enterprise only)
 	// Embedders: reusable embedding configurations
-	v1.GET("/embedders/vendors", authz.Read("embedders"), a.listEmbedderVendors)
-	v1.POST("/embedders", authz.Write("embedders"), a.createEmbedder)
-	v1.GET("/embedders", authz.Read("embedders"), a.listEmbedders)
-	v1.GET("/embedders/:id", authz.Read("embedders"), a.getEmbedder)
-	v1.PATCH("/embedders/:id", authz.Write("embedders"), a.updateEmbedder)
-	v1.DELETE("/embedders/:id", authz.Delete("embedders"), a.deleteEmbedder)
-	v1.GET("/embedders/:id/dependents", authz.Read("embedders"), a.getEmbedderDependents)
+	v1.InWorkspace().GET("/embedders/vendors", authz.Read("embedders"), a.listEmbedderVendors)
+	v1.InWorkspace().POST("/embedders", authz.Write("embedders"), a.createEmbedder)
+	v1.InWorkspace().GET("/embedders", authz.Read("embedders"), a.listEmbedders)
+	v1.InWorkspace().GET("/embedders/:id", authz.Read("embedders"), a.getEmbedder)
+	v1.InWorkspace().PATCH("/embedders/:id", authz.Write("embedders"), a.updateEmbedder)
+	v1.InWorkspace().DELETE("/embedders/:id", authz.Delete("embedders"), a.onObject(&models.Embedder{}, authz.Delete("embedders")), a.deleteEmbedder)
+	v1.InWorkspace().GET("/embedders/:id/dependents", authz.Read("embedders"), a.getEmbedderDependents)
 
 	v1.POST("/semantic-routers", authz.Write("semantic-routers"), a.createSemanticRouter)
 	v1.GET("/semantic-routers", authz.Read("semantic-routers"), a.listSemanticRouters)
@@ -1328,12 +1332,12 @@ func (a *API) setupRoutes() error {
 	v1.GET("/filestore", authz.Read("filestores"), a.getAllFileStores)
 	v1.GET("/filestore/search", authz.Read("filestores"), a.searchFileStores)
 
-	v1.POST("/secrets", authz.Write("secrets"), a.createSecret)
-	v1.GET("/secrets/:id", authz.Read("secrets"), a.getSecret)
-	v1.PATCH("/secrets/:id", authz.Write("secrets"), a.updateSecret)
-	v1.DELETE("/secrets/:id", authz.Delete("secrets"), a.deleteSecret)
-	v1.GET("/secrets", authz.Read("secrets"), a.listSecrets)
-	v1.GET("/secrets/:id/dependents", authz.Read("secrets"), a.getSecretDependents)
+	v1.InWorkspace().POST("/secrets", authz.Write("secrets"), a.createSecret)
+	v1.InWorkspace().GET("/secrets/:id", authz.Read("secrets"), a.getSecret)
+	v1.InWorkspace().PATCH("/secrets/:id", authz.Write("secrets"), a.updateSecret)
+	v1.InWorkspace().DELETE("/secrets/:id", authz.Delete("secrets"), a.onObject(&secrets.Secret{}, authz.Delete("secrets")), a.deleteSecret)
+	v1.InWorkspace().GET("/secrets", authz.Read("secrets"), a.listSecrets)
+	v1.InWorkspace().GET("/secrets/:id/dependents", authz.Read("secrets"), a.getSecretDependents)
 	v1.HandleFn("POST", "/secrets/bulk", bulkActionPermission("secrets"), a.bulkSecrets)
 
 	// Branding routes

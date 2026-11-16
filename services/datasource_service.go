@@ -8,6 +8,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/models/wsstamp"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -203,7 +204,10 @@ func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url
 		targetNS = namespace[0]
 	}
 	embed.VectorConn, embed.VectorAPIKey, embed.Namespace = datasource.DBConnString, datasource.DBConnAPIKey, targetNS
-	embedder, err := s.resolveDatasourceEmbedder(s.DB, datasource.Embedder, embed, name, privacyScore, userID)
+	// An embedder created for the datasource here lands in the datasource's
+	// Workspace (wsstamp.WithWorkspace), as one created with it does.
+	embedDB := s.DB.WithContext(wsstamp.WithWorkspace(context.Background(), datasource.WorkspaceID))
+	embedder, err := s.resolveDatasourceEmbedder(embedDB, datasource.Embedder, embed, name, privacyScore, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +245,7 @@ func (s *Service) UpdateDatasource(id uint, name, shortDesc, longDesc, icon, url
 		// Use modified object if hooks modified it
 		if hookResult.ModifiedObject != nil {
 			if modified, ok := hookResult.ModifiedObject.(*models.Datasource); ok {
-				if err := s.applyHookEmbedEdits(s.DB, datasource.Embedder, modified, userID); err != nil {
+				if err := s.applyHookEmbedEdits(embedDB, datasource.Embedder, modified, userID); err != nil {
 					return nil, err
 				}
 				datasource = modified
@@ -367,6 +371,12 @@ func (s *Service) DeleteDatasource(id uint) error {
 
 // CloneDatasource creates a copy of an existing datasource with all configuration including API keys
 func (s *Service) CloneDatasource(sourceDatasourceID uint) (*models.Datasource, error) {
+	return s.CloneDatasourceWithDB(s.DB, sourceDatasourceID)
+}
+
+// CloneDatasourceWithDB is CloneDatasource creating the copy on db (a
+// transaction, or a connection carrying the Workspace the copy lands in).
+func (s *Service) CloneDatasourceWithDB(db *gorm.DB, sourceDatasourceID uint) (*models.Datasource, error) {
 	// Get source datasource with all relationships
 	source, err := s.GetDatasourceByID(sourceDatasourceID)
 	if err != nil {
@@ -381,7 +391,7 @@ func (s *Service) CloneDatasource(sourceDatasourceID uint) (*models.Datasource, 
 
 	// Create cloned datasource with "Copy of" prefix and inactive status.
 	// It keeps the vector store key and shares the source's embedder.
-	cloned, err := s.CreateDatasource(
+	cloned, err := s.CreateDatasourceWithDB(db,
 		fmt.Sprintf("Copy of %s", source.Name), // New name
 		source.ShortDescription,
 		source.LongDescription,
@@ -436,9 +446,9 @@ func (s *Service) GetActiveDatasources() ([]models.Datasource, error) {
 	return []models.Datasource(datasources), nil
 }
 
-func (s *Service) SearchDatasources(query string) (models.Datasources, error) {
+func (s *Service) SearchDatasources(query string, filters ...func(*gorm.DB) *gorm.DB) (models.Datasources, error) {
 	var datasources models.Datasources
-	if err := datasources.Search(s.DB, query); err != nil {
+	if err := datasources.Search(s.DB.Scopes(filters...), query); err != nil {
 		return nil, err
 	}
 
@@ -449,9 +459,9 @@ func (s *Service) SearchDatasources(query string) (models.Datasources, error) {
 	return datasources, nil
 }
 
-func (s *Service) GetDatasourcesByTag(tagName string) (models.Datasources, error) {
+func (s *Service) GetDatasourcesByTag(tagName string, filters ...func(*gorm.DB) *gorm.DB) (models.Datasources, error) {
 	var datasources models.Datasources
-	if err := datasources.GetByTag(s.DB, tagName); err != nil {
+	if err := datasources.GetByTag(s.DB.Scopes(filters...), tagName); err != nil {
 		return nil, err
 	}
 	return datasources, nil

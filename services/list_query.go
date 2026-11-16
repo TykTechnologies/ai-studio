@@ -21,11 +21,14 @@ type ListOptions struct {
 	Search   string
 	Sort     string
 	SortDesc bool
+	// Filters are extra conditions from the API layer (the Workspace list
+	// filters), applied before search and sort.
+	Filters []func(*gorm.DB) *gorm.DB
 }
 
 // Scopes turns the options into GORM scopes for the model's GetAll.
 func (o ListOptions) Scopes(searchColumns ...string) []func(*gorm.DB) *gorm.DB {
-	var scopes []func(*gorm.DB) *gorm.DB
+	scopes := append([]func(*gorm.DB) *gorm.DB(nil), o.Filters...)
 	if term := strings.TrimSpace(o.Search); term != "" && len(searchColumns) > 0 {
 		scopes = append(scopes, func(db *gorm.DB) *gorm.DB { return applySearch(db, searchColumns, term) })
 	}

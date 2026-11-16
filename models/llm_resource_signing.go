@@ -156,8 +156,12 @@ func NewResourceSigningSecret() (string, error) {
 }
 
 // BeforeCreate gives every new LLM its signing secret, whichever path
-// creates it.
+// creates it, and its Workspace stamp.
 func (l *LLM) BeforeCreate(tx *gorm.DB) error {
+	// The Workspace stamp and its insert lock (stampOnCreate).
+	if err := stampOnCreate(tx, &l.WorkspaceID); err != nil {
+		return err
+	}
 	if l.ResourceSigningSecret != "" {
 		return nil
 	}

@@ -22651,6 +22651,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
+                    "409": {
+                        "description": "Another secret has the name, or objects in another Workspace reference it",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -22813,6 +22819,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
+                    "409": {
+                        "description": "The secret is referenced",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -22877,6 +22889,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Renaming a referenced secret, a name another secret has or objects in another Workspace reference, a concurrent move, or moving a duplicate name",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -31382,6 +31400,10 @@ const docTemplate = `{
                         },
                         "user_id": {
                             "type": "integer"
+                        },
+                        "workspace_id": {
+                            "description": "WorkspaceID is the Workspace that owns the datasource (admin\nresponses).",
+                            "type": "integer"
                         }
                     }
                 },
@@ -31774,6 +31796,10 @@ const docTemplate = `{
                     "items": {
                         "type": "integer"
                     }
+                },
+                "workspace_id": {
+                    "description": "WorkspaceID is the Workspace that owns the filter.",
+                    "type": "integer"
                 }
             }
         },
@@ -32363,6 +32389,9 @@ const docTemplate = `{
                         },
                         "vendor_workspace_id": {
                             "type": "string"
+                        },
+                        "workspace_id": {
+                            "type": "integer"
                         }
                     }
                 },
@@ -34324,6 +34353,10 @@ const docTemplate = `{
                         },
                         "var_name": {
                             "type": "string"
+                        },
+                        "workspace_id": {
+                            "description": "WorkspaceID is the Workspace that owns the secret.",
+                            "type": "integer"
                         }
                     }
                 },
@@ -34928,6 +34961,10 @@ const docTemplate = `{
                 "tracing_content_mode_max": {
                     "description": "Agent tracing content mode cap (Enterprise); \"\" is no cap.",
                     "type": "string"
+                },
+                "workspace_id": {
+                    "description": "WorkspaceID is the Workspace that owns the tool (admin responses).",
+                    "type": "integer"
                 }
             }
         },

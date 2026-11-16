@@ -267,6 +267,7 @@ type LLMResponse struct {
 		TracingContentModeMax    string `json:"tracing_content_mode_max"`
 		TracingPropagationOptOut bool   `json:"tracing_propagation_opt_out"`
 		AllowInternalHost        bool   `json:"allow_internal_host"`
+		WorkspaceID              uint   `json:"workspace_id"`
 	} `json:"attributes"`
 }
 
@@ -420,6 +421,9 @@ type DatasourceResponse struct {
 		// AllowInternalHost: the datasource's own host may be an internal
 		// address (an administrator's switch).
 		AllowInternalHost bool `json:"allow_internal_host"`
+		// WorkspaceID is the Workspace that owns the datasource (admin
+		// responses).
+		WorkspaceID uint `json:"workspace_id,omitempty"`
 	} `json:"attributes"`
 }
 
@@ -750,6 +754,8 @@ type ToolResponseAttributes struct {
 	// AllowInternalHost: the tool's own API hosts may be internal addresses
 	// (an administrator's switch).
 	AllowInternalHost bool `json:"allow_internal_host"`
+	// WorkspaceID is the Workspace that owns the tool (admin responses).
+	WorkspaceID uint `json:"workspace_id,omitempty"`
 
 	// Flattened into the attributes; see toolGatewayAccess.
 	ToolGatewayAccess
@@ -914,6 +920,8 @@ type FilterAttributes struct {
 	Namespace      string                 `json:"namespace"`
 	Kind           string                 `json:"kind"`
 	Config         map[string]interface{} `json:"config,omitempty"`
+	// WorkspaceID is the Workspace that owns the filter.
+	WorkspaceID uint `json:"workspace_id,omitempty"`
 }
 
 // FilterResponse represents the response for filter-related operations
@@ -1482,6 +1490,8 @@ type SecretResponse struct {
 		// ReferencedBy lists the objects that read this secret through a
 		// $SECRET/<name> reference. Always present, empty when nothing does.
 		ReferencedBy []SecretReferenceResponse `json:"referenced_by"`
+		// WorkspaceID is the Workspace that owns the secret.
+		WorkspaceID uint `json:"workspace_id"`
 	} `json:"attributes"`
 }
 

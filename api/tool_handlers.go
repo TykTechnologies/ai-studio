@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/TykTechnologies/midsommar/v2/models/wsstamp"
 	"errors"
 	"fmt"
 	"log"
@@ -29,7 +30,8 @@ import (
 // @Security BearerAuth
 func (a *API) createTool(c *gin.Context) {
 	var input ToolInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	// Bound with the body kept, so workspace_id can be read from it too.
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		fmt.Printf("Error binding JSON: %v\n", err)
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
@@ -89,7 +91,12 @@ func (a *API) createTool(c *gin.Context) {
 		return
 	}
 
-	if !requireSecretReadForCredentials(c, nil, map[string]string{"auth_key": input.Data.Attributes.AuthKey}) {
+	// The Workspace the tool lands in (decision D5).
+	workspaceID, ok := a.resolveCreateFromBody(c, "tools")
+	if !ok {
+		return
+	}
+	if !a.requireSecretRefsIn(c, workspaceID, nil, map[string]string{"auth_key": input.Data.Attributes.AuthKey}) {
 		return
 	}
 
@@ -123,10 +130,10 @@ func (a *API) createTool(c *gin.Context) {
 	wantActive := true
 	if input.Data.Attributes.Active != nil {
 		wantActive = *input.Data.Attributes.Active
-		if !a.requirePublishToCreateLive(c, "tools", wantActive) {
+		if !a.requirePublishToCreateLiveIn(c, "tools", workspaceID, wantActive) {
 			return
 		}
-	} else if !a.canPublish(c, "tools") {
+	} else if !a.holdsIn(c, workspaceID, authz.Publish("tools")) {
 		wantActive = false
 	}
 	if wantActive && !a.publishGateOpen(c, models.GovernedObjectTypeTool, "", input.Data.Attributes.GovernedMetadata) {
@@ -144,7 +151,7 @@ func (a *API) createTool(c *gin.Context) {
 			}{{Title: "Unauthorized", Detail: "User not found in context"}}})
 			return
 		}
-		if _, ok := user.(*models.User); !ok || !authz.Can(c, authz.Write("tools")) {
+		if _, ok := user.(*models.User); !ok || !a.holdsIn(c, workspaceID, authz.Write("tools")) {
 			c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -158,7 +165,7 @@ func (a *API) createTool(c *gin.Context) {
 	// and the single created event describe the tool as it will be served.
 	// Includes auto-assignment to the Default catalogue.
 	tool, err := a.service.CreateToolWithOptions(
-		a.config.DB,
+		a.config.DB.WithContext(wsstamp.WithWorkspace(c.Request.Context(), workspaceID)),
 		input.Data.Attributes.Name,
 		input.Data.Attributes.Description,
 		input.Data.Attributes.ToolType,
@@ -177,6 +184,10 @@ func (a *API) createTool(c *gin.Context) {
 		},
 	)
 	if respondToolSlugConflict(c, err) {
+		return
+	}
+	if isWorkspaceNotFound(err) {
+		invalidWorkspace(c)
 		return
 	}
 	if err != nil {
@@ -295,6 +306,19 @@ func (a *API) updateTool(c *gin.Context) {
 		})
 		return
 	}
+	// Write in the tool's Workspace; a changed workspace_id is a move.
+	requested, ok := boundWorkspaceID(c)
+	if !ok {
+		return
+	}
+	moveTo, ok := a.checkObjectUpdate(c, "tools", tool.WorkspaceID, requested)
+	if !ok {
+		return
+	}
+	refsIn := tool.WorkspaceID
+	if moveTo != nil {
+		refsIn = *moveTo
+	}
 
 	// Only a changed spec (or type) is checked, so a tool stored with a bad
 	// spec before validation existed can still be renamed or deactivated.
@@ -316,7 +340,7 @@ func (a *API) updateTool(c *gin.Context) {
 	// Flipping the active switch is the publish action on tools; an omitted
 	// switch keeps its value.
 	if input.Data.Attributes.Active != nil {
-		if !a.requirePublishIfChanged(c, "tools", tool.Active, *input.Data.Attributes.Active) {
+		if !a.requirePublishIfChangedIn(c, "tools", tool.WorkspaceID, tool.Active, *input.Data.Attributes.Active) {
 			return
 		}
 		if !tool.Active && *input.Data.Attributes.Active &&
@@ -333,18 +357,21 @@ func (a *API) updateTool(c *gin.Context) {
 	tool.OASSpec = input.Data.Attributes.OASSpec
 	tool.PrivacyScore = input.Data.Attributes.PrivacyScore
 	tool.AuthSchemaName = input.Data.Attributes.AuthSchemaName
-	if !requireSecretReadForCredentials(c, map[string]string{"auth_key": tool.AuthKey},
+	if !a.requireSecretRefsIn(c, refsIn, map[string]string{"auth_key": tool.AuthKey},
 		map[string]string{"auth_key": input.Data.Attributes.AuthKey}) {
 		return
 	}
 	if input.Data.Attributes.AuthKey != services.REDACTED_VALUE {
 		tool.AuthKey = input.Data.Attributes.AuthKey
 	}
+	if moveTo != nil && !a.requireSecretRefsStayIn(c, *moveTo, map[string]string{"auth_key": tool.AuthKey}) {
+		return
+	}
 
 	// Namespace change requires admin authorization
 	if input.Data.Attributes.Namespace != tool.Namespace {
 		_, exists := c.Get("user")
-		if !exists || !authz.Can(c, authz.Write("tools")) {
+		if !exists || !a.holdsIn(c, refsIn, authz.Write("tools")) {
 			c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -367,7 +394,6 @@ func (a *API) updateTool(c *gin.Context) {
 		tool.TracingContentModeMax = *input.Data.Attributes.TracingContentModeMax
 	}
 
-	var ok bool
 	if tool.AllowInternalHost, ok = allowInternalHostUpdate(c, tool.AllowInternalHost, input.Data.Attributes.AllowInternalHost); !ok {
 		return
 	}
@@ -389,6 +415,14 @@ func (a *API) updateTool(c *gin.Context) {
 		tool.AddOperation(op)
 	}
 
+	// The move goes first, so the stored Workspace matches the checks
+	// made against the destination; a failed update puts it back.
+	finishMove, ok := a.beginMove(c, &models.Tool{}, tool.ID, tool.WorkspaceID, moveTo)
+	if !ok {
+		return
+	}
+	updated := false
+	defer func() { finishMove(updated) }()
 	// Save changes
 	if err := tool.Update(a.config.DB); err != nil {
 		if respondToolSlugConflict(c, err) {
@@ -402,6 +436,10 @@ func (a *API) updateTool(c *gin.Context) {
 		})
 		return
 	}
+	if moveTo != nil {
+		tool.WorkspaceID = *moveTo
+	}
+	updated = true
 	a.emitToolUpdated(tool)
 
 	meta := a.persistGovernedMetadata(c, models.GovernedObjectTypeTool, models.BuiltinObjectID(tool.ID), input.Data.Attributes.GovernedMetadata)
@@ -464,6 +502,9 @@ func (a *API) getAllTools(c *gin.Context) {
 		return
 	}
 
+	if opts.Filters, ok = a.listWorkspaceScopes(c, "tools"); !ok {
+		return
+	}
 	tools, totalCount, totalPages, err := a.service.GetAllTools(pageSize, pageNumber, all, opts)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -503,7 +544,11 @@ func (a *API) getToolsByType(c *gin.Context) {
 		return
 	}
 
-	tools, err := a.service.GetToolsByType(toolType)
+	filters, ok := a.listWorkspaceScopes(c, "tools")
+	if !ok {
+		return
+	}
+	tools, err := a.service.GetToolsByType(toolType, filters...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -540,7 +585,11 @@ func (a *API) searchTools(c *gin.Context) {
 		return
 	}
 
-	tools, err := a.service.SearchTools(query)
+	filters, ok := a.listWorkspaceScopes(c, "tools")
+	if !ok {
+		return
+	}
+	tools, err := a.service.SearchTools(query, filters...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -1234,6 +1283,7 @@ func serializeTool(tool *models.Tool, db *gorm.DB) ToolResponse {
 			Active:         tool.Active,
 			Namespace:      tool.Namespace,
 			AllowInternalHost: tool.AllowInternalHost,
+			WorkspaceID:       responseWorkspaceIDFrom(db, tool.WorkspaceID),
 			FileStores:     serializeFileStores(fileStores),
 			Filters:        serializeFiltersForTool(filters),
 			Dependencies:   serializeToolsPointers(dependencies, db),

@@ -34,10 +34,14 @@ test('Embedders: create, inline create, model lock and guarded delete', async ({
     const standalone = `E2E standalone ${stamp}`;
     const inline = `E2E inline ${stamp}`;
     const datasource = `E2E handbook ${stamp}`;
+    // A $SECRET/ reference must name an existing secret (an unknown name is
+    // refused), so the key the standalone embedder uses is created first.
+    const secretName = `E2E_EMBED_KEY_${stamp}`;
 
     await loginPage.goto();
     await loginPage.login(config.admin_email, config.password);
     await adminMainPage.dismissQuickStartModal();
+    const secretId = await apiCreate(page, 'secrets', 'secrets', { var_name: secretName, value: 'sk-e2e-not-a-real-key' });
 
     // --- create on the Embedders page -----------------------------------------
     await adminEmbeddersPage.goto();
@@ -45,7 +49,7 @@ test('Embedders: create, inline create, model lock and guarded delete', async ({
     await adminEmbeddersPage.NameInput.fill(standalone);
     await adminEmbeddersPage.choose(page, 'API compatibility', 'OpenAI');
     await expect(adminEmbeddersPage.ModelInput).toHaveValue('text-embedding-3-small');
-    await adminEmbeddersPage.ApiKeyInput.fill('$SECRET/E2E_EMBED_KEY');
+    await adminEmbeddersPage.ApiKeyInput.fill(`$SECRET/${secretName}`);
     await adminEmbeddersPage.CreateButton.click();
     // The detail page: title and connection type.
     await expect(page).toHaveURL(/\/admin\/embedders\/\d+$/);
@@ -97,6 +101,7 @@ test('Embedders: create, inline create, model lock and guarded delete', async ({
         await page.getByRole('dialog').getByRole('button', { name: /Delete/ }).click();
         await expect(page.getByRole('row', { name: new RegExp(name) })).toBeHidden();
     }
+    await apiDelete(page, `secrets/${secretId}`);
 });
 
 /**

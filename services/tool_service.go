@@ -378,9 +378,9 @@ func (s *Service) GetAllTools(pageSize int, pageNumber int, all bool, opts ...Li
 }
 
 // GetToolsByType retrieves all tools of a specific type
-func (s *Service) GetToolsByType(toolType string) ([]models.Tool, error) {
+func (s *Service) GetToolsByType(toolType string, filters ...func(*gorm.DB) *gorm.DB) ([]models.Tool, error) {
 	var tools models.Tools
-	if err := tools.GetByType(s.DB, toolType); err != nil {
+	if err := tools.GetByType(s.DB.Scopes(filters...), toolType); err != nil {
 		return nil, err
 	}
 	return tools, nil
@@ -414,9 +414,9 @@ func (s *Service) GetToolsByPrivacyScoreRange(minScore, maxScore int) ([]models.
 }
 
 // SearchTools searches for tools matching the given query in name or description
-func (s *Service) SearchTools(query string) ([]models.Tool, error) {
+func (s *Service) SearchTools(query string, filters ...func(*gorm.DB) *gorm.DB) ([]models.Tool, error) {
 	var tools models.Tools
-	if err := tools.Search(s.DB, query); err != nil {
+	if err := tools.Search(s.DB.Scopes(filters...), query); err != nil {
 		return nil, err
 	}
 	return tools, nil

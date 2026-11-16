@@ -101,6 +101,17 @@ graph LR
 *   **Logging:** Debug and Error logs exist in handlers and the service package.
 *   **Redaction Utility:** `secrets.FilterSensitiveFields` exists to redact sensitive fields in objects by using struct tags.
 
+**Names, references and Workspaces (Enterprise Workspaces, midsommar-clean-oztk.38/.47):**
+
+A `$SECRET/NAME` reference resolves by name alone, so a name must keep meaning one secret, in the referencing object's Workspace:
+
+*   A reference may only name a secret in the object's own Workspace, readable by the caller there (checked when the reference is written; an unknown name is refused like a forbidden one).
+*   Names are unique among live secrets across all Workspaces (exact, case-sensitive match), checked on create and rename under a per-name lock (`pg_advisory_xact_lock` on Postgres) in the same transaction as the write. A clash answers 409.
+*   A secret that objects reference cannot be deleted (single or bulk) or renamed (409), and a name cannot be taken while an object outside the new secret's Workspace references it (a dangling reference would otherwise pick up another Workspace's secret). A referenced secret does not move (422).
+*   Holders are the recorded references (`secret_references`: LLM key, endpoint and string metadata, tool auth key, datasource API key, embedder key and endpoint, including embedders created inline from a datasource) plus a datasource's connection string and a guardrail filter's connection block, which are scanned directly (`services.SecretHoldersOf`). Plugin config references stay global-only (plugins are global) and are not holders.
+*   Duplicates from before these rules are grandfathered: within one Workspace (0 read as the Default) a reference resolves to the lowest id; across Workspaces it resolves to nothing (`secrets.ErrSecretNameAmbiguous`), cannot be newly referenced, and neither duplicate can move (409).
+*   `secrets.GetSecretByVarName` (via `FindSecretByVarName`) is the only resolution path: `GetValue`, `ResolveRef` and `CredentialRefForEdge`, and so the edge snapshot; microgateways receive the hub's resolved values.
+
 **4. Use Cases & Behavior**
 
 *   **Storing an API Key:** Admin uses UI/API to create a secret (e.g., `VarName="MyServiceKey"`, `Value="actual_key"`). System stores encrypted key. UI/API shows reference `$SECRET/MyServiceKey"`.

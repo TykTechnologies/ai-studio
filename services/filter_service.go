@@ -20,6 +20,9 @@ type FilterSpec struct {
 	Namespace      string
 	Kind           string
 	Config         models.JSONMap
+	// WorkspaceID is the Workspace a new filter lands in (create only; the
+	// API's landing rule decides it). 0 is the Default.
+	WorkspaceID uint
 }
 
 // ErrInvalidFilterSpec wraps a spec the service refuses to store: the
@@ -94,6 +97,7 @@ func (s *Service) CreateFilterFromSpec(spec FilterSpec) (*models.Filter, error) 
 		Namespace:      spec.Namespace,
 		Kind:           kind,
 		Config:         config,
+		WorkspaceID:    spec.WorkspaceID,
 	}
 
 	if err := filter.Create(s.DB); err != nil {

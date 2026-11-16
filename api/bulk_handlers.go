@@ -381,7 +381,7 @@ func (a *API) bulkSecrets(c *gin.Context) {
 			if !found {
 				return gorm.ErrRecordNotFound
 			}
-			if err := secrets.DeleteSecretByID(a.config.DB, id); err != nil {
+			if err := a.service.DeleteSecret(id); err != nil {
 				return err
 			}
 			a.emitSecretChanged(c, services.TopicSecretDeleted, "deleted", id)

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"errors"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"net/http"
 	"strconv"
 	"strings"
@@ -34,6 +36,7 @@ func checkSecretKey(c *gin.Context) bool {
 // @Param secret body SecretInput true "Secret information"
 // @Success 201 {object} SecretResponse
 // @Failure 400 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse "Another secret has the name, or objects in another Workspace reference it"
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse "When TYK_AI_SECRET_KEY is not set"
 // @Router /secrets [post]
@@ -43,7 +46,8 @@ func (a *API) createSecret(c *gin.Context) {
 		return
 	}
 	var input SecretInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	// Bound with the body kept, so workspace_id can be read from it too.
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		log.Printf("[DEBUG] Failed to bind JSON input: %v", err)
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
@@ -54,13 +58,27 @@ func (a *API) createSecret(c *gin.Context) {
 		return
 	}
 
+	// The Workspace the secret lands in (decision D5).
+	workspaceID, ok := a.resolveCreateFromBody(c, "secrets")
+	if !ok {
+		return
+	}
 	secret := &secrets.Secret{
-		VarName: input.Data.Attributes.VarName,
-		Value:   input.Data.Attributes.Value,
+		VarName:     input.Data.Attributes.VarName,
+		Value:       input.Data.Attributes.Value,
+		WorkspaceID: workspaceID,
 	}
 
 	log.Printf("[DEBUG] Creating secret with name: %s", secret.VarName)
-	if err := secrets.CreateSecret(a.config.DB, secret); err != nil {
+	err := a.service.CreateSecret(secret)
+	if isWorkspaceNotFound(err) {
+		invalidWorkspace(c)
+		return
+	}
+	if secretNameConflict(c, err) {
+		return
+	}
+	if err != nil {
 		log.Printf("[DEBUG] Failed to create secret: %v", err)
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -126,6 +144,7 @@ func (a *API) getSecret(c *gin.Context) {
 // @Success 200 {object} SecretResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse "Renaming a referenced secret, a name another secret has or objects in another Workspace reference, a concurrent move, or moving a duplicate name"
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse "When TYK_AI_SECRET_KEY is not set"
 // @Router /secrets/{id} [patch]
@@ -166,6 +185,36 @@ func (a *API) updateSecret(c *gin.Context) {
 		})
 		return
 	}
+	// Write in the secret's Workspace; a changed workspace_id is a move. A
+	// referenced secret does not move: its references would then point
+	// across Workspaces (.38).
+	requested, ok := boundWorkspaceID(c)
+	if !ok {
+		return
+	}
+	moveTo, ok := a.checkObjectUpdate(c, "secrets", secret.WorkspaceID, requested)
+	if !ok {
+		return
+	}
+	if moveTo != nil {
+		holders, err := a.service.SecretHoldersOf(secret.VarName)
+		if err != nil {
+			simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+			c.Abort()
+			return
+		}
+		if len(holders) > 0 {
+			c.AbortWithStatusJSON(http.StatusUnprocessableEntity, authz.Body("Invalid Workspace",
+				"the secret is referenced; change the references before moving it to another Workspace", authz.CodeInvalidWorkspace))
+			return
+		}
+		// A grandfathered duplicate name stays put: moving it could make a
+		// name that resolves today ambiguous, or the reverse.
+		if secretNameConflict(c, a.service.RequireSecretMovable(secret)) {
+			return
+		}
+	}
+	oldName := secret.VarName
 
 	// An omitted var_name keeps the stored name (96e); an empty one would
 	// break every $SECRET/ reference to the secret, so it is refused.
@@ -200,7 +249,22 @@ func (a *API) updateSecret(c *gin.Context) {
 		secret.Value = input.Data.Attributes.Value
 	}
 
-	if err := secrets.UpdateSecret(a.config.DB, secret, valueChanged); err != nil {
+	// The move goes first, so the stored Workspace matches the checks
+	// made against the destination; a failed update puts it back.
+	finishMove, ok := a.beginMove(c, &secrets.Secret{}, secret.ID, secret.WorkspaceID, moveTo)
+	if !ok {
+		return
+	}
+	updated := false
+	defer func() { finishMove(updated) }()
+	dest := secret.WorkspaceID
+	if moveTo != nil {
+		dest = *moveTo
+	}
+	if err := a.service.UpdateSecret(secret, oldName, dest, valueChanged); err != nil {
+		if secretNameConflict(c, err) {
+			return
+		}
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -209,6 +273,10 @@ func (a *API) updateSecret(c *gin.Context) {
 		})
 		return
 	}
+	if moveTo != nil {
+		secret.WorkspaceID = *moveTo
+	}
+	updated = true
 
 	a.emitSecretChanged(c, services.TopicSecretUpdated, "updated", secret.ID)
 	c.JSON(http.StatusOK, gin.H{"data": serializeSecret(secret, a.secretReferencesFor([]string{secret.VarName}))})
@@ -222,6 +290,7 @@ func (a *API) updateSecret(c *gin.Context) {
 // @Param id path int true "Secret ID"
 // @Success 204 "No Content"
 // @Failure 400 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse "The secret is referenced"
 // @Failure 500 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse "When TYK_AI_SECRET_KEY is not set"
 // @Router /secrets/{id} [delete]
@@ -241,7 +310,10 @@ func (a *API) deleteSecret(c *gin.Context) {
 		return
 	}
 
-	if err := secrets.DeleteSecretByID(a.config.DB, uint(id)); err != nil {
+	if err := a.service.DeleteSecret(uint(id)); err != nil {
+		if secretNameConflict(c, err) {
+			return
+		}
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -253,6 +325,23 @@ func (a *API) deleteSecret(c *gin.Context) {
 
 	a.emitSecretChanged(c, services.TopicSecretDeleted, "deleted", uint(id))
 	c.Status(http.StatusNoContent)
+}
+
+// secretNameConflict answers 409 for the secret-name rules
+// (services.ErrSecretNameTaken, ErrSecretDuplicateName,
+// SecretReferencedError) and returns true; any other error (or nil) is
+// left to the caller.
+func secretNameConflict(c *gin.Context, err error) bool {
+	var referenced *services.SecretReferencedError
+	switch {
+	case errors.Is(err, services.ErrSecretNameTaken), errors.Is(err, services.ErrSecretDuplicateName):
+	case errors.As(err, &referenced):
+	default:
+		return false
+	}
+	simpleError(c, http.StatusConflict, "Conflict", err.Error())
+	c.Abort()
+	return true
 }
 
 // emitSecretChanged tells the control server a secret changed: the edges'
@@ -291,6 +380,9 @@ func (a *API) listSecrets(c *gin.Context) {
 		return
 	}
 
+	if opts.Filters, ok = a.listWorkspaceScopes(c, "secrets"); !ok {
+		return
+	}
 	secrets, totalCount, totalPages, err := secrets.ListSecrets(a.config.DB, pageSize, pageNumber, all, opts.Scopes("var_name")...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -357,6 +449,7 @@ func serializeSecret(secret *secrets.Secret, refs map[string][]services.SecretRe
 	response.Attributes.Value = secret.GetValue() // Use GetValue() to handle reference format
 	response.Attributes.VarName = secret.VarName
 	response.Attributes.HasValue = secret.HasValue()
+	response.Attributes.WorkspaceID = secret.WorkspaceID
 	response.Attributes.ReferencedBy = make([]SecretReferenceResponse, 0, len(refs[secret.VarName]))
 	for _, ref := range refs[secret.VarName] {
 		response.Attributes.ReferencedBy = append(response.Attributes.ReferencedBy, SecretReferenceResponse{

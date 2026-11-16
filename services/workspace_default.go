@@ -2,16 +2,16 @@ package services
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
-	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm/clause"
 )
 
 // ErrWorkspaceNotFound is returned when a Workspace id names no Workspace.
-var ErrWorkspaceNotFound = errors.New("workspace not found")
+// It is the models (wsstamp) sentinel, so the stamped models' create hooks
+// and this package report the same error.
+var ErrWorkspaceNotFound = models.ErrWorkspaceNotFound
 
 // DefaultWorkspaceID returns the id of the Default workspace, loaded once
 // per process. The Default is created at start-up under the migration lock
@@ -65,19 +65,5 @@ func (s *Service) WorkspaceNames(ctx context.Context, ids []uint) map[uint]strin
 // a concurrent delete (on any replica) is removing. Call it in the same
 // transaction as the insert. ErrWorkspaceNotFound when it does not exist.
 func LockWorkspaceForInsert(tx *gorm.DB, id uint) error {
-	if id == 0 {
-		return ErrWorkspaceNotFound
-	}
-	q := tx.Model(&models.Workspace{}).Where("id = ?", id)
-	if tx.Dialector.Name() == "postgres" {
-		q = q.Clauses(clause.Locking{Strength: "SHARE"})
-	}
-	var ids []uint
-	if err := q.Pluck("id", &ids).Error; err != nil {
-		return err
-	}
-	if len(ids) == 0 {
-		return ErrWorkspaceNotFound
-	}
-	return nil
+	return models.LockWorkspaceForInsert(tx, id)
 }

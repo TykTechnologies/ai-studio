@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/pkg/nativeapi"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -146,6 +147,9 @@ func (a *API) getLLMResourceSigningKey(c *gin.Context) {
 func (a *API) rotateLLMResourceSigningKey(c *gin.Context) {
 	id, ok := a.llmIDParam(c)
 	if !ok {
+		return
+	}
+	if !a.requireOnObject(c, &models.LLM{}, id, authz.Write("llms")) {
 		return
 	}
 	var req RotateResourceSigningKeyRequest
