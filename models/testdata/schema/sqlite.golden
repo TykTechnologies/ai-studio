@@ -17,6 +17,7 @@ TABLE agent_configs
   column `created_at` datetime
   column `updated_at` datetime
   column `deleted_at` datetime
+  column `workspace_id` integer NOT NULL DEFAULT 0
   column `name` text NOT NULL
   column `slug` text NOT NULL
   column `description` text
@@ -29,6 +30,7 @@ TABLE agent_configs
   constraint CONSTRAINT `fk_agent_configs_plugin` FOREIGN KEY (`plugin_id`) REFERENCES `plugins`(`id`)
   index CREATE INDEX `idx_agent_app` ON `agent_configs`(`app_id`)
   index CREATE INDEX `idx_agent_configs_deleted_at` ON `agent_configs`(`deleted_at`)
+  index CREATE INDEX `idx_agent_configs_workspace_id` ON `agent_configs`(`workspace_id`)
   index CREATE INDEX `idx_agent_is_active` ON `agent_configs`(`is_active`)
   index CREATE INDEX `idx_agent_namespace` ON `agent_configs`(`namespace`)
   index CREATE INDEX `idx_agent_plugin` ON `agent_configs`(`plugin_id`)
@@ -345,6 +347,7 @@ TABLE apps
   column `created_at` datetime
   column `updated_at` datetime
   column `deleted_at` datetime
+  column `workspace_id` integer NOT NULL DEFAULT 0
   column `name` text
   column `description` text
   column `user_id` integer
@@ -365,6 +368,7 @@ TABLE apps
   index CREATE INDEX `idx_apps_credential_id` ON `apps`(`credential_id`)
   index CREATE INDEX `idx_apps_deleted_at` ON `apps`(`deleted_at`)
   index CREATE INDEX `idx_apps_team_id` ON `apps`(`team_id`)
+  index CREATE INDEX `idx_apps_workspace_id` ON `apps`(`workspace_id`)
 TABLE attestation_templates
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime
@@ -488,8 +492,10 @@ TABLE catalogues
   column `created_at` datetime
   column `updated_at` datetime
   column `deleted_at` datetime
+  column `workspace_id` integer NOT NULL DEFAULT 0
   column `name` text
   index CREATE INDEX `idx_catalogues_deleted_at` ON `catalogues`(`deleted_at`)
+  index CREATE INDEX `idx_catalogues_workspace_id` ON `catalogues`(`workspace_id`)
 TABLE chat_filestores
   column `chat_id` integer
   column `file_store_id` integer
@@ -648,11 +654,13 @@ TABLE data_catalogues
   column `created_at` datetime
   column `updated_at` datetime
   column `deleted_at` datetime
+  column `workspace_id` integer NOT NULL DEFAULT 0
   column `name` text
   column `short_description` text
   column `long_description` text
   column `icon` text
   index CREATE INDEX `idx_data_catalogues_deleted_at` ON `data_catalogues`(`deleted_at`)
+  index CREATE INDEX `idx_data_catalogues_workspace_id` ON `data_catalogues`(`workspace_id`)
 TABLE data_key_salts
   column `id` integer
   column `salt` blob NOT NULL
@@ -677,6 +685,7 @@ TABLE datasources
   column `created_at` datetime
   column `updated_at` datetime
   column `deleted_at` datetime
+  column `workspace_id` integer NOT NULL DEFAULT 0
   column `name` text
   column `short_description` text
   column `long_description` text
@@ -702,6 +711,7 @@ TABLE datasources
   index CREATE INDEX `idx_datasources_deleted_at` ON `datasources`(`deleted_at`)
   index CREATE INDEX `idx_datasources_embedder_id` ON `datasources`(`embedder_id`)
   index CREATE INDEX `idx_datasources_name` ON `datasources`(`name`)
+  index CREATE INDEX `idx_datasources_workspace_id` ON `datasources`(`workspace_id`)
   index CREATE INDEX `idx_ds_user_community` ON `datasources`(`user_id`,`community_submitted`)
 TABLE edge_analytics_batches
   column `key` text
@@ -773,6 +783,7 @@ TABLE embedders
   column `created_at` datetime
   column `updated_at` datetime
   column `deleted_at` datetime
+  column `workspace_id` integer NOT NULL DEFAULT 0
   column `name` text NOT NULL
   column `description` text
   column `llm_id` integer
@@ -786,6 +797,7 @@ TABLE embedders
   constraint CONSTRAINT `fk_embedders_llm` FOREIGN KEY (`llm_id`) REFERENCES `llms`(`id`)
   index CREATE INDEX `idx_embedders_deleted_at` ON `embedders`(`deleted_at`)
   index CREATE INDEX `idx_embedders_llm_id` ON `embedders`(`llm_id`)
+  index CREATE INDEX `idx_embedders_workspace_id` ON `embedders`(`workspace_id`)
   index CREATE UNIQUE INDEX `idx_embedder_name` ON `embedders`(`name`)
 TABLE endpoint_auth_plugins
   column `object_type` text
@@ -802,17 +814,20 @@ TABLE file_stores
   column `created_at` datetime
   column `updated_at` datetime
   column `deleted_at` datetime
+  column `workspace_id` integer NOT NULL DEFAULT 0
   column `file_name` text
   column `description` text
   column `content` text
   column `length` integer
   column `last_processed_on` datetime
   index CREATE INDEX `idx_file_stores_deleted_at` ON `file_stores`(`deleted_at`)
+  index CREATE INDEX `idx_file_stores_workspace_id` ON `file_stores`(`workspace_id`)
 TABLE filters
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime
   column `updated_at` datetime
   column `deleted_at` datetime
+  column `workspace_id` integer NOT NULL DEFAULT 0
   column `name` text
   column `description` text
   column `script` blob
@@ -823,6 +838,7 @@ TABLE filters
   index CREATE INDEX `idx_filter_kind` ON `filters`(`kind`)
   index CREATE INDEX `idx_filter_namespace` ON `filters`(`namespace`)
   index CREATE INDEX `idx_filters_deleted_at` ON `filters`(`deleted_at`)
+  index CREATE INDEX `idx_filters_workspace_id` ON `filters`(`workspace_id`)
 TABLE group_catalogues
   column `group_id` integer
   column `catalogue_id` integer
@@ -1016,6 +1032,7 @@ TABLE llms
   column `created_at` datetime
   column `updated_at` datetime
   column `deleted_at` datetime
+  column `workspace_id` integer NOT NULL DEFAULT 0
   column `name` text
   column `api_key` text
   column `api_endpoint` text
@@ -1044,6 +1061,7 @@ TABLE llms
   column `allow_internal_host` numeric NOT NULL DEFAULT false
   index CREATE INDEX `idx_llm_namespace` ON `llms`(`namespace`)
   index CREATE INDEX `idx_llms_deleted_at` ON `llms`(`deleted_at`)
+  index CREATE INDEX `idx_llms_workspace_id` ON `llms`(`workspace_id`)
 TABLE marketplace_config
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime
@@ -1236,6 +1254,7 @@ TABLE mcp_servers
   column `created_at` datetime
   column `updated_at` datetime
   column `deleted_at` datetime
+  column `workspace_id` integer NOT NULL DEFAULT 0
   column `connection_id` integer
   column `tyk_api_id` text
   column `name` text NOT NULL
@@ -1280,6 +1299,7 @@ TABLE mcp_servers
   index CREATE INDEX `idx_mcp_servers_deleted_at` ON `mcp_servers`(`deleted_at`)
   index CREATE INDEX `idx_mcp_servers_is_active` ON `mcp_servers`(`is_active`)
   index CREATE INDEX `idx_mcp_servers_submission_id` ON `mcp_servers`(`submission_id`)
+  index CREATE INDEX `idx_mcp_servers_workspace_id` ON `mcp_servers`(`workspace_id`)
   index CREATE UNIQUE INDEX `idx_mcp_servers_live_conn_api` ON `mcp_servers`(`connection_id`,`tyk_api_id`) WHERE deleted_at IS NULL
   index CREATE UNIQUE INDEX `idx_mcp_servers_live_slug` ON `mcp_servers`(`slug`) WHERE deleted_at IS NULL
 TABLE mcp_sync_runs
@@ -1375,6 +1395,7 @@ TABLE model_routers
   column `created_at` datetime
   column `updated_at` datetime
   column `deleted_at` datetime
+  column `workspace_id` integer NOT NULL DEFAULT 0
   column `name` text NOT NULL
   column `slug` text NOT NULL
   column `description` text
@@ -1385,6 +1406,7 @@ TABLE model_routers
   column `long_description` text
   column `logo_url` text
   index CREATE INDEX `idx_model_routers_deleted_at` ON `model_routers`(`deleted_at`)
+  index CREATE INDEX `idx_model_routers_workspace_id` ON `model_routers`(`workspace_id`)
   index CREATE INDEX `idx_router_namespace` ON `model_routers`(`namespace`)
   index CREATE UNIQUE INDEX `idx_router_slug_namespace` ON `model_routers`(`slug`,`namespace`)
 TABLE namespace_sync_status
@@ -1615,6 +1637,7 @@ TABLE plugins
   column `created_at` datetime
   column `updated_at` datetime
   column `deleted_at` datetime
+  column `workspace_id` integer NOT NULL DEFAULT 0
   column `name` text NOT NULL
   column `description` text
   column `command` text NOT NULL
@@ -1635,6 +1658,7 @@ TABLE plugins
   index CREATE INDEX `idx_plugins_hook_type` ON `plugins`(`hook_type`)
   index CREATE INDEX `idx_plugins_is_active` ON `plugins`(`is_active`)
   index CREATE INDEX `idx_plugins_service_access` ON `plugins`(`service_access_authorized`)
+  index CREATE INDEX `idx_plugins_workspace_id` ON `plugins`(`workspace_id`)
 TABLE pool_vendors
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `created_at` datetime
@@ -1838,9 +1862,11 @@ TABLE secrets
   column `created_at` datetime
   column `updated_at` datetime
   column `deleted_at` datetime
+  column `workspace_id` integer NOT NULL DEFAULT 0
   column `var_name` text
   column `value` text
   index CREATE INDEX `idx_secrets_deleted_at` ON `secrets`(`deleted_at`)
+  index CREATE INDEX `idx_secrets_workspace_id` ON `secrets`(`workspace_id`)
 TABLE semantic_router_targets
   column `id` integer PRIMARY KEY AUTOINCREMENT
   column `router_id` integer NOT NULL
@@ -1855,6 +1881,7 @@ TABLE semantic_routers
   column `created_at` datetime
   column `updated_at` datetime
   column `deleted_at` datetime
+  column `workspace_id` integer NOT NULL DEFAULT 0
   column `name` text NOT NULL
   column `slug` text NOT NULL
   column `namespace` text DEFAULT ""
@@ -1871,6 +1898,7 @@ TABLE semantic_routers
   index CREATE INDEX `idx_semantic_router_namespace` ON `semantic_routers`(`namespace`)
   index CREATE INDEX `idx_semantic_routers_deleted_at` ON `semantic_routers`(`deleted_at`)
   index CREATE INDEX `idx_semantic_routers_embedder_id` ON `semantic_routers`(`embedder_id`)
+  index CREATE INDEX `idx_semantic_routers_workspace_id` ON `semantic_routers`(`workspace_id`)
   index CREATE UNIQUE INDEX `idx_semantic_router_slug_namespace` ON `semantic_routers`(`slug`,`namespace`)
 TABLE studio_schema
   column `id` integer
@@ -2035,11 +2063,13 @@ TABLE tool_catalogues
   column `created_at` datetime
   column `updated_at` datetime
   column `deleted_at` datetime
+  column `workspace_id` integer NOT NULL DEFAULT 0
   column `name` text
   column `short_description` text
   column `long_description` text
   column `icon` text
   index CREATE INDEX `idx_tool_catalogues_deleted_at` ON `tool_catalogues`(`deleted_at`)
+  index CREATE INDEX `idx_tool_catalogues_workspace_id` ON `tool_catalogues`(`workspace_id`)
 TABLE tool_dependencies
   column `tool_id` integer
   column `dependency_id` integer
@@ -2066,6 +2096,7 @@ TABLE tools
   column `created_at` datetime
   column `updated_at` datetime
   column `deleted_at` datetime
+  column `workspace_id` integer NOT NULL DEFAULT 0
   column `name` text
   column `slug` text
   column `description` text
@@ -2090,6 +2121,7 @@ TABLE tools
   index CREATE INDEX `idx_tools_deleted_at` ON `tools`(`deleted_at`)
   index CREATE INDEX `idx_tools_name` ON `tools`(`name`)
   index CREATE INDEX `idx_tools_slug` ON `tools`(`slug`)
+  index CREATE INDEX `idx_tools_workspace_id` ON `tools`(`workspace_id`)
 TABLE tyk_connection_ingests
   column `connection_id` integer
   column `token_hash` text
@@ -2357,6 +2389,7 @@ TABLE webhook_events
   index CREATE INDEX `idx_webhook_events_topic_received` ON `webhook_events`(`topic`,`received_at`)
 TABLE webhook_targets
   column `id` text
+  column `workspace_id` integer NOT NULL DEFAULT 0
   column `name` text NOT NULL
   column `description` text
   column `url` text NOT NULL
@@ -2390,3 +2423,14 @@ TABLE webhook_targets
   constraint PRIMARY KEY (`id`)
   autoindex origin=pk unique=1 (id)
   index CREATE INDEX `idx_webhook_targets_status` ON `webhook_targets`(`status`)
+  index CREATE INDEX `idx_webhook_targets_workspace_id` ON `webhook_targets`(`workspace_id`)
+TABLE workspaces
+  column `id` integer PRIMARY KEY AUTOINCREMENT
+  column `name` text NOT NULL
+  column `name_key` text NOT NULL
+  column `description` text
+  column `is_default` numeric NOT NULL DEFAULT false
+  column `created_at` datetime
+  column `updated_at` datetime
+  index CREATE UNIQUE INDEX `idx_workspaces_default` ON `workspaces`(`is_default`) WHERE is_default = true
+  index CREATE UNIQUE INDEX `idx_workspaces_name_key` ON `workspaces`(`name_key`)

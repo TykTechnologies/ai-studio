@@ -150,7 +150,15 @@ const (
 	// 43: index idx_apps_credential_id on apps.credential_id (additive): the
 	//     credential sync looks up each page's Apps by credential
 	//     (midsommar-clean-4x5y.16).
-	SchemaVersion          = 43
+	// 44: workspaces (new table) and workspace_id (defaulted 0, indexed;
+	//     additive) on llms, apps, tools, datasources, filters, embedders,
+	//     model_routers, semantic_routers, agent_configs, catalogues,
+	//     data_catalogues, tool_catalogues, secrets, file_stores,
+	//     mcp_servers, plugins and webhook_targets: the owning Workspace
+	//     (midsommar-clean-oztk.2). Older code ignores the column; rows it
+	//     writes (0) read as the Default workspace and are stamped on the
+	//     next start.
+	SchemaVersion          = 44
 	MinReaderSchemaVersion = 42
 )
 

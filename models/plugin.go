@@ -14,6 +14,11 @@ import (
 type Plugin struct {
 	gorm.Model
 	ID          uint                   `json:"id" gorm:"primaryKey"`
+
+	// WorkspaceID is the Workspace that owns the object (Workspace); 0 reads
+	// as the Default workspace (EffectiveWorkspaceID).
+	WorkspaceID uint `json:"workspace_id" gorm:"not null;default:0;index"`
+
 	Name        string                 `json:"name" gorm:"not null"`
 	Description string                 `json:"description"`
 	Command     string                 `json:"command" gorm:"not null;size:500"`
