@@ -8429,7 +8429,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "List the gateway-visible objects created, updated or deleted in a namespace since its last configuration push. Use \"global\" (or omit) for the global namespace.",
+                "description": "List the gateway-visible objects created, updated or deleted in a namespace since its last configuration push. Use \"global\" (or omit) for the global namespace. Each change names its owning Workspace (none for plugins, model prices, OAuth clients and access tokens), and by_workspace / unattributed_total count every change. With workspace_id, outside_total and stained report the changes a push limited to that Workspace would carry from outside it: changes owned by another Workspace, and plugin and model price changes (OAuth clients and access tokens never count).",
                 "produces": [
                     "application/json"
                 ],
@@ -8443,6 +8443,12 @@ const docTemplate = `{
                         "description": "Namespace (default: global)",
                         "name": "namespace",
                         "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Workspace to report the stain for",
+                        "name": "workspace_id",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -8453,6 +8459,13 @@ const docTemplate = `{
                             "additionalProperties": {
                                 "$ref": "#/definitions/services.PendingChanges"
                             }
+                        }
+                    },
+                    "422": {
+                        "description": "invalid_workspace: unknown Workspace",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     }
                 }
@@ -38736,6 +38749,13 @@ const docTemplate = `{
                 "type": {
                     "description": "llm, app, filter, tool, datasource, plugin, model_router, semantic_router, model_price, oauth_client, access_token",
                     "type": "string"
+                },
+                "workspace_id": {
+                    "description": "WorkspaceID is the Workspace that owns the object (a stored 0 reads\nas the Default workspace); nil for types with no owning Workspace\n(plugin, model_price, oauth_client, access_token).",
+                    "type": "integer"
+                },
+                "workspace_name": {
+                    "type": "string"
                 }
             }
         },
@@ -38745,6 +38765,13 @@ const docTemplate = `{
                 "baseline": {
                     "description": "push | edge_ack | none",
                     "type": "string"
+                },
+                "by_workspace": {
+                    "description": "ByWorkspace counts every pending change (not only the listed ones)\nby owning Workspace; UnattributedTotal counts those with none.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/services.PendingWorkspaceTotal"
+                    }
                 },
                 "changes": {
                     "type": "array",
@@ -38759,11 +38786,38 @@ const docTemplate = `{
                     "description": "Namespace is the canonical spelling (models.CanonicalNamespace).",
                     "type": "string"
                 },
+                "outside_total": {
+                    "type": "integer"
+                },
                 "since": {
                     "description": "Since is the reference point: the namespace's last push, or -- when\nno push was ever recorded but an edge is in sync with the namespace\nchecksum -- that edge's ack. Nil when there is neither, in which case\nevery object is \"created\". Baseline says which.",
                     "type": "string"
                 },
+                "stained": {
+                    "type": "boolean"
+                },
                 "total": {
+                    "type": "integer"
+                },
+                "unattributed_total": {
+                    "type": "integer"
+                },
+                "workspace_id": {
+                    "description": "Set when asked about one Workspace (?workspace_id=): OutsideTotal\ncounts the changes foreign to it (PendingChangeIsForeign) and Stained\nreports whether there are any, i.e. whether a push limited to that\nWorkspace would carry changes from outside it.",
+                    "type": "integer"
+                }
+            }
+        },
+        "services.PendingWorkspaceTotal": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "workspace_id": {
                     "type": "integer"
                 }
             }

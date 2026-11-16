@@ -1,9 +1,11 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 )
@@ -47,11 +49,13 @@ func (h *SyncStatusHandlers) GetSyncStatus(c *gin.Context) {
 
 // GetPendingChanges handles GET /api/v1/sync/pending-changes?namespace=default
 // @Summary Preview what a push would change
-// @Description List the gateway-visible objects created, updated or deleted in a namespace since its last configuration push. Use "global" (or omit) for the global namespace.
+// @Description List the gateway-visible objects created, updated or deleted in a namespace since its last configuration push. Use "global" (or omit) for the global namespace. Each change names its owning Workspace (none for plugins, model prices, OAuth clients and access tokens), and by_workspace / unattributed_total count every change. With workspace_id, outside_total and stained report the changes a push limited to that Workspace would carry from outside it: changes owned by another Workspace, and plugin and model price changes (OAuth clients and access tokens never count).
 // @Tags sync
 // @Param namespace query string false "Namespace (default: global)"
+// @Param workspace_id query int false "Workspace to report the stain for"
 // @Produce json
 // @Success 200 {object} map[string]services.PendingChanges
+// @Failure 422 {object} map[string]interface{} "invalid_workspace: unknown Workspace"
 // @Router /api/v1/sync/pending-changes [get]
 // @Security BearerAuth
 func (h *SyncStatusHandlers) GetPendingChanges(c *gin.Context) {
@@ -63,7 +67,27 @@ func (h *SyncStatusHandlers) GetPendingChanges(c *gin.Context) {
 		}
 	}
 
-	changes, err := h.syncStatusService.GetPendingChanges(namespace)
+	var workspaceID *uint
+	if raw := c.Query("workspace_id"); raw != "" {
+		id, err := strconv.ParseUint(raw, 10, 32)
+		if err != nil || id == 0 {
+			c.JSON(http.StatusUnprocessableEntity, authz.Body("Invalid Workspace", "workspace_id must be a Workspace id", authz.CodeInvalidWorkspace))
+			return
+		}
+		exists, err := h.syncStatusService.WorkspaceExists(uint(id))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if !exists {
+			c.JSON(http.StatusUnprocessableEntity, authz.Body("Invalid Workspace", fmt.Sprintf("Workspace %d does not exist", id), authz.CodeInvalidWorkspace))
+			return
+		}
+		wid := uint(id)
+		workspaceID = &wid
+	}
+
+	changes, err := h.syncStatusService.GetPendingChangesFor(namespace, workspaceID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

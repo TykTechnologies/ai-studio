@@ -6714,12 +6714,27 @@ definitions:
         description: llm, app, filter, tool, datasource, plugin, model_router, semantic_router,
           model_price, oauth_client, access_token
         type: string
+      workspace_id:
+        description: |-
+          WorkspaceID is the Workspace that owns the object (a stored 0 reads
+          as the Default workspace); nil for types with no owning Workspace
+          (plugin, model_price, oauth_client, access_token).
+        type: integer
+      workspace_name:
+        type: string
     type: object
   services.PendingChanges:
     properties:
       baseline:
         description: push | edge_ack | none
         type: string
+      by_workspace:
+        description: |-
+          ByWorkspace counts every pending change (not only the listed ones)
+          by owning Workspace; UnattributedTotal counts those with none.
+        items:
+          $ref: '#/definitions/services.PendingWorkspaceTotal'
+        type: array
       changes:
         items:
           $ref: '#/definitions/services.PendingChange'
@@ -6729,6 +6744,8 @@ definitions:
       namespace:
         description: Namespace is the canonical spelling (models.CanonicalNamespace).
         type: string
+      outside_total:
+        type: integer
       since:
         description: |-
           Since is the reference point: the namespace's last push, or -- when
@@ -6736,7 +6753,27 @@ definitions:
           checksum -- that edge's ack. Nil when there is neither, in which case
           every object is "created". Baseline says which.
         type: string
+      stained:
+        type: boolean
       total:
+        type: integer
+      unattributed_total:
+        type: integer
+      workspace_id:
+        description: |-
+          Set when asked about one Workspace (?workspace_id=): OutsideTotal
+          counts the changes foreign to it (PendingChangeIsForeign) and Stained
+          reports whether there are any, i.e. whether a push limited to that
+          Workspace would carry changes from outside it.
+        type: integer
+    type: object
+  services.PendingWorkspaceTotal:
+    properties:
+      name:
+        type: string
+      total:
+        type: integer
+      workspace_id:
         type: integer
     type: object
   services.PluginUpgradePreview:
@@ -13522,14 +13559,23 @@ paths:
       - sync
   /api/v1/sync/pending-changes:
     get:
-      description: List the gateway-visible objects created, updated or deleted in
+      description: 'List the gateway-visible objects created, updated or deleted in
         a namespace since its last configuration push. Use "global" (or omit) for
-        the global namespace.
+        the global namespace. Each change names its owning Workspace (none for plugins,
+        model prices, OAuth clients and access tokens), and by_workspace / unattributed_total
+        count every change. With workspace_id, outside_total and stained report the
+        changes a push limited to that Workspace would carry from outside it: changes
+        owned by another Workspace, and plugin and model price changes (OAuth clients
+        and access tokens never count).'
       parameters:
       - description: 'Namespace (default: global)'
         in: query
         name: namespace
         type: string
+      - description: Workspace to report the stain for
+        in: query
+        name: workspace_id
+        type: integer
       produces:
       - application/json
       responses:
@@ -13538,6 +13584,11 @@ paths:
           schema:
             additionalProperties:
               $ref: '#/definitions/services.PendingChanges'
+            type: object
+        "422":
+          description: 'invalid_workspace: unknown Workspace'
+          schema:
+            additionalProperties: true
             type: object
       security:
       - BearerAuth: []
