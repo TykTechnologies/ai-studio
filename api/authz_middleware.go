@@ -48,9 +48,18 @@ func (a *API) ssoConfigGuard() gin.HandlerFunc {
 //     nothing, so the behaviour is exactly the old admin-or-not check.
 //   - Enterprise Edition resolves the user's roles.
 //
+// A permission passes when it is held globally. On a Workspace-checked route
+// (permRouter.InWorkspace) a permission on a Workspace resource also passes
+// when it is held in any Workspace: that is only the capability gate, and
+// the handler checks the object's Workspace. Every other route fails closed
+// for a caller whose grant is scoped (.37). AnyAdmin passes for a caller who
+// holds anything, globally or in a Workspace.
+//
 // Unannotated routes fail closed to full-administrator access and log once.
 // TestMode short-circuits like the other auth middlewares so handler tests
-// keep running without credentials.
+// keep running without credentials. A request that passes is marked
+// (authzGatedKey) so the Workspace helpers fail closed if it has no
+// authorization context.
 func (a *API) requireRoutePermission() gin.HandlerFunc {
 	var warned sync.Map
 	return func(c *gin.Context) {
@@ -64,7 +73,7 @@ func (a *API) requireRoutePermission() gin.HandlerFunc {
 			return
 		}
 		key := routeKey(c.Request.Method, c.FullPath())
-		perms, annotated := a.routePermission(c)
+		perms, inWorkspace, annotated := a.routePermission(c)
 		if !annotated || len(perms) == 0 {
 			perms = []authz.Permission{authz.FullAdmin}
 			if _, seen := warned.LoadOrStore(key, true); !seen {
@@ -72,17 +81,43 @@ func (a *API) requireRoutePermission() gin.HandlerFunc {
 			}
 		}
 		perm := perms[0] // the primary permission, reported on denial
-		set, err := authz.Permissions(c)
+		grants, err := requestGrants(c)
 		if err != nil {
 			slog.Error("authz: could not resolve permissions; denying", "user", user.Email, "route", key, "error", err)
 			c.AbortWithStatusJSON(http.StatusForbidden, authz.Denied(perm))
 			return
 		}
-		if !set.HasAny(perms...) {
+		if !routeGatePasses(grants, perms, inWorkspace) {
 			slog.Warn("authz: permission denied", "user", user.Email, "route", key, "permission", string(perm))
 			c.AbortWithStatusJSON(http.StatusForbidden, authz.Denied(perm))
 			return
 		}
+		c.Set(authzGatedKey, true)
 		c.Next()
 	}
+}
+
+// requestGrants returns the request's resolved grants; empty with no
+// authorization context.
+func requestGrants(c *gin.Context) (authz.Grants, error) {
+	x, ok := authz.FromContext(c)
+	if !ok {
+		return authz.GlobalGrants(authz.NewSet()), nil
+	}
+	return x.Grants()
+}
+
+// routeGatePasses is the route gate's rule; see requireRoutePermission.
+func routeGatePasses(g authz.Grants, perms []authz.Permission, inWorkspace bool) bool {
+	for _, p := range perms {
+		switch {
+		case g.Can(p):
+			return true
+		case p == authz.AnyAdmin && g.CanAnywhere(p):
+			return true
+		case inWorkspace && authz.ScopeOf(p).InWorkspace() && g.CanAnywhere(p):
+			return true
+		}
+	}
+	return false
 }
