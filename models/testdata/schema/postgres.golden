@@ -2480,6 +2480,7 @@ TABLE user_notice_dismissals
   column dismissed_at timestamp with time zone(timestamptz) nullable=NO
 TABLE users
   constraint users_pkey PRIMARY KEY (id)
+  index CREATE INDEX idx_users_account_type ON users USING btree (account_type)
   index CREATE INDEX idx_users_auth_source ON users USING btree (auth_source)
   index CREATE INDEX idx_users_deleted_at ON users USING btree (deleted_at)
   index CREATE INDEX idx_users_disabled ON users USING btree (disabled)
@@ -2515,6 +2516,7 @@ TABLE users
   column disabled boolean(bool) nullable=NO default=false
   column disabled_at timestamp with time zone(timestamptz) nullable=YES
   column metadata json(json) nullable=YES
+  column account_type character varying(varchar) nullable=NO len=16 default=''::character varying
 TABLE webhook_deliveries
   constraint webhook_deliveries_pkey PRIMARY KEY (id)
   index CREATE INDEX idx_webhook_deliveries_created ON webhook_deliveries USING btree (created_at)

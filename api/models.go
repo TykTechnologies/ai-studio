@@ -85,6 +85,10 @@ type UserAttributes struct {
 	NotificationsEnabled bool               `json:"notifications_enabled"`
 	AccessToSSOConfig    bool               `json:"access_to_sso_config"`
 	Role                 string             `json:"role"`
+
+	// AccountType is "" for a person or "service" for a service account.
+	AccountType string `json:"account_type"`
+
 	Groups               []GroupResponse    `json:"groups,omitempty"`
 	Roles                []rbac.RoleSummary `json:"roles,omitempty"`
 

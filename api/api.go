@@ -458,16 +458,16 @@ func (a *API) setupRoutes() error {
 		oauthGroup.OPTIONS("/register_client", a.handleRegisterOAuthClient)
 		// Authorization Endpoint - requires user authentication (user logs in to grant access)
 		// This endpoint will now redirect to a consent page if needed.
-		oauthGroup.GET("/authorize", a.auth.AuthMiddleware(), a.handleOAuthAuthorize)
+		oauthGroup.GET("/authorize", a.auth.AuthMiddleware(), refuseServiceAccount(), a.handleOAuthAuthorize)
 		oauthGroup.OPTIONS("/authorize", a.handleOAuthAuthorize)
 		// Token Endpoint - typically requires client authentication
 		oauthGroup.POST("/token", a.handleOAuthToken)
 		oauthGroup.OPTIONS("/token", a.handleOAuthToken)
 
 		// Endpoints for consent screen flow - require user authentication
-		oauthGroup.GET("/consent_details", a.auth.AuthMiddleware(), a.handleGetConsentDetails)
+		oauthGroup.GET("/consent_details", a.auth.AuthMiddleware(), refuseServiceAccount(), a.handleGetConsentDetails)
 		oauthGroup.OPTIONS("/consent_details", a.handleGetConsentDetails)
-		oauthGroup.POST("/submit_consent", a.auth.AuthMiddleware(), a.handleSubmitConsent)
+		oauthGroup.POST("/submit_consent", a.auth.AuthMiddleware(), refuseServiceAccount(), a.handleSubmitConsent)
 		oauthGroup.OPTIONS("/submit_consent", a.handleSubmitConsent)
 	}
 	// AS Metadata - public
@@ -513,6 +513,7 @@ func (a *API) setupRoutes() error {
 	// Analytics endpoints for portal users
 	portalAnalytics := a.router.Group("/analytics")
 	portalAnalytics.Use(a.auth.AuthMiddleware())
+	portalAnalytics.Use(refuseServiceAccount())
 	portalAnalytics.GET("/token-usage-and-cost-for-app", a.getTokenUsageAndCostForApp)
 	portalAnalytics.GET("/budget-usage-for-app", a.getBudgetUsageForApp)
 
@@ -538,6 +539,7 @@ func (a *API) setupRoutes() error {
 	// routes for portal users
 	authed := public.Group("/common")
 	authed.Use(a.auth.AuthMiddleware())
+	authed.Use(serviceAccountCommonGate())
 	authed.Use(a.rbacContext())
 	authed.POST("/logout", a.handleLogout)
 	authed.GET("/me", a.handleMe)

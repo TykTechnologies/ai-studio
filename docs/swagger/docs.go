@@ -27158,7 +27158,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Create a new user with the provided information",
+                "description": "Create a new user with the provided information. Optional data.attributes.role_ids (Enterprise) binds roles; it needs roles:write, checked before the user is created. Optional data.attributes.account_type \"service\" creates a service account: send only name (and is_admin, role_ids); its email (svc-...@service-account.invalid) and API key are generated, the key is returned once in this response, and it has no password, Portal, Chat, teams or notifications (422 service_account otherwise).",
                 "consumes": [
                     "application/json"
                 ],
@@ -27189,6 +27189,24 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -27300,7 +27318,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Update an existing user's information",
+                "description": "Update an existing user's information. account_type cannot change; a service account's email and password cannot be set, nor Portal, Chat, notifications or teams (422).",
                 "consumes": [
                     "application/json"
                 ],
@@ -27338,6 +27356,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -34956,6 +34980,10 @@ const docTemplate = `{
             "properties": {
                 "access_to_sso_config": {
                     "type": "boolean"
+                },
+                "account_type": {
+                    "description": "AccountType is \"\" for a person or \"service\" for a service account.",
+                    "type": "string"
                 },
                 "api_key": {
                     "type": "string"

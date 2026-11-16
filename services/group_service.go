@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -23,8 +24,23 @@ func (s *Service) validateGroupName(name string, groupID uint) error {
 	return nil
 }
 
+// refuseServiceAccountMembers answers 422 when the member list names a
+// service account: they belong to no team (decision D9).
+func (s *Service) refuseServiceAccountMembers(userIDs []uint) error {
+	if err := models.RefuseServiceAccountMembers(s.DB, userIDs); err != nil {
+		if errors.Is(err, models.ErrServiceAccountTeams) {
+			return serviceAccountTeamsRefusal()
+		}
+		return err
+	}
+	return nil
+}
+
 func (s *Service) CreateGroup(name string, userIDs, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs []uint) (*models.Group, error) {
 	if err := s.validateGroupName(name, 0); err != nil {
+		return nil, err
+	}
+	if err := s.refuseServiceAccountMembers(userIDs); err != nil {
 		return nil, err
 	}
 
@@ -56,6 +72,9 @@ func (s *Service) GetGroupByID(id uint, preloads ...string) (*models.Group, erro
 
 func (s *Service) UpdateGroup(id uint, name string, userIDs, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs []uint) (*models.Group, error) {
 	if err := s.validateGroupName(name, id); err != nil {
+		return nil, err
+	}
+	if err := s.refuseServiceAccountMembers(userIDs); err != nil {
 		return nil, err
 	}
 
@@ -164,6 +183,9 @@ func (s *Service) AddUserToGroup(userID, groupID uint) error {
 	user, err := s.GetUserByID(userID)
 	if err != nil {
 		return err
+	}
+	if user.IsServiceAccount() {
+		return serviceAccountTeamsRefusal()
 	}
 
 	group, err := s.GetGroupByID(groupID)
