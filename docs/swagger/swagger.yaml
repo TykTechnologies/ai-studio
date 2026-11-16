@@ -6704,8 +6704,15 @@ definitions:
       change:
         description: created | updated | deleted
         type: string
+      hidden:
+        description: |-
+          Hidden marks a change whose object the caller cannot see; its type,
+          kind, time and Workspace id are still reported.
+        type: boolean
       id:
-        description: object id
+        description: |-
+          ID and Name are left out (Hidden set) for an object the caller cannot
+          see: an App or router in a Workspace their read does not cover.
         type: integer
       name:
         description: display name at the time of the query

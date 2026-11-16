@@ -13,6 +13,9 @@ import (
 // SyncStatusHandlers handles sync status API endpoints
 type SyncStatusHandlers struct {
 	syncStatusService *services.SyncStatusService
+	// redactPending, when set, hides from the caller what its grants do
+	// not let it see (API.redactPendingChanges).
+	redactPending func(*gin.Context, *services.PendingChanges)
 }
 
 // NewSyncStatusHandlers creates a new SyncStatusHandlers
@@ -91,6 +94,12 @@ func (h *SyncStatusHandlers) GetPendingChanges(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+	if h.redactPending != nil {
+		h.redactPending(c, changes)
+		if c.IsAborted() {
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": changes})

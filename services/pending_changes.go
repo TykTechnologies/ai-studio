@@ -22,16 +22,21 @@ const maxPendingChanges = 200
 
 // PendingChange is one object that changed since the last push.
 type PendingChange struct {
-	Type   string    `json:"type"`   // llm, app, filter, tool, datasource, plugin, model_router, semantic_router, model_price, oauth_client, access_token
-	ID     uint      `json:"id"`     // object id
-	Name   string    `json:"name"`   // display name at the time of the query
-	Change string    `json:"change"` // created | updated | deleted
-	At     time.Time `json:"at"`     // when that change happened
+	Type string `json:"type"` // llm, app, filter, tool, datasource, plugin, model_router, semantic_router, model_price, oauth_client, access_token
+	// ID and Name are left out (Hidden set) for an object the caller cannot
+	// see: an App or router in a Workspace their read does not cover.
+	ID     uint      `json:"id,omitempty"`   // object id
+	Name   string    `json:"name,omitempty"` // display name at the time of the query
+	Change string    `json:"change"`         // created | updated | deleted
+	At     time.Time `json:"at"`             // when that change happened
 	// WorkspaceID is the Workspace that owns the object (a stored 0 reads
 	// as the Default workspace); nil for types with no owning Workspace
 	// (plugin, model_price, oauth_client, access_token).
 	WorkspaceID   *uint  `json:"workspace_id"`
 	WorkspaceName string `json:"workspace_name,omitempty"`
+	// Hidden marks a change whose object the caller cannot see; its type,
+	// kind, time and Workspace id are still reported.
+	Hidden bool `json:"hidden,omitempty"`
 }
 
 // PendingWorkspaceTotal counts the changes owned by one Workspace.
