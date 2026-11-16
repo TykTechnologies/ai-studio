@@ -104,8 +104,9 @@ const UserDetails = () => {
     }
   };
 
-  // The server only returns another user's key to callers who may manage
-  // users; otherwise it sends a hint (the last four characters). A user
+  // The server never returns a user's key once issued: payloads carry a
+  // hint (the last four characters), and only the roll response carries the
+  // new key, shown here once until the page reloads. A user
   // with no key issued (admin-created, SSO-provisioned, or revoked) has
   // has_api_key=false and shows no mask at all.
   const hasApiKey = Boolean(

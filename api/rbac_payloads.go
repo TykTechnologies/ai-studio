@@ -72,42 +72,23 @@ func pluginCallerPermissions(c *gin.Context, plugin *models.Plugin) []string {
 	return out
 }
 
-// revealAPIKeys reports whether the caller may see other users' API keys.
-// With no authorization context on the request (TestMode without a user)
-// the legacy behaviour applies and keys are shown.
-func (a *API) revealAPIKeys(c *gin.Context) bool {
-	if _, ok := authz.FromContext(c); !ok {
-		return true
+// apiKeyHint is the part of an API key user payloads show: its last four
+// characters. A key is shown whole only in the response that issues it
+// (user create, key roll), to whoever issued it (.45).
+func apiKeyHint(key string) string {
+	if n := len(key); n > 4 {
+		return key[n-4:]
 	}
-	return authz.Can(c, authz.Write("users"))
+	return key
 }
 
-func maskAPIKey(attrs *UserAttributes) {
-	if attrs.APIKey == "" {
-		return
-	}
-	if n := len(attrs.APIKey); n > 4 {
-		attrs.APIKeyHint = attrs.APIKey[n-4:]
-	} else {
-		attrs.APIKeyHint = attrs.APIKey
-	}
-	attrs.APIKey = ""
-}
-
-// finishUsers masks API keys and attaches roles to serialised users.
+// finishUsers attaches roles to serialised users (serializeUser never
+// carries an API key, only its hint).
 func (a *API) finishUsers(c *gin.Context, users []UserResponse) []UserResponse {
-	reveal := a.revealAPIKeys(c)
-	var selfID uint
-	if u, ok := auth.UserFromContext(c); ok {
-		selfID = u.ID
-	}
 	ids := make([]uint, 0, len(users))
 	for i := range users {
 		id, _ := strconv.ParseUint(users[i].ID, 10, 64)
 		ids = append(ids, uint(id))
-		if !reveal && uint(id) != selfID {
-			maskAPIKey(&users[i].Attributes)
-		}
 		for j := range users[i].Attributes.Groups {
 			a.finishGroupRoles(c, &users[i].Attributes.Groups[j])
 		}

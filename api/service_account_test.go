@@ -55,6 +55,13 @@ func TestServiceAccountAPI_CreateReturnsTheKeyOnce(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	assert.Equal(t, models.AccountTypeService, resp.Data.Attributes.AccountType)
 	assert.Equal(t, models.RoleServiceAccount, resp.Data.Attributes.Role)
+	assert.Empty(t, resp.Data.Attributes.APIKey, "the key is shown once, at creation (.45)")
+	assert.Equal(t, key[len(key)-4:], resp.Data.Attributes.APIKeyHint)
+
+	w = apitest.PerformAuthRequest(api.router, "GET", "/api/v1/users?all=true", nil, admin.APIKey)
+	require.Equal(t, http.StatusOK, w.Code)
+	assert.NotContains(t, w.Body.String(), key, "no list carries a key")
+	assert.NotContains(t, w.Body.String(), admin.APIKey, "not even the caller's own")
 }
 
 func TestServiceAccountAPI_CreateRefusals(t *testing.T) {
