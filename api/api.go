@@ -871,15 +871,17 @@ func (a *API) setupRoutes() error {
 	v1.PATCH("/chats/:id/prompt-templates", authz.Write("chats"), a.updateChatPromptTemplates)
 
 	// Agent routes
-	v1.GET("/agents/:id/stream", authz.Execute("agents"), a.HandleAgentSSE)             // Establish SSE connection for agent
-	v1.POST("/agents/:id/message", authz.Execute("agents"), a.HandleAgentMessage)       // Send message to agent session
-	v1.GET("/agents", authz.Read("agents"), a.HandleListAgents)                      // List agent configs
-	v1.GET("/agents/:id", authz.Read("agents"), a.HandleGetAgent)                    // Get agent config
-	v1.POST("/agents", authz.Write("agents"), a.HandleCreateAgent)                    // Create agent config (admin only)
-	v1.PUT("/agents/:id", authz.Write("agents"), a.HandleUpdateAgent)                 // Update agent config (admin only)
-	v1.DELETE("/agents/:id", authz.Delete("agents"), a.HandleDeleteAgent)              // Delete agent config (admin only)
-	v1.POST("/agents/:id/activate", authz.Publish("agents"), a.HandleActivateAgent)     // Activate agent (publish)
-	v1.POST("/agents/:id/deactivate", authz.Publish("agents"), a.HandleDeactivateAgent) // Deactivate agent (publish)
+	// Agents are Workspace-checked (B4d): the handlers apply the object
+	// checks on the admin API path.
+	v1.InWorkspace().GET("/agents/:id/stream", authz.Execute("agents"), a.HandleAgentSSE)             // Establish SSE connection for agent
+	v1.InWorkspace().POST("/agents/:id/message", authz.Execute("agents"), a.HandleAgentMessage)       // Send message to agent session
+	v1.InWorkspace().GET("/agents", authz.Read("agents"), a.HandleListAgents)                      // List agent configs
+	v1.InWorkspace().GET("/agents/:id", authz.Read("agents"), a.HandleGetAgent)                    // Get agent config
+	v1.InWorkspace().POST("/agents", authz.Write("agents"), a.HandleCreateAgent)                    // Create agent config (admin only)
+	v1.InWorkspace().PUT("/agents/:id", authz.Write("agents"), a.HandleUpdateAgent)                 // Update agent config (admin only)
+	v1.InWorkspace().DELETE("/agents/:id", authz.Delete("agents"), a.HandleDeleteAgent)              // Delete agent config (admin only)
+	v1.InWorkspace().POST("/agents/:id/activate", authz.Publish("agents"), a.HandleActivateAgent)     // Activate agent (publish)
+	v1.InWorkspace().POST("/agents/:id/deactivate", authz.Publish("agents"), a.HandleDeactivateAgent) // Deactivate agent (publish)
 
 	// Tool routes
 	v1.InWorkspace().POST("/tools", authz.Write("tools"), a.createTool)

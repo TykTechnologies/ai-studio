@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/agent_session"
 	"github.com/TykTechnologies/midsommar/v2/chat_session"
@@ -40,10 +41,61 @@ type AgentConfigRequest struct {
 	// default), unchanged on update. Setting it needs agents:publish.
 	IsActive  *bool  `json:"is_active"`
 	Namespace string `json:"namespace"`
+	// WorkspaceID places the agent (create) or moves it (update); omitted
+	// means the landing rule on create and no move on update. Admin API only.
+	WorkspaceID *uint `json:"workspace_id"`
 }
 
 // wantsActive reports the requested live state, defaulting to true on create.
 func (r *AgentConfigRequest) wantsActive() bool { return r.IsActive == nil || *r.IsActive }
+
+// Workspaces (B4d). The agent handlers serve both the admin API (/api/v1)
+// and the portal and chat (/common). Workspace checks apply on the admin
+// API only: on /common an authorization context exists too, and portal
+// visibility stays with agent groups.
+
+// onAdminAPI reports whether the request came in on the admin API.
+func onAdminAPI(c *gin.Context) bool { return strings.HasPrefix(c.FullPath(), "/api/v1/") }
+
+// agentNotFound is the not-found answer for an agent, also given for an
+// agent in a Workspace the caller cannot see.
+func agentNotFound(c *gin.Context) {
+	c.JSON(http.StatusNotFound, ErrorResponse{
+		Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Agent not found", Detail: "No agent found with the provided ID"}},
+	})
+}
+
+// requireAgentInWorkspace runs the admin API's object checks on a loaded
+// agent: hidden (404) unless the caller's read covers its Workspace, then
+// perm in that Workspace (403). No-op off the admin API.
+func (a *API) requireAgentInWorkspace(c *gin.Context, ag *models.AgentConfig, perm authz.Permission) bool {
+	if !onAdminAPI(c) {
+		return true
+	}
+	if !a.requireVisible(c, "agents", ag.WorkspaceID, agentNotFound) {
+		return false
+	}
+	return a.requireInWorkspace(c, perm, ag.WorkspaceID)
+}
+
+// redactAgent withholds credential material from an admin API response
+// (.46): the agent's plugin configuration needs agents:write in its
+// Workspace, and the embedded plugin's own configuration needs plugins:write.
+// Readers get the metadata.
+func (a *API) redactAgent(c *gin.Context, ag *models.AgentConfig) {
+	if !onAdminAPI(c) {
+		return
+	}
+	if !a.holdsIn(c, ag.WorkspaceID, authz.Write("agents")) {
+		ag.Config = nil
+	}
+	if ag.Plugin != nil && !a.holds(c, authz.Write("plugins")) {
+		ag.Plugin.Config = nil
+	}
+}
 
 // HandleAgentMessage handles POST /api/agents/:id/message - sends a message to an active agent session
 func (a *API) HandleAgentMessage(c *gin.Context) {
@@ -84,6 +136,25 @@ func (a *API) HandleAgentMessage(c *gin.Context) {
 	}
 
 	session := sessionInterface.(*agent_session.AgentSession)
+
+	// On the admin API the session must belong to the agent in the path,
+	// which the caller must see and may execute in its Workspace.
+	if onAdminAPI(c) {
+		agentID, err := strconv.ParseUint(c.Param("id"), 10, 32)
+		ag := session.AgentConfig()
+		if err != nil || ag == nil || ag.ID != uint(agentID) {
+			agentNotFound(c)
+			return
+		}
+		var stored models.AgentConfig
+		if err := a.service.DB.Select("id", "workspace_id").First(&stored, ag.ID).Error; err != nil {
+			agentNotFound(c)
+			return
+		}
+		if !a.requireAgentInWorkspace(c, &stored, authz.Execute("agents")) {
+			return
+		}
+	}
 
 	// Send message to agent
 	if err := session.SendMessage(req.Message, req.History); err != nil {
@@ -151,6 +222,10 @@ func (a *API) HandleAgentSSE(c *gin.Context) {
 				Detail string `json:"detail"`
 			}{{Title: "Agent not found", Detail: "No agent found with the provided ID"}},
 		})
+		return
+	}
+
+	if !a.requireAgentInWorkspace(c, &agentConfig, authz.Execute("agents")) {
 		return
 	}
 
@@ -437,9 +512,18 @@ func (a *API) HandleListAgents(c *gin.Context) {
 	// Load user's groups
 	a.service.DB.Preload("Groups").First(thisUser, thisUser.ID)
 
-	// List agents with pagination
+	// List agents with pagination. On the admin API the Workspace filter
+	// runs in SQL, before pagination.
+	db := a.service.DB
+	if onAdminAPI(c) {
+		filter, ok := a.workspaceFilterParam(c, "")
+		if !ok {
+			return
+		}
+		db = db.Scopes(a.workspaceListScope(c, "agents", ""), filter)
+	}
 	var agents models.AgentConfigs
-	total, totalPages, err := agents.ListWithPagination(a.service.DB, limit, page, true, namespace, nil)
+	total, totalPages, err := agents.ListWithPagination(db, limit, page, true, namespace, nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -476,6 +560,7 @@ func (a *API) HandleListAgents(c *gin.Context) {
 		}
 
 		if hasAccess {
+			a.redactAgent(c, &agents[i])
 			accessibleAgents = append(accessibleAgents, agents[i])
 		}
 	}
@@ -531,6 +616,9 @@ func (a *API) HandleGetAgent(c *gin.Context) {
 		})
 		return
 	}
+	if !a.requireAgentInWorkspace(c, &agentConfig, authz.Read("agents")) {
+		return
+	}
 	// Load relationships
 	a.service.DB.Preload("Plugin").Preload("App").Preload("Groups").First(&agentConfig, agentConfig.ID)
 
@@ -562,6 +650,7 @@ func (a *API) HandleGetAgent(c *gin.Context) {
 		return
 	}
 
+	a.redactAgent(c, &agentConfig)
 	c.JSON(http.StatusOK, gin.H{"data": agentConfig})
 }
 
@@ -579,17 +668,6 @@ func (a *API) HandleCreateAgent(c *gin.Context) {
 		return
 	}
 	_ = uObj // identity is checked; authorization is the permission check below
-
-	// Check if user is admin
-	if !authz.Can(c, authz.Write("agents")) {
-		c.JSON(http.StatusForbidden, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Forbidden", Detail: "Only administrators can create agent configs"}},
-		})
-		return
-	}
 
 	// Parse request body
 	var req AgentConfigRequest
@@ -624,10 +702,20 @@ func (a *API) HandleCreateAgent(c *gin.Context) {
 		return
 	}
 
-	// Verify app exists
+	// The Workspace the agent lands in (decision D5): agents:write there.
+	workspaceID, ok := a.resolveCreateWorkspace(c, "agents", req.WorkspaceID)
+	if !ok {
+		return
+	}
+
+	// Verify app exists and the caller can see it: an App in a Workspace
+	// the caller cannot see is reported as not found, never as forbidden.
 	var app models.App
-	if err := a.service.DB.First(&app, req.AppID).Error; err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{
+	if err := a.service.DB.First(&app, req.AppID).Error; err != nil || !a.visibleIn(c, "apps", app.WorkspaceID) {
+		if c.IsAborted() {
+			return
+		}
+		c.JSON(http.StatusUnprocessableEntity, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -636,9 +724,10 @@ func (a *API) HandleCreateAgent(c *gin.Context) {
 		return
 	}
 
-	// Asking for an active agent explicitly is the publish action on agents;
-	// an omitted switch means "active if allowed, draft otherwise".
-	if req.IsActive != nil && !a.requirePublishToCreateLive(c, "agents", *req.IsActive) {
+	// Asking for an active agent explicitly is the publish action on agents,
+	// in the agent's Workspace; an omitted switch means "active if allowed,
+	// draft otherwise".
+	if req.IsActive != nil && !a.requirePublishToCreateLiveIn(c, "agents", workspaceID, *req.IsActive) {
 		return
 	}
 
@@ -655,6 +744,7 @@ func (a *API) HandleCreateAgent(c *gin.Context) {
 	}
 	agentConfig.IsActive = req.wantsActive()
 	agentConfig.Namespace = req.Namespace
+	agentConfig.WorkspaceID = workspaceID
 
 	// Create in database
 	if err := agentConfig.Create(a.service.DB); err != nil {
@@ -670,7 +760,7 @@ func (a *API) HandleCreateAgent(c *gin.Context) {
 	// The is_active column defaults to true on insert, which turns an
 	// explicit false into true; write the requested value back when it was
 	// false, and never leave a caller without publish holding a live agent.
-	if !req.wantsActive() || !a.canPublish(c, "agents") {
+	if !req.wantsActive() || !a.holdsIn(c, workspaceID, authz.Publish("agents")) {
 		if err := agentConfig.Deactivate(a.service.DB); err != nil {
 			c.JSON(http.StatusInternalServerError, ErrorResponse{
 				Errors: []struct {
@@ -695,6 +785,7 @@ func (a *API) HandleCreateAgent(c *gin.Context) {
 	// Reload with relationships
 	a.service.DB.Preload("Plugin").Preload("App").Preload("Groups").First(&agentConfig, agentConfig.ID)
 
+	a.redactAgent(c, agentConfig)
 	c.JSON(http.StatusCreated, gin.H{"data": agentConfig})
 }
 
@@ -712,17 +803,6 @@ func (a *API) HandleUpdateAgent(c *gin.Context) {
 		return
 	}
 	_ = uObj // identity is checked; authorization is the permission check below
-
-	// Check if user is admin
-	if !authz.Can(c, authz.Write("agents")) {
-		c.JSON(http.StatusForbidden, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Forbidden", Detail: "Only administrators can update agent configs"}},
-		})
-		return
-	}
 
 	// Parse agent ID
 	agentID, err := strconv.ParseUint(c.Param("id"), 10, 32)
@@ -760,10 +840,20 @@ func (a *API) HandleUpdateAgent(c *gin.Context) {
 		return
 	}
 
-	// Flipping the active switch is the publish action on agents; an omitted
-	// switch keeps its value.
+	// Hidden (404) unless the caller sees its Workspace; write there.
+	if !a.requireAgentInWorkspace(c, &agentConfig, authz.Write("agents")) {
+		return
+	}
+	// A different workspace_id is a move: write in both Workspaces.
+	move := req.WorkspaceID != nil && *req.WorkspaceID != agentConfig.WorkspaceID
+	if move && !a.requireMove(c, "agents", agentConfig.WorkspaceID, *req.WorkspaceID) {
+		return
+	}
+
+	// Flipping the active switch is the publish action on agents, in the
+	// agent's Workspace; an omitted switch keeps its value.
 	if req.IsActive != nil {
-		if !a.requirePublishIfChanged(c, "agents", agentConfig.IsActive, *req.IsActive) {
+		if !a.requirePublishIfChangedIn(c, "agents", agentConfig.WorkspaceID, agentConfig.IsActive, *req.IsActive) {
 			return
 		}
 	}
@@ -791,6 +881,21 @@ func (a *API) HandleUpdateAgent(c *gin.Context) {
 		return
 	}
 
+	// The move writes workspace_id with updated_at (ordinary updates never
+	// write workspace_id, and a move must show as a pending change).
+	if move {
+		if err := a.service.DB.Model(&agentConfig).Select("workspace_id", "updated_at").
+			Updates(map[string]interface{}{"workspace_id": *req.WorkspaceID, "updated_at": time.Now()}).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, ErrorResponse{
+				Errors: []struct {
+					Title  string `json:"title"`
+					Detail string `json:"detail"`
+				}{{Title: "Database error", Detail: err.Error()}},
+			})
+			return
+		}
+	}
+
 	// Update groups if specified
 	if req.GroupIDs != nil {
 		// Remove all existing groups
@@ -805,8 +910,10 @@ func (a *API) HandleUpdateAgent(c *gin.Context) {
 	}
 
 	// Reload with relationships
-	a.service.DB.Preload("Plugin").Preload("App").Preload("Groups").First(&agentConfig, agentConfig.ID)
+	agentConfig = models.AgentConfig{}
+	a.service.DB.Preload("Plugin").Preload("App").Preload("Groups").First(&agentConfig, uint(agentID))
 
+	a.redactAgent(c, &agentConfig)
 	c.JSON(http.StatusOK, gin.H{"data": agentConfig})
 }
 
@@ -824,17 +931,6 @@ func (a *API) HandleDeleteAgent(c *gin.Context) {
 		return
 	}
 	_ = uObj // identity is checked; authorization is the permission check below
-
-	// Check if user is admin
-	if !authz.Can(c, authz.Delete("agents")) {
-		c.JSON(http.StatusForbidden, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Forbidden", Detail: "Only administrators can delete agent configs"}},
-		})
-		return
-	}
 
 	// Parse agent ID
 	agentID, err := strconv.ParseUint(c.Param("id"), 10, 32)
@@ -857,6 +953,9 @@ func (a *API) HandleDeleteAgent(c *gin.Context) {
 				Detail string `json:"detail"`
 			}{{Title: "Agent not found", Detail: "No agent found with the provided ID"}},
 		})
+		return
+	}
+	if !a.requireAgentInWorkspace(c, &agentConfig, authz.Delete("agents")) {
 		return
 	}
 	if err := agentConfig.Delete(a.service.DB); err != nil {
@@ -887,17 +986,6 @@ func (a *API) HandleActivateAgent(c *gin.Context) {
 	}
 	_ = uObj // identity is checked; authorization is the permission check below
 
-	// Check if user is admin
-	if !authz.Can(c, authz.Publish("agents")) {
-		c.JSON(http.StatusForbidden, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Forbidden", Detail: "Only administrators can activate agent configs"}},
-		})
-		return
-	}
-
 	// Parse agent ID
 	agentID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -919,6 +1007,9 @@ func (a *API) HandleActivateAgent(c *gin.Context) {
 				Detail string `json:"detail"`
 			}{{Title: "Agent not found", Detail: "No agent found with the provided ID"}},
 		})
+		return
+	}
+	if !a.requireAgentInWorkspace(c, &agentConfig, authz.Publish("agents")) {
 		return
 	}
 	if err := agentConfig.Activate(a.service.DB); err != nil {
@@ -949,17 +1040,6 @@ func (a *API) HandleDeactivateAgent(c *gin.Context) {
 	}
 	_ = uObj // identity is checked; authorization is the permission check below
 
-	// Check if user is admin
-	if !authz.Can(c, authz.Publish("agents")) {
-		c.JSON(http.StatusForbidden, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Forbidden", Detail: "Only administrators can deactivate agent configs"}},
-		})
-		return
-	}
-
 	// Parse agent ID
 	agentID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -981,6 +1061,9 @@ func (a *API) HandleDeactivateAgent(c *gin.Context) {
 				Detail string `json:"detail"`
 			}{{Title: "Agent not found", Detail: "No agent found with the provided ID"}},
 		})
+		return
+	}
+	if !a.requireAgentInWorkspace(c, &agentConfig, authz.Publish("agents")) {
 		return
 	}
 	if err := agentConfig.Deactivate(a.service.DB); err != nil {
