@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"net/http"
 	"path"
 	"strconv"
 	"strings"
@@ -279,5 +280,44 @@ func metadataObjectPermission(action authz.Action) func(*gin.Context) authz.Perm
 			return authz.P(res, action)
 		}
 		return authz.P("metadata", action)
+	}
+}
+
+// metadataObjectModels are the stamped objects whose governed metadata the
+// object routes edit; onMetadataObject checks their Workspace.
+var metadataObjectModels = map[string]struct {
+	resource string
+	model    func() interface{}
+}{
+	models.GovernedObjectTypeLLM:        {"llms", func() interface{} { return &models.LLM{} }},
+	models.GovernedObjectTypeTool:       {"tools", func() interface{} { return &models.Tool{} }},
+	models.GovernedObjectTypeDatasource: {"datasources", func() interface{} { return &models.Datasource{} }},
+}
+
+// onMetadataObject is route middleware for the governed-metadata object
+// routes. A write on a stamped object (LLM, tool, datasource) needs the
+// object's permission in its Workspace (requireOnObject: 403
+// permission_denied). Reads stay read-global for these resources (D4), as
+// on the objects' own routes. A write with a non-numeric object_id on one of
+// these types is a 400. Other object types resolve to a global
+// permission at the route gate (plugins, metadata) and pass here.
+func (a *API) onMetadataObject(action authz.Action) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		target, ok := metadataObjectModels[c.Param("object_type")]
+		if !ok || action == authz.ActionRead {
+			c.Next()
+			return
+		}
+		id, err := strconv.ParseUint(c.Param("object_id"), 10, 32)
+		if err != nil {
+			// LLMs, tools and datasources have numeric ids: fail closed.
+			simpleError(c, http.StatusBadRequest, "Bad Request", "invalid object_id")
+			c.Abort()
+			return
+		}
+		if !a.requireOnObject(c, target.model(), uint(id), authz.P(target.resource, action)) {
+			return
+		}
+		c.Next()
 	}
 }

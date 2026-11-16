@@ -34,7 +34,12 @@ type Dependents struct {
 	Chats           []DependentRef `json:"chats"`
 	// Embedders linked to the object (an LLM).
 	Embedders []DependentRef `json:"embedders"`
-	Total     int            `json:"total"`
+	// Total counts every dependent, including Hidden ones.
+	Total int `json:"total"`
+	// Hidden counts the dependents left out of the lists because the caller
+	// may not see them (Workspace-scoped objects in other Workspaces); only
+	// the count is given, never their ids or names.
+	Hidden int `json:"hidden"`
 }
 
 func newDependents() *Dependents {
