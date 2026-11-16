@@ -304,13 +304,13 @@ func (s *Service) RemoveCatalogueFromGroup(catalogueID, groupID uint) error {
 	return group.RemoveCatalogue(s.DB, catalogue)
 }
 
-func (s *Service) GetGroupCatalogues(groupID uint) (models.Catalogues, error) {
+func (s *Service) GetGroupCatalogues(groupID uint, scopes ...func(*gorm.DB) *gorm.DB) (models.Catalogues, error) {
 	group, err := s.GetGroupByID(groupID)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := group.GetCatalogues(s.DB); err != nil {
+	if err := group.GetCatalogues(s.DB.Scopes(scopes...).Session(&gorm.Session{})); err != nil {
 		return nil, err
 	}
 
@@ -354,13 +354,13 @@ func (s *Service) RemoveDataCatalogueFromGroup(dataCatalogueID, groupID uint) er
 	return group.RemoveDataCatalogue(s.DB, dataCatalogue)
 }
 
-func (s *Service) GetGroupDataCatalogues(groupID uint) (models.DataCatalogues, error) {
+func (s *Service) GetGroupDataCatalogues(groupID uint, scopes ...func(*gorm.DB) *gorm.DB) (models.DataCatalogues, error) {
 	group, err := s.GetGroupByID(groupID)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := group.GetDataCatalogues(s.DB); err != nil {
+	if err := group.GetDataCatalogues(s.DB.Scopes(scopes...).Session(&gorm.Session{})); err != nil {
 		return nil, err
 	}
 

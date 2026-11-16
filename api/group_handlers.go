@@ -690,7 +690,8 @@ func (a *API) listGroupCatalogues(c *gin.Context) {
 		return
 	}
 
-	catalogues, err := a.service.GetGroupCatalogues(uint(groupID))
+	// Hidden catalogues are left out in the query.
+	catalogues, err := a.service.GetGroupCatalogues(uint(groupID), a.workspaceListScope(c, "catalogues", "catalogues.workspace_id"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -701,7 +702,7 @@ func (a *API) listGroupCatalogues(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeCatalogues(a.visibleCatalogues(c, catalogues))})
+	c.JSON(http.StatusOK, gin.H{"data": serializeCatalogues(catalogues)})
 }
 
 // Add this function to group_handlers.go
@@ -901,7 +902,8 @@ func (a *API) listGroupDataCatalogues(c *gin.Context) {
 		return
 	}
 
-	dataCatalogues, err := a.service.GetGroupDataCatalogues(uint(groupID))
+	// Hidden data catalogues are left out in the query.
+	dataCatalogues, err := a.service.GetGroupDataCatalogues(uint(groupID), a.workspaceListScope(c, "data-catalogues", "data_catalogues.workspace_id"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -912,7 +914,7 @@ func (a *API) listGroupDataCatalogues(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeDataCatalogues(a.visibleDataCatalogues(c, dataCatalogues))})
+	c.JSON(http.StatusOK, gin.H{"data": serializeDataCatalogues(dataCatalogues)})
 }
 
 // @Summary Add a tool catalogue to a group
