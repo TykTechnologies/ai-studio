@@ -100,10 +100,14 @@ var Groups = []string{
 }
 
 var (
-	mu        sync.RWMutex
-	registry  = map[string]Resource{}
-	version   uint64
-	groupRank = func() map[string]int {
+	mu       sync.RWMutex
+	registry = map[string]Resource{}
+	version  uint64
+	// stampedCache holds StampedResources; nil means "recompute". Register
+	// clears it. Plugin resources are never stamped, so Replace and
+	// Unregister leave it alone.
+	stampedCache []string
+	groupRank    = func() map[string]int {
 		m := make(map[string]int, len(Groups))
 		for i, g := range Groups {
 			m[g] = i
@@ -161,6 +165,7 @@ func Register(r Resource) {
 		panic(fmt.Sprintf("authz: resource %q registered twice", r.Key))
 	}
 	registry[r.Key] = r
+	stampedCache = nil
 }
 
 // Replace upserts a plugin resource. It returns an error instead of
@@ -324,18 +329,27 @@ func ResourceScope(key string) ScopeKind {
 }
 
 // StampedResources returns the keys of every resource whose objects belong
-// to a Workspace, sorted.
+// to a Workspace, sorted. Only built-in resources can be stamped, so the
+// list is computed once and recomputed only after a Register.
 func StampedResources() []string {
-	var out []string
 	mu.RLock()
-	for k, r := range registry {
-		if r.Scope.Stamped() {
-			out = append(out, k)
-		}
-	}
+	cached := stampedCache
 	mu.RUnlock()
-	sort.Strings(out)
-	return out
+	if cached == nil {
+		mu.Lock()
+		if stampedCache == nil {
+			stampedCache = []string{}
+			for k, r := range registry {
+				if r.Scope.Stamped() {
+					stampedCache = append(stampedCache, k)
+				}
+			}
+			sort.Strings(stampedCache)
+		}
+		cached = stampedCache
+		mu.Unlock()
+	}
+	return append([]string(nil), cached...)
 }
 
 // All returns every concrete permission in the catalogue, sorted.

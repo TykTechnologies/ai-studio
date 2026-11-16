@@ -121,7 +121,11 @@ func legacyAdmin(c *gin.Context) bool {
 	return false
 }
 
-// Can reports whether the request's user holds p globally.
+// Can reports whether the request's user holds p globally. A
+// Workspace-scoped grant never satisfies it. For a permission on a stamped
+// resource (ScopeOf(p).Stamped()) use CanIn with the object's Workspace, or
+// CanAnywhere for a capability or read-global check; Can then answers only
+// for global holders and refuses a user whose grant is scoped.
 //
 // With no Context on the request the route was registered outside the
 // governed groups (or by a test that injects the user directly). The legacy
