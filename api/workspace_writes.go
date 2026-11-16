@@ -361,6 +361,7 @@ func (a *API) requireOnAppCredential(c *gin.Context, id string, perm authz.Permi
 		c.Abort()
 		return false
 	}
+	c.Set(credentialAppKey, credentialApp{workspaceID: ws, found: appFound})
 	if !credFound {
 		// Missing answers exactly as hidden does.
 		notFound(c)
@@ -423,4 +424,25 @@ func (a *API) credentialListScopes(c *gin.Context) ([]func(*gorm.DB) *gorm.DB, b
 		single := fresh.Model(&models.App{}).Select("credential_id").Group("credential_id").Having("COUNT(*) = 1")
 		return db.Where("credentials.id IN (?)", visible).Where("credentials.id IN (?)", single)
 	}}, true
+}
+
+// credentialAppKey holds, for the rest of the request, what
+// requireOnAppCredential found about the credential's App (credentialApp),
+// so handlers need not look it up again.
+const credentialAppKey = "workspace.credential_app"
+
+type credentialApp struct {
+	workspaceID uint
+	found       bool
+}
+
+// credentialAppFromContext returns what requireOnAppCredential found, when
+// it ran for this request.
+func credentialAppFromContext(c *gin.Context) (credentialApp, bool) {
+	v, ok := c.Get(credentialAppKey)
+	if !ok {
+		return credentialApp{}, false
+	}
+	ca, ok := v.(credentialApp)
+	return ca, ok
 }

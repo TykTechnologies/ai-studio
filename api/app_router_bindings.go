@@ -130,30 +130,22 @@ func (a *API) adminAppRouterOptions(c *gin.Context, appID uint, modelIDs, semant
 		ids, ok := a.mergeVisibleLinks(c, resource, model, *submitted, existing, notFound)
 		return &ids, ok
 	}
-	// Visibility first: a hidden router answers as a missing one before the
-	// grant rule could say anything about it.
-	if modelIDs != nil && a.workspaceChecksOn(c) {
-		if _, ok := a.mergeVisibleLinks(c, "model-routers", &models.ModelRouter{}, *modelIDs, nil, "Model router not found"); !ok {
-			return nil, false
-		}
+	// Visibility first (the merge rejects a hidden or missing router with a
+	// 404) before the grant rule could say anything about it; the grant
+	// rule then sees only what the request named.
+	mergedModel, ok := merge("model-routers", &models.ModelRouter{}, "app_model_routers", "model_router_id", modelIDs, "Model router not found")
+	if !ok {
+		return nil, false
 	}
-	if semanticIDs != nil && a.workspaceChecksOn(c) {
-		if _, ok := a.mergeVisibleLinks(c, "semantic-routers", &models.SemanticRouter{}, *semanticIDs, nil, "Semantic router not found"); !ok {
-			return nil, false
-		}
+	mergedSemantic, ok := merge("semantic-routers", &models.SemanticRouter{}, "app_semantic_routers", "semantic_router_id", semanticIDs, "Semantic router not found")
+	if !ok {
+		return nil, false
 	}
 	actorID, actorAdmin := adminAppActor(c) // global, never the App's Workspace
 	if !a.validateAppRouterBindings(c, actorID, actorAdmin, modelIDs, semanticIDs) {
 		return nil, false
 	}
-	modelIDs, ok := merge("model-routers", &models.ModelRouter{}, "app_model_routers", "model_router_id", modelIDs, "Model router not found")
-	if !ok {
-		return nil, false
-	}
-	semanticIDs, ok = merge("semantic-routers", &models.SemanticRouter{}, "app_semantic_routers", "semantic_router_id", semanticIDs, "Semantic router not found")
-	if !ok {
-		return nil, false
-	}
+	modelIDs, semanticIDs = mergedModel, mergedSemantic
 	return appRouterOptions(modelIDs, semanticIDs), true
 }
 

@@ -111,11 +111,25 @@ func (a *API) mintMCPCredential(c *gin.Context) {
 	}
 	// Minting is an action on the App's credentials: execute in the App's
 	// Workspace; an App the caller cannot see answers as a missing one.
-	if !a.requireOnObject(c, &models.App{}, in.AppID, authz.Execute("mcp-credentials"), appNotFound) {
-		return
-	}
-	if !a.scopeMCPCredentialActor(c, &actor, func() (uint, bool, error) { return a.storedWorkspaceID(&models.App{}, in.AppID) }) {
-		return
+	if a.workspaceCheckMode(c) != workspaceOpen {
+		// One read of the App's Workspace for both checks.
+		ws, found, err := a.storedWorkspaceID(&models.App{}, in.AppID)
+		if err != nil {
+			simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+			c.Abort()
+			return
+		}
+		if !found {
+			appNotFound(c)
+			c.Abort()
+			return
+		}
+		if !a.requireOnWorkspace(c, ws, authz.Execute("mcp-credentials"), appNotFound) {
+			return
+		}
+		if !a.scopeMCPCredentialActor(c, &actor, func() (uint, bool, error) { return ws, true, nil }) {
+			return
+		}
 	}
 	minted, err := a.tykMCPService().MintCredential(c.Request.Context(), actor, in)
 	if err != nil {
@@ -145,10 +159,7 @@ func (a *API) credentialAction(c *gin.Context, fallback string, fn func(actor ty
 		webhookBadRequest(c, "reason is too long")
 		return
 	}
-	if !a.scopeMCPCredentialActor(c, &actor, func() (uint, bool, error) {
-		ws, _, appFound, err := a.appWorkspaceOfMCPCredential(c.Param("id"))
-		return ws, appFound, err
-	}) {
+	if !a.scopeMCPCredentialActor(c, &actor, func() (uint, bool, error) { return a.mcpCredentialAppWorkspace(c) }) {
 		return
 	}
 	view, err := fn(actor, c.Param("id"), reason)
@@ -171,10 +182,7 @@ func (a *API) rotateMCPCredential(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if !a.scopeMCPCredentialActor(c, &actor, func() (uint, bool, error) {
-		ws, _, appFound, err := a.appWorkspaceOfMCPCredential(c.Param("id"))
-		return ws, appFound, err
-	}) {
+	if !a.scopeMCPCredentialActor(c, &actor, func() (uint, bool, error) { return a.mcpCredentialAppWorkspace(c) }) {
 		return
 	}
 	minted, err := a.tykMCPService().RotateCredential(c.Request.Context(), actor, c.Param("id"))
@@ -409,4 +417,15 @@ func (a *API) scopeMCPCredentialActor(c *gin.Context, actor *tykmcp.Actor, appWo
 		actor.CanExecute = a.holdsIn(c, ws, authz.Execute("mcp-credentials"))
 	}
 	return true
+}
+
+// mcpCredentialAppWorkspace is the Workspace of the MCP credential's App,
+// as onAppCredential already read it for this request (a lookup only when
+// it did not run).
+func (a *API) mcpCredentialAppWorkspace(c *gin.Context) (uint, bool, error) {
+	if ca, ok := credentialAppFromContext(c); ok {
+		return ca.workspaceID, ca.found, nil
+	}
+	ws, _, appFound, err := a.appWorkspaceOfMCPCredential(c.Param("id"))
+	return ws, appFound, err
 }
