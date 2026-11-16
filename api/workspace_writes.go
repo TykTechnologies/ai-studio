@@ -170,8 +170,10 @@ func (a *API) storedWorkspaceID(model interface{}, id uint) (ws uint, found bool
 // resource (workspace_full, workspace_parent: perm's resource) an object
 // the caller may not see answers 404 first, as requireVisible does, so a
 // 403 never confirms it exists. A missing object passes, so the handler
-// answers its own 404.
-func (a *API) requireOnObject(c *gin.Context, model interface{}, id uint, perm authz.Permission) bool {
+// answers its own 404. notFound, when given, is the handler's not-found
+// writer: a hidden object and a missing one then both get it, byte for byte
+// (no existence oracle).
+func (a *API) requireOnObject(c *gin.Context, model interface{}, id uint, perm authz.Permission, notFound ...func(*gin.Context)) bool {
 	if a.workspaceCheckMode(c) == workspaceOpen {
 		return true
 	}
@@ -182,12 +184,42 @@ func (a *API) requireOnObject(c *gin.Context, model interface{}, id uint, perm a
 		return false
 	}
 	if !found {
+		if len(notFound) > 0 {
+			// Missing answers exactly as hidden does.
+			notFound[0](c)
+			c.Abort()
+			return false
+		}
 		return true
 	}
-	if resource := perm.Resource(); authz.ResourceScope(resource).ReadScoped() && !a.requireVisible(c, resource, ws, nil) {
+	return a.requireOnWorkspace(c, ws, perm, notFound...)
+}
+
+// requireOnWorkspace is requireOnObject once the object's stored Workspace
+// (ws) is known: 404 (notFound) first for a read-scoped resource the caller
+// may not see there, then perm in ws.
+func (a *API) requireOnWorkspace(c *gin.Context, ws uint, perm authz.Permission, notFound ...func(*gin.Context)) bool {
+	var nf func(*gin.Context)
+	if len(notFound) > 0 {
+		nf = notFound[0]
+	}
+	if resource := perm.Resource(); authz.ResourceScope(resource).ReadScoped() && !a.requireVisible(c, resource, ws, nf) {
 		return false
 	}
 	return a.requireInWorkspace(c, perm, ws)
+}
+
+// notFoundBody is a not-found writer with the handler's own body, for
+// onObject and requireOnObject.
+func notFoundBody(detail string) func(*gin.Context) {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: detail}},
+		})
+	}
 }
 
 // responseWorkspaceID is the workspace_id an object response carries: the
@@ -208,10 +240,10 @@ func (a *API) responseWorkspaceID(stored uint) uint {
 // permission_denied; 404 first for a read-scoped object the caller may not
 // see, requireOnObject). A malformed or unknown id passes, for the handler to
 // answer as it always has.
-func (a *API) onObject(model interface{}, perm authz.Permission) gin.HandlerFunc {
+func (a *API) onObject(model interface{}, perm authz.Permission, notFound ...func(*gin.Context)) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := strconv.ParseUint(c.Param("id"), 10, 32)
-		if err == nil && !a.requireOnObject(c, model, uint(id), perm) {
+		if err == nil && !a.requireOnObject(c, model, uint(id), perm, notFound...) {
 			return
 		}
 		c.Next()
@@ -254,4 +286,163 @@ func (a *API) beginMove(c *gin.Context, model interface{}, id uint, from uint, t
 			logger.Errorf("Workspace move of %T %d could not be undone after a failed update: %v", model, id, err)
 		}
 	}, true
+}
+
+// App credentials (credentials, mcp-credentials) have no Workspace of their
+// own: they belong to their App's (ScopeWorkspaceParent, decision of .9).
+// An action on one is checked in the App's Workspace, and a credential whose
+// App the caller cannot see answers the handler's own 404. A credential
+// with no live App (created standalone, or its App deleted) is reachable
+// only with the permission held globally; to anyone else it is not found.
+
+// errMalformedID: the path id is not one; the handler answers it.
+var errMalformedID = errors.New("malformed id")
+
+// appWorkspaceOfCredential reads the Workspace of the live App holding the
+// API credential id (apps.credential_id). credFound is false when there is
+// no such credential; appFound when no live App holds it.
+func (a *API) appWorkspaceOfCredential(rawID string) (ws uint, credFound, appFound bool, err error) {
+	id, perr := strconv.ParseUint(rawID, 10, 32)
+	if perr != nil {
+		return 0, false, false, errMalformedID
+	}
+	// One query: the credential, and the workspace_id of each live App
+	// holding it (NULL when none).
+	var rows []struct{ WorkspaceID *uint }
+	if err := a.service.DB.Model(&models.Credential{}).
+		Select("apps.workspace_id").
+		Joins("LEFT JOIN apps ON apps.credential_id = credentials.id AND apps.deleted_at IS NULL").
+		Where("credentials.id = ?", id).Limit(2).Scan(&rows).Error; err != nil {
+		return 0, false, false, err
+	}
+	switch {
+	case len(rows) == 0:
+		return 0, false, false, nil
+	case len(rows) == 1 && rows[0].WorkspaceID != nil:
+		return *rows[0].WorkspaceID, true, true, nil
+	}
+	// No App, or (only through hand-written SQL) more than one: no single
+	// owning Workspace, so it is treated as standalone (global holders
+	// only), failing closed rather than picking one.
+	return 0, true, false, nil
+}
+
+// appWorkspaceOfMCPCredential is appWorkspaceOfCredential for an MCP
+// credential (mcp_credentials.app_id).
+func (a *API) appWorkspaceOfMCPCredential(id string) (ws uint, credFound, appFound bool, err error) {
+	// One query: the credential, and its live App's workspace_id (NULL when
+	// the App is gone).
+	var rows []struct{ WorkspaceID *uint }
+	if err := a.service.DB.Model(&models.MCPCredential{}).
+		Select("apps.workspace_id").
+		Joins("LEFT JOIN apps ON apps.id = mcp_credentials.app_id AND apps.deleted_at IS NULL").
+		Where("mcp_credentials.id = ?", id).Limit(1).Scan(&rows).Error; err != nil || len(rows) == 0 {
+		return 0, false, false, err
+	}
+	if rows[0].WorkspaceID == nil {
+		return 0, true, false, nil
+	}
+	return *rows[0].WorkspaceID, true, true, nil
+}
+
+// requireOnAppCredential decides an action (perm) on a credential from what
+// lookup found (appWorkspaceOfCredential or appWorkspaceOfMCPCredential).
+// A missing credential gets notFound, as a hidden one does.
+func (a *API) requireOnAppCredential(c *gin.Context, id string, perm authz.Permission, lookup func(string) (uint, bool, bool, error), notFound func(*gin.Context)) bool {
+	if a.workspaceCheckMode(c) == workspaceOpen {
+		return true
+	}
+	ws, credFound, appFound, err := lookup(id)
+	if errors.Is(err, errMalformedID) {
+		return true // the handler answers its 400
+	}
+	if err != nil {
+		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		c.Abort()
+		return false
+	}
+	c.Set(credentialAppKey, credentialApp{workspaceID: ws, found: appFound})
+	if !credFound {
+		// Missing answers exactly as hidden does.
+		notFound(c)
+		c.Abort()
+		return false
+	}
+	if !appFound {
+		if authz.Can(c, perm) {
+			return true
+		}
+		notFound(c)
+		c.Abort()
+		return false
+	}
+	return a.requireOnWorkspace(c, ws, perm, notFound)
+}
+
+// onAppCredential is route middleware for an action on the credential named
+// by the :id path parameter (requireOnAppCredential).
+func (a *API) onAppCredential(perm authz.Permission, lookup func(string) (uint, bool, bool, error), notFound func(*gin.Context)) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !a.requireOnAppCredential(c, c.Param("id"), perm, lookup, notFound) {
+			return
+		}
+		c.Next()
+	}
+}
+
+// parentAppScopes are the conditions on the apps table that limit a list
+// of an App-parented resource (credentials, mcp-credentials) to the Apps
+// the caller may see there (workspaceListScope on apps.workspace_id), plus
+// the optional ?workspace_id= filter on the App's Workspace. nil when
+// nothing is limited: a global reader, TestMode and legacy callers see
+// every row, standalone ones included, unless they filter by Workspace.
+func (a *API) parentAppScopes(c *gin.Context, resource string) ([]func(*gorm.DB) *gorm.DB, bool) {
+	filter, ok := a.workspaceFilterParam(c, "apps.workspace_id")
+	if !ok {
+		return nil, false
+	}
+	_, filtered := c.GetQuery("workspace_id")
+	if !filtered && (a.workspaceCheckMode(c) != workspaceCheck || authz.Can(c, authz.Read(resource))) {
+		return nil, true
+	}
+	return []func(*gorm.DB) *gorm.DB{a.workspaceListScope(c, resource, "apps.workspace_id"), filter}, true
+}
+
+// credentialListScopes narrow a list of API credentials to those of a live
+// App the caller may see (parentAppScopes).
+func (a *API) credentialListScopes(c *gin.Context) ([]func(*gorm.DB) *gorm.DB, bool) {
+	appScopes, ok := a.parentAppScopes(c, "credentials")
+	if !ok || appScopes == nil {
+		return nil, ok
+	}
+	return []func(*gorm.DB) *gorm.DB{func(db *gorm.DB) *gorm.DB {
+		// Two uncorrelated subqueries on the indexed apps.credential_id: the
+		// credentials of visible Apps, and those exactly one live App holds
+		// (see appWorkspaceOfCredential).
+		fresh := db.Session(&gorm.Session{NewDB: true})
+		visible := fresh.Model(&models.App{}).Select("apps.credential_id").Scopes(appScopes...)
+		single := fresh.Model(&models.App{}).Select("credential_id").Group("credential_id").Having("COUNT(*) = 1")
+		return db.Where("credentials.id IN (?)", visible).Where("credentials.id IN (?)", single)
+	}}, true
+}
+
+// credentialAppKey holds, for the rest of the request, what
+// requireOnAppCredential found about the credential's App (credentialApp),
+// so handlers need not look it up again.
+const credentialAppKey = "workspace.credential_app"
+
+type credentialApp struct {
+	workspaceID uint
+	found       bool
+}
+
+// credentialAppFromContext returns what requireOnAppCredential found, when
+// it ran for this request.
+func credentialAppFromContext(c *gin.Context) (credentialApp, bool) {
+	v, ok := c.Get(credentialAppKey)
+	if !ok {
+		return credentialApp{}, false
+	}
+	ca, ok := v.(credentialApp)
+	return ca, ok
 }

@@ -199,6 +199,10 @@ type CredentialFilter struct {
 	Drift        string
 	Page         int
 	PageSize     int
+	// AppScopes are conditions on the apps table from the API layer
+	// (Enterprise Workspaces): only credentials of the Apps they select are
+	// listed. Empty: no limit.
+	AppScopes []func(*gorm.DB) *gorm.DB
 }
 
 // CredentialList is one page of credentials.
@@ -237,6 +241,9 @@ type ReportFilter struct {
 	UserID         uint
 	AppID          uint
 	IncludeRevoked bool
+	// AppScopes limit the report to the Apps they select (as in
+	// CredentialFilter).
+	AppScopes []func(*gorm.DB) *gorm.DB
 }
 
 // Status describes the running feature so the UI can explain itself.

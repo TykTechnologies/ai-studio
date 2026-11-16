@@ -493,6 +493,12 @@ func (a *API) createUserApp(c *gin.Context) {
 		return
 	}
 	routerOpts := append(appRouterOptions(modelRouterIDs, semanticRouterIDs), services.WithSelfService())
+	// Portal Apps land in the Default workspace (Workspaces B4c); the
+	// portal itself shows no Workspaces. Without a Default row the App keeps
+	// 0, which reads as the Default.
+	if def, err := a.service.DefaultWorkspaceID(); err == nil {
+		routerOpts = append(routerOpts, services.WithAppWorkspace(def))
+	}
 
 	// Create the app (with plugin resources if any)
 	var app *models.App
@@ -542,6 +548,7 @@ func (a *API) createUserApp(c *gin.Context) {
 	// Prepare the response (use shared serializer)
 	_ = currentAppTools // verified above for logging
 	response := serializeApp(app)
+	response.Attributes.WorkspaceID = 0 // the portal shows no Workspaces
 
 	c.JSON(http.StatusCreated, response)
 }
@@ -698,6 +705,7 @@ func (a *API) getUserApps(c *gin.Context) {
 	response := make([]AppResponse, len(apps))
 	for i, app := range apps {
 		response[i] = serializeApp(&app)
+		response[i].Attributes.WorkspaceID = 0 // the portal shows no Workspaces
 	}
 
 	c.JSON(http.StatusOK, AppListResponse{

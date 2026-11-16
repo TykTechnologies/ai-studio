@@ -30042,6 +30042,10 @@ const docTemplate = `{
                         },
                         "user_id": {
                             "type": "integer"
+                        },
+                        "workspace_id": {
+                            "description": "WorkspaceID is the Workspace that owns the App (Enterprise\nWorkspaces); a stored 0 reads as the Default.",
+                            "type": "integer"
                         }
                     }
                 },
