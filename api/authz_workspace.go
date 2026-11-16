@@ -305,8 +305,10 @@ func (a *API) resolveCreateWorkspace(c *gin.Context, resource string, requested 
 // (stored workspace_id) to (requested): the caller's write must cover both,
 // and the destination must exist (422 invalid_workspace otherwise, the same
 // body whether it is missing or not covered). An unchanged Workspace passes.
-// The move itself writes workspace_id explicitly (UpdateColumn or Select):
-// ordinary updates never write it (.42).
+// The move itself writes workspace_id and updated_at together, e.g.
+// Select("workspace_id", "updated_at", ...) or UpdateColumns setting both:
+// ordinary updates never write workspace_id (.42), and a move must bump
+// updated_at so it shows as a pending change (moves stain).
 func (a *API) requireMove(c *gin.Context, resource string, from, to uint) bool {
 	perm := authz.Write(resource)
 	mode := a.workspaceCheckMode(c)
