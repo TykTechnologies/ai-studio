@@ -85,11 +85,17 @@ func (g Grants) WorkspacesWith(p Permission) (all bool, ids []uint) {
 	if !ScopeOf(p).InWorkspace() {
 		return false, nil
 	}
+	ids = make([]uint, 0, len(g.Workspaces))
 	for id, s := range g.Workspaces {
 		if id != 0 && s.Has(p) {
 			ids = append(ids, id)
 		}
 	}
+	if len(ids) == 0 {
+		return false, nil
+	}
+	// Sorted so list queries and responses are deterministic; a user holds
+	// bindings in a handful of Workspaces, so this costs nothing.
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 	return false, ids
 }
