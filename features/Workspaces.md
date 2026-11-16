@@ -179,9 +179,15 @@ Studio follows the Portal's Phase 3 RBAC model (Role = what, Workspace = where, 
 
 An internal comparison with interop notes is kept by the security role for the Operator and future shared-model work.
 
-## 10. Deferred
+## 10. Deferred and accepted risks
 
-In intended order: Workspace Owners (a scoped `workspaces:write`); escalation and protection rules (no self-escalation, a role in use cannot be deleted); SSO membership provenance; the vocabulary pass (Team → User Group); a `use` action and ID-and-name link pickers (read scoping for building blocks); Workspace scoping of analytics, logs, traces and chat history. Accepted residual risk until then: an App can link another Workspace's read-global building blocks and use the credentials they hold at runtime.
+**Accepted residual risks** (security review, 2026-11-16):
+
+- **File store content is read-global (D4).** A caller with `filestores:read` in any Workspace can read the content of every file store. Do not put secrets or confidential data in file stores; the user docs say so.
+- **Tyk connections are global.** A caller who may execute MCP-server actions in one Workspace (register, push, link, discover) can use any Tyk connection, and the Dashboard credentials it holds. Tying connections to Workspaces is a later design item.
+- **Linked building blocks.** An App can link another Workspace's read-global building blocks and use the credentials they hold at runtime (until the `use` action below).
+
+**Deferred**, in intended order: Workspace Owners (a scoped `workspaces:write`); escalation and protection rules (no self-escalation, a role in use cannot be deleted); SSO membership provenance; the vocabulary pass (Team → User Group); a `use` action and ID-and-name link pickers (read scoping for building blocks); Workspace scoping of analytics, logs, traces and chat history; Tyk connections owned by Workspaces (so MCP actions in one Workspace use only its connections).
 
 ## 11. Tests
 
