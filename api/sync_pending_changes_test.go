@@ -121,10 +121,15 @@ func TestSyncPendingChanges_WorkspaceStain(t *testing.T) {
 	assert.JSONEq(t, "true", string(other["stained"]))
 	assert.JSONEq(t, "1", string(other["outside_total"]))
 
+	var first []byte
 	for _, q := range []string{"&workspace_id=999999", "&workspace_id=abc", "&workspace_id=0"} {
 		r := get(q)
 		assert.Equal(t, http.StatusUnprocessableEntity, r.code, q)
 		assert.Equal(t, "invalid_workspace", decodeErrorCode(t, r.body), q)
+		if first == nil {
+			first = r.body
+		}
+		assert.JSONEq(t, string(first), string(r.body), "one body for malformed and unknown ids (%s)", q)
 	}
 }
 

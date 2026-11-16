@@ -1,11 +1,9 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 
-	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 )
@@ -72,9 +70,11 @@ func (h *SyncStatusHandlers) GetPendingChanges(c *gin.Context) {
 
 	var workspaceID *uint
 	if raw := c.Query("workspace_id"); raw != "" {
+		// One invalid_workspace body for a malformed and an unknown id, so
+		// Workspace ids cannot be probed.
 		id, err := strconv.ParseUint(raw, 10, 32)
 		if err != nil || id == 0 {
-			c.JSON(http.StatusUnprocessableEntity, authz.Body("Invalid Workspace", "workspace_id must be a Workspace id", authz.CodeInvalidWorkspace))
+			invalidWorkspace(c)
 			return
 		}
 		exists, err := h.syncStatusService.WorkspaceExists(uint(id))
@@ -83,7 +83,7 @@ func (h *SyncStatusHandlers) GetPendingChanges(c *gin.Context) {
 			return
 		}
 		if !exists {
-			c.JSON(http.StatusUnprocessableEntity, authz.Body("Invalid Workspace", fmt.Sprintf("Workspace %d does not exist", id), authz.CodeInvalidWorkspace))
+			invalidWorkspace(c)
 			return
 		}
 		wid := uint(id)

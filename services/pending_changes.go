@@ -91,17 +91,19 @@ const (
 // namespace).
 //
 // stamped says whether the type's owning Workspace is reported
-// (workspace_id, 0 read as the Default workspace). staining marks the
-// unstamped types whose changes are foreign to any Workspace-limited push
-// (global configuration with no enforced owner); oauth_client and
-// access_token are neither: runtime artifacts that never stain.
+// (workspace_id, 0 read as the Default workspace); a change on a stamped
+// type is foreign to a push limited to another Workspace. Every other type
+// is foreign to every Workspace-limited push (fail closed: a source added
+// later stains until someone decides otherwise), except those marked
+// neverStains: oauth_client and access_token, runtime artifacts of OAuth
+// flows with no owner.
 type pendingChangeSource struct {
-	typ        string
-	model      interface{}
-	nameExpr   string
-	namespaced bool
-	stamped    bool
-	staining   bool
+	typ         string
+	model       interface{}
+	nameExpr    string
+	namespaced  bool
+	stamped     bool
+	neverStains bool
 }
 
 // pendingChangeSources mirrors what grpc.ControlServer.getConfigurationSnapshot
@@ -114,15 +116,27 @@ var pendingChangeSources = []pendingChangeSource{
 	{typ: "datasource", model: &models.Datasource{}, nameExpr: "name", namespaced: true, stamped: true},
 	// Plugins carry the stamp, but the resource is global (.36): a plugin
 	// change stains every Workspace-limited push.
-	{typ: "plugin", model: &models.Plugin{}, nameExpr: "name", namespaced: true, staining: true},
+	{typ: "plugin", model: &models.Plugin{}, nameExpr: "name", namespaced: true},
 	{typ: "model_router", model: &models.ModelRouter{}, nameExpr: "name", namespaced: true, stamped: true},
 	{typ: "semantic_router", model: &models.SemanticRouter{}, nameExpr: "name", namespaced: true, stamped: true},
 	// Embedders travel flattened inside the datasources and routers that use
 	// them; an edit changes those without touching their rows.
 	{typ: "embedder", model: &models.Embedder{}, nameExpr: "name", namespaced: false, stamped: true},
-	{typ: "model_price", model: &models.ModelPrice{}, nameExpr: "vendor || '/' || model_name", namespaced: false, staining: true},
-	{typ: "oauth_client", model: &models.OAuthClient{}, nameExpr: "client_name", namespaced: false},
-	{typ: "access_token", model: &models.AccessToken{}, nameExpr: "client_id", namespaced: false},
+	{typ: "model_price", model: &models.ModelPrice{}, nameExpr: "vendor || '/' || model_name", namespaced: false},
+	{typ: "oauth_client", model: &models.OAuthClient{}, nameExpr: "client_name", namespaced: false, neverStains: true},
+	{typ: "access_token", model: &models.AccessToken{}, nameExpr: "client_id", namespaced: false, neverStains: true},
+}
+
+// PendingStampedTypes lists the pending-change types that report an owning
+// Workspace.
+func PendingStampedTypes() []string {
+	var out []string
+	for _, src := range pendingChangeSources {
+		if src.stamped {
+			out = append(out, src.typ)
+		}
+	}
+	return out
 }
 
 // pendingSourceByType finds a source by its type name.
@@ -137,17 +151,20 @@ func pendingSourceByType(typ string) (pendingChangeSource, bool) {
 
 // PendingChangeIsForeign reports whether a pending change is foreign to a
 // push limited to workspaceID: a change on a stamped type owned by another
-// Workspace, or on plugin or model_price (global configuration). OAuth
-// clients and access tokens never are.
+// Workspace, or on any unstamped type (plugin, model_price: global
+// configuration). OAuth clients and access tokens never are. An unknown
+// type is foreign (fail closed).
 func PendingChangeIsForeign(typ string, changeWorkspaceID *uint, workspaceID uint) bool {
 	src, ok := pendingSourceByType(typ)
-	if !ok {
+	switch {
+	case !ok:
+		return true
+	case src.neverStains:
 		return false
-	}
-	if src.staining {
+	case !src.stamped:
 		return true
 	}
-	return src.stamped && changeWorkspaceID != nil && *changeWorkspaceID != workspaceID
+	return changeWorkspaceID == nil || *changeWorkspaceID != workspaceID
 }
 
 // pendingChangeRow is one row of the UNION ALL over the source tables.

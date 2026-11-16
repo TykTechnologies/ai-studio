@@ -7,7 +7,10 @@ import (
 )
 
 // pendingTypeResource maps a stamped pending-change type to its catalogue
-// resource.
+// resource. Which of them are hidden is not decided here: it is the
+// resource's scope kind in the authz catalogue (ReadScoped, the table the
+// route gate uses). TestPendingTypeResourceCoversEveryStampedType keeps the
+// map complete.
 var pendingTypeResource = map[string]string{
 	"llm":             "llms",
 	"app":             "apps",

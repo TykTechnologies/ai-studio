@@ -203,4 +203,5 @@ func TestPendingChangeIsForeign(t *testing.T) {
 	assert.True(t, services.PendingChangeIsForeign("model_price", nil, w1))
 	assert.False(t, services.PendingChangeIsForeign("oauth_client", nil, w1))
 	assert.False(t, services.PendingChangeIsForeign("access_token", nil, w1))
+	assert.True(t, services.PendingChangeIsForeign("a_source_added_later", nil, w1), "fail closed")
 }
