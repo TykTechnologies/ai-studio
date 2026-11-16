@@ -64,7 +64,7 @@ type OperationDetail struct {
 // @Router /tool-catalogues [post]
 func (a *API) createToolCatalogue(c *gin.Context) {
 	var input ToolCatalogueInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
 			Detail string `json:"detail"`
@@ -80,12 +80,21 @@ func (a *API) createToolCatalogue(c *gin.Context) {
 		return
 	}
 
+	workspaceID, ok := a.resolveCreateFromBody(c, "tool-catalogues")
+	if !ok {
+		return
+	}
 	toolCatalogue, err := a.service.CreateToolCatalogue(
 		input.Data.Attributes.Name,
 		input.Data.Attributes.ShortDescription,
 		input.Data.Attributes.LongDescription,
 		input.Data.Attributes.Icon,
+		workspaceID,
 	)
+	if isWorkspaceNotFound(err) {
+		invalidWorkspace(c)
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
@@ -137,7 +146,7 @@ func (a *API) getToolCatalogue(c *gin.Context) {
 	// are edited from their own page, so they are listed beside the
 	// catalogue rather than among its attributes, and only for a caller who
 	// may read MCP servers.
-	if authz.Can(c, authz.Read("mcp-servers")) {
+	if authz.CanAnywhere(c, authz.Read("mcp-servers")) { // read-global (D4)
 		servers, truncated, err := a.toolCatalogueMCPServers(uint(id))
 		if err != nil {
 			// The list is supplementary: the catalogue itself loaded, so the
@@ -234,6 +243,10 @@ func (a *API) updateToolCatalogue(c *gin.Context) {
 		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
 		return
 	}
+	moveTo, ok := a.catalogueMoveTarget(c, "tool-catalogues", stored.WorkspaceID)
+	if !ok {
+		return
+	}
 
 	toolCatalogue, err := a.service.UpdateToolCatalogue(
 		uint(id),
@@ -255,6 +268,13 @@ func (a *API) updateToolCatalogue(c *gin.Context) {
 			Detail string `json:"detail"`
 		}{{"Internal Server Error", err.Error()}}})
 		return
+	}
+
+	if moveTo != nil {
+		if !a.moveObject(c, &models.ToolCatalogue{}, uint(id), *moveTo) {
+			return
+		}
+		toolCatalogue.WorkspaceID = *moveTo
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": toToolCatalogueResponse(toolCatalogue)})
@@ -330,6 +350,11 @@ func (a *API) listToolCatalogues(c *gin.Context) {
 		return
 	}
 
+	scopes, ok := a.qualifiedListScopes(c, "tool-catalogues", "tool_catalogues")
+	if !ok {
+		return
+	}
+	opts.Filters = append(opts.Filters, scopes...)
 	toolCatalogues, totalCount, totalPages, err := a.service.GetAllToolCatalogues(pageSize, pageNumber, all, opts)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
@@ -363,7 +388,11 @@ func (a *API) searchToolCatalogues(c *gin.Context) {
 		return
 	}
 
-	toolCatalogues, err := a.service.SearchToolCatalogues(query)
+	scopes, ok := a.qualifiedListScopes(c, "tool-catalogues", "tool_catalogues")
+	if !ok {
+		return
+	}
+	toolCatalogues, err := a.service.SearchToolCatalogues(query, scopes...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {
 			Title  string `json:"title"`
@@ -387,6 +416,7 @@ func toToolCatalogueResponse(tc *models.ToolCatalogue) ToolCatalogueResponse {
 			Icon             string         `json:"icon"`
 			Tools            []ToolResponse `json:"tools"`
 			Tags             []TagResponse  `json:"tags"`
+			WorkspaceID uint `json:"workspace_id,omitempty"`
 		}{
 			Name:             tc.Name,
 			ShortDescription: tc.ShortDescription,
@@ -394,6 +424,7 @@ func toToolCatalogueResponse(tc *models.ToolCatalogue) ToolCatalogueResponse {
 			Icon:             tc.Icon,
 			Tools:            toToolResponses(tc.Tools),
 			Tags:             toTagResponses(tc.Tags),
+			WorkspaceID:      tc.WorkspaceID,
 		},
 	}
 }
@@ -528,6 +559,9 @@ func (a *API) addToolToToolCatalogue(c *gin.Context) {
 		return
 	}
 
+	if !a.requireMemberRead(c, "tools") {
+		return
+	}
 	err = a.service.AddToolToToolCatalogue(uint(toolID), uint(id))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Errors: []struct {

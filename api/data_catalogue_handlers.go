@@ -26,7 +26,7 @@ import (
 // @Security BearerAuth
 func (a *API) createDataCatalogue(c *gin.Context) {
 	var input DataCatalogueInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -36,12 +36,21 @@ func (a *API) createDataCatalogue(c *gin.Context) {
 		return
 	}
 
+	workspaceID, ok := a.resolveCreateFromBody(c, "data-catalogues")
+	if !ok {
+		return
+	}
 	dataCatalogue, err := a.service.CreateDataCatalogue(
 		input.Data.Attributes.Name,
 		input.Data.Attributes.ShortDescription,
 		input.Data.Attributes.LongDescription,
 		input.Data.Attributes.Icon,
+		workspaceID,
 	)
+	if isWorkspaceNotFound(err) {
+		invalidWorkspace(c)
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -137,6 +146,10 @@ func (a *API) updateDataCatalogue(c *gin.Context) {
 		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
 		return
 	}
+	moveTo, ok := a.catalogueMoveTarget(c, "data-catalogues", stored.WorkspaceID)
+	if !ok {
+		return
+	}
 
 	dataCatalogue, err := a.service.UpdateDataCatalogue(
 		uint(id),
@@ -153,6 +166,13 @@ func (a *API) updateDataCatalogue(c *gin.Context) {
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
 		})
 		return
+	}
+
+	if moveTo != nil {
+		if !a.moveObject(c, &models.DataCatalogue{}, uint(id), *moveTo) {
+			return
+		}
+		dataCatalogue.WorkspaceID = *moveTo
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": serializeDataCatalogue(dataCatalogue)})
@@ -225,6 +245,11 @@ func (a *API) listDataCatalogues(c *gin.Context) {
 		return
 	}
 
+	scopes, ok := a.qualifiedListScopes(c, "data-catalogues", "data_catalogues")
+	if !ok {
+		return
+	}
+	opts.Filters = append(opts.Filters, scopes...)
 	dataCatalogues, totalCount, totalPages, err := a.service.GetAllDataCatalogues(pageSize, pageNumber, all, opts)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -264,7 +289,11 @@ func (a *API) searchDataCatalogues(c *gin.Context) {
 		return
 	}
 
-	dataCatalogues, err := a.service.SearchDataCatalogues(query)
+	scopes, ok := a.qualifiedListScopes(c, "data-catalogues", "data_catalogues")
+	if !ok {
+		return
+	}
+	dataCatalogues, err := a.service.SearchDataCatalogues(query, scopes...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -433,6 +462,9 @@ func (a *API) addDatasourceToDataCatalogue(c *gin.Context) {
 		return
 	}
 
+	if !a.requireMemberRead(c, "datasources") {
+		return
+	}
 	err = a.service.AddDatasourceToDataCatalogue(uint(dataCatalogueID), uint(datasourceID))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -519,7 +551,11 @@ func (a *API) getDataCataloguesByTag(c *gin.Context) {
 		return
 	}
 
-	dataCatalogues, err := a.service.GetDataCataloguesByTag(tagName)
+	scopes, ok := a.qualifiedListScopes(c, "data-catalogues", "data_catalogues")
+	if !ok {
+		return
+	}
+	dataCatalogues, err := a.service.GetDataCataloguesByTag(tagName, scopes...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -556,7 +592,11 @@ func (a *API) getDataCataloguesByDatasource(c *gin.Context) {
 		return
 	}
 
-	dataCatalogues, err := a.service.GetDataCataloguesByDatasource(uint(datasourceID))
+	scopes, ok := a.qualifiedListScopes(c, "data-catalogues", "data_catalogues")
+	if !ok {
+		return
+	}
+	dataCatalogues, err := a.service.GetDataCataloguesByDatasource(uint(datasourceID), scopes...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -581,6 +621,7 @@ func serializeDataCatalogue(dataCatalogue *models.DataCatalogue) DataCatalogueRe
 			Icon             string               `json:"icon"`
 			Datasources      []DatasourceResponse `json:"datasources"`
 			Tags             []TagResponse        `json:"tags"`
+			WorkspaceID uint `json:"workspace_id,omitempty"`
 		}{
 			Name:             dataCatalogue.Name,
 			ShortDescription: dataCatalogue.ShortDescription,
@@ -588,6 +629,7 @@ func serializeDataCatalogue(dataCatalogue *models.DataCatalogue) DataCatalogueRe
 			Icon:             dataCatalogue.Icon,
 			Datasources:      serializeDatasources(dataCatalogue.Datasources),
 			Tags:             serializeTags(dataCatalogue.Tags),
+			WorkspaceID:      dataCatalogue.WorkspaceID,
 		},
 	}
 }

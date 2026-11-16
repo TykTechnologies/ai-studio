@@ -26,7 +26,7 @@ import (
 // @Security BearerAuth
 func (a *API) createCatalogue(c *gin.Context) {
 	var input CatalogueInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -36,7 +36,15 @@ func (a *API) createCatalogue(c *gin.Context) {
 		return
 	}
 
-	catalogue, err := a.service.CreateCatalogue(input.Data.Attributes.Name)
+	workspaceID, ok := a.resolveCreateFromBody(c, "catalogues")
+	if !ok {
+		return
+	}
+	catalogue, err := a.service.CreateCatalogue(input.Data.Attributes.Name, workspaceID)
+	if isWorkspaceNotFound(err) {
+		invalidWorkspace(c)
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -132,6 +140,10 @@ func (a *API) updateCatalogue(c *gin.Context) {
 		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
 		return
 	}
+	moveTo, ok := a.catalogueMoveTarget(c, "catalogues", stored.WorkspaceID)
+	if !ok {
+		return
+	}
 
 	catalogue, err := a.service.UpdateCatalogue(uint(id), input.Data.Attributes.Name)
 	if err != nil {
@@ -142,6 +154,13 @@ func (a *API) updateCatalogue(c *gin.Context) {
 			}{{Title: "Internal Server Error", Detail: err.Error()}},
 		})
 		return
+	}
+
+	if moveTo != nil {
+		if !a.moveObject(c, &models.Catalogue{}, uint(id), *moveTo) {
+			return
+		}
+		catalogue.WorkspaceID = *moveTo
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": serializeCatalogue(catalogue)})
@@ -214,6 +233,11 @@ func (a *API) listCatalogues(c *gin.Context) {
 		return
 	}
 
+	scopes, ok := a.qualifiedListScopes(c, "catalogues", "catalogues")
+	if !ok {
+		return
+	}
+	opts.Filters = append(opts.Filters, scopes...)
 	catalogues, totalCount, totalPages, err := a.service.GetAllCatalogues(pageSize, pageNumber, all, opts)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -255,7 +279,11 @@ func (a *API) searchCatalogues(c *gin.Context) {
 		return
 	}
 
-	catalogues, err := a.service.SearchCataloguesByNameStub(nameStub)
+	scopes, ok := a.qualifiedListScopes(c, "catalogues", "catalogues")
+	if !ok {
+		return
+	}
+	catalogues, err := a.service.SearchCataloguesByNameStub(nameStub, scopes...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -315,6 +343,9 @@ func (a *API) addLLMToCatalogue(c *gin.Context) {
 		return
 	}
 
+	if !a.requireMemberRead(c, "llms") {
+		return
+	}
 	err = a.service.AddLLMToCatalogue(uint(llmID), uint(catalogueID))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -422,9 +453,11 @@ func serializeCatalogue(catalogue *models.Catalogue) CatalogueResponse {
 		Attributes: struct {
 			Name     string   `json:"name"`
 			LLMNames []string `json:"llm_names"`
+			WorkspaceID uint `json:"workspace_id,omitempty"`
 		}{
-			Name:     catalogue.Name,
-			LLMNames: catalogue.LLMNames(),
+			Name:        catalogue.Name,
+			LLMNames:    catalogue.LLMNames(),
+			WorkspaceID: catalogue.WorkspaceID,
 		},
 	}
 }
@@ -452,7 +485,11 @@ func (a *API) searchCataloguesByNameStub(c *gin.Context) {
 		return
 	}
 
-	catalogues, err := a.service.SearchCataloguesByNameStub(stub)
+	scopes, ok := a.qualifiedListScopes(c, "catalogues", "catalogues")
+	if !ok {
+		return
+	}
+	catalogues, err := a.service.SearchCataloguesByNameStub(stub, scopes...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {

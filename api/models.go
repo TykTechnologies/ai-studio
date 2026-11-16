@@ -290,6 +290,7 @@ type CatalogueResponse struct {
 	Attributes struct {
 		Name     string   `json:"name"`
 		LLMNames []string `json:"llm_names"`
+		WorkspaceID uint `json:"workspace_id,omitempty"`
 	} `json:"attributes"`
 }
 
@@ -453,6 +454,7 @@ type DataCatalogueResponse struct {
 		Icon             string               `json:"icon"`
 		Datasources      []DatasourceResponse `json:"datasources"`
 		Tags             []TagResponse        `json:"tags"`
+		WorkspaceID uint `json:"workspace_id,omitempty"`
 	} `json:"attributes"`
 }
 
@@ -1016,6 +1018,7 @@ type ToolCatalogueResponse struct {
 		Icon             string         `json:"icon"`
 		Tools            []ToolResponse `json:"tools"`
 		Tags             []TagResponse  `json:"tags"`
+		WorkspaceID uint `json:"workspace_id,omitempty"`
 	} `json:"attributes"`
 }
 
