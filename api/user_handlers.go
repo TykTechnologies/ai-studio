@@ -189,7 +189,13 @@ func (a *API) mayAssignRolesOnCreate(c *gin.Context, roleIDs []uint, isAdmin boo
 		return false
 	}
 	ctx := c.Request.Context()
+	ownerChecked := false
+	seen := make(map[uint]bool, len(roleIDs))
 	for _, id := range roleIDs {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
 		role, err := svc.GetRole(ctx, id)
 		if errors.Is(err, rbac.ErrNotFound) {
 			helpers.SendErrorResponse(c, helpers.NewUnprocessableEntityError(fmt.Sprintf("role %d does not exist", id), ""))
@@ -199,9 +205,10 @@ func (a *API) mayAssignRolesOnCreate(c *gin.Context, roleIDs []uint, isAdmin boo
 			rbacErrorResponse(c, err)
 			return false
 		}
-		if role.Slug != models.SystemRoleOwner {
+		if role.Slug != models.SystemRoleOwner || ownerChecked {
 			continue
 		}
+		ownerChecked = true
 		if accountType == models.AccountTypeService {
 			helpers.SendErrorResponse(c, helpers.NewUnprocessableEntityError(
 				"the Owner role cannot be given to a service account", services.ServiceAccountCode))
