@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/models/wsstamp"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/scrypt"
@@ -758,4 +759,11 @@ func ListSecrets(db *gorm.DB, pageSize int, pageNumber int, all bool, scopes ...
 	}
 
 	return secrets, totalCount, totalPages, nil
+}
+
+// BeforeUpdate keeps the Workspace stamp out of ordinary updates
+// (wsstamp.KeepOnUpdate).
+func (s *Secret) BeforeUpdate(tx *gorm.DB) error {
+	wsstamp.KeepOnUpdate(tx)
+	return nil
 }
