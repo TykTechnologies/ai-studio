@@ -11,6 +11,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -142,4 +143,24 @@ func TestSecretNames_GrandfatheredDuplicates(t *testing.T) {
 	assert.Equal(t, http.StatusConflict, w.Code, w.Body.String())
 	ws, _ := f.stored(t, &secrets.Secret{}, split)
 	assert.Equal(t, f.w1, ws)
+}
+
+// Boot seeding of the default secret names skips a name objects outside the
+// Default reference (it would resolve for them), and creates it otherwise.
+func TestSecretNames_DefaultSecretsAtBoot(t *testing.T) {
+	t.Setenv("TYK_AI_SECRET_KEY", "secret-names-test-key")
+	f := setupWSB4(t)
+	db := f.api.service.DB
+	require.NoError(t, db.Where("var_name IN ?", []string{"OPENAI_KEY", "ANTHROPIC_KEY"}).Delete(&secrets.Secret{}).Error)
+	require.NoError(t, db.Create(&models.LLM{Name: "W1 provider", Vendor: models.OPENAI, APIKey: "$SECRET/OPENAI_KEY", WorkspaceID: f.w1}).Error)
+	require.NoError(t, db.Create(&models.LLM{Name: "Default provider", Vendor: models.ANTHROPIC, APIKey: "$SECRET/ANTHROPIC_KEY", WorkspaceID: 0}).Error)
+
+	require.NoError(t, secrets.GetOrCreateDefaultSecrets(db, services.DefaultSecretNameBlocked(db)))
+	count := func(name string) int64 {
+		var n int64
+		require.NoError(t, db.Model(&secrets.Secret{}).Where("var_name = ?", name).Count(&n).Error)
+		return n
+	}
+	assert.Zero(t, count("OPENAI_KEY"), "referenced from W1: not recreated in the Default")
+	assert.EqualValues(t, 1, count("ANTHROPIC_KEY"), "referenced from the Default only: recreated")
 }

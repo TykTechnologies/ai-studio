@@ -418,7 +418,7 @@ func (a *API) listFilters(c *gin.Context) {
 		return
 	}
 
-	if opts.Filters, ok = a.listWorkspaceScopes(c, "filters"); !ok {
+	if opts.Filters, ok = a.listWorkspaceScopes(c, "filters", ""); !ok {
 		return
 	}
 	filters, totalCount, totalPages, err := a.service.ListFilters(pageSize, pageNumber, all, opts)

@@ -550,7 +550,7 @@ func (a *API) listLLMs(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if opts.Filters, ok = a.listWorkspaceScopes(c, "llms"); !ok {
+	if opts.Filters, ok = a.listWorkspaceScopes(c, "llms", ""); !ok {
 		return
 	}
 

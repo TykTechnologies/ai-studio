@@ -788,9 +788,13 @@ func UpdateSecret(db *gorm.DB, settings *Secret, encryptValue bool) error {
 // GetOrCreateDefaultSecrets ensures default secrets exist in the database.
 // This function creates OPENAI_KEY and ANTHROPIC_KEY secrets with empty values
 // if they don't already exist, allowing users to fill in their API keys later.
-func GetOrCreateDefaultSecrets(db *gorm.DB) error {
+// A name skip reports true for is left uncreated (the caller logs why):
+// recreating a default name objects in another Workspace reference would
+// let them resolve the Default's secret (midsommar-clean-oztk.47).
+func GetOrCreateDefaultSecrets(db *gorm.DB, skip ...func(name string) (bool, error)) error {
 	defaultSecrets := []string{"OPENAI_KEY", "ANTHROPIC_KEY"}
 
+names:
 	for _, name := range defaultSecrets {
 		// Check if secret already exists by name
 		var count int64
@@ -800,6 +804,15 @@ func GetOrCreateDefaultSecrets(db *gorm.DB) error {
 
 		// Only create if it doesn't exist
 		if count == 0 {
+			for _, f := range skip {
+				blocked, err := f(name)
+				if err != nil {
+					return err
+				}
+				if blocked {
+					continue names
+				}
+			}
 			secret := &Secret{
 				VarName: name,
 				Value:   "", // Empty value - user will fill in later

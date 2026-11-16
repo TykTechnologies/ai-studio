@@ -380,7 +380,7 @@ func (a *API) listSecrets(c *gin.Context) {
 		return
 	}
 
-	if opts.Filters, ok = a.listWorkspaceScopes(c, "secrets"); !ok {
+	if opts.Filters, ok = a.listWorkspaceScopes(c, "secrets", ""); !ok {
 		return
 	}
 	secrets, totalCount, totalPages, err := secrets.ListSecrets(a.config.DB, pageSize, pageNumber, all, opts.Scopes("var_name")...)

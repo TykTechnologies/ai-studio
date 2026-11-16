@@ -96,7 +96,9 @@ func (a *API) checkObjectUpdate(c *gin.Context, resource string, stored uint, re
 var errMoveRaced = errors.New("the object was moved by another request")
 
 // moveObject moves the row of model with the id from the Workspace from (its
-// stored workspace_id, the one the caller's permissions were checked in) to
+// raw stored workspace_id as loaded, 0 included, never the Default-mapped
+// value: the guard compares the column itself; the caller's permissions
+// were checked in that Workspace) to
 // the Workspace to: workspace_id and updated_at together, so the move shows
 // as a pending change (moves stain), with the destination locked for the
 // write so it cannot land in a Workspace a concurrent delete is removing
@@ -135,15 +137,19 @@ func (a *API) moveObject(c *gin.Context, model interface{}, id uint, from, to ui
 	return false
 }
 
-// listWorkspaceScopes are the list scopes of a read-global (workspace_write)
-// resource: only the optional ?workspace_id= filter. It answers 400 and
-// returns false for a malformed value.
-func (a *API) listWorkspaceScopes(c *gin.Context, resource string) ([]func(*gorm.DB) *gorm.DB, bool) {
-	filter, ok := a.workspaceFilterParam(c, "")
+// listWorkspaceScopes are the list scopes of a Workspace resource: the
+// read scope (workspaceListScope: a no-op for read-global resources,
+// the caller's Workspaces for read-scoped ones) and the optional
+// ?workspace_id= filter. column is the workspace_id column, qualified when
+// the query joins other stamped tables ("data_catalogues.workspace_id");
+// "" means "workspace_id". It answers 400 and returns false for a
+// malformed value.
+func (a *API) listWorkspaceScopes(c *gin.Context, resource, column string) ([]func(*gorm.DB) *gorm.DB, bool) {
+	filter, ok := a.workspaceFilterParam(c, column)
 	if !ok {
 		return nil, false
 	}
-	return []func(*gorm.DB) *gorm.DB{a.workspaceListScope(c, resource, ""), filter}, true
+	return []func(*gorm.DB) *gorm.DB{a.workspaceListScope(c, resource, column), filter}, true
 }
 
 // storedWorkspaceID reads the workspace_id of the live row of model with id;
@@ -160,8 +166,11 @@ func (a *API) storedWorkspaceID(model interface{}, id uint) (ws uint, found bool
 }
 
 // requireOnObject checks perm in the Workspace of the object (model, id)
-// before an action on it (403 permission_denied). A missing object passes,
-// so the handler answers its own 404.
+// before an action on it (403 permission_denied). For a read-scoped
+// resource (workspace_full, workspace_parent: perm's resource) an object
+// the caller may not see answers 404 first, as requireVisible does, so a
+// 403 never confirms it exists. A missing object passes, so the handler
+// answers its own 404.
 func (a *API) requireOnObject(c *gin.Context, model interface{}, id uint, perm authz.Permission) bool {
 	if a.workspaceCheckMode(c) == workspaceOpen {
 		return true
@@ -174,6 +183,9 @@ func (a *API) requireOnObject(c *gin.Context, model interface{}, id uint, perm a
 	}
 	if !found {
 		return true
+	}
+	if resource := perm.Resource(); authz.ResourceScope(resource).ReadScoped() && !a.requireVisible(c, resource, ws, nil) {
+		return false
 	}
 	return a.requireInWorkspace(c, perm, ws)
 }
@@ -193,7 +205,8 @@ func (a *API) responseWorkspaceID(stored uint) uint {
 
 // onObject is route middleware for an action on the object named by the
 // :id path parameter: perm must cover the object's Workspace (403
-// permission_denied). A malformed or unknown id passes, for the handler to
+// permission_denied; 404 first for a read-scoped object the caller may not
+// see, requireOnObject). A malformed or unknown id passes, for the handler to
 // answer as it always has.
 func (a *API) onObject(model interface{}, perm authz.Permission) gin.HandlerFunc {
 	return func(c *gin.Context) {

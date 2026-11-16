@@ -94,13 +94,14 @@ func applySort(db *gorm.DB, column string, desc bool) *gorm.DB {
 // ListModelRouters is the searchable, sortable form of
 // ModelRouterService.ListRouters. A plain list (no search, no sort) is
 // exactly ListRouters and goes through the interface, so an edition stub or
-// a test double keeps its say. The router service interface is shared with
+// a test double keeps its say (unless Filters are set: those need the query
+// below). The router service interface is shared with
 // the Enterprise submodule, so rather than widen it for search and sort the
 // filtered query runs here against the same model, behind the same edition
 // gate: Community Edition answers ErrEnterpriseFeature as ListRouters does.
 func (s *Service) ListModelRouters(pageSize int, pageNumber int, all bool, opts ...ListOptions) ([]models.ModelRouter, int64, int, error) {
 	o := firstListOptions(opts)
-	if o.Search == "" && o.Sort == "" && s.ModelRouterService != nil {
+	if o.Search == "" && o.Sort == "" && len(o.Filters) == 0 && s.ModelRouterService != nil {
 		return s.ModelRouterService.ListRouters(pageSize, pageNumber, all)
 	}
 	if !model_router.IsEnterpriseAvailable() {

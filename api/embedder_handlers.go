@@ -281,7 +281,7 @@ func (a *API) listEmbedders(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if opts.Filters, ok = a.listWorkspaceScopes(c, "embedders"); !ok {
+	if opts.Filters, ok = a.listWorkspaceScopes(c, "embedders", ""); !ok {
 		return
 	}
 	embedders, total, pages, err := a.service.ListEmbedders(pageSize, pageNumber, all, opts)
