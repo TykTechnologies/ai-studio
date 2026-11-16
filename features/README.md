@@ -288,11 +288,17 @@ Each feature specification below provides detailed documentation on the individu
 - Built-in Owner / Administrator / Editor / Viewer / Auditor roles plus custom roles
 - Roles bound to users and teams; effective permissions are the union
 
+### [Workspaces](Workspaces.md) (Enterprise)
+- Every configurable object belongs to one Workspace; a Default workspace holds everything on upgrade
+- Roles bound globally or within a Workspace; aggregators hidden outside it, building blocks read-global
+- Landing and move rules, the Workspaces API, and the Operator's service-account recipe
+
 ### [User Management & RBAC](UserManagement.md)
 - Authentication and authorization system
 - Role-based access control (RBAC)
 - User registration and email verification
 - Group-based membership model
+- Service accounts (API-key-only automation identities)
 - Admin capabilities and permissions
 - API key authentication
 - Security features and best practices

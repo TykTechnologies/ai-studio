@@ -54,7 +54,7 @@ Publishing an LLM, tool or data source also passes the governed-metadata publish
 
 **Role** — a named bundle of permissions (`models.Role`). System roles are immutable and recomputed from the catalogue on every boot; custom roles hold an explicit list and never gain permissions automatically.
 
-**Binding** — a role assigned to a subject (`models.RoleBinding`): `subject_type` is `user` or `group`, `scope_type`/`scope_id` are reserved (empty string = global). A user's effective permissions are the union of their direct bindings and the bindings of every team they belong to. SSO group mapping therefore drives roles without extra configuration.
+**Binding** — a role assigned to a subject (`models.RoleBinding`): `subject_type` is `user` or `group`. A binding is **global** (`scope_type` and `scope_id` both empty; it covers every Workspace) or **scoped to a Workspace** (`scope_type = "workspace"`, `scope_id` = the Workspace id in canonical decimal form). A scoped binding grants only the role's permissions on Workspace resources, inside that Workspace; the Owner role cannot be scoped. Any other combination is refused on create and grants nothing if found. See `features/Workspaces.md`. A user's effective permissions are the union of their direct bindings and the bindings of every team they belong to. SSO group mapping therefore drives roles without extra configuration.
 
 ### The catalogue
 
@@ -96,14 +96,14 @@ Portal/chat-only users hold no binding; `ShowPortal`/`ShowChat` keep governing t
 
 1. `roles:write` gates all role and binding changes (Azure-style: no "you cannot grant what you do not hold" check). System roles answer `409 system_role` to edits; clone them to customise.
 2. Only an Owner may bind or unbind `owner` (`403 owner_required`); Owner bindings are user-only (`409 owner_user_only`).
-3. The last Owner cannot lose the binding, be deleted, or have `is_admin` cleared (`409 last_owner` / `403`).
+3. The last Owner cannot lose the binding, be deleted, or have `is_admin` cleared (`409 last_owner` / `403`). The Owner role is global only (`409 owner_scope_forbidden` for a scoped binding) and cannot be bound to a service account (`409 service_account`).
 4. Deleting a role deletes its bindings; deleting a user or team deletes theirs.
 5. There is no self-lockout rule; the UI asks for confirmation when you remove your own administrator-bearing role.
 6. Custom roles never hold `*`; cloning Owner or Administrator expands the wildcard to every concrete permission.
 
 ### The legacy `is_admin` flag
 
-`users.is_admin` stays as a derived cache meaning "holds a wildcard role" so that plugins, portal-side owner checks and a Community downgrade keep working. It is recomputed on binding changes, team membership changes (`AddUserToGroup`, `RemoveUserFromGroup`, `UpdateGroupUsers`, team deletion) and, as a safety net, inside `Resolve` whenever the computed value differs from the stored one. `PATCH /users/:id` with `is_admin` is translated into an Administrator binding add/remove (`SetFullAdmin`) so API automation keeps working; the Enterprise UI omits the field and sends `role_ids` instead (omitted `is_admin` means unchanged).
+`users.is_admin` stays as a derived cache meaning "holds a wildcard role **globally**" (a Workspace-scoped Administrator never sets it) so that plugins, portal-side owner checks and a Community downgrade keep working. It is recomputed on binding changes, team membership changes (`AddUserToGroup`, `RemoveUserFromGroup`, `UpdateGroupUsers`, team deletion) and, as a safety net, inside `Resolve` whenever the computed value differs from the stored one. `PATCH /users/:id` with `is_admin` is translated into an Administrator binding add/remove (`SetFullAdmin`) so API automation keeps working; the Enterprise UI omits the field and sends `role_ids` instead (omitted `is_admin` means unchanged).
 
 `AccessToSSOConfig` is no longer consulted for authorisation in Enterprise: identity provider configuration follows `sso-profiles:*`. Administrators who previously lacked the flag gain it through the Administrator role; the seeder logs their emails at WARN.
 
@@ -123,15 +123,15 @@ Other users' API keys are returned only to callers holding `users:write` (or for
 | API | `api/rbac_handlers.go`, payload helpers in `api/rbac_payloads.go` | — |
 | Audit | — | `enterprise/features/audit/actions.go` entries, denial recording in `middleware.go` |
 
-**Request flow (`/api/v1`)**: `AuthMiddleware` sets the user → `rbacContext` attaches a lazy `authz.Context` → `requireRoutePermission` looks up `METHOD + FullPath` in the registry and evaluates `Set.Has(permission)`. In Community Edition the stub resolves admins to the wildcard and everyone else to nothing, so behaviour is the historical admin-or-not check. Unannotated routes fail closed to full-administrator access and log once; `api/authz_routes_test.go` fails if any `/api/v1` route lacks an annotation.
+**Request flow (`/api/v1`)**: `AuthMiddleware` sets the user → `rbacContext` attaches a lazy `authz.Context` resolving `authz.Grants` (global set plus per-Workspace sets) → `requireRoutePermission` looks up `METHOD + FullPath` in the registry: a permission passes when held globally, or, on a route registered Workspace-checked (`permRouter.InWorkspace()`), when held in any Workspace, the handler then checking each object (`features/Workspaces.md`). Unmarked routes fail closed for scoped-only callers. In Community Edition the stub resolves admins to the wildcard and everyone else to nothing, so behaviour is the historical admin-or-not check. Unannotated routes fail closed to full-administrator access and log once; `api/authz_routes_test.go` fails if any `/api/v1` route lacks an annotation.
 
 `authz.AnyAdmin` marks the handful of routes any role holder needs (logout, plugin UI registry and assets, feature probes, `/rbac/permissions`, `/rbac/me`). Everything under `/common/*` (portal and chat) keeps its ownership rules and is not governed by roles in this version; `rbacContext` is attached there so handlers can call `authz.Can` for admin-or-owner decisions.
 
-**Enterprise evaluator** (`Resolve`): one query joins `role_bindings` to `roles` for the user directly or via `user_groups`, unions the permission lists, and short-circuits to the wildcard. Per request only, no cache. When the licence lacks `feature_rbac` the evaluator falls back to the admin-or-not rule and management endpoints answer 402, so an unlicensed Enterprise build behaves like Community Edition while keeping any bindings for later.
+**Enterprise evaluator** (`ResolveGrants`; `Resolve` returns its global part): one query joins `role_bindings` to `roles` (and `workspaces`, for scoped rows) for the user directly or via `user_groups`, and unions the permission lists into the global set and one set per Workspace. Every reader of `role_bindings` decides "global" with one predicate (`rbac.IsGlobalBinding` / `GlobalBindingSQL`). Per request only, no cache. When the licence lacks `feature_rbac` the evaluator falls back to the admin-or-not rule and management endpoints answer 402, so an unlicensed Enterprise build behaves like Community Edition while keeping any bindings for later.
 
 **Seeding** (`Seed`, run from `main.go` after the services are built and lazily on first use): upserts the five system roles (refreshing their permissions from the catalogue), binds every legacy admin lacking bindings to Administrator, binds user ID 1 to Owner, and promotes the first administrator when no Owner exists.
 
-**Error envelope**: authorization failures use `authz.ErrorBody` — `{"errors":[{"title","detail","code","permission"}]}` with codes `unauthenticated`, `permission_denied`, `enterprise_required`, `system_role`, `last_owner`, `owner_user_only`, `owner_required`. The UI keys off `code`, never the status alone.
+**Error envelope**: authorization failures use `authz.ErrorBody` — `{"errors":[{"title","detail","code","permission"}]}` with codes `unauthenticated`, `permission_denied`, `enterprise_required`, `system_role`, `last_owner`, `owner_user_only`, `owner_required`, and for Workspaces `workspace_required`, `invalid_workspace`, `default_workspace_locked`, `workspace_in_use`, `owner_scope_forbidden`. The UI keys off `code`, never the status alone.
 
 ---
 
@@ -145,12 +145,12 @@ Other users' API keys are returned only to callers holding `users:write` (or for
 | POST | `/api/v1/rbac/roles` | `roles:write` | `{name, description, permissions[]}` |
 | GET / PATCH / DELETE | `/api/v1/rbac/roles/:id` | `roles:read` / `roles:write` / `roles:delete` | |
 | POST | `/api/v1/rbac/roles/:id/clone` | `roles:write` | `{name}` |
-| GET | `/api/v1/rbac/bindings?subject_type=&subject_id=&role_id=` | `roles:read` | |
-| POST | `/api/v1/rbac/bindings` | `roles:write` | `{subject_type, subject_id, role_id}` |
+| GET | `/api/v1/rbac/bindings?subject_type=&subject_id=&role_id=&scope_type=global\|workspace&scope_id=` | `roles:read` | |
+| POST | `/api/v1/rbac/bindings` | `roles:write` | `{subject_type, subject_id, role_id, scope_type?, scope_id?}`; scoped bindings need the global `roles:write` (D10) |
 | DELETE | `/api/v1/rbac/bindings/:id` | `roles:delete` | |
 | GET | `/api/v1/rbac/users/:id/effective` | `users:read` | |
 
-Related payload changes: `/common/me` carries `permissions`, `roles`, `has_admin_access`, `rbac_enabled`; user and team payloads carry `roles` (Enterprise) and users carry `api_key_hint`/`has_api_key` when the key is masked; `POST/PATCH /users` accept `role_ids` (reconciled against direct bindings, requires `roles:write` when it changes anything); the `/plugins/sidebar-menu` items carry `required_permission` and are filtered server-side (manifest `mount_config.required_permission`, default `plugins:execute`); plugins receive `permissions` on `PortalUserContext`.
+Related payload changes: `/common/me` carries `permissions`, `roles`, `has_admin_access` (holds something globally), `admin_nav_hint` (holds something globally or in a Workspace; a UI hint only, never used to authorize), `workspaces` (per-Workspace permissions) and `rbac_enabled`; `/rbac/me` and `/rbac/users/:id/effective` carry the same `admin_nav_hint` and a per-Workspace section (`workspaces[]` with roles and sources); user and team payloads carry `roles` (Enterprise) and users carry `api_key_hint`/`has_api_key` when the key is masked; `POST/PATCH /users` accept `role_ids` (reconciled against direct bindings, requires `roles:write` when it changes anything); the `/plugins/sidebar-menu` items carry `required_permission` and are filtered server-side (manifest `mount_config.required_permission`, default `plugins:execute`); plugins receive `permissions` on `PortalUserContext`.
 
 ---
 
@@ -166,12 +166,12 @@ Related payload changes: `/common/me` carries `permissions`, `roles`, `has_admin
 
 ## 5. Adding a permission for a new feature
 
-1. Register the resource once in `pkg/authz/catalogue.go` (`Register(Resource{Key, Label, Group, Actions, Sensitive, Privileged})`) — the UI matrix and system roles pick it up automatically. Use `crudp`/`crudxp` when the object has a live switch, and guard that switch in the handlers with `requirePublishIfChanged` / `requirePublishToCreateLive` plus a dedicated `activate`/`deactivate` route annotated `authz.Publish`.
+1. Register the resource once in `pkg/authz/catalogue.go` (`Register(Resource{Key, Label, Group, Actions, Sensitive, Privileged, Scope})`) — the UI matrix and system roles pick it up automatically. **Choose a scope kind**: `ScopeGlobal` (the default) for platform configuration; `ScopeWorkspaceWrite` or `ScopeWorkspaceFull` for an object that belongs to a Workspace (add the `workspace_id` stamp and list it in `models.WorkspaceStampedModels`); `ScopeWorkspaceParent` for a child that follows its parent's Workspace. `pkg/authz/grants_test.go` pins every resource's kind. A Workspace route must be registered `InWorkspace()` and use the object helpers, or be listed in `api/testdata/workspace_global_only_routes.txt`. Use `crudp`/`crudxp` when the object has a live switch, and guard that switch in the handlers with `requirePublishIfChanged` / `requirePublishToCreateLive` plus a dedicated `activate`/`deactivate` route annotated `authz.Publish`.
 2. Annotate its routes in `api/api.go` with `authz.Read/Write/Delete/Execute/Publish("<key>")`; the completeness test fails otherwise.
 3. Add a constant to `ui/admin-frontend/src/admin/rbac/permissions.js`, a `permission` on the nav item in `Drawer.js`, and on the route descriptor in `admin/routes.js`.
 4. Add explicit audit action names in `enterprise/features/audit/actions.go` if the generic derivation reads badly.
 
-Scoped bindings (namespace, catalogue) are reserved for a later phase; the binding table already carries `scope_type`/`scope_id`.
+Workspace-scoped bindings are described in `features/Workspaces.md`; no other scope type is defined.
 
 ---
 
@@ -218,7 +218,7 @@ Resources that only exist at runtime (asset classes an administrator defines) ar
 
 ## 6. Tests
 
-- `pkg/authz/authz_test.go` — catalogue shape, parsing, set semantics.
+- `pkg/authz/authz_test.go` — catalogue shape, parsing, set semantics; `pkg/authz/grants_test.go` — scope kinds and `Grants` (see `features/Workspaces.md` for the Workspace tests).
 - `api/authz_routes_test.go` — every `/api/v1` route annotated (both editions, including the conditional marketplace block).
 - `api/authz_middleware_test.go` — TestMode off: 401/403/200 with error codes; CE management endpoints answer 402.
 - `api/rbac_enterprise_test.go` — end to end with the Enterprise evaluator: Viewer read-only, Editor cannot manage access, masked API keys, team roles flip `is_admin`, Owner rules, `role_ids` on the user payload, and the submitter / reviewer / approver publish workflow on LLMs.

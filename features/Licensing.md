@@ -27,7 +27,7 @@ A licence limits five things across the whole deployment:
 | Limit | What uses it |
 |-------|--------------|
 | Edge namespaces | each edge namespace other than the default one (see [Edge Gateways](../docs/site/docs/edge-gateways.md#licensed-namespaces-enterprise)) |
-| Users with admin access | each enabled user who can open the admin area, whatever their role |
+| Users with admin access | each enabled user who can open the admin area, whatever their role (a role bound globally or within a Workspace, directly or through a team), and each enabled **service account**, whatever its roles |
 | Users with portal access | each enabled user with portal access |
 | Apps | each App |
 | LLMs | each LLM, active or not |
@@ -46,6 +46,10 @@ A standalone microgateway holds the LLMs created through its own management
 API to its own licence's LLM limit (409 `QUOTA_EXCEEDED`, and a warning in
 its log at start-up when it is at the limit). Edge gateways get their LLMs
 from AI Studio, which enforces its licence.
+
+Creating or enabling a service account at the admin seat limit is refused
+with 409 `QUOTA_EXCEEDED`, as for any admin. The License page shows service
+accounts as their own line within admin seats.
 
 Single sign-on and host-managed sign-in never fail because of a seat limit:
 the user signs in without the access that would go over it, and the Owners
