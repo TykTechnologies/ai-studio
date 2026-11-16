@@ -42,6 +42,10 @@ func rbacErrorResponse(c *gin.Context, err error) {
 		c.JSON(http.StatusConflict, authz.Body("Owner Is User-Only", err.Error(), authz.CodeOwnerUserOnly))
 	case errors.Is(err, rbac.ErrOwnerRequired):
 		c.JSON(http.StatusForbidden, authz.Body("Owner Required", err.Error(), authz.CodeOwnerRequired))
+	case errors.Is(err, rbac.ErrOwnerScopeForbidden):
+		c.JSON(http.StatusConflict, authz.Body("Owner Is Global", err.Error(), authz.CodeOwnerScopeForbidden))
+	case errors.Is(err, rbac.ErrInvalidScope):
+		c.JSON(http.StatusUnprocessableEntity, authz.Body("Invalid Workspace", err.Error(), authz.CodeInvalidWorkspace))
 	case errors.Is(err, rbac.ErrHostManaged):
 		c.JSON(http.StatusConflict, authz.Body("Assigned By The Host Application", err.Error(), ""))
 	case errors.Is(err, rbac.ErrDuplicateRole), errors.Is(err, rbac.ErrDuplicateBinding):

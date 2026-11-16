@@ -32,6 +32,11 @@ var (
 	ErrDuplicateRole     = errors.New("a role with that name already exists")
 	ErrDuplicateBinding  = errors.New("that role is already assigned to this subject")
 	ErrHostManaged       = errors.New("this role is assigned by the application AI Studio is embedded in; change it there")
+	// ErrInvalidScope: a binding scope other than global or an existing
+	// Workspace (canonical id); see WorkspaceScopeID.
+	ErrInvalidScope = errors.New("invalid binding scope: use no scope, or scope_type \"workspace\" with the id of an existing Workspace")
+	// ErrOwnerScopeForbidden: the Owner role is always global (decision D3).
+	ErrOwnerScopeForbidden = errors.New("the Owner role cannot be assigned within a Workspace")
 )
 
 // Subject identifies who a role is bound to.
