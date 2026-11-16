@@ -99,31 +99,35 @@ func (a *API) mergeTeamCatalogueLinks(c *gin.Context, k catalogueKind, submitted
 	return a.mergeVisibleLinks(c, k.resource, k.model, submitted, stored, k.notFound)
 }
 
+// visibleDataCatalogues drops the data catalogues the caller cannot see.
+func (a *API) visibleDataCatalogues(c *gin.Context, cats []models.DataCatalogue) []models.DataCatalogue {
+	out := make([]models.DataCatalogue, 0, len(cats))
+	for _, x := range cats {
+		if a.visibleIn(c, "data-catalogues", x.WorkspaceID) {
+			out = append(out, x)
+		}
+	}
+	return out
+}
+
+// visibleToolCatalogues drops the tool catalogues the caller cannot see.
+func (a *API) visibleToolCatalogues(c *gin.Context, cats []models.ToolCatalogue) []models.ToolCatalogue {
+	out := make([]models.ToolCatalogue, 0, len(cats))
+	for _, x := range cats {
+		if a.visibleIn(c, "tool-catalogues", x.WorkspaceID) {
+			out = append(out, x)
+		}
+	}
+	return out
+}
+
 // hideTeamCatalogues drops, before a team is serialized, the catalogues the
 // caller cannot see.
 func (a *API) hideTeamCatalogues(c *gin.Context, g *models.Group) {
 	if g == nil || !a.workspaceChecksOn(c) {
 		return
 	}
-	cats := g.Catalogues[:0]
-	for _, x := range g.Catalogues {
-		if a.visibleIn(c, "catalogues", x.WorkspaceID) {
-			cats = append(cats, x)
-		}
-	}
-	g.Catalogues = cats
-	data := g.DataCatalogues[:0]
-	for _, x := range g.DataCatalogues {
-		if a.visibleIn(c, "data-catalogues", x.WorkspaceID) {
-			data = append(data, x)
-		}
-	}
-	g.DataCatalogues = data
-	tools := g.ToolCatalogues[:0]
-	for _, x := range g.ToolCatalogues {
-		if a.visibleIn(c, "tool-catalogues", x.WorkspaceID) {
-			tools = append(tools, x)
-		}
-	}
-	g.ToolCatalogues = tools
+	g.Catalogues = a.visibleCatalogues(c, g.Catalogues)
+	g.DataCatalogues = a.visibleDataCatalogues(c, g.DataCatalogues)
+	g.ToolCatalogues = a.visibleToolCatalogues(c, g.ToolCatalogues)
 }

@@ -912,13 +912,7 @@ func (a *API) listGroupDataCatalogues(c *gin.Context) {
 		return
 	}
 
-	visibleData := dataCatalogues[:0]
-	for _, dc := range dataCatalogues {
-		if a.visibleIn(c, "data-catalogues", dc.WorkspaceID) {
-			visibleData = append(visibleData, dc)
-		}
-	}
-	c.JSON(http.StatusOK, gin.H{"data": serializeDataCatalogues(visibleData)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeDataCatalogues(a.visibleDataCatalogues(c, dataCatalogues))})
 }
 
 // @Summary Add a tool catalogue to a group
@@ -1080,7 +1074,9 @@ func (a *API) listGroupToolCatalogues(c *gin.Context) {
 
 	pageSize, pageNumber, all := getPaginationParams(c)
 
-	toolCatalogues, totalCount, totalPages, err := a.service.GetGroupToolCatalogues(uint(groupID), pageSize, pageNumber, all)
+	// Hidden catalogues are left out before the count, so totals match.
+	toolCatalogues, totalCount, totalPages, err := a.service.GetGroupToolCatalogues(uint(groupID), pageSize, pageNumber, all,
+		a.workspaceListScope(c, "tool-catalogues", "tool_catalogues.workspace_id"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -1093,13 +1089,7 @@ func (a *API) listGroupToolCatalogues(c *gin.Context) {
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	visibleTools := toolCatalogues[:0]
-	for _, tc := range toolCatalogues {
-		if a.visibleIn(c, "tool-catalogues", tc.WorkspaceID) {
-			visibleTools = append(visibleTools, tc)
-		}
-	}
-	c.JSON(http.StatusOK, gin.H{"data": serializeToolCatalogues(visibleTools, a.config.DB)})
+	c.JSON(http.StatusOK, gin.H{"data": serializeToolCatalogues(toolCatalogues, a.config.DB)})
 }
 
 // @Summary Update group catalogues
