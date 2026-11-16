@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -38,6 +39,24 @@ func (s *Service) WorkspaceExists(id uint) (bool, error) {
 		return false, err
 	}
 	return n > 0, nil
+}
+
+// WorkspaceNames returns the names of the given Workspaces, read in one
+// query; ids that name no Workspace are absent. On error it returns what
+// it has (nothing) so callers show ids without names.
+func (s *Service) WorkspaceNames(ctx context.Context, ids []uint) map[uint]string {
+	names := map[uint]string{}
+	if len(ids) == 0 {
+		return names
+	}
+	var rows []models.Workspace
+	if err := s.DB.WithContext(ctx).Select("id", "name").Where("id IN ?", ids).Find(&rows).Error; err != nil {
+		return names
+	}
+	for _, w := range rows {
+		names[w.ID] = w.Name
+	}
+	return names
 }
 
 // LockWorkspaceForInsert checks, inside tx, that the Workspace exists and

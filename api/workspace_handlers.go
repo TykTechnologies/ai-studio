@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strconv"
@@ -67,7 +68,7 @@ func workspaceErrorResponse(c *gin.Context, err error) {
 		c.JSON(http.StatusPaymentRequired, authz.EnterpriseRequired(err.Error()))
 	case errors.Is(err, workspaces.ErrNotFound):
 		c.JSON(http.StatusNotFound, authz.Body("Not Found", err.Error(), ""))
-	case errors.Is(err, workspaces.ErrInvalidName):
+	case errors.Is(err, workspaces.ErrInvalidName), errors.Is(err, workspaces.ErrInvalidDescription):
 		c.JSON(http.StatusBadRequest, authz.Body("Bad Request", err.Error(), ""))
 	case errors.Is(err, workspaces.ErrDuplicateName):
 		c.JSON(http.StatusConflict, authz.Body("Conflict", err.Error(), ""))
@@ -76,7 +77,8 @@ func workspaceErrorResponse(c *gin.Context, err error) {
 	case errors.Is(err, workspaces.ErrInUse):
 		c.JSON(http.StatusConflict, authz.Body("Workspace In Use", err.Error(), authz.CodeWorkspaceInUse))
 	default:
-		c.JSON(http.StatusInternalServerError, authz.Body("Internal Server Error", err.Error(), ""))
+		slog.Error("workspaces: request failed", "path", c.FullPath(), "error", err)
+		c.JSON(http.StatusInternalServerError, authz.Body("Internal Server Error", "the request could not be completed", ""))
 	}
 }
 
@@ -113,26 +115,30 @@ func coversEveryWorkspace(g authz.Grants) bool {
 // @Router /workspaces [get]
 // @Security BearerAuth
 func (a *API) listWorkspaces(c *gin.Context) {
-	all, err := a.service.WorkspacesService().List(c.Request.Context())
+	grants, err := requestGrants(c)
 	if err != nil {
 		workspaceErrorResponse(c, err)
 		return
 	}
-	grants, err := requestGrants(c)
+	// nil lists every Workspace; otherwise only those the caller holds a
+	// scoped role in, filtered in the query.
+	var only []uint
+	if !a.config.TestMode && !coversEveryWorkspace(grants) {
+		only = []uint{}
+		for id, set := range grants.Workspaces {
+			if !set.IsEmpty() {
+				only = append(only, id)
+			}
+		}
+	}
+	list, err := a.service.WorkspacesService().List(c.Request.Context(), only)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, authz.Body("Internal Server Error", err.Error(), ""))
+		workspaceErrorResponse(c, err)
 		return
 	}
-	everyWorkspace := a.config.TestMode || coversEveryWorkspace(grants)
-	out := make([]WorkspaceResponse, 0, len(all))
-	for i := range all {
-		if everyWorkspace {
-			out = append(out, serializeWorkspace(&all[i]))
-			continue
-		}
-		if set, ok := grants.Workspaces[all[i].ID]; ok && !set.IsEmpty() {
-			out = append(out, serializeWorkspace(&all[i]))
-		}
+	out := make([]WorkspaceResponse, 0, len(list))
+	for i := range list {
+		out = append(out, serializeWorkspace(&list[i]))
 	}
 	c.JSON(http.StatusOK, gin.H{"data": out})
 }
@@ -284,22 +290,6 @@ type WorkspaceAccess struct {
 	Sources     map[string][]rbac.PermissionSource `json:"sources,omitempty"`
 }
 
-// workspaceNames loads the names of the given Workspaces in one query.
-func (a *API) workspaceNames(ctx context.Context, ids []uint) map[uint]string {
-	names := map[uint]string{}
-	if len(ids) == 0 {
-		return names
-	}
-	var rows []models.Workspace
-	if err := a.service.DB.WithContext(ctx).Select("id", "name").Where("id IN ?", ids).Find(&rows).Error; err != nil {
-		return names
-	}
-	for _, w := range rows {
-		names[w.ID] = w.Name
-	}
-	return names
-}
-
 // workspaceAccessOf lists the caller's Workspace-scoped permissions, per
 // Workspace with its name, ordered by id.
 func (a *API) workspaceAccessOf(ctx context.Context, g authz.Grants) []WorkspaceAccess {
@@ -309,7 +299,7 @@ func (a *API) workspaceAccessOf(ctx context.Context, g authz.Grants) []Workspace
 			ids = append(ids, id)
 		}
 	}
-	names := a.workspaceNames(ctx, ids)
+	names := a.service.WorkspaceNames(ctx, ids)
 	out := make([]WorkspaceAccess, 0, len(ids))
 	for _, id := range ids {
 		out = append(out, WorkspaceAccess{ID: id, Name: names[id], Permissions: g.Workspaces[id].List()})

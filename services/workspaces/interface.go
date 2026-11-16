@@ -15,12 +15,13 @@ import (
 
 // Errors shared by both editions.
 var (
-	ErrEnterpriseFeature = errors.New("Workspaces are an Enterprise Edition feature - visit https://tyk.io/ai-studio/pricing for more information")
-	ErrNotFound          = errors.New("workspace not found")
-	ErrInvalidName       = errors.New("a Workspace needs a name of at most 128 characters")
-	ErrDuplicateName     = errors.New("a Workspace with that name already exists")
-	ErrDefaultLocked     = errors.New("the Default workspace cannot be deleted or changed into another Workspace")
-	ErrInUse             = errors.New("roles are still assigned within this Workspace; remove those assignments first")
+	ErrEnterpriseFeature  = errors.New("Workspaces are an Enterprise Edition feature - visit https://tyk.io/ai-studio/pricing for more information")
+	ErrNotFound           = errors.New("workspace not found")
+	ErrInvalidName        = errors.New("a Workspace needs a name of at most 128 characters")
+	ErrInvalidDescription = errors.New("a Workspace description has at most 1024 characters")
+	ErrDuplicateName      = errors.New("a Workspace with that name already exists")
+	ErrDefaultLocked      = errors.New("the Default workspace cannot be deleted or changed into another Workspace")
+	ErrInUse              = errors.New("roles are still assigned within this Workspace; remove those assignments first")
 )
 
 // Input is the payload for creating or updating a Workspace. A nil field is
@@ -67,8 +68,10 @@ type Service interface {
 	// with role-based access control licensed.
 	Enabled() bool
 
-	// List returns every Workspace, the Default first, then by name.
-	List(ctx context.Context) ([]models.Workspace, error)
+	// List returns Workspaces, the Default first, then by name: every
+	// Workspace when only is nil, otherwise those whose id is in only (none
+	// for an empty, non-nil slice).
+	List(ctx context.Context, only []uint) ([]models.Workspace, error)
 	// Get returns one Workspace (ErrNotFound).
 	Get(ctx context.Context, id uint) (*models.Workspace, error)
 	// Create adds a Workspace. Names are unique without regard to case.

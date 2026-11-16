@@ -232,7 +232,7 @@ func (a *API) effectiveAccess(ctx context.Context, userID uint, eff *rbac.Effect
 	for id := range eff.Workspaces {
 		ids = append(ids, id)
 	}
-	return effectiveResponse(userID, eff, a.service.Authz().Enabled(), a.workspaceNames(ctx, ids))
+	return effectiveResponse(userID, eff, a.service.Authz().Enabled(), a.service.WorkspaceNames(ctx, ids))
 }
 
 func parseUintParam(c *gin.Context, name string) (uint, bool) {

@@ -19,7 +19,7 @@ func newCommunityService(db *gorm.DB) Service {
 
 func (s *communityService) Enabled() bool { return false }
 
-func (s *communityService) List(context.Context) ([]models.Workspace, error) {
+func (s *communityService) List(context.Context, []uint) ([]models.Workspace, error) {
 	return nil, ErrEnterpriseFeature
 }
 
