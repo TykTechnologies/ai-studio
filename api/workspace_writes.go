@@ -306,32 +306,43 @@ func (a *API) appWorkspaceOfCredential(rawID string) (ws uint, credFound, appFou
 	if perr != nil {
 		return 0, false, false, errMalformedID
 	}
-	var n int64
-	if err := a.service.DB.Model(&models.Credential{}).Where("id = ?", id).Count(&n).Error; err != nil || n == 0 {
+	// One query: the credential, and the workspace_id of each live App
+	// holding it (NULL when none).
+	var rows []struct{ WorkspaceID *uint }
+	if err := a.service.DB.Model(&models.Credential{}).
+		Select("apps.workspace_id").
+		Joins("LEFT JOIN apps ON apps.credential_id = credentials.id AND apps.deleted_at IS NULL").
+		Where("credentials.id = ?", id).Limit(2).Scan(&rows).Error; err != nil {
 		return 0, false, false, err
 	}
-	var ids []uint
-	if err := a.service.DB.Model(&models.App{}).Where("credential_id = ?", id).Order("id").Limit(2).Pluck("workspace_id", &ids).Error; err != nil {
-		return 0, true, false, err
+	switch {
+	case len(rows) == 0:
+		return 0, false, false, nil
+	case len(rows) == 1 && rows[0].WorkspaceID != nil:
+		return *rows[0].WorkspaceID, true, true, nil
 	}
-	if len(ids) != 1 {
-		// None, or (only through hand-written SQL) more than one App: no
-		// single owning Workspace, so it is treated as standalone (global
-		// holders only), failing closed rather than picking one.
-		return 0, true, false, nil
-	}
-	return ids[0], true, true, nil
+	// No App, or (only through hand-written SQL) more than one: no single
+	// owning Workspace, so it is treated as standalone (global holders
+	// only), failing closed rather than picking one.
+	return 0, true, false, nil
 }
 
 // appWorkspaceOfMCPCredential is appWorkspaceOfCredential for an MCP
 // credential (mcp_credentials.app_id).
 func (a *API) appWorkspaceOfMCPCredential(id string) (ws uint, credFound, appFound bool, err error) {
-	var appIDs []uint
-	if err := a.service.DB.Model(&models.MCPCredential{}).Where("id = ?", id).Limit(1).Pluck("app_id", &appIDs).Error; err != nil || len(appIDs) == 0 {
+	// One query: the credential, and its live App's workspace_id (NULL when
+	// the App is gone).
+	var rows []struct{ WorkspaceID *uint }
+	if err := a.service.DB.Model(&models.MCPCredential{}).
+		Select("apps.workspace_id").
+		Joins("LEFT JOIN apps ON apps.id = mcp_credentials.app_id AND apps.deleted_at IS NULL").
+		Where("mcp_credentials.id = ?", id).Limit(1).Scan(&rows).Error; err != nil || len(rows) == 0 {
 		return 0, false, false, err
 	}
-	ws, appFound, err = a.storedWorkspaceID(&models.App{}, appIDs[0])
-	return ws, true, appFound, err
+	if rows[0].WorkspaceID == nil {
+		return 0, true, false, nil
+	}
+	return *rows[0].WorkspaceID, true, true, nil
 }
 
 // requireOnAppCredential decides an action (perm) on a credential from what
@@ -404,10 +415,12 @@ func (a *API) credentialListScopes(c *gin.Context) ([]func(*gorm.DB) *gorm.DB, b
 		return nil, ok
 	}
 	return []func(*gorm.DB) *gorm.DB{func(db *gorm.DB) *gorm.DB {
-		sub := db.Session(&gorm.Session{NewDB: true}).Model(&models.App{}).Select("1").
-			Where("apps.credential_id = credentials.id").Scopes(appScopes...)
-		// Exactly one live App holds it (see appWorkspaceOfCredential).
-		return db.Where("EXISTS (?)", sub).
-			Where("(SELECT COUNT(*) FROM apps holders WHERE holders.credential_id = credentials.id AND holders.deleted_at IS NULL) = 1")
+		// Two uncorrelated subqueries on the indexed apps.credential_id: the
+		// credentials of visible Apps, and those exactly one live App holds
+		// (see appWorkspaceOfCredential).
+		fresh := db.Session(&gorm.Session{NewDB: true})
+		visible := fresh.Model(&models.App{}).Select("apps.credential_id").Scopes(appScopes...)
+		single := fresh.Model(&models.App{}).Select("credential_id").Group("credential_id").Having("COUNT(*) = 1")
+		return db.Where("credentials.id IN (?)", visible).Where("credentials.id IN (?)", single)
 	}}, true
 }
