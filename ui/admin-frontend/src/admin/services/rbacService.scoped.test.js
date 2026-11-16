@@ -44,6 +44,16 @@ describe('scoped role bindings', () => {
     });
   });
 
+  it('asks the server for that Workspace only, and refuses a bad id', async () => {
+    await syncScopedBindings(5, 'user', 9, [20, 30]);
+    expect(apiClient.get).toHaveBeenCalledWith('/rbac/bindings', {
+      params: { subject_type: 'user', subject_id: 9, scope_type: 'workspace', scope_id: '5' },
+    });
+    for (const bad of [undefined, null, '', 0, 'x', -1]) {
+      await expect(syncScopedBindings(bad, 'user', 9, [])).rejects.toThrow(/invalid Workspace id/);
+    }
+  });
+
   it('syncSubjectRoles still never touches scoped bindings', async () => {
     const res = await syncSubjectRoles('user', 9, []);
     expect(res.removed).toEqual([10]);

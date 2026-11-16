@@ -48,6 +48,7 @@ const WorkspaceSelect = ({
       .map((w) => ({ id: w.id, name: w.name || `Workspace ${w.id}` }));
   }, [rbacEnabled, global, all, scoped, permission]);
 
+  const optionIds = useMemo(() => new Set(options.map((o) => o.id)), [options]);
   const only = options.length === 1 ? options[0].id : null;
   useEffect(() => {
     if (only !== null && Number(value) !== only && onChange) onChange(only);
@@ -64,7 +65,7 @@ const WorkspaceSelect = ({
         label={label}
         name={name}
         data-testid="workspace-select"
-        value={options.some((o) => o.id === Number(value)) ? Number(value) : ''}
+        value={optionIds.has(Number(value)) ? Number(value) : ''}
         onChange={(e) => onChange && onChange(Number(e.target.value))}
       >
         {options.map((o) => (

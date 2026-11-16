@@ -28,12 +28,14 @@ const emptyAccess = {
  * Workspace ids are the ones API responses carry (a stored 0 is already
  * reported as the Default's id).
  */
-export const makeCanIn = (permissions, workspaces) => (workspaceId, perm) => {
-  if (hasPermission(permissions, perm)) return true;
-  if (workspaceId === undefined || workspaceId === null || workspaceId === '') return false;
-  const id = Number(workspaceId);
-  const ws = (workspaces || []).find((w) => w.id === id);
-  return Boolean(ws) && hasPermission(ws.permissions, perm);
+export const makeCanIn = (permissions, workspaces) => {
+  const byId = new Map((workspaces || []).map((w) => [w.id, w.permissions]));
+  return (workspaceId, perm) => {
+    if (hasPermission(permissions, perm)) return true;
+    if (workspaceId === undefined || workspaceId === null || workspaceId === '') return false;
+    const held = byId.get(Number(workspaceId));
+    return Boolean(held) && hasPermission(held, perm);
+  };
 };
 
 /**

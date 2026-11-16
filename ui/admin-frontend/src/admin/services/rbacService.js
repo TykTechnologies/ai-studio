@@ -78,12 +78,15 @@ export const cloneRole = async (id, name) => {
   }
 };
 
-export const listBindings = async ({ subjectType, subjectId, roleId } = {}) => {
+export const listBindings = async ({ subjectType, subjectId, roleId, scopeType, scopeId } = {}) => {
   try {
     const params = {};
     if (subjectType) params.subject_type = subjectType;
     if (subjectId) params.subject_id = subjectId;
     if (roleId) params.role_id = roleId;
+    // scopeType "global" (unscoped only) or "workspace" with scopeId.
+    if (scopeType) params.scope_type = scopeType;
+    if (scopeId) params.scope_id = scopeId;
     const response = await apiClient.get('/rbac/bindings', { params });
     return response.data.data || [];
   } catch (error) {
@@ -163,9 +166,15 @@ export const syncSubjectRoles = async (subjectType, subjectId, desiredRoleIds) =
  * globally (D10). Returns what changed and what failed.
  */
 export const syncScopedBindings = async (workspaceId, subjectType, subjectId, desiredRoleIds) => {
-  const scopeId = String(Number(workspaceId));
+  const id = Number(workspaceId);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new Error(`syncScopedBindings: invalid Workspace id ${workspaceId}`);
+  }
+  const scopeId = String(id);
   const desired = new Set((desiredRoleIds || []).map(Number));
-  const current = await listBindings({ subjectType, subjectId });
+  // The server lists only this Workspace's bindings; the check below
+  // keeps the sync to them even if it did not.
+  const current = await listBindings({ subjectType, subjectId, scopeType: 'workspace', scopeId });
   const have = new Map(); // roleId -> bindingId, in this Workspace only
   current.forEach((b) => {
     if (b.attributes.scope_type === 'workspace' && String(b.attributes.scope_id) === scopeId) {

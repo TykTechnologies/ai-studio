@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { MemoryRouter } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
@@ -38,6 +38,9 @@ describe('Workspaces page', () => {
     renderPage();
     expect(await screen.findByText('Ops')).toBeInTheDocument();
     expect(screen.getByText('Operations')).toBeInTheDocument();
-    expect(screen.getAllByText('Default')).toHaveLength(2);
+    const list = within(screen.getByTestId('workspaces-list'));
+    const defaultRow = list.getAllByRole('listitem')[0];
+    expect(within(defaultRow).getByText('Default', { selector: '.MuiChip-label' })).toBeInTheDocument();
+    expect(within(list.getAllByRole('listitem')[1]).queryByText('Default', { selector: '.MuiChip-label' })).toBeNull();
   });
 });
