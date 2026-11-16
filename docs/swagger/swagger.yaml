@@ -3278,6 +3278,39 @@ definitions:
       end_user:
         type: string
     type: object
+  api.PushPreconditionInput:
+    properties:
+      only_workspace_id:
+        description: |-
+          OnlyWorkspaceID refuses the push while changes from outside this
+          Workspace are pending in a target namespace.
+        type: integer
+    type: object
+  api.PushStainedBody:
+    properties:
+      by_workspace:
+        items:
+          $ref: '#/definitions/services.PendingWorkspaceTotal'
+        type: array
+      changes:
+        description: Changes lists up to 20 foreign changes, newest first.
+        items:
+          $ref: '#/definitions/api.stainedChange'
+        type: array
+      errors:
+        items:
+          $ref: '#/definitions/authz.Error'
+        type: array
+      outside_total:
+        description: |-
+          OutsideTotal counts every foreign change; ByWorkspace splits those
+          owned by a Workspace, UnattributedTotal the rest (global types).
+        type: integer
+      unattributed_total:
+        type: integer
+      workspace_id:
+        type: integer
+    type: object
   api.RegisterInput:
     description: Register input model
     properties:
@@ -4454,6 +4487,42 @@ definitions:
       connection_id:
         type: integer
     type: object
+  api.stainedChange:
+    properties:
+      at:
+        description: when that change happened
+        type: string
+      change:
+        description: created | updated | deleted
+        type: string
+      hidden:
+        description: |-
+          Hidden marks a change whose object the caller cannot see; its type,
+          kind, time and Workspace id are still reported.
+        type: boolean
+      id:
+        description: |-
+          ID and Name are left out (Hidden set) for an object the caller cannot
+          see: an App or router in a Workspace their read does not cover.
+        type: integer
+      name:
+        description: display name at the time of the query
+        type: string
+      namespace:
+        type: string
+      type:
+        description: llm, app, filter, tool, datasource, plugin, model_router, semantic_router,
+          model_price, oauth_client, access_token
+        type: string
+      workspace_id:
+        description: |-
+          WorkspaceID is the Workspace that owns the object (a stored 0 reads
+          as the Default workspace); nil for types with no owning Workspace
+          (plugin, model_price, oauth_client, access_token).
+        type: integer
+      workspace_name:
+        type: string
+    type: object
   api.updateWebhookTargetInput:
     properties:
       description:
@@ -4593,6 +4662,17 @@ definitions:
     - ActionDelete
     - ActionExecute
     - ActionPublish
+  authz.Error:
+    properties:
+      code:
+        type: string
+      detail:
+        type: string
+      permission:
+        type: string
+      title:
+        type: string
+    type: object
   authz.Resource:
     properties:
       actions:
@@ -10899,6 +10979,12 @@ paths:
         name: edge_id
         required: true
         type: string
+      - description: 'Optional push precondition (Enterprise Workspaces): refuse the
+          push while changes from outside this Workspace are pending'
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/api.PushPreconditionInput'
       produces:
       - application/json
       responses:
@@ -10909,6 +10995,14 @@ paths:
             type: object
         "404":
           description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: push_stained (only_workspace_id), or no edges to push to
+          schema:
+            $ref: '#/definitions/api.PushStainedBody'
+        "422":
+          description: only_workspace_id names no Workspace
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "500":
@@ -10933,6 +11027,13 @@ paths:
         and, for clients written against v2.2, data.message, data.operations (one
         entry per namespace, all with the same operation_id) and data.operations_count.
         409 when there is no edge to push to (up to v2.2: 202 with no operations).'
+      parameters:
+      - description: 'Optional push precondition (Enterprise Workspaces): refuse the
+          push while changes from outside this Workspace are pending'
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/api.PushPreconditionInput'
       produces:
       - application/json
       responses:
@@ -10942,7 +11043,11 @@ paths:
             additionalProperties: true
             type: object
         "409":
-          description: Conflict
+          description: push_stained (only_workspace_id), or no edges to push to
+          schema:
+            $ref: '#/definitions/api.PushStainedBody'
+        "422":
+          description: only_workspace_id names no Workspace
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "500":

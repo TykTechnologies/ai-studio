@@ -251,6 +251,17 @@ alone.
   `GET /reload-operations/:id/status` (ENT; 402 in CE) reports every edge;
   `GET /edges/reload-operations` lists the last day's pushes with their
   outcome counts, which is what the CE dialog shows.
+- Push precondition (Enterprise Workspaces C2): the three push routes take
+  an optional body `{"only_workspace_id": <id>}`. A `Precheck` on
+  `pushes.Request` runs once the targets are resolved and before anything
+  is recorded: if any target namespace has a pending change from outside
+  that Workspace (the pending-changes stain rule), the push is refused with
+  409 `push_stained` (foreign counts by Workspace and up to 20 foreign
+  changes, redacted for the caller as the pending-changes preview is), and
+  no operation, command or `last_push_at` is written. The check runs on the
+  replica that accepts the request; a change landing after it still ships
+  with the snapshot the edges pull, and a push still delivers the whole
+  namespace. Without the body nothing changes.
 
 #### API changes from v2.2 (upgrade note)
 

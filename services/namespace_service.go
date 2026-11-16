@@ -168,26 +168,87 @@ func (s *NamespaceService) GetEdgesInNamespace(namespace string) ([]EdgeInstance
 
 // TriggerNamespaceReload pushes the current configuration to every edge in
 // the namespace. It returns once the push is recorded; delivery and the
-// edges' answers are tracked on the returned operation.
-func (s *NamespaceService) TriggerNamespaceReload(namespace string, initiatedBy string) (*pushes.Result, error) {
-	return s.push(pushes.Request{Scope: pushes.ScopeNamespace, Namespace: namespace, InitiatedBy: initiatedBy})
+// edges' answers are tracked on the returned operation. onlyWorkspaceID,
+// when given, is the push precondition (PushOnlyWorkspace).
+func (s *NamespaceService) TriggerNamespaceReload(namespace string, initiatedBy string, onlyWorkspaceID ...uint) (*pushes.Result, error) {
+	return s.push(pushes.Request{Scope: pushes.ScopeNamespace, Namespace: namespace, InitiatedBy: initiatedBy}, onlyWorkspaceID...)
 }
 
 // TriggerEdgeReload pushes the current configuration to one edge. An edge
 // that is not connected is waited for until the push's deadline.
-func (s *NamespaceService) TriggerEdgeReload(edgeID string, initiatedBy string) (*pushes.Result, error) {
-	return s.push(pushes.Request{Scope: pushes.ScopeEdge, EdgeIDs: []string{edgeID}, InitiatedBy: initiatedBy})
+func (s *NamespaceService) TriggerEdgeReload(edgeID string, initiatedBy string, onlyWorkspaceID ...uint) (*pushes.Result, error) {
+	return s.push(pushes.Request{Scope: pushes.ScopeEdge, EdgeIDs: []string{edgeID}, InitiatedBy: initiatedBy}, onlyWorkspaceID...)
 }
 
 // TriggerAllReload pushes the current configuration to every edge in every
 // namespace, as one operation.
-func (s *NamespaceService) TriggerAllReload(initiatedBy string) (*pushes.Result, error) {
-	return s.push(pushes.Request{Scope: pushes.ScopeAll, InitiatedBy: initiatedBy})
+func (s *NamespaceService) TriggerAllReload(initiatedBy string, onlyWorkspaceID ...uint) (*pushes.Result, error) {
+	return s.push(pushes.Request{Scope: pushes.ScopeAll, InitiatedBy: initiatedBy}, onlyWorkspaceID...)
 }
 
-func (s *NamespaceService) push(req pushes.Request) (*pushes.Result, error) {
+// ErrPushStained refuses a push limited to one Workspace (the
+// only_workspace_id precondition) while changes from outside it are pending
+// in a target namespace; the push would carry them. The error is a
+// *PushStainedError.
+var ErrPushStained = errors.New("the push would carry pending changes from outside the Workspace")
+
+// PushStainedError says what stains the push: for each stained target
+// namespace, its pending changes (GetPendingChangesFor with the Workspace,
+// so OutsideTotal and PendingChangeIsForeign tell the foreign ones).
+type PushStainedError struct {
+	WorkspaceID uint
+	Stained     []*PendingChanges
+}
+
+func (e *PushStainedError) Error() string {
+	n := 0
+	for _, pc := range e.Stained {
+		if pc.OutsideTotal != nil {
+			n += *pc.OutsideTotal
+		}
+	}
+	return fmt.Sprintf("%s: %d foreign change(s) pending", ErrPushStained.Error(), n)
+}
+
+func (e *PushStainedError) Unwrap() error { return ErrPushStained }
+
+// stainPrecheck is the push precondition (Workspaces C2): every target
+// namespace must have no pending change foreign to workspaceID (C1's rule,
+// PendingChangeIsForeign). It runs on the replica that accepts the push,
+// before anything is recorded; a change landing after it still ships with
+// the snapshot the edges pull.
+func (s *NamespaceService) stainPrecheck(workspaceID uint) func(context.Context, []string) error {
+	return func(_ context.Context, namespaces []string) error {
+		sync := NewSyncStatusService(s.db)
+		var stained []*PendingChanges
+		seen := map[string]bool{}
+		for _, ns := range namespaces {
+			canonical := models.CanonicalNamespace(ns)
+			if seen[canonical] {
+				continue
+			}
+			seen[canonical] = true
+			pc, err := sync.GetPendingChangesFor(canonical, &workspaceID)
+			if err != nil {
+				return err
+			}
+			if pc.Stained != nil && *pc.Stained {
+				stained = append(stained, pc)
+			}
+		}
+		if len(stained) > 0 {
+			return &PushStainedError{WorkspaceID: workspaceID, Stained: stained}
+		}
+		return nil
+	}
+}
+
+func (s *NamespaceService) push(req pushes.Request, onlyWorkspaceID ...uint) (*pushes.Result, error) {
 	if s.pushes == nil {
 		return nil, ErrPushesUnavailable
+	}
+	if len(onlyWorkspaceID) > 0 {
+		req.Precheck = s.stainPrecheck(onlyWorkspaceID[0])
 	}
 	res, err := s.pushes.Push(context.Background(), req)
 	if err != nil {

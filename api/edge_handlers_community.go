@@ -161,6 +161,9 @@ func (a *API) getEdge(c *gin.Context) {
 // @Failure 404 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
+// @Param body body PushPreconditionInput false "Optional push precondition (Enterprise Workspaces): refuse the push while changes from outside this Workspace are pending"
+// @Failure 409 {object} PushStainedBody "push_stained (only_workspace_id), or no edges to push to"
+// @Failure 422 {object} ErrorResponse "only_workspace_id names no Workspace"
 // @Router /api/v1/edges/{edge_id}/reload [post]
 // @Security BearerAuth
 func (a *API) triggerEdgeReload(c *gin.Context) {
@@ -172,8 +175,15 @@ func (a *API) triggerEdgeReload(c *gin.Context) {
 		return
 	}
 
-	res, err := a.service.NamespaceService.TriggerEdgeReload(edgeID, initiatedBy(c))
+	only, ok := a.pushOnlyWorkspace(c)
+	if !ok {
+		return
+	}
+	res, err := a.service.NamespaceService.TriggerEdgeReload(edgeID, initiatedBy(c), only...)
 	if err != nil {
+		if a.sendPushStained(c, err) {
+			return
+		}
 		sendPushError(c, err)
 		return
 	}
@@ -234,14 +244,23 @@ func (a *API) listReloadOperations(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Success 202 {object} map[string]interface{}
-// @Failure 409 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
+// @Param body body PushPreconditionInput false "Optional push precondition (Enterprise Workspaces): refuse the push while changes from outside this Workspace are pending"
+// @Failure 409 {object} PushStainedBody "push_stained (only_workspace_id), or no edges to push to"
+// @Failure 422 {object} ErrorResponse "only_workspace_id names no Workspace"
 // @Router /api/v1/edges/reload-all [post]
 // @Security BearerAuth
 func (a *API) reloadAllEdges(c *gin.Context) {
 	// CE: every edge is in the "default" namespace.
-	res, err := a.service.NamespaceService.TriggerNamespaceReload(models.DefaultNamespace, initiatedBy(c))
+	only, ok := a.pushOnlyWorkspace(c)
+	if !ok {
+		return
+	}
+	res, err := a.service.NamespaceService.TriggerNamespaceReload(models.DefaultNamespace, initiatedBy(c), only...)
 	if err != nil {
+		if a.sendPushStained(c, err) {
+			return
+		}
 		sendPushError(c, err)
 		return
 	}

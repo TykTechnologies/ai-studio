@@ -138,6 +138,11 @@ type Request struct {
 	Namespace   string   // ScopeNamespace
 	EdgeIDs     []string // ScopeEdge
 	InitiatedBy string
+	// Precheck, when set, runs once the target edges are known and before
+	// anything is recorded, with the distinct namespaces of the targets (as
+	// the edges store them: "" for global). An error refuses the push: no
+	// operation, no commands (the push precondition of Workspaces C2).
+	Precheck func(ctx context.Context, namespaces []string) error
 }
 
 // Target is an edge a push was (or was not) sent to.
@@ -441,6 +446,20 @@ func (c *Coordinator) Push(ctx context.Context, req Request) (*Result, error) {
 		}
 	default:
 		return nil, fmt.Errorf("pushes: unknown scope %q", req.Scope)
+	}
+
+	if req.Precheck != nil {
+		seen := map[string]bool{}
+		var namespaces []string
+		for _, e := range edges {
+			if !seen[e.Namespace] {
+				seen[e.Namespace] = true
+				namespaces = append(namespaces, e.Namespace)
+			}
+		}
+		if err := req.Precheck(ctx, namespaces); err != nil {
+			return nil, err
+		}
 	}
 
 	op := models.PushOperation{
