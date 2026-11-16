@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// rbacContext attaches a lazy permission resolver for the authenticated user
+// rbacContext attaches a lazy grants resolver for the authenticated user
 // so handlers (and the enforcing middleware) can ask authz.Can without any
 // database work until something actually checks a permission. It is
 // installed on every authenticated group; it never rejects a request.
@@ -19,8 +19,8 @@ func (a *API) rbacContext() gin.HandlerFunc {
 		if user, ok := auth.UserFromContext(c); ok {
 			svc := a.service.Authz()
 			ctx := c.Request.Context()
-			authz.WithContext(c, authz.NewContext(user.ID, user.IsAdmin, func() (authz.Set, error) {
-				return svc.Resolve(ctx, user)
+			authz.WithContext(c, authz.NewGrantsContext(user.ID, user.IsAdmin, func() (authz.Grants, error) {
+				return svc.ResolveGrants(ctx, user)
 			}))
 		}
 		c.Next()

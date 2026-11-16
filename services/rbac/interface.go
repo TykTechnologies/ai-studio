@@ -55,11 +55,22 @@ type BindingInput struct {
 	ScopeID   string
 }
 
+// Binding scope types. A binding with an empty scope is global and covers
+// every Workspace (decision D1).
+const (
+	ScopeTypeGlobal    = ""
+	ScopeTypeWorkspace = "workspace"
+)
+
 // BindingFilter narrows ListBindings. Zero values mean "no filter".
 type BindingFilter struct {
 	SubjectType string
 	SubjectID   uint
 	RoleID      uint
+	// ScopeType and ScopeID filter by binding scope. ScopeType "" means no
+	// filter (it does not select global bindings only).
+	ScopeType string
+	ScopeID   string
 }
 
 // RoleSummary is the compact role shape returned alongside users, groups and
@@ -91,6 +102,19 @@ type Effective struct {
 	Permissions authz.Set
 	Roles       []RoleSummary
 	Sources     map[string][]PermissionSource
+	// Workspaces is the access the user holds only inside a Workspace, from
+	// Workspace-scoped bindings, keyed by Workspace id. Global access
+	// (above) covers every Workspace and is not repeated here. Empty in CE.
+	Workspaces map[uint]WorkspaceEffective
+}
+
+// WorkspaceEffective is the access Workspace-scoped bindings grant inside
+// one Workspace: the roles, the resulting set (stamped resources only,
+// decision D2) and per permission the bindings that granted it.
+type WorkspaceEffective struct {
+	Permissions authz.Set
+	Roles       []RoleSummary
+	Sources     map[string][]PermissionSource
 }
 
 // RoleCounts is how many users and groups hold a role directly.
@@ -114,6 +138,11 @@ type Service interface {
 	// Resolve computes the user's effective permission set. It is called at
 	// most once per request by the authorization middleware.
 	Resolve(ctx context.Context, user *models.User) (authz.Set, error)
+
+	// ResolveGrants computes the user's global set (what Resolve returns)
+	// and, per Workspace, the permissions Workspace-scoped bindings grant
+	// there. The authorization middleware calls it at most once per request.
+	ResolveGrants(ctx context.Context, user *models.User) (authz.Grants, error)
 
 	// EffectivePermissions returns the set and the roles behind it.
 	EffectivePermissions(ctx context.Context, userID uint) (*Effective, error)
