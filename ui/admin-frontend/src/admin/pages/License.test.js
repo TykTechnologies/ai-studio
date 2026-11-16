@@ -34,6 +34,14 @@ const report = (namespaces, waiting = []) => ({
         { key: "l1", label: "Apps", used: 3, max: 10, unlimited: false },
         { key: "l2", label: "Portal users", used: 7, max: 0, unlimited: true },
         { key: "l3", label: "Namespaces", used: 2, max: 2, unlimited: false },
+        {
+          key: "l4",
+          label: "Users with admin access",
+          used: 4,
+          max: 5,
+          unlimited: false,
+          parts: [{ key: "service_accounts", label: "Service accounts", used: 1 }],
+        },
       ],
       namespaces,
       waiting,
@@ -77,6 +85,8 @@ describe("License page", () => {
     expect(screen.getByTestId("license-limit-l2")).toHaveTextContent("7 of unlimited");
     expect(screen.getByTestId("license-limit-l3")).toHaveTextContent("At limit");
     expect(screen.getByTestId("license-limit-l1")).not.toHaveTextContent("At limit");
+    expect(screen.getByTestId("license-limit-l4-service_accounts")).toHaveTextContent("of which service accounts: 1");
+    expect(screen.queryByTestId("license-limit-l1-service_accounts")).not.toBeInTheDocument();
     expect(screen.getByTestId("license-feature-f1")).toHaveTextContent("Portal");
     expect(screen.getByText("No namespace holds a slot.")).toBeInTheDocument();
   });

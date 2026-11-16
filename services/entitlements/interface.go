@@ -60,6 +60,16 @@ type Limit struct {
 	// Max is the licensed maximum; ignore it when Unlimited.
 	Max       int64 `json:"max"`
 	Unlimited bool  `json:"unlimited"`
+	// Parts break Used down where a kind of holder is worth showing on its
+	// own (the service accounts within admin seats). Omitted when none.
+	Parts []LimitPart `json:"parts,omitempty"`
+}
+
+// LimitPart is one line within a limit's usage.
+type LimitPart struct {
+	Key   string `json:"key"`
+	Label string `json:"label"`
+	Used  int64  `json:"used"`
 }
 
 // Feature is one licensed feature switch.
