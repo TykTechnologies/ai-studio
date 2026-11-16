@@ -47,7 +47,13 @@ func TestCatalogue_ScopeKinds(t *testing.T) {
 		_, ok := ResourceByKey(key)
 		assert.True(t, ok, "stamped resource %q is not registered", key)
 	}
-	assert.Len(t, StampedResources(), 15)
+	var wantStamped []string
+	for key, kind := range expectedScopes {
+		if kind.Stamped() {
+			wantStamped = append(wantStamped, key)
+		}
+	}
+	assert.ElementsMatch(t, wantStamped, StampedResources())
 	assert.Equal(t, ScopeGlobal, ScopeOf(FullAdmin))
 	assert.Equal(t, ScopeGlobal, ScopeOf(AnyAdmin))
 	assert.Equal(t, ScopeGlobal, ScopeOf("spaceships:read"))

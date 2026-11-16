@@ -135,8 +135,9 @@ type Service interface {
 	// treats as enabled and the community stub ignores.
 	SetLicenseCheck(check func() bool)
 
-	// Resolve computes the user's effective permission set. It is called at
-	// most once per request by the authorization middleware.
+	// Resolve computes the user's global effective permission set: what
+	// unscoped bindings grant, covering every Workspace. The authorization
+	// middleware uses ResolveGrants, whose Global is this set.
 	Resolve(ctx context.Context, user *models.User) (authz.Set, error)
 
 	// ResolveGrants computes the user's global set (what Resolve returns)
