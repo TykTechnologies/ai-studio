@@ -158,7 +158,12 @@ const (
 	//     (midsommar-clean-oztk.2). Older code ignores the column; rows it
 	//     writes (0) read as the Default workspace and are stamped on the
 	//     next start.
-	SchemaVersion          = 44
+	// 45: users.account_type (defaulted '', indexed; additive): service
+	//     accounts (midsommar-clean-oztk.16). An older build ignores it, so
+	//     a service account's API key works there as an ordinary user's with
+	//     its global bindings; it still has no password and an undeliverable
+	//     email, so it cannot sign in interactively there either.
+	SchemaVersion          = 45
 	MinReaderSchemaVersion = 42
 )
 

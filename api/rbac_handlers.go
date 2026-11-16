@@ -13,6 +13,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/rbac"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -40,6 +41,8 @@ func rbacErrorResponse(c *gin.Context, err error) {
 		c.JSON(http.StatusConflict, authz.Body("Last Owner", err.Error(), authz.CodeLastOwner))
 	case errors.Is(err, rbac.ErrOwnerUserOnly):
 		c.JSON(http.StatusConflict, authz.Body("Owner Is User-Only", err.Error(), authz.CodeOwnerUserOnly))
+	case errors.Is(err, rbac.ErrServiceAccountOwner):
+		c.JSON(http.StatusConflict, authz.Body("Service Account", err.Error(), services.ServiceAccountCode))
 	case errors.Is(err, rbac.ErrOwnerRequired):
 		c.JSON(http.StatusForbidden, authz.Body("Owner Required", err.Error(), authz.CodeOwnerRequired))
 	case errors.Is(err, rbac.ErrOwnerScopeForbidden):

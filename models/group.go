@@ -72,6 +72,9 @@ func (g *Group) Delete(db *gorm.DB) error {
 }
 
 func (g *Group) AddUser(db *gorm.DB, user *User) error {
+	if user.IsServiceAccount() {
+		return ErrServiceAccountTeams
+	}
 	return db.Model(g).Association("Users").Append(user)
 }
 

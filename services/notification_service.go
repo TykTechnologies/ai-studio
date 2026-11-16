@@ -117,7 +117,7 @@ func (s *NotificationService) NotifyWithOptions(notificationID string, title str
 		// Send to admin users
 		var adminIDs []uint
 		if err := s.db.Model(&models.User{}).
-			Where("is_admin = ? AND notifications_enabled = ? AND disabled = ?", true, true, false).
+			Where("is_admin = ? AND notifications_enabled = ? AND disabled = ? AND account_type <> ?", true, true, false, models.AccountTypeService).
 			Pluck("id", &adminIDs).Error; err != nil {
 			return fmt.Errorf("error finding admin users: %v", err)
 		}
@@ -425,6 +425,12 @@ func (s *NotificationService) Send(notification *models.Notification) error {
 // the in-app record carries a plain summary while the email keeps the full
 // template. Duplicates by NotificationID are skipped.
 func (s *NotificationService) deliver(notification *models.Notification, emailBody string, skipEmail bool) error {
+	// No notification, bell or email, is ever addressed to a service
+	// account: nobody reads it, and its address is undeliverable.
+	if s.recipientIsServiceAccount(notification.UserID) {
+		return nil
+	}
+
 	// For testing purposes
 	s.mu.Lock()
 	s.notifications = append(s.notifications, *notification)
@@ -475,6 +481,18 @@ func (s *NotificationService) deliver(notification *models.Notification, emailBo
 	}
 
 	return nil
+}
+
+// recipientIsServiceAccount reports whether the user is a service account.
+// A lookup failure counts as not: the other checks still apply.
+func (s *NotificationService) recipientIsServiceAccount(userID uint) bool {
+	var count int64
+	if err := s.db.Model(&models.User{}).
+		Where("id = ? AND account_type = ?", userID, models.AccountTypeService).
+		Count(&count).Error; err != nil {
+		return false
+	}
+	return count > 0
 }
 
 // recipientDisabled reports whether the user is switched off (or gone).

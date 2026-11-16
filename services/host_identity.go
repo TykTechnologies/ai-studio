@@ -53,6 +53,10 @@ var (
 	// ErrHostUserDisabled is returned for a user an administrator disabled
 	// in Studio.
 	ErrHostUserDisabled = errors.New("account is disabled")
+	// ErrHostServiceAccount is returned when the identity resolves to a
+	// service account: a host can neither link one by email nor sign in
+	// as one.
+	ErrHostServiceAccount = errors.New("the identity matches a service account, which cannot sign in through the host")
 )
 
 // hostLoginStampInterval throttles how often a host-authenticated request
@@ -87,6 +91,8 @@ func (s *Service) ProvisionHostUser(id HostIdentity) (*models.User, error) {
 		changed = true
 	} else if user.Disabled {
 		return nil, ErrHostUserDisabled
+	} else if user.IsServiceAccount() {
+		return nil, ErrHostServiceAccount
 	} else if changed, err = s.syncHostUser(user, id); err != nil {
 		return nil, err
 	}
@@ -146,6 +152,9 @@ func (s *Service) linkOrCreateHostUser(id HostIdentity) (*models.User, error) {
 	case err == nil:
 		if existing.ExternalSubject != "" {
 			return nil, ErrHostIdentityConflict
+		}
+		if existing.IsServiceAccount() {
+			return nil, ErrHostServiceAccount
 		}
 		if existing.Disabled {
 			return nil, ErrHostUserDisabled

@@ -2320,6 +2320,8 @@ TABLE users
   column `disabled` numeric NOT NULL DEFAULT false
   column `disabled_at` datetime
   column `metadata` json
+  column `account_type` text NOT NULL DEFAULT ""
+  index CREATE INDEX `idx_users_account_type` ON `users`(`account_type`)
   index CREATE INDEX `idx_users_auth_source` ON `users`(`auth_source`)
   index CREATE INDEX `idx_users_deleted_at` ON `users`(`deleted_at`)
   index CREATE INDEX `idx_users_disabled` ON `users`(`disabled`)

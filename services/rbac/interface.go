@@ -37,6 +37,10 @@ var (
 	ErrInvalidScope = errors.New("invalid binding scope: use no scope, or scope_type \"workspace\" with the id of an existing Workspace")
 	// ErrOwnerScopeForbidden: the Owner role is always global (decision D3).
 	ErrOwnerScopeForbidden = errors.New("the Owner role cannot be assigned within a Workspace")
+	// ErrServiceAccountOwner refuses the Owner role for a service account
+	// (Enterprise; answered 409 service_account, like the other Owner
+	// rules).
+	ErrServiceAccountOwner = errors.New("the Owner role cannot be given to a service account")
 )
 
 // Subject identifies who a role is bound to.

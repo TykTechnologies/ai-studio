@@ -4,6 +4,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -282,6 +283,11 @@ func (a *API) addUserToGroup(c *gin.Context) {
 		helpers.SendErrorResponse(c, ee.HTTPError())
 		return
 	}
+	var he helpers.ErrorResponse
+	if errors.As(err, &he) {
+		helpers.SendErrorResponse(c, he)
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -413,6 +419,11 @@ func (a *API) updateGroupUsers(c *gin.Context) {
 	err = a.service.UpdateGroupUsers(uint(id), input.Data.Attributes.Members)
 	if ee, exceeded := entitlements.AsExceeded(err); exceeded {
 		helpers.SendErrorResponse(c, ee.HTTPError())
+		return
+	}
+	var he helpers.ErrorResponse
+	if errors.As(err, &he) {
+		helpers.SendErrorResponse(c, he)
 		return
 	}
 	if err != nil {
