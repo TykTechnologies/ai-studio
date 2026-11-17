@@ -1,14 +1,17 @@
 import { useState } from 'react';
 import { createToolWithOperations } from '../services/toolService';
 import { extractOperations, extractAuthDetails } from '../utils/specUtils';
+import { workspaceFieldError } from '../../../workspaces/workspaceFields';
 
 export const useToolCreation = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [workspaceError, setWorkspaceError] = useState('');
 
   const createTool = async (toolConfig) => {
     setLoading(true);
     setError('');
+    setWorkspaceError('');
 
     try {
       // Extract operations from spec
@@ -37,14 +40,17 @@ export const useToolCreation = () => {
         mcp_access_enabled: Boolean(toolConfig.mcp_access_enabled),
         file_stores: [],
         filters: [],
-        dependencies: []
+        dependencies: [],
+        workspace_id: toolConfig.workspace_id ?? null
       };
 
       // Create tool with operations
       const result = await createToolWithOperations(toolData, operations);
       return result;
     } catch (error) {
-      setError(error.message || 'Failed to create tool');
+      const wsError = workspaceFieldError(error);
+      setWorkspaceError(wsError);
+      setError(wsError || error.message || 'Failed to create tool');
       throw error;
     } finally {
       setLoading(false);
@@ -54,6 +60,7 @@ export const useToolCreation = () => {
   return {
     createTool,
     loading,
-    error
+    error,
+    workspaceError
   };
 };

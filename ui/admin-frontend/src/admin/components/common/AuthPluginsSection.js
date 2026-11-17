@@ -60,9 +60,14 @@ export const fetchAuthCapablePlugins = async () => {
  * in the help text; writePermission (an rbac/permissions P entry) decides
  * whether the viewer may change the list.
  */
-const AuthPluginsSection = ({ endpointPath, endpointId, noun = "endpoint", writePermission }) => {
-  const { can } = usePermissions();
-  const canEdit = writePermission ? can(writePermission) : false;
+const AuthPluginsSection = ({ endpointPath, endpointId, noun = "endpoint", writePermission, workspaceId }) => {
+  const { can, canIn } = usePermissions();
+  // workspaceId: the endpoint's Workspace (write is checked there); omitted
+  // for a global object (plugins).
+  let canEdit = false;
+  if (writePermission) {
+    canEdit = workspaceId !== undefined && canIn ? canIn(workspaceId, writePermission) : can(writePermission);
+  }
   const [available, setAvailable] = useState([]);
   const [selected, setSelected] = useState([]);
   const [saved, setSaved] = useState([]);

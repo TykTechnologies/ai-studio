@@ -5,9 +5,11 @@ import { P } from "../../rbac/permissions";
 import Can from "../rbac/Can";
 import UsedBySection from "../common/UsedBySection";
 import PrivacyLevelChip from "../common/privacy/PrivacyLevelChip";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, Link as RouterLink } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
+import WorkspacePickDialog from "../workspaces/WorkspacePickDialog";
+import useDatasourceClone from "./useDatasourceClone";
 import {
   Typography,
   CircularProgress,
@@ -45,6 +47,7 @@ import {
 const DatasourceDetails = () => {
   const [datasource, setDatasource] = useState(null);
   const [owner, setOwner] = useState(null);
+  const [cloneError, setCloneError] = useState("");
   const [loading, setLoading] = useState(true);
   const [copySuccess, setCopySuccess] = useState("");
   const { id } = useParams();
@@ -83,17 +86,14 @@ const DatasourceDetails = () => {
     }
   };
 
-  const handleCloneDataSource = async () => {
-    try {
-      // Use server-side clone endpoint that preserves API keys
-      const response = await apiClient.post(`/datasources/${id}/clone`);
-      const newDatasourceId = response.data.data.id;
-
-      // Redirect to edit page of new datasource
-      navigate(`/admin/datasources/edit/${newDatasourceId}`);
-    } catch (error) {
-      console.error("Error cloning datasource:", error);
-    }
+  // Server-side clone (keeps API keys); a caller who may write in several
+  // Workspaces picks where the copy goes. Then edit the copy.
+  const onCloned = useCallback((newDatasourceId) => navigate(`/admin/datasources/edit/${newDatasourceId}`), [navigate]);
+  const onCloneError = useCallback((message) => setCloneError(message), []);
+  const { startClone, dialogProps: cloneDialogProps } = useDatasourceClone({ onCloned, onError: onCloneError });
+  const handleCloneDataSource = () => {
+    setCloneError("");
+    startClone(id);
   };
 
   const copyToClipboard = (text, field) => {
@@ -353,6 +353,7 @@ const DatasourceDetails = () => {
         </StyledAccordion>
 
         <AuthPluginsSection
+          workspaceId={datasource.attributes.workspace_id}
           endpointPath="datasources"
           endpointId={id}
           noun="data source"
@@ -371,7 +372,10 @@ const DatasourceDetails = () => {
           justifyContent="space-between"
           alignItems="center"
         >
-          <Typography color="success.main">{copySuccess}</Typography>
+          <Box>
+            <Typography color="success.main">{copySuccess}</Typography>
+            {cloneError && <Typography color="error.main">{cloneError}</Typography>}
+          </Box>
           <Box display="flex" gap={2}>
             <Can permission={P.DATASOURCES_WRITE} workspaceId={datasource.attributes.workspace_id}>
               <PrimaryOutlineButton
@@ -393,6 +397,7 @@ const DatasourceDetails = () => {
           </Box>
         </Box>
       </ContentBox>
+      <WorkspacePickDialog {...cloneDialogProps} />
     </>
   );
 };

@@ -2,6 +2,8 @@ import React from 'react';
 import { PROVIDER_TYPES } from '../constants';
 import PrivacyLevelInput from '../../../common/privacy/PrivacyLevelInput';
 import ToolAccessMethods from '../../ToolAccessMethods';
+import WorkspaceSelect from '../../../workspaces/WorkspaceSelect';
+import { P } from '../../../../rbac/permissions';
 import {
   Box,
   Typography,
@@ -15,6 +17,7 @@ const ConfigureTool = ({
   onConfigChange,
   loading,
   error,
+  workspaceError = '',
   selectedAPI,
   importMethod = PROVIDER_TYPES.DIRECT_IMPORT // default to direct import if not specified
 }) => {
@@ -78,6 +81,17 @@ const ConfigureTool = ({
           value={toolConfig.privacy_score}
           onChange={handlePrivacyChange}
           checkProviders
+        />
+      </Box>
+
+      {/* Workspace (Enterprise): where the tool is created. */}
+      <Box sx={{ mt: 2, mb: 1 }}>
+        <WorkspaceSelect
+          permission={P.TOOLS_WRITE}
+          value={toolConfig.workspace_id ?? null}
+          onChange={(ws) => onConfigChange({ ...toolConfig, workspace_id: ws })}
+          error={workspaceError}
+          helperText="The Workspace the tool is created in."
         />
       </Box>
 

@@ -27,12 +27,13 @@ import useListQuery from "../hooks/useListQuery";
 import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
+import WorkspacePickDialog from "../components/workspaces/WorkspacePickDialog";
+import useDatasourceClone from "../components/datasources/useDatasourceClone";
 import {
   useWorkspaceColumn,
   useWorkspaceFilter,
   useWorkspaceAccess,
   WorkspaceFilter,
-  workspaceFieldError,
 } from "../components/workspaces/workspaceFields";
 
 const DatasourceList = () => {
@@ -120,21 +121,15 @@ const DatasourceList = () => {
     }
   }, [fetchDatasources, notify]);
 
-  const handleCloneDatasource = useCallback(async (datasource) => {
-    try {
-      // Use server-side clone endpoint that preserves API keys
-      const response = await apiClient.post(`/datasources/${datasource.id}/clone`);
-      const newDatasourceId = response.data.data.id;
-
-      notify("Data source cloned successfully");
-
-      navigate(`/admin/datasources/edit/${newDatasourceId}`);
-    } catch (error) {
-      console.error("Error cloning datasource:", error);
-      // A caller who may write in several Workspaces is asked to choose one.
-      notify(workspaceFieldError(error) || "Failed to clone data source", "error");
-    }
+  // Server-side clone (keeps API keys); a caller who may write in several
+  // Workspaces picks where the copy goes.
+  const onCloned = useCallback((newDatasourceId) => {
+    notify("Data source cloned successfully");
+    navigate(`/admin/datasources/edit/${newDatasourceId}`);
   }, [navigate, notify]);
+  const onCloneError = useCallback((message) => notify(message, "error"), [notify]);
+  const { startClone, dialogProps: cloneDialogProps } = useDatasourceClone({ onCloned, onError: onCloneError });
+  const handleCloneDatasource = useCallback((datasource) => startClone(datasource.id), [startClone]);
 
   const handleDatasourceClick = (datasource) => {
     navigate(`/admin/datasources/${datasource.id}`);
@@ -322,6 +317,8 @@ const DatasourceList = () => {
         onConfirm={bulk.confirmDelete}
         onCancel={bulk.cancelDelete}
       />
+
+      <WorkspacePickDialog {...cloneDialogProps} />
 
       <FeedbackSnackbar {...snackbarProps} />
     </>
