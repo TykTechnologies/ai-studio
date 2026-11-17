@@ -38,10 +38,13 @@ Objects fall into three kinds:
 
 Plugins, webhooks, edges, users, teams, roles, analytics, logs, traces and other settings are **global**: they belong to no Workspace and are governed by global roles only.
 
+::: warning Linking is using
+An App linked to another Workspace's model provider, tool or data source uses it, credentials included, when it serves requests. Workspaces protect who may **change** an object, not who may **use** it: anyone who may write an App can link any shared building block they can read. Keep credentials you need to restrict to some teams on objects only those teams' Apps link to, and review App links. A separate permission for use is planned.
+:::
+
 A few things to know:
 
 - **Secret references stay inside a Workspace.** A `$SECRET/NAME` reference must name a secret in the same Workspace as the object that uses it, and a secret's name is unique across all Workspaces. A referenced secret cannot be deleted, renamed or moved to another Workspace.
-- **Linking is using.** An App linked to another Workspace's model provider, tool or data source uses it, credentials included, when it serves requests. Workspaces protect who may change an object, not who may use it. A separate permission for use is planned.
 - **Do not put secrets in file stores.** File store content is a shared building block: anyone who may read file stores in any Workspace can read every file.
 - **Tyk connections are global.** Someone who may run MCP server actions in one Workspace (register, push, link, discover) can use any Tyk Dashboard or Gateway connection. Restricting connections by Workspace is planned.
 - **Unique names are unique across Workspaces.** Where a name must be unique (secret names, agent slugs and the like), it is unique across all Workspaces. A create that takes such a name fails with a conflict, even when the other object is hidden from you, so the conflict can reveal a hidden object's name.
