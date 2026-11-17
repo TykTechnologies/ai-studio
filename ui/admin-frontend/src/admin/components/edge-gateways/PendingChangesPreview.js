@@ -16,7 +16,8 @@ import {
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { Link as RouterLink } from 'react-router-dom';
-import { changeLink, groupChanges, relativeTime, summarizePending } from './pendingChanges';
+import { changeLink, groupChanges, relativeTime, summarizePending, summarizeWorkspaces, workspaceLabel } from './pendingChanges';
+import { usePermissions } from '../../context/PermissionsContext';
 
 const CHANGE_COLOR = { created: 'success', updated: 'info', deleted: 'default' };
 
@@ -34,6 +35,9 @@ const Dot = () => (
  */
 export const NamespaceChanges = ({ namespace, state, onNavigate }) => {
   const { loading, error, data } = state || {};
+  // Workspaces are Enterprise (role-based access control): Community shows
+  // none, as before.
+  const { rbacEnabled } = usePermissions();
 
   if (loading) {
     return (
@@ -76,6 +80,16 @@ export const NamespaceChanges = ({ namespace, state, onNavigate }) => {
       >
         {summarizePending(data)}
       </Typography>
+      {rbacEnabled && summarizeWorkspaces(data) && (
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ mb: groups.length ? 1 : 0 }}
+          data-testid="pending-changes-workspaces"
+        >
+          {summarizeWorkspaces(data)}
+        </Typography>
+      )}
 
       {groups.map((group) => (
         <Box key={group.type} sx={{ mb: 1 }} data-testid={`pending-changes-group-${group.type}`}>
@@ -84,8 +98,11 @@ export const NamespaceChanges = ({ namespace, state, onNavigate }) => {
           </Typography>
           <List dense disablePadding>
             {group.changes.map((change, index) => {
-              const href = changeLink(change);
-              const name = change.name || `#${change.id}`;
+              // A hidden object (one the caller cannot see) has no name or
+              // id to show or link.
+              const href = change.hidden ? null : changeLink(change);
+              const name = change.hidden ? 'An object you cannot see' : change.name || `#${change.id}`;
+              const workspace = rbacEnabled ? workspaceLabel(change.workspaceName, change.workspaceId) : '';
               return (
                 <ListItem
                   key={`${change.type}-${change.id ?? index}-${change.at ?? index}`}
@@ -111,6 +128,19 @@ export const NamespaceChanges = ({ namespace, state, onNavigate }) => {
                           color={CHANGE_COLOR[change.change] || 'default'}
                           sx={{ height: 20 }}
                         />
+                        {workspace && (
+                          <>
+                            <Dot />
+                            <Typography
+                              component="span"
+                              variant="body2"
+                              color="text.secondary"
+                              data-testid="pending-change-workspace"
+                            >
+                              {workspace}
+                            </Typography>
+                          </>
+                        )}
                         {change.at && (
                           <>
                             <Dot />

@@ -143,3 +143,19 @@ export const summarizePending = (data = {}, now = new Date()) => {
   }
   return pushed ? `${count} since the last push at ${pushed}` : `${count} (never pushed)`;
 };
+
+/** A Workspace's display name; one the caller may not name shows by id. */
+export const workspaceLabel = (name, id) => name || (id != null ? `Workspace #${id}` : '');
+
+/**
+ * The per-Workspace summary line: "By Workspace: Default 3 · Ops 2 ·
+ * 1 global". Empty when the response has no Workspace totals (an older
+ * Studio) or nothing to count.
+ */
+export const summarizeWorkspaces = (data = {}) => {
+  const parts = (data.byWorkspace || [])
+    .filter((w) => w.total > 0)
+    .map((w) => `${workspaceLabel(w.name, w.workspaceId)} ${w.total}`);
+  if (data.unattributedTotal > 0) parts.push(`${data.unattributedTotal} global`);
+  return parts.length > 0 ? `By Workspace: ${parts.join(' · ')}` : '';
+};
