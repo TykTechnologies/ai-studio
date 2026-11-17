@@ -240,6 +240,23 @@ describe('Login Component', () => {
       expect(window.location.href).toBe('');
     });
 
+    test('a user whose only roles are Workspace-scoped lands on the admin console (.57)', async () => {
+      pubClient.get.mockImplementation((url) =>
+        Promise.resolve(
+          url === '/common/me'
+            ? { data: { attributes: { has_admin_access: false, admin_nav_hint: true, ui_options: {} } } }
+            : { data: {} },
+        ),
+      );
+      pubClient.post.mockResolvedValue({ data: { message: 'Login successful' } });
+      render(<Login />, { wrapper: Wrapper });
+      fireEvent.change(screen.getByLabelText('Email address'), { target: { value: 'a@example.com' } });
+      fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'pw' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Log in' }));
+      await waitFor(() => expect(window.location.href).toBe('/admin'));
+      expect(screen.queryByText("Your account doesn't have access to any features.")).not.toBeInTheDocument();
+    });
+
     test('opens the requested console route', async () => {
       window.location.search = '?next=%2Fadmin%2Fapps%2F222%3Ftab%3Dkeys';
       await signIn();

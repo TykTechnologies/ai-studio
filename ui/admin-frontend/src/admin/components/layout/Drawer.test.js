@@ -12,12 +12,17 @@ jest.mock('../../utils/pubClient', () => ({
   default: { get: jest.fn() },
 }));
 let mockGranted = new Set(['*']);
-jest.mock('../../context/PermissionsContext', () => ({
-  usePermissions: () => ({
-    permissions: mockGranted,
-    canAny: (perms) => perms.some((p) => mockGranted.has('*') || mockGranted.has(p)),
-  }),
-}));
+let mockWorkspaces = [];
+jest.mock('../../context/PermissionsContext', () => {
+  const { makeCanAnywhere } = jest.requireActual('../../context/PermissionsContext');
+  return {
+    usePermissions: () => ({
+      permissions: mockGranted,
+      canAny: (perms) => perms.some((p) => mockGranted.has('*') || mockGranted.has(p)),
+      canAnywhere: makeCanAnywhere(mockGranted, mockWorkspaces),
+    }),
+  };
+});
 jest.mock('../../../components/common/Icon', () => ({
   __esModule: true,
   default: ({ name }) => <span data-testid={`icon-${name}`} />,
@@ -35,6 +40,12 @@ const manifest = {
         { id: 'llms', text: 'Model providers', path: '/admin/llms', permission: 'llms:read' },
         { id: 'model-prices', text: 'Model prices', path: '/admin/model-prices', permission: 'model-prices:read' },
       ],
+    },
+    {
+      id: 'access',
+      text: 'Access',
+      icon: 'users',
+      items: [{ id: 'users', text: 'Users', path: '/admin/users', permission: 'users:read' }],
     },
     {
       id: 'plugin_1',
@@ -67,6 +78,7 @@ describe('admin Drawer', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGranted = new Set(['*']);
+    mockWorkspaces = [];
     pubClient.get.mockResolvedValue({ data: manifest });
     Object.defineProperty(window, 'localStorage', {
       value: { getItem: jest.fn(() => null), setItem: jest.fn(), removeItem: jest.fn(), clear: jest.fn() },
@@ -78,7 +90,7 @@ describe('admin Drawer', () => {
     renderDrawer();
     await screen.findByText('Asset Catalog');
     expect(pubClient.get).toHaveBeenCalledWith('/common/nav');
-    expect(topLevelLabels()).toEqual(['Overview', 'Model management', 'Asset Catalog']);
+    expect(topLevelLabels()).toEqual(['Overview', 'Model management', 'Access', 'Asset Catalog']);
     expect(screen.getByTestId('icon-microchip-ai')).toBeInTheDocument();
     await expandGroup('Model management');
     expect(screen.getByText('Model providers').closest('a')).toHaveAttribute('href', '/admin/llms');
@@ -90,6 +102,29 @@ describe('admin Drawer', () => {
     await expandGroup('Model management');
     await screen.findByText('Model providers');
     expect(screen.queryByText('Model prices')).not.toBeInTheDocument();
+  });
+
+  it('shows a Workspace-scoped Editor the entries their Workspace role grants, and no global ones (.57)', async () => {
+    mockGranted = new Set();
+    mockWorkspaces = [
+      { id: 4, name: 'W1', permissions: new Set(['llms:write', 'tools:write', 'apps:write']) },
+    ];
+    renderDrawer();
+    await expandGroup('Model management');
+    expect(await screen.findByText('Model providers')).toBeInTheDocument();
+    expect(screen.queryByText('Model prices')).not.toBeInTheDocument();
+    expect(screen.queryByText('Access')).not.toBeInTheDocument();
+    expect(screen.queryByText('Users')).not.toBeInTheDocument();
+    expect(screen.queryByText('Asset Catalog')).not.toBeInTheDocument();
+    expect(topLevelLabels()).toEqual(['Overview', 'Model management']);
+  });
+
+  it('shows a portal-only user (no roles anywhere) nothing but the unguarded entries', async () => {
+    mockGranted = new Set();
+    mockWorkspaces = [];
+    renderDrawer();
+    await screen.findByText('Overview');
+    expect(topLevelLabels()).toEqual(['Overview']);
   });
 
   it('reloads when plugin UIs change', async () => {
