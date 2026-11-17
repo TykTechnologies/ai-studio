@@ -60,9 +60,9 @@ export class AdminWorkspacesPage extends PageTemplate {
         await this.AccessTab.click();
         await this.AddSubjectButton.click();
         const dialog = this.page.getByRole('dialog');
-        await dialog.getByTestId('subject-select').locator('..').click();
+        await dialog.getByRole('combobox', { name: 'User' }).click();
         await this.page.getByRole('option', { name: userLabel }).click();
-        await dialog.getByTestId('role-select-input').locator('..').click();
+        await dialog.getByRole('combobox', { name: 'Roles in this Workspace' }).click();
         for (const id of roleIds) {
             await this.page.getByTestId(`role-option-${id}`).click();
         }

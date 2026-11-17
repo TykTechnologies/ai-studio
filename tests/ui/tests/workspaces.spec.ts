@@ -39,10 +39,12 @@ const created = {
     llmIds: [] as number[],
     appIds: [] as number[],
 };
+// The probe's own LLM is created through the UI, so cleanup finds it by name.
 
 async function cleanUp(p: Page) {
     for (const id of created.appIds) await apiDeleteQuietly(p, `/api/v1/apps/${id}`);
-    for (const name of [w2Llm, ownLlm]) {
+    for (const id of created.llmIds) await apiDeleteQuietly(p, `/api/v1/llms/${id}`);
+    for (const name of [ownLlm]) {
         const found = await p.request.get(`${config.api_url}/api/v1/llms?search=${encodeURIComponent(name)}`);
         if (found.ok()) {
             for (const l of (await found.json()).data || []) {
@@ -98,9 +100,10 @@ test('A Workspace-scoped Editor sees and changes only its own Workspace', async 
         });
         created.appIds.push(Number(app.data.id));
     }
-    await apiExpect(page, 'POST', '/api/v1/llms', 201, {
+    const llm = await apiExpect(page, 'POST', '/api/v1/llms', 201, {
         data: { type: 'llms', attributes: { name: w2Llm, vendor: 'openai', workspace_id: w2 } },
     });
+    created.llmIds.push(Number(llm.data.id));
     created.userId = await createUser(page, probeEmail, probeName, config.password);
 
     // Bind the probe as Editor in W1 only, through the Access tab.
@@ -110,8 +113,8 @@ test('A Workspace-scoped Editor sees and changes only its own Workspace', async 
     await expect(workspacesPage.accessRowForUser(created.userId)).toContainText('Editor');
 
     await workspacesPage.logOut();
-    await page.waitForLoadState('networkidle');
     await loginPage.goto();
+    await expect(loginPage.EmailInput).toBeVisible();
 
     // --- as the Workspace-scoped probe ----------------------------------------
     await loginPage.login(probeEmail, config.password);
