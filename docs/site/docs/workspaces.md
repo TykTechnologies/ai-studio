@@ -143,7 +143,60 @@ The Operator then:
   - **allow**: push without a body, and report the foreign changes it read from pending changes as a warning;
   - **refuse**: send `{"only_workspace_id": <id>}`; AI Studio refuses the push with `409 push_stained` while foreign changes are waiting, and records nothing.
 
+Any foreign change already waiting when the Operator starts stains its first push with `only_workspace_id`. Push the namespace once beforehand (as an administrator, after checking what is pending) if you want the Operator to start clean.
+
 See [Stained pushes](./edge-gateways#pushes-limited-to-one-workspace) for the body of a `409 push_stained` and the limits of the check.
+
+### The recipe through the API
+
+The same setup and the Operator's calls, as an administrator (`$ADMIN_KEY`) and then as the service account (`$SA_KEY`). Ids in the examples are illustrative.
+
+```bash
+# 1. Admin: the Operator's Workspace (answers 201 with its id, here 4)
+curl -X POST "$STUDIO/api/v1/workspaces" -H "Authorization: Bearer $ADMIN_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"name": "operator-team-a", "description": "Objects managed by the Tyk Operator for team A"}'
+
+# 2. Admin: the service account (201; data.attributes.api_key is the key, in this response only)
+curl -X POST "$STUDIO/api/v1/users" -H "Authorization: Bearer $ADMIN_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"data": {"type": "users", "attributes": {"account_type": "service", "name": "tyk-operator-team-a"}}}'
+
+# 3. Admin: a small global role for pushes, assigned globally (no scope)
+curl -X POST "$STUDIO/api/v1/rbac/roles" -H "Authorization: Bearer $ADMIN_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"name": "Operator push", "description": "Read edge sync state and push configuration", "permissions": ["edges:read", "edges:execute"]}'
+curl -X POST "$STUDIO/api/v1/rbac/bindings" -H "Authorization: Bearer $ADMIN_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"subject_type": "user", "subject_id": 44, "role_id": 9}'
+
+# 4. Admin: Editor within the Workspace (find Editor's id with GET /api/v1/rbac/roles)
+curl -X POST "$STUDIO/api/v1/rbac/bindings" -H "Authorization: Bearer $ADMIN_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"subject_type": "user", "subject_id": 44, "role_id": 3, "scope_type": "workspace", "scope_id": "4"}'
+
+# 5. Operator: where may I work? (/rbac/me lists the Workspace under "workspaces";
+#    /workspaces returns only Workspace 4)
+curl "$STUDIO/api/v1/rbac/me" -H "Authorization: Bearer $SA_KEY"
+curl "$STUDIO/api/v1/workspaces" -H "Authorization: Bearer $SA_KEY"
+
+# 6. Operator: objects it creates land in its Workspace, no workspace_id needed
+curl -X POST "$STUDIO/api/v1/llms" -H "Authorization: Bearer $SA_KEY" \
+  -H 'Content-Type: application/json' -d '{"data": {"type": "llms", "attributes": {...}}}'
+
+# 7. Operator: would a push carry anyone else's changes? ("stained": true or false)
+curl "$STUDIO/api/v1/sync/pending-changes?namespace=default&workspace_id=4" \
+  -H "Authorization: Bearer $SA_KEY"
+
+# 8. Operator: push only if it carries nothing foreign (202, or 409 push_stained)
+curl -X POST "$STUDIO/api/v1/namespaces/default/reload" -H "Authorization: Bearer $SA_KEY" \
+  -H 'Content-Type: application/json' -d '{"only_workspace_id": 4}'
+
+# 8b. Operator in "allow" mode: push without the body (202) and report the stain itself
+curl -X POST "$STUDIO/api/v1/namespaces/default/reload" -H "Authorization: Bearer $SA_KEY"
+```
+
+The service account cannot change objects outside its Workspace (a Default-workspace model provider answers `403 permission_denied` with `llms:write`) or reach global resources it has no role for (`GET /api/v1/users` answers `403` with `users:read`).
 
 ## Upgrading and rolling back
 
