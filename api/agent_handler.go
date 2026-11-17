@@ -119,7 +119,8 @@ func (a *API) requireAgentInWorkspace(c *gin.Context, ag *models.AgentConfig, pe
 // redactAgent withholds credential material from an admin API response
 // (.46): the agent's plugin configuration needs agents:write in its
 // Workspace, and the embedded plugin's own configuration the same rule as
-// everywhere else (mayReadPluginConfig). Readers get the metadata.
+// everywhere else (mayReadPluginConfig). Readers get the metadata. The
+// embedded App needs read in the App's Workspace (.55).
 func (a *API) redactAgent(c *gin.Context, ag *models.AgentConfig) {
 	if !onAdminAPI(c) {
 		return
@@ -130,6 +131,27 @@ func (a *API) redactAgent(c *gin.Context, ag *models.AgentConfig) {
 	if ag.Plugin != nil && !a.mayReadPluginConfig(c) {
 		ag.Plugin.Config = nil
 	}
+	// The linked App is shown only to a caller who may see it (.55): one in
+	// another Workspace is left out (app_hidden), its id kept.
+	if ag.AppID != 0 {
+		appWS, found := uint(0), ag.App != nil
+		if found {
+			appWS = ag.App.WorkspaceID
+		} else {
+			var err error
+			if appWS, found, err = a.storedWorkspaceID(&models.App{}, ag.AppID); err != nil {
+				found, appWS = true, ^uint(0) // unreadable: hide (fail closed)
+			}
+		}
+		if found && !a.visibleIn(c, "apps", appWS) {
+			ag.App = nil
+			ag.AppHidden = true
+		}
+	}
+	// A stored 0 (a row not yet backfilled) is reported as the Default's
+	// id, as for every other stamped object, so the UI never reads it as
+	// another Workspace (or a move).
+	ag.WorkspaceID = a.responseWorkspaceID(ag.WorkspaceID)
 }
 
 // HandleAgentMessage handles POST /api/agents/:id/message - sends a message to an active agent session
