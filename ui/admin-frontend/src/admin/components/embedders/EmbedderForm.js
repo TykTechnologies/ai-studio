@@ -9,6 +9,9 @@ import { fetchDependents } from "../../utils/dependentsMessage";
 import EmbedderFormFields from "./EmbedderFormFields";
 import useEmbedderOptions from "./useEmbedderOptions";
 import { apiErrorDetail, attributesFromDraft, draftFromAttributes, emptyDraft, validateDraft } from "./embedderModel";
+import { P } from "../../rbac/permissions";
+import WorkspaceSelect from "../workspaces/WorkspaceSelect";
+import { useCanMove, workspaceFieldError } from "../workspaces/workspaceFields";
 
 // Why the model and API compatibility are read-only while data sources use
 // the embedder; the server refuses the change too (409).
@@ -31,8 +34,14 @@ const EmbedderForm = () => {
   const [lockedReason, setLockedReason] = useState("");
   const [loaded, setLoaded] = useState(!isEdit);
   const { llms, vendors } = useEmbedderOptions();
+  // Enterprise: the Workspace it lives in (landing rule when null), and the
+  // stored one of the embedder being edited: a different one on save is a move.
+  const [workspaceId, setWorkspaceId] = useState(null);
+  const [originalWorkspaceId, setOriginalWorkspaceId] = useState(null);
+  const [workspaceError, setWorkspaceError] = useState("");
+  const canMove = useCanMove(P.EMBEDDERS_WRITE);
 
-  const { markSaved } = useUnsavedForm(draft, { ready: loaded });
+  const { markSaved } = useUnsavedForm({ ...draft, workspace_id: workspaceId }, { ready: loaded });
   const confirmNavigation = useConfirmNavigation();
 
   useEffect(() => {
@@ -40,7 +49,10 @@ const EmbedderForm = () => {
     apiClient
       .get(`/embedders/${id}`)
       .then((response) => {
-        setDraft(draftFromAttributes(response.data.data.attributes));
+        const attrs = response.data.data.attributes;
+        setDraft(draftFromAttributes(attrs));
+        setWorkspaceId(attrs.workspace_id ?? null);
+        setOriginalWorkspaceId(attrs.workspace_id ?? null);
         setLoaded(true);
       })
       .catch(() => setSaveError("Failed to load embedder"));
@@ -52,7 +64,12 @@ const EmbedderForm = () => {
     setErrors(found);
     if (Object.keys(found).length > 0) return;
     setSaveError("");
-    const body = { data: { type: "embedders", attributes: attributesFromDraft(draft) } };
+    // workspace_id is sent only to choose one (create) or to move (edit).
+    const workspaceAttr =
+      workspaceId !== null && workspaceId !== undefined && (!isEdit || Number(workspaceId) !== Number(originalWorkspaceId))
+        ? { workspace_id: Number(workspaceId) }
+        : {};
+    const body = { data: { type: "embedders", attributes: { ...attributesFromDraft(draft), ...workspaceAttr } } };
     try {
       const response = isEdit
         ? await apiClient.patch(`/embedders/${id}`, body)
@@ -60,6 +77,12 @@ const EmbedderForm = () => {
       markSaved();
       navigate(`/admin/embedders/${response.data.data.id}`);
     } catch (error) {
+      const wsError = workspaceFieldError(error);
+      if (wsError) {
+        setWorkspaceError(wsError);
+        setSaveError(wsError);
+        return;
+      }
       setSaveError(apiErrorDetail(error, "Failed to save embedder"));
     }
   };
@@ -86,6 +109,20 @@ const EmbedderForm = () => {
           vendors={vendors}
           lockedReason={lockedReason}
         />
+        {/* Workspace (Enterprise): where it is created; on edit, the move control. */}
+        <Box sx={{ mt: 3 }}>
+          <WorkspaceSelect
+            permission={P.EMBEDDERS_WRITE}
+            value={workspaceId}
+            onChange={(ws) => {
+              setWorkspaceId(ws);
+              setWorkspaceError("");
+            }}
+            disabled={isEdit && !canMove}
+            error={workspaceError}
+            helperText={isEdit ? "Moving it to another Workspace needs write in both." : "The Workspace it is created in."}
+          />
+        </Box>
         <Box sx={{ display: "flex", gap: 2, mt: 3 }}>
           <PrimaryButton variant="contained" onClick={handleSubmit}>
             {isEdit ? "Save embedder" : "Create embedder"}

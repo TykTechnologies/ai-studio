@@ -11,14 +11,21 @@ import { TitleBox, PrimaryButton } from "../styles/sharedStyles";
 import useListQuery from "../hooks/useListQuery";
 import { isPermissionDenied } from "../utils/apiErrors";
 import Can from "../components/rbac/Can";
-import { usePermissions } from "../context/PermissionsContext";
 import { P } from "../rbac/permissions";
+import {
+  useWorkspaceColumn,
+  useWorkspaceFilter,
+  useWorkspaceAccess,
+  WorkspaceFilter,
+} from "../components/workspaces/workspaceFields";
 import { getEmbedderName } from "../utils/vendorUtils";
 import { apiErrorDetail } from "../components/embedders/embedderModel";
 
 const EmbedderList = () => {
   const navigate = useNavigate();
-  const { can } = usePermissions();
+  const { canOn, canAnywhere } = useWorkspaceAccess();
+  const workspaceColumn = useWorkspaceColumn();
+  const { workspaceId, setWorkspaceId, params: workspaceParams } = useWorkspaceFilter();
   const [embedders, setEmbedders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -29,7 +36,7 @@ const EmbedderList = () => {
   const fetchEmbedders = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get("/embedders", { params: queryParams });
+      const response = await apiClient.get("/embedders", { params: { ...queryParams, ...workspaceParams } });
       setEmbedders(response.data.data || []);
       const meta = response.data.meta || {};
       updatePaginationData(parseInt(meta.total_count ?? "0", 10), parseInt(meta.total_pages ?? "0", 10));
@@ -39,7 +46,7 @@ const EmbedderList = () => {
     } finally {
       setLoading(false);
     }
-  }, [queryParams, updatePaginationData]);
+  }, [queryParams, workspaceParams, updatePaginationData]);
 
   useEffect(() => {
     fetchEmbedders();
@@ -74,18 +81,23 @@ const EmbedderList = () => {
           ),
       },
       { field: "privacy_score", headerName: "Privacy", renderCell: (e) => e.attributes.privacy_score },
+      ...(workspaceColumn ? [workspaceColumn] : []),
     ],
-    [],
+    [workspaceColumn],
   );
 
-  const canWrite = can(P.EMBEDDERS_WRITE);
-  const canDelete = can(P.EMBEDDERS_DELETE);
+  // Edit needs embedders:write and delete embedders:delete, both in the
+  // embedder's Workspace: one in another Workspace is read-only.
+  const canWrite = canAnywhere(P.EMBEDDERS_WRITE);
+  const canDelete = canAnywhere(P.EMBEDDERS_DELETE);
+  const writeOn = useCallback((e) => canOn(e?.attributes?.workspace_id, P.EMBEDDERS_WRITE), [canOn]);
+  const deleteOn = useCallback((e) => canOn(e?.attributes?.workspace_id, P.EMBEDDERS_DELETE), [canOn]);
   const rowActions = useMemo(
     () => [
-      { key: "edit", label: "Edit embedder", onClick: (e) => navigate(`/admin/embedders/edit/${e.id}`), hidden: () => !canWrite },
-      { key: "delete", label: "Delete embedder", onClick: (e) => setDeleteTarget(e), hidden: () => !canDelete },
+      { key: "edit", label: "Edit embedder", onClick: (e) => navigate(`/admin/embedders/edit/${e.id}`), hidden: (e) => !writeOn(e) },
+      { key: "delete", label: "Delete embedder", onClick: (e) => setDeleteTarget(e), hidden: (e) => !deleteOn(e) },
     ],
-    [navigate, canWrite, canDelete],
+    [navigate, writeOn, deleteOn],
   );
 
   if (error && embedders.length === 0) {
@@ -96,7 +108,7 @@ const EmbedderList = () => {
     <Box sx={{ p: 0 }}>
       <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Embedders</Typography>
-        <Can permission={P.EMBEDDERS_WRITE}>
+        <Can permission={P.EMBEDDERS_WRITE} anywhere>
           <PrimaryButton variant="contained" startIcon={<AddIcon />} onClick={() => navigate("/admin/embedders/new")}>
             Add embedder
           </PrimaryButton>
@@ -110,6 +122,7 @@ const EmbedderList = () => {
         </Typography>
       </Box>
       <Box sx={{ p: 3 }}>
+        <WorkspaceFilter value={workspaceId} onChange={setWorkspaceId} sx={{ mb: 2 }} />
         <DataTable
           {...tableProps}
           ariaLabel="Embedders"

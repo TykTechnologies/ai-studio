@@ -27,11 +27,20 @@ import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import useConfig from "../hooks/useConfig";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
+import {
+  useWorkspaceColumn,
+  useWorkspaceFilter,
+  useWorkspaceAccess,
+  WorkspaceFilter,
+} from "../components/workspaces/workspaceFields";
 
 const ToolList = () => {
   const navigate = useNavigate();
   const { getDocsLink } = useConfig();
   const { features } = useSystemFeatures();
+  const { canOn, canAnywhere } = useWorkspaceAccess();
+  const workspaceColumn = useWorkspaceColumn();
+  const { workspaceId, setWorkspaceId, params: workspaceParams } = useWorkspaceFilter();
   const [tools, setTools] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -44,7 +53,7 @@ const ToolList = () => {
   const fetchTools = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get("/tools", { params: queryParams });
+      const response = await apiClient.get("/tools", { params: { ...queryParams, ...workspaceParams } });
       setTools(response.data.data || []);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
       const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
@@ -56,7 +65,7 @@ const ToolList = () => {
     } finally {
       setLoading(false);
     }
-  }, [queryParams, updatePaginationData]);
+  }, [queryParams, workspaceParams, updatePaginationData]);
 
   useEffect(() => {
     fetchTools();
@@ -125,24 +134,39 @@ const ToolList = () => {
       sortable: true,
       renderCell: (tool) => <ActiveStatusDot active={tool.attributes.active !== false} />,
     },
-  ], []);
+    ...(workspaceColumn ? [workspaceColumn] : []),
+  ], [workspaceColumn]);
 
   // The row toggle goes through the same bulk endpoint as the toolbar so the
   // list and the tool form (which has the switch) agree on what "active" is.
+  // Edit/delete need tools:write; the active toggle needs tools:publish,
+  // which never implies write. Either permission earns the actions column.
+  // Both are checked in each tool's Workspace: one in another Workspace is
+  // read-only.
+  const canWrite = canAnywhere(P.TOOLS_WRITE);
+  const canPublish = canAnywhere(P.TOOLS_PUBLISH);
+  const canManage = canWrite || canPublish;
+  const writeOn = useCallback((tool) => canOn(tool?.attributes?.workspace_id, P.TOOLS_WRITE), [canOn]);
+  const publishOn = useCallback((tool) => canOn(tool?.attributes?.workspace_id, P.TOOLS_PUBLISH), [canOn]);
+
   const runBulk = bulk.run;
   const rowActions = useMemo(() => [
-    { key: "edit", label: "Edit tool", onClick: (tool) => navigate(`/admin/tools/edit/${tool.id}`) },
-    { key: "delete", label: "Delete tool", onClick: (tool) => setDeleteTarget(tool) },
+    { key: "edit", label: "Edit tool", onClick: (tool) => navigate(`/admin/tools/edit/${tool.id}`), hidden: (tool) => !writeOn(tool) },
+    { key: "delete", label: "Delete tool", onClick: (tool) => setDeleteTarget(tool), hidden: (tool) => !writeOn(tool) },
     {
       key: "toggle",
       label: (tool) => `${tool?.attributes?.active !== false ? "Deactivate" : "Activate"} tool`,
       onClick: (tool) => runBulk(tool.attributes.active !== false ? "deactivate" : "activate", [tool]),
+      hidden: (tool) => !publishOn(tool),
     },
-  ], [navigate, runBulk]);
+  ], [navigate, runBulk, writeOn, publishOn]);
 
   const bulkActions = useMemo(
-    () => standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete, canToggle: true }),
-    [bulk.run, bulk.requestDelete],
+    () =>
+      standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete, canToggle: canPublish }).filter(
+        (action) => canWrite || action.key !== "delete",
+      ),
+    [bulk.run, bulk.requestDelete, canWrite, canPublish],
   );
 
   if (error && tools.length === 0) {
@@ -154,7 +178,7 @@ const ToolList = () => {
       <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Tools</Typography>
         <Stack direction="row" spacing={2}>
-          <Can permission={P.TOOLS_WRITE}>
+          <Can permission={P.TOOLS_WRITE} anywhere>
             <PrimaryOutlineButton
               variant="contained"
               startIcon={<DownloadIcon />}
@@ -182,54 +206,51 @@ const ToolList = () => {
         )}
       </Box>
       <ContentBox>
+        <WorkspaceFilter value={workspaceId} onChange={setWorkspaceId} sx={{ mb: 2 }} />
         <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
-        <Can permission={P.TOOLS_WRITE}>
-          {(canWrite) => (
-            <DataTable
-              {...tableProps}
-              ariaLabel="Tools"
-              searchPlaceholder="Search tools by name..."
-              columns={columns}
-              data={tools}
-              loading={loading}
-              onRowClick={handleToolClick}
-              actions={canWrite ? rowActions : undefined}
-              {...(canWrite ? bulk.selectionProps : {})}
-              bulkActions={canWrite ? bulkActions : undefined}
-              emptyState={
-                !searchTerm ? (
-                  <EmptyStateWidget
-                    title="No tools added yet"
-                    description="Tools are external services that can be used in chat rooms to enhance or provide additional data access and capabilities to the AI that the user is interacting with. Tools are defined by an OpenAPI specification, and you can define which operations are available to the LLM to use from the spec as functions it can call to fulfil the user request."
-                    learnMoreLink={getDocsLink("tools")}
-                    actions={
-                      <>
-                        {canWrite && (
-                          <PrimaryOutlineButton
-                            variant="contained"
-                            startIcon={<DownloadIcon />}
-                            onClick={() => setImportWizardOpen(true)}
-                          >
-                            Import OpenAPI
-                          </PrimaryOutlineButton>
-                        )}
-                        {canWrite && (
-                          <PrimaryButton
-                            variant="contained"
-                            startIcon={<AddIcon />}
-                            onClick={handleAddTool}
-                          >
-                            Add tool
-                          </PrimaryButton>
-                        )}
-                      </>
-                    }
-                  />
-                ) : undefined
-              }
-            />
-          )}
-        </Can>
+        <DataTable
+          {...tableProps}
+          ariaLabel="Tools"
+          searchPlaceholder="Search tools by name..."
+          columns={columns}
+          data={tools}
+          loading={loading}
+          onRowClick={handleToolClick}
+          actions={canManage ? rowActions : undefined}
+          {...(canManage ? bulk.selectionProps : {})}
+          bulkActions={canManage ? bulkActions : undefined}
+          emptyState={
+            !searchTerm ? (
+              <EmptyStateWidget
+                title="No tools added yet"
+                description="Tools are external services that can be used in chat rooms to enhance or provide additional data access and capabilities to the AI that the user is interacting with. Tools are defined by an OpenAPI specification, and you can define which operations are available to the LLM to use from the spec as functions it can call to fulfil the user request."
+                learnMoreLink={getDocsLink("tools")}
+                actions={
+                  <>
+                    {canWrite && (
+                      <PrimaryOutlineButton
+                        variant="contained"
+                        startIcon={<DownloadIcon />}
+                        onClick={() => setImportWizardOpen(true)}
+                      >
+                        Import OpenAPI
+                      </PrimaryOutlineButton>
+                    )}
+                    {canWrite && (
+                      <PrimaryButton
+                        variant="contained"
+                        startIcon={<AddIcon />}
+                        onClick={handleAddTool}
+                      >
+                        Add tool
+                      </PrimaryButton>
+                    )}
+                  </>
+                }
+              />
+            ) : undefined
+          }
+        />
       </ContentBox>
 
       <ImportOpenAPIWizard

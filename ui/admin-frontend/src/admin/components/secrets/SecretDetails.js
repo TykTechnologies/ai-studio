@@ -3,6 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import apiClient from "../../utils/apiClient";
 import Section from "../common/Section";
 import UsedBySection from "../common/UsedBySection";
+import Can from "../rbac/Can";
+import { P } from "../../rbac/permissions";
 import {
   Typography,
   CircularProgress,
@@ -89,13 +91,15 @@ const SecretDetails = () => {
           >
             Back to secrets
           </SecondaryLinkButton>
-          <PrimaryButton
-            variant="contained"
-            startIcon={<EditIcon />}
-            onClick={() => navigate(`/admin/secrets/edit/${id}`)}
-          >
-            Edit secret
-          </PrimaryButton>
+          <Can permission={P.SECRETS_WRITE} workspaceId={secret.attributes.workspace_id}>
+            <PrimaryButton
+              variant="contained"
+              startIcon={<EditIcon />}
+              onClick={() => navigate(`/admin/secrets/edit/${id}`)}
+            >
+              Edit secret
+            </PrimaryButton>
+          </Can>
         </Box>
       </TitleBox>
       <ContentBox>

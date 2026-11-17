@@ -27,9 +27,19 @@ import useListQuery from "../hooks/useListQuery";
 import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
+import {
+  useWorkspaceColumn,
+  useWorkspaceFilter,
+  useWorkspaceAccess,
+  WorkspaceFilter,
+  workspaceFieldError,
+} from "../components/workspaces/workspaceFields";
 
 const DatasourceList = () => {
   const navigate = useNavigate();
+  const { canOn, canAnywhere } = useWorkspaceAccess();
+  const workspaceColumn = useWorkspaceColumn();
+  const { workspaceId, setWorkspaceId, params: workspaceParams } = useWorkspaceFilter();
   const [datasources, setDatasources] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -43,7 +53,7 @@ const DatasourceList = () => {
   const fetchDatasources = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get("/datasources", { params: queryParams });
+      const response = await apiClient.get("/datasources", { params: { ...queryParams, ...workspaceParams } });
       setDatasources(response.data.data || []);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
       const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
@@ -55,7 +65,7 @@ const DatasourceList = () => {
     } finally {
       setLoading(false);
     }
-  }, [queryParams, updatePaginationData]);
+  }, [queryParams, workspaceParams, updatePaginationData]);
 
   useEffect(() => {
     const initializePage = async () => {
@@ -121,7 +131,8 @@ const DatasourceList = () => {
       navigate(`/admin/datasources/edit/${newDatasourceId}`);
     } catch (error) {
       console.error("Error cloning datasource:", error);
-      notify("Failed to clone data source", "error");
+      // A caller who may write in several Workspaces is asked to choose one.
+      notify(workspaceFieldError(error) || "Failed to clone data source", "error");
     }
   }, [navigate, notify]);
 
@@ -203,22 +214,37 @@ const DatasourceList = () => {
       sortable: true,
       renderCell: (d) => <ActiveStatusDot active={d.attributes.active} />,
     },
-  ], []);
+    ...(workspaceColumn ? [workspaceColumn] : []),
+  ], [workspaceColumn]);
+
+  // Edit/clone/delete need datasources:write; the active toggle needs
+  // datasources:publish, which never implies write. Either permission earns
+  // the actions column. Both are checked in each data source's Workspace:
+  // one in another Workspace is read-only.
+  const canWrite = canAnywhere(P.DATASOURCES_WRITE);
+  const canPublish = canAnywhere(P.DATASOURCES_PUBLISH);
+  const canManage = canWrite || canPublish;
+  const writeOn = useCallback((d) => canOn(d?.attributes?.workspace_id, P.DATASOURCES_WRITE), [canOn]);
+  const publishOn = useCallback((d) => canOn(d?.attributes?.workspace_id, P.DATASOURCES_PUBLISH), [canOn]);
 
   const rowActions = useMemo(() => [
-    { key: "edit", label: "Edit data source", onClick: (d) => navigate(`/admin/datasources/edit/${d.id}`) },
-    { key: "clone", label: "Clone data source", onClick: handleCloneDatasource },
-    { key: "delete", label: "Delete data source", onClick: (d) => setDeleteTarget(d) },
+    { key: "edit", label: "Edit data source", onClick: (d) => navigate(`/admin/datasources/edit/${d.id}`), hidden: (d) => !writeOn(d) },
+    { key: "clone", label: "Clone data source", onClick: handleCloneDatasource, hidden: (d) => !writeOn(d) },
+    { key: "delete", label: "Delete data source", onClick: (d) => setDeleteTarget(d), hidden: (d) => !writeOn(d) },
     {
       key: "toggle",
       label: (d) => `${d?.attributes?.active ? "Deactivate" : "Activate"} data source`,
       onClick: handleToggleActive,
+      hidden: (d) => !publishOn(d),
     },
-  ], [navigate, handleCloneDatasource, handleToggleActive]);
+  ], [navigate, handleCloneDatasource, handleToggleActive, writeOn, publishOn]);
 
   const bulkActions = useMemo(
-    () => standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete, canToggle: true }),
-    [bulk.run, bulk.requestDelete],
+    () =>
+      standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete, canToggle: canPublish }).filter(
+        (action) => canWrite || action.key !== "delete",
+      ),
+    [bulk.run, bulk.requestDelete, canWrite, canPublish],
   );
 
   if (error && datasources.length === 0) {
@@ -230,7 +256,7 @@ const DatasourceList = () => {
       <>
         <TitleBox top="var(--studio-header-height)">
           <Typography variant="headingXLarge">Data sources</Typography>
-          <Can permission={P.DATASOURCES_WRITE}>
+          <Can permission={P.DATASOURCES_WRITE} anywhere>
             <PrimaryButton
               variant="contained"
               startIcon={<AddIcon />}
@@ -244,34 +270,31 @@ const DatasourceList = () => {
           <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Data sources let you store and access information to enhance AI conversations using Retrieval Augmented Generation (RAG). By using embedding providers to convert content into searchable vectors, your AI can deliver more accurate, informed, and engaging responses.</Typography>
         </Box>
         <ContentBox>
+          <WorkspaceFilter value={workspaceId} onChange={setWorkspaceId} sx={{ mb: 2 }} />
           <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
-          <Can permission={P.DATASOURCES_WRITE}>
-            {(canWrite) => (
-              <DataTable
-                {...tableProps}
-                ariaLabel="Data sources"
-                searchPlaceholder="Search data sources by name..."
-                columns={columns}
-                data={datasources}
-                loading={loading}
-                onRowClick={handleDatasourceClick}
-                actions={canWrite ? rowActions : undefined}
-                {...(canWrite ? bulk.selectionProps : {})}
-                bulkActions={canWrite ? bulkActions : undefined}
-                emptyState={
-                  !searchTerm ? (
-                    <EmptyStateWidget
-                      title="No vector DBs yet"
-                      description="Vector data sources are used to store and retrieve data to enhance LLM response effectiveness. These can be created using embedding providers that vectorize the content you wish to search, and make for an excellent way to enhance your chat room value for your users, or to better inform responses in your AI Applications."
-                      buttonText="Add data source"
-                      buttonIcon={<AddIcon />}
-                      onButtonClick={canWrite ? handleAddDatasource : undefined}
-                    />
-                  ) : undefined
-                }
-              />
-            )}
-          </Can>
+          <DataTable
+            {...tableProps}
+            ariaLabel="Data sources"
+            searchPlaceholder="Search data sources by name..."
+            columns={columns}
+            data={datasources}
+            loading={loading}
+            onRowClick={handleDatasourceClick}
+            actions={canManage ? rowActions : undefined}
+            {...(canManage ? bulk.selectionProps : {})}
+            bulkActions={canManage ? bulkActions : undefined}
+            emptyState={
+              !searchTerm ? (
+                <EmptyStateWidget
+                  title="No vector DBs yet"
+                  description="Vector data sources are used to store and retrieve data to enhance LLM response effectiveness. These can be created using embedding providers that vectorize the content you wish to search, and make for an excellent way to enhance your chat room value for your users, or to better inform responses in your AI Applications."
+                  buttonText="Add data source"
+                  buttonIcon={<AddIcon />}
+                  onButtonClick={canWrite ? handleAddDatasource : undefined}
+                />
+              ) : undefined
+            }
+          />
         </ContentBox>
       </>
 

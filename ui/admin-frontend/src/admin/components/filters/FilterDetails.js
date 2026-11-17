@@ -31,6 +31,8 @@ import {
   effectiveToolDefinitionAction,
   DEFAULT_BACKSTOP_MIN_SCORE,
 } from "./GuardrailConfigForm";
+import Can from "../rbac/Can";
+import { P } from "../../rbac/permissions";
 
 const BACKSTOP_DISPLAY = { off: "Off", log: "Log", enforce: "Enforce" };
 
@@ -234,13 +236,15 @@ const FilterDetails = () => {
         {isGuardrail && <FilterExceptions filterId={id} />}
 
         <Box mt={4} display="flex" justifyContent="flex-end">
-          <PrimaryButton
-            variant="contained"
-            startIcon={<EditIcon />}
-            onClick={() => navigate(`/admin/filters/edit/${id}`)}
-          >
-            Edit filter
-          </PrimaryButton>
+          <Can permission={P.FILTERS_WRITE} workspaceId={attrs.workspace_id}>
+            <PrimaryButton
+              variant="contained"
+              startIcon={<EditIcon />}
+              onClick={() => navigate(`/admin/filters/edit/${id}`)}
+            >
+              Edit filter
+            </PrimaryButton>
+          </Can>
         </Box>
       </ContentBox>
     </>

@@ -58,6 +58,8 @@ import { isValidPrivacyScore } from "../common/privacy/privacyLevels";
 import PublishSwitch from "../rbac/PublishSwitch";
 import { P } from "../../rbac/permissions";
 import { usePermissions } from "../../context/PermissionsContext";
+import WorkspaceSelect from "../workspaces/WorkspaceSelect";
+import { useCanMove, workspaceFieldError } from "../workspaces/workspaceFields";
 import { parseOpenAPIOperations } from "../../utils/openapiOperations";
 import ClientToolEditor from "./client/ClientToolEditor";
 import ToolAccessMethods from "./ToolAccessMethods";
@@ -298,7 +300,13 @@ const ToolForm = () => {
     mcp_access_enabled: false,
     tracing_content_mode_max: "", // Agent tracing content cap (Enterprise); "" = no cap
     allow_internal_host: false, // administrators only (w4e)
+    workspace_id: null, // Enterprise: the Workspace it lives in (landing rule when null)
   });
+  // The stored Workspace of the tool being edited: a different workspace_id
+  // on save is a move.
+  const [originalWorkspaceId, setOriginalWorkspaceId] = useState(null);
+  const [workspaceError, setWorkspaceError] = useState("");
+  const canMove = useCanMove(P.TOOLS_WRITE);
   const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -440,7 +448,9 @@ const ToolForm = () => {
         ? atob(fetchedTool.oas_spec)
         : "";
 
+      fetchedTool.workspace_id = fetchedTool.workspace_id ?? null;
       setTool(fetchedTool);
+      setOriginalWorkspaceId(fetchedTool.workspace_id);
       if (fetchedTool.tool_type === "CLIENT") {
         try {
           const def = JSON.parse(fetchedTool.oas_spec || "{}");
@@ -637,11 +647,19 @@ const ToolForm = () => {
       return;
     }
 
+    // workspace_id is sent only to choose one (create) or to move (edit).
+    const { workspace_id: workspaceId, ...toolWithoutWorkspace } = tool;
+    const workspaceAttr =
+      workspaceId !== null && workspaceId !== undefined && (!id || Number(workspaceId) !== Number(originalWorkspaceId))
+        ? { workspace_id: Number(workspaceId) }
+        : {};
+
     const toolData = {
       data: {
         type: "Tool",
         attributes: {
-          ...tool,
+          ...toolWithoutWorkspace,
+          ...workspaceAttr,
           operations: isClient ? [] : selectedOperations,
           privacy_score: Number(tool.privacy_score),
           active: Boolean(tool.active),
@@ -697,6 +715,12 @@ const ToolForm = () => {
           message: `${error.message}. The tool itself was saved.`,
           severity: "error",
         });
+        return;
+      }
+      const wsError = workspaceFieldError(error);
+      if (wsError) {
+        setWorkspaceError(wsError);
+        setSnackbar({ open: true, message: wsError, severity: "error" });
         return;
       }
       if (error.response?.status === 422) {
@@ -907,6 +931,7 @@ const ToolForm = () => {
                   M4b). The API needs tools:publish to turn it on. */}
               <PublishSwitch
                 permission={P.TOOLS_PUBLISH}
+                workspaceId={tool.workspace_id ?? null}
                 checked={tool.active}
                 onChange={(e) => setTool((prev) => ({ ...prev, active: e.target.checked }))}
                 name="active"
@@ -1173,6 +1198,21 @@ const ToolForm = () => {
             }}
             errors={metadataErrors}
           />
+
+          {/* Workspace (Enterprise): where it is created; on edit, the move control. */}
+          <Box sx={{ mt: 3 }}>
+            <WorkspaceSelect
+              permission={P.TOOLS_WRITE}
+              value={tool.workspace_id}
+              onChange={(ws) => {
+                setTool((prev) => ({ ...prev, workspace_id: ws }));
+                setWorkspaceError("");
+              }}
+              disabled={Boolean(id) && !canMove}
+              error={workspaceError}
+              helperText={id ? "Moving it to another Workspace needs write in both." : "The Workspace it is created in."}
+            />
+          </Box>
 
           {/* Edge Availability Section (Enterprise only) */}
           <EdgeAvailabilitySection

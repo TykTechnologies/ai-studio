@@ -54,7 +54,8 @@ const renderWith = (identity, path = "/admin/llms") =>
   );
 
 const openRowMenu = async (name) => {
-  const row = (await screen.findByText(name)).closest("tr");
+  await screen.findByText(name);
+  const row = screen.getByRole("row", { name: new RegExp(name) });
   fireEvent.click(within(row).getByRole("button", { name: `Actions for ${name}` }));
   return screen.findByRole("menu");
 };
@@ -76,8 +77,8 @@ describe("LLMList Workspaces", () => {
     await screen.findByText("W1 OpenAI");
     expect(screen.getByRole("columnheader", { name: "Workspace" })).toBeInTheDocument();
     expect(screen.getByTestId("workspace-filter")).toBeInTheDocument();
-    expect(within(screen.getByText("W1 OpenAI").closest("tr")).getByTestId("workspace-cell")).toHaveTextContent("W1");
-    expect(within(screen.getByText("W2 Claude").closest("tr")).getByTestId("workspace-cell")).toHaveTextContent("Other Workspace");
+    expect(within(screen.getByRole("row", { name: /W1 OpenAI/ })).getByTestId("workspace-cell")).toHaveTextContent("W1");
+    expect(within(screen.getByRole("row", { name: /W2 Claude/ })).getByTestId("workspace-cell")).toHaveTextContent("Other Workspace");
   });
 
   it("Community: no Workspace column or filter", async () => {

@@ -16,6 +16,12 @@ import { TitleBox, ContentBox, PrimaryButton, PrimaryOutlineButton } from "../st
 import { apiErrorDetail, formatTime } from "./webhookShared";
 import { TykUpsell, TykDisabledNotice } from "./tykShared";
 import { MCP_SERVERS_SEE_TOOLS } from "../components/tools/toolsVsMcpServers";
+import {
+  useWorkspaceColumn,
+  useWorkspaceFilter,
+  useWorkspaceAccess,
+  WorkspaceFilter,
+} from "../components/workspaces/workspaceFields";
 
 export const AUTH_MODE_LABELS = {
   keyless: "Keyless",
@@ -66,6 +72,9 @@ const INTRO =
 
 const EMPTY_FILTERS = { connection_id: "", state: "", published: "" };
 
+// The MCP server API answers flat objects, not JSON:API rows.
+const serverWorkspaceId = (s) => s?.workspace_id;
+
 const MCPServers = () => {
   const navigate = useNavigate();
   const { getDocsLink } = useConfig();
@@ -76,6 +85,9 @@ const MCPServers = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const { canAnywhere } = useWorkspaceAccess();
+  const workspaceColumn = useWorkspaceColumn(serverWorkspaceId);
+  const { workspaceId, setWorkspaceId, params: workspaceParams } = useWorkspaceFilter();
 
   const { queryParams, updatePaginationData, searchTerm, tableProps, pageSize, handlePageChange } = useListQuery({
     initialPageSize: 25,
@@ -90,7 +102,7 @@ const MCPServers = () => {
       if (!(st.data?.available && st.data?.enabled)) return;
       // The list endpoint takes `q` for search and reports totals in the body.
       const { search, ...rest } = queryParams;
-      const params = { ...rest };
+      const params = { ...rest, ...workspaceParams };
       if (search) params.q = search;
       Object.entries(filters).forEach(([k, v]) => {
         if (v !== "") params[k] = v;
@@ -108,7 +120,7 @@ const MCPServers = () => {
     } finally {
       setLoading(false);
     }
-  }, [queryParams, filters, pageSize, updatePaginationData]);
+  }, [queryParams, workspaceParams, filters, pageSize, updatePaginationData]);
 
   useEffect(() => {
     fetchServers();
@@ -121,7 +133,10 @@ const MCPServers = () => {
 
   const activeConnections = useMemo(() => connections.filter((c) => c.status === "active"), [connections]);
   const canRegister = activeConnections.some((c) => c.effective_mode === "full");
-  const filtersApplied = Object.values(filters).some((v) => v !== "");
+  const filtersApplied = Object.values(filters).some((v) => v !== "") || Boolean(workspaceId);
+  // Registering creates a server: execute (the route) plus write in the
+  // Workspace it lands in, so some Workspace must grant both.
+  const mayRegister = canAnywhere(P.MCP_SERVERS_EXECUTE) && canAnywhere(P.MCP_SERVERS_WRITE);
 
   const syncNow = async () => {
     const connectionId = filters.connection_id || activeConnections[0]?.id;
@@ -189,8 +204,9 @@ const MCPServers = () => {
           ),
       },
       { field: "last_seen_at", headerName: "Last seen", renderCell: (s) => (s.last_seen_at ? formatTime(s.last_seen_at) : "never") },
+      ...(workspaceColumn ? [workspaceColumn] : []),
     ],
-    []
+    [workspaceColumn]
   );
 
   if (loading && !status) {
@@ -220,7 +236,7 @@ const MCPServers = () => {
         <Typography variant="headingXLarge">MCP servers</Typography>
         <Stack direction="row" spacing={2}>
           <Can permission={P.TYK_CONNECTIONS_EXECUTE}>{activeConnections.length > 0 && syncButton}</Can>
-          <Can permission={P.MCP_SERVERS_EXECUTE}>{canRegister && registerButton}</Can>
+          {mayRegister && canRegister && registerButton}
         </Stack>
       </TitleBox>
       <Box sx={{ p: 3 }}>
@@ -266,37 +282,34 @@ const MCPServers = () => {
             <MenuItem value="true">Published</MenuItem>
             <MenuItem value="false">Unpublished</MenuItem>
           </TextField>
+          <WorkspaceFilter value={workspaceId} onChange={(ws) => { handlePageChange(1); setWorkspaceId(ws); }} />
         </Stack>
 
-        <Can permission={P.MCP_SERVERS_EXECUTE}>
-          {(canExecute) => (
-            <DataTable
-              {...tableProps}
-              ariaLabel="MCP servers"
-              searchPlaceholder="Search MCP servers by name..."
-              columns={columns}
-              data={servers}
-              loading={loading}
-              onRowClick={(s) => navigate(`/admin/mcp-servers/${s.id}`)}
-              rowProps={(s) => ({ "data-testid": `server-row-${s.id}` })}
-              emptyState={
-                !searchTerm && !filtersApplied ? (
-                  <EmptyStateWidget
-                    title="No MCP servers yet"
-                    description="MCP servers arrive from a connected Tyk Dashboard: run a sync to import the proxies it already serves, or register a new one from here on a full-mode connection. Community members can also propose servers through the portal."
-                    learnMoreLink={getDocsLink("mcp_servers")}
-                    actions={
-                      <>
-                        {activeConnections.length > 0 && syncButton}
-                        {canExecute && canRegister && registerButton}
-                      </>
-                    }
-                  />
-                ) : undefined
-              }
-            />
-          )}
-        </Can>
+        <DataTable
+          {...tableProps}
+          ariaLabel="MCP servers"
+          searchPlaceholder="Search MCP servers by name..."
+          columns={columns}
+          data={servers}
+          loading={loading}
+          onRowClick={(s) => navigate(`/admin/mcp-servers/${s.id}`)}
+          rowProps={(s) => ({ "data-testid": `server-row-${s.id}` })}
+          emptyState={
+            !searchTerm && !filtersApplied ? (
+              <EmptyStateWidget
+                title="No MCP servers yet"
+                description="MCP servers arrive from a connected Tyk Dashboard: run a sync to import the proxies it already serves, or register a new one from here on a full-mode connection. Community members can also propose servers through the portal."
+                learnMoreLink={getDocsLink("mcp_servers")}
+                actions={
+                  <>
+                    {activeConnections.length > 0 && syncButton}
+                    {mayRegister && canRegister && registerButton}
+                  </>
+                }
+              />
+            ) : undefined
+          }
+        />
       </ContentBox>
       <FeedbackSnackbar {...snackbarProps} />
     </>
