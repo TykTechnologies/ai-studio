@@ -27,7 +27,11 @@ export const createTool = async (toolData) => {
           operations: toolData.operations || [],
           file_stores: toolData.file_stores || [],
           filters: toolData.filters || [],
-          dependencies: toolData.dependencies || []
+          dependencies: toolData.dependencies || [],
+          // Enterprise: omitted, the landing rule applies.
+          ...(toolData.workspace_id !== null && toolData.workspace_id !== undefined
+            ? { workspace_id: Number(toolData.workspace_id) }
+            : {}),
         },
       },
     };

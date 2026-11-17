@@ -361,6 +361,7 @@ const ToolDetails = () => {
         </Section>
 
         <AuthPluginsSection
+          workspaceId={tool.attributes.workspace_id}
           endpointPath="tools"
           endpointId={id}
           noun="tool (REST and MCP)"
