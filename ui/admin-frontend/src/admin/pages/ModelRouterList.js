@@ -123,32 +123,34 @@ const ModelRouterList = () => {
     ...(workspaceColumn ? [workspaceColumn] : []),
   ], [workspaceColumn]);
 
-  // Edit/delete need model-routers:write; the active toggle needs
-  // model-routers:publish, which never implies write. Either permission
-  // earns the actions column and bulk selection. Both are checked in each
+  // Edit needs model-routers:write, delete model-routers:delete and the
+  // active toggle model-routers:publish (none implies another). Any of them
+  // earns the actions column and bulk selection. Each is checked in the
   // router's Workspace: one in another Workspace is read-only.
   const canWrite = canAnywhere(P.MODEL_ROUTERS_WRITE);
+  const canDelete = canAnywhere(P.MODEL_ROUTERS_DELETE);
   const canPublish = canAnywhere(P.MODEL_ROUTERS_PUBLISH);
-  const canManage = canWrite || canPublish;
+  const canManage = canWrite || canPublish || canDelete;
   const writeOn = useCallback((router) => canOn(router?.attributes?.workspace_id, P.MODEL_ROUTERS_WRITE), [canOn]);
+  const deleteOn = useCallback((router) => canOn(router?.attributes?.workspace_id, P.MODEL_ROUTERS_DELETE), [canOn]);
   const publishOn = useCallback((router) => canOn(router?.attributes?.workspace_id, P.MODEL_ROUTERS_PUBLISH), [canOn]);
   const rowActions = useMemo(() => [
     { key: "edit", label: "Edit Router", onClick: (router) => navigate(`/admin/model-routers/edit/${router.id}`), hidden: (router) => !writeOn(router) },
-    { key: "delete", label: "Delete Router", onClick: (router) => setDeleteTarget(router), hidden: (router) => !writeOn(router) },
+    { key: "delete", label: "Delete Router", onClick: (router) => setDeleteTarget(router), hidden: (router) => !deleteOn(router) },
     {
       key: "toggle",
       label: (router) => `${router?.attributes?.active ? "Deactivate" : "Activate"} Router`,
       onClick: handleToggleActive,
       hidden: (router) => !publishOn(router),
     },
-  ], [navigate, handleToggleActive, writeOn, publishOn]);
+  ], [navigate, handleToggleActive, writeOn, publishOn, deleteOn]);
 
   const bulkActions = useMemo(
     () =>
       standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete, canToggle: canPublish }).filter(
-        (action) => canWrite || action.key !== "delete",
+        (action) => canDelete || action.key !== "delete",
       ),
-    [bulk.run, bulk.requestDelete, canWrite, canPublish],
+    [bulk.run, bulk.requestDelete, canDelete, canPublish],
   );
 
   if (error && routers.length === 0) {

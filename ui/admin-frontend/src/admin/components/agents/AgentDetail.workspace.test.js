@@ -98,6 +98,22 @@ describe("AgentDetail Workspaces", () => {
     expect(screen.queryByText("Test Interface")).not.toBeInTheDocument();
   });
 
+  it("an App in another Workspace (app_hidden) is named neutrally, with no link or resources", async () => {
+    const { app, ...rest } = agent(2);
+    apiClient.get.mockResolvedValue({ data: { data: { ...rest, app_id: 10, app_hidden: true } } });
+    renderDetail();
+    expect(await screen.findByTestId("agent-app-hidden")).toHaveTextContent("App in another Workspace");
+    expect(screen.queryByRole("link", { name: /Unknown App|Visible App/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("Available Resources (from App)")).not.toBeInTheDocument();
+  });
+
+  it("a visible App is linked and its resources listed", async () => {
+    apiClient.get.mockResolvedValue({ data: { data: agent(2) } });
+    renderDetail();
+    expect(await screen.findByRole("link", { name: "Visible App" })).toBeInTheDocument();
+    expect(screen.getByText("Available Resources (from App)")).toBeInTheDocument();
+  });
+
   it("a 404 (an agent in another Workspace looks missing) renders the not-found panel", async () => {
     apiClient.get.mockRejectedValue({ response: { status: 404, data: { errors: [{ detail: "Agent not found" }] } } });
     renderDetail();

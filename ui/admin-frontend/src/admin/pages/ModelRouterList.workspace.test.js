@@ -36,7 +36,7 @@ const scoped = {
     has_admin_access: true,
     rbac_enabled: true,
     permissions: [],
-    workspaces: [{ id: 2, name: "W1", permissions: ["model-routers:read", "model-routers:write", "model-routers:publish"] }],
+    workspaces: [{ id: 2, name: "W1", permissions: ["model-routers:read", "model-routers:write", "model-routers:delete", "model-routers:publish"] }],
   },
 };
 const community = { id: "1", attributes: { is_admin: true, has_admin_access: true, rbac_enabled: false, permissions: ["*"] } };

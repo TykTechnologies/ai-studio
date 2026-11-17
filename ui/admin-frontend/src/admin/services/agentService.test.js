@@ -57,6 +57,7 @@ describe('AgentService', () => {
         plugin: { id: 10, name: 'Agent Plugin' },
         appId: 5,
         app: { id: 5, name: 'Test App' },
+        appHidden: false,
         config: { setting: 'value' },
         groups: [{ id: 1, name: 'Group 1' }],
         isActive: true,

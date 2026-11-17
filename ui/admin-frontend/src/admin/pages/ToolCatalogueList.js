@@ -122,6 +122,8 @@ const ToolCatalogueList = memo(() => {
   // Edit/delete need tool-catalogues:write in the catalog's Workspace: one
   // in another Workspace is read-only.
   const canWrite = canAnywhere(P.TOOL_CATALOGUES_WRITE);
+  // Bulk selection only deletes: it needs the delete permission.
+  const canDelete = canAnywhere(P.TOOL_CATALOGUES_DELETE);
   const writeOn = (catalogue) => canOn(catalogue?.attributes?.workspace_id, P.TOOL_CATALOGUES_WRITE);
   // Deleting needs tool-catalogues:delete in its Workspace, as on the server.
   const deleteOn = (catalogue) => canOn(catalogue?.attributes?.workspace_id, P.TOOL_CATALOGUES_DELETE);
@@ -168,8 +170,8 @@ const ToolCatalogueList = memo(() => {
           loading={loading}
           onRowClick={handleCatalogueClick}
           actions={canWrite ? rowActions : undefined}
-          {...(canWrite ? bulk.selectionProps : {})}
-          bulkActions={canWrite ? bulkActions : undefined}
+          {...(canDelete ? bulk.selectionProps : {})}
+          bulkActions={canDelete ? bulkActions : undefined}
           emptyState={
             !searchTerm ? (
               <EmptyStateWidget

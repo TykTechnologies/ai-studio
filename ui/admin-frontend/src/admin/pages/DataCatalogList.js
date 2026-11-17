@@ -122,6 +122,8 @@ const DataCatalogList = () => {
   // Edit/delete need data-catalogues:write in the catalog's Workspace: one
   // in another Workspace is read-only.
   const canWrite = canAnywhere(P.DATA_CATALOGUES_WRITE);
+  // Bulk selection only deletes: it needs the delete permission.
+  const canDelete = canAnywhere(P.DATA_CATALOGUES_DELETE);
   const writeOn = (catalog) => canOn(catalog?.attributes?.workspace_id, P.DATA_CATALOGUES_WRITE);
   // Deleting needs data-catalogues:delete in its Workspace, as on the server.
   const deleteOn = (catalog) => canOn(catalog?.attributes?.workspace_id, P.DATA_CATALOGUES_DELETE);
@@ -170,8 +172,8 @@ const DataCatalogList = () => {
             loading={loading}
             onRowClick={handleCatalogClick}
             actions={canWrite ? rowActions : undefined}
-            {...(canWrite ? bulk.selectionProps : {})}
-            bulkActions={canWrite ? bulkActions : undefined}
+            {...(canDelete ? bulk.selectionProps : {})}
+            bulkActions={canDelete ? bulkActions : undefined}
             emptyState={
               !searchTerm ? (
                 <EmptyStateWidget

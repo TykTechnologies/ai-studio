@@ -421,14 +421,21 @@ const AgentDetail = () => {
                     <Typography variant="body2" color="textSecondary">
                       App
                     </Typography>
-                    <Typography
-                      variant="body1"
-                      component={RouterLink}
-                      to={`/admin/apps/${agent.app?.id}`}
-                      sx={{ textDecoration: 'none', color: 'primary.main', '&:hover': { textDecoration: 'underline' } }}
-                    >
-                      {agent.app?.name || 'Unknown App'}
-                    </Typography>
+                    {agent.appHidden ? (
+                      // In a Workspace the caller cannot see: no name, no link.
+                      <Typography variant="body1" color="text.secondary" data-testid="agent-app-hidden">
+                        App in another Workspace
+                      </Typography>
+                    ) : (
+                      <Typography
+                        variant="body1"
+                        component={RouterLink}
+                        to={`/admin/apps/${agent.app?.id}`}
+                        sx={{ textDecoration: 'none', color: 'primary.main', '&:hover': { textDecoration: 'underline' } }}
+                      >
+                        {agent.app?.name || 'Unknown App'}
+                      </Typography>
+                    )}
                   </Box>
 
                   <Box mb={2}>
@@ -455,58 +462,60 @@ const AgentDetail = () => {
             </Card>
           </Grid>
 
-          {/* Resources from App */}
-          <Grid item xs={12}>
-            <Card>
-              <CardContent>
-                <Typography variant="headingMedium" gutterBottom>
-                  Available Resources (from App)
-                </Typography>
-                <Divider sx={{ my: 2 }} />
-                <Grid container spacing={2}>
-                  <Grid item xs={12} md={4}>
-                    <Typography variant="bodyMedium" gutterBottom>
-                      Model providers ({agent.app?.llms?.length || 0})
-                    </Typography>
-                    <List dense>
-                      {agent.app?.llms?.map((llm) => (
-                        <ListItem key={llm.id}>
-                          <ListItemText
-                            primary={llm.name}
-                            secondary={llm.vendor}
-                          />
-                        </ListItem>
-                      ))}
-                    </List>
+          {/* Resources from App (not for an App in another Workspace) */}
+          {!agent.appHidden && (
+            <Grid item xs={12}>
+              <Card>
+                <CardContent>
+                  <Typography variant="headingMedium" gutterBottom>
+                    Available Resources (from App)
+                  </Typography>
+                  <Divider sx={{ my: 2 }} />
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={4}>
+                      <Typography variant="bodyMedium" gutterBottom>
+                        Model providers ({agent.app?.llms?.length || 0})
+                      </Typography>
+                      <List dense>
+                        {agent.app?.llms?.map((llm) => (
+                          <ListItem key={llm.id}>
+                            <ListItemText
+                              primary={llm.name}
+                              secondary={llm.vendor}
+                            />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <Typography variant="bodyMedium" gutterBottom>
+                        Tools ({agent.app?.tools?.length || 0})
+                      </Typography>
+                      <List dense>
+                        {agent.app?.tools?.map((tool) => (
+                          <ListItem key={tool.id}>
+                            <ListItemText primary={tool.name} />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <Typography variant="bodyMedium" gutterBottom>
+                        Datasources ({agent.app?.datasources?.length || 0})
+                      </Typography>
+                      <List dense>
+                        {agent.app?.datasources?.map((ds) => (
+                          <ListItem key={ds.id}>
+                            <ListItemText primary={ds.name} />
+                          </ListItem>
+                        ))}
+                      </List>
+                    </Grid>
                   </Grid>
-                  <Grid item xs={12} md={4}>
-                    <Typography variant="bodyMedium" gutterBottom>
-                      Tools ({agent.app?.tools?.length || 0})
-                    </Typography>
-                    <List dense>
-                      {agent.app?.tools?.map((tool) => (
-                        <ListItem key={tool.id}>
-                          <ListItemText primary={tool.name} />
-                        </ListItem>
-                      ))}
-                    </List>
-                  </Grid>
-                  <Grid item xs={12} md={4}>
-                    <Typography variant="bodyMedium" gutterBottom>
-                      Datasources ({agent.app?.datasources?.length || 0})
-                    </Typography>
-                    <List dense>
-                      {agent.app?.datasources?.map((ds) => (
-                        <ListItem key={ds.id}>
-                          <ListItemText primary={ds.name} />
-                        </ListItem>
-                      ))}
-                    </List>
-                  </Grid>
-                </Grid>
-              </CardContent>
-            </Card>
-          </Grid>
+                </CardContent>
+              </Card>
+            </Grid>
+          )}
 
           {/* Access Control */}
           <Grid item xs={12}>

@@ -302,7 +302,7 @@ const AgentList = () => {
                       {agent.plugin?.name || 'Unknown'}
                     </StyledTableCell>
                     <StyledTableCell>
-                      {agent.app?.name || 'Unknown'}
+                      {agent.appHidden ? 'App in another Workspace' : agent.app?.name || 'Unknown'}
                     </StyledTableCell>
                     <StyledTableCell>
                       {agent.groups.length === 0 ? (

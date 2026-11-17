@@ -12,6 +12,9 @@ const fromResponse = (agent) => ({
   plugin: agent.plugin,
   appId: agent.app_id,
   app: agent.app,
+  // The linked App is in a Workspace the caller cannot see (Workspaces
+  // .55): app is left out, appId kept.
+  appHidden: agent.app_hidden === true,
   config: agent.config || {},
   groups: agent.groups || [],
   isActive: agent.is_active,
