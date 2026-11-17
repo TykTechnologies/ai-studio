@@ -125,6 +125,8 @@ test('A Workspace-scoped Editor sees and changes only its own Workspace', async 
 
     // The W2 LLM is listed but offers no edit or delete.
     await adminMainPage.navigateToLLMProviders();
+    const search = page.getByPlaceholder('Search model providers by name...');
+    await search.fill(w2Llm);
     await adminLLMProvidersPage.Table.expectRowWithTextExists(w2Llm);
     const w2Actions = page.getByLabel(`Actions for ${w2Llm}`, { exact: true });
     if (await w2Actions.count()) {
@@ -139,6 +141,7 @@ test('A Workspace-scoped Editor sees and changes only its own Workspace', async 
     await adminLLMProvidersPage.ProviderNameInput.fill(ownLlm);
     await adminLLMProvidersPage.ProviderTypeDropDown.setValue('Anthropic');
     await adminLLMProvidersPage.SaveButton.click();
+    await page.getByPlaceholder('Search model providers by name...').fill(ownLlm);
     await adminLLMProvidersPage.Table.expectRowWithTextExists(ownLlm);
     await expect(page.getByRole('row').filter({ hasText: ownLlm })).toContainText(w1Name);
     const mine = await apiExpect(page, 'GET', `/api/v1/llms?search=${encodeURIComponent(ownLlm)}`, 200);
