@@ -122,7 +122,7 @@ func (a *API) createEmbedder(c *gin.Context) {
 		respondEmbedderError(c, err)
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"data": serializeEmbedder(e)})
+	c.JSON(http.StatusCreated, gin.H{"data": a.embedderIn(e)})
 }
 
 // @Summary Get an embedder
@@ -144,7 +144,7 @@ func (a *API) getEmbedder(c *gin.Context) {
 		respondEmbedderError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": serializeEmbedder(e)})
+	c.JSON(http.StatusOK, gin.H{"data": a.embedderIn(e)})
 }
 
 // @Summary Update an embedder
@@ -236,7 +236,7 @@ func (a *API) updateEmbedder(c *gin.Context) {
 		e.WorkspaceID = *moveTo
 	}
 	updated = true
-	c.JSON(http.StatusOK, gin.H{"data": serializeEmbedder(e)})
+	c.JSON(http.StatusOK, gin.H{"data": a.embedderIn(e)})
 }
 
 // @Summary Delete an embedder
@@ -293,7 +293,7 @@ func (a *API) listEmbedders(c *gin.Context) {
 	// serializing linked embedders runs no further queries.
 	out := make([]map[string]interface{}, len(embedders))
 	for i := range embedders {
-		out[i] = serializeEmbedder(&embedders[i])
+		out[i] = a.embedderIn(&embedders[i])
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"data": out,

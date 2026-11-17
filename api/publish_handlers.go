@@ -172,7 +172,7 @@ func (a *API) setDatasourceActive(c *gin.Context, active bool) {
 		writePublishError(c, err, "Datasource")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": a.withDatasourceGovernedMetadataOne(serializeDatasource(ds))})
+	c.JSON(http.StatusOK, gin.H{"data": a.withDatasourceGovernedMetadataOne(a.datasourceIn(ds))})
 }
 
 // --- Apps ---

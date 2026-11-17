@@ -90,7 +90,7 @@ func (a *API) createSecret(c *gin.Context) {
 	}
 
 	a.emitSecretChanged(c, services.TopicSecretCreated, "created", secret.ID)
-	c.JSON(http.StatusCreated, gin.H{"data": serializeSecret(secret, a.secretReferencesFor([]string{secret.VarName}))})
+	c.JSON(http.StatusCreated, gin.H{"data": a.secretIn(serializeSecret(secret, a.secretReferencesFor([]string{secret.VarName})), secret.WorkspaceID)})
 }
 
 // @Summary Get a secret by ID
@@ -131,7 +131,7 @@ func (a *API) getSecret(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeSecret(secret, a.secretReferencesFor([]string{secret.VarName}))})
+	c.JSON(http.StatusOK, gin.H{"data": a.secretIn(serializeSecret(secret, a.secretReferencesFor([]string{secret.VarName})), secret.WorkspaceID)})
 }
 
 // @Summary Update a secret
@@ -279,7 +279,7 @@ func (a *API) updateSecret(c *gin.Context) {
 	updated = true
 
 	a.emitSecretChanged(c, services.TopicSecretUpdated, "updated", secret.ID)
-	c.JSON(http.StatusOK, gin.H{"data": serializeSecret(secret, a.secretReferencesFor([]string{secret.VarName}))})
+	c.JSON(http.StatusOK, gin.H{"data": a.secretIn(serializeSecret(secret, a.secretReferencesFor([]string{secret.VarName})), secret.WorkspaceID)})
 }
 
 // @Summary Delete a secret
@@ -398,7 +398,7 @@ func (a *API) listSecrets(c *gin.Context) {
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
 
 	response := SecretListResponse{
-		Data: serializeSecrets(secrets, a.secretReferencesFor(secretVarNames(secrets))),
+		Data: a.secretsIn(serializeSecrets(secrets, a.secretReferencesFor(secretVarNames(secrets))), secrets),
 		Meta: struct {
 			TotalCount int64 `json:"total_count"`
 			TotalPages int   `json:"total_pages"`
