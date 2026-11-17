@@ -46,6 +46,20 @@ A few things to know:
 - **Names are unique across Workspaces.** Creating an object whose name is taken in another Workspace fails with a conflict, even when you cannot see the other object.
 - **Counts include what you cannot see.** Dependency totals and pending-change counts include hidden objects; their names and ids are never shown.
 
+## What Workspaces do not cover
+
+Workspaces govern the administration UI and the management API. These parts of AI Studio do not look at Workspaces, on purpose:
+
+- **The Portal and Chat.** What a Portal or Chat user sees is still decided by their teams' catalogues, never by Workspaces. Apps created in the Portal land in the Default workspace.
+- **Serving requests.** The gateway, edge gateways, chat and agent sessions serve every object they are configured with, whatever its Workspace.
+- **Edges and namespaces.** They belong to no Workspace (see [Pushes limited to one Workspace](./edge-gateways.md#pushes-limited-to-one-workspace) for how the two meet).
+- **Analytics, logs, traces and the audit trail**, including compliance reports, MCP analytics, guardrail block reports and proxy log exports: global, governed by their global permissions.
+- **Plugins and webhooks**: global, even though each records the Workspace it was created in.
+- **Access management**: users, teams, roles, App quotas and the license are global.
+- **Governed metadata** on MCP servers and plugin resources needs the global `metadata` permission.
+
+Management API routes on Workspace objects that are not Workspace-aware require their permission **globally**, so a person with only Workspace roles is refused (403) rather than given wider access.
+
 ## Managing Workspaces
 
 Open **Access → Workspaces**. You need `workspaces:read` to see the page, `workspaces:write` to create or rename a Workspace, `workspaces:delete` to delete one, and `roles:write` (global) to give people roles in it.
