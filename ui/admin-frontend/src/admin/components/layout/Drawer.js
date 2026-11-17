@@ -10,14 +10,20 @@ import { toArray } from '../../rbac/permissions';
  * in api/nav.go, filtered by the user's permissions.
  */
 const Drawer = () => {
-  const { canAny } = usePermissions();
+  const { canAny, canAnywhere } = usePermissions();
   const { manifest, loading } = useNavManifest();
 
   // The server has already filtered the menu; this hides an entry at once
-  // when a permission is revoked, before the reload lands.
+  // when a permission is revoked, before the reload lands. Like the route
+  // guard (RequirePermission) and the server's filter, a permission on a
+  // Workspace resource counts when held in any Workspace (.57); Workspace
+  // roles never carry global permissions, so for those this is the global
+  // check. canAnywhere may be absent where tests mock usePermissions.
   const isItemAllowed = useCallback(
-    (item) => !item.permission || canAny(toArray(item.permission)),
-    [canAny]
+    (item) =>
+      !item.permission ||
+      (canAnywhere ? toArray(item.permission).some(canAnywhere) : canAny(toArray(item.permission))),
+    [canAny, canAnywhere]
   );
 
   const menuItems = useMemo(() => toMenuItems(manifest?.admin || []), [manifest]);
