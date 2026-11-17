@@ -592,6 +592,9 @@ type UserQueryParams struct {
 	AuthSource string
 	HasAPIKey  *bool
 	Disabled   *bool
+	// AccountType: nil any; otherwise AccountTypeUser ("") or
+	// AccountTypeService.
+	AccountType *string
 }
 
 func (u *Users) QueryUsers(db *gorm.DB, params UserQueryParams) (int64, int, error) {
@@ -616,6 +619,10 @@ func (u *Users) QueryUsers(db *gorm.DB, params UserQueryParams) (int64, int, err
 
 	if params.Disabled != nil {
 		query = query.Where("disabled = ?", *params.Disabled)
+	}
+
+	if params.AccountType != nil {
+		query = query.Where("COALESCE(account_type, '') = ?", *params.AccountType)
 	}
 
 	if params.ExcludeGroupID > 0 {

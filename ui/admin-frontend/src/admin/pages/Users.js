@@ -51,6 +51,11 @@ const API_KEY_OPTIONS = [
   { value: "true", label: "Issued" },
   { value: "false", label: "None" },
 ];
+const ACCOUNT_TYPE_OPTIONS = [
+  { value: "", label: "Any" },
+  { value: "user", label: "People" },
+  { value: "service", label: "Service accounts" },
+];
 const STATUS_OPTIONS = [
   { value: "", label: "Any" },
   { value: "false", label: "Active" },
@@ -76,6 +81,7 @@ const Users = memo(() => {
   const [originFilter, setOriginFilter] = useState("");
   const [apiKeyFilter, setApiKeyFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [accountTypeFilter, setAccountTypeFilter] = useState("");
   const { features } = useSystemFeatures();
 
   // Helper function to check if we're in gateway-only mode
@@ -104,6 +110,7 @@ const Users = memo(() => {
       if (originFilter) params.auth_source = originFilter;
       if (apiKeyFilter) params.has_api_key = apiKeyFilter;
       if (statusFilter) params.disabled = statusFilter;
+      if (accountTypeFilter) params.account_type = accountTypeFilter;
 
       const response = await apiClient.get("/users", { params });
       setUsers(response.data.data || []);
@@ -117,7 +124,7 @@ const Users = memo(() => {
     } finally {
       setLoading(false);
     }
-  }, [queryParams, updatePaginationData, originFilter, apiKeyFilter, statusFilter]);
+  }, [queryParams, updatePaginationData, originFilter, apiKeyFilter, statusFilter, accountTypeFilter]);
 
   const fetchGroups = useCallback(async () => {
     try {
@@ -238,7 +245,25 @@ const Users = memo(() => {
 
   const columns = useMemo(() => [
     { field: "id", headerName: "ID", sortable: true },
-    { field: "name", headerName: "Name", sortable: true, renderCell: (user) => user.attributes.name },
+    {
+      field: "name",
+      headerName: "Name",
+      sortable: true,
+      renderCell: (user) => (
+        <>
+          {user.attributes.name}
+          {user.attributes.account_type === "service" && (
+            <Chip
+              label="Service account"
+              size="small"
+              variant="outlined"
+              sx={{ ml: 1 }}
+              data-testid={`user-service-account-${user.id}`}
+            />
+          )}
+        </>
+      ),
+    },
     { field: "email", headerName: "Email", sortable: true, renderCell: (user) => user.attributes.email },
     {
       field: "email_verified",
@@ -281,9 +306,14 @@ const Users = memo(() => {
           field: "is_admin",
           headerName: "Account type",
           sortable: true,
-          renderCell: (user) => (
-            <CustomSelectBadge config={roleBadgeConfigs[user.attributes.role] || roleBadgeConfigs["Chat user"]} />
-          ),
+          // The label is the API's (role); a label with no badge style
+          // (e.g. "Service account") shows as text rather than as another.
+          renderCell: (user) =>
+            roleBadgeConfigs[user.attributes.role] ? (
+              <CustomSelectBadge config={roleBadgeConfigs[user.attributes.role]} />
+            ) : (
+              <Chip label={user.attributes.role || "Chat user"} size="small" variant="outlined" />
+            ),
         },
   ], [rbacEnabled]);
 
@@ -354,6 +384,19 @@ const Users = memo(() => {
             inputProps={{ "data-testid": "users-filter-api-key" }}
           >
             {API_KEY_OPTIONS.map((o) => (
+              <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            select
+            size="small"
+            label="Account type"
+            value={accountTypeFilter}
+            onChange={applyFilter(setAccountTypeFilter)}
+            sx={{ minWidth: 160 }}
+            inputProps={{ "data-testid": "users-filter-account-type" }}
+          >
+            {ACCOUNT_TYPE_OPTIONS.map((o) => (
               <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
             ))}
           </TextField>

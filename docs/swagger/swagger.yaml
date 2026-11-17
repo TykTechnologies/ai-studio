@@ -27083,6 +27083,10 @@ paths:
         in: query
         name: search
         type: string
+      - description: 'service: service accounts only; user: people only'
+        in: query
+        name: account_type
+        type: string
       produces:
       - application/json
       responses:

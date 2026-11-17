@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { ThemeProvider } from "@mui/material/styles";
 import { MemoryRouter } from "react-router-dom";
@@ -125,5 +125,40 @@ describe("Users list Roles column (RBAC on)", () => {
     expect(directBadge).toHaveTextContent("Viewer");
     expect(directBadge).not.toHaveTextContent("via team");
     expect(directBadge.className).toMatch(/MuiChip-filled/);
+  });
+});
+
+// Service accounts: a badge by the name, the API's role label, and an
+// account-type filter sent as ?account_type=.
+describe("Users list service accounts", () => {
+  const withService = [
+    ...users,
+    { id: "9", attributes: { name: "Operator", email: "svc-1@service-account.invalid", is_admin: false, role: "Service account", account_type: "service", email_verified: true, auth_source: "admin" } },
+  ];
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    apiClient.get.mockImplementation((url) => {
+      if (url === "/users") return Promise.resolve({ data: { data: withService }, headers: { "x-total-count": "4", "x-total-pages": "1" } });
+      return Promise.resolve({ data: { data: [] }, headers: {} });
+    });
+  });
+
+  it("badges a service account and shows the API's role label", async () => {
+    renderPage();
+    const row = (await screen.findByText("Operator")).closest("tr");
+    expect(within(row).getByTestId("user-service-account-9")).toHaveTextContent("Service account");
+    expect(within(row).getAllByText("Service account")).toHaveLength(2); // badge and the role label
+    expect(screen.queryByTestId("user-service-account-2")).toBeNull();
+  });
+
+  it("filters by account type", async () => {
+    renderPage();
+    await screen.findByText("Operator");
+    fireEvent.mouseDown(screen.getByLabelText("Account type"));
+    fireEvent.click(await screen.findByRole("option", { name: "Service accounts" }));
+    await waitFor(() =>
+      expect(apiClient.get).toHaveBeenLastCalledWith("/users", expect.objectContaining({ params: expect.objectContaining({ account_type: "service" }) }))
+    );
   });
 });

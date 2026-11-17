@@ -91,3 +91,29 @@ func TestUserAPI_RoleIDsValidatedBeforeCreate(t *testing.T) {
 		Where("email = ? OR name = ?", "new@example.com", "Bot").Count(&n).Error)
 	assert.Zero(t, n, "no user is left behind")
 }
+
+// ?account_type= filters the users list to service accounts or to people.
+func TestUserAPI_ListFiltersByAccountType(t *testing.T) {
+	f := setupRBACFixture(t)
+	w := f.do("POST", "/api/v1/users", serviceAccountBody(nil), f.owner)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+
+	types := func(query string) map[string]int {
+		w := f.do("GET", "/api/v1/users?all=true"+query, nil, f.owner)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		var list struct{ Data []UserResponse }
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &list))
+		out := map[string]int{}
+		for _, u := range list.Data {
+			out[u.Attributes.AccountType]++
+		}
+		return out
+	}
+	all := types("")
+	assert.Equal(t, 1, all[models.AccountTypeService])
+	assert.Positive(t, all[models.AccountTypeUser])
+	assert.Equal(t, map[string]int{models.AccountTypeService: 1}, types("&account_type=service"))
+	people := types("&account_type=user")
+	assert.Zero(t, people[models.AccountTypeService])
+	assert.Equal(t, all[models.AccountTypeUser], people[models.AccountTypeUser])
+}

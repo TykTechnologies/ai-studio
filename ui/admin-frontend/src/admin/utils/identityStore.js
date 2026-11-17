@@ -48,8 +48,10 @@ export const buildIdentity = (me) => {
     permissions,
     roles: Array.isArray(attributes.roles) ? attributes.roles : [],
     workspaces: buildWorkspaces(attributes.workspaces),
-    // "" for a person, "service" for a service account.
-    accountType: attributes.account_type || '',
+    // /common/me's account_type is the legacy role label (e.g. "Admin",
+    // "Service account"), not the users API's account type ("" | "service"):
+    // kept as a label only.
+    roleLabel: attributes.account_type || '',
     uiOptions: attributes.ui_options || {},
     entitlements: attributes.entitlements || null,
     raw: me,

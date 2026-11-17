@@ -43,7 +43,7 @@ import { usePermissions } from "../../context/PermissionsContext";
 import RoleBadge from "../roles/RoleBadge";
 import CustomSelectBadge from "../common/CustomSelectBadge";
 import { roleBadgeConfigs } from "../groups/utils/roleBadgeConfig";
-import EffectivePermissionsList from "../roles/EffectivePermissionsList";
+import WorkspaceEffectivePermissions from "./WorkspaceEffectivePermissions";
 import CollapsibleSection from "../common/CollapsibleSection";
 import Can from "../rbac/Can";
 import { P } from "../../rbac/permissions";
@@ -437,10 +437,7 @@ const UserDetails = () => {
           <Box mb={4}>
             <CollapsibleSection title="Effective permissions" defaultExpanded={false}>
               <Box sx={{ px: 2, pb: 2 }}>
-                <EffectivePermissionsList
-                  permissions={effectiveAccess.permissions || []}
-                  sources={effectiveAccess.sources || {}}
-                />
+                <WorkspaceEffectivePermissions access={effectiveAccess} />
               </Box>
             </CollapsibleSection>
           </Box>

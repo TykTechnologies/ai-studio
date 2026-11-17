@@ -28144,6 +28144,12 @@ const docTemplate = `{
                         "description": "Search term for filtering users by email or name",
                         "name": "search",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "service: service accounts only; user: people only",
+                        "name": "account_type",
+                        "in": "query"
                     }
                 ],
                 "responses": {
