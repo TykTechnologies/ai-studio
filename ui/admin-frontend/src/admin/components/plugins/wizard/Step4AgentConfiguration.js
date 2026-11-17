@@ -14,6 +14,8 @@ import {
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import { PrimaryButton, SecondaryOutlineButton } from '../../../styles/sharedStyles';
 import AgentFormFields from '../../agents/AgentFormFields';
+import WorkspaceSelect from '../../workspaces/WorkspaceSelect';
+import { P } from '../../../rbac/permissions';
 import apiClient from '../../../utils/apiClient';
 import pluginService from '../../../services/pluginService';
 import { listAll } from '../../../utils/listAll';
@@ -25,6 +27,7 @@ const Step4AgentConfiguration = ({
   onSkip,
   loading,
   disabled,
+  workspaceError = '',
 }) => {
   const [showConfirmDialog, setShowConfirmDialog] = useState(true);
   const [configureAgent, setConfigureAgent] = useState(false);
@@ -40,6 +43,7 @@ const Step4AgentConfiguration = ({
     config: pluginData.config || {},
     groupIds: [],
     isActive: true,
+    workspaceId: null, // Enterprise: the Workspace the agent is created in
   });
 
   // Dropdown options
@@ -199,6 +203,18 @@ const Step4AgentConfiguration = ({
               showPluginField={false} // Don't show plugin field since it's pre-selected
               disabled={disabled || loading}
             />
+
+            {/* Workspace (Enterprise): where the agent is created. */}
+            <Box sx={{ mt: 3 }}>
+              <WorkspaceSelect
+                permission={P.AGENTS_WRITE}
+                value={formData.workspaceId}
+                onChange={(ws) => setFormData((prev) => ({ ...prev, workspaceId: ws }))}
+                error={workspaceError}
+                helperText="The Workspace the agent is created in."
+                disabled={disabled || loading}
+              />
+            </Box>
 
             {/* Action Buttons */}
             <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 4 }}>

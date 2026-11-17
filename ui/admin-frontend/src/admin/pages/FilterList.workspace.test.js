@@ -43,7 +43,7 @@ const scoped = {
     has_admin_access: true,
     rbac_enabled: true,
     permissions: [],
-    workspaces: [{ id: 2, name: "W1", permissions: ["filters:read", "filters:write"] }],
+    workspaces: [{ id: 2, name: "W1", permissions: ["filters:read", "filters:write", "filters:delete"] }],
   },
 };
 const community = { id: "1", attributes: { is_admin: true, has_admin_access: true, rbac_enabled: false, permissions: ["*"] } };

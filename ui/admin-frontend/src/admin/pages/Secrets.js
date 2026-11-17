@@ -152,15 +152,19 @@ const Secrets = () => {
     ...(workspaceColumn ? [workspaceColumn] : []),
   ], [workspaceColumn]);
 
-  // Edit/delete need secrets:write in the secret's Workspace: one in
+  // Edit needs secrets:write and delete secrets:delete, in the secret's Workspace: one in
   // another Workspace is read-only.
   const canWrite = canAnywhere(P.SECRETS_WRITE);
   const writeOn = useCallback((secret) => canOn(secret?.attributes?.workspace_id, P.SECRETS_WRITE), [canOn]);
+  // Deleting needs the delete permission in the object's Workspace, as on
+  // the server (row and bulk).
+  const canDelete = canAnywhere(P.SECRETS_DELETE);
+  const deleteOn = useCallback((secret) => canOn(secret?.attributes?.workspace_id, P.SECRETS_DELETE), [canOn]);
 
   const rowActions = useMemo(() => [
     { key: "edit", label: "Edit secret", onClick: (secret) => navigate(`/admin/secrets/edit/${secret.id}`), hidden: (secret) => !writeOn(secret) },
-    { key: "delete", label: "Delete secret", onClick: (secret) => setDeleteTarget(secret), hidden: (secret) => !writeOn(secret) },
-  ], [navigate, writeOn]);
+    { key: "delete", label: "Delete secret", onClick: (secret) => setDeleteTarget(secret), hidden: (secret) => !deleteOn(secret) },
+  ], [navigate, writeOn, deleteOn]);
 
   const bulkActions = useMemo(
     () => standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete }),
@@ -245,9 +249,9 @@ const Secrets = () => {
           loading={loading}
           onRowClick={handleSecretClick}
           getRowLabel={secretName}
-          actions={canWrite ? rowActions : undefined}
-          {...(canWrite ? bulk.selectionProps : {})}
-          bulkActions={canWrite ? bulkActions : undefined}
+          actions={canWrite || canDelete ? rowActions : undefined}
+          {...(canDelete ? bulk.selectionProps : {})}
+          bulkActions={canDelete ? bulkActions : undefined}
           emptyState={
             !searchTerm ? (
               <EmptyStateWidget

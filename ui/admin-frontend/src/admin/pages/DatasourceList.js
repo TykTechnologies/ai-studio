@@ -212,34 +212,38 @@ const DatasourceList = () => {
     ...(workspaceColumn ? [workspaceColumn] : []),
   ], [workspaceColumn]);
 
-  // Edit/clone/delete need datasources:write; the active toggle needs
+  // Edit/clone need datasources:write, delete datasources:delete; the active toggle needs
   // datasources:publish, which never implies write. Either permission earns
   // the actions column. Both are checked in each data source's Workspace:
   // one in another Workspace is read-only.
   const canWrite = canAnywhere(P.DATASOURCES_WRITE);
   const canPublish = canAnywhere(P.DATASOURCES_PUBLISH);
-  const canManage = canWrite || canPublish;
+  const canDelete = canAnywhere(P.DATASOURCES_DELETE);
+  const canManage = canWrite || canPublish || canDelete;
   const writeOn = useCallback((d) => canOn(d?.attributes?.workspace_id, P.DATASOURCES_WRITE), [canOn]);
+  // Deleting needs the delete permission in the object's Workspace, as on
+  // the server (row and bulk).
+  const deleteOn = useCallback((d) => canOn(d?.attributes?.workspace_id, P.DATASOURCES_DELETE), [canOn]);
   const publishOn = useCallback((d) => canOn(d?.attributes?.workspace_id, P.DATASOURCES_PUBLISH), [canOn]);
 
   const rowActions = useMemo(() => [
     { key: "edit", label: "Edit data source", onClick: (d) => navigate(`/admin/datasources/edit/${d.id}`), hidden: (d) => !writeOn(d) },
     { key: "clone", label: "Clone data source", onClick: handleCloneDatasource, hidden: (d) => !writeOn(d) },
-    { key: "delete", label: "Delete data source", onClick: (d) => setDeleteTarget(d), hidden: (d) => !writeOn(d) },
+    { key: "delete", label: "Delete data source", onClick: (d) => setDeleteTarget(d), hidden: (d) => !deleteOn(d) },
     {
       key: "toggle",
       label: (d) => `${d?.attributes?.active ? "Deactivate" : "Activate"} data source`,
       onClick: handleToggleActive,
       hidden: (d) => !publishOn(d),
     },
-  ], [navigate, handleCloneDatasource, handleToggleActive, writeOn, publishOn]);
+  ], [navigate, handleCloneDatasource, handleToggleActive, writeOn, publishOn, deleteOn]);
 
   const bulkActions = useMemo(
     () =>
       standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete, canToggle: canPublish }).filter(
-        (action) => canWrite || action.key !== "delete",
+        (action) => canDelete || action.key !== "delete",
       ),
-    [bulk.run, bulk.requestDelete, canWrite, canPublish],
+    [bulk.run, bulk.requestDelete, canDelete, canPublish],
   );
 
   if (error && datasources.length === 0) {

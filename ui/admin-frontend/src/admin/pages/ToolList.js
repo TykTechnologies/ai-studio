@@ -139,34 +139,38 @@ const ToolList = () => {
 
   // The row toggle goes through the same bulk endpoint as the toolbar so the
   // list and the tool form (which has the switch) agree on what "active" is.
-  // Edit/delete need tools:write; the active toggle needs tools:publish,
+  // Edit needs tools:write, delete tools:delete; the active toggle needs tools:publish,
   // which never implies write. Either permission earns the actions column.
   // Both are checked in each tool's Workspace: one in another Workspace is
   // read-only.
   const canWrite = canAnywhere(P.TOOLS_WRITE);
   const canPublish = canAnywhere(P.TOOLS_PUBLISH);
-  const canManage = canWrite || canPublish;
+  const canDelete = canAnywhere(P.TOOLS_DELETE);
+  const canManage = canWrite || canPublish || canDelete;
   const writeOn = useCallback((tool) => canOn(tool?.attributes?.workspace_id, P.TOOLS_WRITE), [canOn]);
+  // Deleting needs the delete permission in the object's Workspace, as on
+  // the server (row and bulk).
+  const deleteOn = useCallback((tool) => canOn(tool?.attributes?.workspace_id, P.TOOLS_DELETE), [canOn]);
   const publishOn = useCallback((tool) => canOn(tool?.attributes?.workspace_id, P.TOOLS_PUBLISH), [canOn]);
 
   const runBulk = bulk.run;
   const rowActions = useMemo(() => [
     { key: "edit", label: "Edit tool", onClick: (tool) => navigate(`/admin/tools/edit/${tool.id}`), hidden: (tool) => !writeOn(tool) },
-    { key: "delete", label: "Delete tool", onClick: (tool) => setDeleteTarget(tool), hidden: (tool) => !writeOn(tool) },
+    { key: "delete", label: "Delete tool", onClick: (tool) => setDeleteTarget(tool), hidden: (tool) => !deleteOn(tool) },
     {
       key: "toggle",
       label: (tool) => `${tool?.attributes?.active !== false ? "Deactivate" : "Activate"} tool`,
       onClick: (tool) => runBulk(tool.attributes.active !== false ? "deactivate" : "activate", [tool]),
       hidden: (tool) => !publishOn(tool),
     },
-  ], [navigate, runBulk, writeOn, publishOn]);
+  ], [navigate, runBulk, writeOn, publishOn, deleteOn]);
 
   const bulkActions = useMemo(
     () =>
       standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete, canToggle: canPublish }).filter(
-        (action) => canWrite || action.key !== "delete",
+        (action) => canDelete || action.key !== "delete",
       ),
-    [bulk.run, bulk.requestDelete, canWrite, canPublish],
+    [bulk.run, bulk.requestDelete, canDelete, canPublish],
   );
 
   if (error && tools.length === 0) {

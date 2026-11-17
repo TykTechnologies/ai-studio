@@ -48,6 +48,7 @@ import {
 import EdgeAvailabilitySection from "../common/EdgeAvailabilitySection";
 import PublishSwitch from "../rbac/PublishSwitch";
 import { P } from "../../rbac/permissions";
+import Can from "../rbac/Can";
 import { useEdition } from "../../context/EditionContext";
 import RelationshipPicker from "../common/relationship-picker";
 import { listAll } from "../../utils/listAll";
@@ -1083,22 +1084,26 @@ const SemanticRouterForm = () => {
             <Divider sx={{ my: 2 }} />
           </Grid>
 
-          {/* Test the unsaved configuration */}
-          <Grid item xs={12}>
-            <Typography variant="h6" gutterBottom>
-              Test
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Classify a prompt with the configuration above, before saving it.
-            </Typography>
-            <SemanticRouterTestPanel
-              getDraft={() => attributesFromDraft(router)}
-              routeNames={names}
-              allowExplicit={router.settings.allow_explicit_route}
-              llms={llms}
-              modelRouters={modelRouters}
-            />
-          </Grid>
+          {/* Test the unsaved configuration. The draft test route is global
+              (semantic-routers:write held globally, by design), so a
+              Workspace-scoped writer does not get a button that always fails. */}
+          <Can permission={P.SEMANTIC_ROUTERS_WRITE}>
+            <Grid item xs={12}>
+              <Typography variant="h6" gutterBottom>
+                Test
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Classify a prompt with the configuration above, before saving it.
+              </Typography>
+              <SemanticRouterTestPanel
+                getDraft={() => attributesFromDraft(router)}
+                routeNames={names}
+                allowExplicit={router.settings.allow_explicit_route}
+                llms={llms}
+                modelRouters={modelRouters}
+              />
+            </Grid>
+          </Can>
         </Grid>
       </ContentBox>
 
