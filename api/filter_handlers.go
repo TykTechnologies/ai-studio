@@ -98,7 +98,7 @@ func (a *API) createFilter(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, toFilterResponse(filter))
+	c.JSON(http.StatusCreated, a.filterResponseIn(filter))
 }
 
 // validateFilterInput checks the attributes every kind needs; the service
@@ -241,7 +241,7 @@ func (a *API) getFilter(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, toFilterResponse(filter))
+	c.JSON(http.StatusOK, a.filterResponseIn(filter))
 }
 
 // @Summary Update a filter
@@ -368,7 +368,7 @@ func (a *API) updateFilter(c *gin.Context) {
 	}
 	updated = true
 
-	c.JSON(http.StatusOK, toFilterResponse(filter))
+	c.JSON(http.StatusOK, a.filterResponseIn(filter))
 }
 
 // @Summary Delete a filter
@@ -432,7 +432,7 @@ func (a *API) listFilters(c *gin.Context) {
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, toFilterResponses(filters))
+	c.JSON(http.StatusOK, a.filterResponsesIn(filters))
 }
 
 func toFilterResponse(filter *models.Filter) FilterResponse {

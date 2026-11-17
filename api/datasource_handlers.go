@@ -141,7 +141,7 @@ func (a *API) createDatasource(c *gin.Context) {
 	}
 
 	meta := a.persistGovernedMetadata(c, models.GovernedObjectTypeDatasource, models.BuiltinObjectID(datasource.ID), input.Data.Attributes.GovernedMetadata)
-	c.JSON(http.StatusCreated, dataWithMeta(a.withDatasourceGovernedMetadataOne(serializeDatasource(datasource)), meta))
+	c.JSON(http.StatusCreated, dataWithMeta(a.withDatasourceGovernedMetadataOne(a.datasourceIn(datasource)), meta))
 }
 
 // @Summary Get a datasource by ID
@@ -178,7 +178,7 @@ func (a *API) getDatasource(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": a.withDatasourceGovernedMetadataOne(serializeDatasource(datasource))})
+	c.JSON(http.StatusOK, gin.H{"data": a.withDatasourceGovernedMetadataOne(a.datasourceIn(datasource))})
 }
 
 // @Summary Update a datasource
@@ -386,7 +386,7 @@ func (a *API) updateDatasource(c *gin.Context) {
 	updated = true
 
 	meta := a.persistGovernedMetadata(c, models.GovernedObjectTypeDatasource, models.BuiltinObjectID(datasource.ID), input.Data.Attributes.GovernedMetadata)
-	c.JSON(http.StatusOK, dataWithMeta(a.withDatasourceGovernedMetadataOne(serializeDatasource(datasource)), meta))
+	c.JSON(http.StatusOK, dataWithMeta(a.withDatasourceGovernedMetadataOne(a.datasourceIn(datasource)), meta))
 }
 
 // @Summary Delete a datasource
@@ -462,7 +462,7 @@ func (a *API) listDatasources(c *gin.Context) {
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, gin.H{"data": a.withDatasourceGovernedMetadata(serializeDatasources(datasources), false)})
+	c.JSON(http.StatusOK, gin.H{"data": a.withDatasourceGovernedMetadata(a.datasourcesIn(datasources), false)})
 }
 
 // @Summary Search datasources
@@ -503,7 +503,7 @@ func (a *API) searchDatasources(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeDatasources(datasources)})
+	c.JSON(http.StatusOK, gin.H{"data": a.datasourcesIn(datasources)})
 }
 
 // @Summary Get datasources by tag
@@ -544,7 +544,7 @@ func (a *API) getDatasourcesByTag(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeDatasources(datasources)})
+	c.JSON(http.StatusOK, gin.H{"data": a.datasourcesIn(datasources)})
 }
 
 // @Summary Add FileStore to Datasource
@@ -605,7 +605,7 @@ func (a *API) addFileStoreToDatasource(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeDatasource(datasource)})
+	c.JSON(http.StatusOK, gin.H{"data": a.datasourceIn(datasource)})
 }
 
 // @Summary Remove FileStore from Datasource
@@ -666,7 +666,7 @@ func (a *API) removeFileStoreFromDatasource(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeDatasource(datasource)})
+	c.JSON(http.StatusOK, gin.H{"data": a.datasourceIn(datasource)})
 }
 
 // @Summary Process file embeddings for a datasource
@@ -808,7 +808,7 @@ func (a *API) cloneDatasource(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": serializeDatasource(cloned)})
+	c.JSON(http.StatusCreated, gin.H{"data": a.datasourceIn(cloned)})
 }
 
 func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
