@@ -47,7 +47,7 @@ const KID = ({ children }) => (
  * (batch and response IDs, `{vendor_id}.t1k{kid}.{mac}`). Shows key IDs only:
  * the API never returns the secret.
  */
-const ResourceSigningKeySection = ({ llmId }) => {
+const ResourceSigningKeySection = ({ llmId, workspaceId }) => {
   const [status, setStatus] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [graceHours, setGraceHours] = useState(720);
@@ -106,7 +106,7 @@ const ResourceSigningKeySection = ({ llmId }) => {
       title="Native API resource IDs"
       description="The key that signs the resource IDs this model provider's native API extensions hand out (for example batch or response IDs). The kid is the 8 characters after .t1k in an ID."
       actions={
-        <Can permission={P.LLMS_WRITE}>
+        <Can permission={P.LLMS_WRITE} workspaceId={workspaceId}>
           <SecondaryOutlineButton onClick={openDialog} disabled={rotating}>
             Rotate signing key
           </SecondaryOutlineButton>

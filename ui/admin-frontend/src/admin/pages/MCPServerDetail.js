@@ -52,6 +52,8 @@ import {
 import { apiErrorDetail, formatTime, preStyle } from "./webhookShared";
 import { AUTH_MODE_LABELS, DashboardStateChip, KindChip } from "./MCPServers";
 import AllowInternalHostSwitch from "../components/common/AllowInternalHostSwitch";
+import WorkspaceSelect from "../components/workspaces/WorkspaceSelect";
+import { useCanMove, workspaceFieldError } from "../components/workspaces/workspaceFields";
 
 // Tool catalogues come back as JSON:API rows; the picker wants {id, name}.
 const catalogueOptions = (data) =>
@@ -332,7 +334,14 @@ const MCPServerDetail = () => {
   const [policies, setPolicies] = useState([]);
   const [catalogues, setCatalogues] = useState([]);
   const [error, setError] = useState(null);
-  const [form, setForm] = useState({ name: "", description: "", long_description: "", logo_url: "", tags: "", privacy_score: "", allow_internal_host: false });
+  const [form, setForm] = useState({ name: "", description: "", long_description: "", logo_url: "", tags: "", privacy_score: "", allow_internal_host: false, workspace_id: null });
+  // Enterprise: a workspace_id other than the server's on save is a move.
+  const [workspaceError, setWorkspaceError] = useState("");
+  const canMove = useCanMove(P.MCP_SERVERS_WRITE);
+  const setWorkspace = useCallback((ws) => {
+    setForm((f) => ({ ...f, workspace_id: ws }));
+    setWorkspaceError("");
+  }, []);
   const [selectedCatalogues, setSelectedCatalogues] = useState([]);
   const [savingCatalogues, setSavingCatalogues] = useState(false);
   const [connection, setConnection] = useState(null);
@@ -360,6 +369,7 @@ const MCPServerDetail = () => {
         tags: (s.tags || []).join(", "),
         privacy_score: s.privacy_score === null || s.privacy_score === undefined ? "" : s.privacy_score,
         allow_internal_host: Boolean(s.allow_internal_host),
+        workspace_id: s.workspace_id ?? null,
       });
       setSelectedCatalogues((s.tool_catalogues || []).map((c) => ({ id: Number(c.id), name: c.name })));
       const [pols, cats] = await Promise.all([
@@ -408,10 +418,21 @@ const MCPServerDetail = () => {
       else body.privacy_score = Number(form.privacy_score);
       // Sent only when changed: only an administrator may change it (w4e).
       if (form.allow_internal_host !== Boolean(server.allow_internal_host)) body.allow_internal_host = form.allow_internal_host;
+      // Sent only to move it to another Workspace (write in both).
+      if (form.workspace_id !== null && form.workspace_id !== undefined && Number(form.workspace_id) !== Number(server.workspace_id)) {
+        body.workspace_id = Number(form.workspace_id);
+      }
       const res = await apiClient.patch(`/mcp-servers/${server.id}`, body);
       setServer(res.data);
+      setForm((f) => ({ ...f, workspace_id: res.data?.workspace_id ?? f.workspace_id }));
       notify("Saved");
     } catch (err) {
+      const wsError = workspaceFieldError(err);
+      if (wsError) {
+        setWorkspaceError(wsError);
+        setError(wsError);
+        return;
+      }
       setError(apiErrorDetail(err, "Save failed"));
     }
   };
@@ -518,6 +539,8 @@ const MCPServerDetail = () => {
   // Open-source Tyk Gateways: keys carry the rights inline instead of policies.
   const isGatewayConn = connection?.kind === "gateway";
   const platform = isGatewayConn ? "Gateway" : "Dashboard";
+  // Controls are checked in the server's Workspace (Workspaces B4b).
+  const wsId = server.workspace_id;
   const prettyDefinition = server.definition ? JSON.stringify(JSON.parse(server.definition), null, 2) : "not available";
 
   return (
@@ -535,6 +558,7 @@ const MCPServerDetail = () => {
         <Stack direction="row" spacing={2} alignItems="center">
           <PublishSwitch
             permission={P.MCP_SERVERS_PUBLISH}
+            workspaceId={server.workspace_id ?? null}
             checked={server.is_active}
             onChange={togglePublish}
             name="is_active"
@@ -586,7 +610,7 @@ const MCPServerDetail = () => {
                 <SecondaryOutlineButton size="small" onClick={() => downloadHandoff(false)} data-testid="download-handoff">
                   Download handoff package
                 </SecondaryOutlineButton>
-                <Can permission={P.MCP_SERVERS_EXECUTE}>
+                <Can permission={P.MCP_SERVERS_EXECUTE} workspaceId={wsId}>
                   <SecondaryOutlineButton size="small" onClick={() => downloadHandoff(true)} data-testid="download-handoff-secrets">
                     Download with credential
                   </SecondaryOutlineButton>
@@ -621,7 +645,7 @@ const MCPServerDetail = () => {
                         <Typography variant="body2">
                           {c.name} · {c.listen_path} · <code>{c.tyk_api_id}</code>
                         </Typography>
-                        <Can permission={P.MCP_SERVERS_EXECUTE}>
+                        <Can permission={P.MCP_SERVERS_EXECUTE} workspaceId={wsId}>
                           <PrimaryButton size="small" variant="contained" onClick={() => linkTo(c.tyk_api_id)} data-testid={`link-${c.tyk_api_id}`}>
                             Link
                           </PrimaryButton>
@@ -727,8 +751,21 @@ const MCPServerDetail = () => {
                 />
               </Grid>
             )}
+            {/* Workspace (Enterprise): the move control. */}
+            <Grid item xs={12} md={6}>
+              <Can permission={P.MCP_SERVERS_WRITE} workspaceId={wsId}>
+                <WorkspaceSelect
+                  permission={P.MCP_SERVERS_WRITE}
+                  value={form.workspace_id}
+                  onChange={setWorkspace}
+                  disabled={!canMove}
+                  error={workspaceError}
+                  helperText="Moving it to another Workspace needs write in both."
+                />
+              </Can>
+            </Grid>
           </Grid>
-          <Can permission={P.MCP_SERVERS_WRITE}>
+          <Can permission={P.MCP_SERVERS_WRITE} workspaceId={wsId}>
             <Box sx={{ mt: 3 }}>
               <PrimaryButton variant="contained" onClick={savePresentation} data-testid="save-presentation">
                 Save
@@ -750,7 +787,7 @@ const MCPServerDetail = () => {
               portal shows no Build app button for it.
             </Alert>
           )}
-          <Can permission={P.MCP_SERVERS_WRITE} fallback={<Typography variant="body2">{selectedCatalogues.map((c) => c.name).join(", ") || "Not in any catalog."}</Typography>}>
+          <Can permission={P.MCP_SERVERS_WRITE} workspaceId={wsId} fallback={<Typography variant="body2">{selectedCatalogues.map((c) => c.name).join(", ") || "Not in any catalog."}</Typography>}>
             <RelationshipPicker
               label="Tool catalogs this server is published in"
               itemLabel="catalog"
@@ -774,7 +811,7 @@ const MCPServerDetail = () => {
             description="What the Tyk keys AI Studio mints grant for this server. Open-source gateways keep policies on each node's disk, so the rights are written onto every key instead and hold on every node at once. Saving rewrites the live keys of the Apps that use this server."
             data-testid="key-access-section"
           >
-            <Can permission={P.MCP_SERVERS_WRITE} fallback={<Typography variant="body2">{(server.key_access?.allowed_tools || []).join(", ") || "Every tool, no limits."}</Typography>}>
+            <Can permission={P.MCP_SERVERS_WRITE} workspaceId={wsId} fallback={<Typography variant="body2">{(server.key_access?.allowed_tools || []).join(", ") || "Every tool, no limits."}</Typography>}>
               <MCPKeyAccessEditor server={server} onSaved={(s) => { setServer(s); notify("Key access saved"); }} onError={setError} />
             </Can>
           </Section>
@@ -784,7 +821,7 @@ const MCPServerDetail = () => {
           description="A bundle is one access policy (the ACL that names this proxy) plus optional consumption policies (rate limit and quota partitions). Keys minted for Apps carry the union of the bundles of every MCP server they use; Tyk applies policy changes to those keys at request time."
           actions={
             fullMode && server.tyk_api_id ? (
-              <Can permission={P.MCP_SERVERS_EXECUTE}>
+              <Can permission={P.MCP_SERVERS_EXECUTE} workspaceId={wsId}>
                 <SecondaryOutlineButton size="small" onClick={() => setCreatorOpen(true)} data-testid="open-policy-creator">
                   Create policy
                 </SecondaryOutlineButton>
@@ -792,7 +829,7 @@ const MCPServerDetail = () => {
             ) : null
           }
         >
-          <Can permission={P.MCP_SERVERS_WRITE} fallback={<Typography variant="body2">{(server.bundle || []).map((p) => `${p.role}: ${p.policy?.name}`).join(", ") || "No bundle pinned."}</Typography>}>
+          <Can permission={P.MCP_SERVERS_WRITE} workspaceId={wsId} fallback={<Typography variant="body2">{(server.bundle || []).map((p) => `${p.role}: ${p.policy?.name}`).join(", ") || "No bundle pinned."}</Typography>}>
             <BundleEditor server={server} policies={policies} onSaved={(s) => { setServer(s); notify("Bundle saved"); }} onError={setError} />
           </Can>
           <PolicyCreator
@@ -861,7 +898,7 @@ const MCPServerDetail = () => {
 
         {fullMode && onDashboard && server.origin !== "gateway" ? (
           <Section title="Definition" description={`Edit the Tyk OAS document and push it to the ${isGatewayConn ? "gateway nodes" : "Dashboard"}.`}>
-            <Can permission={P.MCP_SERVERS_EXECUTE} fallback={<Box component="pre" sx={{ ...preStyle, maxHeight: 480 }}>{prettyDefinition}</Box>}>
+            <Can permission={P.MCP_SERVERS_EXECUTE} workspaceId={wsId} fallback={<Box component="pre" sx={{ ...preStyle, maxHeight: 480 }}>{prettyDefinition}</Box>}>
               <DefinitionEditor
                 server={server}
                 platform={platform}
@@ -883,7 +920,7 @@ const MCPServerDetail = () => {
         )}
 
         {canDelete && (
-          <Can permission={P.MCP_SERVERS_DELETE}>
+          <Can permission={P.MCP_SERVERS_DELETE} workspaceId={wsId}>
             <Section
               title="Danger zone"
               description={onDashboard ? `Removes the proxy from the Tyk ${isGatewayConn ? "Gateway nodes" : "Dashboard"} and this record from AI Studio.` : "Removes this record from AI Studio."}

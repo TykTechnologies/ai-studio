@@ -20,10 +20,19 @@ import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import useAdminData from "../hooks/useAdminData";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
+import {
+  useWorkspaceColumn,
+  useWorkspaceFilter,
+  useWorkspaceAccess,
+  WorkspaceFilter,
+} from "../components/workspaces/workspaceFields";
 
 const FilterList = memo(() => {
   const navigate = useNavigate();
   const { config, loading: configLoading } = useAdminData();
+  const { canOn, canAnywhere } = useWorkspaceAccess();
+  const workspaceColumn = useWorkspaceColumn();
+  const { workspaceId, setWorkspaceId, params: workspaceParams } = useWorkspaceFilter();
   const [filters, setFilters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -35,7 +44,7 @@ const FilterList = memo(() => {
   const fetchFilters = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get("/filters", { params: queryParams });
+      const response = await apiClient.get("/filters", { params: { ...queryParams, ...workspaceParams } });
       // The filters endpoint returns a bare array, not a { data } envelope.
       setFilters(Array.isArray(response.data) ? response.data : response.data?.data || []);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
@@ -48,7 +57,7 @@ const FilterList = memo(() => {
     } finally {
       setLoading(false);
     }
-  }, [queryParams, updatePaginationData]);
+  }, [queryParams, workspaceParams, updatePaginationData]);
 
   useEffect(() => {
     fetchFilters();
@@ -98,12 +107,18 @@ const FilterList = memo(() => {
       headerName: "Type",
       renderCell: (filter) => (filter.attributes.response_filter ? "Response" : "Request"),
     },
-  ], []);
+    ...(workspaceColumn ? [workspaceColumn] : []),
+  ], [workspaceColumn]);
+
+  // Edit/delete need filters:write in the filter's Workspace: one in
+  // another Workspace is read-only.
+  const canWrite = canAnywhere(P.FILTERS_WRITE);
+  const writeOn = useCallback((filter) => canOn(filter?.attributes?.workspace_id, P.FILTERS_WRITE), [canOn]);
 
   const rowActions = useMemo(() => [
-    { key: "edit", label: "Edit filter", onClick: (filter) => navigate(`/admin/filters/edit/${filter.id}`) },
-    { key: "delete", label: "Delete filter", onClick: (filter) => setDeleteTarget(filter) },
-  ], [navigate]);
+    { key: "edit", label: "Edit filter", onClick: (filter) => navigate(`/admin/filters/edit/${filter.id}`), hidden: (filter) => !writeOn(filter) },
+    { key: "delete", label: "Delete filter", onClick: (filter) => setDeleteTarget(filter), hidden: (filter) => !writeOn(filter) },
+  ], [navigate, writeOn]);
 
   const bulkActions = useMemo(
     () => standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete }),
@@ -141,7 +156,7 @@ const FilterList = memo(() => {
       <>
         <TitleBox top="var(--studio-header-height)">
           <Typography variant="headingXLarge">Filters</Typography>
-          <Can permission={P.FILTERS_WRITE}>
+          <Can permission={P.FILTERS_WRITE} anywhere>
             <PrimaryButton
               variant="contained"
               startIcon={<AddIcon />}
@@ -155,34 +170,31 @@ const FilterList = memo(() => {
           <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Filters are used as a security layer to process and modify data before it is passed to the LLM. For example, filters can remove personally identifiable information to ensure privacy.</Typography>
         </Box>
         <ContentBox>
+          <WorkspaceFilter value={workspaceId} onChange={setWorkspaceId} sx={{ mb: 2 }} />
           <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
-          <Can permission={P.FILTERS_WRITE}>
-            {(canWrite) => (
-              <DataTable
-                {...tableProps}
-                ariaLabel="Filters"
-                searchPlaceholder="Search filters by name..."
-                columns={columns}
-                data={filters}
-                loading={loading}
-                onRowClick={handleFilterClick}
-                actions={canWrite ? rowActions : undefined}
-                {...(canWrite ? bulk.selectionProps : {})}
-                bulkActions={canWrite ? bulkActions : undefined}
-                emptyState={
-                  !searchTerm ? (
-                    <EmptyStateWidget
-                      title="No filters created yet"
-                      description="Click the button below to add a new filter."
-                      buttonText="Add Filter"
-                      buttonIcon={<AddIcon />}
-                      onButtonClick={canWrite ? handleAddFilter : undefined}
-                    />
-                  ) : undefined
-                }
-              />
-            )}
-          </Can>
+          <DataTable
+            {...tableProps}
+            ariaLabel="Filters"
+            searchPlaceholder="Search filters by name..."
+            columns={columns}
+            data={filters}
+            loading={loading}
+            onRowClick={handleFilterClick}
+            actions={canWrite ? rowActions : undefined}
+            {...(canWrite ? bulk.selectionProps : {})}
+            bulkActions={canWrite ? bulkActions : undefined}
+            emptyState={
+              !searchTerm ? (
+                <EmptyStateWidget
+                  title="No filters created yet"
+                  description="Click the button below to add a new filter."
+                  buttonText="Add Filter"
+                  buttonIcon={<AddIcon />}
+                  onButtonClick={canWrite ? handleAddFilter : undefined}
+                />
+              ) : undefined
+            }
+          />
         </ContentBox>
       </>
 

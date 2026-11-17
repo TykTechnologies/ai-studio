@@ -4,8 +4,9 @@ import { toArray } from '../../rbac/permissions';
 import PermissionDeniedPanel from './PermissionDeniedPanel';
 
 /**
- * Route-level guard: renders the page when the user holds the permission,
- * otherwise a "you don't have permission" panel instead of a blank page.
+ * Route-level guard: renders the page when the user holds the permission
+ * (globally, or in any Workspace for a Workspace resource), otherwise a
+ * "you don't have permission" panel instead of a blank page.
  *
  *   <RequirePermission permission={P.LLMS_READ}><LLMList /></RequirePermission>
  *   <RequirePermission anyOf={[P.A, P.B]}>...</RequirePermission>
@@ -16,7 +17,13 @@ import PermissionDeniedPanel from './PermissionDeniedPanel';
  */
 const RequirePermission = ({ permission, anyOf, children }) => {
   const access = usePermissions();
-  const { can, canAny } = access;
+  // A route is a capability gate, as on the server: a permission on a
+  // Workspace resource passes when held in any Workspace (the page then
+  // checks each object). Workspace roles never carry global permissions,
+  // so for those this is the global check. canAnywhere may be absent where
+  // tests mock usePermissions.
+  const can = access.canAnywhere || access.can;
+  const canAny = (perms) => toArray(perms).some(can);
   let required;
   let allowed;
   if (permission && typeof permission === 'object' && typeof permission.test === 'function') {

@@ -23,11 +23,17 @@ const emptyAccess = {
 };
 
 /**
+ * makeCanAnywhere builds canAnywhere(perm): held globally or in any
+ * Workspace (who may create, or see a Workspace-checked page at all).
+ *
  * makeCanIn builds canIn(workspaceId, perm): the permission is held globally
  * (which covers every Workspace) or through a role scoped to that Workspace.
  * Workspace ids are the ones API responses carry (a stored 0 is already
  * reported as the Default's id).
  */
+export const makeCanAnywhere = (permissions, workspaces) => (perm) =>
+  hasPermission(permissions, perm) || (workspaces || []).some((w) => hasPermission(w.permissions, perm));
+
 export const makeCanIn = (permissions, workspaces) => {
   const byId = new Map((workspaces || []).map((w) => [w.id, w.permissions]));
   return (workspaceId, perm) => {
@@ -85,6 +91,7 @@ export const PermissionsProvider = ({ identity: initialIdentity, children }) => 
       loading: false,
       can,
       canIn: makeCanIn(base.permissions, base.workspaces),
+      canAnywhere: makeCanAnywhere(base.permissions, base.workspaces),
       canAny: (perms) => toArray(perms).some(can),
       canAll: (perms) => toArray(perms).every(can),
       refresh,
@@ -95,7 +102,7 @@ export const PermissionsProvider = ({ identity: initialIdentity, children }) => 
 };
 
 /**
- * usePermissions returns { permissions, roles, can, canIn, canAny, canAll,
+ * usePermissions returns { permissions, roles, can, canIn, canAnywhere, canAny, canAll,
  * isFullAdmin, hasAdminAccess, canAccessAdmin, rbacEnabled, workspaces,
  * identity, refresh }. Outside a provider it degrades to "nothing allowed" so
  * components stay renderable in isolation (tests, storybook).
@@ -125,6 +132,7 @@ export const usePermissions = () => {
     loading: false,
     can,
     canIn: makeCanIn(permissions, identity?.workspaces),
+    canAnywhere: makeCanAnywhere(permissions, identity?.workspaces),
     canAny: (perms) => toArray(perms).some(can),
     canAll: (perms) => toArray(perms).every(can),
     refresh: refreshIdentity,

@@ -2,6 +2,7 @@ import GovernedMetadataSummary from "../metadata/GovernedMetadataSummary";
 import Section from "../common/Section";
 import AuthPluginsSection from "../common/AuthPluginsSection";
 import { P } from "../../rbac/permissions";
+import Can from "../rbac/Can";
 import UsedBySection from "../common/UsedBySection";
 import PrivacyLevelChip from "../common/privacy/PrivacyLevelChip";
 import React, { useState, useEffect } from "react";
@@ -372,21 +373,23 @@ const DatasourceDetails = () => {
         >
           <Typography color="success.main">{copySuccess}</Typography>
           <Box display="flex" gap={2}>
-            <PrimaryOutlineButton
-              variant="contained"
-              color="secondary"
-              onClick={handleCloneDataSource}
-              startIcon={<ContentCopyIcon />}
-            >
-              Clone this data source
-            </PrimaryOutlineButton>
-            <PrimaryButton
-              variant="contained"
-              startIcon={<EditIcon />}
-              onClick={() => navigate(`/admin/datasources/edit/${id}`)}
-            >
-              Edit data source
-            </PrimaryButton>
+            <Can permission={P.DATASOURCES_WRITE} workspaceId={datasource.attributes.workspace_id}>
+              <PrimaryOutlineButton
+                variant="contained"
+                color="secondary"
+                onClick={handleCloneDataSource}
+                startIcon={<ContentCopyIcon />}
+              >
+                Clone this data source
+              </PrimaryOutlineButton>
+              <PrimaryButton
+                variant="contained"
+                startIcon={<EditIcon />}
+                onClick={() => navigate(`/admin/datasources/edit/${id}`)}
+              >
+                Edit data source
+              </PrimaryButton>
+            </Can>
           </Box>
         </Box>
       </ContentBox>

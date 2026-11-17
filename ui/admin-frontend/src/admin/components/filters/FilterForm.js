@@ -35,6 +35,9 @@ import ScriptTemplateSelector from "./ScriptTemplateSelector";
 import ScriptTestPanel from "./ScriptTestPanel";
 import GuardrailConfigForm, { emptyGuardrailConfig, budgetErrors, backstopMinScoreError } from "./GuardrailConfigForm";
 import { judgeErrors } from "./GuardrailJudgeSection";
+import { P } from "../../rbac/permissions";
+import WorkspaceSelect from "../workspaces/WorkspaceSelect";
+import { useCanMove, workspaceFieldError } from "../workspaces/workspaceFields";
 
 export const FILTER_KIND_SCRIPT = "script";
 export const FILTER_KIND_GUARDRAIL = "guardrail";
@@ -69,7 +72,13 @@ const FilterForm = () => {
     namespace: "", // Added for edge availability
     kind: FILTER_KIND_SCRIPT,
     config: null,
+    workspace_id: null, // Enterprise: the Workspace it lives in (landing rule when null)
   });
+  // The stored Workspace of the filter being edited: a different
+  // workspace_id on save is a move.
+  const [originalWorkspaceId, setOriginalWorkspaceId] = useState(null);
+  const [workspaceError, setWorkspaceError] = useState("");
+  const canMove = useCanMove(P.FILTERS_WRITE);
   const [errors, setErrors] = useState({});
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -91,6 +100,7 @@ const FilterForm = () => {
       namespace: filter.namespace,
       kind: filter.kind,
       config: JSON.stringify(filter.config || null),
+      workspace_id: filter.workspace_id ?? null,
     },
     { ready: !id || loaded }
   );
@@ -114,7 +124,9 @@ const FilterForm = () => {
         namespace: filterData.namespace || "",
         kind: filterData.kind || FILTER_KIND_SCRIPT,
         config: filterData.config || null,
+        workspace_id: filterData.workspace_id ?? null,
       });
+      setOriginalWorkspaceId(filterData.workspace_id ?? null);
       setLoaded(true);
     } catch (error) {
       console.error("Error fetching filter", error);
@@ -202,9 +214,15 @@ const FilterForm = () => {
       return;
     }
 
-    const { config, ...rest } = filter;
+    // workspace_id is sent only to choose one (create) or to move (edit).
+    const { config, workspace_id: workspaceId, ...rest } = filter;
+    const workspaceAttr =
+      workspaceId !== null && workspaceId !== undefined && (!id || Number(workspaceId) !== Number(originalWorkspaceId))
+        ? { workspace_id: Number(workspaceId) }
+        : {};
     const attributes = {
       ...rest,
+      ...workspaceAttr,
       kind: filter.kind,
       script: isGuardrail ? "" : btoa(filter.script), // Encode to base64
     };
@@ -238,6 +256,12 @@ const FilterForm = () => {
       });
     } catch (error) {
       console.error("Error saving filter", error);
+      const wsError = workspaceFieldError(error);
+      if (wsError) {
+        setWorkspaceError(wsError);
+        setSnackbar({ open: true, message: wsError, severity: "error" });
+        return;
+      }
       // The server names what is wrong with a guardrail config; show that
       // rather than a generic failure.
       const detail = error.response?.data?.errors?.[0]?.detail;
@@ -415,6 +439,21 @@ const FilterForm = () => {
               />
             </Grid>
           </Grid>
+
+          {/* Workspace (Enterprise): where it is created; on edit, the move control. */}
+          <Box sx={{ mt: 3 }}>
+            <WorkspaceSelect
+              permission={P.FILTERS_WRITE}
+              value={filter.workspace_id}
+              onChange={(ws) => {
+                setFilter((prev) => ({ ...prev, workspace_id: ws }));
+                setWorkspaceError("");
+              }}
+              disabled={Boolean(id) && !canMove}
+              error={workspaceError}
+              helperText={id ? "Moving it to another Workspace needs write in both." : "The Workspace it is created in."}
+            />
+          </Box>
 
           {/* Edge Availability Section */}
           <EdgeAvailabilitySection

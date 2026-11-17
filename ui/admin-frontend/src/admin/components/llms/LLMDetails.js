@@ -726,7 +726,7 @@ const LLMDetails = () => {
         </Section>
 
         {NATIVE_RESOURCE_VENDORS.includes(llm.attributes.vendor) && (
-          <ResourceSigningKeySection llmId={id} />
+          <ResourceSigningKeySection llmId={id} workspaceId={llm.attributes.workspace_id} />
         )}
 
         <Section title="Model Configuration">
@@ -972,7 +972,7 @@ const LLMDetails = () => {
             {toggleError && <Typography color="error.main">{toggleError}</Typography>}
           </Box>
           <Box sx={{ display: "flex", gap: 2 }}>
-            <Can permission={P.LLMS_PUBLISH}>
+            <Can permission={P.LLMS_PUBLISH} workspaceId={llm.attributes.workspace_id}>
               <PrimaryButton
                 variant="outlined"
                 onClick={handleToggleActive}
@@ -981,7 +981,7 @@ const LLMDetails = () => {
                 {llm.attributes.active ? "Deactivate model provider" : "Activate model provider"}
               </PrimaryButton>
             </Can>
-            <Can permission={P.LLMS_WRITE}>
+            <Can permission={P.LLMS_WRITE} workspaceId={llm.attributes.workspace_id}>
               <PrimaryButton
                 variant="contained"
                 startIcon={<EditIcon />}
