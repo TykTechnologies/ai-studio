@@ -17,23 +17,23 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/auth"
 	"github.com/TykTechnologies/midsommar/v2/config"
-	"github.com/TykTechnologies/midsommar/v2/models"
 	appconfig "github.com/TykTechnologies/midsommar/v2/config"
-	"github.com/TykTechnologies/midsommar/v2/services/audit"
-	"github.com/TykTechnologies/midsommar/v2/services/tykmcp"
-	"github.com/TykTechnologies/midsommar/v2/services/webhooks"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/metrics"
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/pkg/middleware"
 	"github.com/TykTechnologies/midsommar/v2/pkg/ociplugins"
 	"github.com/TykTechnologies/midsommar/v2/proxy"
 	"github.com/TykTechnologies/midsommar/v2/secrets"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/audit"
 	"github.com/TykTechnologies/midsommar/v2/services/licensing"
 	"github.com/TykTechnologies/midsommar/v2/services/marketplace_management"
 	"github.com/TykTechnologies/midsommar/v2/services/plugin_security"
 	"github.com/TykTechnologies/midsommar/v2/services/sso"
+	"github.com/TykTechnologies/midsommar/v2/services/tykmcp"
+	"github.com/TykTechnologies/midsommar/v2/services/webhooks"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/csrf"
@@ -71,27 +71,27 @@ func (w *bodyLogWriter) Write(b []byte) (int, error) {
 // @name Authorization
 
 type API struct {
-	service                       *services.Service
-	router                        *gin.Engine
-	serverMu                      sync.Mutex
-	server                        *http.Server
-	config                        *auth.Config
-	disableCORS                   bool
-	auth                          *auth.AuthService
-	proxy                         *proxy.Proxy
-	clusterStatus                 ClusterStatusFunc
+	service       *services.Service
+	router        *gin.Engine
+	serverMu      sync.Mutex
+	server        *http.Server
+	config        *auth.Config
+	disableCORS   bool
+	auth          *auth.AuthService
+	proxy         *proxy.Proxy
+	clusterStatus ClusterStatusFunc
 	// dbReadyGrace is DATABASE_READY_GRACE (see SetDatabaseReadyGrace).
 	dbReadyGrace time.Duration
 	// frontend holds the built admin UI, rooted at its build directory.
-	frontend                      fs.FS
+	frontend fs.FS
 	// basePath is the path prefix the API and UI are served under ("" for
 	// the root); see Handler.
-	basePath                      string
-	setupChatRoutesFunc           func(*gin.RouterGroup)
-	ssoService                    sso.Service
-	licensingService              licensing.Service
-	pluginSecurityService         plugin_security.Service
-	marketplaceManagementService  marketplace_management.Service
+	basePath                     string
+	setupChatRoutesFunc          func(*gin.RouterGroup)
+	ssoService                   sso.Service
+	licensingService             licensing.Service
+	pluginSecurityService        plugin_security.Service
+	marketplaceManagementService marketplace_management.Service
 	// Audit trail (ENT: records management API activity, CE: no-op)
 	auditService audit.Service
 	// webhooksFallback answers webhook routes when the service has no
@@ -880,11 +880,11 @@ func (a *API) setupRoutes() error {
 	// checks on the admin API path.
 	v1.InWorkspace().GET("/agents/:id/stream", authz.Execute("agents"), a.HandleAgentSSE)             // Establish SSE connection for agent
 	v1.InWorkspace().POST("/agents/:id/message", authz.Execute("agents"), a.HandleAgentMessage)       // Send message to agent session
-	v1.InWorkspace().GET("/agents", authz.Read("agents"), a.HandleListAgents)                      // List agent configs
-	v1.InWorkspace().GET("/agents/:id", authz.Read("agents"), a.HandleGetAgent)                    // Get agent config
-	v1.InWorkspace().POST("/agents", authz.Write("agents"), a.HandleCreateAgent)                    // Create agent config (admin only)
-	v1.InWorkspace().PUT("/agents/:id", authz.Write("agents"), a.HandleUpdateAgent)                 // Update agent config (admin only)
-	v1.InWorkspace().DELETE("/agents/:id", authz.Delete("agents"), a.HandleDeleteAgent)              // Delete agent config (admin only)
+	v1.InWorkspace().GET("/agents", authz.Read("agents"), a.HandleListAgents)                         // List agent configs
+	v1.InWorkspace().GET("/agents/:id", authz.Read("agents"), a.HandleGetAgent)                       // Get agent config
+	v1.InWorkspace().POST("/agents", authz.Write("agents"), a.HandleCreateAgent)                      // Create agent config (admin only)
+	v1.InWorkspace().PUT("/agents/:id", authz.Write("agents"), a.HandleUpdateAgent)                   // Update agent config (admin only)
+	v1.InWorkspace().DELETE("/agents/:id", authz.Delete("agents"), a.HandleDeleteAgent)               // Delete agent config (admin only)
 	v1.InWorkspace().POST("/agents/:id/activate", authz.Publish("agents"), a.HandleActivateAgent)     // Activate agent (publish)
 	v1.InWorkspace().POST("/agents/:id/deactivate", authz.Publish("agents"), a.HandleDeactivateAgent) // Deactivate agent (publish)
 
