@@ -38,6 +38,7 @@ import agentService from '../../services/agentService';
 import Can from '../rbac/Can';
 import { P } from '../../rbac/permissions';
 import { withBase } from '../../../runtimeConfig';
+import NotFound from '../../pages/NotFound';
 
 const AgentDetail = () => {
   const navigate = useNavigate();
@@ -46,6 +47,9 @@ const AgentDetail = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  // An agent in another Workspace (or deleted) answers 404: the page shows
+  // the standard not-found panel.
+  const [notFound, setNotFound] = useState(false);
 
   // Test interface state
   const [testExpanded, setTestExpanded] = useState(false);
@@ -174,6 +178,10 @@ const AgentDetail = () => {
       setAgent(data);
     } catch (err) {
       console.error('Error loading agent:', err);
+      if (err.status === 404) {
+        setNotFound(true);
+        return;
+      }
       setError(err.message);
     } finally {
       setLoading(false);
@@ -285,6 +293,8 @@ const AgentDetail = () => {
     });
   };
 
+  if (notFound) return <NotFound />;
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
@@ -313,23 +323,28 @@ const AgentDetail = () => {
           />
         </Box>
         <Box sx={{ display: 'flex', gap: 2 }}>
-          <SecondaryOutlineButton
-            startIcon={<EditIcon />}
-            onClick={handleEdit}
-          >
-            Edit
-          </SecondaryOutlineButton>
-          <Can permission={P.AGENTS_PUBLISH}>
+          {/* Every action is checked in the agent's Workspace (Workspaces E4). */}
+          <Can permission={P.AGENTS_WRITE} workspaceId={agent.workspaceId}>
+            <SecondaryOutlineButton
+              startIcon={<EditIcon />}
+              onClick={handleEdit}
+            >
+              Edit
+            </SecondaryOutlineButton>
+          </Can>
+          <Can permission={P.AGENTS_PUBLISH} workspaceId={agent.workspaceId}>
             <SecondaryOutlineButton onClick={handleToggleActive}>
               {agent.isActive ? 'Deactivate' : 'Activate'}
             </SecondaryOutlineButton>
           </Can>
-          <DangerButton
-            startIcon={<DeleteIcon />}
-            onClick={() => setDeleteDialogOpen(true)}
-          >
-            Delete
-          </DangerButton>
+          <Can permission={P.AGENTS_DELETE} workspaceId={agent.workspaceId}>
+            <DangerButton
+              startIcon={<DeleteIcon />}
+              onClick={() => setDeleteDialogOpen(true)}
+            >
+              Delete
+            </DangerButton>
+          </Can>
         </Box>
       </TitleBox>
 
@@ -519,86 +534,88 @@ const AgentDetail = () => {
             </Card>
           </Grid>
 
-          {/* Test Interface */}
-          <Grid item xs={12}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Typography variant="headingMedium">
-                    Test Interface
-                  </Typography>
-                  <IconButton onClick={() => setTestExpanded(!testExpanded)}>
-                    {testExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                  </IconButton>
-                </Box>
-
-                <Collapse in={testExpanded}>
-                  <Divider sx={{ my: 2 }} />
-
-                  {/* Messages */}
-                  <Paper
-                    sx={{
-                      p: 2,
-                      mb: 2,
-                      maxHeight: 400,
-                      overflow: 'auto',
-                      bgcolor: 'background.default',
-                    }}
-                  >
-                    {testMessages.length === 0 ? (
-                      <Typography variant="bodySmallDefault" color="text.secondary">
-                        Send a message to test the agent
-                      </Typography>
-                    ) : (
-                      testMessages.map((msg, idx) => (
-                        <Box
-                          key={idx}
-                          sx={{
-                            mb: 2,
-                            p: 1,
-                            borderRadius: 1,
-                            bgcolor: msg.type === 'user' ? 'primary.light' : 'background.paper',
-                          }}
-                        >
-                          <Typography variant="bodySmallDefault" color="text.secondary">
-                            {msg.type.toUpperCase()}
-                          </Typography>
-                          <Typography variant="bodyMedium" sx={{ whiteSpace: 'pre-wrap' }}>
-                            {msg.content}
-                          </Typography>
-                        </Box>
-                      ))
-                    )}
-                    <div ref={testMessagesEndRef} />
-                  </Paper>
-
-                  {/* Input */}
-                  <Box sx={{ display: 'flex', gap: 2 }}>
-                    <TextField
-                      fullWidth
-                      placeholder="Type a message..."
-                      value={testMessage}
-                      onChange={(e) => setTestMessage(e.target.value)}
-                      onKeyPress={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSendTestMessage();
-                        }
-                      }}
-                      disabled={testLoading || !agent.isActive}
-                    />
-                    <PrimaryButton
-                      startIcon={<SendIcon />}
-                      onClick={handleSendTestMessage}
-                      disabled={testLoading || !agent.isActive || !testMessage.trim()}
-                    >
-                      Send
-                    </PrimaryButton>
+          {/* Test Interface: runs the agent, agents:execute in its Workspace. */}
+          <Can permission={P.AGENTS_EXECUTE} workspaceId={agent.workspaceId}>
+            <Grid item xs={12}>
+              <Card>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Typography variant="headingMedium">
+                      Test Interface
+                    </Typography>
+                    <IconButton onClick={() => setTestExpanded(!testExpanded)}>
+                      {testExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                    </IconButton>
                   </Box>
-                </Collapse>
-              </CardContent>
-            </Card>
-          </Grid>
+
+                  <Collapse in={testExpanded}>
+                    <Divider sx={{ my: 2 }} />
+
+                    {/* Messages */}
+                    <Paper
+                      sx={{
+                        p: 2,
+                        mb: 2,
+                        maxHeight: 400,
+                        overflow: 'auto',
+                        bgcolor: 'background.default',
+                      }}
+                    >
+                      {testMessages.length === 0 ? (
+                        <Typography variant="bodySmallDefault" color="text.secondary">
+                          Send a message to test the agent
+                        </Typography>
+                      ) : (
+                        testMessages.map((msg, idx) => (
+                          <Box
+                            key={idx}
+                            sx={{
+                              mb: 2,
+                              p: 1,
+                              borderRadius: 1,
+                              bgcolor: msg.type === 'user' ? 'primary.light' : 'background.paper',
+                            }}
+                          >
+                            <Typography variant="bodySmallDefault" color="text.secondary">
+                              {msg.type.toUpperCase()}
+                            </Typography>
+                            <Typography variant="bodyMedium" sx={{ whiteSpace: 'pre-wrap' }}>
+                              {msg.content}
+                            </Typography>
+                          </Box>
+                        ))
+                      )}
+                      <div ref={testMessagesEndRef} />
+                    </Paper>
+
+                    {/* Input */}
+                    <Box sx={{ display: 'flex', gap: 2 }}>
+                      <TextField
+                        fullWidth
+                        placeholder="Type a message..."
+                        value={testMessage}
+                        onChange={(e) => setTestMessage(e.target.value)}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSendTestMessage();
+                          }
+                        }}
+                        disabled={testLoading || !agent.isActive}
+                      />
+                      <PrimaryButton
+                        startIcon={<SendIcon />}
+                        onClick={handleSendTestMessage}
+                        disabled={testLoading || !agent.isActive || !testMessage.trim()}
+                      >
+                        Send
+                      </PrimaryButton>
+                    </Box>
+                  </Collapse>
+                </CardContent>
+              </Card>
+            </Grid>
+          </Can>
         </Grid>
       </ContentBox>
 

@@ -17,6 +17,12 @@ import useListQuery from "../hooks/useListQuery";
 import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
+import {
+  useWorkspaceColumn,
+  useWorkspaceFilter,
+  useWorkspaceAccess,
+  WorkspaceFilter,
+} from "../components/workspaces/workspaceFields";
 
 const chips = (items, labelOf) => (
   <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
@@ -32,6 +38,9 @@ const chips = (items, labelOf) => (
 );
 
 const ToolCatalogueList = memo(() => {
+  const { canOn, canAnywhere } = useWorkspaceAccess();
+  const workspaceColumn = useWorkspaceColumn();
+  const { workspaceId, setWorkspaceId, params: workspaceParams } = useWorkspaceFilter();
   const [toolCatalogues, setToolCatalogues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -43,7 +52,7 @@ const ToolCatalogueList = memo(() => {
   const fetchToolCatalogues = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get("/tool-catalogues", { params: queryParams });
+      const response = await apiClient.get("/tool-catalogues", { params: { ...queryParams, ...workspaceParams } });
       setToolCatalogues(response.data?.data || []);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
       const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
@@ -55,7 +64,7 @@ const ToolCatalogueList = memo(() => {
     } finally {
       setLoading(false);
     }
-  }, [queryParams, updatePaginationData]);
+  }, [queryParams, workspaceParams, updatePaginationData]);
 
   useEffect(() => {
     fetchToolCatalogues();
@@ -107,11 +116,19 @@ const ToolCatalogueList = memo(() => {
       headerName: "Tags",
       renderCell: (catalogue) => chips(catalogue.attributes.tags, (tag) => tag.attributes.name),
     },
-  ], []);
+    ...(workspaceColumn ? [workspaceColumn] : []),
+  ], [workspaceColumn]);
+
+  // Edit/delete need tool-catalogues:write in the catalog's Workspace: one
+  // in another Workspace is read-only.
+  const canWrite = canAnywhere(P.TOOL_CATALOGUES_WRITE);
+  const writeOn = (catalogue) => canOn(catalogue?.attributes?.workspace_id, P.TOOL_CATALOGUES_WRITE);
+  // Deleting needs tool-catalogues:delete in its Workspace, as on the server.
+  const deleteOn = (catalogue) => canOn(catalogue?.attributes?.workspace_id, P.TOOL_CATALOGUES_DELETE);
 
   const rowActions = [
-    { key: "edit", label: "Edit", onClick: (catalogue) => handleEdit(catalogue.id) },
-    { key: "delete", label: "Delete", onClick: (catalogue) => handleDelete(catalogue.id) },
+    { key: "edit", label: "Edit", onClick: (catalogue) => handleEdit(catalogue.id), hidden: (catalogue) => !writeOn(catalogue) },
+    { key: "delete", label: "Delete", onClick: (catalogue) => handleDelete(catalogue.id), hidden: (catalogue) => !deleteOn(catalogue) },
   ];
 
   const bulkActions = useMemo(
@@ -126,7 +143,7 @@ const ToolCatalogueList = memo(() => {
     <>
       <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Tool catalogs</Typography>
-        <Can permission={P.TOOL_CATALOGUES_WRITE}>
+        <Can permission={P.TOOL_CATALOGUES_WRITE} anywhere>
           <PrimaryButton
             variant="contained"
             startIcon={<AddIcon />}
@@ -140,34 +157,31 @@ const ToolCatalogueList = memo(() => {
         <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of tools that you can assign to specific teams to manage access easily.</Typography>
       </Box>
       <ContentBox>
+        <WorkspaceFilter value={workspaceId} onChange={setWorkspaceId} sx={{ mb: 2 }} />
         <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
-        <Can permission={P.TOOL_CATALOGUES_WRITE}>
-          {(canWrite) => (
-            <DataTable
-              {...tableProps}
-              ariaLabel="Tool catalogs"
-              searchPlaceholder="Search tool catalogs by name..."
-              columns={columns}
-              data={toolCatalogues}
-              loading={loading}
-              onRowClick={handleCatalogueClick}
-              actions={canWrite ? rowActions : undefined}
-              {...(canWrite ? bulk.selectionProps : {})}
-              bulkActions={canWrite ? bulkActions : undefined}
-              emptyState={
-                !searchTerm ? (
-                  <EmptyStateWidget
-                    title="No tool catalogs found"
-                    description="Click the button below to add a new tool catalog."
-                    buttonText="Add Tool Catalog"
-                    buttonIcon={<AddIcon />}
-                    onButtonClick={canWrite ? handleAddToolCatalogue : undefined}
-                  />
-                ) : undefined
-              }
-            />
-          )}
-        </Can>
+        <DataTable
+          {...tableProps}
+          ariaLabel="Tool catalogs"
+          searchPlaceholder="Search tool catalogs by name..."
+          columns={columns}
+          data={toolCatalogues}
+          loading={loading}
+          onRowClick={handleCatalogueClick}
+          actions={canWrite ? rowActions : undefined}
+          {...(canWrite ? bulk.selectionProps : {})}
+          bulkActions={canWrite ? bulkActions : undefined}
+          emptyState={
+            !searchTerm ? (
+              <EmptyStateWidget
+                title="No tool catalogs found"
+                description="Click the button below to add a new tool catalog."
+                buttonText="Add Tool Catalog"
+                buttonIcon={<AddIcon />}
+                onButtonClick={canWrite ? handleAddToolCatalogue : undefined}
+              />
+            ) : undefined
+          }
+        />
       </ContentBox>
 
       <BulkDeleteConfirmationDialog

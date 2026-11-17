@@ -19,6 +19,10 @@ import pluginService from '../../services/pluginService';
 import apiClient from '../../utils/apiClient';
 import AgentFormFields from './AgentFormFields';
 import { listAll } from '../../utils/listAll';
+import { P } from '../../rbac/permissions';
+import WorkspaceSelect from '../workspaces/WorkspaceSelect';
+import { useCanMove, workspaceFieldError } from '../workspaces/workspaceFields';
+import NotFound from '../../pages/NotFound';
 
 const AgentForm = () => {
   const navigate = useNavigate();
@@ -38,11 +42,21 @@ const AgentForm = () => {
     config: {},
     groupIds: [],
     isActive: true,
+    workspaceId: null, // Enterprise: the Workspace it lives in (landing rule when null)
   });
+  // The stored Workspace of the agent being edited: a different workspaceId
+  // on save is a move.
+  const [originalWorkspaceId, setOriginalWorkspaceId] = useState(null);
+  const [workspaceError, setWorkspaceError] = useState('');
+  const canMove = useCanMove(P.AGENTS_WRITE);
+  // An agent in another Workspace (or deleted) answers 404: the form shows
+  // the standard not-found panel instead of an empty form.
+  const [notFound, setNotFound] = useState(false);
 
   // Dropdown options
   const [plugins, setPlugins] = useState([]);
   const [apps, setApps] = useState([]);
+  const [appsLoaded, setAppsLoaded] = useState(false);
   const [groups, setGroups] = useState([]);
 
   // Plugin config schema
@@ -69,6 +83,7 @@ const AgentForm = () => {
       // Load apps
       const appsResponse = await listAll(apiClient, '/apps');
       setApps(appsResponse.data.data || []);
+      setAppsLoaded(true);
 
       // Load groups
       const groupsResponse = await listAll(apiClient, '/groups');
@@ -92,7 +107,9 @@ const AgentForm = () => {
         config: agent.config || {},
         groupIds: agent.groups.map(g => g.id),
         isActive: agent.isActive,
+        workspaceId: agent.workspaceId ?? null,
       });
+      setOriginalWorkspaceId(agent.workspaceId ?? null);
 
       setConfigJson(JSON.stringify(agent.config || {}, null, 2));
 
@@ -102,6 +119,10 @@ const AgentForm = () => {
       }
     } catch (err) {
       console.error('Error loading agent:', err);
+      if (err.status === 404) {
+        setNotFound(true);
+        return;
+      }
       setError(err.message);
     } finally {
       setLoading(false);
@@ -152,15 +173,30 @@ const AgentForm = () => {
     setSaving(true);
     setError('');
 
+    // workspaceId is sent only to choose a Workspace (create) or to move the
+    // agent (edit).
+    const { workspaceId, ...fields } = formData;
+    const sendWorkspace =
+      workspaceId !== null &&
+      workspaceId !== undefined &&
+      (!isEditMode || Number(workspaceId) !== Number(originalWorkspaceId));
+    const payload = { ...fields, workspaceId: sendWorkspace ? Number(workspaceId) : undefined };
+
     try {
       if (isEditMode) {
-        await agentService.updateAgent(id, formData);
+        await agentService.updateAgent(id, payload);
       } else {
-        await agentService.createAgent(formData);
+        await agentService.createAgent(payload);
       }
       navigate('/admin/agents');
     } catch (err) {
       console.error('Error saving agent:', err);
+      const wsError = workspaceFieldError(err);
+      if (wsError) {
+        setWorkspaceError(wsError);
+        setError(wsError);
+        return;
+      }
       setError(err.message);
     } finally {
       setSaving(false);
@@ -170,6 +206,8 @@ const AgentForm = () => {
   const handleCancel = () => {
     navigate('/admin/agents');
   };
+
+  if (notFound) return <NotFound />;
 
   if (loading) {
     return (
@@ -208,7 +246,28 @@ const AgentForm = () => {
                 configSchema={configSchema}
                 showPluginField={true}
                 disabled={saving}
+                workspaceId={formData.workspaceId ?? null}
+                appsLoaded={appsLoaded}
               />
+
+              {/* Workspace (Enterprise): where it is created; on edit, the move control. */}
+              <Box sx={{ mt: 3 }}>
+                <WorkspaceSelect
+                  permission={P.AGENTS_WRITE}
+                  value={formData.workspaceId}
+                  onChange={(ws) => {
+                    setFormData((prev) => ({ ...prev, workspaceId: ws }));
+                    setWorkspaceError('');
+                  }}
+                  disabled={saving || (isEditMode && !canMove)}
+                  error={workspaceError}
+                  helperText={
+                    isEditMode
+                      ? 'Moving it to another Workspace needs write in both.'
+                      : 'The Workspace it is created in.'
+                  }
+                />
+              </Box>
 
               {/* Actions */}
               <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 4 }}>

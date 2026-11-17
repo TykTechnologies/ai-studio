@@ -17,6 +17,12 @@ import useListQuery from "../hooks/useListQuery";
 import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
+import {
+  useWorkspaceColumn,
+  useWorkspaceFilter,
+  useWorkspaceAccess,
+  WorkspaceFilter,
+} from "../components/workspaces/workspaceFields";
 
 const chips = (items, labelOf) => (
   <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
@@ -33,6 +39,9 @@ const chips = (items, labelOf) => (
 
 const DataCatalogList = () => {
   const navigate = useNavigate();
+  const { canOn, canAnywhere } = useWorkspaceAccess();
+  const workspaceColumn = useWorkspaceColumn();
+  const { workspaceId, setWorkspaceId, params: workspaceParams } = useWorkspaceFilter();
   const [dataCatalogs, setDataCatalogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -43,7 +52,7 @@ const DataCatalogList = () => {
   const fetchDataCatalogs = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get("/data-catalogues", { params: queryParams });
+      const response = await apiClient.get("/data-catalogues", { params: { ...queryParams, ...workspaceParams } });
       setDataCatalogs(response.data.data || []);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
       const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
@@ -55,7 +64,7 @@ const DataCatalogList = () => {
     } finally {
       setLoading(false);
     }
-  }, [queryParams, updatePaginationData]);
+  }, [queryParams, workspaceParams, updatePaginationData]);
 
   useEffect(() => {
     fetchDataCatalogs();
@@ -107,11 +116,19 @@ const DataCatalogList = () => {
       headerName: "Tags",
       renderCell: (catalog) => chips(catalog.attributes.tags, (tag) => tag.attributes.name),
     },
-  ], []);
+    ...(workspaceColumn ? [workspaceColumn] : []),
+  ], [workspaceColumn]);
+
+  // Edit/delete need data-catalogues:write in the catalog's Workspace: one
+  // in another Workspace is read-only.
+  const canWrite = canAnywhere(P.DATA_CATALOGUES_WRITE);
+  const writeOn = (catalog) => canOn(catalog?.attributes?.workspace_id, P.DATA_CATALOGUES_WRITE);
+  // Deleting needs data-catalogues:delete in its Workspace, as on the server.
+  const deleteOn = (catalog) => canOn(catalog?.attributes?.workspace_id, P.DATA_CATALOGUES_DELETE);
 
   const rowActions = [
-    { key: "edit", label: "Edit data catalog", onClick: (catalog) => handleEdit(catalog.id) },
-    { key: "delete", label: "Delete data catalog", onClick: (catalog) => handleDelete(catalog.id) },
+    { key: "edit", label: "Edit data catalog", onClick: (catalog) => handleEdit(catalog.id), hidden: (catalog) => !writeOn(catalog) },
+    { key: "delete", label: "Delete data catalog", onClick: (catalog) => handleDelete(catalog.id), hidden: (catalog) => !deleteOn(catalog) },
   ];
 
   const bulkActions = useMemo(
@@ -128,7 +145,7 @@ const DataCatalogList = () => {
       <>
         <TitleBox top="var(--studio-header-height)">
           <Typography variant="headingXLarge">Data catalogs</Typography>
-          <Can permission={P.DATA_CATALOGUES_WRITE}>
+          <Can permission={P.DATA_CATALOGUES_WRITE} anywhere>
             <PrimaryButton
               variant="contained"
               startIcon={<AddIcon />}
@@ -142,34 +159,31 @@ const DataCatalogList = () => {
           <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of data sources that you can assign to specific teams to manage access easily.</Typography>
         </Box>
         <ContentBox>
+          <WorkspaceFilter value={workspaceId} onChange={setWorkspaceId} sx={{ mb: 2 }} />
           <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
-          <Can permission={P.DATA_CATALOGUES_WRITE}>
-            {(canWrite) => (
-              <DataTable
-                {...tableProps}
-                ariaLabel="Data catalogs"
-                searchPlaceholder="Search data catalogs by name..."
-                columns={columns}
-                data={dataCatalogs}
-                loading={loading}
-                onRowClick={handleCatalogClick}
-                actions={canWrite ? rowActions : undefined}
-                {...(canWrite ? bulk.selectionProps : {})}
-                bulkActions={canWrite ? bulkActions : undefined}
-                emptyState={
-                  !searchTerm ? (
-                    <EmptyStateWidget
-                      title="No data catalogs found"
-                      description="Click the button below to add a new data catalog."
-                      buttonText="Add Data Catalog"
-                      buttonIcon={<AddIcon />}
-                      onButtonClick={canWrite ? handleAddDataCatalog : undefined}
-                    />
-                  ) : undefined
-                }
-              />
-            )}
-          </Can>
+          <DataTable
+            {...tableProps}
+            ariaLabel="Data catalogs"
+            searchPlaceholder="Search data catalogs by name..."
+            columns={columns}
+            data={dataCatalogs}
+            loading={loading}
+            onRowClick={handleCatalogClick}
+            actions={canWrite ? rowActions : undefined}
+            {...(canWrite ? bulk.selectionProps : {})}
+            bulkActions={canWrite ? bulkActions : undefined}
+            emptyState={
+              !searchTerm ? (
+                <EmptyStateWidget
+                  title="No data catalogs found"
+                  description="Click the button below to add a new data catalog."
+                  buttonText="Add Data Catalog"
+                  buttonIcon={<AddIcon />}
+                  onButtonClick={canWrite ? handleAddDataCatalog : undefined}
+                />
+              ) : undefined
+            }
+          />
         </ContentBox>
       </>
 

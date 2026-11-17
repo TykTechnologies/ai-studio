@@ -18,12 +18,19 @@ import useListQuery from "../hooks/useListQuery";
 import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import { isEnterpriseFeature, isPermissionDenied } from "../utils/apiErrors";
 import Can from "../components/rbac/Can";
-import { usePermissions } from "../context/PermissionsContext";
 import { P } from "../rbac/permissions";
+import {
+  useWorkspaceColumn,
+  useWorkspaceFilter,
+  useWorkspaceAccess,
+  WorkspaceFilter,
+} from "../components/workspaces/workspaceFields";
 
 const ModelRouterList = () => {
   const navigate = useNavigate();
-  const { can } = usePermissions();
+  const { canOn, canAnywhere } = useWorkspaceAccess();
+  const workspaceColumn = useWorkspaceColumn();
+  const { workspaceId, setWorkspaceId, params: workspaceParams } = useWorkspaceFilter();
   const [routers, setRouters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -35,7 +42,7 @@ const ModelRouterList = () => {
   const fetchRouters = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get("/model-routers", { params: queryParams });
+      const response = await apiClient.get("/model-routers", { params: { ...queryParams, ...workspaceParams } });
       setRouters(response.data.data || []);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
       const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
@@ -53,7 +60,7 @@ const ModelRouterList = () => {
     } finally {
       setLoading(false);
     }
-  }, [queryParams, updatePaginationData]);
+  }, [queryParams, workspaceParams, updatePaginationData]);
 
   useEffect(() => {
     fetchRouters();
@@ -113,24 +120,28 @@ const ModelRouterList = () => {
       sortable: true,
       renderCell: (router) => <ActiveStatusDot active={router.attributes.active} showLabel />,
     },
-  ], []);
+    ...(workspaceColumn ? [workspaceColumn] : []),
+  ], [workspaceColumn]);
 
   // Edit/delete need model-routers:write; the active toggle needs
   // model-routers:publish, which never implies write. Either permission
-  // earns the actions column and bulk selection.
-  const canWrite = can(P.MODEL_ROUTERS_WRITE);
-  const canPublish = can(P.MODEL_ROUTERS_PUBLISH);
+  // earns the actions column and bulk selection. Both are checked in each
+  // router's Workspace: one in another Workspace is read-only.
+  const canWrite = canAnywhere(P.MODEL_ROUTERS_WRITE);
+  const canPublish = canAnywhere(P.MODEL_ROUTERS_PUBLISH);
   const canManage = canWrite || canPublish;
+  const writeOn = useCallback((router) => canOn(router?.attributes?.workspace_id, P.MODEL_ROUTERS_WRITE), [canOn]);
+  const publishOn = useCallback((router) => canOn(router?.attributes?.workspace_id, P.MODEL_ROUTERS_PUBLISH), [canOn]);
   const rowActions = useMemo(() => [
-    { key: "edit", label: "Edit Router", onClick: (router) => navigate(`/admin/model-routers/edit/${router.id}`), hidden: () => !canWrite },
-    { key: "delete", label: "Delete Router", onClick: (router) => setDeleteTarget(router), hidden: () => !canWrite },
+    { key: "edit", label: "Edit Router", onClick: (router) => navigate(`/admin/model-routers/edit/${router.id}`), hidden: (router) => !writeOn(router) },
+    { key: "delete", label: "Delete Router", onClick: (router) => setDeleteTarget(router), hidden: (router) => !writeOn(router) },
     {
       key: "toggle",
       label: (router) => `${router?.attributes?.active ? "Deactivate" : "Activate"} Router`,
       onClick: handleToggleActive,
-      hidden: () => !canPublish,
+      hidden: (router) => !publishOn(router),
     },
-  ], [navigate, handleToggleActive, canWrite, canPublish]);
+  ], [navigate, handleToggleActive, writeOn, publishOn]);
 
   const bulkActions = useMemo(
     () =>
@@ -149,7 +160,7 @@ const ModelRouterList = () => {
       <>
         <TitleBox top="var(--studio-header-height)">
           <Typography variant="headingXLarge">Model Routers</Typography>
-          <Can permission={P.MODEL_ROUTERS_WRITE}>
+          <Can permission={P.MODEL_ROUTERS_WRITE} anywhere>
             <PrimaryButton
               variant="contained"
               startIcon={<AddIcon />}
@@ -167,6 +178,7 @@ const ModelRouterList = () => {
           </Typography>
         </Box>
         <Box sx={{ p: 3 }}>
+          <WorkspaceFilter value={workspaceId} onChange={setWorkspaceId} sx={{ mb: 2 }} />
           <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
           <DataTable
             {...tableProps}

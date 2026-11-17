@@ -22,9 +22,18 @@ import useListQuery from "../hooks/useListQuery";
 import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
+import {
+  useWorkspaceColumn,
+  useWorkspaceFilter,
+  useWorkspaceAccess,
+  WorkspaceFilter,
+} from "../components/workspaces/workspaceFields";
 
 const AppList = () => {
   const navigate = useNavigate();
+  const { canOn, canAnywhere } = useWorkspaceAccess();
+  const workspaceColumn = useWorkspaceColumn();
+  const { workspaceId, setWorkspaceId, params: workspaceParams } = useWorkspaceFilter();
   const [apps, setApps] = useState([]);
   const [users, setUsers] = useState({});
   const [loading, setLoading] = useState(true);
@@ -44,7 +53,7 @@ const AppList = () => {
     try {
       setLoading(true);
 
-      const params = { ...queryParams };
+      const params = { ...queryParams, ...workspaceParams };
       // Approval status is calculated client-side, so the server sorts by id
       // and the page is re-ordered below.
       if (sortConfig?.field === "approval_status") {
@@ -79,7 +88,7 @@ const AppList = () => {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryParams, sortConfig, updatePaginationData]);
+  }, [queryParams, workspaceParams, sortConfig, updatePaginationData]);
 
   useEffect(() => {
     fetchApps();
@@ -226,30 +235,49 @@ const AppList = () => {
           ? "No limit"
           : `$${parseFloat(app.attributes.monthly_budget).toFixed(2)}`,
     },
+    ...(workspaceColumn ? [workspaceColumn] : []),
   ];
 
+  // Every action is checked in the App's Workspace: one in another Workspace
+  // is read-only. Edit needs apps:write, delete apps:delete, approving or
+  // disabling its credential credentials:write (checked by the server in the
+  // App's Workspace), and the bulk activate/deactivate apps:publish.
+  const canWrite = canAnywhere(P.APPS_WRITE);
+  const canDelete = canAnywhere(P.APPS_DELETE);
+  const canPublish = canAnywhere(P.APPS_PUBLISH);
+  const canManage = canWrite || canDelete || canPublish || canAnywhere(P.CREDENTIALS_WRITE);
+  const on = (app, perm) => canOn(app?.attributes?.workspace_id, perm);
+
   const rowActions = [
-    { key: "edit", label: "Edit app", onClick: (app) => navigate(`/admin/apps/edit/${app.id}`) },
+    { key: "edit", label: "Edit app", onClick: (app) => navigate(`/admin/apps/edit/${app.id}`), hidden: (app) => !on(app, P.APPS_WRITE) },
     {
       key: "approve",
       label: "Approve credentials",
       icon: <SecurityIcon sx={{ mr: 1, fontSize: 20 }} />,
-      hidden: (app) => !app || getApprovalStatus(app) !== APP_STATUS.AWAITING_APPROVAL,
+      hidden: (app) =>
+        !app || getApprovalStatus(app) !== APP_STATUS.AWAITING_APPROVAL || !on(app, P.CREDENTIALS_WRITE),
       onClick: handleApproveCredentials,
     },
     {
       key: "disable",
       label: "Disable credentials",
       icon: <SecurityIcon sx={{ mr: 1, fontSize: 20 }} />,
+      hidden: (app) => !on(app, P.CREDENTIALS_WRITE),
       disabled: (app) => !app || getApprovalStatus(app) !== APP_STATUS.ACTIVE,
       onClick: handleDisableCredentials,
     },
-    { key: "delete", label: "Delete app", onClick: (app) => handleDelete(app.id) },
+    { key: "delete", label: "Delete app", onClick: (app) => handleDelete(app.id), hidden: (app) => !on(app, P.APPS_DELETE) },
   ];
 
+  // Bulk delete needs apps:delete and bulk activate/deactivate apps:publish
+  // (the server checks each App in its Workspace and reports refusals).
+  const canBulk = canDelete || canPublish;
   const bulkActions = useMemo(
-    () => standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete, canToggle: true }),
-    [bulk.run, bulk.requestDelete],
+    () =>
+      standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete, canToggle: canPublish }).filter(
+        (action) => canDelete || action.key !== "delete",
+      ),
+    [bulk.run, bulk.requestDelete, canDelete, canPublish],
   );
 
   if (error && apps.length === 0) {
@@ -261,7 +289,7 @@ const AppList = () => {
       <>
         <TitleBox top="var(--studio-header-height)">
           <Typography variant="headingXLarge">Apps</Typography>
-          <Can permission={P.APPS_WRITE}>
+          <Can permission={P.APPS_WRITE} anywhere>
             <PrimaryButton
               variant="contained"
               startIcon={<AddIcon />}
@@ -275,35 +303,32 @@ const AppList = () => {
           <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Apps are used to grant developers direct access to model providers and data sources in the AI Portal. With active credentials, an app can use the gateway API to work directly with model providers or access the data source API to search through data. You can create apps for specific developers or set up catalogs so they can request access and customize their setup.</Typography>
         </Box>
         <ContentBox>
+          <WorkspaceFilter value={workspaceId} onChange={setWorkspaceId} sx={{ mb: 2 }} />
           <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
-          <Can permission={P.APPS_WRITE}>
-            {(canWrite) => (
-              <DataTable
-                {...tableProps}
-                ariaLabel="Apps"
-                searchPlaceholder="Search by name, description, or user..."
-                columns={columns}
-                data={apps}
-                loading={loading}
-                onRowClick={handleAppClick}
-                actions={canWrite ? rowActions : undefined}
-                {...(canWrite ? bulk.selectionProps : {})}
-                bulkActions={canWrite ? bulkActions : undefined}
-                emptyMessage={searchTerm ? `No apps found matching "${searchTerm}"` : "No apps found"}
-                emptyState={
-                  !searchTerm ? (
-                    <EmptyStateWidget
-                      title="No apps configured yet"
-                      description="Apps are requests by users to access model providers and data sources in the AI Portal. An app with an active credential can access the gateway API to work directly with model providers, or use the portal data source API to search data sources. Click the button below to add a new app configuration."
-                      buttonText="Add App"
-                      buttonIcon={<AddIcon />}
-                      onButtonClick={canWrite ? handleAddApp : undefined}
-                    />
-                  ) : undefined
-                }
-              />
-            )}
-          </Can>
+          <DataTable
+            {...tableProps}
+            ariaLabel="Apps"
+            searchPlaceholder="Search by name, description, or user..."
+            columns={columns}
+            data={apps}
+            loading={loading}
+            onRowClick={handleAppClick}
+            actions={canManage ? rowActions : undefined}
+            {...(canBulk ? bulk.selectionProps : {})}
+            bulkActions={canBulk ? bulkActions : undefined}
+            emptyMessage={searchTerm ? `No apps found matching "${searchTerm}"` : "No apps found"}
+            emptyState={
+              !searchTerm ? (
+                <EmptyStateWidget
+                  title="No apps configured yet"
+                  description="Apps are requests by users to access model providers and data sources in the AI Portal. An app with an active credential can access the gateway API to work directly with model providers, or use the portal data source API to search data sources. Click the button below to add a new app configuration."
+                  buttonText="Add App"
+                  buttonIcon={<AddIcon />}
+                  onButtonClick={canWrite ? handleAddApp : undefined}
+                />
+              ) : undefined
+            }
+          />
         </ContentBox>
       </>
 

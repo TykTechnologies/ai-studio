@@ -130,6 +130,10 @@ func (a *API) redactAgent(c *gin.Context, ag *models.AgentConfig) {
 	if ag.Plugin != nil && !a.mayReadPluginConfig(c) {
 		ag.Plugin.Config = nil
 	}
+	// A stored 0 (a row not yet backfilled) is reported as the Default's
+	// id, as for every other stamped object, so the UI never reads it as
+	// another Workspace (or a move).
+	ag.WorkspaceID = a.responseWorkspaceID(ag.WorkspaceID)
 }
 
 // HandleAgentMessage handles POST /api/agents/:id/message - sends a message to an active agent session

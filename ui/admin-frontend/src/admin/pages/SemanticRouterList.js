@@ -18,12 +18,19 @@ import useListQuery from "../hooks/useListQuery";
 import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import { isEnterpriseFeature, isPermissionDenied } from "../utils/apiErrors";
 import Can from "../components/rbac/Can";
-import { usePermissions } from "../context/PermissionsContext";
 import { P } from "../rbac/permissions";
+import {
+  useWorkspaceColumn,
+  useWorkspaceFilter,
+  useWorkspaceAccess,
+  WorkspaceFilter,
+} from "../components/workspaces/workspaceFields";
 
 const SemanticRouterList = () => {
   const navigate = useNavigate();
-  const { can } = usePermissions();
+  const { canOn, canAnywhere } = useWorkspaceAccess();
+  const workspaceColumn = useWorkspaceColumn();
+  const { workspaceId, setWorkspaceId, params: workspaceParams } = useWorkspaceFilter();
   const [routers, setRouters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -35,7 +42,7 @@ const SemanticRouterList = () => {
   const fetchRouters = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get("/semantic-routers", { params: queryParams });
+      const response = await apiClient.get("/semantic-routers", { params: { ...queryParams, ...workspaceParams } });
       setRouters(response.data.data || []);
       // Paging comes back in meta; headers are honoured too for parity with
       // the other list endpoints.
@@ -56,7 +63,7 @@ const SemanticRouterList = () => {
     } finally {
       setLoading(false);
     }
-  }, [queryParams, updatePaginationData]);
+  }, [queryParams, workspaceParams, updatePaginationData]);
 
   useEffect(() => {
     fetchRouters();
@@ -144,25 +151,28 @@ const SemanticRouterList = () => {
       sortable: true,
       renderCell: (router) => <ActiveStatusDot active={router.attributes.active} showLabel />,
     },
-  ], []);
+    ...(workspaceColumn ? [workspaceColumn] : []),
+  ], [workspaceColumn]);
 
   // Edit needs semantic-routers:write, delete semantic-routers:delete, and
   // the active toggle semantic-routers:publish (which never implies write).
-  // Any of them earns the actions column.
-  const canWrite = can(P.SEMANTIC_ROUTERS_WRITE);
-  const canDelete = can(P.SEMANTIC_ROUTERS_DELETE);
-  const canPublish = can(P.SEMANTIC_ROUTERS_PUBLISH);
+  // Any of them earns the actions column. Each is checked in the router's
+  // Workspace: one in another Workspace is read-only.
+  const canWrite = canAnywhere(P.SEMANTIC_ROUTERS_WRITE);
+  const canDelete = canAnywhere(P.SEMANTIC_ROUTERS_DELETE);
+  const canPublish = canAnywhere(P.SEMANTIC_ROUTERS_PUBLISH);
   const canManage = canWrite || canDelete || canPublish;
+  const allowedOn = useCallback((router, perm) => canOn(router?.attributes?.workspace_id, perm), [canOn]);
   const rowActions = useMemo(() => [
-    { key: "edit", label: "Edit Router", onClick: (router) => navigate(`/admin/semantic-routers/edit/${router.id}`), hidden: () => !canWrite },
-    { key: "delete", label: "Delete Router", onClick: (router) => setDeleteTarget(router), hidden: () => !canDelete },
+    { key: "edit", label: "Edit Router", onClick: (router) => navigate(`/admin/semantic-routers/edit/${router.id}`), hidden: (router) => !allowedOn(router, P.SEMANTIC_ROUTERS_WRITE) },
+    { key: "delete", label: "Delete Router", onClick: (router) => setDeleteTarget(router), hidden: (router) => !allowedOn(router, P.SEMANTIC_ROUTERS_DELETE) },
     {
       key: "toggle",
       label: (router) => `${router?.attributes?.active ? "Deactivate" : "Activate"} Router`,
       onClick: handleToggleActive,
-      hidden: () => !canPublish,
+      hidden: (router) => !allowedOn(router, P.SEMANTIC_ROUTERS_PUBLISH),
     },
-  ], [navigate, handleToggleActive, canWrite, canDelete, canPublish]);
+  ], [navigate, handleToggleActive, allowedOn]);
 
   const bulkActions = useMemo(
     () => standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete, canToggle: false }),
@@ -178,7 +188,7 @@ const SemanticRouterList = () => {
       <>
         <TitleBox top="var(--studio-header-height)">
           <Typography variant="headingXLarge">Semantic Routers</Typography>
-          <Can permission={P.SEMANTIC_ROUTERS_WRITE}>
+          <Can permission={P.SEMANTIC_ROUTERS_WRITE} anywhere>
             <PrimaryButton
               variant="contained"
               startIcon={<AddIcon />}
@@ -197,6 +207,7 @@ const SemanticRouterList = () => {
           </Typography>
         </Box>
         <Box sx={{ p: 3 }}>
+          <WorkspaceFilter value={workspaceId} onChange={setWorkspaceId} sx={{ mb: 2 }} />
           <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
           <DataTable
             {...tableProps}

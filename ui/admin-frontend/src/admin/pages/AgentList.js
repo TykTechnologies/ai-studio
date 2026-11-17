@@ -38,9 +38,21 @@ import usePagination from '../hooks/usePagination';
 import agentService from '../services/agentService';
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
+import {
+  useWorkspaces,
+  useWorkspaceFilter,
+  useWorkspaceAccess,
+  WorkspaceFilter,
+} from "../components/workspaces/workspaceFields";
 
 const AgentList = () => {
   const navigate = useNavigate();
+  // Workspaces (Enterprise): each agent's Workspace is shown and filtered
+  // on, and every action is checked in it: an agent in another Workspace is
+  // read-only.
+  const { enabled: workspacesEnabled, nameOf } = useWorkspaces();
+  const { canOn } = useWorkspaceAccess();
+  const { workspaceId, setWorkspaceId, params: workspaceParams } = useWorkspaceFilter();
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -77,7 +89,8 @@ const AgentList = () => {
         page,
         pageSize,
         '', // namespace
-        isActive
+        isActive,
+        workspaceParams
       );
 
       setAgents(result.data || []);
@@ -88,7 +101,7 @@ const AgentList = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, statusFilter, updatePaginationData]);
+  }, [page, pageSize, statusFilter, workspaceParams, updatePaginationData]);
 
   useEffect(() => {
     fetchAgents();
@@ -185,6 +198,10 @@ const AgentList = () => {
     }
   };
 
+  const writeOn = (agent) => canOn(agent?.workspaceId, P.AGENTS_WRITE);
+  const deleteOn = (agent) => canOn(agent?.workspaceId, P.AGENTS_DELETE);
+  const publishOn = (agent) => canOn(agent?.workspaceId, P.AGENTS_PUBLISH);
+
   const handleSnackbarClose = () => {
     setSnackbar({ ...snackbar, open: false });
   };
@@ -215,7 +232,8 @@ const AgentList = () => {
               <SelectMenuItem value="inactive">Inactive</SelectMenuItem>
             </Select>
           </FormControl>
-          <Can permission={P.AGENTS_WRITE}>
+          <WorkspaceFilter value={workspaceId} onChange={setWorkspaceId} />
+          <Can permission={P.AGENTS_WRITE} anywhere>
             <PrimaryButton startIcon={<AddIcon />} onClick={handleCreate}>
               Create Agent
             </PrimaryButton>
@@ -249,6 +267,7 @@ const AgentList = () => {
                   <StyledTableHeaderCell>App</StyledTableHeaderCell>
                   <StyledTableHeaderCell>Teams</StyledTableHeaderCell>
                   <StyledTableHeaderCell>Status</StyledTableHeaderCell>
+                  {workspacesEnabled && <StyledTableHeaderCell>Workspace</StyledTableHeaderCell>}
                   <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                 </TableRow>
               </TableHead>
@@ -301,10 +320,18 @@ const AgentList = () => {
                         size="small"
                       />
                     </StyledTableCell>
+                    {workspacesEnabled && (
+                      <StyledTableCell>
+                        <Typography variant="bodyMediumDefault" data-testid="workspace-cell">
+                          {nameOf(agent.workspaceId)}
+                        </Typography>
+                      </StyledTableCell>
+                    )}
                     <StyledTableCell align="right">
                       <IconButton
                         onClick={(e) => handleMenuOpen(e, agent)}
                         size="small"
+                        aria-label={`Actions for ${agent.name}`}
                       >
                         <MoreVertIcon />
                       </IconButton>
@@ -331,9 +358,11 @@ const AgentList = () => {
         onClose={handleMenuClose}
       >
         <MenuItem onClick={() => handleView(selectedAgent?.id)}>View Details</MenuItem>
-        <MenuItem onClick={() => handleEdit(selectedAgent?.id)}>Edit</MenuItem>
-        <Can permission={P.AGENTS_PUBLISH}>
-          {selectedAgent?.isActive ? (
+        {writeOn(selectedAgent) && (
+          <MenuItem onClick={() => handleEdit(selectedAgent?.id)}>Edit</MenuItem>
+        )}
+        {publishOn(selectedAgent) &&
+          (selectedAgent?.isActive ? (
             <MenuItem onClick={() => openConfirmDialog('deactivate', selectedAgent)}>
               Deactivate
             </MenuItem>
@@ -341,11 +370,12 @@ const AgentList = () => {
             <MenuItem onClick={() => openConfirmDialog('activate', selectedAgent)}>
               Activate
             </MenuItem>
-          )}
-        </Can>
-        <MenuItem onClick={() => openConfirmDialog('delete', selectedAgent)}>
-          Delete
-        </MenuItem>
+          ))}
+        {deleteOn(selectedAgent) && (
+          <MenuItem onClick={() => openConfirmDialog('delete', selectedAgent)}>
+            Delete
+          </MenuItem>
+        )}
       </Menu>
 
       <ConfirmationDialog
