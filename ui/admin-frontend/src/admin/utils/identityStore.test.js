@@ -92,15 +92,15 @@ describe('identityStore', () => {
     expect(listener).toHaveBeenCalledTimes(2);
   });
 
-  it('maps Workspaces and the account type', () => {
+  it('maps Workspaces and the role label', () => {
     const id = buildIdentity(
       me({
         permissions: [],
-        account_type: 'service',
+        account_type: 'Service account',
         workspaces: [{ id: '4', name: 'Ops', permissions: ['llms:write', 'apps:read'] }],
       })
     );
-    expect(id.accountType).toBe('service');
+    expect(id.roleLabel).toBe('Service account');
     expect(id.workspaces).toHaveLength(1);
     expect(id.workspaces[0].id).toBe(4);
     expect(id.workspaces[0].name).toBe('Ops');
@@ -108,6 +108,6 @@ describe('identityStore', () => {
 
     const none = buildIdentity(me({ permissions: [] }));
     expect(none.workspaces).toEqual([]);
-    expect(none.accountType).toBe('');
+    expect(none.roleLabel).toBe('');
   });
 });

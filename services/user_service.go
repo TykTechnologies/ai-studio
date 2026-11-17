@@ -798,6 +798,8 @@ type ListUsersParams struct {
 	AuthSource string
 	HasAPIKey  *bool
 	Disabled   *bool
+	// AccountType: nil any; otherwise "" (people) or "service".
+	AccountType *string
 }
 
 func (s *Service) ListUsers(params ListUsersParams) (models.Users, int64, int, error) {
@@ -813,6 +815,7 @@ func (s *Service) ListUsers(params ListUsersParams) (models.Users, int64, int, e
 		AuthSource:     params.AuthSource,
 		HasAPIKey:      params.HasAPIKey,
 		Disabled:       params.Disabled,
+		AccountType:    params.AccountType,
 	}
 
 	totalCount, totalPages, err := users.QueryUsers(s.DB, modelParams)

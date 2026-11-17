@@ -425,6 +425,7 @@ func (a *API) deleteUser(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param search query string false "Search term for filtering users by email or name"
+// @Param account_type query string false "service: service accounts only; user: people only"
 // @Success 200 {array} UserResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /users [get]
@@ -453,6 +454,16 @@ func (a *API) listUsers(c *gin.Context) {
 		AuthSource:     c.Query("auth_source"),
 		HasAPIKey:      optionalBoolQuery(c, "has_api_key"),
 		Disabled:       optionalBoolQuery(c, "disabled"),
+	}
+	// ?account_type=service lists service accounts, ?account_type=user
+	// people; anything else (or nothing) lists both.
+	switch c.Query("account_type") {
+	case "service":
+		t := models.AccountTypeService
+		params.AccountType = &t
+	case "user":
+		t := models.AccountTypeUser
+		params.AccountType = &t
 	}
 
 	users, totalCount, totalPages, err := a.service.ListUsers(params)
