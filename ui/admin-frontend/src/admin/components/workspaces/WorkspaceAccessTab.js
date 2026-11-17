@@ -70,15 +70,18 @@ const WorkspaceAccessTab = ({ workspaceId, onBindingsChange }) => {
   }, [load]);
 
   useEffect(() => {
+    // The pickers' data: a failure is reported, not hidden behind an empty
+    // list (the assignments themselves still show, by id).
+    const failed = (what) => () => setError(`Failed to load the ${what}; reload the page to try again.`);
     listRoles()
       .then((list) => setRoles(sortRoles(list).filter((r) => r.attributes.slug !== OWNER_SLUG)))
-      .catch(() => setRoles([]));
+      .catch(failed('roles'));
     listAll(apiClient, '/users')
       .then((res) => setUsers(res.data?.data || []))
-      .catch(() => setUsers([]));
+      .catch(failed('users'));
     listAll(apiClient, '/groups')
       .then((res) => setTeams(res.data?.data || []))
-      .catch(() => setTeams([]));
+      .catch(failed('teams'));
   }, []);
 
   const names = useMemo(() => {

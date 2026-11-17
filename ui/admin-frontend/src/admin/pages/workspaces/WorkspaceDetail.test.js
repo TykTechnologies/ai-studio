@@ -31,6 +31,12 @@ jest.mock('../../../components/common/Icon', () => ({
   default: ({ name }) => <span data-testid={`icon-${name}`} />,
 }));
 
+const OWNER = 1;
+const EDITOR = 3;
+const VIEWER = 4;
+const ANN = 9;
+const BOT = 10;
+
 const role = (id, name, slug) => ({ id: String(id), attributes: { name, slug, is_system: slug !== 'custom', description: '' } });
 const binding = (id, type, subjectId, roleId, roleName) => ({
   id: String(id),
@@ -59,13 +65,13 @@ describe('WorkspaceDetail', () => {
     allow(['*']);
     getWorkspace.mockResolvedValue({ id: '5', attributes: { name: 'Ops', is_default: false } });
     getWorkspaceObjects.mockResolvedValue({ counts: { llms: 3, filestores: 1 } });
-    listRoles.mockResolvedValue([role(1, 'Owner', 'owner'), role(3, 'Editor', 'editor'), role(4, 'Viewer', 'viewer')]);
+    listRoles.mockResolvedValue([role(OWNER, 'Owner', 'owner'), role(EDITOR, 'Editor', 'editor'), role(VIEWER, 'Viewer', 'viewer')]);
     listAll.mockImplementation(async (_c, path) =>
       path === '/users'
         ? { data: { data: [{ id: '9', attributes: { name: 'Ann' } }, { id: '10', attributes: { name: 'Bot', account_type: 'service' } }] } }
         : { data: { data: [{ id: '20', attributes: { name: 'Platform' } }] } }
     );
-    listBindings.mockResolvedValue([binding(100, 'user', 9, 3, 'Editor')]);
+    listBindings.mockResolvedValue([binding(100, 'user', ANN, EDITOR, 'Editor')]);
     syncScopedBindings.mockResolvedValue({ added: [], removed: [], failed: [] });
   });
 
@@ -79,10 +85,10 @@ describe('WorkspaceDetail', () => {
     fireEvent.click(within(row).getByRole('button', { name: 'Change roles' }));
     const dialog = await screen.findByRole('dialog');
     fireEvent.mouseDown(within(dialog).getByLabelText('Roles in this Workspace'));
-    fireEvent.click(await screen.findByTestId('role-option-4'));
+    fireEvent.click(await screen.findByTestId(`role-option-${VIEWER}`));
     fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(syncScopedBindings).toHaveBeenCalledWith('5', 'user', '9', [3, 4]));
+    await waitFor(() => expect(syncScopedBindings).toHaveBeenCalledWith('5', 'user', String(ANN), [EDITOR, VIEWER]));
   });
 
   it('adds a service account, the Owner role not offered', async () => {
@@ -95,18 +101,18 @@ describe('WorkspaceDetail', () => {
     expect(options).toEqual(['Bot (service account)']); // Ann already holds a role here
     fireEvent.click(screen.getByText('Bot (service account)'));
     fireEvent.mouseDown(within(dialog).getByLabelText('Roles in this Workspace'));
-    expect(screen.queryByTestId('role-option-1')).toBeNull();
-    fireEvent.click(screen.getByTestId('role-option-3'));
+    expect(screen.queryByTestId(`role-option-${OWNER}`)).toBeNull();
+    fireEvent.click(screen.getByTestId(`role-option-${EDITOR}`));
     fireEvent.keyDown(screen.getByRole('listbox'), { key: 'Escape' });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(syncScopedBindings).toHaveBeenCalledWith('5', 'user', '10', [3]));
+    await waitFor(() => expect(syncScopedBindings).toHaveBeenCalledWith('5', 'user', String(BOT), [EDITOR]));
   });
 
   it('removes someone from the Workspace', async () => {
     renderAt();
     const row = await screen.findByTestId('access-row-user-9');
     fireEvent.click(within(row).getByRole('button', { name: 'Remove from this Workspace' }));
-    await waitFor(() => expect(syncScopedBindings).toHaveBeenCalledWith('5', 'user', '9', []));
+    await waitFor(() => expect(syncScopedBindings).toHaveBeenCalledWith('5', 'user', String(ANN), []));
   });
 
   it('hides Access controls without roles:write', async () => {

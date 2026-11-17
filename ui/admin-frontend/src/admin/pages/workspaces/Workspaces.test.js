@@ -18,6 +18,10 @@ jest.mock('../../../components/common/Icon', () => ({
   default: ({ name }) => <span data-testid={`icon-${name}`} />,
 }));
 
+// The Default owns these; the list shows their sum.
+const DEFAULT_COUNTS = { llms: 2, apps: 1 };
+const DEFAULT_TOTAL = String(Object.values(DEFAULT_COUNTS).reduce((a, b) => a + b, 0));
+
 const renderPage = () =>
   render(
     <ThemeProvider theme={adminTheme}>
@@ -36,7 +40,7 @@ describe('Workspaces page', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     allow(['workspaces:read', 'workspaces:write']);
-    getWorkspaceObjects.mockImplementation(async (id) => ({ counts: id === '1' ? { llms: 2, apps: 1 } : { llms: 0 } }));
+    getWorkspaceObjects.mockImplementation(async (id) => ({ counts: id === '1' ? DEFAULT_COUNTS : { llms: 0 } }));
   });
 
   it('shows the upgrade prompt in Community Edition (402)', async () => {
@@ -56,7 +60,7 @@ describe('Workspaces page', () => {
     expect(rows[1]).toBe(first);
     expect(within(first).getByTestId('default-badge')).toBeInTheDocument();
     expect(within(screen.getByTestId('workspace-row-2')).queryByTestId('default-badge')).toBeNull();
-    expect(await within(first).findByText('3')).toBeInTheDocument();
+    expect(await within(first).findByText(DEFAULT_TOTAL)).toBeInTheDocument();
     expect(screen.getByText('Operations')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('workspace-row-2'));
     expect(mockNavigate).toHaveBeenCalledWith('/admin/workspaces/2');

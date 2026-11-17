@@ -1,6 +1,5 @@
 import apiClient from '../utils/apiClient';
 import { handleApiError } from './utils/errorHandler';
-import { errorCode } from '../utils/apiErrors';
 
 /**
  * Client for the Workspaces API (/api/v1/workspaces, Enterprise). Every
@@ -18,18 +17,13 @@ export const WORKSPACE_ERRORS = Object.freeze({
   IN_USE: 'workspace_in_use',
 });
 
-// Keeps the HTTP status and the error code on the thrown Error, which
-// handleApiError drops, so pages can tell the 409s apart.
+// handleApiError keeps the HTTP status and error code on the Error, so the
+// pages can tell the 409s apart.
 const call = async (fn) => {
   try {
     return await fn();
   } catch (error) {
-    const out = handleApiError(error);
-    if (out !== error) {
-      out.status = error?.response?.status;
-      out.code = errorCode(error);
-    }
-    throw out;
+    throw handleApiError(error);
   }
 };
 
