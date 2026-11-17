@@ -113,6 +113,8 @@ import AttestationTemplates from "./pages/AttestationTemplates";
 
 import Roles from "./pages/roles/Roles";
 import Workspaces from "./pages/workspaces/Workspaces";
+import WorkspaceDetail from "./pages/workspaces/WorkspaceDetail";
+import WorkspaceForm from "./pages/workspaces/WorkspaceForm";
 import RoleDetail from "./components/roles/RoleDetail";
 import RoleForm from "./components/roles/RoleForm";
 
@@ -310,6 +312,9 @@ const roleRoutes = [
 // Edition the page shows the upgrade prompt on the API's 402.
 const workspaceRoutes = [
   { path: "workspaces", element: <Workspaces />, permission: P.WORKSPACES_READ },
+  { path: "workspaces/new", element: <WorkspaceForm />, permission: P.WORKSPACES_WRITE },
+  { path: "workspaces/edit/:id", element: <WorkspaceForm />, permission: P.WORKSPACES_WRITE },
+  { path: "workspaces/:id", element: <WorkspaceDetail />, permission: P.WORKSPACES_READ },
 ];
 
 // Semantic Router routes (Enterprise only - requires feature_semantic_router)

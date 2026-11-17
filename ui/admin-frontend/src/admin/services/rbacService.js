@@ -130,7 +130,9 @@ export const getEffectivePermissions = async (userId) => {
  */
 export const syncSubjectRoles = async (subjectType, subjectId, desiredRoleIds) => {
   const desired = new Set((desiredRoleIds || []).map(Number));
-  const current = await listBindings({ subjectType, subjectId });
+  // The server lists only global bindings; the check below keeps the sync
+  // to them even if it did not.
+  const current = await listBindings({ subjectType, subjectId, scopeType: 'global' });
   const have = new Map(); // roleId -> bindingId
   current.forEach((b) => {
     if (!b.attributes.scope_type) {

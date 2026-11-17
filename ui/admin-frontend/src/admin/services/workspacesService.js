@@ -7,6 +7,18 @@ import { handleApiError } from './utils/errorHandler';
  * render the upgrade prompt on a 402.
  */
 
+/**
+ * Error codes of the Workspaces API the pages explain specifically
+ * (authz.CodeDefaultWorkspaceLocked, authz.CodeWorkspaceInUse). A duplicate
+ * name is a 409 without a code.
+ */
+export const WORKSPACE_ERRORS = Object.freeze({
+  DEFAULT_LOCKED: 'default_workspace_locked',
+  IN_USE: 'workspace_in_use',
+});
+
+// handleApiError keeps the HTTP status and error code on the Error, so the
+// pages can tell the 409s apart.
 const call = async (fn) => {
   try {
     return await fn();
