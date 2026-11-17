@@ -1,5 +1,6 @@
 import apiClient from '../utils/apiClient';
 import { handleApiError } from './utils/errorHandler';
+import { errorCode } from '../utils/apiErrors';
 
 /**
  * Client for the Workspaces API (/api/v1/workspaces, Enterprise). Every
@@ -7,11 +8,28 @@ import { handleApiError } from './utils/errorHandler';
  * render the upgrade prompt on a 402.
  */
 
+/**
+ * Error codes of the Workspaces API the pages explain specifically
+ * (authz.CodeDefaultWorkspaceLocked, authz.CodeWorkspaceInUse). A duplicate
+ * name is a 409 without a code.
+ */
+export const WORKSPACE_ERRORS = Object.freeze({
+  DEFAULT_LOCKED: 'default_workspace_locked',
+  IN_USE: 'workspace_in_use',
+});
+
+// Keeps the HTTP status and the error code on the thrown Error, which
+// handleApiError drops, so pages can tell the 409s apart.
 const call = async (fn) => {
   try {
     return await fn();
   } catch (error) {
-    throw handleApiError(error);
+    const out = handleApiError(error);
+    if (out !== error) {
+      out.status = error?.response?.status;
+      out.code = errorCode(error);
+    }
+    throw out;
   }
 };
 
