@@ -56,6 +56,9 @@ describe('scoped role bindings', () => {
 
   it('syncSubjectRoles still never touches scoped bindings', async () => {
     const res = await syncSubjectRoles('user', 9, []);
+    expect(apiClient.get).toHaveBeenCalledWith('/rbac/bindings', {
+      params: { subject_type: 'user', subject_id: 9, scope_type: 'global' },
+    });
     expect(res.removed).toEqual([10]);
     expect(apiClient.delete).toHaveBeenCalledTimes(1);
     expect(apiClient.delete).toHaveBeenCalledWith('/rbac/bindings/1');
