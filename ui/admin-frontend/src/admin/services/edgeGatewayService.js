@@ -218,7 +218,8 @@ class EdgeGatewayService {
   /**
    * What has changed in a namespace since its configuration was last pushed
    * to the edge gateways, so the push dialog can say what it is about to do.
-   * Returns { namespace, since, lastPushAt, baseline, total, changes } where
+   * Returns { namespace, since, lastPushAt, baseline, total, changes,
+   * byWorkspace, unattributedTotal } where
    * `changes` is capped by the server (see `total` for the real count) and
    * `baseline` says what `since` is: 'push' (a recorded push), 'edge_ack'
    * (an in-sync edge's ack, no push recorded) or 'none'.
@@ -240,7 +241,18 @@ class EdgeGatewayService {
           name: change.name,
           change: change.change,
           at: change.at,
+          // Workspaces (Enterprise): the owning Workspace (null for global
+          // types); hidden marks an object the caller cannot see.
+          workspaceId: change.workspace_id ?? null,
+          workspaceName: change.workspace_name || '',
+          hidden: change.hidden === true,
         })),
+        // Totals by owning Workspace and of global changes; absent from an
+        // older Studio.
+        byWorkspace: Array.isArray(data.by_workspace)
+          ? data.by_workspace.map(w => ({ workspaceId: w.workspace_id, name: w.name || '', total: w.total }))
+          : null,
+        unattributedTotal: typeof data.unattributed_total === 'number' ? data.unattributed_total : null,
       };
     } catch (error) {
       console.error('Error fetching pending changes:', error);
