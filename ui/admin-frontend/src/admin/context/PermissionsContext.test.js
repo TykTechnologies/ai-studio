@@ -74,4 +74,42 @@ describe('usePermissions', () => {
     expect(result.current.canAccessAdmin).toBe(false);
     expect(result.current.can(P.LLMS_READ)).toBe(false);
   });
+
+  describe('canIn (Workspaces)', () => {
+    const identity = me({
+      is_admin: false,
+      has_admin_access: true,
+      rbac_enabled: true,
+      permissions: ['tools:write'],
+      workspaces: [
+        { id: 2, name: 'W1', permissions: ['llms:write'] },
+        { id: 3, name: 'W2', permissions: ['apps:read'] },
+      ],
+    });
+
+    it('a global grant covers every Workspace', () => {
+      const { result } = renderHook(() => usePermissions(), { wrapper: wrapperFor(identity) });
+      expect(result.current.canIn(3, P.TOOLS_WRITE)).toBe(true);
+      expect(result.current.canIn(99, P.TOOLS_READ)).toBe(true);
+    });
+
+    it('a scoped grant covers its own Workspace only', () => {
+      const { result } = renderHook(() => usePermissions(), { wrapper: wrapperFor(identity) });
+      expect(result.current.canIn(2, P.LLMS_WRITE)).toBe(true);
+      expect(result.current.canIn('2', P.LLMS_READ)).toBe(true);
+      expect(result.current.canIn(3, P.LLMS_WRITE)).toBe(false);
+      expect(result.current.can(P.LLMS_WRITE)).toBe(false);
+    });
+
+    it('nothing held: false', () => {
+      const { result } = renderHook(() => usePermissions(), { wrapper: wrapperFor(identity) });
+      expect(result.current.canIn(2, P.USERS_WRITE)).toBe(false);
+      expect(result.current.canIn(undefined, P.LLMS_WRITE)).toBe(false);
+    });
+
+    it('exposes the Workspaces', () => {
+      const { result } = renderHook(() => usePermissions(), { wrapper: wrapperFor(identity) });
+      expect(result.current.workspaces.map((w) => w.name)).toEqual(['W1', 'W2']);
+    });
+  });
 });

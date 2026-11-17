@@ -19,6 +19,23 @@ const emptyAccess = {
   canAccessAdmin: false,
   rbacEnabled: false,
   isOwner: false,
+  workspaces: [],
+};
+
+/**
+ * makeCanIn builds canIn(workspaceId, perm): the permission is held globally
+ * (which covers every Workspace) or through a role scoped to that Workspace.
+ * Workspace ids are the ones API responses carry (a stored 0 is already
+ * reported as the Default's id).
+ */
+export const makeCanIn = (permissions, workspaces) => {
+  const byId = new Map((workspaces || []).map((w) => [w.id, w.permissions]));
+  return (workspaceId, perm) => {
+    if (hasPermission(permissions, perm)) return true;
+    if (workspaceId === undefined || workspaceId === null || workspaceId === '') return false;
+    const held = byId.get(Number(workspaceId));
+    return Boolean(held) && hasPermission(held, perm);
+  };
 };
 
 /**
@@ -59,6 +76,7 @@ export const PermissionsProvider = ({ identity: initialIdentity, children }) => 
           canAccessAdmin: identity.hasAdminAccess,
           rbacEnabled: identity.rbacEnabled,
           isOwner: identity.isOwner === true,
+          workspaces: identity.workspaces || [],
         }
       : emptyAccess;
     const can = (perm) => hasPermission(base.permissions, perm);
@@ -66,6 +84,7 @@ export const PermissionsProvider = ({ identity: initialIdentity, children }) => 
       ...base,
       loading: false,
       can,
+      canIn: makeCanIn(base.permissions, base.workspaces),
       canAny: (perms) => toArray(perms).some(can),
       canAll: (perms) => toArray(perms).every(can),
       refresh,
@@ -76,9 +95,9 @@ export const PermissionsProvider = ({ identity: initialIdentity, children }) => 
 };
 
 /**
- * usePermissions returns { permissions, roles, can, canAny, canAll,
- * isFullAdmin, hasAdminAccess, canAccessAdmin, rbacEnabled, identity,
- * refresh }. Outside a provider it degrades to "nothing allowed" so
+ * usePermissions returns { permissions, roles, can, canIn, canAny, canAll,
+ * isFullAdmin, hasAdminAccess, canAccessAdmin, rbacEnabled, workspaces,
+ * identity, refresh }. Outside a provider it degrades to "nothing allowed" so
  * components stay renderable in isolation (tests, storybook).
  */
 export const usePermissions = () => {
@@ -100,10 +119,12 @@ export const usePermissions = () => {
           canAccessAdmin: identity.hasAdminAccess,
           rbacEnabled: identity.rbacEnabled,
           isOwner: identity.isOwner === true,
+          workspaces: identity.workspaces || [],
         }
       : {}),
     loading: false,
     can,
+    canIn: makeCanIn(permissions, identity?.workspaces),
     canAny: (perms) => toArray(perms).some(can),
     canAll: (perms) => toArray(perms).every(can),
     refresh: refreshIdentity,

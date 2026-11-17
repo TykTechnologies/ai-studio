@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
-import { mainAdminRoutes, ssoRoutes, groupRoutes, catalogRoutes, modelRouterRoutes, semanticRouterRoutes, roleRoutes } from "../admin/routes";
+import { mainAdminRoutes, ssoRoutes, groupRoutes, catalogRoutes, modelRouterRoutes, semanticRouterRoutes, roleRoutes, workspaceRoutes } from "../admin/routes";
 import { usePluginRoutes } from "../admin/components/plugins/DynamicPluginRoute";
 import useSystemFeatures from "../admin/hooks/useSystemFeatures";
 import { withPermission } from "../admin/components/rbac/RequirePermission";
@@ -120,6 +120,7 @@ const AdminRoutes = ({ uiOptions }) => {
       {features.feature_model_router && renderRoutes(modelRouterRoutes)}
       {features.feature_semantic_router && renderRoutes(semanticRouterRoutes)}
       {renderRoutes(roleRoutes)}
+      {renderRoutes(workspaceRoutes)}
 
       {/* Dynamically registered plugin routes */}
       {pluginRoutes.map((route) => {

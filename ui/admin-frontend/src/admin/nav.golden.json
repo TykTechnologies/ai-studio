@@ -38,6 +38,12 @@
           "permission": "roles:read"
         },
         {
+          "id": "workspaces",
+          "text": "Workspaces",
+          "path": "/admin/workspaces",
+          "permission": "workspaces:read"
+        },
+        {
           "id": "sso-profiles",
           "text": "Identity providers",
           "path": "/admin/sso-profiles",
