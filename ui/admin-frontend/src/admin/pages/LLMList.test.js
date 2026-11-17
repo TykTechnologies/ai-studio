@@ -52,7 +52,8 @@ const renderWith = (permissions) =>
   );
 
 const openRowMenu = async (name) => {
-  const row = (await screen.findByText(name)).closest("tr");
+  await screen.findByText(name);
+  const row = screen.getByRole("row", { name: new RegExp(name) });
   fireEvent.click(within(row).getByRole("button", { name: `Actions for ${name}` }));
   return screen.findByRole("menu");
 };
@@ -101,17 +102,23 @@ describe("LLMList permission gating (llms:publish vs llms:write)", () => {
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith("/llms/2/activate"));
   });
 
-  it("write-only: offers edit and delete but not the toggle", async () => {
+  it("write-only: offers edit but not delete or the toggle", async () => {
     renderWith(["llms:write"]);
     await screen.findByText("Prod OpenAI");
 
     expect(screen.getByRole("button", { name: /Add model provider/ })).toBeInTheDocument();
     const menu = await openRowMenu("Prod OpenAI");
     expect(within(menu).getByRole("menuitem", { name: "Edit model provider" })).toBeInTheDocument();
-    expect(within(menu).getByRole("menuitem", { name: "Delete model provider" })).toBeInTheDocument();
+    // Deleting needs llms:delete, as on the server.
+    expect(within(menu).queryByRole("menuitem", { name: "Delete model provider" })).not.toBeInTheDocument();
     expect(within(menu).queryByRole("menuitem", { name: /Deactivate model provider/ })).not.toBeInTheDocument();
     expect(within(menu).queryByRole("menuitem", { name: /Activate model provider/ })).not.toBeInTheDocument();
+  });
 
+  it("write and delete: Delete in the row menu and the bulk toolbar", async () => {
+    renderWith(["llms:write", "llms:delete"]);
+    const menu = await openRowMenu("Prod OpenAI");
+    expect(within(menu).getByRole("menuitem", { name: "Delete model provider" })).toBeInTheDocument();
     fireEvent.keyDown(menu, { key: "Escape" });
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Prod OpenAI" }));
     const toolbar = await screen.findByRole("toolbar", { name: "Bulk actions" });
@@ -140,9 +147,10 @@ describe("LLMList vendor cell accessible name", () => {
 
   it("reads the vendor name once: the logo is decorative", async () => {
     renderWith(["llms:read"]);
-    const row = (await screen.findByText("Prod OpenAI")).closest("tr");
-    const vendorCell = within(row).getByText("OpenAI").closest("td");
-    expect(vendorCell.textContent).toBe("OpenAI");
+    await screen.findByText("Prod OpenAI");
+    const row = screen.getByRole("row", { name: /Prod OpenAI/ });
+    const vendorCell = within(row).getByRole("cell", { name: "OpenAI" });
+    expect(vendorCell).toHaveTextContent(/^OpenAI$/);
     // An <img alt=""> is presentational: no accessible name to double up.
     expect(within(vendorCell).getByRole("presentation")).toHaveAttribute("alt", "");
     // Nothing in the row announces "OpenAI" a second time.
@@ -175,7 +183,8 @@ describe("LLMList credential source", () => {
       headers: { "x-total-count": "1", "x-total-pages": "1" },
     });
     renderWith(["llms:read"]);
-    const row = (await screen.findByText("Env OpenAI")).closest("tr");
+    await screen.findByText("Env OpenAI");
+    const row = screen.getByRole("row", { name: /Env OpenAI/ });
     fireEvent.mouseOver(within(row).getByTitle("Credential unresolved"));
     expect(await screen.findByRole("tooltip")).toHaveTextContent("environment variable OPENAI_API_KEY");
   });

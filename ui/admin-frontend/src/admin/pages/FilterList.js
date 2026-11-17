@@ -110,15 +110,19 @@ const FilterList = memo(() => {
     ...(workspaceColumn ? [workspaceColumn] : []),
   ], [workspaceColumn]);
 
-  // Edit/delete need filters:write in the filter's Workspace: one in
+  // Edit needs filters:write and delete filters:delete, in the filter's Workspace: one in
   // another Workspace is read-only.
   const canWrite = canAnywhere(P.FILTERS_WRITE);
   const writeOn = useCallback((filter) => canOn(filter?.attributes?.workspace_id, P.FILTERS_WRITE), [canOn]);
+  // Deleting needs the delete permission in the object's Workspace, as on
+  // the server (row and bulk).
+  const canDelete = canAnywhere(P.FILTERS_DELETE);
+  const deleteOn = useCallback((filter) => canOn(filter?.attributes?.workspace_id, P.FILTERS_DELETE), [canOn]);
 
   const rowActions = useMemo(() => [
     { key: "edit", label: "Edit filter", onClick: (filter) => navigate(`/admin/filters/edit/${filter.id}`), hidden: (filter) => !writeOn(filter) },
-    { key: "delete", label: "Delete filter", onClick: (filter) => setDeleteTarget(filter), hidden: (filter) => !writeOn(filter) },
-  ], [navigate, writeOn]);
+    { key: "delete", label: "Delete filter", onClick: (filter) => setDeleteTarget(filter), hidden: (filter) => !deleteOn(filter) },
+  ], [navigate, writeOn, deleteOn]);
 
   const bulkActions = useMemo(
     () => standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete }),
@@ -180,9 +184,9 @@ const FilterList = memo(() => {
             data={filters}
             loading={loading}
             onRowClick={handleFilterClick}
-            actions={canWrite ? rowActions : undefined}
-            {...(canWrite ? bulk.selectionProps : {})}
-            bulkActions={canWrite ? bulkActions : undefined}
+            actions={canWrite || canDelete ? rowActions : undefined}
+            {...(canDelete ? bulk.selectionProps : {})}
+            bulkActions={canDelete ? bulkActions : undefined}
             emptyState={
               !searchTerm ? (
                 <EmptyStateWidget

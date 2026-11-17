@@ -19,6 +19,7 @@ import {
 } from '../../styles/sharedStyles';
 import pluginService from '../../services/pluginService';
 import agentService from '../../services/agentService';
+import { workspaceFieldError } from '../workspaces/workspaceFields';
 import pluginLoaderService from '../../services/pluginLoaderService';
 import Step1BasicInfo from './wizard/Step1BasicInfo';
 import Step2ScopeApproval from './wizard/Step2ScopeApproval';
@@ -41,6 +42,8 @@ const PluginCreationWizard = () => {
   const [workflowState, setWorkflowState] = useState(WORKFLOW_STATES.CREATED);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  // A Workspace refusal of the agent create (Workspaces), shown on the field.
+  const [agentWorkspaceError, setAgentWorkspaceError] = useState('');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
   // Check if we're coming from marketplace
@@ -276,6 +279,7 @@ const PluginCreationWizard = () => {
   // Step 4: Handle agent configuration
   const handleAgentConfiguration = async (agentData) => {
     setLoading(true);
+    setAgentWorkspaceError('');
     try {
       const createdAgent = await agentService.createAgent(agentData);
       setAgentId(createdAgent.id);
@@ -305,7 +309,9 @@ const PluginCreationWizard = () => {
       handleNext();
     } catch (err) {
       console.error('Error creating agent:', err);
-      setError(err.message || 'Failed to create agent');
+      const wsError = workspaceFieldError(err);
+      setAgentWorkspaceError(wsError);
+      setError(wsError || err.message || 'Failed to create agent');
     } finally {
       setLoading(false);
     }
@@ -458,6 +464,7 @@ const PluginCreationWizard = () => {
           {/* Step 4: Agent Configuration (only for agent plugins) */}
           {activeStep === (shouldShowScopeStep ? 3 : 2) && shouldShowAgentStep && (
             <Step4AgentConfiguration
+              workspaceError={agentWorkspaceError}
               pluginId={pluginId}
               pluginData={pluginData}
               onComplete={handleAgentConfiguration}

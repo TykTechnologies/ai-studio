@@ -178,6 +178,20 @@ describe("SemanticRouterForm Workspace select", () => {
     expect(screen.getByRole("combobox", { name: "Workspace" })).toHaveAttribute("aria-disabled", "true");
   });
 
+  it("the draft Test needs semantic-routers:write globally (the draft test route is global)", async () => {
+    mockParams = { id: "5" };
+    renderForm(scopedW1);
+    await screen.findByDisplayValue("Smart");
+    expect(screen.queryByText(/before saving it/)).not.toBeInTheDocument();
+  });
+
+  it("a global writer gets the draft Test", async () => {
+    mockParams = { id: "5" };
+    renderForm(identity({ rbac_enabled: true, permissions: perms }));
+    await screen.findByDisplayValue("Smart");
+    expect(screen.getByText(/before saving it/)).toBeInTheDocument();
+  });
+
   it("a router the caller cannot see (404) renders the not-found panel", async () => {
     mockParams = { id: "5" };
     apiClient.get.mockImplementation((url) =>
