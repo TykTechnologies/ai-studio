@@ -52,6 +52,10 @@ import { useEdition } from "../../context/EditionContext";
 import RelationshipPicker from "../common/relationship-picker";
 import { listAll } from "../../utils/listAll";
 import SemanticRouterTestPanel from "./SemanticRouterTestPanel";
+import WorkspaceSelect from "../workspaces/WorkspaceSelect";
+import { useCanMove, workspaceFieldError } from "../workspaces/workspaceFields";
+import { usePermissions } from "../../context/PermissionsContext";
+import NotFound from "../../pages/NotFound";
 import {
   DEFAULT_THRESHOLD,
   INPUT_SCOPE_LABELS,
@@ -335,6 +339,17 @@ const RouteCard = ({
 
 const SemanticRouterForm = () => {
   const [router, setRouter] = useState(emptyDraft);
+  // Enterprise: the Workspace the router lives in (landing rule when null),
+  // and its stored one when editing: a different one on save is a move.
+  const [workspaceId, setWorkspaceId] = useState(null);
+  const [originalWorkspaceId, setOriginalWorkspaceId] = useState(null);
+  const [workspaceError, setWorkspaceError] = useState("");
+  const canMove = useCanMove(P.SEMANTIC_ROUTERS_WRITE);
+  // The router's catalogues come back without those the caller cannot see,
+  // and saving keeps those links on the server.
+  const { rbacEnabled, can } = usePermissions();
+  const cataloguesMayBeHidden = rbacEnabled && !can(P.CATALOGUES_READ);
+  const [notFound, setNotFound] = useState(false);
   // LLM catalogues the router is published in. Saved through its own
   // endpoint (PUT /semantic-routers/:id/catalogues) after the router itself.
   const [catalogues, setCatalogues] = useState([]);
@@ -360,7 +375,7 @@ const SemanticRouterForm = () => {
   // Unsaved-changes tracking over the whole router, routes and catalogues
   // included.
   const { markSaved } = useUnsavedForm(
-    { router, selectedCatalogues },
+    { router, selectedCatalogues, workspaceId },
     { ready: !isEditMode || loaded },
   );
   const confirmNavigation = useConfirmNavigation();
@@ -411,6 +426,8 @@ const SemanticRouterForm = () => {
       const response = await apiClient.get(`/semantic-routers/${id}`);
       const data = response.data.data;
       setRouter(draftFromAttributes(data.attributes));
+      setWorkspaceId(data.attributes.workspace_id ?? null);
+      setOriginalWorkspaceId(data.attributes.workspace_id ?? null);
       const published = catalogueOptions(data.attributes.catalogues);
       setSelectedCatalogues(published);
       setSavedCatalogues(published);
@@ -418,6 +435,11 @@ const SemanticRouterForm = () => {
       setLoaded(true);
     } catch (error) {
       console.error("Error fetching semantic router:", error);
+      // Missing, or in a Workspace the caller cannot see.
+      if (error.response?.status === 404) {
+        setNotFound(true);
+        return;
+      }
       setSnackbar({
         open: true,
         message: "Failed to load semantic router",
@@ -532,11 +554,19 @@ const SemanticRouterForm = () => {
       return;
     }
 
+    // workspace_id is sent only to choose one (create) or to move (edit).
+    const workspaceAttr =
+      workspaceId !== null &&
+      workspaceId !== undefined &&
+      (!isEditMode || Number(workspaceId) !== Number(originalWorkspaceId))
+        ? { workspace_id: Number(workspaceId) }
+        : {};
+
     try {
       const payload = {
         data: {
           type: "semantic-routers",
-          attributes: attributesFromDraft(router),
+          attributes: { ...attributesFromDraft(router), ...workspaceAttr },
         },
       };
 
@@ -580,6 +610,12 @@ const SemanticRouterForm = () => {
       });
     } catch (error) {
       console.error("Error saving semantic router:", error);
+      const wsError = workspaceFieldError(error);
+      if (wsError) {
+        setWorkspaceError(wsError);
+        setSnackbar({ open: true, message: wsError, severity: "error" });
+        return;
+      }
       const detail = apiErrorDetail(error);
       setSaveError(detail);
       setSnackbar({
@@ -592,6 +628,10 @@ const SemanticRouterForm = () => {
 
   const hasErrors = Object.values(errors).some(Boolean);
   const slugHint = router.slug || "<slug>";
+
+  if (notFound) {
+    return <NotFound />;
+  }
 
   return (
     <Box sx={{ p: 0 }}>
@@ -677,12 +717,30 @@ const SemanticRouterForm = () => {
           <Grid item xs={12} md={6}>
             <PublishSwitch
               permission={P.SEMANTIC_ROUTERS_PUBLISH}
+              workspaceId={workspaceId ?? null}
               name="active"
               checked={router.active}
               onChange={handleChange}
               label="Active"
             />
           </Grid>
+
+          {/* Workspace (Enterprise): where it is created; on edit, the move control. */}
+          {rbacEnabled && (
+            <Grid item xs={12} md={6}>
+              <WorkspaceSelect
+                permission={P.SEMANTIC_ROUTERS_WRITE}
+                value={workspaceId}
+                onChange={(ws) => {
+                  setWorkspaceId(ws);
+                  setWorkspaceError("");
+                }}
+                disabled={isEditMode && !canMove}
+                error={workspaceError}
+                helperText={isEditMode ? "Moving it to another Workspace needs write in both." : "The Workspace it is created in."}
+              />
+            </Grid>
+          )}
 
           {/* Edge Availability */}
           {isEnterprise && (
@@ -980,6 +1038,11 @@ const SemanticRouterForm = () => {
               getOptionLabel={(c) => c.name}
               helperText="Model provider catalogs. Teams holding one of them see the router in the portal and can add it to their Apps."
             />
+            {cataloguesMayBeHidden && (
+              <Typography variant="caption" color="text.secondary" data-testid="router-catalogues-hidden-note">
+                Only the catalogs you can see are listed. Catalogs in other Workspaces keep the router when you save.
+              </Typography>
+            )}
           </Grid>
 
           <Grid item xs={12}>

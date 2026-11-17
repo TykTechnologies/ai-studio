@@ -50,6 +50,10 @@ import { P } from "../../rbac/permissions";
 import { useEdition } from "../../context/EditionContext";
 import RelationshipPicker from "../common/relationship-picker";
 import { listAll } from "../../utils/listAll";
+import WorkspaceSelect from "../workspaces/WorkspaceSelect";
+import { useCanMove, workspaceFieldError } from "../workspaces/workspaceFields";
+import { usePermissions } from "../../context/PermissionsContext";
+import NotFound from "../../pages/NotFound";
 
 // LLM catalogues come back as JSON:API rows; the picker wants {id, name}.
 const catalogueOptions = (rows) =>
@@ -76,7 +80,18 @@ const ModelRouterForm = () => {
     active: false,
     namespace: "",
     pools: [],
+    workspace_id: null, // Enterprise: the Workspace it lives in (landing rule when null)
   });
+  // The stored Workspace of the router being edited: a different
+  // workspace_id on save is a move.
+  const [originalWorkspaceId, setOriginalWorkspaceId] = useState(null);
+  const [workspaceError, setWorkspaceError] = useState("");
+  const canMove = useCanMove(P.MODEL_ROUTERS_WRITE);
+  // The router's catalogues come back without those the caller cannot see,
+  // and saving keeps those links on the server.
+  const { rbacEnabled, can } = usePermissions();
+  const cataloguesMayBeHidden = rbacEnabled && !can(P.CATALOGUES_READ);
+  const [notFound, setNotFound] = useState(false);
   // LLM catalogues the router is published in. Saved through its own
   // endpoint (PUT /model-routers/:id/catalogues) after the router itself.
   const [catalogues, setCatalogues] = useState([]);
@@ -148,7 +163,9 @@ const ModelRouterForm = () => {
         active: data.attributes.active || false,
         namespace: data.attributes.namespace || "",
         pools: data.attributes.pools || [],
+        workspace_id: data.attributes.workspace_id ?? null,
       });
+      setOriginalWorkspaceId(data.attributes.workspace_id ?? null);
       const published = catalogueOptions(data.attributes.catalogues);
       setSelectedCatalogues(published);
       setSavedCatalogues(published);
@@ -156,6 +173,11 @@ const ModelRouterForm = () => {
       setLoaded(true);
     } catch (error) {
       console.error("Error fetching router:", error);
+      // Missing, or in a Workspace the caller cannot see.
+      if (error.response?.status === 404) {
+        setNotFound(true);
+        return;
+      }
       setSnackbar({
         open: true,
         message: "Failed to load router",
@@ -387,11 +409,20 @@ const ModelRouterForm = () => {
       return;
     }
 
+    // workspace_id is sent only to choose one (create) or to move (edit).
+    const workspaceAttr =
+      router.workspace_id !== null &&
+      router.workspace_id !== undefined &&
+      (!isEditMode || Number(router.workspace_id) !== Number(originalWorkspaceId))
+        ? { workspace_id: Number(router.workspace_id) }
+        : {};
+
     try {
       const payload = {
         data: {
           type: "model_router",
           attributes: {
+            ...workspaceAttr,
             name: router.name,
             slug: router.slug,
             description: router.description,
@@ -460,6 +491,12 @@ const ModelRouterForm = () => {
       });
     } catch (error) {
       console.error("Error saving router:", error);
+      const wsError = workspaceFieldError(error);
+      if (wsError) {
+        setWorkspaceError(wsError);
+        setSnackbar({ open: true, message: wsError, severity: "error" });
+        return;
+      }
       setSnackbar({
         open: true,
         message: error.response?.data?.message || "Failed to save Model Router",
@@ -467,6 +504,10 @@ const ModelRouterForm = () => {
       });
     }
   };
+
+  if (notFound) {
+    return <NotFound />;
+  }
 
   return (
     <Box sx={{ p: 0 }}>
@@ -559,12 +600,30 @@ const ModelRouterForm = () => {
           <Grid item xs={12} md={6}>
             <PublishSwitch
               permission={P.MODEL_ROUTERS_PUBLISH}
+              workspaceId={router.workspace_id ?? null}
               name="active"
               checked={router.active}
               onChange={handleChange}
               label="Active"
             />
           </Grid>
+
+          {/* Workspace (Enterprise): where it is created; on edit, the move control. */}
+          {rbacEnabled && (
+            <Grid item xs={12} md={6}>
+              <WorkspaceSelect
+                permission={P.MODEL_ROUTERS_WRITE}
+                value={router.workspace_id}
+                onChange={(ws) => {
+                  setRouter((prev) => ({ ...prev, workspace_id: ws }));
+                  setWorkspaceError("");
+                }}
+                disabled={isEditMode && !canMove}
+                error={workspaceError}
+                helperText={isEditMode ? "Moving it to another Workspace needs write in both." : "The Workspace it is created in."}
+              />
+            </Grid>
+          )}
 
           {/* Edge Availability */}
           {isEnterprise && (
@@ -605,6 +664,11 @@ const ModelRouterForm = () => {
               getOptionLabel={(c) => c.name}
               helperText="Model provider catalogs. Teams holding one of them see the router in the portal and can add it to their Apps."
             />
+            {cataloguesMayBeHidden && (
+              <Typography variant="caption" color="text.secondary" data-testid="router-catalogues-hidden-note">
+                Only the catalogs you can see are listed. Catalogs in other Workspaces keep the router when you save.
+              </Typography>
+            )}
           </Grid>
 
           <Grid item xs={12}>

@@ -24,11 +24,16 @@ import {
   FieldValue,
   PrimaryButton,
 } from "../../styles/sharedStyles";
+import Can from "../rbac/Can";
+import { P } from "../../rbac/permissions";
+import NotFound from "../../pages/NotFound";
 
 const DataCatalogDetail = () => {
   const [catalog, setCatalog] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // The catalog is gone or in a Workspace the caller cannot see.
+  const [notFound, setNotFound] = useState(false);
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -43,11 +48,13 @@ const DataCatalogDetail = () => {
       setLoading(false);
     } catch (error) {
       console.error("Error fetching data catalog details", error);
-      setError("Failed to load data catalog details");
+      if (error.response?.status === 404) setNotFound(true);
+      else setError("Failed to load data catalog details");
       setLoading(false);
     }
   };
 
+  if (notFound) return <NotFound />;
   if (loading) return <CircularProgress />;
   if (error) return <Typography color="error">{error}</Typography>;
   if (!catalog) return <Typography>Data catalog not found</Typography>;
@@ -137,13 +144,15 @@ const DataCatalogDetail = () => {
         <CatalogueTeamsSection resourcePath="data-catalogues" id={id} />
 
         <Box mt={4}>
-          <PrimaryButton
-            variant="contained"
-            startIcon={<EditIcon />}
-            onClick={() => navigate(`/admin/catalogs/datasources/edit/${id}`)}
-          >
-            Edit catalog
-          </PrimaryButton>
+          <Can permission={P.DATA_CATALOGUES_WRITE} workspaceId={catalog.attributes.workspace_id}>
+            <PrimaryButton
+              variant="contained"
+              startIcon={<EditIcon />}
+              onClick={() => navigate(`/admin/catalogs/datasources/edit/${id}`)}
+            >
+              Edit catalog
+            </PrimaryButton>
+          </Can>
         </Box>
       </ContentBox>
     </>

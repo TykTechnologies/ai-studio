@@ -11,10 +11,15 @@ jest.mock("../utils/apiClient", () => ({
   __esModule: true,
   default: { get: jest.fn(), post: jest.fn(), patch: jest.fn(), delete: jest.fn() },
 }));
-// Can's render-prop form (children as a function) is used to gate the table.
+// Can gates the Add button (it no longer wraps the table).
 jest.mock("../components/rbac/Can", () => ({ children }) => (
   <>{typeof children === "function" ? children(true) : children}</>
 ));
+// The row actions are gated in each App's Workspace (Workspaces E4); this
+// suite is about status labels, so the caller holds everything.
+jest.mock("../context/PermissionsContext", () => ({
+  usePermissions: () => ({ rbacEnabled: false, can: () => true, canIn: () => true, canAnywhere: () => true }),
+}));
 jest.mock("../../components/common/Icon", () => (props) => <div data-testid="mock-icon">{props.name}</div>);
 const mockNavigate = jest.fn();
 jest.mock("react-router-dom", () => ({
@@ -58,11 +63,14 @@ describe("AppList status labels and approval", () => {
     apiClient.patch.mockResolvedValue({ data: {} });
   });
 
-  const rowFor = async (name) => (await screen.findByText(name)).closest("tr");
+  const rowFor = async (name) => {
+    await screen.findByText(name);
+    return screen.getByRole("row", { name: new RegExp(name) });
+  };
 
   it("uses the Active / Awaiting approval / No credential / Disabled labels", async () => {
     renderList();
-    await waitFor(() => expect(within(screen.getByText("Approved App").closest("tr")).getByText("Active")).toBeInTheDocument());
+    await waitFor(() => expect(within(screen.getByRole("row", { name: /Approved App/ })).getByText("Active")).toBeInTheDocument());
     expect(within(await rowFor("Waiting App")).getByText("Awaiting approval")).toBeInTheDocument();
     expect(within(await rowFor("Bare App")).getByText("No credential")).toBeInTheDocument();
     // A switched-off App is Disabled whatever its credential says, as in the portal.

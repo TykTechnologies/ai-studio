@@ -43,6 +43,10 @@ import AppTeamField from "./AppTeamField";
 import BudgetField from "../common/BudgetField";
 import { errorDetail } from "../../services/teamBudgetsService";
 import { usePermissions } from "../../context/PermissionsContext";
+import { P } from "../../rbac/permissions";
+import WorkspaceSelect from "../workspaces/WorkspaceSelect";
+import { useCanMove, workspaceFieldError } from "../workspaces/workspaceFields";
+import NotFound from "../../pages/NotFound";
 import { getGuardrailCapability } from "../../services/guardrailCapabilityService";
 import ConfirmationDialog from "../common/ConfirmationDialog";
 import {
@@ -94,7 +98,16 @@ const AppForm = () => {
     team_id: null, // Enterprise team budgets; null = owner's budget team
     namespace: "", // Added for edge availability
     metadata: {}, // Added for custom metadata
+    workspace_id: null, // Enterprise: the Workspace it lives in (landing rule when null)
   });
+  // The stored Workspace of the App being edited: a different workspace_id
+  // on save is a move.
+  const [originalWorkspaceId, setOriginalWorkspaceId] = useState(null);
+  const [workspaceError, setWorkspaceError] = useState("");
+  const canMove = useCanMove(P.APPS_WRITE);
+  // An App in another Workspace (or deleted) answers 404: the form shows the
+  // standard not-found panel instead of an empty form.
+  const [notFound, setNotFound] = useState(false);
   const [metadataJSON, setMetadataJSON] = useState("{}"); // JSON string for editor
   // Agent tracing overrides (Enterprise), edited apart from the App and sent
   // only while the section is shown; omitted, the server keeps them.
@@ -178,7 +191,9 @@ const AppForm = () => {
         namespace: appData.namespace || "",
         team_id: appData.team_id ?? null,
         metadata: metadata,
+        workspace_id: appData.workspace_id ?? null,
       });
+      setOriginalWorkspaceId(appData.workspace_id ?? null);
       setMetadataJSON(JSON.stringify(metadata, null, 2));
       setTracing(appTracingFromResponse(appData.tracing));
 
@@ -202,6 +217,10 @@ const AppForm = () => {
       }
     } catch (error) {
       console.error("Error fetching app", error);
+      if (error?.response?.status === 404) {
+        setNotFound(true);
+        return;
+      }
       setSnackbar({
         open: true,
         message: "Failed to fetch app details",
@@ -466,6 +485,12 @@ const AppForm = () => {
       });
     } catch (error) {
       console.error("Error saving app", error);
+      const wsError = workspaceFieldError(error);
+      if (wsError) {
+        setWorkspaceError(wsError);
+        setSnackbar({ open: true, message: wsError, severity: "error" });
+        return;
+      }
       setSnackbar({
         open: true,
         // A refused team allocation explains itself (400 with the reason).
@@ -509,10 +534,16 @@ const AppForm = () => {
         };
       });
 
-    // team_id null keeps the resolved team.
-    const { tracing: _storedTracing, ...appFields } = app;
+    // team_id null keeps the resolved team. workspace_id is sent only to
+    // choose one (create) or to move (edit).
+    const { tracing: _storedTracing, workspace_id: workspaceId, ...appFields } = app;
+    const workspaceAttr =
+      workspaceId !== null && workspaceId !== undefined && (!id || Number(workspaceId) !== Number(originalWorkspaceId))
+        ? { workspace_id: Number(workspaceId) }
+        : {};
     const appPayload = {
       ...appFields,
+      ...workspaceAttr,
       user_id: parseInt(app.user_id, 10),
       llm_ids: app.llm_ids.map((id) => parseInt(id, 10)),
       datasource_ids: app.datasource_ids.map((id) => parseInt(id, 10)),
@@ -546,6 +577,8 @@ const AppForm = () => {
     }
     setSnackbar({ ...snackbar, open: false });
   };
+
+  if (notFound) return <NotFound />;
 
   return (
     <>
@@ -609,6 +642,20 @@ const AppForm = () => {
                   <Typography color="error">{errors.user_id}</Typography>
                 )}
               </FormControl>
+            </Grid>
+            {/* Workspace (Enterprise): where it is created; on edit, the move control. */}
+            <Grid item xs={12}>
+              <WorkspaceSelect
+                permission={P.APPS_WRITE}
+                value={app.workspace_id}
+                onChange={(ws) => {
+                  setApp((prev) => ({ ...prev, workspace_id: ws }));
+                  setWorkspaceError("");
+                }}
+                disabled={Boolean(id) && !canMove}
+                error={workspaceError}
+                helperText={id ? "Moving it to another Workspace needs write in both." : "The Workspace it is created in."}
+              />
             </Grid>
             {isEnterprise && (
               <Grid item xs={12}>

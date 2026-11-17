@@ -1,38 +1,65 @@
 import apiClient from '../utils/apiClient';
 
+// fromResponse maps an agent config from the API to the shape the admin UI
+// uses. workspaceId is the agent's Workspace (Enterprise; undefined on
+// Community Edition).
+const fromResponse = (agent) => ({
+  id: agent.id,
+  name: agent.name,
+  slug: agent.slug,
+  description: agent.description,
+  pluginId: agent.plugin_id,
+  plugin: agent.plugin,
+  appId: agent.app_id,
+  app: agent.app,
+  // The linked App is in a Workspace the caller cannot see (Workspaces
+  // .55): app is left out, appId kept.
+  appHidden: agent.app_hidden === true,
+  config: agent.config || {},
+  groups: agent.groups || [],
+  isActive: agent.is_active,
+  namespace: agent.namespace || '',
+  workspaceId: agent.workspace_id,
+  createdAt: agent.created_at,
+  updatedAt: agent.updated_at,
+});
+
+// failure wraps an API error in an Error with the API's detail as message,
+// keeping status and response so callers can tell a 404 (an agent in
+// another Workspace looks missing) and read field errors (workspaceFieldError).
+const failure = (error, fallback) => {
+  const err = new Error(error.response?.data?.errors?.[0]?.detail || fallback);
+  err.status = error.response?.status;
+  err.response = error.response;
+  return err;
+};
+
+// workspaceAttr: workspace_id is sent only to choose a Workspace (create)
+// or to move the agent (edit); the caller decides and passes workspaceId.
+const workspaceAttr = (agentData) =>
+  agentData.workspaceId !== undefined && agentData.workspaceId !== null
+    ? { workspace_id: Number(agentData.workspaceId) }
+    : {};
+
 class AgentService {
   /**
    * List all agent configurations with pagination and filtering
    */
-  async listAgents(page = 1, limit = 25, namespace = '', isActive) {
+  async listAgents(page = 1, limit = 25, namespace = '', isActive, extraParams = {}) {
     try {
       const params = {
         page,
         limit,
         ...(namespace && { namespace }),
         ...(isActive !== undefined && { is_active: isActive }),
+        ...extraParams, // e.g. the Workspace filter ({ workspace_id })
       };
 
       const response = await apiClient.get('/agents', { params });
 
       if (response.data?.data) {
         return {
-          data: response.data.data.map(agent => ({
-            id: agent.id,
-            name: agent.name,
-            slug: agent.slug,
-            description: agent.description,
-            pluginId: agent.plugin_id,
-            plugin: agent.plugin,
-            appId: agent.app_id,
-            app: agent.app,
-            config: agent.config || {},
-            groups: agent.groups || [],
-            isActive: agent.is_active,
-            namespace: agent.namespace || '',
-            createdAt: agent.created_at,
-            updatedAt: agent.updated_at,
-          })),
+          data: response.data.data.map(fromResponse),
           meta: response.data.meta || {},
         };
       }
@@ -40,7 +67,7 @@ class AgentService {
       return { data: [], meta: {} };
     } catch (error) {
       console.error('Error fetching agents:', error);
-      throw new Error(error.response?.data?.errors?.[0]?.detail || 'Failed to fetch agents');
+      throw failure(error, 'Failed to fetch agents');
     }
   }
 
@@ -53,28 +80,13 @@ class AgentService {
 
       if (response.data?.data) {
         const agent = response.data.data;
-        return {
-          id: agent.id,
-          name: agent.name,
-          slug: agent.slug,
-          description: agent.description,
-          pluginId: agent.plugin_id,
-          plugin: agent.plugin,
-          appId: agent.app_id,
-          app: agent.app,
-          config: agent.config || {},
-          groups: agent.groups || [],
-          isActive: agent.is_active,
-          namespace: agent.namespace || '',
-          createdAt: agent.created_at,
-          updatedAt: agent.updated_at,
-        };
+        return fromResponse(agent);
       }
 
       return null;
     } catch (error) {
       console.error('Error fetching agent:', error);
-      throw new Error(error.response?.data?.errors?.[0]?.detail || 'Failed to fetch agent');
+      throw failure(error, 'Failed to fetch agent');
     }
   }
 
@@ -92,34 +104,20 @@ class AgentService {
         group_ids: (agentData.groupIds || []).map(id => parseInt(id, 10)),
         is_active: agentData.isActive !== undefined ? agentData.isActive : true,
         namespace: agentData.namespace || '',
+        ...workspaceAttr(agentData),
       };
 
       const response = await apiClient.post('/agents', payload);
 
       if (response.data?.data) {
         const agent = response.data.data;
-        return {
-          id: agent.id,
-          name: agent.name,
-          slug: agent.slug,
-          description: agent.description,
-          pluginId: agent.plugin_id,
-          plugin: agent.plugin,
-          appId: agent.app_id,
-          app: agent.app,
-          config: agent.config || {},
-          groups: agent.groups || [],
-          isActive: agent.is_active,
-          namespace: agent.namespace || '',
-          createdAt: agent.created_at,
-          updatedAt: agent.updated_at,
-        };
+        return fromResponse(agent);
       }
 
       return null;
     } catch (error) {
       console.error('Error creating agent:', error);
-      throw new Error(error.response?.data?.errors?.[0]?.detail || 'Failed to create agent');
+      throw failure(error, 'Failed to create agent');
     }
   }
 
@@ -137,34 +135,20 @@ class AgentService {
         group_ids: (agentData.groupIds || []).map(id => parseInt(id, 10)),
         is_active: agentData.isActive !== undefined ? agentData.isActive : true,
         namespace: agentData.namespace || '',
+        ...workspaceAttr(agentData),
       };
 
       const response = await apiClient.put(`/agents/${id}`, payload);
 
       if (response.data?.data) {
         const agent = response.data.data;
-        return {
-          id: agent.id,
-          name: agent.name,
-          slug: agent.slug,
-          description: agent.description,
-          pluginId: agent.plugin_id,
-          plugin: agent.plugin,
-          appId: agent.app_id,
-          app: agent.app,
-          config: agent.config || {},
-          groups: agent.groups || [],
-          isActive: agent.is_active,
-          namespace: agent.namespace || '',
-          createdAt: agent.created_at,
-          updatedAt: agent.updated_at,
-        };
+        return fromResponse(agent);
       }
 
       return null;
     } catch (error) {
       console.error('Error updating agent:', error);
-      throw new Error(error.response?.data?.errors?.[0]?.detail || 'Failed to update agent');
+      throw failure(error, 'Failed to update agent');
     }
   }
 

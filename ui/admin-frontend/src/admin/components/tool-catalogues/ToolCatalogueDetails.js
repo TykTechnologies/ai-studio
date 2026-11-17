@@ -26,6 +26,9 @@ import {
   FieldValue,
   PrimaryButton,
 } from "../../styles/sharedStyles";
+import Can from "../rbac/Can";
+import { P } from "../../rbac/permissions";
+import NotFound from "../../pages/NotFound";
 
 const ToolCatalogueDetails = () => {
   const [catalogue, setCatalogue] = useState(null);
@@ -34,6 +37,8 @@ const ToolCatalogueDetails = () => {
   const [mcpServersTruncated, setMcpServersTruncated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // The catalog is gone or in a Workspace the caller cannot see.
+  const [notFound, setNotFound] = useState(false);
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -50,11 +55,13 @@ const ToolCatalogueDetails = () => {
       setLoading(false);
     } catch (error) {
       console.error("Error fetching tool catalogue details", error);
-      setError("Failed to load tool catalogue details");
+      if (error.response?.status === 404) setNotFound(true);
+      else setError("Failed to load tool catalogue details");
       setLoading(false);
     }
   };
 
+  if (notFound) return <NotFound />;
   if (loading) return <CircularProgress />;
   if (error) return <Typography color="error">{error}</Typography>;
   if (!catalogue) return <Typography>Tool catalogue not found</Typography>;
@@ -188,13 +195,15 @@ const ToolCatalogueDetails = () => {
           justifyContent="flex-end"
           alignItems="center"
         >
-          <PrimaryButton
-            variant="contained"
-            startIcon={<EditIcon />}
-            onClick={() => navigate(`/admin/catalogs/tools/edit/${id}`)}
-          >
-            Edit catalog
-          </PrimaryButton>
+          <Can permission={P.TOOL_CATALOGUES_WRITE} workspaceId={catalogue.attributes?.workspace_id}>
+            <PrimaryButton
+              variant="contained"
+              startIcon={<EditIcon />}
+              onClick={() => navigate(`/admin/catalogs/tools/edit/${id}`)}
+            >
+              Edit catalog
+            </PrimaryButton>
+          </Can>
         </Box>
       </ContentBox>
     </>

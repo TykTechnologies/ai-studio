@@ -31,6 +31,8 @@ import {
   SecondaryLinkButton,
 } from "../../styles/sharedStyles";
 import Can from "../rbac/Can";
+import { usePermissions } from "../../context/PermissionsContext";
+import NotFound from "../../pages/NotFound";
 import { P } from "../../rbac/permissions";
 import { listAll } from "../../utils/listAll";
 import SemanticRouterTestPanel, { describeTarget } from "./SemanticRouterTestPanel";
@@ -70,6 +72,10 @@ const SemanticRouterDetails = () => {
   const [modelRouters, setModelRouters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [notFound, setNotFound] = useState(false);
+  // Catalogs in Workspaces the caller cannot see are left out of the router.
+  const { rbacEnabled, can } = usePermissions();
+  const cataloguesMayBeHidden = rbacEnabled && !can(P.CATALOGUES_READ);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -96,6 +102,11 @@ const SemanticRouterDetails = () => {
       setError("");
     } catch (error) {
       console.error("Error fetching semantic router:", error);
+      // Missing, or in a Workspace the caller cannot see.
+      if (error.response?.status === 404) {
+        setNotFound(true);
+        return;
+      }
       setError("Failed to load Semantic Router");
     } finally {
       setLoading(false);
@@ -128,6 +139,10 @@ const SemanticRouterDetails = () => {
         <CircularProgress />
       </Box>
     );
+  }
+
+  if (notFound) {
+    return <NotFound />;
   }
 
   if (error) {
@@ -176,12 +191,12 @@ const SemanticRouterDetails = () => {
         <Box sx={{ display: "flex", gap: 2 }}>
           {/* The toggle is publish-gated (PATCH /semantic-routers/:id/toggle);
               the edit form is write-gated, and publish never implies write. */}
-          <Can permission={P.SEMANTIC_ROUTERS_PUBLISH}>
+          <Can permission={P.SEMANTIC_ROUTERS_PUBLISH} workspaceId={attributes.workspace_id}>
             <PrimaryButton variant="outlined" onClick={handleToggleActive}>
               {attributes.active ? "Deactivate" : "Activate"}
             </PrimaryButton>
           </Can>
-          <Can permission={P.SEMANTIC_ROUTERS_WRITE}>
+          <Can permission={P.SEMANTIC_ROUTERS_WRITE} workspaceId={attributes.workspace_id}>
             <PrimaryButton
               variant="contained"
               startIcon={<EditIcon />}
@@ -324,6 +339,7 @@ const SemanticRouterDetails = () => {
           {/* Gateway authentication */}
           <Grid item xs={12}>
             <AuthPluginsSection
+              workspaceId={attributes.workspace_id}
               endpointPath="semantic-routers"
               endpointId={id}
               noun="router"
@@ -352,7 +368,9 @@ const SemanticRouterDetails = () => {
                 </Box>
               ) : (
                 <Typography variant="body1">
-                  Not in any catalog. Portal users cannot add it to their Apps.
+                  {cataloguesMayBeHidden
+                    ? "Not in any catalog you can see. Catalogs in other Workspaces are not listed."
+                    : "Not in any catalog. Portal users cannot add it to their Apps."}
                 </Typography>
               )}
             </Section>
@@ -364,7 +382,7 @@ const SemanticRouterDetails = () => {
           </Grid>
 
           {/* Test the saved router; write-gated like the endpoint. */}
-          <Can permission={P.SEMANTIC_ROUTERS_WRITE}>
+          <Can permission={P.SEMANTIC_ROUTERS_WRITE} workspaceId={attributes.workspace_id}>
             <Grid item xs={12}>
               <Section
                 title="Test"

@@ -23,6 +23,10 @@ import {
   useConfirmNavigation,
 } from "../../../components/unsaved-changes";
 import { listAll } from "../../utils/listAll";
+import { P } from "../../rbac/permissions";
+import WorkspaceSelect from "../workspaces/WorkspaceSelect";
+import { useCanMove, workspaceFieldError } from "../workspaces/workspaceFields";
+import NotFound from "../../pages/NotFound";
 
 const ToolCatalogueForm = () => {
   const [catalogue, setCatalogue] = useState({
@@ -31,6 +35,14 @@ const ToolCatalogueForm = () => {
     long_description: "",
     icon: "",
   });
+  // Enterprise: the Workspace it lives in (landing rule when null). The
+  // stored one is kept apart: a different workspace_id on save is a move.
+  const [workspaceId, setWorkspaceId] = useState(null);
+  const [originalWorkspaceId, setOriginalWorkspaceId] = useState(null);
+  const [workspaceError, setWorkspaceError] = useState("");
+  const canMove = useCanMove(P.TOOL_CATALOGUES_WRITE);
+  // The catalog is gone or in a Workspace the caller cannot see.
+  const [notFound, setNotFound] = useState(false);
   const [tools, setTools] = useState([]);
   const [availableTools, setAvailableTools] = useState([]);
   const [tags, setTags] = useState([]);
@@ -80,6 +92,8 @@ const ToolCatalogueForm = () => {
       console.log("Catalogue details response:", response.data);
       if (response.data?.data?.attributes) {
         setCatalogue(response.data.data.attributes);
+        setWorkspaceId(response.data.data.attributes.workspace_id ?? null);
+        setOriginalWorkspaceId(response.data.data.attributes.workspace_id ?? null);
         setTools(response.data.data.attributes.tools || []);
         setTags(response.data.data.attributes.tags || []);
         setLoadedTools(response.data.data.attributes.tools || []);
@@ -90,6 +104,10 @@ const ToolCatalogueForm = () => {
       }
     } catch (error) {
       console.error("Error fetching catalogue details", error);
+      if (error.response?.status === 404) {
+        setNotFound(true);
+        return;
+      }
       setSnackbar({
         open: true,
         message: "Error fetching catalogue details: " + error.message,
@@ -124,10 +142,16 @@ const ToolCatalogueForm = () => {
     const desiredTools = tools;
     const desiredTags = tags;
 
+    // workspace_id is sent only to choose one (create) or to move (edit).
+    const { workspace_id: _storedWorkspaceId, ...attributes } = catalogue;
+    const workspaceAttr =
+      workspaceId !== null && workspaceId !== undefined && (!id || Number(workspaceId) !== Number(originalWorkspaceId))
+        ? { workspace_id: Number(workspaceId) }
+        : {};
     const catalogueData = {
       data: {
         type: "ToolCatalogue",
-        attributes: catalogue,
+        attributes: { ...attributes, ...workspaceAttr },
       },
     };
 
@@ -162,6 +186,12 @@ const ToolCatalogueForm = () => {
       });
     } catch (error) {
       console.error("Error saving tool catalogue", error);
+      const wsError = workspaceFieldError(error);
+      if (wsError) {
+        setWorkspaceError(wsError);
+        setSnackbar({ open: true, message: wsError, severity: "error" });
+        return;
+      }
       setSnackbar({
         open: true,
         message: `Error saving tool catalogue: ${error.message}`,
@@ -229,6 +259,10 @@ const ToolCatalogueForm = () => {
     }
     setSnackbar({ ...snackbar, open: false });
   };
+
+  if (notFound) {
+    return <NotFound />;
+  }
 
   return (
     <>
@@ -304,6 +338,21 @@ const ToolCatalogueForm = () => {
               onChange={setTags}
               options={availableTags}
               getOptionLabel={(tag) => tag.attributes?.name ?? ""}
+            />
+          </Box>
+
+          {/* Workspace (Enterprise): where it is created; on edit, the move control. */}
+          <Box sx={{ mb: 3 }}>
+            <WorkspaceSelect
+              permission={P.TOOL_CATALOGUES_WRITE}
+              value={workspaceId}
+              onChange={(ws) => {
+                setWorkspaceId(ws);
+                setWorkspaceError("");
+              }}
+              disabled={Boolean(id) && !canMove}
+              error={workspaceError}
+              helperText={id ? "Moving it to another Workspace needs write in both." : "The Workspace it is created in."}
             />
           </Box>
 

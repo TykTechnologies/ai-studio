@@ -2,6 +2,7 @@ import React from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import PublishSwitch from "../rbac/PublishSwitch";
 import { P } from "../../rbac/permissions";
+import { usePermissions } from "../../context/PermissionsContext";
 import {
   Box,
   Typography,
@@ -32,10 +33,29 @@ const AgentFormFields = ({
   configSchema = null,
   showPluginField = true,
   disabled = false,
+  // The agent's Workspace, for the Active switch (publish there); null while
+  // it is not chosen yet (publish anywhere). Omitted: the global permission.
+  workspaceId,
+  // false while the App list is loading, so a stored App is not called
+  // hidden before the list arrives.
+  appsLoaded = true,
 }) => {
+  const { rbacEnabled } = usePermissions();
   const handleChange = (field, value) => {
     onFieldChange(field, value);
   };
+
+  // The App list holds only the Apps the caller can see (the server hides
+  // those in other Workspaces). An agent bound to one of those keeps it: it
+  // is offered under a neutral label and sent back unchanged.
+  const hiddenAppId =
+    appsLoaded &&
+    formData.appId !== undefined &&
+    formData.appId !== null &&
+    formData.appId !== '' &&
+    !apps.some((app) => String(app.id) === String(formData.appId))
+      ? formData.appId
+      : null;
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -114,6 +134,11 @@ const AgentFormFields = ({
               {app.attributes?.name || `App ${app.id}`}
             </MenuItem>
           ))}
+          {hiddenAppId !== null && (
+            <MenuItem key={`hidden-${hiddenAppId}`} value={hiddenAppId}>
+              {rbacEnabled ? 'App in another Workspace' : `App ${hiddenAppId}`}
+            </MenuItem>
+          )}
         </Select>
         <Typography variant="bodySmallDefault" color="text.secondary" sx={{ mt: 1 }}>
           The app provides model providers, tools, and datasources for the agent
@@ -200,6 +225,7 @@ const AgentFormFields = ({
 
       <PublishSwitch
         permission={P.AGENTS_PUBLISH}
+        workspaceId={workspaceId}
         control="checkbox"
         checked={formData.isActive !== undefined ? formData.isActive : true}
         onChange={(e) => handleChange('isActive', e.target.checked)}

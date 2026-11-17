@@ -4,10 +4,18 @@ import CollapsibleSection from "../../common/CollapsibleSection";
 import RelationshipPicker from "../../common/relationship-picker";
 import CustomNote from "../../common/CustomNote";
 import { getFeatureFlags } from "../../../utils/featureUtils";
+import OtherWorkspacesNote from "../../catalogues/OtherWorkspacesNote";
+import { usePermissions } from "../../../context/PermissionsContext";
+import { P } from "../../../rbac/permissions";
 
 // Catalog options and selections are `{ value, label }` pairs (see
 // useCatalogsSelection), hence idField="value" and the label accessor.
 const catalogLabel = (catalog) => catalog?.label ?? "";
+
+// Workspaces (Enterprise): the catalog lists and the team's links hold only
+// the catalogs the caller can see; a save keeps the team's links to the
+// others, so each picker says so to a caller without a global read.
+const hiddenNote = (kind) => `${kind} in Workspaces you cannot see are not listed; saving keeps this team's links to them.`;
 
 const GroupCatalogsSection = ({
   catalogs,
@@ -26,6 +34,12 @@ const GroupCatalogsSection = ({
   features
 }) => {
   const { isPortalEnabled, isChatEnabled } = getFeatureFlags(features);
+  const { rbacEnabled, can } = usePermissions();
+  const mayHideSome =
+    Boolean(rbacEnabled) &&
+    ((isPortalEnabled && !can(P.CATALOGUES_READ)) ||
+      !can(P.DATA_CATALOGUES_READ) ||
+      (isChatEnabled && !can(P.TOOL_CATALOGUES_READ)));
   const hasNoCatalogs = (!catalogs || catalogs.length === 0) &&
                         (!dataCatalogs || dataCatalogs.length === 0) &&
                         (!toolCatalogs || toolCatalogs.length === 0);
@@ -34,7 +48,11 @@ const GroupCatalogsSection = ({
     <CollapsibleSection title="Add catalogs" defaultExpanded={false}>
       {hasNoCatalogs ? (
         <CustomNote
-          message="Currently, there are no catalogs available. To create a new one, please go to the Catalogs."
+          message={
+            mayHideSome
+              ? "There are no catalogs in your Workspaces. Catalogs in other Workspaces are not listed; saving keeps this team's links to them."
+              : "Currently, there are no catalogs available. To create a new one, please go to the Catalogs."
+          }
         />
       ) : (
         <>
@@ -56,6 +74,9 @@ const GroupCatalogsSection = ({
               getOptionLabel={catalogLabel}
               disabled={loading}
             />
+            <OtherWorkspacesNote permission={P.CATALOGUES_READ} sx={{ mt: 1 }}>
+              {hiddenNote("Model provider catalogs")}
+            </OtherWorkspacesNote>
           </Box>
         )}
         
@@ -70,6 +91,9 @@ const GroupCatalogsSection = ({
             getOptionLabel={catalogLabel}
             disabled={loading}
           />
+          <OtherWorkspacesNote permission={P.DATA_CATALOGUES_READ} sx={{ mt: 1 }}>
+            {hiddenNote("Data catalogs")}
+          </OtherWorkspacesNote>
         </Box>
         
         {isChatEnabled && (
@@ -84,6 +108,9 @@ const GroupCatalogsSection = ({
               getOptionLabel={catalogLabel}
               disabled={loading}
             />
+            <OtherWorkspacesNote permission={P.TOOL_CATALOGUES_READ} sx={{ mt: 1 }}>
+              {hiddenNote("Tool catalogs")}
+            </OtherWorkspacesNote>
           </Box>
         )}
         </>
