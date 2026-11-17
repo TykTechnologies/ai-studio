@@ -151,14 +151,16 @@ describe("AgentForm Workspaces", () => {
   });
 
   it("keeps an App the caller cannot see, under a neutral label, and sends it unchanged", async () => {
+    // An App id that is not in the /apps list the caller gets.
+    const HIDDEN_APP_ID = 77;
     mockParams = { id: "5" };
-    mockGets(Promise.resolve(storedAgent({ app_id: 77 })));
+    mockGets(Promise.resolve(storedAgent({ app_id: HIDDEN_APP_ID })));
     renderForm(scopedW1);
     const appSelect = await screen.findByRole("combobox", { name: "App" });
     await waitFor(() => expect(appSelect).toHaveTextContent("App in another Workspace"));
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
     await waitFor(() => expect(apiClient.put).toHaveBeenCalled());
-    expect(apiClient.put.mock.calls[0][1].app_id).toBe(77);
+    expect(apiClient.put.mock.calls[0][1].app_id).toBe(HIDDEN_APP_ID);
   });
 
   it("an agent the caller cannot see (404) renders the not-found panel", async () => {
