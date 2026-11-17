@@ -581,14 +581,14 @@ func (a *API) deleteApp(c *gin.Context) {
 // @Tags apps
 // @Accept json
 // @Produce json
-// @Param userId path int true "User ID"
+// @Param user_id path int true "User ID"
 // @Success 200 {array} AppResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /users/{user_id}/apps [get]
 // @Security BearerAuth
 func (a *API) getAppsByUserID(c *gin.Context) {
-	userID, err := strconv.ParseUint(c.Param("user_id"), 10, 32)
+	userID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
@@ -629,7 +629,7 @@ func (a *API) getAppsByUserID(c *gin.Context) {
 // @Router /users/{user_id}/apps/count [get]
 // @Security BearerAuth
 func (a *API) countAppsByUserID(c *gin.Context) {
-	userID, err := strconv.ParseUint(c.Param("user_id"), 10, 32)
+	userID, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {

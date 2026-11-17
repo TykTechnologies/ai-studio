@@ -809,7 +809,7 @@ func (a *API) setupRoutes() error {
 	v1.InWorkspace().POST("/apps/:id/activate", authz.Publish("apps"), a.onObject(&models.App{}, authz.Publish("apps"), appNotFound), a.activateApp)
 	v1.InWorkspace().POST("/apps/:id/deactivate", authz.Publish("apps"), a.onObject(&models.App{}, authz.Publish("apps"), appNotFound), a.deactivateApp)
 	v1.InWorkspace().DELETE("/apps/:id", authz.Delete("apps"), a.onObject(&models.App{}, authz.Delete("apps"), appNotFound), a.deleteApp)
-	v1.InWorkspace().GET("/users/:id/apps", authz.Read("apps"), a.getAppsByUserID) // Note: Param is "id" here, not "userId" as in some other handlers
+	v1.InWorkspace().GET("/users/:id/apps", authz.Read("apps"), a.getAppsByUserID)
 	v1.InWorkspace().GET("/apps/by-name", authz.Read("apps"), a.getAppByName)
 	v1.InWorkspace().POST("/apps/:id/activate-credential", authz.Write("apps"), a.onObject(&models.App{}, authz.Write("apps"), appNotFound), a.activateAppCredential)
 	v1.InWorkspace().POST("/apps/:id/deactivate-credential", authz.Write("apps"), a.onObject(&models.App{}, authz.Write("apps"), appNotFound), a.deactivateAppCredential)
@@ -819,7 +819,7 @@ func (a *API) setupRoutes() error {
 	v1.InWorkspace().GET("/apps/count", authz.Read("apps"), a.countApps)
 	v1.InWorkspace().GET("/apps/:id/dependents", authz.Read("apps"), a.onObject(&models.App{}, authz.Read("apps"), appNotFound), a.getAppDependents)
 	v1.InWorkspace().HandleFn("POST", "/apps/bulk", bulkActionPermission("apps"), a.bulkApps)
-	v1.InWorkspace().GET("/users/:id/apps/count", authz.Read("apps"), a.countAppsByUserID) // Note: Param is "id" here
+	v1.InWorkspace().GET("/users/:id/apps/count", authz.Read("apps"), a.countAppsByUserID)
 
 	// App-Tool routes
 	v1.InWorkspace().POST("/apps/:id/tools/:tool_id", authz.Write("apps"), a.onObject(&models.App{}, authz.Write("apps"), appNotFound), a.addToolToApp)
