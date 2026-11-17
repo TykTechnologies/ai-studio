@@ -9,7 +9,9 @@ import { listWorkspaces } from '../../services/workspacesService';
  * the Workspaces where the caller holds `permission` (a write permission,
  * e.g. P.LLMS_WRITE). A global holder may pick any Workspace (listed from
  * the API); anyone else the Workspaces their scoped roles give them it in.
- * With one choice it is preselected and disabled. Community Edition
+ * With one choice it is preselected and disabled. `error` (a message, e.g.
+ * from workspaceFieldError) marks the field and replaces the helper text.
+ * Community Edition
  * (rbacEnabled false) has no Workspaces, so nothing is rendered.
  */
 const WorkspaceSelect = ({
@@ -18,6 +20,7 @@ const WorkspaceSelect = ({
   onChange,
   label = 'Workspace',
   helperText,
+  error = '',
   disabled = false,
   name = 'workspace_id',
 }) => {
@@ -58,7 +61,7 @@ const WorkspaceSelect = ({
 
   const labelId = `${name}-label`;
   return (
-    <FormControl fullWidth disabled={disabled || options.length <= 1}>
+    <FormControl fullWidth disabled={disabled || options.length <= 1} error={Boolean(error)}>
       <InputLabel id={labelId}>{label}</InputLabel>
       <Select
         labelId={labelId}
@@ -74,7 +77,7 @@ const WorkspaceSelect = ({
           </MenuItem>
         ))}
       </Select>
-      {helperText && <FormHelperText>{helperText}</FormHelperText>}
+      {(error || helperText) && <FormHelperText>{error || helperText}</FormHelperText>}
     </FormControl>
   );
 };

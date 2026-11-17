@@ -30,7 +30,7 @@ jest.mock("react-router-dom", () => ({
   useParams: () => mockParams,
 }));
 
-const WORKSPACE_LABEL = "Anthropic workspace ID";
+const WORKSPACE_LABEL = "Vendor workspace (Anthropic)";
 
 const renderForm = () =>
   render(
