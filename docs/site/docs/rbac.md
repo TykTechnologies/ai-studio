@@ -94,7 +94,7 @@ In Community Edition, or when the license does not include roles, the role manag
 
 ## Things to know
 
-- **API keys.** A user's API key has exactly the user's permissions, globally and within each Workspace. A key is shown in full only in the response that issues it (creating a service account, or rolling a key); every other response, for every caller, shows its last four characters.
+- **API keys.** A user's API key has exactly the user's permissions, globally and within each Workspace. A key is shown in full only in the response that issues it (creating a service account, or rolling a key); every other response, for every caller and for your own key too, shows at most its last four characters.
 - **`is_admin`.** The legacy flag is still reported and still accepted by the API: it now means "holds Owner or Administrator", and setting it adds or removes the Administrator role. Omitting it leaves roles alone.
 - **Identity provider settings** follow the `sso-profiles` permission. The old per-user "access to IdP configuration" switch is no longer used; administrators who lacked it gain that access through the Administrator role, and the server logs who they were at startup.
 - **Audit trail.** Role and assignment changes are recorded like any other change, with diffs. Requests refused for lack of permission are recorded too, including reads.

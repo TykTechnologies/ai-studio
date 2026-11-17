@@ -358,7 +358,7 @@ Returns what has changed in a namespace since its last push, as shown in the pus
 }
 ```
 
-With Workspaces (Enterprise), each change carries `workspace_id` and `workspace_name` (null for objects that belong to no Workspace), and the response adds `by_workspace` (`[{workspace_id, name, total}]`) and `unattributed_total`, counting every change, not just the first 200. Adding `&workspace_id=<id>` adds `outside_total` (how many changes come from outside that Workspace) and `stained` (whether there are any). The endpoint needs `edges:read` globally. For a caller who cannot see an App or router, that change is listed with `hidden: true` and no `id` or `name`; a Workspace's name is shown only to a caller who may see every Workspace or holds a role in that one. Counts are never reduced.
+With Workspaces (Enterprise), each change carries `workspace_id` and `workspace_name` (null for objects that belong to no Workspace), and the response adds `by_workspace` (`[{workspace_id, name, total}]`) and `unattributed_total`, counting every change, not just the first 200. Adding `&workspace_id=<id>` adds `outside_total` (how many changes come from outside that Workspace) and `stained` (whether there are any). The endpoint needs `edges:read` globally. A change to an object you cannot see (an App, agent, router or catalog outside your Workspaces) is listed with `hidden: true` and no `id` or `name`; a Workspace's name is shown only to a caller who holds `workspaces:read` or a read permission on Workspace objects globally, or a role in that Workspace. Counts are never reduced.
 
 `changes` is capped at 200 entries; `total` is the real count. `baseline` says what `since` was taken from: `push` (the recorded last push), `edge_ack` (no push was ever recorded, for example on a database upgraded from before pushes were stamped, or when the edges only got their configuration when they registered: the latest time an edge confirmed it was in sync is used, whether or not that edge is connected now, and the UI says "since the last sync") or `none` (no edge ever confirmed; every object is listed as created).
 
@@ -402,7 +402,7 @@ If any target namespace has a waiting change from outside Workspace 7, the push 
 }
 ```
 
-`changes` lists up to 20 of the foreign changes, newest first, redacted as for pending changes. What counts as foreign: an object of another Workspace, and any plugin or model price change. OAuth clients and access tokens never count. A moved object counts for its new Workspace. An unknown `only_workspace_id` answers `422 invalid_workspace`; a malformed body `400`. Without the body, pushes behave as before.
+`changes` lists up to 20 of the foreign changes, newest first, redacted as for pending changes. What counts as foreign: a change to another Workspace's object, and any change that belongs to no Workspace (plugins, model prices and other global objects; these are what `unattributed_total` counts). OAuth clients and access tokens never count. A moved object counts for its new Workspace, including objects moved to the Default when their Workspace is deleted. An unknown `only_workspace_id` answers `422 invalid_workspace`; a malformed body `400`. Without the body, pushes behave as before.
 
 Limits to know:
 
