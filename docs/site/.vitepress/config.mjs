@@ -74,6 +74,7 @@ export default defineConfig({
           { text: 'Observability', link: '/docs/observability' }, // Gateway metrics and tracing
           { text: 'Webhooks (Enterprise)', link: '/docs/webhooks' }, // Outbound event delivery
           { text: 'Roles and Permissions (Enterprise)', link: '/docs/rbac' }, // Fine-grained RBAC
+          { text: 'Workspaces (Enterprise)', link: '/docs/workspaces' }, // Scoped roles, service-account Operator recipe
           { text: 'Notifications', link: '/docs/notifications' }, // New
           { text: 'Edge Gateways (Enterprise)', link: '/docs/edge-gateways' }, // Enterprise hub-spoke management
           { text: 'Tyk Dashboard MCP Integration (Enterprise)', link: '/docs/tyk-mcp-integration' }, // MCP proxies as portal assets, keys, registration

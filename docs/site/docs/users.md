@@ -108,3 +108,19 @@ The form provides toggles to configure the user's role and access permissions:
 ---
 
 This form provides a streamlined way for administrators to add and configure new user accounts, ensuring flexibility in assigning roles and managing access permissions.
+
+---
+
+### Service accounts
+
+A **service account** is a user for automation, such as the [Tyk Operator](./workspaces#operator-recipe) or a CI pipeline. Use one instead of a person's account whenever a program calls the AI Studio API.
+
+- **API key only.** It cannot sign in with a password, through SSO or the host application, and has no password reset or email verification. Its email address is generated (`svc-…@service-account.invalid`) and never receives mail.
+- **No Portal, Chat or notifications**, and it belongs to no team: give it roles directly (globally, or within a [Workspace](./workspaces)). It cannot hold the Owner role.
+- **Takes an admin seat** while it is enabled (Enterprise; see [License and Quotas](./license)). Disable it to free the seat.
+
+**To create one:** **Users → Add user**, choose account type *Service account*, enter a name and its roles, and save. The API key is shown **once**, with a copy button: store it in your secret manager straight away. If it is lost, roll a new key on the user's page; the old key stops working at once.
+
+On the users list, service accounts carry a *Service account* badge, and the *Account type* filter shows people or service accounts only. Editing a service account shows its type read-only: a person cannot become a service account, or the reverse.
+
+Through the API, create one with `POST /api/v1/users` sending only `name`, `"account_type": "service"` and its access (`role_ids`, or `is_admin` in Community Edition). The response carries the API key, once. `GET /api/v1/users?account_type=service` lists service accounts (`user` lists people). Setting a password, email, Portal, Chat, notifications or teams on a service account is refused with `422 service_account`.
