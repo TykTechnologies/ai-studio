@@ -43,9 +43,20 @@ Open **Access → Roles** in the administration UI (you need the `roles:read` pe
 
 The Owner role can only be assigned to users (not teams) and only by another Owner.
 
+### Roles within a Workspace
+
+A role can also be assigned **within a [Workspace](./workspaces)**, to a user, a service account or a team, from the Workspace's **Access** tab. It then applies only to that Workspace's objects:
+
+- Only the role's permissions on Workspace objects count there (model providers, Apps, tools, data sources, routers, catalogues and the other kinds listed in [Workspaces](./workspaces#what-is-visible-across-workspaces)). Its permissions on global resources (users, teams, roles, plugins, webhooks, edges, analytics, settings) **do not apply inside a Workspace**: give those with a global role.
+- *Administrator* within a Workspace means everything inside that Workspace, not administration of the installation.
+- The Owner role cannot be assigned within a Workspace (`409 owner_scope_forbidden`).
+- Assigning roles within a Workspace needs `roles:write` globally.
+
+Roles assigned globally, like every assignment made before Workspaces existed, apply in every Workspace. A user's *Effective permissions* panel shows the global permissions and, separately, what each Workspace grants.
+
 ## Recipes
 
-- **Operator** who can push configuration to edge gateways and test filters but not change them: clone Viewer, add `edges:execute`, `filters:execute`, `tools:execute`.
+- **Operator** who can push configuration to edge gateways and test filters but not change them: clone Viewer, add `edges:execute`, `filters:execute`, `tools:execute`. For the Tyk Operator (automation managing its own objects), see the [Operator recipe](./workspaces#operator-recipe).
 - **Submission reviewer**: clone Viewer, add `submissions:write` and `submissions:execute`, remove everything outside Community if you prefer. To let reviewers publish approved tools or data sources into catalogues at approval time, also grant `tool-catalogues:write` and/or `data-catalogues:write`; without them they approve without assigning catalogues.
 - **LLM submitter / LLM reviewer**: a new role with `llms:read` and `llms:write` can create and edit providers but not set them active; add `llms:publish` for the reviewer who releases them. A role holding only `llms:publish` can activate and deactivate providers through the Activate action but cannot edit them. To make the reviewer record something (an "Approving reviewer", say), add a governance metadata field marked *Required to publish*: submitters can save without it, and activation is refused until it is filled.
 - **One plugin only**: every installed plugin with pages or resource types appears in the Plugins group of the matrix under its own name, with read (open its pages and configuration), write (call its actions, edit its configuration) and execute. Tick those instead of `Installed plugins: execute`, which unlocks every plugin at once. Grants on a plugin that is later uninstalled are kept on the role and listed as "Not installed" until it returns.
@@ -64,8 +75,9 @@ POST   /api/v1/rbac/roles                  {"name": "...", "description": "...",
 PATCH  /api/v1/rbac/roles/:id              omitted keys keep their values; "permissions": [] clears
 DELETE /api/v1/rbac/roles/:id
 POST   /api/v1/rbac/roles/:id/clone        {"name": "..."}
-GET    /api/v1/rbac/bindings?subject_type=user&subject_id=42
+GET    /api/v1/rbac/bindings?subject_type=user&subject_id=42   add scope_type=global|workspace (and scope_id) to filter
 POST   /api/v1/rbac/bindings               {"subject_type": "user"|"group", "subject_id": 42, "role_id": 3}
+                                            within a Workspace: add "scope_type": "workspace", "scope_id": "7"
 DELETE /api/v1/rbac/bindings/:id
 GET    /api/v1/rbac/users/:id/effective
 ```
@@ -78,11 +90,11 @@ A request your role does not allow returns `403` with `"code": "permission_denie
 {"errors":[{"title":"Forbidden","detail":"missing permission llms:write","code":"permission_denied","permission":"llms:write"}]}
 ```
 
-In Community Edition, or when the licence does not include roles, the role management endpoints return `402` with `"code": "enterprise_required"`.
+In Community Edition, or when the license does not include roles, the role management endpoints return `402` with `"code": "enterprise_required"`.
 
 ## Things to know
 
-- **API keys.** A user's API key has exactly the user's permissions. Another user's key is only shown to people who may manage users (`users:write`); everyone else sees the last four characters.
+- **API keys.** A user's API key has exactly the user's permissions, globally and within each Workspace. A key is shown in full only in the response that issues it (creating a service account, or rolling a key); every other response, for every caller, shows its last four characters.
 - **`is_admin`.** The legacy flag is still reported and still accepted by the API: it now means "holds Owner or Administrator", and setting it adds or removes the Administrator role. Omitting it leaves roles alone.
 - **Identity provider settings** follow the `sso-profiles` permission. The old per-user "access to IdP configuration" switch is no longer used; administrators who lacked it gain that access through the Administrator role, and the server logs who they were at startup.
 - **Audit trail.** Role and assignment changes are recorded like any other change, with diffs. Requests refused for lack of permission are recorded too, including reads.
