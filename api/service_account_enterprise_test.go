@@ -116,4 +116,8 @@ func TestUserAPI_ListFiltersByAccountType(t *testing.T) {
 	people := types("&account_type=user")
 	assert.Zero(t, people[models.AccountTypeService])
 	assert.Equal(t, all[models.AccountTypeUser], people[models.AccountTypeUser])
+	// Any other value is no filter: the list it answers is the one without
+	// the parameter, never more.
+	assert.Equal(t, all, types("&account_type=bogus"))
+	assert.Equal(t, all, types("&account_type='%20OR%201=1--"))
 }
