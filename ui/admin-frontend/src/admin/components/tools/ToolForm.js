@@ -279,7 +279,10 @@ const parseJSONObject = (text, label) => {
 };
 
 const ToolForm = () => {
-  const { can } = usePermissions();
+  const { can, canIn } = usePermissions();
+  // Whether the user set the live switch themselves on a new tool; until
+  // then it follows tools:publish in the chosen Workspace.
+  const activeTouched = useRef(false);
   const [tool, setTool] = useState({
     name: "",
     description: "",
@@ -933,7 +936,10 @@ const ToolForm = () => {
                 permission={P.TOOLS_PUBLISH}
                 workspaceId={tool.workspace_id ?? null}
                 checked={tool.active}
-                onChange={(e) => setTool((prev) => ({ ...prev, active: e.target.checked }))}
+                onChange={(e) => {
+                  activeTouched.current = true;
+                  setTool((prev) => ({ ...prev, active: e.target.checked }));
+                }}
                 name="active"
                 label="Active"
               />
@@ -1205,7 +1211,14 @@ const ToolForm = () => {
               permission={P.TOOLS_WRITE}
               value={tool.workspace_id}
               onChange={(ws) => {
-                setTool((prev) => ({ ...prev, workspace_id: ws }));
+                setTool((prev) => {
+                  if (id) return { ...prev, workspace_id: ws };
+                  // A new tool defaults to live where the user may publish,
+                  // and is never left live where they may not.
+                  const mayPublish = canIn ? canIn(ws, P.TOOLS_PUBLISH) : can(P.TOOLS_PUBLISH);
+                  const active = activeTouched.current ? prev.active && mayPublish : mayPublish;
+                  return { ...prev, workspace_id: ws, active };
+                });
                 setWorkspaceError("");
               }}
               disabled={Boolean(id) && !canMove}

@@ -134,6 +134,23 @@ describe("ToolForm Workspace select", () => {
     expect(sentAttributes("post").workspace_id).toBe(2);
   });
 
+  it("a new tool starts live where the user may publish, off where they may not", async () => {
+    renderForm(scopedW1);
+    await waitFor(() => expect(screen.getByTestId("workspace-select")).toHaveTextContent("W1"));
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: "Active" })).toBeChecked());
+    await fillRequired();
+    fireEvent.click(screen.getByRole("button", { name: "Add tool" }));
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith("/tools", expect.anything()));
+    expect(sentAttributes("post").active).toBe(true);
+  });
+
+  it("a new tool starts off in a Workspace without tools:publish", async () => {
+    renderForm(scopedTwo);
+    fireEvent.mouseDown(await screen.findByRole("combobox", { name: "Workspace" }));
+    fireEvent.click(await screen.findByRole("option", { name: "W2" }));
+    expect(screen.getByRole("checkbox", { name: "Active" })).not.toBeChecked();
+  });
+
   it("shows workspace_required on the Workspace field", async () => {
     apiClient.post.mockRejectedValue({
       response: { status: 422, data: { errors: [{ title: "Workspace required", detail: "name one", code: "workspace_required" }] } },
