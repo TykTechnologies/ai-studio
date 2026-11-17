@@ -56,6 +56,26 @@ describe('identityStore', () => {
     expect(identity.roles).toHaveLength(1);
   });
 
+  it('puts a user whose only roles are Workspace-scoped on the admin surface (.57)', () => {
+    const identity = buildIdentity(
+      me({
+        is_admin: false,
+        has_admin_access: false,
+        admin_nav_hint: true,
+        rbac_enabled: true,
+        permissions: [],
+        workspaces: [{ id: 4, name: 'W1', permissions: ['llms:write'] }],
+      })
+    );
+    expect(identity.hasAdminAccess).toBe(true);
+    expect(identity.hasGlobalAdminAccess).toBe(false);
+    expect(identity.isFullAdmin).toBe(false);
+    setIdentity(identity.raw);
+    expect(canAccessAdminNow()).toBe(true);
+    // No global permission is implied by the hint.
+    expect(hasPermissionNow('llms:write')).toBe(false);
+  });
+
   it('answers permission checks with implied read and wildcard semantics', () => {
     setIdentity(me({ is_admin: false, permissions: ['tools:write'] }));
     expect(hasPermissionNow('tools:write')).toBe(true);

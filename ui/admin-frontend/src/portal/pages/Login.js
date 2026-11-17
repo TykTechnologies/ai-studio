@@ -56,12 +56,14 @@ const Login = () => {
       if (loginResponse.data.message === "Login successful") {
         // Get user entitlements to determine where to redirect
         const userResponse = await pubClient.get("/common/me");
-        const { ui_options, is_admin, has_admin_access } = userResponse.data.attributes;
+        const { ui_options, is_admin, has_admin_access, admin_nav_hint } = userResponse.data.attributes;
 
         // Determine which dashboard to show based on permissions. Anyone
-        // holding an administrative role lands on the administration surface.
+        // holding an administrative role lands on the administration surface,
+        // including one whose only roles are scoped to a Workspace
+        // (admin_nav_hint; has_admin_access counts global roles only).
         let home = null;
-        if (is_admin || has_admin_access) {
+        if (is_admin || has_admin_access || admin_nav_hint) {
           home = "/admin";
         } else if (ui_options?.show_portal) {
           home = "/portal/dashboard";
