@@ -205,7 +205,9 @@ Configuration reaches edges by **push** (`POST /edges/:edge_id/reload`, `/namesp
 - OAuth clients and access tokens never stain (runtime artifacts with no owner).
 - An unknown type stains (fail closed).
 
-**Moves** bump `updated_at` and are attributed to their **destination**. So a move stains every Workspace-limited push except the destination's, and no record of the source is kept.
+**Moves** bump `updated_at` and are attributed to their **destination**. So a move stains every Workspace-limited push except the destination's, and no record of the source is kept. Deleting a Workspace moves its objects to the Default (§5), so those count as moves to the Default.
+
+**Namespaces:** objects in the global namespace ship to every namespace, so a pending change to one of them is pending in, and can stain, every namespace's push.
 
 **Redaction** (.44, `api/pending_changes_redaction.go`), for a Workspace-scoped caller:
 - The id and name of a change on a read-scoped type (Apps, routers) in a Workspace their read does not cover are left out (`hidden: true`); its type, kind, time and Workspace id remain.
