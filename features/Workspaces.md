@@ -14,7 +14,7 @@ Spec of record history: epic `midsommar-clean-oztk` (design field and notes). Th
 | Create, rename and delete Workspaces (`/api/v1/workspaces`) | ❌ (402) | ✅ |
 | Roles assigned within a Workspace (scoped bindings) | ❌ | ✅ |
 | Objects hidden or write-protected outside the caller's Workspaces | ❌ | ✅ |
-| Pending changes per Workspace, pushes limited to one Workspace | TODO (Slice C) | TODO (Slice C) |
+| Pending changes report each change's Workspace; pushes limited to one Workspace (409 `push_stained`) | ✅ (every change is in the Default) | ✅ |
 
 ---
 
@@ -190,7 +190,44 @@ Every `/api/v1` route on a Workspace resource is either Workspace-checked (`perm
 
 ## 7. Pending changes and stained pushes
 
-TODO (Slice C: .14, .15). Each pending change reports its Workspace; `GET /api/v1/sync/pending-changes?workspace_id=` adds `outside_total` and `stained`; pushes accept `{"only_workspace_id": W}` and answer 409 `push_stained`. Redaction (.44): for read-scoped types outside the caller's read, ids and names are left out; Workspace names show only where the caller has a binding or global `workspaces:read`; counts are always shown (the same in the `push_stained` body). Moves are attributed to their destination; plugin changes count as foreign; OAuth and access-token artifacts never do; an unflagged source counts as foreign (fail closed).
+Configuration reaches edges by **push** (`POST /edges/:edge_id/reload`, `/namespaces/:namespace/reload`, `/edges/reload-all`, global `edges:execute`). A push delivers a whole namespace: Workspaces do not split what an edge loads. What Slice C adds is visibility of whose changes a push carries, and a way for an automated caller (the Tyk Operator) to refuse a push that would carry someone else's.
+
+### Pending changes (C1, .14)
+
+`GET /api/v1/sync/pending-changes?namespace=` (global `edges:read`) lists what changed since the namespace's last push.
+- **Per change:** `workspace_id` and `workspace_name`, for stamped types (LLM, App, filter, tool, datasource, model and semantic router, embedder; a stored 0 reads as the Default). Plugins, model prices, OAuth clients and access tokens report none.
+- **Per response:** `by_workspace` (`{workspace_id, name, total}` over every pending change, not only the listed ones) and `unattributed_total`.
+- **With `?workspace_id=W`:** `outside_total` counts the changes foreign to W and `stained` says whether there are any, i.e. whether a push limited to W would carry changes from outside it.
+
+**Foreign** (`services.PendingChangeIsForeign`):
+- A change on a stamped type is foreign to W when another Workspace owns it.
+- Unstamped types (plugins, model prices) are foreign to every W, since they're global configuration.
+- OAuth clients and access tokens never stain (runtime artifacts with no owner).
+- An unknown type stains (fail closed).
+
+**Moves** bump `updated_at` and are attributed to their **destination**. So a move stains every Workspace-limited push except the destination's, and no record of the source is kept.
+
+**Redaction** (.44, `api/pending_changes_redaction.go`), for a Workspace-scoped caller:
+- The id and name of a change on a read-scoped type (Apps, routers) in a Workspace their read does not cover are left out (`hidden: true`); its type, kind, time and Workspace id remain.
+- Workspace names show only where the caller holds a binding, or for a caller whose access covers every Workspace (global `workspaces:read`, full admin, or a global read on a Workspace object type: `mayNameWorkspace`).
+- Read-global and unstamped types keep their names (D4).
+- Counts are always shown, an accepted exception (§10).
+
+The push dialog (E6) shows each change's Workspace and the per-Workspace summary.
+
+### Push precondition (C2, .15)
+
+The three push routes take an optional body `{"only_workspace_id": W}`.
+- **A malformed body** answers 400. **A Workspace that does not exist** answers 422 `invalid_workspace`.
+- **The check:** once the targets are resolved and before anything is recorded, the push is refused if any target namespace has a change pending from outside W. The answer is 409 `push_stained`, carrying:
+  - `workspace_id`, `outside_total`, `by_workspace` (W excluded) and `unattributed_total`;
+  - up to 20 foreign changes, newest first, each with its namespace, redacted as in the preview.
+- **A refused push records nothing:** no operation, command or `last_push_at`.
+- **Without the body** a push behaves as before.
+
+Studio only refuses when asked. The Operator decides what to do with a stained push (wait, or push anyway without the precondition). The check runs on the replica that accepts the request. A change that lands after it still ships with the snapshot the edges pull, and a push still delivers the whole namespace. See `features/ClusterControlPlane.md` (push model).
+
+**Operator recipe:** a service account with a global role holding `edges:read` and `edges:execute`, plus a Workspace-scoped role on its own Workspace. It reads `pending-changes?workspace_id=W` and pushes with `only_workspace_id: W`, so it never ships another team's half-finished change.
 
 ---
 
@@ -235,4 +272,8 @@ An internal comparison with interop notes is kept by the security role for the O
 - `enterprise/features/workspaces/service_test.go` — CRUD, delete (moves, `updated_at`), counts, and the Postgres delete-vs-binding race.
 - `enterprise/_coretests/api/workspace_api_entlink_test.go` — the API, visibility, per-Workspace access, audit; Community: `api/workspace_handlers_community_test.go` (402).
 - B4 per-resource (Enterprise, real middleware chain): `api/workspace_b4_enterprise_test.go`, `api/llm_workspace_test.go` (.7: write-scoped building blocks, secrets, clone), `api/workspace_b4b_enterprise_test.go` (.8: file stores, MCP servers), `api/workspace_b4c_enterprise_test.go` (.9: Apps and credentials), and in `enterprise/_coretests/api/`: `workspace_agents_entlink_test.go` (.10), `workspace_routers_entlink_test.go` (.11), `workspace_catalogues_entlink_test.go` (.12), `workspace_crosscutting_entlink_test.go` (.13: bulk, dependents, metadata objects, submission approval, hidden/missing parity).
-- TODO: the Slice C tests.
+- Slice C:
+  - `services/pending_changes_workspace_test.go`: attribution, the stain rule, moves, the totals.
+  - `api/sync_pending_changes_test.go`, `api/pending_changes_redaction_test.go` and `api/pending_changes_redaction_enterprise_test.go`: `?workspace_id=`, redaction, Workspace names.
+  - `api/push_precondition_enterprise_test.go` and `services/pushes/pushes_test.go`: 409 `push_stained`, its body, nothing recorded, 400/422.
+  - UI: `components/edge-gateways/PendingChangesWorkspaces.test.js`.
