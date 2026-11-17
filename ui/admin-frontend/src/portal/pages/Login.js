@@ -12,6 +12,7 @@ import {
   FormLink,
   FormText
 } from "../styles/authStyles";
+import { buildIdentity } from "../../admin/utils/identityStore";
 
 const Login = () => {
   const theme = useTheme();
@@ -56,14 +57,14 @@ const Login = () => {
       if (loginResponse.data.message === "Login successful") {
         // Get user entitlements to determine where to redirect
         const userResponse = await pubClient.get("/common/me");
-        const { ui_options, is_admin, has_admin_access, admin_nav_hint } = userResponse.data.attributes;
+        const { ui_options } = userResponse.data.attributes || {};
+        // The identity store decides who has an admin surface (the same rule
+        // as the /admin route gate): anyone holding an administrative role,
+        // including one whose only roles are scoped to a Workspace (.57).
+        const identity = buildIdentity(userResponse.data);
 
-        // Determine which dashboard to show based on permissions. Anyone
-        // holding an administrative role lands on the administration surface,
-        // including one whose only roles are scoped to a Workspace
-        // (admin_nav_hint; has_admin_access counts global roles only).
         let home = null;
-        if (is_admin || has_admin_access || admin_nav_hint) {
+        if (identity?.isFullAdmin || identity?.hasAdminAccess) {
           home = "/admin";
         } else if (ui_options?.show_portal) {
           home = "/portal/dashboard";
