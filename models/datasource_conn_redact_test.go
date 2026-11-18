@@ -20,6 +20,11 @@ func TestRedactConnString(t *testing.T) {
 		{"host=db password='s 3cret' dbname=v", "host=db password=[redacted] dbname=v"},
 		{"Server=db;Pwd=s3cret;Database=v", "Server=db;Pwd=[redacted];Database=v"},
 		{"postgres://user:p%zz@db/x", CredentialRedacted},
+		{"jdbc:sqlserver://db:1433;user=app;password=s3cret;database=v", "jdbc:sqlserver://db:1433;user=app;password=[redacted];database=v"},
+		{"host=db password=s3cret other=foo://bar", "host=db password=[redacted] other=foo://bar"},
+		{"endpoint=https://vec.example api_key=s3cret", "endpoint=https://vec.example api_key=[redacted]"},
+		{"https://vec.example/v1;token=s3cret", "https://vec.example/v1;token=[redacted]"},
+		{"Server=db;Token=s3cret;SSLKey=/etc/k.pem", "Server=db;Token=[redacted];SSLKey=/etc/k.pem"},
 	} {
 		got := RedactConnString(tc.in)
 		assert.Equal(t, tc.want, got, tc.in)
