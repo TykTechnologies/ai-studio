@@ -302,10 +302,27 @@ func TestWorkspaceB4_DatasourceConnStringRedacted(t *testing.T) {
 	assert.Equal(t, http.StatusUnprocessableEntity, w.Code, w.Body.String())
 	assert.Equal(t, conn, stored())
 
+	// A clone's response is redacted too.
+	w = f.do("POST", path+"/clone", nil, f.owner)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	assert.NotContains(t, w.Body.String(), "s3cretPW")
+	assert.NotContains(t, w.Body.String(), "k3yval")
+
 	// A new value is taken.
 	require.Equal(t, http.StatusOK,
 		f.do("PATCH", path, body(map[string]any{"db_conn_string": "https://vec.example/idx"}), f.owner).Code)
 	assert.Equal(t, "https://vec.example/idx", stored())
+
+	// A $SECRET/ reference is shown as it is, and an unchanged PATCH keeps it.
+	require.NoError(t, secrets.CreateSecret(f.api.service.DB, &secrets.Secret{VarName: "W2DSCONN", Value: "postgres://u:p@h/db", WorkspaceID: f.w2}))
+	require.Equal(t, http.StatusOK,
+		f.do("PATCH", path, body(map[string]any{"db_conn_string": "$SECRET/W2DSCONN"}), f.owner).Code)
+	w = f.do("GET", path, nil, f.inW1)
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+	assert.Equal(t, "$SECRET/W2DSCONN", got.Data.Attributes.DBConnString)
+	require.Equal(t, http.StatusOK,
+		f.do("PATCH", path, body(map[string]any{"db_conn_string": got.Data.Attributes.DBConnString, "short_description": "again"}), f.owner).Code)
+	assert.Equal(t, "$SECRET/W2DSCONN", stored())
 }
 
 func TestWorkspaceB4_Datasources(t *testing.T) {
