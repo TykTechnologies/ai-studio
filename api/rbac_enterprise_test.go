@@ -446,12 +446,20 @@ func TestRBAC_UsersListMasksAPIKeysForNonManagers(t *testing.T) {
 		}
 	}
 
-	// Rolling a key returns the new one, once.
-	w = f.do("POST", fmt.Sprintf("/api/v1/users/%d/roll-api-key", saID), nil, f.owner)
-	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	var rolled struct{ Data UserResponse }
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &rolled))
-	assert.NotEmpty(t, rolled.Data.Attributes.APIKey)
+	// Rolling a key returns the new one, once (#1041); reading the user back
+	// shows only its hint.
+	for _, id := range []uint{saID, f.viewer.ID} {
+		w = f.do("POST", fmt.Sprintf("/api/v1/users/%d/roll-api-key", id), nil, f.owner)
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		var rolled struct{ Data UserResponse }
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &rolled))
+		key := rolled.Data.Attributes.APIKey
+		require.NotEmpty(t, key, "the roll response carries the new key")
+		w = f.do("GET", fmt.Sprintf("/api/v1/users/%d", id), nil, f.owner)
+		require.Equal(t, http.StatusOK, w.Code)
+		assert.NotContains(t, w.Body.String(), key)
+		assert.Contains(t, w.Body.String(), key[len(key)-4:])
+	}
 }
 
 func TestRBAC_MeCarriesPermissionsAndRoles(t *testing.T) {
