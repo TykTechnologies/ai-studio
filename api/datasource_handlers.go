@@ -256,6 +256,21 @@ func (a *API) updateDatasource(c *gin.Context) {
 		})
 		return
 	}
+	// Responses show the connection string with its password redacted
+	// (.58); sending that form back keeps the stored value. A changed value
+	// that still carries the marker is refused, so the stored password never
+	// follows a new host or user.
+	connString, ok := models.RestoreConnString(input.Data.Attributes.DBConnString, existingDS.DBConnString)
+	if !ok {
+		c.JSON(http.StatusUnprocessableEntity, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Unprocessable Entity", Detail: "db_conn_string still contains a redacted password: enter the password again, or send the connection string unchanged"}},
+		})
+		return
+	}
+	input.Data.Attributes.DBConnString = connString
 
 	// Write in the datasource's Workspace; a changed workspace_id is a move.
 	requested, ok := requestedWorkspaceID(c, rawBody)
@@ -816,6 +831,8 @@ func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
 		datasource = &models.Datasource{}
 	}
 	embed := datasource.FlattenedEmbed()
+	// Datasources are read-global (D4): credentials are redacted, the
+	// password in the connection string included (.58).
 	return DatasourceResponse{
 		Type: "datasources",
 		ID:   strconv.FormatUint(uint64(datasource.ID), 10),
@@ -860,7 +877,7 @@ func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
 			PrivacyScore:     datasource.PrivacyScore,
 			UserID:           datasource.UserID,
 			Tags:             serializeTags(datasource.Tags),
-			DBConnString:     datasource.DBConnString,
+			DBConnString:     models.RedactConnString(datasource.DBConnString),
 			DBSourceType:     datasource.DBSourceType,
 			DBConnAPIKey:     services.REDACTED_VALUE,
 			HasDBConnAPIKey:  datasource.DBConnAPIKey != "",

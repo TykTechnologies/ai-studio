@@ -261,6 +261,70 @@ func dsAttrs(name string, extra map[string]any) map[string]any {
 	return a
 }
 
+// Datasources are read-global (D4), so reads carry no credentials: a
+// password in the connection string reaches a reader in another Workspace
+// redacted, and sending the redacted form back keeps it (.58).
+func TestWorkspaceB4_DatasourceConnStringRedacted(t *testing.T) {
+	f := setupWSB4(t)
+	const conn = "https://svc:s3cretPW@vec.example/idx?api_key=k3yval&region=eu"
+	theirs, _ := f.created(t, f.do("POST", "/api/v1/datasources",
+		body(dsAttrs("Theirs", map[string]any{"workspace_id": f.w2, "db_conn_string": conn})), f.owner))
+	stored := func() string {
+		var ds models.Datasource
+		require.NoError(t, f.api.service.DB.First(&ds, theirs).Error)
+		return ds.DBConnString
+	}
+	require.Equal(t, conn, stored())
+
+	path := fmt.Sprintf("/api/v1/datasources/%d", theirs)
+	for _, q := range []string{path, "/api/v1/datasources?all=true", "/api/v1/datasources/search?query=Theirs"} {
+		w := f.do("GET", q, nil, f.inW1)
+		require.Equal(t, http.StatusOK, w.Code, q)
+		assert.Contains(t, w.Body.String(), "Theirs", q)
+		assert.NotContains(t, w.Body.String(), "s3cretPW", q)
+		assert.NotContains(t, w.Body.String(), "k3yval", q)
+	}
+	w := f.do("GET", path, nil, f.inW1)
+	var got struct {
+		Data DatasourceResponse `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+	shown := got.Data.Attributes.DBConnString
+	assert.Equal(t, "https://svc:[redacted]@vec.example/idx?api_key=[redacted]&region=eu", shown)
+
+	// The redacted form sent back means unchanged.
+	require.Equal(t, http.StatusOK,
+		f.do("PATCH", path, body(map[string]any{"db_conn_string": shown, "short_description": "edited"}), f.owner).Code)
+	assert.Equal(t, conn, stored())
+
+	// The stored password never follows a changed host.
+	w = f.do("PATCH", path, body(map[string]any{"db_conn_string": "https://svc:[redacted]@evil.example/idx"}), f.owner)
+	assert.Equal(t, http.StatusUnprocessableEntity, w.Code, w.Body.String())
+	assert.Equal(t, conn, stored())
+
+	// A clone's response is redacted too.
+	w = f.do("POST", path+"/clone", nil, f.owner)
+	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())
+	assert.NotContains(t, w.Body.String(), "s3cretPW")
+	assert.NotContains(t, w.Body.String(), "k3yval")
+
+	// A new value is taken.
+	require.Equal(t, http.StatusOK,
+		f.do("PATCH", path, body(map[string]any{"db_conn_string": "https://vec.example/idx"}), f.owner).Code)
+	assert.Equal(t, "https://vec.example/idx", stored())
+
+	// A $SECRET/ reference is shown as it is, and an unchanged PATCH keeps it.
+	require.NoError(t, secrets.CreateSecret(f.api.service.DB, &secrets.Secret{VarName: "W2DSCONN", Value: "postgres://u:p@h/db", WorkspaceID: f.w2}))
+	require.Equal(t, http.StatusOK,
+		f.do("PATCH", path, body(map[string]any{"db_conn_string": "$SECRET/W2DSCONN"}), f.owner).Code)
+	w = f.do("GET", path, nil, f.inW1)
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+	assert.Equal(t, "$SECRET/W2DSCONN", got.Data.Attributes.DBConnString)
+	require.Equal(t, http.StatusOK,
+		f.do("PATCH", path, body(map[string]any{"db_conn_string": got.Data.Attributes.DBConnString, "short_description": "again"}), f.owner).Code)
+	assert.Equal(t, "$SECRET/W2DSCONN", stored())
+}
+
 func TestWorkspaceB4_Datasources(t *testing.T) {
 	f := setupWSB4(t)
 
