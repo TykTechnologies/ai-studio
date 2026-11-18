@@ -20,8 +20,7 @@ import (
 // denial recording behave exactly as for a route-level denial.
 //
 // TestMode and requests without an authorization context (legacy callers,
-// handler tests) are allowed through, mirroring requireRoutePermission and
-// revealAPIKeys.
+// handler tests) are allowed through, mirroring requireRoutePermission.
 
 // canPublish reports whether the caller may flip the live switch of resource.
 func (a *API) canPublish(c *gin.Context, resource string) bool {

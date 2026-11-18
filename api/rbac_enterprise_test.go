@@ -396,35 +396,51 @@ func TestRBAC_PublishGateOnMetadata(t *testing.T) {
 func TestRBAC_UsersListMasksAPIKeysForNonManagers(t *testing.T) {
 	f := setupRBACFixture(t)
 
+	// No caller -- not an Owner, not users:write, not the user itself --
+	// reads a key back from the users list or a user's GET: every payload
+	// shows the last four characters only. The full key is in the response
+	// that issues it (a roll), once.
 	type users struct{ Data []UserResponse }
-	w := f.do("GET", "/api/v1/users", nil, f.editor)
-	require.Equal(t, http.StatusOK, w.Code)
-	var forEditor users
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &forEditor))
-	for _, u := range forEditor.Data {
-		if uintFromString(t, u.ID) == f.editor.ID {
-			assert.NotEmpty(t, u.Attributes.APIKey, "your own key is visible")
-			continue
+	for _, as := range []*models.User{f.editor, f.owner} {
+		w := f.do("GET", "/api/v1/users", nil, as)
+		require.Equal(t, http.StatusOK, w.Code)
+		var list users
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &list))
+		for _, u := range list.Data {
+			assert.Empty(t, u.Attributes.APIKey, "%s (as %s): no key in a user payload", u.Attributes.Email, as.Email)
+			assert.True(t, u.Attributes.HasAPIKey)
+			assert.Len(t, u.Attributes.APIKeyHint, 4)
+			if as == f.owner {
+				switch uintFromString(t, u.ID) {
+				case f.viewer.ID:
+					require.Len(t, u.Attributes.Roles, 1)
+					assert.Equal(t, models.SystemRoleViewer, u.Attributes.Roles[0].Slug)
+				case f.owner.ID:
+					assert.Len(t, u.Attributes.Roles, 2, "owner holds Owner and Administrator")
+				}
+			}
 		}
-		assert.Empty(t, u.Attributes.APIKey, "%s: keys are masked without users:write", u.Attributes.Email)
-		assert.True(t, u.Attributes.HasAPIKey)
-		assert.Len(t, u.Attributes.APIKeyHint, 4)
+		for _, id := range []uint{f.owner.ID, f.viewer.ID} {
+			w := f.do("GET", fmt.Sprintf("/api/v1/users/%d", id), nil, as)
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			var one struct{ Data UserResponse }
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &one))
+			assert.Empty(t, one.Data.Attributes.APIKey)
+			assert.Len(t, one.Data.Attributes.APIKeyHint, 4)
+		}
 	}
 
-	w = f.do("GET", "/api/v1/users", nil, f.owner)
+	// A roll answers the new key, once; reading the user back shows its hint.
+	w := f.do("POST", fmt.Sprintf("/api/v1/users/%d/roll-api-key", f.viewer.ID), nil, f.owner)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var rolled struct{ Data UserResponse }
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &rolled))
+	key := rolled.Data.Attributes.APIKey
+	require.NotEmpty(t, key, "the roll response carries the new key")
+	w = f.do("GET", fmt.Sprintf("/api/v1/users/%d", f.viewer.ID), nil, f.owner)
 	require.Equal(t, http.StatusOK, w.Code)
-	var forOwner users
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &forOwner))
-	for _, u := range forOwner.Data {
-		assert.NotEmpty(t, u.Attributes.APIKey, "owners see every key")
-		switch uintFromString(t, u.ID) {
-		case f.viewer.ID:
-			require.Len(t, u.Attributes.Roles, 1)
-			assert.Equal(t, models.SystemRoleViewer, u.Attributes.Roles[0].Slug)
-		case f.owner.ID:
-			assert.Len(t, u.Attributes.Roles, 2, "owner holds Owner and Administrator")
-		}
-	}
+	assert.NotContains(t, w.Body.String(), key)
+	assert.Contains(t, w.Body.String(), key[len(key)-4:])
 }
 
 func TestRBAC_MeCarriesPermissionsAndRoles(t *testing.T) {
