@@ -32,12 +32,27 @@ const (
 	eventSystem      = "system"
 )
 
+// ChatMessage is the session event a chat stream opens with. Tools and
+// datasources are summaries (id, name, description): never the models,
+// which carry credentials (a tool's auth key, a datasource's connection
+// string and resolved vector store key).
 type ChatMessage struct {
-	Type        string               `json:"type"`
-	Payload     string               `json:"payload"`
-	FileRefs    []string             `json:"file_refs"`
-	Tools       []models.Tool        `json:"tools,omitempty"`
-	Datasources []*models.Datasource `json:"datasources,omitempty"`
+	Type        string            `json:"type"`
+	Payload     string            `json:"payload"`
+	FileRefs    []string          `json:"file_refs"`
+	Tools       []V2ToolSummary   `json:"tools,omitempty"`
+	Datasources []V2SourceSummary `json:"datasources,omitempty"`
+}
+
+// sessionEventMessage builds the session event for a chat session's
+// current tools and datasources.
+func sessionEventMessage(sessionID string, tools map[string]models.Tool, datasources []*models.Datasource) ChatMessage {
+	return ChatMessage{
+		Type:        eventSession,
+		Payload:     sessionID,
+		Tools:       chatToolSummaries(tools),
+		Datasources: chatSourceSummaries(datasources),
+	}
 }
 
 var (
@@ -210,17 +225,8 @@ func (a *API) HandleChatSSE(c *gin.Context) {
 	// the idle TTL afterwards, so a reconnect continues the same session.
 	defer release()
 
-	// Send session ID with current tools and datasources
-	tools := make([]models.Tool, 0)
-	for _, tool := range chatSession.CurrentTools() {
-		tools = append(tools, tool)
-	}
-	msg := ChatMessage{
-		Type:        eventSession,
-		Payload:     chatSession.ID(),
-		Tools:       tools,
-		Datasources: chatSession.GetCurrentDatasources(),
-	}
+	// Send session ID with current tools and datasources (summaries only).
+	msg := sessionEventMessage(chatSession.ID(), chatSession.CurrentTools(), chatSession.GetCurrentDatasources())
 
 	msgBytes, err := json.Marshal(msg)
 	if err != nil {
