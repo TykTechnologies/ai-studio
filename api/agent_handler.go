@@ -121,8 +121,16 @@ func (a *API) requireAgentInWorkspace(c *gin.Context, ag *models.AgentConfig, pe
 // Workspace, and the embedded plugin's own configuration the same rule as
 // everywhere else (mayReadPluginConfig). Readers get the metadata. The
 // embedded App needs read in the App's Workspace (.55).
+//
+// On the portal (/common) the caller is a chat user, not an administrator:
+// the response names the agent and nothing it is built from. The agent's
+// configuration, its plugin and its App are left out (their ids kept), as
+// they can carry credentials (tgoe).
 func (a *API) redactAgent(c *gin.Context, ag *models.AgentConfig) {
 	if !onAdminAPI(c) {
+		ag.Config = nil
+		ag.Plugin = nil
+		ag.App = nil
 		return
 	}
 	if !a.holdsIn(c, ag.WorkspaceID, authz.Write("agents")) {
