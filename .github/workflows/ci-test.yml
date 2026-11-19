@@ -64,6 +64,9 @@ jobs:
   #   ubuntu-latest     (x64; 2 vCPU/8 GB private repos, 4 vCPU/16 GB public)
   # https://docs.github.com/en/actions/reference/runners/github-hosted-runners
   # Restore the WarpBuild label once it is available again.
+  # Each runs-on falls back to that WarpBuild label when the variable is empty:
+  # pull requests from forks appear to get no repository variables, and a job
+  # with an empty runs-on fails before it starts.
 
   # ==========================================================================
   # Dependency Guard: a pull request that changes a dependency manifest
@@ -154,7 +157,7 @@ jobs:
   # ==========================================================================
   golangci-lint:
     if: false
-    runs-on: ${{ vars.REPO_DEFAULT_RUNNER_4X_ARM64 }}
+    runs-on: ${{ vars.REPO_DEFAULT_RUNNER_4X_ARM64 || 'warp-ubuntu-latest-arm64-4x' }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -191,7 +194,7 @@ jobs:
     # Runs when dep-guard passed or was skipped (outside pull requests).
     if: ${{ !cancelled() && !failure() && needs.changes.outputs.frontend == 'true' }}
     name: Frontend Tests
-    runs-on: ${{ vars.REPO_DEFAULT_RUNNER_8X_ARM64 }}
+    runs-on: ${{ vars.REPO_DEFAULT_RUNNER_8X_ARM64 || 'warp-ubuntu-latest-arm64-8x' }}
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -217,7 +220,7 @@ jobs:
     needs: [dep-guard, changes]
     if: ${{ !cancelled() && !failure() && needs.changes.outputs.frontend == 'true' }}
     name: Frontend Build
-    runs-on: ${{ vars.REPO_DEFAULT_RUNNER_2X_ARM64 }}
+    runs-on: ${{ vars.REPO_DEFAULT_RUNNER_2X_ARM64 || 'warp-ubuntu-latest-arm64-2x' }}
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -264,7 +267,7 @@ jobs:
     needs: [dep-guard, changes]
     if: ${{ !cancelled() && !failure() && needs.changes.outputs.go == 'true' }}
     name: Go Unit Tests (${{ matrix.edition }})
-    runs-on: ${{ vars.REPO_DEFAULT_RUNNER_4X_ARM64 }}
+    runs-on: ${{ vars.REPO_DEFAULT_RUNNER_4X_ARM64 || 'warp-ubuntu-latest-arm64-4x' }}
     timeout-minutes: 40
     strategy:
       fail-fast: false
@@ -502,7 +505,7 @@ jobs:
     needs: [dep-guard, changes]
     if: ${{ !cancelled() && !failure() && needs.changes.outputs.go == 'true' }}
     name: Go Postgres Tests
-    runs-on: ${{ vars.REPO_DEFAULT_RUNNER_4X_ARM64 }}
+    runs-on: ${{ vars.REPO_DEFAULT_RUNNER_4X_ARM64 || 'warp-ubuntu-latest-arm64-4x' }}
     timeout-minutes: 40
     services:
       postgres:
@@ -622,7 +625,7 @@ jobs:
     needs: [dep-guard, changes]
     if: ${{ !cancelled() && !failure() && needs.changes.outputs.go == 'true' }}
     name: Agent Tracing Perf Gate
-    runs-on: ${{ vars.REPO_DEFAULT_RUNNER_4X_ARM64 }}
+    runs-on: ${{ vars.REPO_DEFAULT_RUNNER_4X_ARM64 || 'warp-ubuntu-latest-arm64-4x' }}
     timeout-minutes: 20
     services:
       postgres:
@@ -689,7 +692,7 @@ jobs:
     needs: [dep-guard, changes]
     if: ${{ !cancelled() && !failure() && needs.changes.outputs.go == 'true' }}
     name: gorm Copy Verification
-    runs-on: ${{ vars.REPO_DEFAULT_RUNNER_2X_ARM64 }}
+    runs-on: ${{ vars.REPO_DEFAULT_RUNNER_2X_ARM64 || 'warp-ubuntu-latest-arm64-2x' }}
     timeout-minutes: 15
     steps:
       # The enterprise module is part of the import check. Fork pull requests
@@ -776,7 +779,7 @@ jobs:
     needs: [dep-guard]
     if: ${{ !cancelled() && !failure() }}
     name: Documentation Build
-    runs-on: ${{ vars.REPO_DEFAULT_RUNNER_2X_ARM64 }}
+    runs-on: ${{ vars.REPO_DEFAULT_RUNNER_2X_ARM64 || 'warp-ubuntu-latest-arm64-2x' }}
     timeout-minutes: 15
     steps:
       - name: Checkout
