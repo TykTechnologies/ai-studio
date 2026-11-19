@@ -1,0 +1,40 @@
+{{- if .Values.metrics.serviceMonitor.enabled }}
+{{- /* AI Studio registers /metrics only when METRICS_AUTH_TOKEN is set or
+       METRICS_ALLOW_UNAUTHENTICATED is true, so a ServiceMonitor alone is not
+       enough: without one of them the path answers with the web UI page. Fail
+       the render rather than ship a monitor with nothing to scrape. */}}
+{{- if eq (toString .Values.metrics.enabled) "false" }}
+{{- fail "metrics.serviceMonitor.enabled needs metrics.enabled=true: AI Studio serves no /metrics with metrics off" }}
+{{- end }}
+{{- if not (or (eq (toString .Values.metrics.allowUnauthenticated) "true") .Values.metrics.bearerTokenSecret.name) }}
+{{- fail "metrics.serviceMonitor.enabled requires either metrics.bearerTokenSecret.{name,key} or metrics.allowUnauthenticated=true; AI Studio does not register /metrics otherwise" }}
+{{- end }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "midsommar.fullname" . }}
+  labels:
+    {{- include "midsommar.labels" . | nindent 4 }}
+    {{- with .Values.metrics.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "midsommar.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: studio
+  endpoints:
+    - port: http
+      path: {{ default "/metrics" .Values.metrics.path }}
+      interval: {{ .Values.metrics.serviceMonitor.interval }}
+      {{- with .Values.metrics.serviceMonitor.scrapeTimeout }}
+      scrapeTimeout: {{ . }}
+      {{- end }}
+      {{- if .Values.metrics.bearerTokenSecret.name }}
+      authorization:
+        type: Bearer
+        credentials:
+          name: {{ .Values.metrics.bearerTokenSecret.name }}
+          key: {{ default "token" .Values.metrics.bearerTokenSecret.key }}
+      {{- end }}
+{{- end }}

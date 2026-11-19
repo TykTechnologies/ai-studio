@@ -285,12 +285,26 @@ securityContext:
   runAsNonRoot: true
   runAsUser: 1000
 
-# Prometheus metrics
+# Prometheus metrics, served on AI Studio's http port (8080).
 metrics:
   enabled: true
+  path: /metrics
+  # AI Studio does not register /metrics at all unless one of these is set.
+  # bearerTokenSecret names an existing Secret that holds the token: the pod
+  # reads it as METRICS_AUTH_TOKEN and the ServiceMonitor sends it.
+  # allowUnauthenticated serves /metrics to anyone who can reach the http
+  # port, which is the port the Ingress routes to: use it only where that
+  # port is not exposed, or the Ingress does not route the metrics path.
+  allowUnauthenticated: false
+  bearerTokenSecret:
+    name: ""
+    key: token
+  # Needs the Prometheus Operator CRDs. Scrapes the Service port named http.
   serviceMonitor:
     enabled: false
     interval: 30s
+    scrapeTimeout: ""
+    labels: {}
 
 # How an AI Studio pod stops. On SIGTERM Studio stops accepting connections
 # and lets the requests in flight finish, for up to 30 seconds. Kubernetes

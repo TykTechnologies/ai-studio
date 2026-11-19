@@ -635,6 +635,22 @@ The `/metrics` endpoint is secure by default and is not served at all unless
 the render rather than deploying a ServiceMonitor that would scrape nothing. For
 the full metric reference and example queries, see [Observability](./observability.md).
 
+AI Studio itself has the same top-level values:
+
+```yaml
+metrics:
+  bearerTokenSecret:
+    name: studio-metrics   # an existing Secret; key "token" by default
+  serviceMonitor:
+    enabled: true
+    interval: 30s
+```
+
+The pod reads the Secret as `METRICS_AUTH_TOKEN` and the ServiceMonitor sends the
+same token. AI Studio serves `/metrics` on its http port, the one the Ingress
+routes to, so prefer the token: `metrics.allowUnauthenticated: true` serves the
+metrics to anyone who can reach that port.
+
 ### Database Options
 
 **Internal PostgreSQL** (testing/small deployments):

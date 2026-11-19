@@ -31,6 +31,10 @@ This Helm chart deploys Midsommar along with its optional components. It support
 | `shutdown.preStopDelaySeconds` | Seconds an AI Studio pod keeps serving after Kubernetes starts removing it from the Service, before it gets SIGTERM, so requests routed to it meanwhile are answered (`0`: none). Rendered on Kubernetes 1.30 and later (the `sleep` action); on an older cluster no hook is rendered and the install notes say so | `10` |
 | `shutdown.terminationGracePeriodSeconds` | Pod grace period. Empty: the delay plus Studio's 30-second drain plus 5 s; a smaller value fails the render | `""` (45) |
 | `probes.readiness.requireWrite` | Probe `/ready?require=write` instead of `/ready` | `false` |
+| `metrics.enabled`, `metrics.path` | `METRICS_ENABLED` and `METRICS_PATH`. AI Studio serves `/metrics` on its http port only when one of the next two is set | `true`, `/metrics` |
+| `metrics.bearerTokenSecret.name` / `.key` | An existing Secret holding the metrics bearer token: the pod reads it as `METRICS_AUTH_TOKEN` and the ServiceMonitor sends it | `""` / `token` |
+| `metrics.allowUnauthenticated` | `METRICS_ALLOW_UNAUTHENTICATED`: serve `/metrics` without a token. The http port is the one the Ingress routes to, so use it only where that port is not exposed | `false` |
+| `metrics.serviceMonitor.enabled`, `.interval`, `.scrapeTimeout`, `.labels` | A Prometheus Operator ServiceMonitor for AI Studio. The render fails without a token Secret or `metrics.allowUnauthenticated` | `false`, `30s`, `""`, `{}` |
 | `config.allowRegistrations` | Enable user registrations | `"true"` |
 | `config.adminEmail` | Admin email address | `"you@tyk.io"` |
 | `config.siteUrl` | Site URL | `"http://localhost:3000"` |
