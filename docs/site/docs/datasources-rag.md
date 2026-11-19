@@ -149,6 +149,7 @@ Administrators configure Data Sources via the UI or API:
     *   Select the database type (e.g., `pinecone`).
     *   Provide connection details (e.g., endpoint/connection string, namespace/index name).
     *   Reference a [Secret](./secrets.md) containing the API key/credentials.
+    *   Credentials are never shown again once saved. The API key reads `[redacted]`, and so does a password written into the connection string (for example `postgres://user:[redacted]@host/db`). Saving without changing them keeps the stored values. If you change a connection string that contains `[redacted]`, type the password again: AI Studio refuses (`422`) to reuse the stored password with a different connection string. To avoid this, keep the password in a [Secret](./secrets.md) and use a `$SECRET/` reference, which is shown as written.
 3.  **Choose an Embedder:** Pick the [Embedder](./embedders.md) that embeds this data source's documents and queries, or create one inline. An embedder is either linked to an LLM provider (reusing its connection and credentials) or standalone (its own API compatibility, URL, model and [Secret](./secrets.md)-referenced API key). Its model cannot change while data sources use it.
 4.  **Upload Files:** Upload documents to be chunked, embedded, and indexed into the vector store.
 

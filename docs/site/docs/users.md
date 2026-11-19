@@ -31,7 +31,7 @@ The table contains user-specific data displayed in rows and organized into the f
   How the account was created: **Self-registered**, **Admin-created** or **SSO** (provisioned on first identity-provider login). Origin never changes afterwards, so a user who registered before SSO was switched on stays **Self-registered** even though they now log in through the IdP.
 
 - **API key**:
-  **Issued** when the user holds an API key, **None** otherwise. Only self-registered users receive a key automatically; SSO-provisioned users cannot be issued one unless the deployment sets `ALLOW_SSO_USER_API_KEYS=true`.
+  **Issued** when the user holds an API key, **None** otherwise. The key itself is shown in full only once, when it is issued or regenerated; after that, only its last four characters. Only self-registered users receive a key automatically; SSO-provisioned users cannot be issued one unless the deployment sets `ALLOW_SSO_USER_API_KEYS=true`.
 
 - **Status**:
   **Active** or **Disabled**. A disabled user cannot sign in or use an API key until an administrator enables them again.

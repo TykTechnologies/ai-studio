@@ -42,7 +42,7 @@ Administrators manage users via the UI or API:
 *   **Group Assignment:** Add or remove users from various Groups.
 *   **Role Assignment:** Assign a primary Role (e.g., Admin, Standard) to each user.
 *   **Status Management:** Disable or enable user accounts. A disabled user is refused everywhere at once: browser sessions, API key, password login, SSO login, OAuth tokens and password reset. Disabling also ends their live session and deactivates the credentials of the apps they own (those are re-activated per app, not by enabling the user).
-*   **API Key Management:** Issue, regenerate or revoke a user's API key from the user detail page, and see when it was last used. The Users list shows which accounts hold a key.
+*   **API Key Management:** Issue, regenerate or revoke a user's API key from the user detail page, and see when it was last used. The Users list shows which accounts hold a key. A key is shown in full only once, when it is issued or regenerated, so copy it then. After that, the console and the API show only its last four characters, to administrators too. Users regenerate their own key from their profile.
 
 ## Group Management (Admin)
 
