@@ -6,6 +6,15 @@ import {
   TextField,
   Box,
   Alert,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControlLabel as RadioLabel,
+  FormLabel,
+  Radio,
+  RadioGroup,
   Typography,
   Grid,
   Snackbar,
@@ -84,6 +93,13 @@ const UserForm = () => {
   const [emailVerified, setEmailVerified] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [accessToSSOConfig, setAccessToSSOConfig] = useState(false);
+  // "" (a person) or "service" (a service account: API key only). Chosen on
+  // create; read-only afterwards. Read from the users API's account_type,
+  // never from /common/me (whose account_type is the legacy role label).
+  const [accountType, setAccountType] = useState("");
+  const isService = accountType === "service";
+  // A service account's API key, shown once after it is created.
+  const [issuedKey, setIssuedKey] = useState("");
 
   // Unsaved-changes tracking over every field the form saves; markSaved()
   // runs before the post-save redirect so the guard stays quiet on the way
@@ -149,6 +165,7 @@ const UserForm = () => {
       setEmailVerified(userData.attributes.email_verified ?? false);
       setNotificationsEnabled(userData.attributes.notifications_enabled ?? false);
       setAccessToSSOConfig(userData.attributes.access_to_sso_config ?? false);
+      setAccountType(userData.attributes.account_type || "");
       const budgetTeam = userData.attributes.budget_team_id ? String(userData.attributes.budget_team_id) : "";
       setBudgetTeamId(budgetTeam);
       setLoadedBudgetTeamId(budgetTeam);
@@ -191,8 +208,10 @@ const UserForm = () => {
   const validateForm = () => {
     const newErrors = {};
     if (!name.trim()) newErrors.name = "Name is required";
-    if (!email.trim()) newErrors.email = "Email is required";
-    if (!id && !password.trim()) newErrors.password = "Password is required";
+    // A service account has no email or password: the server generates
+    // its address, and it signs in with its API key only.
+    if (!isService && !email.trim()) newErrors.email = "Email is required";
+    if (!isService && !id && !password.trim()) newErrors.password = "Password is required";
     // The last team cannot be removed. This used to block the delete click;
     // now it is a validation error on save. A user who arrived with no teams
     // (possible through the API) is not blocked from saving other changes.
@@ -235,6 +254,7 @@ const UserForm = () => {
   };
 
   const isFormValid = () => {
+    if (isService) return name.trim() !== "";
     return (
       name.trim() !== "" &&
       email.trim() !== "" &&
@@ -268,6 +288,10 @@ const UserForm = () => {
 
   const saveUser = async () => {
     setConfirmSelfDemotion(false);
+    if (isService) {
+      await saveServiceAccount();
+      return;
+    }
     const userData = {
       data: {
         type: "User",
@@ -325,6 +349,7 @@ const UserForm = () => {
         },
       });
     } catch (error) {
+      if (quotaExceeded(error)) return;
       if (savedUserId && !error.response) {
         // The user is saved; only a team change was refused.
         console.error("Error saving user teams", error);
@@ -342,6 +367,59 @@ const UserForm = () => {
         severity: "error",
       });
     }
+  };
+
+  // A licence seat limit (409 QUOTA_EXCEEDED): the server says what to remove
+  // or whom to ask. Reports and returns true when it was that.
+  const quotaExceeded = (error) => {
+    if (error?.response?.status === 409 && error.response?.data?.errors?.[0]?.code === "QUOTA_EXCEEDED") {
+      setSnackbar({
+        open: true,
+        message: error.response.data.errors[0].detail || "The licensed seat limit has been reached.",
+        severity: "error",
+      });
+      return true;
+    }
+    return false;
+  };
+
+  // A service account sends only its name and access (roles, or the admin
+  // switch in Community); the type is set on create and never changes. The
+  // create response carries its API key, shown once.
+  const saveServiceAccount = async () => {
+    const attributes = {
+      name,
+      ...(rbacEnabled ? { role_ids: roleIds } : { is_admin: isAdmin }),
+      ...(!id && { account_type: "service" }),
+    };
+    try {
+      if (id) {
+        await apiClient.patch(`/users/${id}`, { data: { type: "User", attributes } });
+        markSaved();
+        navigate("/admin/users", {
+          state: { snackbar: { message: "Service account updated successfully", severity: "success" } },
+        });
+        return;
+      }
+      const response = await apiClient.post("/users", { data: { type: "User", attributes } });
+      markSaved();
+      setIssuedKey(response.data?.data?.attributes?.api_key || "");
+    } catch (error) {
+      if (quotaExceeded(error)) return;
+      console.error("Error saving service account", error);
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.errors?.[0]?.detail || "Failed to save the service account. Please try again.",
+        severity: "error",
+      });
+    }
+  };
+
+  const closeIssuedKey = () => {
+    setIssuedKey("");
+    navigate("/admin/users", {
+      state: { snackbar: { message: "Service account created", severity: "success" } },
+    });
   };
 
   const handleCloseSnackbar = (event, reason) => {
@@ -408,7 +486,40 @@ const UserForm = () => {
       <ContentBox>
         <Box component="form" onSubmit={handleSubmit}>
           <Grid container spacing={3}>
-            {!id && (
+            {!id ? (
+              <Grid item xs={12}>
+                <FormControl>
+                  <FormLabel id="account-type-label">Account type</FormLabel>
+                  <RadioGroup
+                    row
+                    aria-labelledby="account-type-label"
+                    value={accountType}
+                    onChange={(e) => setAccountType(e.target.value)}
+                  >
+                    <RadioLabel value="" control={<Radio />} label="User" />
+                    <RadioLabel value="service" control={<Radio />} label="Service account" />
+                  </RadioGroup>
+                  <FormHelperText>
+                    A service account is for automation, such as an operator or a CI pipeline: it signs in with an API
+                    key only, and has no password, Portal, Chat, teams or notifications.
+                  </FormHelperText>
+                </FormControl>
+              </Grid>
+            ) : (
+              isService && (
+                <Grid item xs={12}>
+                  <Chip label="Service account" data-testid="account-type-readonly" />
+                  <Typography variant="bodySmallDefault" component="div" sx={{ mt: 1 }}>
+                    The account type cannot change. Roll or revoke its API key on the{" "}
+                    <MuiLink component={Link} to={`/admin/users/${id}`}>
+                      user page
+                    </MuiLink>
+                    .
+                  </Typography>
+                </Grid>
+              )
+            )}
+            {!id && !isService && (
               <Grid item xs={12}>
                 {/* This form has no Teams field, so every user created here
                     joins Default -- which owns catalogues holding every
@@ -443,6 +554,7 @@ const UserForm = () => {
                 autoComplete="off"
               />
             </Grid>
+            {!isService && (
             <Grid item xs={12}>
               <TextField
                 fullWidth
@@ -456,7 +568,8 @@ const UserForm = () => {
                 autoComplete="off"
               />
             </Grid>
-            {!id && (
+            )}
+            {!id && !isService && (
               <Grid item xs={12}>
                 <TextField
                   fullWidth
@@ -485,6 +598,8 @@ const UserForm = () => {
                       label="Admin User"
                     />
                   )}
+                  {!isService && (
+                  <>
                   <Box mt={2}>
                     <FormControlLabel
                       control={
@@ -521,6 +636,8 @@ const UserForm = () => {
                       label="Email Verified"
                     />
                   </Box>
+                  </>
+                  )}
                 </Grid>
                 <Grid item xs={6}>
                   {rbacEnabled && (
@@ -538,7 +655,7 @@ const UserForm = () => {
                       />
                     </Box>
                   )}
-                  {effectiveIsAdmin && (
+                  {effectiveIsAdmin && !isService && (
                     <>
                       <FormControlLabel
                         control={
@@ -569,6 +686,7 @@ const UserForm = () => {
                 </Grid>
               </Grid>
             </Grid>
+            {!isService && (
             <Grid item xs={12} data-testid="user-teams-field">
               <RelationshipPicker
                 label="Teams"
@@ -664,6 +782,7 @@ const UserForm = () => {
                 )}
               </Box>
             </Grid>
+            )}
             <Grid item xs={12}>
               <Box display="flex" gap={2}>
                 <SecondaryOutlineButton onClick={handleCancel}>
@@ -674,7 +793,7 @@ const UserForm = () => {
                   type="submit"
                   disabled={!isFormValid()}
                 >
-                  {id ? "Update user" : "Add user"}
+                  {id ? (isService ? "Update service account" : "Update user") : isService ? "Add service account" : "Add user"}
                 </PrimaryButton>
               </Box>
             </Grid>
@@ -695,6 +814,33 @@ const UserForm = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      <Dialog open={Boolean(issuedKey)} onClose={closeIssuedKey} fullWidth maxWidth="sm">
+        <DialogTitle>Service account created</DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            Copy the API key now. It will not be shown again; if it is lost, roll a new one on the user page.
+          </Alert>
+          <Box
+            component="code"
+            data-testid="issued-api-key"
+            sx={{ display: "block", p: 1.5, borderRadius: 1, bgcolor: "background.surfaceNeutralDisabled", wordBreak: "break-all" }}
+          >
+            {issuedKey}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <SecondaryOutlineButton
+            onClick={() => navigator.clipboard?.writeText(issuedKey)}
+            data-testid="copy-issued-api-key"
+          >
+            Copy
+          </SecondaryOutlineButton>
+          <PrimaryButton variant="contained" onClick={closeIssuedKey}>
+            Done
+          </PrimaryButton>
+        </DialogActions>
+      </Dialog>
 
       <ConfirmationDialog
         open={confirmSelfDemotion}

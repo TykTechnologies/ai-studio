@@ -8,7 +8,12 @@ import (
 
 type FileStore struct {
 	gorm.Model
-	ID              uint      `gorm:"primary_key" json:"id"`
+	ID uint `gorm:"primary_key" json:"id"`
+
+	// WorkspaceID is the Workspace that owns the object (Workspace); 0 reads
+	// as the Default workspace (EffectiveWorkspaceID).
+	WorkspaceID uint `json:"workspace_id" gorm:"not null;default:0;index"`
+
 	FileName        string    `json:"file_name"`
 	Description     string    `json:"description"`
 	Content         string    `json:"content"`

@@ -22,6 +22,7 @@ TABLE agent_configs
   index CREATE INDEX idx_agent_app ON agent_configs USING btree (app_id)
   index CREATE INDEX idx_agent_configs_deleted_at ON agent_configs USING btree (deleted_at)
   index CREATE UNIQUE INDEX idx_agent_configs_slug ON agent_configs USING btree (slug)
+  index CREATE INDEX idx_agent_configs_workspace_id ON agent_configs USING btree (workspace_id)
   index CREATE INDEX idx_agent_is_active ON agent_configs USING btree (is_active)
   index CREATE INDEX idx_agent_namespace ON agent_configs USING btree (namespace)
   index CREATE INDEX idx_agent_plugin ON agent_configs USING btree (plugin_id)
@@ -29,6 +30,7 @@ TABLE agent_configs
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES
   column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column workspace_id bigint(int8) nullable=NO precision=64 scale=0 default=0
   column name text(text) nullable=NO
   column slug text(text) nullable=NO
   column description text(text) nullable=YES
@@ -362,10 +364,12 @@ TABLE apps
   index CREATE INDEX idx_apps_credential_id ON apps USING btree (credential_id)
   index CREATE INDEX idx_apps_deleted_at ON apps USING btree (deleted_at)
   index CREATE INDEX idx_apps_team_id ON apps USING btree (team_id)
+  index CREATE INDEX idx_apps_workspace_id ON apps USING btree (workspace_id)
   column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('apps_id_seq'::regclass)
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES
   column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column workspace_id bigint(int8) nullable=NO precision=64 scale=0 default=0
   column name text(text) nullable=YES
   column description text(text) nullable=YES
   column user_id bigint(int8) nullable=YES precision=64 scale=0
@@ -513,10 +517,12 @@ TABLE catalogues
   constraint catalogues_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX catalogues_pkey ON catalogues USING btree (id)
   index CREATE INDEX idx_catalogues_deleted_at ON catalogues USING btree (deleted_at)
+  index CREATE INDEX idx_catalogues_workspace_id ON catalogues USING btree (workspace_id)
   column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('catalogues_id_seq'::regclass)
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES
   column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column workspace_id bigint(int8) nullable=NO precision=64 scale=0 default=0
   column name text(text) nullable=YES
 TABLE chat_filestores
   constraint chat_filestores_pkey PRIMARY KEY (chat_id, file_store_id)
@@ -685,10 +691,12 @@ TABLE data_catalogues
   constraint data_catalogues_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX data_catalogues_pkey ON data_catalogues USING btree (id)
   index CREATE INDEX idx_data_catalogues_deleted_at ON data_catalogues USING btree (deleted_at)
+  index CREATE INDEX idx_data_catalogues_workspace_id ON data_catalogues USING btree (workspace_id)
   column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('data_catalogues_id_seq'::regclass)
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES
   column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column workspace_id bigint(int8) nullable=NO precision=64 scale=0 default=0
   column name text(text) nullable=YES
   column short_description text(text) nullable=YES
   column long_description text(text) nullable=YES
@@ -722,11 +730,13 @@ TABLE datasources
   index CREATE INDEX idx_datasources_deleted_at ON datasources USING btree (deleted_at)
   index CREATE INDEX idx_datasources_embedder_id ON datasources USING btree (embedder_id)
   index CREATE INDEX idx_datasources_name ON datasources USING btree (name)
+  index CREATE INDEX idx_datasources_workspace_id ON datasources USING btree (workspace_id)
   index CREATE INDEX idx_ds_user_community ON datasources USING btree (user_id, community_submitted)
   column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('datasources_id_seq'::regclass)
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES
   column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column workspace_id bigint(int8) nullable=NO precision=64 scale=0 default=0
   column name text(text) nullable=YES
   column short_description text(text) nullable=YES
   column long_description text(text) nullable=YES
@@ -822,10 +832,12 @@ TABLE embedders
   index CREATE UNIQUE INDEX idx_embedder_name ON embedders USING btree (name)
   index CREATE INDEX idx_embedders_deleted_at ON embedders USING btree (deleted_at)
   index CREATE INDEX idx_embedders_llm_id ON embedders USING btree (llm_id)
+  index CREATE INDEX idx_embedders_workspace_id ON embedders USING btree (workspace_id)
   column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('embedders_id_seq'::regclass)
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES
   column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column workspace_id bigint(int8) nullable=NO precision=64 scale=0 default=0
   column name text(text) nullable=NO
   column description text(text) nullable=YES
   column llm_id bigint(int8) nullable=YES precision=64 scale=0
@@ -850,10 +862,12 @@ TABLE file_stores
   constraint file_stores_pkey PRIMARY KEY (id)
   index CREATE UNIQUE INDEX file_stores_pkey ON file_stores USING btree (id)
   index CREATE INDEX idx_file_stores_deleted_at ON file_stores USING btree (deleted_at)
+  index CREATE INDEX idx_file_stores_workspace_id ON file_stores USING btree (workspace_id)
   column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('file_stores_id_seq'::regclass)
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES
   column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column workspace_id bigint(int8) nullable=NO precision=64 scale=0 default=0
   column file_name text(text) nullable=YES
   column description text(text) nullable=YES
   column content text(text) nullable=YES
@@ -865,10 +879,12 @@ TABLE filters
   index CREATE INDEX idx_filter_kind ON filters USING btree (kind)
   index CREATE INDEX idx_filter_namespace ON filters USING btree (namespace)
   index CREATE INDEX idx_filters_deleted_at ON filters USING btree (deleted_at)
+  index CREATE INDEX idx_filters_workspace_id ON filters USING btree (workspace_id)
   column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('filters_id_seq'::regclass)
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES
   column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column workspace_id bigint(int8) nullable=NO precision=64 scale=0 default=0
   column name text(text) nullable=YES
   column description text(text) nullable=YES
   column script bytea(bytea) nullable=YES
@@ -1084,11 +1100,13 @@ TABLE llms
   constraint llms_pkey PRIMARY KEY (id)
   index CREATE INDEX idx_llm_namespace ON llms USING btree (namespace)
   index CREATE INDEX idx_llms_deleted_at ON llms USING btree (deleted_at)
+  index CREATE INDEX idx_llms_workspace_id ON llms USING btree (workspace_id)
   index CREATE UNIQUE INDEX llms_pkey ON llms USING btree (id)
   column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('llms_id_seq'::regclass)
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES
   column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column workspace_id bigint(int8) nullable=NO precision=64 scale=0 default=0
   column name text(text) nullable=YES
   column api_key text(text) nullable=YES
   column api_endpoint text(text) nullable=YES
@@ -1324,11 +1342,13 @@ TABLE mcp_servers
   index CREATE UNIQUE INDEX idx_mcp_servers_live_conn_api ON mcp_servers USING btree (connection_id, tyk_api_id) WHERE (deleted_at IS NULL)
   index CREATE UNIQUE INDEX idx_mcp_servers_live_slug ON mcp_servers USING btree (slug) WHERE (deleted_at IS NULL)
   index CREATE INDEX idx_mcp_servers_submission_id ON mcp_servers USING btree (submission_id)
+  index CREATE INDEX idx_mcp_servers_workspace_id ON mcp_servers USING btree (workspace_id)
   index CREATE UNIQUE INDEX mcp_servers_pkey ON mcp_servers USING btree (id)
   column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('mcp_servers_id_seq'::regclass)
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES
   column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column workspace_id bigint(int8) nullable=NO precision=64 scale=0 default=0
   column connection_id bigint(int8) nullable=YES precision=64 scale=0
   column tyk_api_id character varying(varchar) nullable=YES len=64
   column name character varying(varchar) nullable=NO len=200
@@ -1470,6 +1490,7 @@ TABLE model_prices
 TABLE model_routers
   constraint model_routers_pkey PRIMARY KEY (id)
   index CREATE INDEX idx_model_routers_deleted_at ON model_routers USING btree (deleted_at)
+  index CREATE INDEX idx_model_routers_workspace_id ON model_routers USING btree (workspace_id)
   index CREATE INDEX idx_router_namespace ON model_routers USING btree (namespace)
   index CREATE UNIQUE INDEX idx_router_slug_namespace ON model_routers USING btree (slug, namespace)
   index CREATE UNIQUE INDEX model_routers_pkey ON model_routers USING btree (id)
@@ -1477,6 +1498,7 @@ TABLE model_routers
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES
   column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column workspace_id bigint(int8) nullable=NO precision=64 scale=0 default=0
   column name text(text) nullable=NO
   column slug text(text) nullable=NO
   column description text(text) nullable=YES
@@ -1742,11 +1764,13 @@ TABLE plugins
   index CREATE INDEX idx_plugins_hook_type ON plugins USING btree (hook_type)
   index CREATE INDEX idx_plugins_is_active ON plugins USING btree (is_active)
   index CREATE INDEX idx_plugins_service_access ON plugins USING btree (service_access_authorized)
+  index CREATE INDEX idx_plugins_workspace_id ON plugins USING btree (workspace_id)
   index CREATE UNIQUE INDEX plugins_pkey ON plugins USING btree (id)
   column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('plugins_id_seq'::regclass)
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES
   column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column workspace_id bigint(int8) nullable=NO precision=64 scale=0 default=0
   column name text(text) nullable=NO
   column description text(text) nullable=YES
   column command character varying(varchar) nullable=NO len=500
@@ -1983,11 +2007,13 @@ TABLE secret_references
 TABLE secrets
   constraint secrets_pkey PRIMARY KEY (id)
   index CREATE INDEX idx_secrets_deleted_at ON secrets USING btree (deleted_at)
+  index CREATE INDEX idx_secrets_workspace_id ON secrets USING btree (workspace_id)
   index CREATE UNIQUE INDEX secrets_pkey ON secrets USING btree (id)
   column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('secrets_id_seq'::regclass)
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES
   column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column workspace_id bigint(int8) nullable=NO precision=64 scale=0 default=0
   column var_name text(text) nullable=YES
   column value text(text) nullable=YES
 TABLE semantic_router_targets
@@ -2008,11 +2034,13 @@ TABLE semantic_routers
   index CREATE UNIQUE INDEX idx_semantic_router_slug_namespace ON semantic_routers USING btree (slug, namespace)
   index CREATE INDEX idx_semantic_routers_deleted_at ON semantic_routers USING btree (deleted_at)
   index CREATE INDEX idx_semantic_routers_embedder_id ON semantic_routers USING btree (embedder_id)
+  index CREATE INDEX idx_semantic_routers_workspace_id ON semantic_routers USING btree (workspace_id)
   index CREATE UNIQUE INDEX semantic_routers_pkey ON semantic_routers USING btree (id)
   column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('semantic_routers_id_seq'::regclass)
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES
   column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column workspace_id bigint(int8) nullable=NO precision=64 scale=0 default=0
   column name text(text) nullable=NO
   column slug text(text) nullable=NO
   column namespace text(text) nullable=YES default=''::text
@@ -2205,11 +2233,13 @@ TABLE tool_catalogue_tools
 TABLE tool_catalogues
   constraint tool_catalogues_pkey PRIMARY KEY (id)
   index CREATE INDEX idx_tool_catalogues_deleted_at ON tool_catalogues USING btree (deleted_at)
+  index CREATE INDEX idx_tool_catalogues_workspace_id ON tool_catalogues USING btree (workspace_id)
   index CREATE UNIQUE INDEX tool_catalogues_pkey ON tool_catalogues USING btree (id)
   column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('tool_catalogues_id_seq'::regclass)
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES
   column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column workspace_id bigint(int8) nullable=NO precision=64 scale=0 default=0
   column name text(text) nullable=YES
   column short_description text(text) nullable=YES
   column long_description text(text) nullable=YES
@@ -2242,11 +2272,13 @@ TABLE tools
   index CREATE INDEX idx_tools_deleted_at ON tools USING btree (deleted_at)
   index CREATE INDEX idx_tools_name ON tools USING btree (name)
   index CREATE INDEX idx_tools_slug ON tools USING btree (slug)
+  index CREATE INDEX idx_tools_workspace_id ON tools USING btree (workspace_id)
   index CREATE UNIQUE INDEX tools_pkey ON tools USING btree (id)
   column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('tools_id_seq'::regclass)
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES
   column deleted_at timestamp with time zone(timestamptz) nullable=YES
+  column workspace_id bigint(int8) nullable=NO precision=64 scale=0 default=0
   column name text(text) nullable=YES
   column slug text(text) nullable=YES
   column description text(text) nullable=YES
@@ -2448,6 +2480,7 @@ TABLE user_notice_dismissals
   column dismissed_at timestamp with time zone(timestamptz) nullable=NO
 TABLE users
   constraint users_pkey PRIMARY KEY (id)
+  index CREATE INDEX idx_users_account_type ON users USING btree (account_type)
   index CREATE INDEX idx_users_auth_source ON users USING btree (auth_source)
   index CREATE INDEX idx_users_deleted_at ON users USING btree (deleted_at)
   index CREATE INDEX idx_users_disabled ON users USING btree (disabled)
@@ -2483,6 +2516,7 @@ TABLE users
   column disabled boolean(bool) nullable=NO default=false
   column disabled_at timestamp with time zone(timestamptz) nullable=YES
   column metadata json(json) nullable=YES
+  column account_type character varying(varchar) nullable=NO len=16 default=''::character varying
 TABLE webhook_deliveries
   constraint webhook_deliveries_pkey PRIMARY KEY (id)
   index CREATE INDEX idx_webhook_deliveries_created ON webhook_deliveries USING btree (created_at)
@@ -2551,8 +2585,10 @@ TABLE webhook_events
 TABLE webhook_targets
   constraint webhook_targets_pkey PRIMARY KEY (id)
   index CREATE INDEX idx_webhook_targets_status ON webhook_targets USING btree (status)
+  index CREATE INDEX idx_webhook_targets_workspace_id ON webhook_targets USING btree (workspace_id)
   index CREATE UNIQUE INDEX webhook_targets_pkey ON webhook_targets USING btree (id)
   column id character varying(varchar) nullable=NO len=36
+  column workspace_id bigint(int8) nullable=NO precision=64 scale=0 default=0
   column name character varying(varchar) nullable=NO len=200
   column description character varying(varchar) nullable=YES len=1024
   column url character varying(varchar) nullable=NO len=2048
@@ -2581,5 +2617,17 @@ TABLE webhook_targets
   column last_failure_at timestamp with time zone(timestamptz) nullable=YES
   column consecutive_failures bigint(int8) nullable=YES precision=64 scale=0
   column lock_version bigint(int8) nullable=NO precision=64 scale=0 default=0
+  column created_at timestamp with time zone(timestamptz) nullable=YES
+  column updated_at timestamp with time zone(timestamptz) nullable=YES
+TABLE workspaces
+  constraint workspaces_pkey PRIMARY KEY (id)
+  index CREATE UNIQUE INDEX idx_workspaces_default ON workspaces USING btree (is_default) WHERE (is_default = true)
+  index CREATE UNIQUE INDEX idx_workspaces_name_key ON workspaces USING btree (name_key)
+  index CREATE UNIQUE INDEX workspaces_pkey ON workspaces USING btree (id)
+  column id bigint(int8) nullable=NO precision=64 scale=0 default=nextval('workspaces_id_seq'::regclass)
+  column name character varying(varchar) nullable=NO len=128
+  column name_key character varying(varchar) nullable=NO len=128
+  column description character varying(varchar) nullable=YES len=1024
+  column is_default boolean(bool) nullable=NO default=false
   column created_at timestamp with time zone(timestamptz) nullable=YES
   column updated_at timestamp with time zone(timestamptz) nullable=YES

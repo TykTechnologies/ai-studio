@@ -32,6 +32,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services/agenttracing"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/services/rbac"
+	"github.com/TykTechnologies/midsommar/v2/services/workspaces"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -82,6 +83,9 @@ type Service struct {
 	SyncStatusService *SyncStatusService
 	// Role-based access control (ENT: roles and bindings, CE: admin-or-not stub)
 	RBAC rbac.Service
+	// Workspaces management (ENT; CE: 402 stub). Use WorkspacesService(),
+	// which also covers hand-built Services.
+	Workspaces workspaces.Service
 	// Entitlements applies license limits and App quotas (ENT); the CE stub
 	// allows everything. Use EntitlementsService(), which also covers
 	// hand-built Services.
@@ -99,6 +103,10 @@ type Service struct {
 	// tykMCPHost is the host application's Dashboard connection, passed to
 	// the TykMCP service InitTykMCP builds.
 	tykMCPHost *tykmcp.HostConnection
+
+	// defaultWorkspaceID caches the Default workspace's id (0: not loaded
+	// yet); see DefaultWorkspaceID.
+	defaultWorkspaceID atomic.Uint64
 
 	// auditService is the audit trail owned by the API and attached through
 	// SetAuditService so background services (webhooks) can record non-HTTP
@@ -412,6 +420,7 @@ func NewServiceWithOCI(db *gorm.DB, ociConfig *ociplugins.OCIConfig) *Service {
 	service.InitBudgets(notificationService)
 
 	service.Entitlements = service.newEntitlements()
+	service.Workspaces = workspaces.NewService(db, service.RBAC)
 
 	// Governed metadata: hooks are optional (nil when no plugin manager); the event
 	// emitter is resolved lazily because SetEventBus runs after construction.
@@ -619,6 +628,15 @@ func (s *Service) SetLicensingService(svc licensing.Service) {
 		})
 	}
 	logger.Debug("Licensing service set on main service")
+}
+
+// WorkspacesService returns the Workspaces service; NewService sets it,
+// and a hand-built Service (tests) gets one on first use.
+func (s *Service) WorkspacesService() workspaces.Service {
+	if s.Workspaces == nil {
+		s.Workspaces = workspaces.NewService(s.DB, s.Authz())
+	}
+	return s.Workspaces
 }
 
 // Authz returns the RBAC service, falling back to the edition-appropriate

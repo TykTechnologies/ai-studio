@@ -35,6 +35,7 @@ const emptyToolConfig = () => ({
   auth_key: "",
   auth_key_prefilled: false,
   operations: [],
+  workspace_id: null, // Enterprise: the Workspace the tool is created in
 });
 
 /**
@@ -57,7 +58,8 @@ const ImportOpenAPIWizard = ({ open, onClose, onImport }) => {
   const {
     createTool,
     loading: toolLoading,
-    error: toolError
+    error: toolError,
+    workspaceError: toolWorkspaceError
   } = useToolCreation();
 
   const sequence = selectedProvider ? STEP_SEQUENCES[selectedProvider.type] : [STEPS.SELECT_PROVIDER];
@@ -302,6 +304,7 @@ const ImportOpenAPIWizard = ({ open, onClose, onImport }) => {
             onConfigChange={setToolConfig}
             loading={toolLoading}
             error={toolError}
+            workspaceError={toolWorkspaceError}
             selectedAPI={selectedAPI}
             importMethod={selectedProvider?.type}
           />

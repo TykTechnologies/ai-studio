@@ -142,7 +142,15 @@ func NewAuthService(config *Config, mailService *notifications.MailService, serv
 	}
 }
 
+// ErrServiceAccountSession refuses an interactive session for a service
+// account, whichever path (password, SSO, host, OAuth) asked for it: its
+// API key is its only way in.
+var ErrServiceAccountSession = errors.New("service accounts cannot sign in interactively")
+
 func (a *AuthService) SetUserSession(c *gin.Context, user *models.User) error {
+	if user.IsServiceAccount() {
+		return ErrServiceAccountSession
+	}
 	token, err := a.generateToken()
 	if err != nil {
 		return err
@@ -230,7 +238,9 @@ func (a *AuthService) GetAuthenticatedUser(c *gin.Context) *models.User {
 		// Cookie exists, validate it
 		user := &models.User{}
 		err := a.Config.DB.Where("session_token = ?", cookie).First(user).Error
-		if err == nil && !user.Disabled {
+		// A service account's session token (one minted by an older
+		// build, say) is not honored.
+		if err == nil && !user.Disabled && !user.IsServiceAccount() {
 			c.Set(AuthMethodKey, AuthMethodSession)
 			return user
 		}
@@ -531,6 +541,11 @@ func (a *AuthService) ResetPassword(email string) error {
 	if err := user.GetByEmail(a.Config.DB, email); err != nil {
 		return err
 	}
+	// A service account has no password to reset: answered exactly as an
+	// unknown address is.
+	if user.IsServiceAccount() {
+		return gorm.ErrRecordNotFound
+	}
 	if user.Disabled {
 		return ErrUserDisabled
 	}
@@ -577,6 +592,9 @@ func (a *AuthService) ValidateResetToken(token string) (*models.User, error) {
 	user := &models.User{}
 	if err := a.Config.DB.Where("reset_token = ?", token).First(user).Error; err != nil {
 		return nil, err
+	}
+	if user.IsServiceAccount() {
+		return nil, gorm.ErrRecordNotFound
 	}
 
 	if time.Now().After(user.ResetTokenExpiry) {
@@ -735,6 +753,9 @@ func (a *AuthService) ResendVerificationEmail(email string) error {
 	user := &models.User{}
 	if err := user.GetByEmail(a.Config.DB, email); err != nil {
 		return fmt.Errorf("failed to get user: %w", err)
+	}
+	if user.IsServiceAccount() {
+		return fmt.Errorf("failed to get user: %w", gorm.ErrRecordNotFound)
 	}
 
 	if user.EmailVerified {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -127,6 +128,31 @@ func chatSummary(chat *models.Chat) V2ChatSummary {
 	}
 }
 
+// chatToolSummaries describes a session's tools to the chat user: never the
+// tool model, whose auth key and spec are not theirs to read.
+func chatToolSummaries(tools map[string]models.Tool) []V2ToolSummary {
+	out := make([]V2ToolSummary, 0, len(tools))
+	for _, t := range tools {
+		out = append(out, V2ToolSummary{ID: t.ID, Name: t.Name, Description: t.Description, ToolType: t.ToolType})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+// chatSourceSummaries describes a session's datasources to the chat user:
+// never the datasource model, whose connection string and resolved vector
+// store key the session holds.
+func chatSourceSummaries(datasources []*models.Datasource) []V2SourceSummary {
+	out := make([]V2SourceSummary, 0, len(datasources))
+	for _, ds := range datasources {
+		if ds == nil {
+			continue
+		}
+		out = append(out, V2SourceSummary{ID: ds.ID, Name: ds.Name, ShortDescription: ds.ShortDescription})
+	}
+	return out
+}
+
 func sessionResponse(cs *chat_session.ChatSession, chat *models.Chat) V2SessionResponse {
 	resp := V2SessionResponse{
 		SessionID:   cs.ID(),
@@ -135,12 +161,8 @@ func sessionResponse(cs *chat_session.ChatSession, chat *models.Chat) V2SessionR
 		ClientTools: []V2ClientToolInfo{},
 		Chat:        chatSummary(chat),
 	}
-	for _, t := range cs.CurrentTools() {
-		resp.Tools = append(resp.Tools, V2ToolSummary{ID: t.ID, Name: t.Name, Description: t.Description, ToolType: t.ToolType})
-	}
-	for _, ds := range cs.GetCurrentDatasources() {
-		resp.Datasources = append(resp.Datasources, V2SourceSummary{ID: ds.ID, Name: ds.Name, ShortDescription: ds.ShortDescription})
-	}
+	resp.Tools = chatToolSummaries(cs.CurrentTools())
+	resp.Datasources = chatSourceSummaries(cs.GetCurrentDatasources())
 	resp.ClientTools = clientToolInfos(cs)
 	resp.PendingToolCallIDs = cs.PendingClientCallIDs()
 	return resp

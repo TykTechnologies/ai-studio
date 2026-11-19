@@ -74,3 +74,14 @@ func applyLLMOptions(l *models.LLM, opts []LLMOption) error {
 	}
 	return nil
 }
+
+// WithWorkspace creates the LLM in the Workspace (the API's landing rule
+// decides which). Creation only: an update never moves an object (.42).
+func WithWorkspace(workspaceID uint) LLMOption {
+	return func(l *models.LLM) error {
+		if l.ID == 0 {
+			l.WorkspaceID = workspaceID
+		}
+		return nil
+	}
+}

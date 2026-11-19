@@ -79,7 +79,7 @@ func (a *API) testMCPSubmission(c *gin.Context, submission *models.Submission) {
 // @Success 200 {object} tykmcp.HandoffPackage
 // @Router /mcp-servers/{id}/handoff [get]
 func (a *API) getMCPServerHandoff(c *gin.Context) {
-	actor, ok := requireTykMCPActor(c, "mcp-servers")
+	actor, ok := a.requireTykMCPServerActor(c)
 	if !ok {
 		return
 	}
@@ -113,7 +113,7 @@ type linkMCPServerInput struct {
 // @Success 200 {object} models.MCPServerResponse
 // @Router /mcp-servers/{id}/link [post]
 func (a *API) linkMCPServer(c *gin.Context) {
-	actor, ok := requireTykMCPActor(c, "mcp-servers")
+	actor, ok := a.requireTykMCPServerActor(c)
 	if !ok {
 		return
 	}

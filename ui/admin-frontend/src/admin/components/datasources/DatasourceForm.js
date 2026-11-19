@@ -63,6 +63,9 @@ import PublishSwitch from "../rbac/PublishSwitch";
 import PrivacyLevelInput from "../common/privacy/PrivacyLevelInput";
 import { isValidPrivacyScore } from "../common/privacy/privacyLevels";
 import { P } from "../../rbac/permissions";
+import Can from "../rbac/Can";
+import WorkspaceSelect from "../workspaces/WorkspaceSelect";
+import { useCanMove, workspaceFieldError } from "../workspaces/workspaceFields";
 import { listAll } from "../../utils/listAll";
 import { ResourceTracingSection } from "../common/TracingSettingsSection";
 import AllowInternalHostSwitch from "../common/AllowInternalHostSwitch";
@@ -93,7 +96,13 @@ const DatasourceForm = () => {
     namespace: "",
     tracing_content_mode_max: "", // Agent tracing content cap (Enterprise); "" = no cap
     allow_internal_host: false, // administrators only (w4e)
+    workspace_id: null, // Enterprise: the Workspace it lives in (landing rule when null)
   });
+  // The stored Workspace of the data source being edited: a different
+  // workspace_id on save is a move.
+  const [originalWorkspaceId, setOriginalWorkspaceId] = useState(null);
+  const [workspaceError, setWorkspaceError] = useState("");
+  const canMove = useCanMove(P.DATASOURCES_WRITE);
 
   const [users, setUsers] = useState([]);
   const [vectorStores, setVectorStores] = useState([]);
@@ -134,7 +143,9 @@ const DatasourceForm = () => {
               : [],
             user_id: datasourceData.user_id.toString(),
             tracing_content_mode_max: datasourceData.tracing_content_mode_max || "",
+            workspace_id: datasourceData.workspace_id ?? null,
           });
+          setOriginalWorkspaceId(datasourceData.workspace_id ?? null);
           setFiles(datasourceData.files || []);
           setGovernedMetadata(response.data.data.governed_metadata || {});
           setVectorStoreHelpText(
@@ -346,14 +357,21 @@ const DatasourceForm = () => {
       embed_model: _model,
       has_embed_api_key: _hasKey,
       embedder_name: _embedderName,
+      // workspace_id is sent only to choose one (create) or to move (edit).
+      workspace_id: workspaceId,
       ...fields
     } = datasource;
+    const workspaceAttr =
+      workspaceId !== null && workspaceId !== undefined && (!id || Number(workspaceId) !== Number(originalWorkspaceId))
+        ? { workspace_id: Number(workspaceId) }
+        : {};
     const datasourceData = {
       data: {
         type: "datasources",
         ...(id && { id }),
         attributes: {
           ...fields,
+          ...workspaceAttr,
           embedder_id: Number(datasource.embedder_id),
           privacy_score: Number(datasource.privacy_score),
           active: Boolean(datasource.active),
@@ -387,6 +405,12 @@ const DatasourceForm = () => {
         },
       });
     } catch (error) {
+      const wsError = workspaceFieldError(error);
+      if (wsError) {
+        setWorkspaceError(wsError);
+        setSnackbar({ open: true, message: wsError, severity: "error" });
+        return;
+      }
       if (error.response?.status === 422) {
         const fieldErrors = extractGovernedMetadataErrors(error);
         setMetadataErrors(fieldErrors);
@@ -597,6 +621,7 @@ const DatasourceForm = () => {
             <Grid item xs={12}>
               <PublishSwitch
                 permission={P.DATASOURCES_PUBLISH}
+                workspaceId={datasource.workspace_id ?? null}
                 checked={datasource.active}
                 onChange={handleSwitchChange}
                 name="active"
@@ -790,15 +815,17 @@ const DatasourceForm = () => {
                     Upload Additional Datasource Documentation
                   </PrimaryOutlineButton>
 
-                  <Button
-                    variant="contained"
-                    color="secondary"
-                    onClick={handleStartProcessing}
-                    disabled={files.length === 0}
-                    startIcon={<AutorenewIcon />}
-                  >
-                    Start Processing
-                  </Button>
+                  <Can permission={P.DATASOURCES_EXECUTE} workspaceId={originalWorkspaceId ?? undefined}>
+                    <Button
+                      variant="contained"
+                      color="secondary"
+                      onClick={handleStartProcessing}
+                      disabled={files.length === 0}
+                      startIcon={<AutorenewIcon />}
+                    >
+                      Start Processing
+                    </Button>
+                  </Can>
                 </Box>
               </AccordionDetails>
             </StyledAccordion>
@@ -820,6 +847,21 @@ const DatasourceForm = () => {
             }}
             errors={metadataErrors}
           />
+
+          {/* Workspace (Enterprise): where it is created; on edit, the move control. */}
+          <Box sx={{ mt: 3 }}>
+            <WorkspaceSelect
+              permission={P.DATASOURCES_WRITE}
+              value={datasource.workspace_id}
+              onChange={(ws) => {
+                setDatasource((prev) => ({ ...prev, workspace_id: ws }));
+                setWorkspaceError("");
+              }}
+              disabled={Boolean(id) && !canMove}
+              error={workspaceError}
+              helperText={id ? "Moving it to another Workspace needs write in both." : "The Workspace it is created in."}
+            />
+          </Box>
 
           {/* Edge Availability Section (Enterprise only) */}
           <EdgeAvailabilitySection

@@ -6,6 +6,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Plugin config references stay global-only: plugins are global (.36), so
+// a $SECRET/ reference in a plugin's config (or a per-LLM override of it)
+// needs global secrets:read here and is not tied to a Workspace. It is not
+// a holder for the secret-name rules either (services.SecretHoldersOf).
+
 // requireSecretReadForReferences refuses a plugin config write that adds a
 // $SECRET/ reference unless the caller may read secrets: AI Studio resolves
 // references for the plugin, so writing one hands the plugin (and anything
@@ -36,4 +41,26 @@ func requireSecretReadForGuardrailReferences(c *gin.Context, old, updated map[st
 		}
 	}
 	return requireSecretReadForKeys(c, guardrails.NewConnectionReferences(oldConn, newCfg.Connection))
+}
+
+// requireGuardrailSecretRefsIn is requireSecretReadForGuardrailReferences
+// for a filter in a Workspace: the connection's $SECRET/ references must be
+// in the filter's Workspace and covered by the caller's secrets:read there
+// (requireSecretRefsIn). It returns the new connection block for a move
+// re-check.
+func (a *API) requireGuardrailSecretRefsIn(c *gin.Context, workspaceID uint, old, updated map[string]interface{}) (map[string]string, bool) {
+	if len(updated) == 0 {
+		return nil, true
+	}
+	newCfg, err := guardrails.ParseConfig(updated)
+	if err != nil {
+		return nil, true
+	}
+	var oldConn map[string]string
+	if len(old) > 0 {
+		if oldCfg, err := guardrails.ParseConfig(old); err == nil {
+			oldConn = oldCfg.Connection
+		}
+	}
+	return newCfg.Connection, a.requireSecretRefsIn(c, workspaceID, oldConn, newCfg.Connection)
 }

@@ -57,6 +57,7 @@ describe('AgentService', () => {
         plugin: { id: 10, name: 'Agent Plugin' },
         appId: 5,
         app: { id: 5, name: 'Test App' },
+        appHidden: false,
         config: { setting: 'value' },
         groups: [{ id: 1, name: 'Group 1' }],
         isActive: true,
@@ -466,6 +467,16 @@ describe('AgentService', () => {
       });
 
       expect(result).toBe(mockBody);
+    });
+  });
+  describe('Workspaces', () => {
+    it('createAgent sends workspace_id only when one is chosen', async () => {
+      apiClient.post.mockResolvedValue({ data: { data: { id: 1, name: 'A' } } });
+      await agentService.createAgent({ name: 'A', pluginId: 1, appId: 2, workspaceId: 3 });
+      expect(apiClient.post.mock.calls[0][1].workspace_id).toBe(3);
+      apiClient.post.mockClear();
+      await agentService.createAgent({ name: 'A', pluginId: 1, appId: 2, workspaceId: null });
+      expect(apiClient.post.mock.calls[0][1]).not.toHaveProperty('workspace_id');
     });
   });
 });

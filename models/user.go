@@ -3,6 +3,7 @@ package models
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -17,7 +18,29 @@ const (
 	RoleAdmin           = "Admin"
 	RoleDeveloper       = "Developer"
 	RoleChatUser        = "Chat user"
+	RoleServiceAccount  = "Service account"
 )
+
+// Account types (User.AccountType). A service account is a non-human
+// identity for automation (the Tyk Operator, CI): it authenticates with its
+// API key only, has no password and an undeliverable generated email, never
+// signs in interactively, has no Portal or Chat access, belongs to no team
+// (roles are bound to it directly) and receives no notifications. In
+// Enterprise it takes an admin seat while enabled.
+const (
+	AccountTypeUser    = ""
+	AccountTypeService = "service"
+)
+
+// ServiceAccountEmailDomain is the domain of the generated address every
+// service account has. ".invalid" is reserved (RFC 2606): mail to it cannot
+// be delivered, so a password reset or an identity provider can never reach
+// or match the account, on this build or an older one.
+const ServiceAccountEmailDomain = "service-account.invalid"
+
+// ErrServiceAccountTeams refuses putting a service account in a team: its
+// roles are bound to it directly (decision D9).
+var ErrServiceAccountTeams = errors.New("a service account cannot be a member of a team; bind roles to it directly")
 
 // AuthSource records how a user account came to exist. It is set once, at
 // creation, and never changes on later logins: a self-registered user who
@@ -98,6 +121,16 @@ type User struct {
 
 	// Plugin-stored metadata
 	Metadata JSONMap `json:"metadata" gorm:"type:json"`
+
+	// AccountType is AccountTypeUser ("") or AccountTypeService. Set at
+	// creation and never changed afterwards. AuthSource still records who
+	// created the account.
+	AccountType string `json:"account_type" gorm:"size:16;not null;default:'';index"`
+}
+
+// IsServiceAccount reports whether the user is a service account.
+func (u *User) IsServiceAccount() bool {
+	return u != nil && u.AccountType == AccountTypeService
 }
 
 type Users []User
@@ -385,6 +418,9 @@ func (u *Users) CountActive(db *gorm.DB) (int64, error) {
 }
 
 func (u *User) UpdateGroupMemberships(db *gorm.DB, groupIDs ...string) error {
+	if u.IsServiceAccount() && len(groupIDs) > 0 {
+		return ErrServiceAccountTeams
+	}
 	var groupUintIDs []uint
 	for _, idStr := range groupIDs {
 		id, err := strconv.ParseUint(idStr, 10, 64)
@@ -437,11 +473,31 @@ func (u *User) GetGroupsToUpdate(groupIDs []uint) []Group {
 }
 
 func (u *User) ReplaceGroupAssociation(db *gorm.DB, groups []Group) error {
+	if u.IsServiceAccount() && len(groups) > 0 {
+		return ErrServiceAccountTeams
+	}
 	return db.Model(u).Association("Groups").Replace(groups)
 }
 
 func (u *User) DeleteGroupAssociation(db *gorm.DB) error {
 	return db.Model(u).Association("Groups").Clear()
+}
+
+// RefuseServiceAccountMembers returns ErrServiceAccountTeams when any of
+// the users is a service account: the check for paths that add members by
+// id (team create and update, member lists).
+func RefuseServiceAccountMembers(db *gorm.DB, userIDs []uint) error {
+	if len(userIDs) == 0 {
+		return nil
+	}
+	var n int64
+	if err := db.Model(&User{}).Where("id IN ? AND account_type = ?", userIDs, AccountTypeService).Count(&n).Error; err != nil {
+		return err
+	}
+	if n > 0 {
+		return ErrServiceAccountTeams
+	}
+	return nil
 }
 
 func IsEmailUnique(db *gorm.DB, email string, userID uint) (bool, error) {
@@ -466,10 +522,11 @@ func SetSkipQuickStartForUser(db *gorm.DB, userID uint) error {
 }
 
 type UserCounts struct {
-	UserCount      int64
-	AdminCount     int64
-	DeveloperCount int64
-	ChatUserCount  int64
+	UserCount           int64
+	AdminCount          int64
+	DeveloperCount      int64
+	ChatUserCount       int64
+	ServiceAccountCount int64
 }
 
 func GetUserCounts(db *gorm.DB) (UserCounts, error) {
@@ -477,9 +534,10 @@ func GetUserCounts(db *gorm.DB) (UserCounts, error) {
 	err := db.Model(&User{}).
 		Select(`
 			COUNT(*) as user_count,
-			SUM(CASE WHEN is_admin = true THEN 1 ELSE 0 END) as admin_count,
-			SUM(CASE WHEN is_admin = false AND show_portal = true THEN 1 ELSE 0 END) as developer_count,
-			SUM(CASE WHEN is_admin = false AND show_portal = false AND show_chat = true THEN 1 ELSE 0 END) as chat_user_count
+			SUM(CASE WHEN account_type <> 'service' AND is_admin = true THEN 1 ELSE 0 END) as admin_count,
+			SUM(CASE WHEN account_type <> 'service' AND is_admin = false AND show_portal = true THEN 1 ELSE 0 END) as developer_count,
+			SUM(CASE WHEN account_type <> 'service' AND is_admin = false AND show_portal = false AND show_chat = true THEN 1 ELSE 0 END) as chat_user_count,
+			SUM(CASE WHEN account_type = 'service' THEN 1 ELSE 0 END) as service_account_count
 		`).
 		Scan(&results).Error
 
@@ -495,6 +553,8 @@ func GetUserGroupCount(db *gorm.DB) (int64, error) {
 
 func (u *User) GetRole() string {
 	switch {
+	case u.IsServiceAccount():
+		return RoleServiceAccount
 	case u.IsAdmin && u.ID == SuperAdminID:
 		return RoleSuperAdmin
 	case u.IsAdmin:
@@ -532,6 +592,9 @@ type UserQueryParams struct {
 	AuthSource string
 	HasAPIKey  *bool
 	Disabled   *bool
+	// AccountType: nil any; otherwise AccountTypeUser ("") or
+	// AccountTypeService.
+	AccountType *string
 }
 
 func (u *Users) QueryUsers(db *gorm.DB, params UserQueryParams) (int64, int, error) {
@@ -556,6 +619,10 @@ func (u *Users) QueryUsers(db *gorm.DB, params UserQueryParams) (int64, int, err
 
 	if params.Disabled != nil {
 		query = query.Where("disabled = ?", *params.Disabled)
+	}
+
+	if params.AccountType != nil {
+		query = query.Where("COALESCE(account_type, '') = ?", *params.AccountType)
 	}
 
 	if params.ExcludeGroupID > 0 {

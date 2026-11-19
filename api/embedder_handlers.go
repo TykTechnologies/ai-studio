@@ -86,8 +86,14 @@ func parseEmbedderID(c *gin.Context) (uint, bool) {
 // @Security BearerAuth
 func (a *API) createEmbedder(c *gin.Context) {
 	var input EmbedderInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	// Bound with the body kept, so workspace_id can be read from it too.
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
+		return
+	}
+	// The Workspace the embedder lands in (decision D5).
+	workspaceID, ok := a.resolveCreateFromBody(c, "embedders")
+	if !ok {
 		return
 	}
 	if !validatePrivacyScore(c, input.Data.Attributes.PrivacyScore) {
@@ -97,7 +103,7 @@ func (a *API) createEmbedder(c *gin.Context) {
 	if e.IsLinked() && !a.requireLLMReadToLink(c) {
 		return
 	}
-	if !requireSecretReadForCredentials(c, nil, embedderCredentialFields(e)) {
+	if !a.requireSecretRefsIn(c, workspaceID, nil, embedderCredentialFields(e)) {
 		return
 	}
 	if _, ok := allowInternalHostUpdate(c, false, input.Data.Attributes.AllowInternalHost); !ok {
@@ -106,12 +112,17 @@ func (a *API) createEmbedder(c *gin.Context) {
 	if allow, ok := internalHostRequested(input.Data.Attributes.AllowInternalHost); ok {
 		e.AllowInternalHost = allow
 	}
+	e.WorkspaceID = workspaceID
 	e, err := a.service.CreateEmbedder(e, currentUserID(c))
+	if isWorkspaceNotFound(err) {
+		invalidWorkspace(c)
+		return
+	}
 	if err != nil {
 		respondEmbedderError(c, err)
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"data": serializeEmbedder(e)})
+	c.JSON(http.StatusCreated, gin.H{"data": a.embedderIn(e)})
 }
 
 // @Summary Get an embedder
@@ -133,7 +144,7 @@ func (a *API) getEmbedder(c *gin.Context) {
 		respondEmbedderError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": serializeEmbedder(e)})
+	c.JSON(http.StatusOK, gin.H{"data": a.embedderIn(e)})
 }
 
 // @Summary Update an embedder
@@ -167,6 +178,19 @@ func (a *API) updateEmbedder(c *gin.Context) {
 		respondEmbedderError(c, err)
 		return
 	}
+	// Write in the embedder's Workspace; a changed workspace_id is a move.
+	requested, ok := boundWorkspaceID(c)
+	if !ok {
+		return
+	}
+	moveTo, ok := a.checkObjectUpdate(c, "embedders", current.WorkspaceID, requested)
+	if !ok {
+		return
+	}
+	refsIn := current.WorkspaceID
+	if moveTo != nil {
+		refsIn = *moveTo
+	}
 	present, err := boundAttributeKeys(c)
 	if err != nil {
 		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
@@ -182,7 +206,10 @@ func (a *API) updateEmbedder(c *gin.Context) {
 			return
 		}
 	}
-	if !requireSecretReadForCredentials(c, embedderCredentialFields(current), embedderCredentialFields(changes)) {
+	if !a.requireSecretRefsIn(c, refsIn, embedderCredentialFields(current), embedderCredentialFields(changes)) {
+		return
+	}
+	if moveTo != nil && !a.requireSecretRefsStayIn(c, *moveTo, embedderCredentialFields(changes)) {
 		return
 	}
 	if _, ok := allowInternalHostUpdate(c, current.AllowInternalHost, input.Data.Attributes.AllowInternalHost); !ok {
@@ -192,12 +219,24 @@ func (a *API) updateEmbedder(c *gin.Context) {
 	if allow, ok := internalHostRequested(input.Data.Attributes.AllowInternalHost); ok {
 		changes.AllowInternalHost = allow
 	}
+	// The move goes first, so the stored Workspace matches the checks
+	// made against the destination; a failed update puts it back.
+	finishMove, ok := a.beginMove(c, &models.Embedder{}, id, current.WorkspaceID, moveTo)
+	if !ok {
+		return
+	}
+	updated := false
+	defer func() { finishMove(updated) }()
 	e, err := a.service.UpdateEmbedder(id, changes, currentUserID(c))
 	if err != nil {
 		respondEmbedderError(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": serializeEmbedder(e)})
+	if moveTo != nil {
+		e.WorkspaceID = *moveTo
+	}
+	updated = true
+	c.JSON(http.StatusOK, gin.H{"data": a.embedderIn(e)})
 }
 
 // @Summary Delete an embedder
@@ -242,6 +281,9 @@ func (a *API) listEmbedders(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if opts.Filters, ok = a.listWorkspaceScopes(c, "embedders", ""); !ok {
+		return
+	}
 	embedders, total, pages, err := a.service.ListEmbedders(pageSize, pageNumber, all, opts)
 	if err != nil {
 		respondEmbedderError(c, err)
@@ -251,7 +293,7 @@ func (a *API) listEmbedders(c *gin.Context) {
 	// serializing linked embedders runs no further queries.
 	out := make([]map[string]interface{}, len(embedders))
 	for i := range embedders {
-		out[i] = serializeEmbedder(&embedders[i])
+		out[i] = a.embedderIn(&embedders[i])
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"data": out,
@@ -297,7 +339,8 @@ func (a *API) listEmbedderVendors(c *gin.Context) {
 // using it would spend them), so embedders:write alone is not enough. It
 // writes the 403 and returns false when the caller lacks llms:read.
 func (a *API) requireLLMReadToLink(c *gin.Context) bool {
-	if a.holds(c, authz.Read("llms")) {
+	// LLMs are read-global (D4): read in any Workspace reads them all.
+	if a.workspaceCheckMode(c) == workspaceOpen || authz.CanAnywhere(c, authz.Read("llms")) {
 		return true
 	}
 	simpleError(c, http.StatusForbidden, "Forbidden", "linking an embedder to an LLM provider requires llms:read")
@@ -321,6 +364,7 @@ func serializeEmbedder(e *models.Embedder) map[string]interface{} {
 		"model":               e.ModelName,
 		"privacy_score":       e.EffectivePrivacyScore(),
 		"allow_internal_host": e.AllowInternalHost,
+		"workspace_id":        e.WorkspaceID,
 		"created_at":          e.CreatedAt,
 		"updated_at":          e.UpdatedAt,
 	}

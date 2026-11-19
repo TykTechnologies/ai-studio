@@ -2,14 +2,20 @@ package services
 
 import (
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
-func (s *Service) CreateDataCatalogue(name, shortDesc, longDesc, icon string) (*models.DataCatalogue, error) {
+// workspaceID, when given, is the Workspace the catalogue lands in (the
+// API's landing rule); otherwise it lands in the Default workspace.
+func (s *Service) CreateDataCatalogue(name, shortDesc, longDesc, icon string, workspaceID ...uint) (*models.DataCatalogue, error) {
 	dataCatalogue := &models.DataCatalogue{
 		Name:             name,
 		ShortDescription: shortDesc,
 		LongDescription:  longDesc,
 		Icon:             icon,
+	}
+	if len(workspaceID) > 0 {
+		dataCatalogue.WorkspaceID = workspaceID[0]
 	}
 
 	if err := dataCatalogue.Create(s.DB); err != nil {
@@ -120,25 +126,25 @@ func (s *Service) GetAllDataCatalogues(pageSize int, pageNumber int, all bool, o
 	return dataCatalogues, totalCount, totalPages, nil
 }
 
-func (s *Service) SearchDataCatalogues(query string) (models.DataCatalogues, error) {
+func (s *Service) SearchDataCatalogues(query string, scopes ...func(*gorm.DB) *gorm.DB) (models.DataCatalogues, error) {
 	var dataCatalogues models.DataCatalogues
-	if err := dataCatalogues.Search(s.DB, query); err != nil {
+	if err := dataCatalogues.Search(s.DB.Scopes(scopes...), query); err != nil {
 		return nil, err
 	}
 	return dataCatalogues, nil
 }
 
-func (s *Service) GetDataCataloguesByTag(tagName string) (models.DataCatalogues, error) {
+func (s *Service) GetDataCataloguesByTag(tagName string, scopes ...func(*gorm.DB) *gorm.DB) (models.DataCatalogues, error) {
 	var dataCatalogues models.DataCatalogues
-	if err := dataCatalogues.GetByTag(s.DB, tagName); err != nil {
+	if err := dataCatalogues.GetByTag(s.DB.Scopes(scopes...), tagName); err != nil {
 		return nil, err
 	}
 	return dataCatalogues, nil
 }
 
-func (s *Service) GetDataCataloguesByDatasource(datasourceID uint) (models.DataCatalogues, error) {
+func (s *Service) GetDataCataloguesByDatasource(datasourceID uint, scopes ...func(*gorm.DB) *gorm.DB) (models.DataCatalogues, error) {
 	var dataCatalogues models.DataCatalogues
-	if err := dataCatalogues.GetByDatasource(s.DB, datasourceID); err != nil {
+	if err := dataCatalogues.GetByDatasource(s.DB.Scopes(scopes...), datasourceID); err != nil {
 		return nil, err
 	}
 	return dataCatalogues, nil

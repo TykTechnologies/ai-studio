@@ -77,10 +77,13 @@ func TestApproveSubmission_AssignedCataloguesNeedCatalogueWrite(t *testing.T) {
 	reviewerOnly := authz.NewSet(authz.Write("submissions"))
 	catalogueEditor := authz.NewSet(authz.Write("submissions"), authz.Write("tool-catalogues"))
 	wrongType := authz.NewSet(authz.Write("submissions"), authz.Write("data-catalogues"))
+	catalogueReader := authz.NewSet(authz.Write("submissions"), authz.Read("tool-catalogues"))
 
+	// A catalogue the reviewer may not see answers 404, as on the catalogue's
+	// own routes (Workspaces: a 403 never confirms an object exists).
 	t.Run("submissions:write alone cannot assign catalogues", func(t *testing.T) {
 		sub := newToolSubmission("Refused")
-		assert.Equal(t, http.StatusForbidden, approve(reviewerOnly, sub.ID, withCatalogue))
+		assert.Equal(t, http.StatusNotFound, approve(reviewerOnly, sub.ID, withCatalogue))
 		got, err := svc.GetSubmissionByID(sub.ID)
 		require.NoError(t, err)
 		assert.NotEqual(t, models.SubmissionStatusApproved, got.Status, "nothing is approved")
@@ -89,7 +92,15 @@ func TestApproveSubmission_AssignedCataloguesNeedCatalogueWrite(t *testing.T) {
 
 	t.Run("the other catalogue type's write permission does not count", func(t *testing.T) {
 		sub := newToolSubmission("Wrong type")
-		assert.Equal(t, http.StatusForbidden, approve(wrongType, sub.ID, withCatalogue))
+		assert.Equal(t, http.StatusNotFound, approve(wrongType, sub.ID, withCatalogue))
+	})
+
+	t.Run("reading a catalogue is not enough to assign to it", func(t *testing.T) {
+		sub := newToolSubmission("Reader")
+		assert.Equal(t, http.StatusForbidden, approve(catalogueReader, sub.ID, withCatalogue))
+		got, err := svc.GetSubmissionByID(sub.ID)
+		require.NoError(t, err)
+		assert.Nil(t, got.ResourceID, "no resource is created")
 	})
 
 	t.Run("tool-catalogues:write may assign tool catalogues", func(t *testing.T) {
@@ -107,24 +118,34 @@ func TestApproveSubmission_AssignedCataloguesNeedCatalogueWrite(t *testing.T) {
 
 // The permission each resource type needs to assign catalogues, including
 // the fail-closed default for plugin resources (and anything unknown).
-func TestCanAssignCatalogues(t *testing.T) {
+func TestRequireApprovalCatalogues(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	can := func(resourceType string, perms ...authz.Permission) bool {
+	db := apitest.SetupTestDB(t)
+	svc := apitest.SetupTestService(db)
+	a := &API{service: svc, config: &auth.Config{}}
+	toolCat, err := svc.CreateToolCatalogue("Tools", "", "", "")
+	require.NoError(t, err)
+	dataCat, err := svc.CreateDataCatalogue("Data", "", "", "")
+	require.NoError(t, err)
+
+	can := func(resourceType string, ids []uint, perms ...authz.Permission) bool {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/submissions/1/approve", nil)
 		set := authz.NewSet(perms...)
 		authz.WithContext(c, authz.NewContext(7, false, func() (authz.Set, error) { return set, nil }))
-		return canAssignCatalogues(c, resourceType)
+		return a.requireApprovalCatalogues(c, resourceType, ids)
 	}
 	toolW, dataW, llmW := authz.Write("tool-catalogues"), authz.Write("data-catalogues"), authz.Write("catalogues")
+	tools, data := []uint{toolCat.ID}, []uint{dataCat.ID}
 
-	assert.True(t, can(models.SubmissionResourceTypeTool, toolW))
-	assert.True(t, can(models.SubmissionResourceTypeMCPServer, toolW))
-	assert.False(t, can(models.SubmissionResourceTypeTool, dataW, llmW))
+	assert.True(t, can(models.SubmissionResourceTypeTool, tools, toolW))
+	assert.True(t, can(models.SubmissionResourceTypeMCPServer, tools, toolW))
+	assert.False(t, can(models.SubmissionResourceTypeTool, tools, dataW, llmW))
 
-	assert.True(t, can(models.SubmissionResourceTypeDatasource, dataW))
-	assert.False(t, can(models.SubmissionResourceTypeDatasource, toolW, llmW))
+	assert.True(t, can(models.SubmissionResourceTypeDatasource, data, dataW))
+	assert.False(t, can(models.SubmissionResourceTypeDatasource, data, toolW, llmW))
 
-	assert.False(t, can(models.SubmissionResourceTypePlugin, toolW, dataW), "a plugin resource needs every catalogue write")
-	assert.True(t, can(models.SubmissionResourceTypePlugin, toolW, dataW, llmW))
-	assert.False(t, can("something-new", toolW, dataW))
+	assert.False(t, can(models.SubmissionResourceTypePlugin, tools, toolW, dataW), "a plugin resource needs every catalogue write")
+	assert.True(t, can(models.SubmissionResourceTypePlugin, tools, toolW, dataW, llmW))
+	assert.False(t, can("something-new", tools, toolW, dataW))
 }

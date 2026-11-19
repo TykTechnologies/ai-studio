@@ -34,6 +34,9 @@ import { apiErrorDetail, preStyle } from "./webhookShared";
 import { TykUpsell, TykDisabledNotice } from "./tykShared";
 import { TOOL_VS_MCP_SERVER } from "../components/tools/toolsVsMcpServers";
 import AllowInternalHostSwitch from "../components/common/AllowInternalHostSwitch";
+import WorkspaceSelect from "../components/workspaces/WorkspaceSelect";
+import { workspaceFieldError } from "../components/workspaces/workspaceFields";
+import { P } from "../rbac/permissions";
 
 const STEPS = ["Connection and kind", "Proxy details", "Access and governance", "Review and create"];
 
@@ -93,6 +96,9 @@ export const buildPayload = (f) => {
     body.scopes_supported = parseList(f.scopes_supported);
   }
   if (f.consumer_auth === "keyless") body.confirm_keyless = f.confirm_keyless;
+  // Enterprise: the Workspace the server lands in; omitted, the landing rule
+  // applies (Workspaces D5).
+  if (f.workspace_id !== null && f.workspace_id !== undefined && f.workspace_id !== "") body.workspace_id = Number(f.workspace_id);
   return body;
 };
 
@@ -124,6 +130,7 @@ const initialForm = {
   privacy_score: "",
   publish: false,
   tool_catalogues: [],
+  workspace_id: null, // Enterprise: the Workspace the server is created in
 };
 
 /**
@@ -258,6 +265,20 @@ const MCPServerRegister = () => {
   // Tool discovery for remote servers: Studio asks the upstream for its
   // tools/list. It goes stale when the URL or credential changes.
   const [discovery, setDiscovery] = useState({ status: "idle" });
+  const [workspaceError, setWorkspaceError] = useState("");
+  const setWorkspace = useCallback((ws) => {
+    setForm((f) => ({ ...f, workspace_id: ws }));
+    setWorkspaceError("");
+  }, []);
+  // A Workspace error belongs to the field on the first step.
+  const showWorkspaceError = (err) => {
+    const wsError = workspaceFieldError(err);
+    if (!wsError) return false;
+    setWorkspaceError(wsError);
+    setError(wsError);
+    setStep(0);
+    return true;
+  };
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e?.target?.type === "checkbox" ? e.target.checked : e.target.value }));
 
@@ -424,6 +445,7 @@ const MCPServerRegister = () => {
         setPreview(res.data);
         setStep(3);
       } catch (err) {
+        if (showWorkspaceError(err)) return;
         setError(apiErrorDetail(err, "The Dashboard rejected the definition"));
       } finally {
         setBusy(false);
@@ -440,6 +462,7 @@ const MCPServerRegister = () => {
       const res = await apiClient.post("/mcp-servers/register", buildPayload(form));
       navigate(`/admin/mcp-servers/${res.data.server.id}`);
     } catch (err) {
+      if (showWorkspaceError(err)) return;
       setError(apiErrorDetail(err, "Registration failed"));
     } finally {
       setBusy(false);
@@ -510,6 +533,16 @@ const MCPServerRegister = () => {
                     REST API to MCP {restSupported ? "" : "(needs Tyk 5.15+)"}
                   </MenuItem>
                 </TextField>
+              </Grid>
+              {/* Workspace (Enterprise): where the catalogued server lands. */}
+              <Grid item xs={12} md={6}>
+                <WorkspaceSelect
+                  permission={P.MCP_SERVERS_WRITE}
+                  value={form.workspace_id}
+                  onChange={setWorkspace}
+                  error={workspaceError}
+                  helperText="The Workspace the server is created in."
+                />
               </Grid>
             </Grid>
           </Section>

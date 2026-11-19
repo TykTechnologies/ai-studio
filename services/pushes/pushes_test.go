@@ -880,3 +880,29 @@ func TestIdleJanitorLooksLessOften(t *testing.T) {
 	before := looks.Load()
 	require.Eventually(t, func() bool { return looks.Load() > before }, 150*time.Millisecond, 5*time.Millisecond, "looks at the next interval after a wake")
 }
+
+// Precheck sees the targets' distinct namespaces once they are resolved;
+// its error refuses the push before anything is recorded.
+func TestPrecheckRunsBeforeAnythingIsRecorded(t *testing.T) {
+	forEachDB(t, func(t *testing.T, db *gorm.DB) {
+		a := newReplica(t, db, "node-a", Options{})
+		addEdge(t, db, "edge-1", "ns1", models.EdgeStatusConnected, "node-a")
+		addEdge(t, db, "edge-2", "ns1", models.EdgeStatusConnected, "node-a")
+		addEdge(t, db, "edge-3", "", models.EdgeStatusConnected, "node-a")
+
+		refused := errors.New("stained")
+		var seen []string
+		_, err := a.c.Push(context.Background(), Request{Scope: ScopeAll, InitiatedBy: "admin@example.com",
+			Precheck: func(_ context.Context, namespaces []string) error { seen = namespaces; return refused }})
+		require.ErrorIs(t, err, refused)
+		assert.ElementsMatch(t, []string{"ns1", ""}, seen)
+		var n int64
+		require.NoError(t, db.Model(&models.PushOperation{}).Count(&n).Error)
+		assert.Zero(t, n, "no operation")
+		require.NoError(t, db.Model(&models.EdgePushCommand{}).Count(&n).Error)
+		assert.Zero(t, n, "no commands")
+
+		res := push(t, a.c, Request{Scope: ScopeAll, Precheck: func(context.Context, []string) error { return nil }})
+		assert.Len(t, res.Targets, 3)
+	})
+}

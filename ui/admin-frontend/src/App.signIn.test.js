@@ -129,6 +129,41 @@ describe('standalone (Studio signs users in)', () => {
     expect(await screen.findByText('portal')).toBeInTheDocument();
   });
 
+  test('a user whose only roles are Workspace-scoped reaches the admin console (.57)', async () => {
+    pubClient.get.mockResolvedValue({
+      data: {
+        attributes: {
+          is_admin: false,
+          has_admin_access: false,
+          admin_nav_hint: true,
+          ui_options: {},
+          entitlements: {},
+          permissions: [],
+          workspaces: [{ id: 4, name: 'W1', permissions: ['llms:write'] }],
+        },
+      },
+    });
+    open('/admin/llms');
+    expect(await screen.findByText('admin console')).toBeInTheDocument();
+  });
+
+  test('home sends a Workspace-scoped user to the admin console (.57)', async () => {
+    pubClient.get.mockResolvedValue({
+      data: { attributes: { has_admin_access: false, admin_nav_hint: true, ui_options: {}, permissions: [] } },
+    });
+    open('/');
+    expect(await screen.findByText('admin console')).toBeInTheDocument();
+  });
+
+  test('a user with no admin access and no hint is kept off the admin console', async () => {
+    pubClient.get.mockResolvedValue({
+      data: { attributes: { has_admin_access: false, admin_nav_hint: false, ui_options: { show_portal: true }, permissions: [] } },
+    });
+    open('/admin/llms');
+    expect(await screen.findByText('portal')).toBeInTheDocument();
+    expect(screen.queryByText('admin console')).not.toBeInTheDocument();
+  });
+
   test('a signed-in user opening /login with an off-site ?next= goes home', async () => {
     signedInAdmin();
     open('/login', { search: '?next=%2F%2Fevil.example%2Fportal' });

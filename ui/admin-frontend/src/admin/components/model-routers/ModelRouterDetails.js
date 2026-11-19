@@ -30,6 +30,8 @@ import {
   SecondaryLinkButton,
 } from "../../styles/sharedStyles";
 import Can from "../rbac/Can";
+import { usePermissions } from "../../context/PermissionsContext";
+import NotFound from "../../pages/NotFound";
 import { P } from "../../rbac/permissions";
 import { routerModelStrings } from "./routerModels";
 
@@ -39,6 +41,10 @@ const ModelRouterDetails = () => {
   const [router, setRouter] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [notFound, setNotFound] = useState(false);
+  // Catalogs in Workspaces the caller cannot see are left out of the router.
+  const { rbacEnabled, can } = usePermissions();
+  const cataloguesMayBeHidden = rbacEnabled && !can(P.CATALOGUES_READ);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -57,6 +63,11 @@ const ModelRouterDetails = () => {
       setError("");
     } catch (error) {
       console.error("Error fetching router:", error);
+      // Missing, or in a Workspace the caller cannot see.
+      if (error.response?.status === 404) {
+        setNotFound(true);
+        return;
+      }
       setError("Failed to load Model Router");
     } finally {
       setLoading(false);
@@ -88,6 +99,10 @@ const ModelRouterDetails = () => {
         <CircularProgress />
       </Box>
     );
+  }
+
+  if (notFound) {
+    return <NotFound />;
   }
 
   if (error) {
@@ -130,7 +145,7 @@ const ModelRouterDetails = () => {
         <Box sx={{ display: "flex", gap: 2 }}>
           {/* The toggle is publish-gated (PATCH /model-routers/:id/toggle);
               the edit form is write-gated, and publish never implies write. */}
-          <Can permission={P.MODEL_ROUTERS_PUBLISH}>
+          <Can permission={P.MODEL_ROUTERS_PUBLISH} workspaceId={attributes.workspace_id}>
             <PrimaryButton
               variant="outlined"
               onClick={handleToggleActive}
@@ -138,7 +153,7 @@ const ModelRouterDetails = () => {
               {attributes.active ? "Deactivate" : "Activate"}
             </PrimaryButton>
           </Can>
-          <Can permission={P.MODEL_ROUTERS_WRITE}>
+          <Can permission={P.MODEL_ROUTERS_WRITE} workspaceId={attributes.workspace_id}>
             <PrimaryButton
               variant="contained"
               startIcon={<EditIcon />}
@@ -243,7 +258,9 @@ const ModelRouterDetails = () => {
                 </Box>
               ) : (
                 <Typography variant="body1" sx={{ mb: 2 }}>
-                  Not in any catalog. Portal users cannot add it to their Apps.
+                  {cataloguesMayBeHidden
+                    ? "Not in any catalog you can see. Catalogs in other Workspaces are not listed."
+                    : "Not in any catalog. Portal users cannot add it to their Apps."}
                 </Typography>
               )}
               <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -276,6 +293,7 @@ const ModelRouterDetails = () => {
           {/* Gateway authentication */}
           <Grid item xs={12}>
             <AuthPluginsSection
+              workspaceId={attributes.workspace_id}
               endpointPath="model-routers"
               endpointId={id}
               noun="router"

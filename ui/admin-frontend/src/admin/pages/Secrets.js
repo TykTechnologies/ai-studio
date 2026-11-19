@@ -25,6 +25,12 @@ import useListQuery from "../hooks/useListQuery";
 import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
+import {
+  useWorkspaceColumn,
+  useWorkspaceFilter,
+  useWorkspaceAccess,
+  WorkspaceFilter,
+} from "../components/workspaces/workspaceFields";
 
 // Links each LLM that references the secret as $SECRET/<name>.
 const renderReferencedBy = (referencedBy) => {
@@ -58,6 +64,9 @@ const secretName = (secret) => secret?.attributes?.var_name || String(secret?.id
 
 const Secrets = () => {
   const navigate = useNavigate();
+  const { canOn, canAnywhere } = useWorkspaceAccess();
+  const workspaceColumn = useWorkspaceColumn();
+  const { workspaceId, setWorkspaceId, params: workspaceParams } = useWorkspaceFilter();
   const [secrets, setSecrets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -69,7 +78,7 @@ const Secrets = () => {
   const fetchSecrets = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get("/secrets", { params: queryParams });
+      const response = await apiClient.get("/secrets", { params: { ...queryParams, ...workspaceParams } });
       setSecrets(response.data.data || []);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
       const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
@@ -85,7 +94,7 @@ const Secrets = () => {
     } finally {
       setLoading(false);
     }
-  }, [queryParams, updatePaginationData]);
+  }, [queryParams, workspaceParams, updatePaginationData]);
 
   useEffect(() => {
     fetchSecrets();
@@ -140,12 +149,22 @@ const Secrets = () => {
       cellProps: () => ({ onClick: (event) => event.stopPropagation() }),
       renderCell: (secret) => renderReferencedBy(secret.attributes.referenced_by),
     },
-  ], []);
+    ...(workspaceColumn ? [workspaceColumn] : []),
+  ], [workspaceColumn]);
+
+  // Edit needs secrets:write and delete secrets:delete, in the secret's Workspace: one in
+  // another Workspace is read-only.
+  const canWrite = canAnywhere(P.SECRETS_WRITE);
+  const writeOn = useCallback((secret) => canOn(secret?.attributes?.workspace_id, P.SECRETS_WRITE), [canOn]);
+  // Deleting needs the delete permission in the object's Workspace, as on
+  // the server (row and bulk).
+  const canDelete = canAnywhere(P.SECRETS_DELETE);
+  const deleteOn = useCallback((secret) => canOn(secret?.attributes?.workspace_id, P.SECRETS_DELETE), [canOn]);
 
   const rowActions = useMemo(() => [
-    { key: "edit", label: "Edit secret", onClick: (secret) => navigate(`/admin/secrets/edit/${secret.id}`) },
-    { key: "delete", label: "Delete secret", onClick: (secret) => setDeleteTarget(secret) },
-  ], [navigate]);
+    { key: "edit", label: "Edit secret", onClick: (secret) => navigate(`/admin/secrets/edit/${secret.id}`), hidden: (secret) => !writeOn(secret) },
+    { key: "delete", label: "Delete secret", onClick: (secret) => setDeleteTarget(secret), hidden: (secret) => !deleteOn(secret) },
+  ], [navigate, writeOn, deleteOn]);
 
   const bulkActions = useMemo(
     () => standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete }),
@@ -208,7 +227,7 @@ const Secrets = () => {
     <>
       <TitleBox top="var(--studio-header-height)">
         <Typography variant="headingXLarge">Secrets</Typography>
-        <Can permission={P.SECRETS_WRITE}>
+        <Can permission={P.SECRETS_WRITE} anywhere>
           <PrimaryButton
             variant="contained"
             startIcon={<AddIcon />}
@@ -219,35 +238,32 @@ const Secrets = () => {
         </Can>
       </TitleBox>
       <ContentBox>
+        <WorkspaceFilter value={workspaceId} onChange={setWorkspaceId} sx={{ mb: 2 }} />
         <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
-        <Can permission={P.SECRETS_WRITE}>
-          {(canWrite) => (
-            <DataTable
-              {...tableProps}
-              ariaLabel="Secrets"
-              searchPlaceholder="Search secrets by variable name..."
-              columns={columns}
-              data={secrets}
-              loading={loading}
-              onRowClick={handleSecretClick}
-              getRowLabel={secretName}
-              actions={canWrite ? rowActions : undefined}
-              {...(canWrite ? bulk.selectionProps : {})}
-              bulkActions={canWrite ? bulkActions : undefined}
-              emptyState={
-                !searchTerm ? (
-                  <EmptyStateWidget
-                    title="No secrets found"
-                    description="Click the button below to add a new secret."
-                    buttonText="Add Secret"
-                    buttonIcon={<AddIcon />}
-                    onButtonClick={canWrite ? handleAddSecret : undefined}
-                  />
-                ) : undefined
-              }
-            />
-          )}
-        </Can>
+        <DataTable
+          {...tableProps}
+          ariaLabel="Secrets"
+          searchPlaceholder="Search secrets by variable name..."
+          columns={columns}
+          data={secrets}
+          loading={loading}
+          onRowClick={handleSecretClick}
+          getRowLabel={secretName}
+          actions={canWrite || canDelete ? rowActions : undefined}
+          {...(canDelete ? bulk.selectionProps : {})}
+          bulkActions={canDelete ? bulkActions : undefined}
+          emptyState={
+            !searchTerm ? (
+              <EmptyStateWidget
+                title="No secrets found"
+                description="Click the button below to add a new secret."
+                buttonText="Add Secret"
+                buttonIcon={<AddIcon />}
+                onButtonClick={canWrite ? handleAddSecret : undefined}
+              />
+            ) : undefined
+          }
+        />
       </ContentBox>
 
       <DeleteConfirmationDialog

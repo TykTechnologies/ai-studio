@@ -1,6 +1,8 @@
 package api
 
 import (
+	"github.com/TykTechnologies/midsommar/v2/models/wsstamp"
+	"github.com/gin-gonic/gin/binding"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -30,7 +32,8 @@ import (
 // @Security BearerAuth
 func (a *API) createDatasource(c *gin.Context) {
 	var input DatasourceInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	// Bound with the body kept, so workspace_id can be read from it too.
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -51,7 +54,12 @@ func (a *API) createDatasource(c *gin.Context) {
 	if !a.validateGovernedMetadataInput(c, models.GovernedObjectTypeDatasource, input.Data.Attributes.GovernedMetadata, true) {
 		return
 	}
-	if !requireSecretReadForCredentials(c, nil, datasourceCredentialFields(input.Data.Attributes.DBConnString,
+	// The Workspace the datasource lands in (decision D5).
+	workspaceID, ok := a.resolveCreateFromBody(c, "datasources")
+	if !ok {
+		return
+	}
+	if !a.requireSecretRefsIn(c, workspaceID, nil, datasourceCredentialFields(input.Data.Attributes.DBConnString,
 		input.Data.Attributes.DBConnAPIKey, input.Data.Attributes.EmbedUrl, input.Data.Attributes.EmbedAPIKey)) {
 		return
 	}
@@ -63,7 +71,7 @@ func (a *API) createDatasource(c *gin.Context) {
 
 	// Creating a datasource already active is the publish action, and needs
 	// every "required to publish" metadata field.
-	if !a.requirePublishToCreateLive(c, "datasources", input.Data.Attributes.Active) {
+	if !a.requirePublishToCreateLiveIn(c, "datasources", workspaceID, input.Data.Attributes.Active) {
 		return
 	}
 	if input.Data.Attributes.Active && !a.publishGateOpen(c, models.GovernedObjectTypeDatasource, "", input.Data.Attributes.GovernedMetadata) {
@@ -80,7 +88,7 @@ func (a *API) createDatasource(c *gin.Context) {
 			}{{Title: "Unauthorized", Detail: "User not found in context"}}})
 			return
 		}
-		if _, ok := user.(*models.User); !ok || !authz.Can(c, authz.Write("datasources")) {
+		if _, ok := user.(*models.User); !ok || !a.holdsIn(c, workspaceID, authz.Write("datasources")) {
 			c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -89,7 +97,10 @@ func (a *API) createDatasource(c *gin.Context) {
 		}
 	}
 
-	datasource, err := a.service.CreateDatasource(
+	// Created on a connection carrying the Workspace: the datasource, and an
+	// embedder made for it, land there (wsstamp.WithWorkspace).
+	datasource, err := a.service.CreateDatasourceWithDB(
+		a.service.DB.WithContext(wsstamp.WithWorkspace(c.Request.Context(), workspaceID)),
 		input.Data.Attributes.Name,
 		input.Data.Attributes.ShortDescription,
 		input.Data.Attributes.LongDescription,
@@ -114,6 +125,10 @@ func (a *API) createDatasource(c *gin.Context) {
 		err = a.service.SetDatasourceAllowInternalHost(datasource.ID, true)
 		datasource.AllowInternalHost = true
 	}
+	if isWorkspaceNotFound(err) {
+		invalidWorkspace(c)
+		return
+	}
 	if err != nil {
 		status := datasourceWriteStatus(err)
 		c.JSON(status, ErrorResponse{
@@ -126,7 +141,7 @@ func (a *API) createDatasource(c *gin.Context) {
 	}
 
 	meta := a.persistGovernedMetadata(c, models.GovernedObjectTypeDatasource, models.BuiltinObjectID(datasource.ID), input.Data.Attributes.GovernedMetadata)
-	c.JSON(http.StatusCreated, dataWithMeta(a.withDatasourceGovernedMetadataOne(serializeDatasource(datasource)), meta))
+	c.JSON(http.StatusCreated, dataWithMeta(a.withDatasourceGovernedMetadataOne(a.datasourceIn(datasource)), meta))
 }
 
 // @Summary Get a datasource by ID
@@ -163,7 +178,7 @@ func (a *API) getDatasource(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": a.withDatasourceGovernedMetadataOne(serializeDatasource(datasource))})
+	c.JSON(http.StatusOK, gin.H{"data": a.withDatasourceGovernedMetadataOne(a.datasourceIn(datasource))})
 }
 
 // @Summary Update a datasource
@@ -241,12 +256,44 @@ func (a *API) updateDatasource(c *gin.Context) {
 		})
 		return
 	}
+	// Responses show the connection string with its password redacted
+	// (.58); sending that form back keeps the stored value. A changed value
+	// that still carries the marker is refused, so the stored password never
+	// follows a new host or user.
+	connString, ok := models.RestoreConnString(input.Data.Attributes.DBConnString, existingDS.DBConnString)
+	if !ok {
+		c.JSON(http.StatusUnprocessableEntity, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Unprocessable Entity", Detail: "db_conn_string still contains a redacted password: enter the password again, or send the connection string unchanged"}},
+		})
+		return
+	}
+	input.Data.Attributes.DBConnString = connString
 
+	// Write in the datasource's Workspace; a changed workspace_id is a move.
+	requested, ok := requestedWorkspaceID(c, rawBody)
+	if !ok {
+		return
+	}
+	moveTo, ok := a.checkObjectUpdate(c, "datasources", existingDS.WorkspaceID, requested)
+	if !ok {
+		return
+	}
+	refsIn := existingDS.WorkspaceID
+	if moveTo != nil {
+		refsIn = *moveTo
+	}
 	existingEmbed := existingDS.EmbedFields(false)
-	if !requireSecretReadForCredentials(c,
+	newFields := datasourceCredentialFields(input.Data.Attributes.DBConnString, input.Data.Attributes.DBConnAPIKey,
+		input.Data.Attributes.EmbedUrl, input.Data.Attributes.EmbedAPIKey)
+	if !a.requireSecretRefsIn(c, refsIn,
 		datasourceCredentialFields(existingDS.DBConnString, existingDS.DBConnAPIKey, existingEmbed.URL, existingEmbed.APIKey),
-		datasourceCredentialFields(input.Data.Attributes.DBConnString, input.Data.Attributes.DBConnAPIKey,
-			input.Data.Attributes.EmbedUrl, input.Data.Attributes.EmbedAPIKey)) {
+		newFields) {
+		return
+	}
+	if moveTo != nil && !a.requireSecretRefsStayIn(c, *moveTo, newFields) {
 		return
 	}
 
@@ -254,7 +301,7 @@ func (a *API) updateDatasource(c *gin.Context) {
 	if _, ok := present["active"]; !ok {
 		input.Data.Attributes.Active = existingDS.Active
 	}
-	if !a.requirePublishIfChanged(c, "datasources", existingDS.Active, input.Data.Attributes.Active) {
+	if !a.requirePublishIfChangedIn(c, "datasources", existingDS.WorkspaceID, existingDS.Active, input.Data.Attributes.Active) {
 		return
 	}
 	if !existingDS.Active && input.Data.Attributes.Active &&
@@ -265,7 +312,7 @@ func (a *API) updateDatasource(c *gin.Context) {
 	// Any namespace change (including clearing to global) requires admin authorization
 	if input.Data.Attributes.Namespace != existingDS.Namespace {
 		_, exists := c.Get("user")
-		if !exists || !authz.Can(c, authz.Write("datasources")) {
+		if !exists || !a.holdsIn(c, refsIn, authz.Write("datasources")) {
 			c.JSON(http.StatusForbidden, ErrorResponse{Errors: []struct {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
@@ -312,6 +359,14 @@ func (a *API) updateDatasource(c *gin.Context) {
 		}
 	}
 
+	// The move goes first, so the stored Workspace matches the checks
+	// made against the destination; a failed update puts it back.
+	finishMove, ok := a.beginMove(c, &models.Datasource{}, uint(id), existingDS.WorkspaceID, moveTo)
+	if !ok {
+		return
+	}
+	updated := false
+	defer func() { finishMove(updated) }()
 	datasource, err := a.service.UpdateDatasource(
 		uint(id),
 		input.Data.Attributes.Name,
@@ -340,9 +395,13 @@ func (a *API) updateDatasource(c *gin.Context) {
 		})
 		return
 	}
+	if moveTo != nil {
+		datasource.WorkspaceID = *moveTo
+	}
+	updated = true
 
 	meta := a.persistGovernedMetadata(c, models.GovernedObjectTypeDatasource, models.BuiltinObjectID(datasource.ID), input.Data.Attributes.GovernedMetadata)
-	c.JSON(http.StatusOK, dataWithMeta(a.withDatasourceGovernedMetadataOne(serializeDatasource(datasource)), meta))
+	c.JSON(http.StatusOK, dataWithMeta(a.withDatasourceGovernedMetadataOne(a.datasourceIn(datasource)), meta))
 }
 
 // @Summary Delete a datasource
@@ -402,6 +461,9 @@ func (a *API) listDatasources(c *gin.Context) {
 		return
 	}
 
+	if opts.Filters, ok = a.listWorkspaceScopes(c, "datasources", ""); !ok {
+		return
+	}
 	datasources, totalCount, totalPages, err := a.service.GetAllDatasources(pageSize, pageNumber, all, opts)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -415,7 +477,7 @@ func (a *API) listDatasources(c *gin.Context) {
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, gin.H{"data": a.withDatasourceGovernedMetadata(serializeDatasources(datasources), false)})
+	c.JSON(http.StatusOK, gin.H{"data": a.withDatasourceGovernedMetadata(a.datasourcesIn(datasources), false)})
 }
 
 // @Summary Search datasources
@@ -441,7 +503,11 @@ func (a *API) searchDatasources(c *gin.Context) {
 		return
 	}
 
-	datasources, err := a.service.SearchDatasources(query)
+	filters, ok := a.listWorkspaceScopes(c, "datasources", "")
+	if !ok {
+		return
+	}
+	datasources, err := a.service.SearchDatasources(query, filters...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -452,7 +518,7 @@ func (a *API) searchDatasources(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeDatasources(datasources)})
+	c.JSON(http.StatusOK, gin.H{"data": a.datasourcesIn(datasources)})
 }
 
 // @Summary Get datasources by tag
@@ -478,7 +544,11 @@ func (a *API) getDatasourcesByTag(c *gin.Context) {
 		return
 	}
 
-	datasources, err := a.service.GetDatasourcesByTag(tag)
+	filters, ok := a.listWorkspaceScopes(c, "datasources", "")
+	if !ok {
+		return
+	}
+	datasources, err := a.service.GetDatasourcesByTag(tag, filters...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -489,7 +559,7 @@ func (a *API) getDatasourcesByTag(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeDatasources(datasources)})
+	c.JSON(http.StatusOK, gin.H{"data": a.datasourcesIn(datasources)})
 }
 
 // @Summary Add FileStore to Datasource
@@ -550,7 +620,7 @@ func (a *API) addFileStoreToDatasource(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeDatasource(datasource)})
+	c.JSON(http.StatusOK, gin.H{"data": a.datasourceIn(datasource)})
 }
 
 // @Summary Remove FileStore from Datasource
@@ -611,7 +681,7 @@ func (a *API) removeFileStoreFromDatasource(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeDatasource(datasource)})
+	c.JSON(http.StatusOK, gin.H{"data": a.datasourceIn(datasource)})
 }
 
 // @Summary Process file embeddings for a datasource
@@ -707,7 +777,42 @@ func (a *API) cloneDatasource(c *gin.Context) {
 		return
 	}
 
-	cloned, err := a.service.CloneDatasource(uint(id))
+	// The copy keeps the source's credentials, so cloning needs write on
+	// the source's Workspace (the route's onObject check) as well as on the
+	// Workspace it lands in, chosen by the landing rule (never silently the
+	// source's), and the copied references must be allowed there (.38).
+	source, err := a.service.GetDatasourceByID(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{Errors: []struct {
+			Title  string `json:"title"`
+			Detail string `json:"detail"`
+		}{{Title: "Not Found", Detail: "Datasource not found"}}})
+		return
+	}
+	var raw []byte
+	if c.Request.Body != nil {
+		raw, _ = io.ReadAll(c.Request.Body)
+	}
+	requested, ok := requestedWorkspaceID(c, raw)
+	if !ok {
+		return
+	}
+	landing, ok := a.resolveCreateWorkspace(c, "datasources", requested)
+	if !ok {
+		return
+	}
+	sourceEmbed := source.EmbedFields(false)
+	if !a.requireSecretRefsIn(c, landing, nil,
+		datasourceCredentialFields(source.DBConnString, source.DBConnAPIKey, sourceEmbed.URL, sourceEmbed.APIKey)) {
+		return
+	}
+
+	cloned, err := a.service.CloneDatasourceWithDB(
+		a.service.DB.WithContext(wsstamp.WithWorkspace(c.Request.Context(), landing)), uint(id))
+	if isWorkspaceNotFound(err) {
+		invalidWorkspace(c)
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -718,7 +823,7 @@ func (a *API) cloneDatasource(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": serializeDatasource(cloned)})
+	c.JSON(http.StatusCreated, gin.H{"data": a.datasourceIn(cloned)})
 }
 
 func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
@@ -726,6 +831,8 @@ func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
 		datasource = &models.Datasource{}
 	}
 	embed := datasource.FlattenedEmbed()
+	// Datasources are read-global (D4): credentials are redacted, the
+	// password in the connection string included (.58).
 	return DatasourceResponse{
 		Type: "datasources",
 		ID:   strconv.FormatUint(uint64(datasource.ID), 10),
@@ -758,6 +865,9 @@ func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
 			// AllowInternalHost: the datasource's own host may be an
 			// internal address (an administrator's switch).
 			AllowInternalHost bool `json:"allow_internal_host"`
+			// WorkspaceID is the Workspace that owns the datasource (admin
+			// responses).
+			WorkspaceID uint `json:"workspace_id,omitempty"`
 		}{
 			Name:             datasource.Name,
 			ShortDescription: datasource.ShortDescription,
@@ -767,7 +877,7 @@ func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
 			PrivacyScore:     datasource.PrivacyScore,
 			UserID:           datasource.UserID,
 			Tags:             serializeTags(datasource.Tags),
-			DBConnString:     datasource.DBConnString,
+			DBConnString:     models.RedactConnString(datasource.DBConnString),
 			DBSourceType:     datasource.DBSourceType,
 			DBConnAPIKey:     services.REDACTED_VALUE,
 			HasDBConnAPIKey:  datasource.DBConnAPIKey != "",
@@ -784,6 +894,7 @@ func serializeDatasource(datasource *models.Datasource) DatasourceResponse {
 			Files:            serializeFileStores(datasource.Files),
 			TracingContentModeMax: datasource.TracingContentModeMax,
 			AllowInternalHost:     datasource.AllowInternalHost,
+			WorkspaceID:           datasource.WorkspaceID,
 		},
 	}
 }

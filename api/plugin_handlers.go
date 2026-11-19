@@ -996,7 +996,7 @@ func (a *API) getLLMPlugins(c *gin.Context) {
 
 	response := make([]PluginResponse, len(plugins))
 	for i, plugin := range plugins {
-		response[i] = serializePlugin(&plugin)
+		response[i] = a.pluginForObjectRead(c, serializePlugin(&plugin))
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": response})
@@ -1024,6 +1024,9 @@ func (a *API) updateLLMPlugins(c *gin.Context) {
 				Detail string `json:"detail"`
 			}{{Title: "Bad Request", Detail: "Invalid LLM ID"}},
 		})
+		return
+	}
+	if !a.requireOnObject(c, &models.LLM{}, uint(id), authz.Write("llms")) {
 		return
 	}
 
@@ -2657,4 +2660,23 @@ func (a *API) getPluginPolicy(c *gin.Context) {
 		resp.PluginAllowedSources = append(resp.PluginAllowedSources, string(source))
 	}
 	c.JSON(http.StatusOK, gin.H{"data": resp})
+}
+
+// pluginForObjectRead is a plugin listed on an object (an LLM's plugins, an
+// endpoint's auth plugins): the plugin's own config is shown only to a
+// caller who may read plugins (a global resource, .36). A reader of the
+// object alone, possibly through a grant scoped to its Workspace, sees the
+// plugin without its config, which may hold secrets (.46).
+func (a *API) pluginForObjectRead(c *gin.Context, p PluginResponse) PluginResponse {
+	if !a.mayReadPluginConfig(c) {
+		p.Attributes.Config = nil
+	}
+	return p
+}
+
+// mayReadPluginConfig is the one rule for a plugin's own configuration
+// embedded in another object's response (an endpoint's auth plugins, an
+// agent's plugin): global plugins:read, as GET /plugins requires.
+func (a *API) mayReadPluginConfig(c *gin.Context) bool {
+	return a.holds(c, authz.Read("plugins"))
 }

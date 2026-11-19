@@ -23,6 +23,10 @@ import {
   useConfirmNavigation,
 } from "../../../components/unsaved-changes";
 import { listAll } from "../../utils/listAll";
+import { P } from "../../rbac/permissions";
+import WorkspaceSelect from "../workspaces/WorkspaceSelect";
+import { useCanMove, workspaceFieldError } from "../workspaces/workspaceFields";
+import NotFound from "../../pages/NotFound";
 
 const DataCatalogForm = () => {
   const [catalog, setCatalog] = useState({
@@ -31,6 +35,14 @@ const DataCatalogForm = () => {
     long_description: "",
     icon: "",
   });
+  // Enterprise: the Workspace it lives in (landing rule when null). The
+  // stored one is kept apart: a different workspace_id on save is a move.
+  const [workspaceId, setWorkspaceId] = useState(null);
+  const [originalWorkspaceId, setOriginalWorkspaceId] = useState(null);
+  const [workspaceError, setWorkspaceError] = useState("");
+  const canMove = useCanMove(P.DATA_CATALOGUES_WRITE);
+  // The catalog is gone or in a Workspace the caller cannot see.
+  const [notFound, setNotFound] = useState(false);
   const [datasources, setDatasources] = useState([]);
   const [availableDatasources, setAvailableDatasources] = useState([]);
   const [tags, setTags] = useState([]);
@@ -74,6 +86,8 @@ const DataCatalogForm = () => {
 
         if (catalogResponse) {
           setCatalog(catalogResponse.data.data.attributes);
+          setWorkspaceId(catalogResponse.data.data.attributes.workspace_id ?? null);
+          setOriginalWorkspaceId(catalogResponse.data.data.attributes.workspace_id ?? null);
           setDatasources(
             catalogResponse.data.data.attributes.datasources || [],
           );
@@ -83,6 +97,9 @@ const DataCatalogForm = () => {
         setAvailableTags(availableTagsResponse.data.data);
       } catch (error) {
         console.error("Error fetching data", error);
+        if (error.response?.status === 404) {
+          setNotFound(true);
+        }
         setSnackbar({
           open: true,
           message: "Error fetching data",
@@ -108,10 +125,16 @@ const DataCatalogForm = () => {
     const desiredDatasources = datasources;
     const desiredTags = tags;
 
+    // workspace_id is sent only to choose one (create) or to move (edit).
+    const { workspace_id: _storedWorkspaceId, ...attributes } = catalog;
+    const workspaceAttr =
+      workspaceId !== null && workspaceId !== undefined && (!id || Number(workspaceId) !== Number(originalWorkspaceId))
+        ? { workspace_id: Number(workspaceId) }
+        : {};
     const catalogData = {
       data: {
         type: "DataCatalogue",
-        attributes: catalog,
+        attributes: { ...attributes, ...workspaceAttr },
       },
     };
 
@@ -135,6 +158,13 @@ const DataCatalogForm = () => {
       });
     } catch (error) {
       console.error("Error saving data catalog", error);
+      const wsError = workspaceFieldError(error);
+      if (wsError) {
+        setWorkspaceError(wsError);
+        setSnackbar({ open: true, message: wsError, severity: "error" });
+        setLoading(false);
+        return;
+      }
       setSnackbar({
         open: true,
         message: "Error saving data catalog",
@@ -193,6 +223,10 @@ const DataCatalogForm = () => {
     }
     setSnackbar({ ...snackbar, open: false });
   };
+
+  if (notFound) {
+    return <NotFound />;
+  }
 
   if (loading) {
     return <CircularProgress />;
@@ -276,6 +310,21 @@ const DataCatalogForm = () => {
               getOptionLabel={(tag) => tag.attributes?.name ?? ""}
             />
           </Box>
+          {/* Workspace (Enterprise): where it is created; on edit, the move control. */}
+          <Box sx={{ mt: 3 }}>
+            <WorkspaceSelect
+              permission={P.DATA_CATALOGUES_WRITE}
+              value={workspaceId}
+              onChange={(ws) => {
+                setWorkspaceId(ws);
+                setWorkspaceError("");
+              }}
+              disabled={Boolean(id) && !canMove}
+              error={workspaceError}
+              helperText={id ? "Moving it to another Workspace needs write in both." : "The Workspace it is created in."}
+            />
+          </Box>
+
           <Box mt={3} display="flex" gap={2}>
             <SecondaryOutlineButton onClick={handleCancel}>
               Cancel

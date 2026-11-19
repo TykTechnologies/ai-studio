@@ -16,7 +16,12 @@ import (
 // only through the router.
 type SemanticRouter struct {
 	gorm.Model
-	ID          uint   `json:"id" gorm:"primaryKey"`
+	ID uint `json:"id" gorm:"primaryKey"`
+
+	// WorkspaceID is the Workspace that owns the object (Workspace); 0 reads
+	// as the Default workspace (EffectiveWorkspaceID).
+	WorkspaceID uint `json:"workspace_id" gorm:"not null;default:0;index"`
+
 	Name        string `json:"name" gorm:"not null"`
 	Slug        string `json:"slug" gorm:"uniqueIndex:idx_semantic_router_slug_namespace;not null"`
 	Namespace   string `json:"namespace" gorm:"default:'';uniqueIndex:idx_semantic_router_slug_namespace;index:idx_semantic_router_namespace"`

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"net/mail"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
+	"github.com/TykTechnologies/midsommar/v2/services/rbac"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 )
@@ -29,11 +31,19 @@ func (a *API) validateAdminPermissions(c *gin.Context) error {
 	return nil
 }
 
-func (a *API) validateUserInput(userInput UserInput, userId uint) error {
+func (a *API) validateUserInput(userInput UserInput, userId uint, accountType string) error {
 	// The user payload is a JSON:API envelope. A flat body ({"email": ...})
 	// binds cleanly into an empty envelope, so without these checks it used to
 	// create a user with no email and no name.
 	attrs := userInput.Data.Attributes
+	if userId == 0 && accountType == models.AccountTypeService {
+		// A service account's email is generated (the service refuses one
+		// sent in); only the name is the caller's.
+		if strings.TrimSpace(attrs.Name) == "" {
+			return helpers.NewBadRequestError("Name is required (send data.attributes.name)")
+		}
+		return nil
+	}
 	if strings.TrimSpace(attrs.Email) == "" {
 		return helpers.NewBadRequestError("Email is required (send data.attributes.email)")
 	}
@@ -57,13 +67,16 @@ func (a *API) validateUserInput(userInput UserInput, userId uint) error {
 }
 
 // @Summary Create a new user
-// @Description Create a new user with the provided information
+// @Description Create a new user with the provided information. Optional data.attributes.role_ids (Enterprise) binds roles; it needs roles:write, checked before the user is created. Optional data.attributes.account_type "service" creates a service account: send only name (and is_admin, role_ids); its email (svc-...@service-account.invalid) and API key are generated, the key is returned once in this response, and it has no password, Portal, Chat, teams or notifications (422 service_account otherwise).
 // @Tags users
 // @Accept json
 // @Produce json
 // @Param user body UserInput true "User information"
 // @Success 201 {object} UserResponse
 // @Failure 400 {object} ErrorResponse
+// @Failure 402 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /users [post]
 // @Security BearerAuth
@@ -74,7 +87,8 @@ func (a *API) createUser(c *gin.Context) {
 		return
 	}
 
-	if err := a.validateUserInput(input, 0); err != nil {
+	accountType := bindAccountType(c)
+	if err := a.validateUserInput(input, 0, accountType); err != nil {
 		helpers.SendErrorResponse(c, err)
 		return
 	}
@@ -85,6 +99,13 @@ func (a *API) createUser(c *gin.Context) {
 			helpers.SendErrorResponse(c, err)
 			return
 		}
+	}
+
+	// Roles are checked before the user exists, so a caller without
+	// roles:write is refused with nothing left behind.
+	roleIDs := bindRoleIDs(c)
+	if roleIDs != nil && !a.mayAssignRolesOnCreate(c, *roleIDs, isAdmin, accountType) {
+		return
 	}
 
 	user, err := a.service.CreateUser(services.UserDTO{
@@ -98,14 +119,20 @@ func (a *API) createUser(c *gin.Context) {
 		NotificationsEnabled: input.Data.Attributes.NotificationsEnabled,
 		AccessToSSOConfig:    input.Data.Attributes.AccessToSSOConfig,
 		Groups:               input.Data.Attributes.Groups,
+		AccountType:          accountType,
 	})
 	if err != nil {
 		helpers.SendErrorResponse(c, err)
 		return
 	}
+	// A service account's key is generated with it and shown this once.
+	issuedKey := ""
+	if user.IsServiceAccount() {
+		issuedKey = user.APIKey
+	}
 
 	// Optional role assignment (Enterprise): role_ids on the same payload.
-	if roleIDs := bindRoleIDs(c); roleIDs != nil {
+	if roleIDs != nil {
 		if !a.reconcileUserRoles(c, user.ID, *roleIDs) {
 			return
 		}
@@ -114,7 +141,94 @@ func (a *API) createUser(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": a.finishUser(c, serializeUser(user))})
+	resp := a.finishUser(c, serializeUser(user))
+	if issuedKey != "" {
+		resp.Attributes.APIKey = issuedKey
+		resp.Attributes.APIKeyHint = ""
+	}
+	c.JSON(http.StatusCreated, gin.H{"data": resp})
+}
+
+// accountTypeInput is the optional account_type on a user payload: "" (a
+// person) or "service" (a service account: API key only, generated email,
+// no password, Portal, Chat, teams or notifications). It is bound
+// separately from UserInput, like role_ids, so the shared input struct
+// stays untouched. Set on create; an update naming a different type is
+// refused.
+type accountTypeInput struct {
+	Data struct {
+		Attributes struct {
+			AccountType string `json:"account_type"`
+		} `json:"attributes"`
+	} `json:"data"`
+}
+
+func bindAccountType(c *gin.Context) string {
+	var in accountTypeInput
+	if err := c.ShouldBindBodyWith(&in, binding.JSON); err != nil {
+		return ""
+	}
+	return in.Data.Attributes.AccountType
+}
+
+// mayAssignRolesOnCreate checks, before a user is created, what
+// reconcileUserRoles would refuse afterwards, so a refusal leaves no account
+// (and no unseen API key) behind: role_ids needs Enterprise; unless it asks
+// for nothing beyond what creation itself grants, roles:write; every role
+// must exist; and the Owner role needs an Owner as the caller and is never a
+// service account's. Returns false after writing the response.
+func (a *API) mayAssignRolesOnCreate(c *gin.Context, roleIDs []uint, isAdmin bool, accountType string) bool {
+	svc := a.service.Authz()
+	if !svc.Enabled() {
+		c.JSON(http.StatusPaymentRequired, authz.EnterpriseRequired(rbac.ErrEnterpriseFeature.Error()))
+		return false
+	}
+	if (len(roleIDs) > 0 || isAdmin) && !authz.Can(c, authz.Write("roles")) {
+		c.JSON(http.StatusForbidden, authz.Denied(authz.Write("roles")))
+		return false
+	}
+	ctx := c.Request.Context()
+	if len(roleIDs) == 0 {
+		return true
+	}
+	// One query for every requested role.
+	var roles []models.Role
+	if err := a.service.DB.WithContext(ctx).Select("id", "slug").Where("id IN ?", roleIDs).Find(&roles).Error; err != nil {
+		helpers.SendErrorResponse(c, err)
+		return false
+	}
+	found := make(map[uint]string, len(roles))
+	for _, r := range roles {
+		found[r.ID] = r.Slug
+	}
+	wantsOwner := false
+	for _, id := range roleIDs {
+		slug, ok := found[id]
+		if !ok {
+			helpers.SendErrorResponse(c, helpers.NewUnprocessableEntityError(fmt.Sprintf("role %d does not exist", id), ""))
+			return false
+		}
+		wantsOwner = wantsOwner || slug == models.SystemRoleOwner
+	}
+	if !wantsOwner {
+		return true
+	}
+	if accountType == models.AccountTypeService {
+		rbacErrorResponse(c, rbac.ErrServiceAccountOwner)
+		return false
+	}
+	if actor, ok := auth.UserFromContext(c); ok {
+		owner, err := svc.IsOwner(ctx, actor.ID)
+		if err != nil {
+			rbacErrorResponse(c, err)
+			return false
+		}
+		if !owner {
+			rbacErrorResponse(c, rbac.ErrOwnerRequired)
+			return false
+		}
+	}
+	return true
 }
 
 // @Summary Get a user by ID
@@ -155,7 +269,7 @@ func (a *API) getUser(c *gin.Context) {
 }
 
 // @Summary Update a user
-// @Description Update an existing user's information
+// @Description Update an existing user's information. account_type cannot change; a service account's email and password cannot be set, nor Portal, Chat, notifications or teams (422).
 // @Tags users
 // @Accept json
 // @Produce json
@@ -163,6 +277,7 @@ func (a *API) getUser(c *gin.Context) {
 // @Param user body UserInput true "Updated user information"
 // @Success 200 {object} UserResponse
 // @Failure 400 {object} ErrorResponse
+// @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /users/{id} [patch]
 // @Security BearerAuth
@@ -201,12 +316,18 @@ func (a *API) updateUser(c *gin.Context) {
 	base.NotificationsEnabled = user.NotificationsEnabled
 	base.AccessToSSOConfig = user.AccessToSSOConfig
 	base.Groups = user.ExtractGroupIDs()
+	// No path sets a service account's password.
+	if _, ok := present["password"]; ok && user.IsServiceAccount() {
+		helpers.SendErrorResponse(c, helpers.NewUnprocessableEntityError(
+			"a service account has no password; it authenticates with its API key", services.ServiceAccountCode))
+		return
+	}
 	if err := patchOnto(&input.Data.Attributes, base, present); err != nil {
 		helpers.SendErrorResponse(c, helpers.NewBadRequestError(err.Error()))
 		return
 	}
 
-	if err := a.validateUserInput(input, uint(id)); err != nil {
+	if err := a.validateUserInput(input, uint(id), user.AccountType); err != nil {
 		helpers.SendErrorResponse(c, err)
 		return
 	}
@@ -237,6 +358,7 @@ func (a *API) updateUser(c *gin.Context) {
 			NotificationsEnabled: input.Data.Attributes.NotificationsEnabled,
 			AccessToSSOConfig:    input.Data.Attributes.AccessToSSOConfig,
 			Groups:               input.Data.Attributes.Groups,
+			AccountType:          bindAccountType(c),
 		},
 	)
 	if err != nil {
@@ -303,6 +425,7 @@ func (a *API) deleteUser(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param search query string false "Search term for filtering users by email or name"
+// @Param account_type query string false "service: service accounts only; user: people only"
 // @Success 200 {array} UserResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /users [get]
@@ -331,6 +454,16 @@ func (a *API) listUsers(c *gin.Context) {
 		AuthSource:     c.Query("auth_source"),
 		HasAPIKey:      optionalBoolQuery(c, "has_api_key"),
 		Disabled:       optionalBoolQuery(c, "disabled"),
+	}
+	// ?account_type=service lists service accounts, ?account_type=user
+	// people; anything else (or nothing) lists both.
+	switch c.Query("account_type") {
+	case "service":
+		t := models.AccountTypeService
+		params.AccountType = &t
+	case "user":
+		t := models.AccountTypeUser
+		params.AccountType = &t
 	}
 
 	users, totalCount, totalPages, err := a.service.ListUsers(params)
@@ -369,6 +502,7 @@ func serializeUser(user *models.User) UserResponse {
 			NotificationsEnabled: user.NotificationsEnabled,
 			AccessToSSOConfig:    user.AccessToSSOConfig,
 			Role:                 user.GetRole(),
+			AccountType:          user.AccountType,
 			AuthSource:           user.AuthSource,
 			SSOProfileID:         user.SSOProfileID,
 			LastLoginAt:          user.LastLoginAt,

@@ -173,6 +173,23 @@ type User struct {
 
 18. **Disabled / DisabledAt**: The account switch. A disabled user is refused by every authentication path: session cookie, API key (header and query), password login (401 "Account disabled, contact your administrator"), SSO login (403, before any name/group/verification mutation), OAuth access tokens on the gateway, the OAuth token exchange, and password reset. `POST /users/{id}/disable` also clears the live session and any pending reset token and deactivates the credentials of apps the user owns; `POST /users/{id}/enable` restores the account but not those credentials. The caller cannot disable themselves, the super admin, or (Enterprise) the last Owner. Column updates only: `User.Update` is a whole-struct `Save`, so lifecycle writes must never go through it.
 
+## 3a. Service accounts
+
+A **service account** (`users.account_type = "service"`, `models.AccountTypeService`; schema 45) is an automation identity for the management API, such as the Tyk Operator or a CI job. It lives in core and works in both editions; seat counting is Enterprise (`features/Licensing.md`).
+
+- **Creation:** `POST /api/v1/users` with `data.attributes.account_type: "service"` and `users:write`. Send only `name`, plus optionally `is_admin` and `role_ids` (`role_ids` needs `roles:write`, checked before the user is created). The email is generated (`svc-<name slug>-<random>@service-account.invalid`), so it is never deliverable and never matches an identity provider's user. The API key is generated and **returned once, in the create response only**; later reads show `api_key_hint` and `has_api_key`, and the key can be rolled like any user's.
+- **Immutable:** the account type cannot change after creation (`PATCH` with a different `account_type` → 422). Object hooks cannot change the type, the email, or give the account a password, Portal, Chat or notifications.
+- **No password or person-facing state:** a password, an email, Portal or Chat access, notifications or teams in the request → 422 `service_account`. `EmailVerified` is set so the API key authenticates.
+- **No team, including Default (D9):** roles are bound to the account directly. Adding it to a team by any path (`AddUserToGroup`, `UpdateGroupUsers`, team create or update, SSO mapping) is refused, so a role bound to a shared team never leaks into the automation's scope. It cannot hold the Owner role (409 `service_account`).
+- **Authentication:** API key only (header or `?token=`). Password login, session creation, session cookies, password reset and verification, SSO and host identity all refuse it (reset and verification are silent no-ops with the usual response).
+- **Routes:** on `/common`, only `/common/me`, `/common/me/api-key/*` and `/common/nav` are open; every Portal and Chat route answers 403 `service_account`, as do the OAuth authorization routes and the portal analytics group.
+- **Notifications:** excluded from the admin fan-out and from delivery.
+- **Display:** `GetRole()` returns "Service account"; `GetUserCounts` has a fourth bucket. The UI shows a type badge and filter, and the key once after creation (Slice E).
+
+With Workspaces (`features/Workspaces.md`), the Operator recipe is: a service account, a global role holding `edges:read` and `edges:execute`, and a role scoped to the Operator's own Workspace.
+
+**Rollback note:** an older binary does not know the account type. The account has no password and an undeliverable email, so it still cannot sign in interactively, but its API key works there as an ordinary user's, without the Portal and Chat restrictions. Mention this in release notes.
+
 ## 4. User Roles & Permissions
 
 > **Enterprise Edition:** the admin-or-not model below is replaced by fine-grained roles (Owner, Administrator, Editor, Viewer, Auditor and custom roles) bound to users and teams. `IsAdmin` then means "holds Owner or Administrator" and `AccessToSSOConfig` is no longer consulted. See [RBAC.md](RBAC.md).

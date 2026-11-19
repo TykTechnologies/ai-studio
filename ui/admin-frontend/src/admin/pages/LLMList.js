@@ -16,12 +16,19 @@ import { getVendorName, getVendorLogo } from "../utils/vendorLogos";
 import useListQuery from "../hooks/useListQuery";
 import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import Can from "../components/rbac/Can";
-import { usePermissions } from "../context/PermissionsContext";
 import { P } from "../rbac/permissions";
+import {
+  useWorkspaceColumn,
+  useWorkspaceFilter,
+  useWorkspaceAccess,
+  WorkspaceFilter,
+} from "../components/workspaces/workspaceFields";
 
 const LLMList = () => {
   const navigate = useNavigate();
-  const { can } = usePermissions();
+  const { canOn, canAnywhere } = useWorkspaceAccess();
+  const workspaceColumn = useWorkspaceColumn();
+  const { workspaceId, setWorkspaceId, params: workspaceParams } = useWorkspaceFilter();
   const [llms, setLLMs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -33,7 +40,7 @@ const LLMList = () => {
   const fetchLLMs = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get("/llms", { params: queryParams });
+      const response = await apiClient.get("/llms", { params: { ...queryParams, ...workspaceParams } });
       setLLMs(response.data.data || []);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
       const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
@@ -45,7 +52,7 @@ const LLMList = () => {
     } finally {
       setLoading(false);
     }
-  }, [queryParams, updatePaginationData]);
+  }, [queryParams, workspaceParams, updatePaginationData]);
 
   useEffect(() => {
     fetchLLMs();
@@ -144,31 +151,40 @@ const LLMList = () => {
         />
       ),
     },
-  ], []);
+    ...(workspaceColumn ? [workspaceColumn] : []),
+  ], [workspaceColumn]);
 
-  // Edit/delete need llms:write; the active toggle needs llms:publish, which
-  // never implies write. Either permission earns the actions column.
-  const canWrite = can(P.LLMS_WRITE);
-  const canPublish = can(P.LLMS_PUBLISH);
-  const canManage = canWrite || canPublish;
+  // Edit needs llms:write, delete llms:delete and the active toggle
+  // llms:publish (none implies another). Any of them earns the actions column. Both
+  // are checked in each model provider's Workspace: one in another
+  // Workspace is read-only.
+  const canWrite = canAnywhere(P.LLMS_WRITE);
+  const canPublish = canAnywhere(P.LLMS_PUBLISH);
+  const canDelete = canAnywhere(P.LLMS_DELETE);
+  const canManage = canWrite || canPublish || canDelete;
+  const writeOn = useCallback((llm) => canOn(llm?.attributes?.workspace_id, P.LLMS_WRITE), [canOn]);
+  // Deleting needs the delete permission in the object's Workspace, as on
+  // the server (row and bulk).
+  const deleteOn = useCallback((llm) => canOn(llm?.attributes?.workspace_id, P.LLMS_DELETE), [canOn]);
+  const publishOn = useCallback((llm) => canOn(llm?.attributes?.workspace_id, P.LLMS_PUBLISH), [canOn]);
 
   const rowActions = useMemo(() => [
-    { key: "edit", label: "Edit model provider", onClick: (llm) => navigate(`/admin/llms/edit/${llm.id}`), hidden: () => !canWrite },
-    { key: "delete", label: "Delete model provider", onClick: (llm) => setDeleteTarget(llm), hidden: () => !canWrite },
+    { key: "edit", label: "Edit model provider", onClick: (llm) => navigate(`/admin/llms/edit/${llm.id}`), hidden: (llm) => !writeOn(llm) },
+    { key: "delete", label: "Delete model provider", onClick: (llm) => setDeleteTarget(llm), hidden: (llm) => !deleteOn(llm) },
     {
       key: "toggle",
       label: (llm) => `${llm?.attributes?.active ? "Deactivate" : "Activate"} model provider`,
       onClick: handleToggleActive,
-      hidden: () => !canPublish,
+      hidden: (llm) => !publishOn(llm),
     },
-  ], [navigate, handleToggleActive, canWrite, canPublish]);
+  ], [navigate, handleToggleActive, writeOn, publishOn, deleteOn]);
 
   const bulkActions = useMemo(
     () =>
       standardBulkActions({ run: bulk.run, requestDelete: bulk.requestDelete, canToggle: canPublish }).filter(
-        (action) => canWrite || action.key !== "delete",
+        (action) => canDelete || action.key !== "delete",
       ),
-    [bulk.run, bulk.requestDelete, canWrite, canPublish],
+    [bulk.run, bulk.requestDelete, canDelete, canPublish],
   );
 
   if (error && llms.length === 0) {
@@ -180,7 +196,7 @@ const LLMList = () => {
       <>
         <TitleBox top="var(--studio-header-height)">
           <Typography variant="headingXLarge">Model providers</Typography>
-          <Can permission={P.LLMS_WRITE}>
+          <Can permission={P.LLMS_WRITE} anywhere>
             <PrimaryButton
               variant="contained"
               startIcon={<AddIcon />}
@@ -194,6 +210,7 @@ const LLMList = () => {
           <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Model providers power AI chats and can be made available to developers in the portal and gateway when set to Active. To control access, each model provider must be part of a catalog to be used by specific teams.</Typography>
         </Box>
         <Box sx={{ p: 3 }}>
+          <WorkspaceFilter value={workspaceId} onChange={setWorkspaceId} sx={{ mb: 2 }} />
           <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
           <DataTable
             {...tableProps}

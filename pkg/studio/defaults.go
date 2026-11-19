@@ -85,7 +85,7 @@ func ensureDefaults(db *gorm.DB, skipLLMDefaults, skipFilterDefaults bool) error
 
 	// Seed default secrets and LLM configurations if not disabled
 	if !skipLLMDefaults {
-		if err := secrets.GetOrCreateDefaultSecrets(db); err != nil {
+		if err := secrets.GetOrCreateDefaultSecrets(db, services.DefaultSecretNameBlocked(db)); err != nil {
 			return fmt.Errorf("failed to create default secrets: %w", err)
 		}
 		logger.Info("Default secrets checked/initialized")

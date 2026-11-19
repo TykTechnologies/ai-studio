@@ -93,6 +93,17 @@ func NewConflictError(message string) ErrorResponse {
 	}
 }
 
+// NewUnprocessableEntityError is a 422 with a machine-readable code (empty
+// for none).
+func NewUnprocessableEntityError(message, code string) ErrorResponse {
+	return ErrorResponse{
+		StatusCode: http.StatusUnprocessableEntity,
+		Title:      "Unprocessable Entity",
+		Message:    message,
+		Code:       code,
+	}
+}
+
 func KeyValueOrZero(dat map[string]any, key string) int {
 	if val, ok := dat[key]; ok {
 		val, ok := val.(int)

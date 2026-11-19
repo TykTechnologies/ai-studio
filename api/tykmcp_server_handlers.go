@@ -8,6 +8,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/services/tykmcp"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
 )
 
 func queryUint(c *gin.Context, name string) (uint, bool) {
@@ -73,6 +74,9 @@ func (a *API) listMCPServers(c *gin.Context) {
 			return
 		}
 	}
+	if f.Scopes, ok = a.listWorkspaceScopes(c, "mcp-servers", ""); !ok {
+		return
+	}
 	list, err := a.tykMCPService().ListServers(c.Request.Context(), f)
 	if err != nil {
 		tykMCPErrorResponse(c, err, "Failed to list MCP servers")
@@ -111,7 +115,7 @@ func (a *API) getMCPServer(c *gin.Context) {
 // @Success 200 {object} models.MCPServerResponse
 // @Router /mcp-servers/{id} [patch]
 func (a *API) updateMCPServer(c *gin.Context) {
-	actor, ok := requireTykMCPActor(c, "mcp-servers")
+	actor, ok := a.requireTykMCPServerActor(c)
 	if !ok {
 		return
 	}
@@ -120,9 +124,30 @@ func (a *API) updateMCPServer(c *gin.Context) {
 		return
 	}
 	var p tykmcp.ServerPatch
-	if err := c.ShouldBindJSON(&p); err != nil {
+	if err := c.ShouldBindBodyWith(&p, binding.JSON); err != nil {
 		webhookBadRequest(c, "invalid request body")
 		return
+	}
+	// Write in the server's Workspace; a changed top-level workspace_id is
+	// a move (Workspaces B4b).
+	var probe struct {
+		WorkspaceID *uint `json:"workspace_id"`
+	}
+	if err := c.ShouldBindBodyWith(&probe, binding.JSON); err != nil {
+		webhookBadRequest(c, "workspace_id must be a Workspace id")
+		return
+	}
+	stored, found, err := a.storedWorkspaceID(&models.MCPServer{}, id)
+	if err != nil {
+		tykMCPErrorResponse(c, err, "Failed to update MCP server")
+		return
+	}
+	// A missing server (or Community Edition) is answered by the service.
+	var moveTo *uint
+	if found {
+		if moveTo, ok = a.checkObjectUpdate(c, "mcp-servers", stored, probe.WorkspaceID); !ok {
+			return
+		}
 	}
 	if p.AllowInternalHost != nil {
 		current, err := a.tykMCPService().GetServer(c.Request.Context(), id)
@@ -134,11 +159,22 @@ func (a *API) updateMCPServer(c *gin.Context) {
 			return
 		}
 	}
+	// The move goes first; a failed update puts it back.
+	finishMove, ok := a.beginMove(c, &models.MCPServer{}, id, stored, moveTo)
+	if !ok {
+		return
+	}
+	updated := false
+	defer func() { finishMove(updated) }()
 	view, err := a.tykMCPService().UpdateServer(c.Request.Context(), actor, id, p)
 	if err != nil {
 		tykMCPErrorResponse(c, err, "Failed to update MCP server")
 		return
 	}
+	if moveTo != nil && view != nil {
+		view.WorkspaceID = *moveTo
+	}
+	updated = true
 	c.JSON(http.StatusOK, view)
 }
 
@@ -149,7 +185,7 @@ func (a *API) updateMCPServer(c *gin.Context) {
 // @Success 204
 // @Router /mcp-servers/{id} [delete]
 func (a *API) deleteMCPServer(c *gin.Context) {
-	actor, ok := requireTykMCPActor(c, "mcp-servers")
+	actor, ok := a.requireTykMCPServerActor(c)
 	if !ok {
 		return
 	}
@@ -172,7 +208,7 @@ func (a *API) deleteMCPServer(c *gin.Context) {
 // @Success 200 {object} models.MCPServerResponse
 // @Router /mcp-servers/{id}/activate [post]
 func (a *API) publishMCPServer(c *gin.Context) {
-	actor, ok := requireTykMCPActor(c, "mcp-servers")
+	actor, ok := a.requireTykMCPServerActor(c)
 	if !ok {
 		return
 	}
@@ -195,7 +231,7 @@ func (a *API) publishMCPServer(c *gin.Context) {
 // @Success 200 {object} models.MCPServerResponse
 // @Router /mcp-servers/{id}/deactivate [post]
 func (a *API) unpublishMCPServer(c *gin.Context) {
-	actor, ok := requireTykMCPActor(c, "mcp-servers")
+	actor, ok := a.requireTykMCPServerActor(c)
 	if !ok {
 		return
 	}
@@ -225,7 +261,7 @@ type mcpServerCataloguesInput struct {
 // @Success 200 {object} models.MCPServerResponse
 // @Router /mcp-servers/{id}/catalogues [put]
 func (a *API) setMCPServerCatalogues(c *gin.Context) {
-	actor, ok := requireTykMCPActor(c, "mcp-servers")
+	actor, ok := a.requireTykMCPServerActor(c)
 	if !ok {
 		return
 	}
@@ -260,7 +296,7 @@ type mcpServerBundleInput struct {
 // @Failure 422 {object} models.ErrorResponse
 // @Router /mcp-servers/{id}/bundle [put]
 func (a *API) setMCPServerBundle(c *gin.Context) {
-	actor, ok := requireTykMCPActor(c, "mcp-servers")
+	actor, ok := a.requireTykMCPServerActor(c)
 	if !ok {
 		return
 	}
@@ -292,7 +328,7 @@ func (a *API) setMCPServerBundle(c *gin.Context) {
 // @Failure 409 {object} models.ErrorResponse
 // @Router /mcp-servers/{id}/key-access [put]
 func (a *API) setMCPServerKeyAccess(c *gin.Context) {
-	actor, ok := requireTykMCPActor(c, "mcp-servers")
+	actor, ok := a.requireTykMCPServerActor(c)
 	if !ok {
 		return
 	}

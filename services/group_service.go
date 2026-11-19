@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
@@ -23,8 +24,23 @@ func (s *Service) validateGroupName(name string, groupID uint) error {
 	return nil
 }
 
+// refuseServiceAccountMembers answers 422 when the member list names a
+// service account: they belong to no team (decision D9).
+func (s *Service) refuseServiceAccountMembers(userIDs []uint) error {
+	if err := models.RefuseServiceAccountMembers(s.DB, userIDs); err != nil {
+		if errors.Is(err, models.ErrServiceAccountTeams) {
+			return serviceAccountTeamsRefusal()
+		}
+		return err
+	}
+	return nil
+}
+
 func (s *Service) CreateGroup(name string, userIDs, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs []uint) (*models.Group, error) {
 	if err := s.validateGroupName(name, 0); err != nil {
+		return nil, err
+	}
+	if err := s.refuseServiceAccountMembers(userIDs); err != nil {
 		return nil, err
 	}
 
@@ -56,6 +72,9 @@ func (s *Service) GetGroupByID(id uint, preloads ...string) (*models.Group, erro
 
 func (s *Service) UpdateGroup(id uint, name string, userIDs, catalogueIDs, dataCatalogueIDs, toolCatalogueIDs []uint) (*models.Group, error) {
 	if err := s.validateGroupName(name, id); err != nil {
+		return nil, err
+	}
+	if err := s.refuseServiceAccountMembers(userIDs); err != nil {
 		return nil, err
 	}
 
@@ -164,6 +183,9 @@ func (s *Service) AddUserToGroup(userID, groupID uint) error {
 	user, err := s.GetUserByID(userID)
 	if err != nil {
 		return err
+	}
+	if user.IsServiceAccount() {
+		return serviceAccountTeamsRefusal()
 	}
 
 	group, err := s.GetGroupByID(groupID)
@@ -282,13 +304,13 @@ func (s *Service) RemoveCatalogueFromGroup(catalogueID, groupID uint) error {
 	return group.RemoveCatalogue(s.DB, catalogue)
 }
 
-func (s *Service) GetGroupCatalogues(groupID uint) (models.Catalogues, error) {
+func (s *Service) GetGroupCatalogues(groupID uint, scopes ...func(*gorm.DB) *gorm.DB) (models.Catalogues, error) {
 	group, err := s.GetGroupByID(groupID)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := group.GetCatalogues(s.DB); err != nil {
+	if err := group.GetCatalogues(s.DB.Scopes(scopes...).Session(&gorm.Session{})); err != nil {
 		return nil, err
 	}
 
@@ -332,13 +354,13 @@ func (s *Service) RemoveDataCatalogueFromGroup(dataCatalogueID, groupID uint) er
 	return group.RemoveDataCatalogue(s.DB, dataCatalogue)
 }
 
-func (s *Service) GetGroupDataCatalogues(groupID uint) (models.DataCatalogues, error) {
+func (s *Service) GetGroupDataCatalogues(groupID uint, scopes ...func(*gorm.DB) *gorm.DB) (models.DataCatalogues, error) {
 	group, err := s.GetGroupByID(groupID)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := group.GetDataCatalogues(s.DB); err != nil {
+	if err := group.GetDataCatalogues(s.DB.Scopes(scopes...).Session(&gorm.Session{})); err != nil {
 		return nil, err
 	}
 
@@ -373,13 +395,15 @@ func (s *Service) RemoveToolCatalogueFromGroup(toolCatalogueID, groupID uint) er
 	return group.RemoveToolCatalogue(s.DB, toolCatalogue)
 }
 
-func (s *Service) GetGroupToolCatalogues(groupID uint, pageSize int, pageNumber int, all bool) (models.ToolCatalogues, int64, int, error) {
+// GetGroupToolCatalogues pages a team's tool catalogues; scopes narrow them
+// before the count (e.g. the caller's Workspaces).
+func (s *Service) GetGroupToolCatalogues(groupID uint, pageSize int, pageNumber int, all bool, scopes ...func(*gorm.DB) *gorm.DB) (models.ToolCatalogues, int64, int, error) {
 	group, err := s.GetGroupByID(groupID)
 	if err != nil {
 		return nil, 0, 0, err
 	}
 
-	totalCount, totalPages, err := group.GetToolCatalogues(s.DB, pageSize, pageNumber, all)
+	totalCount, totalPages, err := group.GetToolCatalogues(s.DB.Scopes(scopes...).Session(&gorm.Session{}), pageSize, pageNumber, all)
 	if err != nil {
 		return nil, 0, 0, err
 	}

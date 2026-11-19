@@ -44,6 +44,8 @@ Each group represents a set of users with shared permissions. Groups help to:
 - Streamline permission management by assigning roles at the group level instead of individually for each user.
 - Enhance security by ensuring users only have access to the resources they need.
 
+A team's roles can be **global** (they apply everywhere) or assigned **within a [Workspace](./workspaces.md)** (Enterprise), from that Workspace's **Access** tab. A role within a Workspace gives every member of the team that role on the Workspace's objects only. Be careful with global roles on a team everyone belongs to, such as Default: they reach every Workspace.
+
 ---
 
 The Groups View is a critical tool for managing access control efficiently, ensuring that users have the appropriate permissions based on their roles within the organization.

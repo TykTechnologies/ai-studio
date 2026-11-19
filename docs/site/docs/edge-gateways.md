@@ -220,6 +220,8 @@ Click the **Push Configuration** button to open the push modal. You can choose t
 
 Before you confirm, the modal lists **what will be pushed** for the chosen scope: every object that was created, updated or deleted since the namespace's last push, grouped by type (LLM providers, Apps, Tools, Data sources, Filters, Model prices, Model routers, Plugins, OAuth clients, Access tokens), each with a link to its admin page where one exists. A summary line reads "12 changes since the last push at 13:12"; when nothing has changed the button becomes **Push anyway**, since a push can still be useful after an edge has been re-registered. With "All Namespaces" selected, each namespace gets its own collapsible block.
 
+With [Workspaces](./workspaces.md) (Enterprise), each change also shows the Workspace it belongs to, and a line under the summary counts the changes per Workspace ("By Workspace: Default 3 · Payments 2 · 1 global"; *global* counts plugins, model prices and other objects that belong to no Workspace). A Workspace whose name you may not see shows by its id, and an object you cannot see is listed without its name or link.
+
 The Edge Gateways list and each gateway's detail page show **Last pushed HH:MM** for the namespace.
 
 ### Push Process
@@ -356,6 +358,8 @@ Returns what has changed in a namespace since its last push, as shown in the pus
 }
 ```
 
+With Workspaces (Enterprise), each change carries `workspace_id` and `workspace_name` (null for objects that belong to no Workspace), and the response adds `by_workspace` (`[{workspace_id, name, total}]`) and `unattributed_total`, counting every change, not just the first 200. Adding `&workspace_id=<id>` adds `outside_total` (how many changes come from outside that Workspace) and `stained` (whether there are any). The endpoint needs `edges:read` globally. A change to an object you cannot see (an App, agent, router or catalog outside your Workspaces) is listed with `hidden: true` and no `id` or `name`; a Workspace's name is shown only to a caller who holds `workspaces:read` or a read permission on Workspace objects globally, or a role in that Workspace. Counts are never reduced.
+
 `changes` is capped at 200 entries; `total` is the real count. `baseline` says what `since` was taken from: `push` (the recorded last push), `edge_ack` (no push was ever recorded, for example on a database upgraded from before pushes were stamped, or when the edges only got their configuration when they registered: the latest time an edge confirmed it was in sync is used, whether or not that edge is connected now, and the UI says "since the last sync") or `none` (no edge ever confirmed; every object is listed as created).
 
 A reload makes each edge pull the snapshot through `GetFullConfiguration`, which marks that edge in sync immediately rather than waiting for its next heartbeat; the other edges in the namespace stay pending until they pull.
@@ -376,6 +380,37 @@ GET /api/v1/edges/reload-operations                  # the last day's pushes
 ```
 
 The status reports the operation's `status` (`in_progress`, `succeeded`, `succeeded_with_warnings`, `partially_failed`, `failed`, `expired`), `progress`, `counts` per outcome, and `edges`: for each edge its `status`, the phase it last reported, `message`, `warning`, `attempts` and the history of every delivery attempt. From 2.3, any AI Studio replica answers it. The listing gives each push's status, counts and message.
+
+#### Pushes limited to one Workspace
+
+A [Workspace](./workspaces.md) (who manages an object) is not a namespace (where it is deployed): a namespace's snapshot can hold objects from many Workspaces, and every push delivers the whole namespace. An automated client that manages one Workspace, such as the [Tyk Operator](./workspaces.md#operator-recipe), can ask AI Studio to refuse a push that would also carry other Workspaces' waiting changes. Each of the three push routes takes an optional body:
+
+```json
+{"only_workspace_id": 7}
+```
+
+If any target namespace has a waiting change from outside Workspace 7, the push is refused with `409` and nothing is recorded (no push operation, and the namespace's *last pushed* time is unchanged):
+
+```json
+{
+  "errors": [{"title": "Conflict", "detail": "changes from outside the Workspace are pending in a target namespace; the push would carry them", "code": "push_stained"}],
+  "workspace_id": 7,
+  "outside_total": 2,
+  "by_workspace": [{"workspace_id": 3, "name": "Data", "total": 1}],
+  "unattributed_total": 1,
+  "changes": [{"type": "llm", "id": 12, "name": "Claude", "change": "updated", "at": "...", "workspace_id": 3, "workspace_name": "Data", "namespace": "default"}]
+}
+```
+
+`changes` lists up to 20 of the foreign changes, newest first, redacted as for pending changes. What counts as foreign: a change to another Workspace's object, and any change that belongs to no Workspace (plugins, model prices and other global objects; these are what `unattributed_total` counts). OAuth clients and access tokens never count. A moved object counts for its new Workspace, including objects moved to the Default when their Workspace is deleted. An unknown `only_workspace_id` answers `422 invalid_workspace`; a malformed body `400`. Without the body, pushes behave as before.
+
+Limits to know:
+
+- **The check is made when the push is accepted.** The edges pull their snapshot a moment later, so an edit saved in between still reaches them (the push result then reports *Updated, with a warning*).
+- **A push delivers the whole namespace**, including objects of other Workspaces that have no waiting changes.
+- **Objects in the global namespace stain every namespace's push**, because they reach every edge. Give each team its own namespace and keep shared objects to a minimum.
+
+The administration UI has no control for this precondition: it is for API clients.
 
 #### Upgrading scripts from 2.2
 

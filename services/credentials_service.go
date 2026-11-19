@@ -123,9 +123,11 @@ func (s *Service) DeactivateCredential(id uint) error {
 }
 
 // GetAllCredentials retrieves all credentials
-func (s *Service) GetAllCredentials(pageSize int, pageNumber int, all bool) (models.Credentials, int64, int, error) {
+// scopes narrow the list (the API's parent-App visibility); counts and
+// pages follow them.
+func (s *Service) GetAllCredentials(pageSize int, pageNumber int, all bool, scopes ...func(*gorm.DB) *gorm.DB) (models.Credentials, int64, int, error) {
 	var credentials models.Credentials
-	totalCount, totalPages, err := credentials.GetAll(s.DB, pageSize, pageNumber, all)
+	totalCount, totalPages, err := credentials.GetAll(s.DB.Scopes(scopes...), pageSize, pageNumber, all)
 	if err != nil {
 		return nil, 0, 0, err
 	}
@@ -133,9 +135,9 @@ func (s *Service) GetAllCredentials(pageSize int, pageNumber int, all bool) (mod
 }
 
 // GetActiveCredentials retrieves all active credentials
-func (s *Service) GetActiveCredentials() (models.Credentials, error) {
+func (s *Service) GetActiveCredentials(scopes ...func(*gorm.DB) *gorm.DB) (models.Credentials, error) {
 	var credentials models.Credentials
-	if err := credentials.GetActive(s.DB); err != nil {
+	if err := credentials.GetActive(s.DB.Scopes(scopes...)); err != nil {
 		return nil, err
 	}
 	return credentials, nil

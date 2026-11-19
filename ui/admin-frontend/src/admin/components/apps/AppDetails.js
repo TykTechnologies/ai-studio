@@ -74,6 +74,8 @@ import { useEdition } from "../../context/EditionContext";
 import { getAppStatus } from "../../../utils/appStatus";
 import Can from "../rbac/Can";
 import { P } from "../../rbac/permissions";
+import NotFound from "../../pages/NotFound";
+import { useWorkspaceAccess } from "../workspaces/workspaceFields";
 
 ChartJS.register(
   CategoryScale,
@@ -132,6 +134,8 @@ const ExpandableMessage = ({ message, isCode = false }) => {
 
 const AppDetails = () => {
   const { isEnterprise } = useEdition();
+  // Actions are checked in the App's Workspace (Workspaces E4).
+  const { canOn } = useWorkspaceAccess();
   const [app, setApp] = useState(null);
   const [credential, setCredential] = useState(null);
   const [user, setUser] = useState(null);
@@ -141,6 +145,9 @@ const AppDetails = () => {
   const [agents, setAgents] = useState([]); // Added state for agents
   const [pluginResources, setPluginResources] = useState([]); // Plugin resource associations
   const [loading, setLoading] = useState(true);
+  // An App in another Workspace (or deleted) answers 404: the page shows the
+  // standard not-found panel.
+  const [notFound, setNotFound] = useState(false);
   const [agentsLoading, setAgentsLoading] = useState(false);
   const [tokenUsageAndCostData, setTokenUsageAndCostData] = useState(null);
   const [budgetUsageData, setBudgetUsageData] = useState(null);
@@ -262,6 +269,10 @@ const AppDetails = () => {
 
     } catch (error) {
       console.error("Error fetching app details", error);
+      if (error?.response?.status === 404) {
+        setNotFound(true);
+        return;
+      }
       setSnackbar({ open: true, message: "Failed to load app details.", severity: "error" });
     } finally {
       setLoading(false);
@@ -468,6 +479,9 @@ const AppDetails = () => {
     }
   };
 
+  const canOnApp = (perm) => canOn(app?.attributes?.workspace_id, perm);
+
+  if (notFound) return <NotFound />;
   if (loading) return <CircularProgress />;
   if (!app) return <Typography>App not found</Typography>;
 
@@ -657,7 +671,7 @@ const AppDetails = () => {
           >
             Back to apps
           </SecondaryLinkButton>
-          <Can permission={P.APPS_WRITE}>
+          <Can permission={P.APPS_WRITE} workspaceId={app.attributes.workspace_id}>
             <PrimaryButton
               variant="contained"
               startIcon={<EditIcon />}
@@ -893,7 +907,7 @@ const AppDetails = () => {
                     </Typography>
                   )}
                 </FieldValue>
-                {app.attributes.monthly_budget && isEnterprise && (
+                {app.attributes.monthly_budget && isEnterprise && canOnApp(P.APPS_WRITE) && (
                   <Button
                     variant="outlined"
                     size="small"
@@ -970,7 +984,7 @@ const AppDetails = () => {
                     })}
                   </FieldValue>
                 </Grid>
-                {!credential.attributes.active && (
+                {!credential.attributes.active && canOnApp(P.CREDENTIALS_WRITE) && (
                   <Grid item xs={12}>
                     <Box mt={2}>
                       <PrimaryOutlineButton

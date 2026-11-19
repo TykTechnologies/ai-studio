@@ -2,6 +2,7 @@ import GovernedMetadataSummary from "../metadata/GovernedMetadataSummary";
 import Section from "../common/Section";
 import AuthPluginsSection from "../common/AuthPluginsSection";
 import { P } from "../../rbac/permissions";
+import Can from "../rbac/Can";
 import UsedBySection from "../common/UsedBySection";
 import PrivacyLevelChip from "../common/privacy/PrivacyLevelChip";
 import ToolAccessMethods from "./ToolAccessMethods";
@@ -360,6 +361,7 @@ const ToolDetails = () => {
         </Section>
 
         <AuthPluginsSection
+          workspaceId={tool.attributes.workspace_id}
           endpointPath="tools"
           endpointId={id}
           noun="tool (REST and MCP)"
@@ -373,13 +375,15 @@ const ToolDetails = () => {
         />
 
         <Box mt={4} display="flex" justifyContent="flex-end">
-          <PrimaryButton
-            variant="contained"
-            startIcon={<EditIcon />}
-            onClick={() => navigate(`/admin/tools/edit/${id}`)}
-          >
-            Edit tool
-          </PrimaryButton>
+          <Can permission={P.TOOLS_WRITE} workspaceId={tool.attributes.workspace_id}>
+            <PrimaryButton
+              variant="contained"
+              startIcon={<EditIcon />}
+              onClick={() => navigate(`/admin/tools/edit/${id}`)}
+            >
+              Edit tool
+            </PrimaryButton>
+          </Can>
         </Box>
       </ContentBox>
     </>

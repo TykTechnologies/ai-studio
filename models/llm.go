@@ -12,7 +12,14 @@ type Vendor string
 
 type LLM struct {
 	gorm.Model
-	ID               uint   `json:"id" gorm:"primary_key"`
+	ID uint `json:"id" gorm:"primary_key"`
+
+	// WorkspaceID is the Workspace that owns the object (Workspace); 0 reads
+	// as the Default workspace (EffectiveWorkspaceID).
+	// Not to be confused with VendorWorkspaceID, the vendor's (Anthropic)
+	// workspace upstream calls are pinned to.
+	WorkspaceID uint `json:"workspace_id" gorm:"not null;default:0;index"`
+
 	Name             string `json:"name"`
 	APIKey           string `json:"api_key"`
 	APIEndpoint      string `json:"api_endpoint"`

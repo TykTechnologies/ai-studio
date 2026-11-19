@@ -112,6 +112,9 @@ import SubmissionReview from "./pages/SubmissionReview";
 import AttestationTemplates from "./pages/AttestationTemplates";
 
 import Roles from "./pages/roles/Roles";
+import Workspaces from "./pages/workspaces/Workspaces";
+import WorkspaceDetail from "./pages/workspaces/WorkspaceDetail";
+import WorkspaceForm from "./pages/workspaces/WorkspaceForm";
 import RoleDetail from "./components/roles/RoleDetail";
 import RoleForm from "./components/roles/RoleForm";
 
@@ -305,6 +308,15 @@ const roleRoutes = [
   { path: "roles/new", element: <RoleForm />, permission: P.ROLES_WRITE },
 ];
 
+// Workspaces (Enterprise). Always rendered, like roleRoutes: in Community
+// Edition the page shows the upgrade prompt on the API's 402.
+const workspaceRoutes = [
+  { path: "workspaces", element: <Workspaces />, permission: P.WORKSPACES_READ },
+  { path: "workspaces/new", element: <WorkspaceForm />, permission: P.WORKSPACES_WRITE },
+  { path: "workspaces/edit/:id", element: <WorkspaceForm />, permission: P.WORKSPACES_WRITE },
+  { path: "workspaces/:id", element: <WorkspaceDetail />, permission: P.WORKSPACES_READ },
+];
+
 // Semantic Router routes (Enterprise only - requires feature_semantic_router)
 const semanticRouterRoutes = [
   { path: "semantic-routers", element: <SemanticRouterList />, permission: P.SEMANTIC_ROUTERS_READ },
@@ -314,5 +326,5 @@ const semanticRouterRoutes = [
   { path: "semantic-routers/new", element: <SemanticRouterForm />, permission: P.SEMANTIC_ROUTERS_WRITE },
 ];
 
-export { mainAdminRoutes, ssoRoutes, groupRoutes, catalogRoutes, modelRouterRoutes, semanticRouterRoutes, roleRoutes };
+export { mainAdminRoutes, ssoRoutes, groupRoutes, catalogRoutes, modelRouterRoutes, semanticRouterRoutes, roleRoutes, workspaceRoutes };
 export default mainAdminRoutes;

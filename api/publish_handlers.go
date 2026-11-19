@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
@@ -75,6 +76,9 @@ func (a *API) deactivateLLM(c *gin.Context) { a.setLLMActive(c, false) }
 func (a *API) setLLMActive(c *gin.Context, active bool) {
 	id, ok := publishTargetID(c, "LLM")
 	if !ok {
+		return
+	}
+	if !a.requireOnObject(c, &models.LLM{}, id, authz.Publish("llms")) {
 		return
 	}
 	if active && !a.publishGateOpen(c, models.GovernedObjectTypeLLM, models.BuiltinObjectID(id), nil) {
@@ -168,7 +172,7 @@ func (a *API) setDatasourceActive(c *gin.Context, active bool) {
 		writePublishError(c, err, "Datasource")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": a.withDatasourceGovernedMetadataOne(serializeDatasource(ds))})
+	c.JSON(http.StatusOK, gin.H{"data": a.withDatasourceGovernedMetadataOne(a.datasourceIn(ds))})
 }
 
 // --- Apps ---

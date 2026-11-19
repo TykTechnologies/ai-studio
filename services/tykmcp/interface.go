@@ -20,6 +20,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/mcpintrospect"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
 // ErrEnterpriseFeature is returned by Community Edition for every operation.
@@ -50,8 +51,12 @@ type Actor struct {
 	Email  string
 	Name   string
 	// CanExecute reports whether the actor holds the execute permission that
-	// lets widening credential changes apply without a review.
+	// lets widening credential changes apply without a review. For an
+	// action on one server it is checked in that server's Workspace.
 	CanExecute bool
+	// WorkspaceID is the Workspace an object the call creates lands in (the
+	// API's landing rule, D5); 0 for the Default.
+	WorkspaceID uint
 }
 
 // ConnectionInput creates a connection. Kind gateway connects a Tyk OSS
@@ -194,6 +199,10 @@ type CredentialFilter struct {
 	Drift        string
 	Page         int
 	PageSize     int
+	// AppScopes are conditions on the apps table from the API layer
+	// (Enterprise Workspaces): only credentials of the Apps they select are
+	// listed. Empty: no limit.
+	AppScopes []func(*gorm.DB) *gorm.DB
 }
 
 // CredentialList is one page of credentials.
@@ -232,6 +241,9 @@ type ReportFilter struct {
 	UserID         uint
 	AppID          uint
 	IncludeRevoked bool
+	// AppScopes limit the report to the Apps they select (as in
+	// CredentialFilter).
+	AppScopes []func(*gorm.DB) *gorm.DB
 }
 
 // Status describes the running feature so the UI can explain itself.
@@ -257,6 +269,9 @@ type ServerFilter struct {
 	Search       string // case-insensitive substring over name, slug, description, listen path
 	Page         int    // 1-based
 	PageSize     int
+	// Scopes are extra conditions from the API layer (the ?workspace_id=
+	// filter of Enterprise Workspaces), applied to the server query.
+	Scopes []func(*gorm.DB) *gorm.DB
 }
 
 // ServerList is one page of servers.

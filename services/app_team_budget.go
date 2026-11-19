@@ -33,6 +33,9 @@ func (s *Service) validateAppTeam(teamID uint) error {
 // budget the caller asked for (nil when none). It reports whether the budget
 // came from the team, in which case no other default applies.
 func (s *Service) attributeNewApp(app *models.App, o appOptions) (bool, error) {
+	if o.workspaceID != nil {
+		app.WorkspaceID = *o.workspaceID
+	}
 	if o.teamID != nil {
 		if err := s.validateAppTeam(*o.teamID); err != nil {
 			return false, err

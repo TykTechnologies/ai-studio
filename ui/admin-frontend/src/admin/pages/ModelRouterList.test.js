@@ -43,7 +43,8 @@ const renderWith = (permissions) =>
   );
 
 const openRowMenu = async (name) => {
-  const row = (await screen.findByText(name)).closest("tr");
+  await screen.findByText(name);
+  const row = screen.getByRole("row", { name: new RegExp(name) });
   fireEvent.click(within(row).getByRole("button", { name: `Actions for ${name}` }));
   return screen.findByRole("menu");
 };
@@ -80,16 +81,22 @@ describe("ModelRouterList permission gating (model-routers:publish vs model-rout
     expect(within(toolbar).queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
   });
 
-  it("write-only: Add Router and edit/delete, but no toggle", async () => {
+  it("write-only: Add Router and edit, but no delete or toggle", async () => {
     renderWith(["model-routers:write"]);
     await screen.findByText("Primary router");
 
     expect(screen.getByRole("button", { name: /Add Router/ })).toBeInTheDocument();
     const menu = await openRowMenu("Primary router");
     expect(within(menu).getByRole("menuitem", { name: "Edit Router" })).toBeInTheDocument();
-    expect(within(menu).getByRole("menuitem", { name: "Delete Router" })).toBeInTheDocument();
+    // Deleting needs model-routers:delete, as on the server.
+    expect(within(menu).queryByRole("menuitem", { name: "Delete Router" })).not.toBeInTheDocument();
     expect(within(menu).queryByRole("menuitem", { name: /Deactivate Router/ })).not.toBeInTheDocument();
+  });
 
+  it("write and delete: Delete in the row menu and the bulk toolbar", async () => {
+    renderWith(["model-routers:write", "model-routers:delete"]);
+    const menu = await openRowMenu("Primary router");
+    expect(within(menu).getByRole("menuitem", { name: "Delete Router" })).toBeInTheDocument();
     fireEvent.keyDown(menu, { key: "Escape" });
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Primary router" }));
     const toolbar = await screen.findByRole("toolbar", { name: "Bulk actions" });

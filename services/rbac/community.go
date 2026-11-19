@@ -37,6 +37,13 @@ func (s *communityService) Resolve(_ context.Context, user *models.User) (authz.
 	return ResolveByAdminFlag(user), nil
 }
 
+// ResolveGrants is Resolve with no Workspace grants: Community Edition has
+// no scoped bindings.
+func (s *communityService) ResolveGrants(ctx context.Context, user *models.User) (authz.Grants, error) {
+	set, err := s.Resolve(ctx, user)
+	return authz.GlobalGrants(set), err
+}
+
 // IsOwner: without roles the Super Admin is the Owner.
 func (s *communityService) IsOwner(_ context.Context, userID uint) (bool, error) {
 	return IsSuperAdminUser(s.db, userID)

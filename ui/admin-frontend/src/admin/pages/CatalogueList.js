@@ -32,9 +32,18 @@ import useBulkActions, { standardBulkActions } from "../hooks/useBulkActions";
 import Can from "../components/rbac/Can";
 import { P } from "../rbac/permissions";
 import { listAll } from "../utils/listAll";
+import {
+  useWorkspaceColumn,
+  useWorkspaceFilter,
+  useWorkspaceAccess,
+  WorkspaceFilter,
+} from "../components/workspaces/workspaceFields";
 
 const CatalogueList = memo(() => {
   const navigate = useNavigate();
+  const { canOn, canAnywhere } = useWorkspaceAccess();
+  const workspaceColumn = useWorkspaceColumn();
+  const { workspaceId, setWorkspaceId, params: workspaceParams } = useWorkspaceFilter();
   const [catalogues, setCatalogues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -51,7 +60,7 @@ const CatalogueList = memo(() => {
   const fetchCatalogues = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get("/catalogues", { params: queryParams });
+      const response = await apiClient.get("/catalogues", { params: { ...queryParams, ...workspaceParams } });
       setCatalogues(response.data.data || []);
       const totalCount = parseInt(response.headers["x-total-count"] || "0", 10);
       const totalPages = parseInt(response.headers["x-total-pages"] || "0", 10);
@@ -63,7 +72,7 @@ const CatalogueList = memo(() => {
     } finally {
       setLoading(false);
     }
-  }, [queryParams, updatePaginationData]);
+  }, [queryParams, workspaceParams, updatePaginationData]);
 
   useEffect(() => {
     fetchCatalogues();
@@ -190,13 +199,21 @@ const CatalogueList = memo(() => {
         </Box>
       ),
     },
-  ], [getLLMNames]);
+    ...(workspaceColumn ? [workspaceColumn] : []),
+  ], [getLLMNames, workspaceColumn]);
+
+  // Every row action changes the catalog, so each needs catalogues:write in
+  // the catalog's Workspace: one in another Workspace is read-only.
+  const canWrite = canAnywhere(P.CATALOGUES_WRITE);
+  const writeOn = (catalogue) => canOn(catalogue?.attributes?.workspace_id, P.CATALOGUES_WRITE);
+  // Deleting needs catalogues:delete in its Workspace, as on the server.
+  const deleteOn = (catalogue) => canOn(catalogue?.attributes?.workspace_id, P.CATALOGUES_DELETE);
 
   const rowActions = [
-    { key: "edit", label: "Edit catalog", onClick: (catalogue) => handleEdit(catalogue.id) },
-    { key: "delete", label: "Delete catalog", onClick: (catalogue) => handleDelete(catalogue.id) },
-    { key: "add-llm", label: "Add model provider to catalog", onClick: (catalogue) => handleOpenModal("add", catalogue) },
-    { key: "remove-llm", label: "Remove model provider from catalog", onClick: (catalogue) => handleOpenModal("remove", catalogue) },
+    { key: "edit", label: "Edit catalog", onClick: (catalogue) => handleEdit(catalogue.id), hidden: (catalogue) => !writeOn(catalogue) },
+    { key: "delete", label: "Delete catalog", onClick: (catalogue) => handleDelete(catalogue.id), hidden: (catalogue) => !deleteOn(catalogue) },
+    { key: "add-llm", label: "Add model provider to catalog", onClick: (catalogue) => handleOpenModal("add", catalogue), hidden: (catalogue) => !writeOn(catalogue) },
+    { key: "remove-llm", label: "Remove model provider from catalog", onClick: (catalogue) => handleOpenModal("remove", catalogue), hidden: (catalogue) => !deleteOn(catalogue) },
   ];
 
   const bulkActions = useMemo(
@@ -213,7 +230,7 @@ const CatalogueList = memo(() => {
       <>
         <TitleBox top="var(--studio-header-height)">
           <Typography variant="headingXLarge">Model provider catalogs</Typography>
-          <Can permission={P.CATALOGUES_WRITE}>
+          <Can permission={P.CATALOGUES_WRITE} anywhere>
             <PrimaryButton
               variant="contained"
               startIcon={<AddIcon />}
@@ -227,34 +244,31 @@ const CatalogueList = memo(() => {
           <Typography variant="bodyLargeDefault" color="text.defaultSubdued">Catalogs are collections of model providers that you can assign to specific teams to manage access easily.</Typography>
         </Box>
         <ContentBox>
+          <WorkspaceFilter value={workspaceId} onChange={setWorkspaceId} sx={{ mb: 2 }} />
           <BulkResultAlert action={bulk.failures?.action} failures={bulk.failures?.failures} onClose={bulk.clearFailures} />
-          <Can permission={P.CATALOGUES_WRITE}>
-            {(canWrite) => (
-              <DataTable
-                {...tableProps}
-                ariaLabel="Model provider catalogs"
-                searchPlaceholder="Search catalogs by name..."
-                columns={columns}
-                data={catalogues}
-                loading={loading}
-                onRowClick={handleCatalogueClick}
-                actions={canWrite ? rowActions : undefined}
-                {...(canWrite ? bulk.selectionProps : {})}
-                bulkActions={canWrite ? bulkActions : undefined}
-                emptyState={
-                  !searchTerm ? (
-                    <EmptyStateWidget
-                      title="No catalogs found"
-                      description="Click the button below to add a new catalog."
-                      buttonText="Add Catalog"
-                      buttonIcon={<AddIcon />}
-                      onButtonClick={canWrite ? handleAddCatalogue : undefined}
-                    />
-                  ) : undefined
-                }
-              />
-            )}
-          </Can>
+          <DataTable
+            {...tableProps}
+            ariaLabel="Model provider catalogs"
+            searchPlaceholder="Search catalogs by name..."
+            columns={columns}
+            data={catalogues}
+            loading={loading}
+            onRowClick={handleCatalogueClick}
+            actions={canWrite ? rowActions : undefined}
+            {...(canWrite ? bulk.selectionProps : {})}
+            bulkActions={canWrite ? bulkActions : undefined}
+            emptyState={
+              !searchTerm ? (
+                <EmptyStateWidget
+                  title="No catalogs found"
+                  description="Click the button below to add a new catalog."
+                  buttonText="Add Catalog"
+                  buttonIcon={<AddIcon />}
+                  onButtonClick={canWrite ? handleAddCatalogue : undefined}
+                />
+              ) : undefined
+            }
+          />
         </ContentBox>
       </>
 

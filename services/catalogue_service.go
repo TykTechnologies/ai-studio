@@ -2,11 +2,17 @@ package services
 
 import (
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
-func (s *Service) CreateCatalogue(name string) (*models.Catalogue, error) {
+// workspaceID, when given, is the Workspace the catalogue lands in (the
+// API's landing rule); otherwise it lands in the Default workspace.
+func (s *Service) CreateCatalogue(name string, workspaceID ...uint) (*models.Catalogue, error) {
 	catalogue := &models.Catalogue{
 		Name: name,
+	}
+	if len(workspaceID) > 0 {
+		catalogue.WorkspaceID = workspaceID[0]
 	}
 
 	if err := catalogue.Create(s.DB); err != nil {
@@ -123,9 +129,11 @@ func (s *Service) GetAllCatalogues(pageSize int, pageNumber int, all bool, opts 
 	return catalogues, totalCount, totalPages, nil
 }
 
-func (s *Service) SearchCataloguesByNameStub(stub string) (models.Catalogues, error) {
+// SearchCataloguesByNameStub finds catalogues by name; scopes narrow the
+// search (e.g. the caller's Workspaces).
+func (s *Service) SearchCataloguesByNameStub(stub string, scopes ...func(*gorm.DB) *gorm.DB) (models.Catalogues, error) {
 	var catalogues models.Catalogues
-	if err := catalogues.GetByNameStub(s.DB, stub); err != nil {
+	if err := catalogues.GetByNameStub(s.DB.Scopes(scopes...), stub); err != nil {
 		return nil, err
 	}
 	return catalogues, nil

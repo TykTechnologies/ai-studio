@@ -56,6 +56,8 @@ import PublishSwitch from "../rbac/PublishSwitch";
 import PrivacyLevelInput from "../common/privacy/PrivacyLevelInput";
 import { isValidPrivacyScore } from "../common/privacy/privacyLevels";
 import { P } from "../../rbac/permissions";
+import WorkspaceSelect from "../workspaces/WorkspaceSelect";
+import { useCanMove, workspaceFieldError } from "../workspaces/workspaceFields";
 import pluginService from "../../services/pluginService";
 import PluginConfigDialog from './PluginConfigDialog';
 import {
@@ -113,7 +115,13 @@ const LLMForm = () => {
     tracing_content_mode_max: "", // Agent tracing content cap (Enterprise); "" = no cap
     tracing_propagation_opt_out: false, // true: no traceparent to this provider
     allow_internal_host: false, // admin-only: the endpoint may be an internal address
+    workspace_id: null, // Enterprise: the Workspace it lives in (landing rule when null)
   });
+  // The stored Workspace of the model provider being edited: a different
+  // workspace_id on save is a move.
+  const [originalWorkspaceId, setOriginalWorkspaceId] = useState(null);
+  const [workspaceError, setWorkspaceError] = useState("");
+  const canMove = useCanMove(P.LLMS_WRITE);
   const [vendors, setVendors] = useState([]);
   // Every other LLM, for the failover picker (id, name, allowed models...).
   const [availableLLMs, setAvailableLLMs] = useState([]);
@@ -305,7 +313,9 @@ const LLMForm = () => {
         tracing_content_mode_max: llmData.tracing_content_mode_max || "",
         tracing_propagation_opt_out: Boolean(llmData.tracing_propagation_opt_out),
         allow_internal_host: Boolean(llmData.allow_internal_host),
+        workspace_id: llmData.workspace_id ?? null,
       });
+      setOriginalWorkspaceId(llmData.workspace_id ?? null);
       setOriginalName(llmData.name);
       setPriceMultiplierRows(rowsFromPriceMultipliers(llmData.price_multipliers));
       setGovernedMetadata(llmResponse.data.data.governed_metadata || {});
@@ -455,8 +465,13 @@ const LLMForm = () => {
   };
 
   const saveLLM = async () => {
-    // Remove plugins from the main LLM data since they're managed separately
-    const { plugins, ...llmDataWithoutPlugins } = llm;
+    // Remove plugins from the main LLM data since they're managed separately;
+    // workspace_id is sent only to choose one (create) or to move (edit).
+    const { plugins, workspace_id: workspaceId, ...llmDataWithoutPlugins } = llm;
+    const workspaceAttr =
+      workspaceId !== null && workspaceId !== undefined && (!id || Number(workspaceId) !== Number(originalWorkspaceId))
+        ? { workspace_id: Number(workspaceId) }
+        : {};
 
     // For Bedrock: pack AWS credentials into metadata and clear api_key
     let metadata = llmDataWithoutPlugins.metadata || {};
@@ -478,6 +493,7 @@ const LLMForm = () => {
         type: "LLM",
         attributes: {
           ...llmDataWithoutPlugins,
+          ...workspaceAttr,
           privacy_score: Number(llm.privacy_score),
           active: Boolean(llm.active),
           filters: llm.filters.map((filterId) => parseInt(filterId, 10)),
@@ -527,6 +543,12 @@ const LLMForm = () => {
         },
       });
     } catch (error) {
+      const wsError = workspaceFieldError(error);
+      if (wsError) {
+        setWorkspaceError(wsError);
+        setSnackbar({ open: true, message: wsError, severity: "error" });
+        return;
+      }
       if (error.response?.status === 422) {
         const fieldErrors = extractGovernedMetadataErrors(error);
         setMetadataErrors(fieldErrors);
@@ -814,7 +836,7 @@ const LLMForm = () => {
                       <Grid item xs={12}>
                         <TextField
                           fullWidth
-                          label="Anthropic workspace ID"
+                          label="Vendor workspace (Anthropic)"
                           name="vendor_workspace_id"
                           value={llm.vendor_workspace_id || ""}
                           onChange={handleChange}
@@ -961,6 +983,7 @@ const LLMForm = () => {
                 <Grid item xs={12}>
                   <PublishSwitch
                     permission={P.LLMS_PUBLISH}
+                    workspaceId={llm.workspace_id ?? null}
                     checked={llm.active}
                     onChange={handleSwitchChange}
                     name="active"
@@ -1188,6 +1211,21 @@ const LLMForm = () => {
             }}
             errors={metadataErrors}
           />
+
+          {/* Workspace (Enterprise): where it is created; on edit, the move control. */}
+          <Box sx={{ mt: 3 }}>
+            <WorkspaceSelect
+              permission={P.LLMS_WRITE}
+              value={llm.workspace_id}
+              onChange={(ws) => {
+                setLLM((prev) => ({ ...prev, workspace_id: ws }));
+                setWorkspaceError("");
+              }}
+              disabled={Boolean(id) && !canMove}
+              error={workspaceError}
+              helperText={id ? "Moving it to another Workspace needs write in both." : "The Workspace it is created in."}
+            />
+          </Box>
 
           {/* Edge Availability Section */}
           <EdgeAvailabilitySection

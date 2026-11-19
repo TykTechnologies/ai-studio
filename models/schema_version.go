@@ -150,7 +150,20 @@ const (
 	// 43: index idx_apps_credential_id on apps.credential_id (additive): the
 	//     credential sync looks up each page's Apps by credential
 	//     (midsommar-clean-4x5y.16).
-	SchemaVersion          = 43
+	// 44: workspaces (new table) and workspace_id (defaulted 0, indexed;
+	//     additive) on llms, apps, tools, datasources, filters, embedders,
+	//     model_routers, semantic_routers, agent_configs, catalogues,
+	//     data_catalogues, tool_catalogues, secrets, file_stores,
+	//     mcp_servers, plugins and webhook_targets: the owning Workspace
+	//     (midsommar-clean-oztk.2). Older code ignores the column; rows it
+	//     writes (0) read as the Default workspace and are stamped on the
+	//     next start.
+	// 45: users.account_type (defaulted '', indexed; additive): service
+	//     accounts (midsommar-clean-oztk.16). An older build ignores it, so
+	//     a service account's API key works there as an ordinary user's with
+	//     its global bindings; it still has no password and an undeliverable
+	//     email, so it cannot sign in interactively there either.
+	SchemaVersion          = 45
 	MinReaderSchemaVersion = 42
 )
 

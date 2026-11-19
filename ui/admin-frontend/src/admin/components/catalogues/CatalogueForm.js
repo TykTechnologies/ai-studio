@@ -24,6 +24,11 @@ import {
 } from "../../../components/unsaved-changes";
 import { listAll } from "../../utils/listAll";
 import useSystemFeatures from "../../hooks/useSystemFeatures";
+import { P } from "../../rbac/permissions";
+import WorkspaceSelect from "../workspaces/WorkspaceSelect";
+import { useCanMove, workspaceFieldError } from "../workspaces/workspaceFields";
+import NotFound from "../../pages/NotFound";
+import OtherWorkspacesNote from "./OtherWorkspacesNote";
 
 // Routers are published in LLM catalogues too; the picker works on
 // {id, attributes: {name}} items like the LLM one.
@@ -31,6 +36,14 @@ const routerOption = (r) => ({ id: String(r.id), attributes: { name: r.name } })
 
 const CatalogueForm = () => {
   const [catalogue, setCatalogue] = useState({ name: "" });
+  // Enterprise: the Workspace it lives in (landing rule when null). The
+  // stored one is kept apart: a different workspace_id on save is a move.
+  const [workspaceId, setWorkspaceId] = useState(null);
+  const [originalWorkspaceId, setOriginalWorkspaceId] = useState(null);
+  const [workspaceError, setWorkspaceError] = useState("");
+  const canMove = useCanMove(P.CATALOGUES_WRITE);
+  // The catalog is gone or in a Workspace the caller cannot see.
+  const [notFound, setNotFound] = useState(false);
   const [llms, setLLMs] = useState([]);
   const [availableLLMs, setAvailableLLMs] = useState([]);
   const [modelRouters, setModelRouters] = useState([]);
@@ -72,6 +85,8 @@ const CatalogueForm = () => {
 
         if (catalogueResponse) {
           setCatalogue(catalogueResponse.data.data.attributes);
+          setWorkspaceId(catalogueResponse.data.data.attributes.workspace_id ?? null);
+          setOriginalWorkspaceId(catalogueResponse.data.data.attributes.workspace_id ?? null);
           const catalogueLLMsResponse = await apiClient.get(
             `/catalogues/${id}/llms`,
           );
@@ -83,6 +98,9 @@ const CatalogueForm = () => {
         );
       } catch (error) {
         console.error("Error fetching data", error);
+        if (error.response?.status === 404) {
+          setNotFound(true);
+        }
         setSnackbar({
           open: true,
           message: "Error fetching data",
@@ -135,10 +153,16 @@ const CatalogueForm = () => {
     // pending "+" step, so what is on screen is exactly what gets saved.
     const desiredLLMs = llms;
 
+    // workspace_id is sent only to choose one (create) or to move (edit).
+    const { workspace_id: _storedWorkspaceId, ...attributes } = catalogue;
+    const workspaceAttr =
+      workspaceId !== null && workspaceId !== undefined && (!id || Number(workspaceId) !== Number(originalWorkspaceId))
+        ? { workspace_id: Number(workspaceId) }
+        : {};
     const catalogueData = {
       data: {
         type: "Catalogue",
-        attributes: catalogue,
+        attributes: { ...attributes, ...workspaceAttr },
       },
     };
 
@@ -169,6 +193,13 @@ const CatalogueForm = () => {
       });
     } catch (error) {
       console.error("Error saving catalog", error);
+      const wsError = workspaceFieldError(error);
+      if (wsError) {
+        setWorkspaceError(wsError);
+        setSnackbar({ open: true, message: wsError, severity: "error" });
+        setLoading(false);
+        return;
+      }
       setSnackbar({
         open: true,
         message: "Error saving catalog",
@@ -223,6 +254,10 @@ const CatalogueForm = () => {
     }
     setSnackbar({ ...snackbar, open: false });
   };
+
+  if (notFound) {
+    return <NotFound />;
+  }
 
   if (loading) {
     return <CircularProgress />;
@@ -279,6 +314,9 @@ const CatalogueForm = () => {
                 options={availableModelRouters}
                 getOptionLabel={(r) => r.attributes?.name ?? ""}
               />
+              <OtherWorkspacesNote permission={P.MODEL_ROUTERS_READ} sx={{ mt: 1 }}>
+                Model routers in Workspaces you cannot see are not listed; saving keeps them in this catalog.
+              </OtherWorkspacesNote>
             </Box>
           )}
 
@@ -292,8 +330,26 @@ const CatalogueForm = () => {
                 options={availableSemanticRouters}
                 getOptionLabel={(r) => r.attributes?.name ?? ""}
               />
+              <OtherWorkspacesNote permission={P.SEMANTIC_ROUTERS_READ} sx={{ mt: 1 }}>
+                Semantic routers in Workspaces you cannot see are not listed; saving keeps them in this catalog.
+              </OtherWorkspacesNote>
             </Box>
           )}
+
+          {/* Workspace (Enterprise): where it is created; on edit, the move control. */}
+          <Box sx={{ mt: 3 }}>
+            <WorkspaceSelect
+              permission={P.CATALOGUES_WRITE}
+              value={workspaceId}
+              onChange={(ws) => {
+                setWorkspaceId(ws);
+                setWorkspaceError("");
+              }}
+              disabled={Boolean(id) && !canMove}
+              error={workspaceError}
+              helperText={id ? "Moving it to another Workspace needs write in both." : "The Workspace it is created in."}
+            />
+          </Box>
 
           <Box mt={3} display="flex" gap={2}>
             <SecondaryOutlineButton onClick={handleCancel}>

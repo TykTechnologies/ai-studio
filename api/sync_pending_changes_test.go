@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"testing"
 
 	apitest "github.com/TykTechnologies/midsommar/v2/api/testing"
@@ -81,3 +82,60 @@ func TestSyncPendingChanges_RouteAndReloadAll(t *testing.T) {
 	assert.Equal(t, "default", status.Data[0].Namespace)
 	assert.NotNil(t, status.Data[0].LastPushAt)
 }
+
+// ?workspace_id= adds the stain summary; an unknown or malformed id is 422
+// invalid_workspace; without it the response carries no stain fields.
+func TestSyncPendingChanges_WorkspaceStain(t *testing.T) {
+	f := setupLifecycleAPI(t)
+	db := f.auth.Config.DB
+	def, err := models.EnsureDefaultWorkspace(db)
+	require.NoError(t, err)
+	w1 := &models.Workspace{Name: "W1"}
+	require.NoError(t, db.Create(w1).Error)
+	llm := &models.LLM{Name: "Default LLM", Namespace: "default"}
+	require.NoError(t, db.Create(llm).Error)
+	require.NoError(t, db.Model(llm).UpdateColumn("workspace_id", def.ID).Error)
+
+	get := func(query string) *httptestResponse {
+		w := apitest.PerformAuthRequest(f.router, "GET", "/api/v1/sync/pending-changes?namespace=default"+query, nil, f.admin.APIKey)
+		return &httptestResponse{code: w.Code, body: w.Body.Bytes()}
+	}
+	decode := func(r *httptestResponse) map[string]json.RawMessage {
+		t.Helper()
+		require.Equal(t, http.StatusOK, r.code, string(r.body))
+		var resp struct{ Data map[string]json.RawMessage }
+		require.NoError(t, json.Unmarshal(r.body, &resp))
+		return resp.Data
+	}
+
+	plain := decode(get(""))
+	assert.NotContains(t, plain, "stained")
+	assert.NotContains(t, plain, "outside_total")
+	assert.Contains(t, plain, "by_workspace")
+
+	own := decode(get("&workspace_id=" + uintString(def.ID)))
+	assert.JSONEq(t, "false", string(own["stained"]))
+	assert.JSONEq(t, "0", string(own["outside_total"]))
+
+	other := decode(get("&workspace_id=" + uintString(w1.ID)))
+	assert.JSONEq(t, "true", string(other["stained"]))
+	assert.JSONEq(t, "1", string(other["outside_total"]))
+
+	var first []byte
+	for _, q := range []string{"&workspace_id=999999", "&workspace_id=abc", "&workspace_id=0"} {
+		r := get(q)
+		assert.Equal(t, http.StatusUnprocessableEntity, r.code, q)
+		assert.Equal(t, "invalid_workspace", decodeErrorCode(t, r.body), q)
+		if first == nil {
+			first = r.body
+		}
+		assert.JSONEq(t, string(first), string(r.body), "one body for malformed and unknown ids (%s)", q)
+	}
+}
+
+type httptestResponse struct {
+	code int
+	body []byte
+}
+
+func uintString(v uint) string { return strconv.FormatUint(uint64(v), 10) }

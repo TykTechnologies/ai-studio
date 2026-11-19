@@ -55,7 +55,7 @@ const EmbedderDetails = () => {
           <Typography variant="headingXLarge">{a.name}</Typography>
           <Chip size="small" variant="outlined" label={a.linked ? "Uses a model provider" : "Standalone"} />
         </Box>
-        <Can permission={P.EMBEDDERS_WRITE}>
+        <Can permission={P.EMBEDDERS_WRITE} workspaceId={a.workspace_id}>
           <PrimaryButton variant="contained" startIcon={<EditIcon />} onClick={() => navigate(`/admin/embedders/edit/${id}`)}>
             Edit
           </PrimaryButton>

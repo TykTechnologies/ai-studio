@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/filereader"
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -20,6 +19,7 @@ import (
 // @Produce json
 // @Param file formData file true "File to upload"
 // @Param description formData string false "Description of the file"
+// @Param workspace_id formData int false "Workspace the entry lands in (Enterprise Workspaces)"
 // @Success 201 {object} FileStoreResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
@@ -66,6 +66,23 @@ func (a *API) createFileStore(c *gin.Context) {
 	// Get the description from form data (optional)
 	description := c.PostForm("description")
 
+	// The Workspace the entry lands in (decision D5): an optional
+	// workspace_id form field.
+	var requested *uint
+	if raw, ok := c.GetPostForm("workspace_id"); ok && raw != "" {
+		id, err := strconv.ParseUint(raw, 10, 32)
+		if err != nil {
+			simpleError(c, http.StatusBadRequest, "Bad Request", "workspace_id must be a Workspace id")
+			return
+		}
+		v := uint(id)
+		requested = &v
+	}
+	workspaceID, ok := a.resolveCreateWorkspace(c, "filestores", requested)
+	if !ok {
+		return
+	}
+
 	// Handle file types
 	textContent, err := filereader.Read(fileHeader.Filename, content)
 	if err != nil {
@@ -82,7 +99,12 @@ func (a *API) createFileStore(c *gin.Context) {
 		description,
 		string(base64.StdEncoding.EncodeToString([]byte(textContent))),
 		len(content),
+		workspaceID,
 	)
+	if isWorkspaceNotFound(err) {
+		invalidWorkspace(c)
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -93,7 +115,7 @@ func (a *API) createFileStore(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": serializeFileStore(fileStore)})
+	c.JSON(http.StatusCreated, gin.H{"data": a.serializeFileStoreIn(fileStore)})
 }
 
 // @Summary Get a filestore entry by ID
@@ -130,7 +152,7 @@ func (a *API) getFileStore(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeFileStore(fileStore)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializeFileStoreIn(fileStore)})
 }
 
 // @Summary Update a filestore entry
@@ -174,11 +196,27 @@ func (a *API) updateFileStore(c *gin.Context) {
 		simpleError(c, http.StatusNotFound, "Not Found", "Filestore entry not found")
 		return
 	}
+	// Write in the entry's Workspace; a changed workspace_id is a move.
+	requested, ok := boundWorkspaceID(c)
+	if !ok {
+		return
+	}
+	moveTo, ok := a.checkObjectUpdate(c, "filestores", stored.WorkspaceID, requested)
+	if !ok {
+		return
+	}
 	if err := patchAttributes(c, &input.Data.Attributes, stored); err != nil {
 		simpleError(c, http.StatusBadRequest, "Bad Request", err.Error())
 		return
 	}
 
+	// The move goes first; a failed update puts it back.
+	finishMove, ok := a.beginMove(c, &models.FileStore{}, stored.ID, stored.WorkspaceID, moveTo)
+	if !ok {
+		return
+	}
+	updated := false
+	defer func() { finishMove(updated) }()
 	fileStore, err := a.service.UpdateFileStore(
 		uint(id),
 		input.Data.Attributes.FileName,
@@ -195,8 +233,12 @@ func (a *API) updateFileStore(c *gin.Context) {
 		})
 		return
 	}
+	if moveTo != nil {
+		fileStore.WorkspaceID = *moveTo
+	}
+	updated = true
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeFileStore(fileStore)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializeFileStoreIn(fileStore)})
 }
 
 // @Summary Delete a filestore entry
@@ -247,8 +289,12 @@ func (a *API) deleteFileStore(c *gin.Context) {
 // @Security BearerAuth
 func (a *API) getAllFileStores(c *gin.Context) {
 	pageSize, pageNumber, all := getPaginationParams(c)
+	scopes, ok := a.listWorkspaceScopes(c, "filestores", "")
+	if !ok {
+		return
+	}
 
-	fileStores, totalCount, totalPages, err := a.service.GetAllFileStores(pageSize, pageNumber, all)
+	fileStores, totalCount, totalPages, err := a.service.GetAllFileStores(pageSize, pageNumber, all, scopes...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -261,7 +307,7 @@ func (a *API) getAllFileStores(c *gin.Context) {
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, gin.H{"data": serializeFileStores(fileStores)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializeFileStoresIn(fileStores)})
 }
 
 // @Summary Search filestore entries
@@ -287,7 +333,11 @@ func (a *API) searchFileStores(c *gin.Context) {
 		return
 	}
 
-	fileStores, err := a.service.SearchFileStores(query)
+	scopes, ok := a.listWorkspaceScopes(c, "filestores", "")
+	if !ok {
+		return
+	}
+	fileStores, err := a.service.SearchFileStores(query, scopes...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -298,27 +348,21 @@ func (a *API) searchFileStores(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeFileStores(fileStores)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializeFileStoresIn(fileStores)})
 }
 
 func serializeFileStore(fileStore *models.FileStore) FileStoreResponse {
-	return FileStoreResponse{
+	resp := FileStoreResponse{
 		Type: "filestore",
 		ID:   strconv.FormatUint(uint64(fileStore.ID), 10),
-		Attributes: struct {
-			FileName        string    `json:"file_name"`
-			Description     string    `json:"description"`
-			Content         string    `json:"-"`
-			Length          int       `json:"length"`
-			LastProcessedOn time.Time `json:"last_processed_on"`
-		}{
-			FileName:        fileStore.FileName,
-			Description:     fileStore.Description,
-			Content:         fileStore.Content,
-			Length:          fileStore.Length,
-			LastProcessedOn: fileStore.LastProcessedOn,
-		},
 	}
+	resp.Attributes.FileName = fileStore.FileName
+	resp.Attributes.Description = fileStore.Description
+	resp.Attributes.Content = fileStore.Content
+	resp.Attributes.Length = fileStore.Length
+	resp.Attributes.LastProcessedOn = fileStore.LastProcessedOn
+	resp.Attributes.WorkspaceID = fileStore.WorkspaceID
+	return resp
 }
 
 func serializeFileStores(fileStores []models.FileStore) []FileStoreResponse {
@@ -327,4 +371,20 @@ func serializeFileStores(fileStores []models.FileStore) []FileStoreResponse {
 		result[i] = serializeFileStore(&fileStore)
 	}
 	return result
+}
+
+// serializeFileStoreIn is serializeFileStore with the entry's Workspace
+// (a stored 0 read as the Default).
+func (a *API) serializeFileStoreIn(fileStore *models.FileStore) FileStoreResponse {
+	resp := serializeFileStore(fileStore)
+	resp.Attributes.WorkspaceID = a.responseWorkspaceID(fileStore.WorkspaceID)
+	return resp
+}
+
+func (a *API) serializeFileStoresIn(fileStores []models.FileStore) []FileStoreResponse {
+	out := make([]FileStoreResponse, len(fileStores))
+	for i := range fileStores {
+		out[i] = a.serializeFileStoreIn(&fileStores[i])
+	}
+	return out
 }

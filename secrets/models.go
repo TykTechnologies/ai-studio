@@ -18,6 +18,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/TykTechnologies/midsommar/v2/models/wsstamp"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/scrypt"
@@ -189,7 +190,12 @@ func deriveKeyPBKDF2(input string, salt []byte, iter int) ([]byte, error) {
 
 type Secret struct {
 	gorm.Model
-	ID      uint   `gorm:"primaryKey" json:"id" access:"secrets"`
+	ID uint `gorm:"primaryKey" json:"id" access:"secrets"`
+
+	// WorkspaceID is the Workspace that owns the secret (models.Workspace);
+	// 0 reads as the Default workspace.
+	WorkspaceID uint `json:"workspace_id" gorm:"not null;default:0;index"`
+
 	VarName string `json:"name"`
 	Value   string `json:"value"`
 
@@ -629,13 +635,101 @@ func GetSecretByID(db *gorm.DB, id uint, preserveRef bool) (*Secret, error) {
 	return &settings, nil
 }
 
-// GetSecretByVarName retrieves a Secret record from the database by it's name.
+// ErrSecretNameAmbiguous: live secrets in more than one Workspace share
+// the name (grandfathered from before names were unique), so a reference
+// to it resolves to none of them.
+var ErrSecretNameAmbiguous = errors.New("secret name is held in more than one Workspace")
+
+// FindSecretByVarName returns the live secret named name (exact match).
+// Names are unique for new writes (midsommar-clean-oztk.47); of
+// grandfathered duplicates it picks the lowest id when they are all in one
+// Workspace (0 read as the Default) and refuses with ErrSecretNameAmbiguous
+// when they span Workspaces. gorm.ErrRecordNotFound when there is none.
+// The value is returned as stored (encrypted).
+func FindSecretByVarName(db *gorm.DB, name string) (*Secret, error) {
+	var rows []Secret
+	if err := db.Where("var_name = ?", name).Order("id").Limit(maxNameCandidates).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return pickByName(db, rows)
+}
+
+// pickByName applies FindSecretByVarName's rule to the live secrets of one
+// name, in id order.
+func pickByName(db *gorm.DB, rows []Secret) (*Secret, error) {
+	switch len(rows) {
+	case 0:
+		return nil, gorm.ErrRecordNotFound
+	case 1:
+		return &rows[0], nil
+	case maxNameCandidates:
+		return nil, ErrSecretNameAmbiguous // more than it reads: fail closed
+	}
+	ws := map[uint]bool{}
+	for _, r := range rows {
+		ws[r.WorkspaceID] = true
+	}
+	if ws[0] && len(ws) > 1 {
+		// 0 is the Default: read it as the Default's id.
+		var def []uint
+		if err := db.Table("workspaces").Where("is_default = ?", true).Limit(1).Pluck("id", &def).Error; err != nil || len(def) == 0 {
+			return nil, ErrSecretNameAmbiguous
+		}
+		delete(ws, 0)
+		ws[def[0]] = true
+	}
+	if len(ws) > 1 {
+		return nil, ErrSecretNameAmbiguous
+	}
+	return &rows[0], nil
+}
+
+// SecretWorkspacesByVarNames is FindSecretByVarName for several names in
+// one query, returning only the stored workspace_id of the secret each name
+// resolves to. A name that resolves to nothing (unknown or ambiguous) is
+// absent.
+func SecretWorkspacesByVarNames(db *gorm.DB, names []string) (map[string]uint, error) {
+	out := map[string]uint{}
+	if len(names) == 0 {
+		return out, nil
+	}
+	var rows []Secret
+	if err := db.Select("id", "var_name", "workspace_id").Where("var_name IN ?", names).Order("id").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	byName := map[string][]Secret{}
+	for _, r := range rows {
+		if len(byName[r.VarName]) < maxNameCandidates {
+			byName[r.VarName] = append(byName[r.VarName], r)
+		}
+	}
+	for name, list := range byName {
+		picked, err := pickByName(db, list)
+		if errors.Is(err, ErrSecretNameAmbiguous) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		out[name] = picked.WorkspaceID
+	}
+	return out, nil
+}
+
+// maxNameCandidates bounds the duplicates FindSecretByVarName reads; at the
+// bound it refuses rather than decide on a partial list.
+const maxNameCandidates = 50
+
+// GetSecretByVarName retrieves a Secret record from the database by its
+// name (FindSecretByVarName). It is the one place a $SECRET/ reference is
+// resolved (GetValue, ResolveRef, CredentialRefForEdge and so the edge
+// snapshot; microgateways get the hub's resolved values).
 func GetSecretByVarName(db *gorm.DB, name string, preserveRef bool) (*Secret, error) {
-	var settings Secret
-	err := db.Where("var_name = (?)", name).First(&settings).Error
+	found, err := FindSecretByVarName(db, name)
 	if err != nil {
 		return nil, err
 	}
+	settings := *found
 
 	if preserveRef {
 		settings.PreserveReference()
@@ -694,9 +788,13 @@ func UpdateSecret(db *gorm.DB, settings *Secret, encryptValue bool) error {
 // GetOrCreateDefaultSecrets ensures default secrets exist in the database.
 // This function creates OPENAI_KEY and ANTHROPIC_KEY secrets with empty values
 // if they don't already exist, allowing users to fill in their API keys later.
-func GetOrCreateDefaultSecrets(db *gorm.DB) error {
+// A name skip reports true for is left uncreated (the caller logs why):
+// recreating a default name objects in another Workspace reference would
+// let them resolve the Default's secret (midsommar-clean-oztk.47).
+func GetOrCreateDefaultSecrets(db *gorm.DB, skip ...func(name string) (bool, error)) error {
 	defaultSecrets := []string{"OPENAI_KEY", "ANTHROPIC_KEY"}
 
+names:
 	for _, name := range defaultSecrets {
 		// Check if secret already exists by name
 		var count int64
@@ -706,6 +804,15 @@ func GetOrCreateDefaultSecrets(db *gorm.DB) error {
 
 		// Only create if it doesn't exist
 		if count == 0 {
+			for _, f := range skip {
+				blocked, err := f(name)
+				if err != nil {
+					return err
+				}
+				if blocked {
+					continue names
+				}
+			}
 			secret := &Secret{
 				VarName: name,
 				Value:   "", // Empty value - user will fill in later
@@ -753,4 +860,16 @@ func ListSecrets(db *gorm.DB, pageSize int, pageNumber int, all bool, scopes ...
 	}
 
 	return secrets, totalCount, totalPages, nil
+}
+
+// BeforeUpdate keeps the Workspace stamp out of ordinary updates
+// (wsstamp.KeepOnUpdate).
+func (s *Secret) BeforeUpdate(tx *gorm.DB) error {
+	return wsstamp.KeepOnUpdate(tx)
+}
+
+// BeforeCreate stamps the secret's Workspace and locks it for the insert
+// (wsstamp.OnCreate).
+func (s *Secret) BeforeCreate(tx *gorm.DB) error {
+	return wsstamp.OnCreate(tx, &s.WorkspaceID)
 }

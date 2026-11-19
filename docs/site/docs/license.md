@@ -7,7 +7,7 @@ An Enterprise licence limits how much of AI Studio a deployment may use. This pa
 | Limit | What uses it |
 |-------|--------------|
 | **Edge namespaces** | Each edge namespace other than the default one. See [Licensed Namespaces](./edge-gateways.md#licensed-namespaces-enterprise). |
-| **Users with admin access** | Each enabled user who can open the admin area, whatever their role: Viewers and Auditors count, and so does access through a team's role. |
+| **Users with admin access** | Each enabled user who can open the admin area, whatever their role: Viewers and Auditors count, and so does access through a team's role or a role within a [Workspace](./workspaces.md). Each enabled [service account](./users.md#service-accounts) takes one of these seats, whatever its roles. |
 | **Users with portal access** | Each enabled user with portal access. |
 | **Apps** | Each App, however it was created. |
 | **LLMs** | Each LLM, active or not, however it was created. |
@@ -24,7 +24,7 @@ A change that would go over a limit is refused with a message that says what to 
 
 > Your organisation has reached its licensed limit of 10 apps. Remove an app to make room, or contact your administrator to increase the quota.
 
-The API answers HTTP 409 with `errors[0].code` set to `QUOTA_EXCEEDED`; plugins calling through the SDK get gRPC `ResourceExhausted`. This applies to creating Apps and LLMs, creating and editing users, adding users to teams, and granting roles, including a role granted to a team, which gives every member admin access.
+The API answers HTTP 409 with `errors[0].code` set to `QUOTA_EXCEEDED`; plugins calling through the SDK get gRPC `ResourceExhausted`. This applies to creating Apps and LLMs, creating and editing users (creating or enabling a service account included), adding users to teams, and granting roles, including a role granted to a team, which gives every member admin access.
 
 Nothing that exists is taken away. If a new licence has lower limits than what is in use, everything keeps working, and new use is refused until usage drops below the limit.
 
@@ -43,7 +43,7 @@ Each banner can be dismissed with its close button, and stays dismissed for that
 The page shows:
 
 - the products the licence covers and when it expires, with the days left;
-- each limit with its usage ("3 of 10", or "of unlimited"), marked **At limit** when it is reached;
+- each limit with its usage ("3 of 10", or "of unlimited"), marked **At limit** when it is reached; the admin seats line also says how many of them service accounts hold;
 - the licensed features;
 - the **licensed namespaces**, each with when it took its slot, its connected edge gateways, and, for an idle one, when its slot frees itself. **Release slot** frees a slot now, for a namespace with no connected edge gateway (`DELETE /api/v1/license/namespaces/{namespace}`); the freed slot goes to the next waiting namespace;
 - the **waiting namespaces** that have an edge gateway connected, in the order they will get a slot.

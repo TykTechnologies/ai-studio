@@ -45,6 +45,36 @@ func requireTykMCPActor(c *gin.Context, resource string) (tykmcp.Actor, bool) {
 	return actor, ok
 }
 
+// requireTykMCPServerActor is requireTykMCPActor for an action on the MCP
+// server named by the :id path parameter: CanExecute is the execute
+// permission in that server's Workspace (Workspaces B4b), not anywhere. An
+// unknown or malformed id keeps the global check, for the handler's 404.
+func (a *API) requireTykMCPServerActor(c *gin.Context) (tykmcp.Actor, bool) {
+	actor, ok := requireTykMCPActor(c, "mcp-servers")
+	if !ok || a.workspaceCheckMode(c) != workspaceCheck {
+		return actor, ok
+	}
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		return actor, true
+	}
+	ws, found, err := a.storedWorkspaceID(&models.MCPServer{}, uint(id))
+	if err != nil {
+		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		c.Abort()
+		return actor, false
+	}
+	if !found {
+		return actor, true
+	}
+	eff, ok := a.effectiveWorkspaceID(c, ws)
+	if !ok {
+		return actor, false
+	}
+	actor.CanExecute = authz.CanIn(c, eff, authz.Execute("mcp-servers"))
+	return actor, true
+}
+
 // tykMCPErrorResponse maps service errors onto the API error envelope.
 func tykMCPErrorResponse(c *gin.Context, err error, fallback string) {
 	switch {

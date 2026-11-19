@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"net/http"
 	"path"
 	"strconv"
 	"strings"
@@ -22,6 +23,11 @@ type permEntry struct {
 	anyOf      []authz.Permission
 	resolve    func(*gin.Context) authz.Permission
 	resolveAny func(*gin.Context) []authz.Permission
+	// inWorkspace marks a Workspace-checked route: its handler checks the
+	// object's Workspace (authz_workspace.go), so the route gate lets a
+	// permission on a Workspace resource through when it is held in any
+	// Workspace. Every other route needs the permission globally (.37).
+	inWorkspace bool
 }
 
 // permission returns the first (primary) permission the route needs; it is
@@ -77,6 +83,9 @@ func joinRoutePath(base, rel string) string {
 type permRouter struct {
 	g   *gin.RouterGroup
 	api *API
+	// inWorkspace: routes registered through this router are
+	// Workspace-checked; see InWorkspace.
+	inWorkspace bool
 }
 
 func (a *API) permGroup(g *gin.RouterGroup) *permRouter {
@@ -92,7 +101,18 @@ func (r *permRouter) Raw() *gin.RouterGroup { return r.g }
 
 // Group creates an annotated sub-group sharing the same registry.
 func (r *permRouter) Group(rel string, mw ...gin.HandlerFunc) *permRouter {
-	return &permRouter{g: r.g.Group(rel, mw...), api: r.api}
+	return &permRouter{g: r.g.Group(rel, mw...), api: r.api, inWorkspace: r.inWorkspace}
+}
+
+// InWorkspace returns a router whose routes are registered as
+// Workspace-checked: v1.InWorkspace().PATCH("/llms/:id", authz.Write("llms"), h).
+// Mark a route only once its handler applies the object checks of
+// authz_workspace.go (requireVisible, requireInWorkspace, workspaceListScope,
+// resolveCreateWorkspace, requireMove) to every object it touches; the gate
+// then admits callers who hold the permission in any Workspace. A fixed
+// permission on a marked route must be on a Workspace resource.
+func (r *permRouter) InWorkspace() *permRouter {
+	return &permRouter{g: r.g, api: r.api, inWorkspace: true}
 }
 
 // Handle registers a route with a fixed permission. It panics if the
@@ -136,6 +156,16 @@ func (r *permRouter) HandleAnyFn(method, rel string, resolve func(*gin.Context) 
 
 func (r *permRouter) record(method, rel string, e permEntry) {
 	key := routeKey(method, joinRoutePath(r.g.BasePath(), rel))
+	if r.inWorkspace {
+		e.inWorkspace = true
+		if !e.dynamic() {
+			for _, p := range e.permissions(nil) {
+				if !authz.ScopeOf(p).InWorkspace() {
+					panic(fmt.Sprintf("authz: route %s is Workspace-checked but %q is not a Workspace permission", key, p))
+				}
+			}
+		}
+	}
 	if _, dup := r.api.routePerms[key]; dup {
 		panic("authz: route registered twice: " + key)
 	}
@@ -159,13 +189,14 @@ func (r *permRouter) DELETE(rel string, p authz.Permission, h ...gin.HandlerFunc
 }
 
 // routePermission returns the annotation for the matched route, if any: the
-// full any-of list and its primary permission.
-func (a *API) routePermission(c *gin.Context) ([]authz.Permission, bool) {
+// full any-of list (the first is the primary permission) and whether the
+// route is Workspace-checked.
+func (a *API) routePermission(c *gin.Context) ([]authz.Permission, bool, bool) {
 	e, ok := a.routePerms[routeKey(c.Request.Method, c.FullPath())]
 	if !ok {
-		return nil, false
+		return nil, false, false
 	}
-	return e.permissions(c), true
+	return e.permissions(c), e.inWorkspace, true
 }
 
 // pluginForAuthz resolves the plugin named by the :id path parameter for the
@@ -249,5 +280,44 @@ func metadataObjectPermission(action authz.Action) func(*gin.Context) authz.Perm
 			return authz.P(res, action)
 		}
 		return authz.P("metadata", action)
+	}
+}
+
+// metadataObjectModels are the stamped objects whose governed metadata the
+// object routes edit; onMetadataObject checks their Workspace.
+var metadataObjectModels = map[string]struct {
+	resource string
+	model    func() interface{}
+}{
+	models.GovernedObjectTypeLLM:        {"llms", func() interface{} { return &models.LLM{} }},
+	models.GovernedObjectTypeTool:       {"tools", func() interface{} { return &models.Tool{} }},
+	models.GovernedObjectTypeDatasource: {"datasources", func() interface{} { return &models.Datasource{} }},
+}
+
+// onMetadataObject is route middleware for the governed-metadata object
+// routes. A write on a stamped object (LLM, tool, datasource) needs the
+// object's permission in its Workspace (requireOnObject: 403
+// permission_denied). Reads stay read-global for these resources (D4), as
+// on the objects' own routes. A write with a non-numeric object_id on one of
+// these types is a 400. Other object types resolve to a global
+// permission at the route gate (plugins, metadata) and pass here.
+func (a *API) onMetadataObject(action authz.Action) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		target, ok := metadataObjectModels[c.Param("object_type")]
+		if !ok || action == authz.ActionRead {
+			c.Next()
+			return
+		}
+		id, err := strconv.ParseUint(c.Param("object_id"), 10, 32)
+		if err != nil {
+			// LLMs, tools and datasources have numeric ids: fail closed.
+			simpleError(c, http.StatusBadRequest, "Bad Request", "invalid object_id")
+			c.Abort()
+			return
+		}
+		if !a.requireOnObject(c, target.model(), uint(id), authz.P(target.resource, action)) {
+			return
+		}
+		c.Next()
 	}
 }

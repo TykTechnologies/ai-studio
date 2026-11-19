@@ -296,6 +296,8 @@ With RBAC enabled, team membership from the claim mapping is also what grants co
 
 ### Provenance, API keys and deprovisioning
 
+**Service accounts are excluded.** An identity-provider login whose email matches a service account is refused (403, code `service_account`) before any write, so the account's name, verification flag and teams stay as they are. Service-account emails are generated in the undeliverable `service-account.invalid` domain, so a real IdP user cannot match one. IdP group mapping never adds a service account to a team.
+
 `createUserWithTx` (core and the Enterprise copy in `enterprise/features/sso/service.go`) builds the user with a struct literal on purpose: an identity-provider account gets **no password and no API key**. It stamps `AuthSource = sso`, `SSOProfileID` (when the profile is known) and the first `LastLoginAt`/`LastLoginMethod = sso`. Every later `HandleSSO` for an existing user refreshes the login stamp, fills `SSOProfileID` if it was empty, and leaves `AuthSource` alone: a user who registered locally and now signs in through the IdP is still `local` in origin.
 
 `HandleSSO` checks `Disabled` immediately after the email lookup and returns 403 **before** it touches the name, forces `EmailVerified`, or replaces team memberships. The administrator's switch therefore survives IdP logins; nothing in the SSO path re-enables an account.

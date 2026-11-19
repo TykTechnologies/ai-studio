@@ -8,6 +8,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/services/pushes"
 	"github.com/gin-gonic/gin"
 )
 
@@ -116,9 +117,11 @@ func (a *API) listNamespaces(c *gin.Context) {
 // @Param namespace path string true "Namespace name (use 'global' for global namespace)"
 // @Success 202 {object} ReloadResponse
 // @Failure 400 {object} ErrorResponse
-// @Failure 409 {object} ErrorResponse
 // @Failure 503 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
+// @Param body body PushPreconditionInput false "Optional push precondition (Enterprise Workspaces): refuse the push while changes from outside this Workspace are pending"
+// @Failure 409 {object} PushStainedBody "push_stained (only_workspace_id), or no edges to push to"
+// @Failure 422 {object} ErrorResponse "only_workspace_id names no Workspace"
 // @Router /api/v1/namespaces/{namespace}/reload [post]
 // @Security BearerAuth
 func (a *API) triggerNamespaceReload(c *gin.Context) {
@@ -130,9 +133,10 @@ func (a *API) triggerNamespaceReload(c *gin.Context) {
 		return
 	}
 
-	res, err := a.service.NamespaceService.TriggerNamespaceReload(namespace, initiatedBy(c))
-	if err != nil {
-		sendPushError(c, err)
+	res, ok := a.push(c, func(only ...uint) (*pushes.Result, error) {
+		return a.service.NamespaceService.TriggerNamespaceReload(namespace, initiatedBy(c), only...)
+	})
+	if !ok {
 		return
 	}
 	pushAccepted(c, res)

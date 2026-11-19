@@ -25,6 +25,9 @@ type UserDTO struct {
 	NotificationsEnabled bool
 	AccessToSSOConfig    bool
 	Groups               []uint
+	// AccountType is models.AccountTypeUser or models.AccountTypeService.
+	// Set on create; an update that names a different type is refused.
+	AccountType string
 }
 
 // applyDefaultGroup gives every new user the Default team, in addition to any
@@ -32,8 +35,16 @@ type UserDTO struct {
 //
 // This is deliberate and load-bearing, not an oversight: Community Edition has
 // no teams at all, Enterprise does, and universal Default membership is what
-// keeps the two editions behaving the same way. Do not make it conditional --
-// a user outside Default has no equivalent in CE.
+// keeps the two editions behaving the same way. Do not make it conditional for
+// people -- a user outside Default has no equivalent in CE.
+//
+// The one exception is service accounts (decision D9 of the Workspaces epic),
+// which CreateUser never passes through here: they belong to no team at all.
+// Default membership exists to give people Portal and Chat access to the
+// catalogues Default owns, and a service account has neither (it is refused
+// on /common); its access is the roles bound to it directly. Leaving it out
+// of Default also keeps team-derived roles from reaching an automation
+// identity by accident. Its Apps get no budget team unless one is named.
 //
 // The consequence is worth understanding, and is why the admin user form now
 // says so out loud: Default owns catalogues, membership is additive and never
@@ -56,8 +67,12 @@ func (s *Service) applyDefaultGroup(groups []uint) ([]uint, error) {
 }
 
 func (s *Service) validateUserInput(dto UserDTO) error {
-	if err := helpers.ValidateEmailDomain(dto.Email); err != nil {
-		return err
+	// A service account's address is generated and never used for mail or
+	// sign-in, so the allowed sign-up domains do not apply to it.
+	if dto.AccountType != models.AccountTypeService {
+		if err := helpers.ValidateEmailDomain(dto.Email); err != nil {
+			return err
+		}
 	}
 
 	if dto.NotificationsEnabled && !dto.IsAdmin {
@@ -86,6 +101,23 @@ func (s *Service) validateUserInput(dto UserDTO) error {
 }
 
 func (s *Service) CreateUser(dto UserDTO) (*models.User, error) {
+	if err := validAccountType(dto.AccountType); err != nil {
+		return nil, err
+	}
+	service := dto.AccountType == models.AccountTypeService
+	if service {
+		if err := checkServiceAccountDTO(dto, nil); err != nil {
+			return nil, err
+		}
+		email, err := ServiceAccountEmail(dto.Name)
+		if err != nil {
+			return nil, err
+		}
+		dto.Email = email
+		// Its API key is the only way in, and userForAPIKey refuses
+		// unverified accounts.
+		dto.EmailVerified = true
+	}
 	if err := s.validateUserInput(dto); err != nil {
 		return nil, err
 	}
@@ -102,15 +134,25 @@ func (s *Service) CreateUser(dto UserDTO) (*models.User, error) {
 		NotificationsEnabled: dto.NotificationsEnabled,
 		AccessToSSOConfig:    dto.AccessToSSOConfig,
 		AuthSource:           models.AuthSourceAdmin,
+		AccountType:          dto.AccountType,
 	}
 
-	if err := user.SetPassword(dto.Password); err != nil {
-		return nil, err
-	}
-
-	groups, err := s.applyDefaultGroup(dto.Groups)
-	if err != nil {
-		return nil, err
+	groups := dto.Groups
+	if service {
+		// No password (it would hash the empty string), and the API key,
+		// generated now, is returned once to the creator. No team, not
+		// even Default (decision D9; see applyDefaultGroup).
+		if err := user.GenerateAPIKey(); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := user.SetPassword(dto.Password); err != nil {
+			return nil, err
+		}
+		var err error
+		if groups, err = s.applyDefaultGroup(dto.Groups); err != nil {
+			return nil, err
+		}
 	}
 
 	if len(groups) > 0 {
@@ -148,8 +190,9 @@ func (s *Service) CreateUser(dto UserDTO) (*models.User, error) {
 		}
 	}
 
-	// Provenance is not a plugin's to rewrite.
+	// Provenance and the account type are not a plugin's to rewrite.
 	user.AuthSource = models.AuthSourceAdmin
+	keepServiceAccountInvariants(user, dto.AccountType, dto.Email)
 
 	if err := s.EntitlementsService().GuardUserChange(s.DB, func(tx *gorm.DB) error { return user.Create(tx) }); err != nil {
 		return nil, err
@@ -314,6 +357,17 @@ func (s *Service) GetUserByEmail(email string) (*models.User, error) {
 }
 
 func (s *Service) UpdateUser(user *models.User, dto UserDTO) (*models.User, error) {
+	if dto.AccountType != "" && dto.AccountType != user.AccountType {
+		return nil, serviceAccountRefusal("account_type cannot be changed")
+	}
+	accountType, email := user.AccountType, user.Email
+	dto.AccountType = accountType
+	if user.IsServiceAccount() {
+		if err := checkServiceAccountDTO(dto, user); err != nil {
+			return nil, err
+		}
+		dto.EmailVerified = true
+	}
 	if err := s.validateUserInput(dto); err != nil {
 		return nil, err
 	}
@@ -360,6 +414,10 @@ func (s *Service) UpdateUser(user *models.User, dto UserDTO) (*models.User, erro
 		if err := s.HookManager.MergeMetadata(user, hookResult.Metadata); err != nil {
 			logger.Warn(fmt.Sprintf("Failed to merge hook metadata: %v", err))
 		}
+	}
+	keepServiceAccountInvariants(user, accountType, email)
+	if user.IsServiceAccount() {
+		newGroups = nil
 	}
 
 	// One transaction under the licence seat guard: admin access, portal
@@ -555,6 +613,11 @@ func (s *Service) AuthenticateUser(email, password string) (*models.User, error)
 	if err := user.GetByEmail(s.DB, email); err != nil {
 		return nil, err
 	}
+	// A service account never signs in interactively; it is told apart
+	// from a wrong password by nothing.
+	if user.IsServiceAccount() {
+		return nil, LoginFailedError
+	}
 
 	if !user.DoesPasswordMatch(password) {
 		return nil, LoginFailedError
@@ -735,6 +798,8 @@ type ListUsersParams struct {
 	AuthSource string
 	HasAPIKey  *bool
 	Disabled   *bool
+	// AccountType: nil any; otherwise "" (people) or "service".
+	AccountType *string
 }
 
 func (s *Service) ListUsers(params ListUsersParams) (models.Users, int64, int, error) {
@@ -750,6 +815,7 @@ func (s *Service) ListUsers(params ListUsersParams) (models.Users, int64, int, e
 		AuthSource:     params.AuthSource,
 		HasAPIKey:      params.HasAPIKey,
 		Disabled:       params.Disabled,
+		AccountType:    params.AccountType,
 	}
 
 	totalCount, totalPages, err := users.QueryUsers(s.DB, modelParams)
@@ -772,6 +838,9 @@ func (s *Service) GetAllUsers(pageSize int, pageNumber int, all bool, sort strin
 }
 
 func (s *Service) UpdateGroupUsers(id uint, userIDs []uint) error {
+	if err := s.refuseServiceAccountMembers(userIDs); err != nil {
+		return err
+	}
 	group, err := s.GetGroupByID(id, "Users")
 	if err != nil {
 		return err

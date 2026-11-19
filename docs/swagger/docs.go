@@ -4180,6 +4180,16 @@ const docTemplate = `{
                     "edges"
                 ],
                 "summary": "Reload all edge gateways",
+                "parameters": [
+                    {
+                        "description": "Optional push precondition (Enterprise Workspaces): refuse the push while changes from outside this Workspace are pending",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.PushPreconditionInput"
+                        }
+                    }
+                ],
                 "responses": {
                     "202": {
                         "description": "Accepted",
@@ -4189,7 +4199,13 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "Conflict",
+                        "description": "push_stained (only_workspace_id), or no edges to push to",
+                        "schema": {
+                            "$ref": "#/definitions/api.PushStainedBody"
+                        }
+                    },
+                    "422": {
+                        "description": "only_workspace_id names no Workspace",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -4355,6 +4371,14 @@ const docTemplate = `{
                         "name": "edge_id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Optional push precondition (Enterprise Workspaces): refuse the push while changes from outside this Workspace are pending",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.PushPreconditionInput"
+                        }
                     }
                 ],
                 "responses": {
@@ -4367,6 +4391,18 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "push_stained (only_workspace_id), or no edges to push to",
+                        "schema": {
+                            "$ref": "#/definitions/api.PushStainedBody"
+                        }
+                    },
+                    "422": {
+                        "description": "only_workspace_id names no Workspace",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -5187,6 +5223,92 @@ const docTemplate = `{
                     },
                     "402": {
                         "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/license": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "The licence's SKUs, expiry, features, and each limit with its usage, plus the namespaces holding a licensed slot. Owner only; Community Edition answers 402.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "license"
+                ],
+                "summary": "Licence report",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/entitlements.Report"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/license/namespaces/{namespace}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Frees the namespace's licensed slot so another namespace can claim it. Refused (409) while edges in the namespace are connected. Owner only; Community Edition answers 402.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "license"
+                ],
+                "summary": "Release a namespace's licensed slot",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Namespace",
+                        "name": "namespace",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -8429,7 +8551,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "List the gateway-visible objects created, updated or deleted in a namespace since its last configuration push. Use \"global\" (or omit) for the global namespace.",
+                "description": "List the gateway-visible objects created, updated or deleted in a namespace since its last configuration push. Use \"global\" (or omit) for the global namespace. Each change names its owning Workspace (none for plugins, model prices, OAuth clients and access tokens), and by_workspace / unattributed_total count every change. With workspace_id, outside_total and stained report the changes a push limited to that Workspace would carry from outside it: changes owned by another Workspace, and plugin and model price changes (OAuth clients and access tokens never count).",
                 "produces": [
                     "application/json"
                 ],
@@ -8443,6 +8565,12 @@ const docTemplate = `{
                         "description": "Namespace (default: global)",
                         "name": "namespace",
                         "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Workspace to report the stain for",
+                        "name": "workspace_id",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -8453,6 +8581,13 @@ const docTemplate = `{
                             "additionalProperties": {
                                 "$ref": "#/definitions/services.PendingChanges"
                             }
+                        }
+                    },
+                    "422": {
+                        "description": "invalid_workspace: unknown Workspace",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     }
                 }
@@ -9980,6 +10115,388 @@ const docTemplate = `{
                 }
             }
         },
+        "/apps/{id}/guardrail-capability": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "The capability a full administrator attested for the app (value, \"\" when unattested and treated as acting) and the one Studio suggests from its tools, MCP servers and datasources, with the reasons.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "apps"
+                ],
+                "summary": "Get an app's guardrail capability",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.AppGuardrailCapabilityResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Attests what the app can do (read_only, read_tools or acting; \"\" clears it). Full administrators only.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "apps"
+                ],
+                "summary": "Set an app's guardrail capability",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Capability",
+                        "name": "capability",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.AppGuardrailCapabilityInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.AppGuardrailCapabilityResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/apps/{id}/guardrail-exceptions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists the guardrail exceptions of an app, optionally by status (proposed, approved, retired). The response's meta holds the rules the API applies (GuardrailExceptionMeta).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "apps"
+                ],
+                "summary": "List an app's guardrail exceptions",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Status filter",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.GuardrailExceptionResponse"
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Softens a guardrail filter's action on a verdict for this app, one filter, detector (\"\" = any) and channel (text_user, text_system, tool_result, tool_call, tool_definition; tool_name narrows a tool channel). The action must be within the floor for the app's guardrail capability. A full administrator's exception is approved at once; anyone else's is proposed and the administrators are notified.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "apps"
+                ],
+                "summary": "Create a guardrail exception",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Exception",
+                        "name": "exception",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.GuardrailExceptionInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/api.GuardrailExceptionResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/apps/{id}/guardrail-exceptions/{eid}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "apps"
+                ],
+                "summary": "Get an app's guardrail exception",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Exception ID",
+                        "name": "eid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.GuardrailExceptionResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "apps"
+                ],
+                "summary": "Delete a guardrail exception",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Exception ID",
+                        "name": "eid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Changes an exception. A change to an approved exception returns it to proposed, unless a full administrator makes it. A retired exception cannot change.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "apps"
+                ],
+                "summary": "Change a guardrail exception",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Exception ID",
+                        "name": "eid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Changes",
+                        "name": "exception",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.GuardrailExceptionInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.GuardrailExceptionResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/apps/{id}/guardrail-exceptions/{eid}/approve": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Approves a proposed exception (full administrators only). content_hash must be the content_hash of the exception as reviewed; an exception that changed since is refused with 409.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "apps"
+                ],
+                "summary": "Approve a guardrail exception",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Exception ID",
+                        "name": "eid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Reviewed content hash",
+                        "name": "approval",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.GuardrailExceptionApproveInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.GuardrailExceptionResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/apps/{id}/guardrail-exceptions/{eid}/retire": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retires an exception: it is kept for the record and never applies again.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "apps"
+                ],
+                "summary": "Retire a guardrail exception",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Exception ID",
+                        "name": "eid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.GuardrailExceptionResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/apps/{id}/prompt-templates": {
             "get": {
                 "security": [
@@ -9987,7 +10504,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Lists the trusted prompt template versions of an app, optionally by status (proposed, approved, retired).",
+                "description": "Lists the trusted prompt template versions of an app, optionally by status (proposed, approved, retired). The response's meta holds the constant lengths this Studio accepts (AppPromptTemplateLimits).",
                 "produces": [
                     "application/json"
                 ],
@@ -12802,6 +13319,59 @@ const docTemplate = `{
                 }
             }
         },
+        "/common/apps/{id}/guardrail-blocks/{event_id}/report": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Proposes a guardrail exception for the App from one of its blocks (GET .../guardrail-blocks, reportable): the event's filter, detector, channel and tool, softened to the softest action the App's capability allows there. Proposed for an administrator to approve; App owners cannot approve it.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "portal"
+                ],
+                "summary": "Report a guardrail block of one of the user's Apps as a false positive",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Compliance event ID",
+                        "name": "event_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Why it is a false positive",
+                        "name": "report",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.GuardrailBlockReportInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/api.GuardrailBlockReportResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/common/apps/{id}/mcp": {
             "get": {
                 "produces": [
@@ -13644,6 +14214,37 @@ const docTemplate = `{
                 }
             }
         },
+        "/common/me/app-quota": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "How many Apps the signed-in user owns and how many they may create through the portal (Enterprise)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "portal"
+                ],
+                "summary": "My App quota",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.MyAppQuota"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/common/me/preferences": {
             "get": {
                 "security": [
@@ -13745,6 +14346,71 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/api.NavManifest"
+                        }
+                    }
+                }
+            }
+        },
+        "/common/notices": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Licence limits and App quota near their maximum that the signed-in user has not dismissed; always empty in Community Edition",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "common"
+                ],
+                "summary": "My near-limit notices",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.NoticesResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/common/notices/{key}/dismiss": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Hides the notice for the signed-in user for good; a licence with a different maximum shows it again (Enterprise)",
+                "tags": [
+                    "common"
+                ],
+                "summary": "Dismiss a notice",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Notice key",
+                        "name": "key",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     }
                 }
@@ -14282,6 +14948,64 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/events/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get a script-reported compliance event by id, as the events list returns it (Enterprise). Guardrail alerts and outcome events link to it.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "Get one compliance event",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Compliance event ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/compliance.ComplianceEventRecord"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/models.ErrorResponse"
                         }
@@ -17056,6 +17780,12 @@ const docTemplate = `{
                         "description": "Description of the file",
                         "name": "description",
                         "in": "formData"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Workspace the entry lands in (Enterprise Workspaces)",
+                        "name": "workspace_id",
+                        "in": "formData"
                     }
                 ],
                 "responses": {
@@ -17662,6 +18392,49 @@ const docTemplate = `{
                 }
             }
         },
+        "/filters/{id}/exceptions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists the exceptions that soften this filter's verdicts, across apps, optionally by status.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "filters"
+                ],
+                "summary": "List a filter's guardrail exceptions",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Filter ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Status filter",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.GuardrailExceptionResponse"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/groups": {
             "get": {
                 "security": [
@@ -17890,6 +18663,140 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/groups/{id}/app-quota": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "The team's own per-member quota of self-service Apps, and the global default its members get without one (Enterprise)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Get a team's App quota",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Team ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/entitlements.TeamAppQuota"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Members may create this many Apps each through the portal; the most generous of a user's teams applies (Enterprise)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Set a team's App quota",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Team ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Quota",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/entitlements.TeamAppQuotaInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/entitlements.TeamAppQuota"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Members get the global default again (Enterprise)",
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Remove a team's App quota",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Team ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "402": {
+                        "description": "Payment Required",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -20861,7 +21768,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Create a new model price with the provided information",
+                "description": "Create a new model price with the provided information. Traffic auto-creates an unpriced (all zero) price for every model it sees; when the model and vendor have one, it is filled in and 200 is returned. When they already have a priced row, 409 names it.",
                 "consumes": [
                     "application/json"
                 ],
@@ -20884,6 +21791,12 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.ModelPriceResponse"
+                        }
+                    },
                     "201": {
                         "description": "Created",
                         "schema": {
@@ -20892,6 +21805,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -21130,6 +22049,69 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/model-prices/{id}/backfill": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Price the chat records this price prices that were recorded at no cost (traffic from before the model had a price), at the current price, optionally only within a date range (inclusive dates, UTC). Records that have a cost are left alone; to reprice those, use PATCH /model-prices/{id}/recalculate.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "model-prices"
+                ],
+                "summary": "Backfill a model price's unpriced history",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Model Price ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Optional date range",
+                        "name": "range",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.BackfillModelPriceInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.BackfillModelPriceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -22146,6 +23128,18 @@ const docTemplate = `{
                         "description": "Role ID",
                         "name": "role_id",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "global (unscoped bindings only) or workspace",
+                        "name": "scope_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Workspace id (with scope_type=workspace)",
+                        "name": "scope_id",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -22651,6 +23645,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
+                    "409": {
+                        "description": "Another secret has the name, or objects in another Workspace reference it",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -22813,6 +23813,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
+                    "409": {
+                        "description": "The secret is referenced",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
@@ -22877,6 +23883,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Renaming a referenced secret, a name another secret has or objects in another Workspace reference, a concurrent move, or moving a duplicate name",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -27132,6 +28144,12 @@ const docTemplate = `{
                         "description": "Search term for filtering users by email or name",
                         "name": "search",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "service: service accounts only; user: people only",
+                        "name": "account_type",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -27158,7 +28176,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Create a new user with the provided information",
+                "description": "Create a new user with the provided information. Optional data.attributes.role_ids (Enterprise) binds roles; it needs roles:write, checked before the user is created. Optional data.attributes.account_type \"service\" creates a service account: send only name (and is_admin, role_ids); its email (svc-...@service-account.invalid) and API key are generated, the key is returned once in this response, and it has no password, Portal, Chat, teams or notifications (422 service_account otherwise).",
                 "consumes": [
                     "application/json"
                 ],
@@ -27189,6 +28207,24 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -27300,7 +28336,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Update an existing user's information",
+                "description": "Update an existing user's information. account_type cannot change; a service account's email and password cannot be set, nor Portal, Chat, notifications or teams (422).",
                 "consumes": [
                     "application/json"
                 ],
@@ -27338,6 +28374,12 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -29028,6 +30070,313 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/workspaces": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Lists the Workspaces the caller can work in: every Workspace for a caller whose access covers them all (workspaces:read, or any global permission on Workspace objects), otherwise those the caller holds a Workspace-scoped role in. The Default workspace comes first. Enterprise Edition.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "summary": "List Workspaces",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                    "$ref": "#/definitions/api.WorkspaceResponse"
+                                }
+                            }
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/authz.ErrorBody"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates a Workspace. Names are unique without regard to case. Enterprise Edition.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "summary": "Create a Workspace",
+                "parameters": [
+                    {
+                        "description": "Workspace",
+                        "name": "workspace",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.WorkspaceInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "$ref": "#/definitions/api.WorkspaceResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/authz.ErrorBody"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/authz.ErrorBody"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/authz.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "summary": "Get a Workspace",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Workspace ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "$ref": "#/definitions/api.WorkspaceResponse"
+                            }
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/authz.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/authz.ErrorBody"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Deletes a Workspace and moves every object it owns to the Default workspace. Refused (409 default_workspace_locked) for the Default, and (409 workspace_in_use) while a role is assigned within it. Enterprise Edition.",
+                "tags": [
+                    "workspaces"
+                ],
+                "summary": "Delete a Workspace",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Workspace ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/authz.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/authz.ErrorBody"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/authz.ErrorBody"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Renames or re-describes a Workspace. is_default cannot be changed. Enterprise Edition.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "summary": "Update a Workspace",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Workspace ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to change",
+                        "name": "workspace",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.WorkspaceInput"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "$ref": "#/definitions/api.WorkspaceResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/authz.ErrorBody"
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/authz.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/authz.ErrorBody"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/authz.ErrorBody"
+                        }
+                    }
+                }
+            }
+        },
+        "/workspaces/{id}/objects": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Counts the objects a Workspace owns, per resource (llms, apps, ...), for the Workspace page. Enterprise Edition.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workspaces"
+                ],
+                "summary": "Count a Workspace's objects",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Workspace ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "$ref": "#/definitions/api.WorkspaceObjectsResponse"
+                            }
+                        }
+                    },
+                    "402": {
+                        "description": "Payment Required",
+                        "schema": {
+                            "$ref": "#/definitions/authz.ErrorBody"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/authz.ErrorBody"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -29608,6 +30957,48 @@ const docTemplate = `{
                 }
             }
         },
+        "api.AppGuardrailCapabilityInput": {
+            "type": "object",
+            "properties": {
+                "value": {
+                    "description": "Value is read_only, read_tools or acting; \"\" clears the attestation.",
+                    "type": "string"
+                }
+            }
+        },
+        "api.AppGuardrailCapabilityResponse": {
+            "type": "object",
+            "properties": {
+                "effective": {
+                    "description": "Effective is the capability the guardrail floors apply (\"\" is acting).",
+                    "type": "string"
+                },
+                "guardrails_apply": {
+                    "description": "GuardrailsApply is true when a guardrail filter is attached to one of\nthe App's LLMs: only then does a resource change by someone who is not\na full administrator clear the attestation visibly.",
+                    "type": "boolean"
+                },
+                "reasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "reset_at": {
+                    "type": "string"
+                },
+                "reset_by": {
+                    "description": "ResetBy and ResetAt record the last visible reset of the attestation\nafter a resource change (ResetBy null when no user is known, such as a\nplugin); both null once the capability is attested again.",
+                    "type": "integer"
+                },
+                "suggestion": {
+                    "type": "string"
+                },
+                "value": {
+                    "description": "Value is the attested capability: read_only, read_tools, acting, or \"\"\nwhen nobody has attested one (treated as acting).",
+                    "type": "string"
+                }
+            }
+        },
         "api.AppInput": {
             "description": "App input model",
             "type": "object",
@@ -29891,6 +31282,14 @@ const docTemplate = `{
                         "description": {
                             "type": "string"
                         },
+                        "guardrail_capability": {
+                            "description": "GuardrailCapability is the attested capability (\"\" = unattested,\ntreated as acting); set with PUT /apps/{id}/guardrail-capability.",
+                            "type": "string"
+                        },
+                        "guardrail_capability_reset": {
+                            "description": "GuardrailCapabilityReset is true on the response to a change that\ncleared the attested capability (a resource change by someone who\nis not a full administrator, on an App whose LLMs run guardrails).",
+                            "type": "boolean"
+                        },
                         "is_active": {
                             "description": "live switch (apps:publish)",
                             "type": "boolean"
@@ -29981,6 +31380,10 @@ const docTemplate = `{
                         },
                         "user_id": {
                             "type": "integer"
+                        },
+                        "workspace_id": {
+                            "description": "WorkspaceID is the Workspace that owns the App (Enterprise\nWorkspaces); a stored 0 reads as the Default.",
+                            "type": "integer"
                         }
                     }
                 },
@@ -30019,6 +31422,11 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "budget_start_date": {
+                    "description": "BudgetStartDate is the start of the current budget period, which\nCurrentSpend covers.",
+                    "type": "string"
+                },
+                "currency": {
+                    "description": "Currency is the currency of CurrentSpend: a budget's currency is\nimplied by its spend. When the period mixes currencies,\nMixedCurrencySpend has the spend by currency instead, CurrentSpend is\n0, and the budget refuses requests (costs are not converted).",
                     "type": "string"
                 },
                 "current_spend": {
@@ -30026,6 +31434,12 @@ const docTemplate = `{
                 },
                 "last_access_at": {
                     "type": "string"
+                },
+                "mixed_currency_spend": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number"
+                    }
                 },
                 "monthly_budget": {
                     "type": "number"
@@ -30081,6 +31495,34 @@ const docTemplate = `{
             "properties": {
                 "approved": {
                     "type": "boolean"
+                }
+            }
+        },
+        "api.BackfillModelPriceInput": {
+            "type": "object",
+            "properties": {
+                "from": {
+                    "type": "string"
+                },
+                "to": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.BackfillModelPriceResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "properties": {
+                        "model_price": {
+                            "$ref": "#/definitions/api.ModelPriceResponse"
+                        },
+                        "rows_priced": {
+                            "description": "RowsPriced is the number of chat records that were priced.",
+                            "type": "integer"
+                        }
+                    }
                 }
             }
         },
@@ -30686,6 +32128,9 @@ const docTemplate = `{
                         },
                         "name": {
                             "type": "string"
+                        },
+                        "workspace_id": {
+                            "type": "integer"
                         }
                     }
                 },
@@ -31148,6 +32593,9 @@ const docTemplate = `{
                             "items": {
                                 "$ref": "#/definitions/api.TagResponse"
                             }
+                        },
+                        "workspace_id": {
+                            "type": "integer"
                         }
                     }
                 },
@@ -31358,6 +32806,10 @@ const docTemplate = `{
                         },
                         "user_id": {
                             "type": "integer"
+                        },
+                        "workspace_id": {
+                            "description": "WorkspaceID is the Workspace that owns the datasource (admin\nresponses).",
+                            "type": "integer"
                         }
                     }
                 },
@@ -31459,6 +32911,9 @@ const docTemplate = `{
                         "last_sync_ack": {
                             "type": "string"
                         },
+                        "license_state": {
+                            "type": "string"
+                        },
                         "loaded_checksum": {
                             "type": "string"
                         },
@@ -31470,7 +32925,6 @@ const docTemplate = `{
                             "additionalProperties": true
                         },
                         "namespace": {
-                            "description": "Always \"default\" in CE",
                             "type": "string"
                         },
                         "owner_label": {
@@ -31514,6 +32968,10 @@ const docTemplate = `{
             "description": "Effective permissions for a user",
             "type": "object",
             "properties": {
+                "admin_nav_hint": {
+                    "description": "AdminNavHint tells the UI to show the admin navigation: the user holds\nsome permission, globally or within a Workspace. A UI hint only: it is\nnot users.is_admin, and nothing on the server authorizes on it.",
+                    "type": "boolean"
+                },
                 "enabled": {
                     "type": "boolean"
                 },
@@ -31546,6 +33004,13 @@ const docTemplate = `{
                 },
                 "user_id": {
                     "type": "integer"
+                },
+                "workspaces": {
+                    "description": "Workspaces lists the access Workspace-scoped bindings grant, per\nWorkspace (Enterprise). Permissions above are global and cover every\nWorkspace; they are not repeated here.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.WorkspaceAccess"
+                    }
                 }
             }
         },
@@ -31711,6 +33176,10 @@ const docTemplate = `{
                         },
                         "length": {
                             "type": "integer"
+                        },
+                        "workspace_id": {
+                            "description": "WorkspaceID is the Workspace that owns the entry (Enterprise\nWorkspaces); a stored 0 reads as the Default.",
+                            "type": "integer"
                         }
                     }
                 },
@@ -31750,6 +33219,10 @@ const docTemplate = `{
                     "items": {
                         "type": "integer"
                     }
+                },
+                "workspace_id": {
+                    "description": "WorkspaceID is the Workspace that owns the filter.",
+                    "type": "integer"
                 }
             }
         },
@@ -32111,16 +33584,151 @@ const docTemplate = `{
                 "filter": {
                     "type": "string"
                 },
+                "id": {
+                    "description": "ID is the compliance event's, for reporting it as a false positive.",
+                    "type": "integer"
+                },
                 "reason": {
                     "type": "string"
                 },
                 "reason_code": {
                     "type": "string"
                 },
+                "reportable": {
+                    "description": "Reportable is true when the owner can report the block as a false\npositive: a detector's verdict on the App's request, from a filter\nthe event names.",
+                    "type": "boolean"
+                },
                 "request_id": {
                     "type": "string"
                 },
                 "timestamp": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.GuardrailBlockReportInput": {
+            "type": "object",
+            "properties": {
+                "justification": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.GuardrailBlockReportResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.GuardrailExceptionApproveInput": {
+            "type": "object",
+            "properties": {
+                "content_hash": {
+                    "description": "ContentHash is the content_hash of the exception the administrator\nreviewed, as the API returned it. Required.",
+                    "type": "string"
+                }
+            }
+        },
+        "api.GuardrailExceptionInput": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "alert_event": {
+                    "type": "string"
+                },
+                "channel": {
+                    "type": "string"
+                },
+                "detector": {
+                    "type": "string"
+                },
+                "expires_after_days": {
+                    "type": "integer"
+                },
+                "filter_id": {
+                    "type": "integer"
+                },
+                "justification": {
+                    "type": "string"
+                },
+                "source_event": {
+                    "type": "integer"
+                },
+                "tool_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.GuardrailExceptionResponse": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "alert_event": {
+                    "description": "AlertEvent names the event the alert action raises.",
+                    "type": "string"
+                },
+                "app_id": {
+                    "type": "integer"
+                },
+                "approved_at": {
+                    "type": "string"
+                },
+                "approved_by": {
+                    "type": "integer"
+                },
+                "channel": {
+                    "type": "string"
+                },
+                "content_hash": {
+                    "description": "ContentHash identifies the reviewed content; approving takes it back.",
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "detector": {
+                    "type": "string"
+                },
+                "expires_after_days": {
+                    "type": "integer"
+                },
+                "filter_id": {
+                    "type": "integer"
+                },
+                "hit_count": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "justification": {
+                    "type": "string"
+                },
+                "last_hit_at": {
+                    "type": "string"
+                },
+                "proposed_by": {
+                    "type": "integer"
+                },
+                "source_event": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "tool_name": {
+                    "type": "string"
+                },
+                "updated_at": {
                     "type": "string"
                 }
             }
@@ -32339,6 +33947,9 @@ const docTemplate = `{
                         },
                         "vendor_workspace_id": {
                             "type": "string"
+                        },
+                        "workspace_id": {
+                            "type": "integer"
                         }
                     }
                 },
@@ -32821,6 +34432,15 @@ const docTemplate = `{
                 }
             }
         },
+        "api.ModelPriceMeta": {
+            "type": "object",
+            "properties": {
+                "unpriced_rows": {
+                    "description": "UnpricedRows is the number of chat records this price prices that were\nrecorded at no cost (before the model had a price): what\nPOST /model-prices/{id}/backfill would price.",
+                    "type": "integer"
+                }
+            }
+        },
         "api.ModelPriceResponse": {
             "description": "Model Price response model",
             "type": "object",
@@ -32857,6 +34477,14 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "string"
+                },
+                "meta": {
+                    "description": "Meta is set on the list response only.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/api.ModelPriceMeta"
+                        }
+                    ]
                 },
                 "type": {
                     "type": "string"
@@ -32906,6 +34534,10 @@ const docTemplate = `{
                                 },
                                 "slug": {
                                     "type": "string"
+                                },
+                                "workspace_id": {
+                                    "description": "WorkspaceID places the router (create) or moves it\n(update); omitted = the landing rule / no move.",
+                                    "type": "integer"
                                 }
                             }
                         },
@@ -32913,6 +34545,20 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
+                }
+            }
+        },
+        "api.MyAppQuota": {
+            "type": "object",
+            "properties": {
+                "max": {
+                    "type": "integer"
+                },
+                "unlimited": {
+                    "type": "boolean"
+                },
+                "used": {
+                    "type": "integer"
                 }
             }
         },
@@ -32938,6 +34584,10 @@ const docTemplate = `{
                         },
                         "edge_count": {
                             "type": "integer"
+                        },
+                        "licensed": {
+                            "description": "Licensed is false for a namespace holding no licensed slot: its\nedges get no configuration and are not push targets.",
+                            "type": "boolean"
                         },
                         "llm_count": {
                             "type": "integer"
@@ -33018,6 +34668,17 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/api.NavItem"
+                    }
+                }
+            }
+        },
+        "api.NoticesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/entitlements.Notice"
                     }
                 }
             }
@@ -33759,6 +35420,49 @@ const docTemplate = `{
                 }
             }
         },
+        "api.PushPreconditionInput": {
+            "type": "object",
+            "properties": {
+                "only_workspace_id": {
+                    "description": "OnlyWorkspaceID refuses the push while changes from outside this\nWorkspace are pending in a target namespace.",
+                    "type": "integer"
+                }
+            }
+        },
+        "api.PushStainedBody": {
+            "type": "object",
+            "properties": {
+                "by_workspace": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/services.PendingWorkspaceTotal"
+                    }
+                },
+                "changes": {
+                    "description": "Changes lists up to 20 foreign changes, newest first.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.stainedChange"
+                    }
+                },
+                "errors": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/authz.Error"
+                    }
+                },
+                "outside_total": {
+                    "description": "OutsideTotal counts every foreign change; ByWorkspace splits those\nowned by a Workspace, UnattributedTotal the rest (global types).",
+                    "type": "integer"
+                },
+                "unattributed_total": {
+                    "type": "integer"
+                },
+                "workspace_id": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.RegisterInput": {
             "description": "Register input model",
             "type": "object",
@@ -34143,6 +35847,13 @@ const docTemplate = `{
                 "role_id": {
                     "type": "integer"
                 },
+                "scope_id": {
+                    "type": "string"
+                },
+                "scope_type": {
+                    "description": "ScopeType is empty for a global binding (every Workspace) or\n\"workspace\"; ScopeID is then the Workspace id in canonical decimal\nform (\"7\"). Managing scoped bindings needs roles:write globally (D10).",
+                    "type": "string"
+                },
                 "subject_id": {
                     "type": "integer"
                 },
@@ -34300,6 +36011,10 @@ const docTemplate = `{
                         },
                         "var_name": {
                             "type": "string"
+                        },
+                        "workspace_id": {
+                            "description": "WorkspaceID is the Workspace that owns the secret.",
+                            "type": "integer"
                         }
                     }
                 },
@@ -34352,6 +36067,10 @@ const docTemplate = `{
                 },
                 "slug": {
                     "type": "string"
+                },
+                "workspace_id": {
+                    "description": "WorkspaceID places the router (create) or moves it (update);\nomitted = the landing rule / no move.",
+                    "type": "integer"
                 }
             }
         },
@@ -34649,6 +36368,9 @@ const docTemplate = `{
                             "items": {
                                 "$ref": "#/definitions/api.ToolResponse"
                             }
+                        },
+                        "workspace_id": {
+                            "type": "integer"
                         }
                     }
                 },
@@ -34904,6 +36626,10 @@ const docTemplate = `{
                 "tracing_content_mode_max": {
                     "description": "Agent tracing content mode cap (Enterprise); \"\" is no cap.",
                     "type": "string"
+                },
+                "workspace_id": {
+                    "description": "WorkspaceID is the Workspace that owns the tool (admin responses).",
+                    "type": "integer"
                 }
             }
         },
@@ -34956,6 +36682,10 @@ const docTemplate = `{
             "properties": {
                 "access_to_sso_config": {
                     "type": "boolean"
+                },
+                "account_type": {
+                    "description": "AccountType is \"\" for a person or \"service\" for a service account.",
+                    "type": "string"
                 },
                 "api_key": {
                     "type": "string"
@@ -35135,6 +36865,10 @@ const docTemplate = `{
                             "description": "Profile fields for the signed-in user's own menu. AccountType is\nthe legacy role label the users list shows as \"role\"; the key\nitself is never included here (see POST /common/me/api-key/roll).",
                             "type": "string"
                         },
+                        "admin_nav_hint": {
+                            "description": "AdminNavHint tells the UI to show the admin navigation: the user\nholds some permission, globally or within a Workspace. A UI hint\nonly: it is not is_admin, and nothing on the server authorizes on it.",
+                            "type": "boolean"
+                        },
                         "api_key_last_used_at": {
                             "type": "string"
                         },
@@ -35186,6 +36920,10 @@ const docTemplate = `{
                         "is_admin": {
                             "type": "boolean"
                         },
+                        "is_owner": {
+                            "description": "IsOwner: the user holds the Owner role (the Super Admin without\nroles), and so may open the License page.",
+                            "type": "boolean"
+                        },
                         "is_super_admin": {
                             "type": "boolean"
                         },
@@ -35232,6 +36970,13 @@ const docTemplate = `{
                                 "skip_quick_start": {
                                     "type": "boolean"
                                 }
+                            }
+                        },
+                        "workspaces": {
+                            "description": "Workspaces lists, per Workspace, the permissions the user holds\nthere through Workspace-scoped roles, for per-object UI gating\n(Enterprise). Permissions above are global and cover every\nWorkspace.",
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.WorkspaceAccess"
                             }
                         }
                     }
@@ -35372,6 +37117,102 @@ const docTemplate = `{
                 }
             }
         },
+        "api.WorkspaceAccess": {
+            "description": "Access inside one Workspace",
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "permissions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "roles": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/rbac.RoleSummary"
+                    }
+                },
+                "sources": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/definitions/rbac.PermissionSource"
+                        }
+                    }
+                }
+            }
+        },
+        "api.WorkspaceAttributes": {
+            "description": "Workspace attributes",
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "is_default": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.WorkspaceInput": {
+            "description": "Workspace create or update payload",
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.WorkspaceObjectsResponse": {
+            "description": "Object counts of a Workspace, keyed by permission resource",
+            "type": "object",
+            "properties": {
+                "counts": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "workspace_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.WorkspaceResponse": {
+            "description": "Workspace response model",
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/api.WorkspaceAttributes"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
         "api.createWebhookTargetResponse": {
             "type": "object",
             "properties": {
@@ -35418,6 +37259,45 @@ const docTemplate = `{
             "properties": {
                 "connection_id": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.stainedChange": {
+            "type": "object",
+            "properties": {
+                "at": {
+                    "description": "when that change happened",
+                    "type": "string"
+                },
+                "change": {
+                    "description": "created | updated | deleted",
+                    "type": "string"
+                },
+                "hidden": {
+                    "description": "Hidden marks a change whose object the caller cannot see; its type,\nkind, time and Workspace id are still reported.",
+                    "type": "boolean"
+                },
+                "id": {
+                    "description": "ID and Name are left out (Hidden set) for an object the caller cannot\nsee: an App or router in a Workspace their read does not cover.",
+                    "type": "integer"
+                },
+                "name": {
+                    "description": "display name at the time of the query",
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "type": {
+                    "description": "llm, app, filter, tool, datasource, plugin, model_router, semantic_router, model_price, oauth_client, access_token",
+                    "type": "string"
+                },
+                "workspace_id": {
+                    "description": "WorkspaceID is the Workspace that owns the object (a stored 0 reads\nas the Default workspace); nil for types with no owning Workspace\n(plugin, model_price, oauth_client, access_token).",
+                    "type": "integer"
+                },
+                "workspace_name": {
+                    "type": "string"
                 }
             }
         },
@@ -35630,6 +37510,34 @@ const docTemplate = `{
                 "ActionPublish"
             ]
         },
+        "authz.Error": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "detail": {
+                    "type": "string"
+                },
+                "permission": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "authz.ErrorBody": {
+            "type": "object",
+            "properties": {
+                "errors": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/authz.Error"
+                    }
+                }
+            }
+        },
         "authz.Resource": {
             "type": "object",
             "properties": {
@@ -35672,11 +37580,38 @@ const docTemplate = `{
                     "description": "Privileged marks resources whose write/delete can escalate access\n(users, groups, roles, identity providers, plugins). The UI warns.",
                     "type": "boolean"
                 },
+                "scope": {
+                    "description": "Scope says whether the resource's objects belong to a Workspace and how\nWorkspace-scoped bindings apply to it; see ScopeKind. Plugin resources\nare always global.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/authz.ScopeKind"
+                        }
+                    ]
+                },
+                "scope_parent": {
+                    "description": "ScopeParent is, for ScopeWorkspaceParent, the key of the resource whose\nobjects own this one's (\"apps\" for credentials). Empty otherwise.",
+                    "type": "string"
+                },
                 "sensitive": {
                     "description": "Sensitive marks a data class (transcripts, logs, secrets) that is split\nout so read can be withheld independently. The UI shows a shield.",
                     "type": "boolean"
                 }
             }
+        },
+        "authz.ScopeKind": {
+            "type": "string",
+            "enum": [
+                "",
+                "workspace_write",
+                "workspace_full",
+                "workspace_parent"
+            ],
+            "x-enum-varnames": [
+                "ScopeGlobal",
+                "ScopeWorkspaceWrite",
+                "ScopeWorkspaceFull",
+                "ScopeWorkspaceParent"
+            ]
         },
         "compliance.AccessIssue": {
             "type": "object",
@@ -36163,6 +38098,207 @@ const docTemplate = `{
                 "violation_type": {
                     "description": "filter_block, model_access, budget_exceeded, auth_failure",
                     "type": "string"
+                }
+            }
+        },
+        "entitlements.Feature": {
+            "type": "object",
+            "properties": {
+                "enabled": {
+                    "type": "boolean"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                }
+            }
+        },
+        "entitlements.Limit": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "description": "Key identifies the limit (stable, for the UI's React keys and tests).",
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "max": {
+                    "description": "Max is the licensed maximum; ignore it when Unlimited.",
+                    "type": "integer"
+                },
+                "parts": {
+                    "description": "Parts break Used down where a kind of holder is worth showing on its\nown (the service accounts within admin seats). Omitted when none.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/entitlements.LimitPart"
+                    }
+                },
+                "unlimited": {
+                    "type": "boolean"
+                },
+                "used": {
+                    "type": "integer"
+                }
+            }
+        },
+        "entitlements.LimitPart": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "used": {
+                    "type": "integer"
+                }
+            }
+        },
+        "entitlements.NamespaceSlot": {
+            "type": "object",
+            "properties": {
+                "claimed_at": {
+                    "type": "string"
+                },
+                "connected_edges": {
+                    "description": "ConnectedEdges counts the namespace's edges; a slot with connected\nedges cannot be released.",
+                    "type": "integer"
+                },
+                "frees_at": {
+                    "type": "string"
+                },
+                "idle_since": {
+                    "description": "IdleSince is set while no edge is connected, and FreesAt is when the\nslot is then released automatically.",
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                }
+            }
+        },
+        "entitlements.NamespaceWait": {
+            "type": "object",
+            "properties": {
+                "connected_edges": {
+                    "type": "integer"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "position": {
+                    "type": "integer"
+                },
+                "waiting_since": {
+                    "type": "string"
+                }
+            }
+        },
+        "entitlements.Notice": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                },
+                "max": {
+                    "type": "integer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "unlimited": {
+                    "type": "boolean"
+                },
+                "used": {
+                    "type": "integer"
+                }
+            }
+        },
+        "entitlements.Report": {
+            "type": "object",
+            "properties": {
+                "days_left": {
+                    "type": "integer"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "features": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/entitlements.Feature"
+                    }
+                },
+                "limits": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/entitlements.Limit"
+                    }
+                },
+                "namespaces": {
+                    "description": "Namespaces lists the namespaces holding a slot.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/entitlements.NamespaceSlot"
+                    }
+                },
+                "skus": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "valid": {
+                    "type": "boolean"
+                },
+                "waiting": {
+                    "description": "Waiting lists the namespaces waiting for a slot, in admission order.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/entitlements.NamespaceWait"
+                    }
+                }
+            }
+        },
+        "entitlements.TeamAppQuota": {
+            "type": "object",
+            "properties": {
+                "default_max": {
+                    "description": "The global default, for showing what members inherit.",
+                    "type": "integer"
+                },
+                "default_unlimited": {
+                    "type": "boolean"
+                },
+                "group_id": {
+                    "type": "integer"
+                },
+                "max_apps_per_member": {
+                    "type": "integer"
+                },
+                "set": {
+                    "description": "Set reports whether the team has its own quota; otherwise its members\nget the global default.",
+                    "type": "boolean"
+                },
+                "unlimited": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "entitlements.TeamAppQuotaInput": {
+            "type": "object",
+            "properties": {
+                "max_apps_per_member": {
+                    "type": "integer"
+                },
+                "unlimited": {
+                    "type": "boolean"
                 }
             }
         },
@@ -36679,6 +38815,10 @@ const docTemplate = `{
                 "budget_start_date": {
                     "type": "string"
                 },
+                "currency": {
+                    "description": "Currency is the currency of Spent: the one currency of the period's\nspend (a budget's currency is implied by its spend). Empty when there\nis no spend, or when the period mixes currencies.",
+                    "type": "string"
+                },
                 "entity_id": {
                     "type": "integer"
                 },
@@ -36686,7 +38826,21 @@ const docTemplate = `{
                     "description": "\"LLM\" or \"App\"",
                     "type": "string"
                 },
+                "mixed_currency_spend": {
+                    "description": "MixedCurrencySpend is set when the period mixes currencies: the spend\nby currency. Costs are not converted, so Spent and Usage are 0 and the\nbudget refuses requests.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "number"
+                    }
+                },
                 "name": {
+                    "type": "string"
+                },
+                "period_end": {
+                    "type": "string"
+                },
+                "period_start": {
+                    "description": "PeriodStart and PeriodEnd are the current budget period Spent covers,\nas enforcement computes it (budget.Period): PeriodEnd is the start of\nthe next period (exclusive).",
                     "type": "string"
                 },
                 "spent": {
@@ -37274,6 +39428,10 @@ const docTemplate = `{
                 },
                 "upstream_url": {
                     "type": "string"
+                },
+                "workspace_id": {
+                    "description": "WorkspaceID is the Workspace that owns the server (Enterprise\nWorkspaces); a stored 0 reads as the Default.",
+                    "type": "integer"
                 }
             }
         },
@@ -38619,6 +40777,10 @@ const docTemplate = `{
                         "$ref": "#/definitions/services.DependentRef"
                     }
                 },
+                "hidden": {
+                    "description": "Hidden counts the dependents left out of the lists because the caller\nmay not see them (Workspace-scoped objects in other Workspaces); only\nthe count is given, never their ids or names.",
+                    "type": "integer"
+                },
                 "llms": {
                     "type": "array",
                     "items": {
@@ -38645,6 +40807,7 @@ const docTemplate = `{
                     }
                 },
                 "total": {
+                    "description": "Total counts every dependent, including Hidden ones.",
                     "type": "integer"
                 }
             }
@@ -38660,8 +40823,12 @@ const docTemplate = `{
                     "description": "created | updated | deleted",
                     "type": "string"
                 },
+                "hidden": {
+                    "description": "Hidden marks a change whose object the caller cannot see; its type,\nkind, time and Workspace id are still reported.",
+                    "type": "boolean"
+                },
                 "id": {
-                    "description": "object id",
+                    "description": "ID and Name are left out (Hidden set) for an object the caller cannot\nsee: an App or router in a Workspace their read does not cover.",
                     "type": "integer"
                 },
                 "name": {
@@ -38670,6 +40837,13 @@ const docTemplate = `{
                 },
                 "type": {
                     "description": "llm, app, filter, tool, datasource, plugin, model_router, semantic_router, model_price, oauth_client, access_token",
+                    "type": "string"
+                },
+                "workspace_id": {
+                    "description": "WorkspaceID is the Workspace that owns the object (a stored 0 reads\nas the Default workspace); nil for types with no owning Workspace\n(plugin, model_price, oauth_client, access_token).",
+                    "type": "integer"
+                },
+                "workspace_name": {
                     "type": "string"
                 }
             }
@@ -38680,6 +40854,13 @@ const docTemplate = `{
                 "baseline": {
                     "description": "push | edge_ack | none",
                     "type": "string"
+                },
+                "by_workspace": {
+                    "description": "ByWorkspace counts every pending change (not only the listed ones)\nby owning Workspace; UnattributedTotal counts those with none.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/services.PendingWorkspaceTotal"
+                    }
                 },
                 "changes": {
                     "type": "array",
@@ -38694,11 +40875,38 @@ const docTemplate = `{
                     "description": "Namespace is the canonical spelling (models.CanonicalNamespace).",
                     "type": "string"
                 },
+                "outside_total": {
+                    "type": "integer"
+                },
                 "since": {
                     "description": "Since is the reference point: the namespace's last push, or -- when\nno push was ever recorded but an edge is in sync with the namespace\nchecksum -- that edge's ack. Nil when there is neither, in which case\nevery object is \"created\". Baseline says which.",
                     "type": "string"
                 },
+                "stained": {
+                    "type": "boolean"
+                },
                 "total": {
+                    "type": "integer"
+                },
+                "unattributed_total": {
+                    "type": "integer"
+                },
+                "workspace_id": {
+                    "description": "Set when asked about one Workspace (?workspace_id=): OutsideTotal\ncounts the changes foreign to it (PendingChangeIsForeign) and Stained\nreports whether there are any, i.e. whether a push limited to that\nWorkspace would carry changes from outside it.",
+                    "type": "integer"
+                }
+            }
+        },
+        "services.PendingWorkspaceTotal": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "workspace_id": {
                     "type": "integer"
                 }
             }

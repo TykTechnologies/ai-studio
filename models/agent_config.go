@@ -11,7 +11,12 @@ import (
 // Agents are separate from Chats and leverage Apps for resource access
 type AgentConfig struct {
 	gorm.Model
-	ID          uint                   `json:"id" gorm:"primaryKey"`
+	ID uint `json:"id" gorm:"primaryKey"`
+
+	// WorkspaceID is the Workspace that owns the object (Workspace); 0 reads
+	// as the Default workspace (EffectiveWorkspaceID).
+	WorkspaceID uint `json:"workspace_id" gorm:"not null;default:0;index"`
+
 	Name        string                 `json:"name" gorm:"not null"`
 	Slug        string                 `json:"slug" gorm:"uniqueIndex;not null"`
 	Description string                 `json:"description"`
@@ -23,6 +28,11 @@ type AgentConfig struct {
 	Groups      []Group                `json:"groups" gorm:"many2many:agent_groups;"`
 	IsActive    bool                   `json:"is_active" gorm:"default:true;index:idx_agent_is_active"`
 	Namespace   string                 `json:"namespace" gorm:"default:'';index:idx_agent_namespace"`
+
+	// AppHidden is set on an admin API response when the caller may not see
+	// the linked App (another Workspace): App is then left out, AppID kept.
+	// Not stored.
+	AppHidden bool `json:"app_hidden,omitempty" gorm:"-"`
 }
 
 type AgentConfigs []AgentConfig

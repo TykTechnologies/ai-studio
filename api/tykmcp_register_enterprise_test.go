@@ -212,6 +212,11 @@ func TestTykMCPEnterprise_RegistrationFlow(t *testing.T) {
 	assert.Equal(t, "studio", srv.Origin)
 	assert.Equal(t, "mcp-1", srv.TykAPIID)
 	assert.True(t, srv.IsActive, "published in the same call")
+	if def, err := models.GetDefaultWorkspace(h.api.service.DB); err == nil {
+		assert.Equal(t, def.ID, srv.WorkspaceID, "a registered server lands in the Default (landing rule), never at 0")
+	} else {
+		t.Log("no Default workspace in this database; landing not checked")
+	}
 	assert.Equal(t, []string{"edge-eu"}, srv.GatewayTags.Tags)
 	require.GreaterOrEqual(t, len(dash.bodies), 2)
 	assert.Contains(t, dash.bodies[len(dash.bodies)-1], "UPSTREAM-SECRET")

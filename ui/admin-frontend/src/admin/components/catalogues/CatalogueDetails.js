@@ -24,10 +24,16 @@ import {
   PrimaryButton,
 } from "../../styles/sharedStyles";
 import useSystemFeatures from "../../hooks/useSystemFeatures";
+import Can from "../rbac/Can";
+import { P } from "../../rbac/permissions";
+import NotFound from "../../pages/NotFound";
+import OtherWorkspacesNote from "./OtherWorkspacesNote";
 
 // One kind of router published in the catalogue, linking to its page.
-const RouterList = ({ title, routers, path, emptyText }) => (
+// Routers in Workspaces the caller cannot see are left out by the server.
+const RouterList = ({ title, routers, path, emptyText, readPermission, hiddenText }) => (
   <Section title={title}>
+    <OtherWorkspacesNote permission={readPermission}>{hiddenText}</OtherWorkspacesNote>
     <List>
       {routers.length > 0 ? (
         routers.map((r) => (
@@ -59,6 +65,8 @@ const CatalogueDetails = () => {
   const showSemanticRouters = Boolean(features?.feature_semantic_router);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // The catalog is gone or in a Workspace the caller cannot see.
+  const [notFound, setNotFound] = useState(false);
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -87,7 +95,8 @@ const CatalogueDetails = () => {
       setLoading(false);
     } catch (error) {
       console.error("Error fetching catalog details", error);
-      setError("Failed to load catalog details");
+      if (error.response?.status === 404) setNotFound(true);
+      else setError("Failed to load catalog details");
       setLoading(false);
     }
   };
@@ -102,6 +111,7 @@ const CatalogueDetails = () => {
     }
   };
 
+  if (notFound) return <NotFound />;
   if (loading) return <CircularProgress />;
   if (error) return <Typography color="error">{error}</Typography>;
   if (!catalogue) return <Typography>Catalog not found</Typography>;
@@ -169,6 +179,8 @@ const CatalogueDetails = () => {
             routers={routers.model_routers}
             path="model-routers"
             emptyText="No model routers in this catalog"
+            readPermission={P.MODEL_ROUTERS_READ}
+            hiddenText="Model routers in Workspaces you cannot see are not listed."
           />
         )}
 
@@ -178,19 +190,23 @@ const CatalogueDetails = () => {
             routers={routers.semantic_routers}
             path="semantic-routers"
             emptyText="No semantic routers in this catalog"
+            readPermission={P.SEMANTIC_ROUTERS_READ}
+            hiddenText="Semantic routers in Workspaces you cannot see are not listed."
           />
         )}
 
         <CatalogueTeamsSection resourcePath="catalogues" id={id} />
 
         <Box mt={4}>
-          <PrimaryButton
-            variant="contained"
-            startIcon={<EditIcon />}
-            onClick={() => navigate(`/admin/catalogs/llms/edit/${id}`)}
-          >
-            Edit catalog
-          </PrimaryButton>
+          <Can permission={P.CATALOGUES_WRITE} workspaceId={catalogue.attributes.workspace_id}>
+            <PrimaryButton
+              variant="contained"
+              startIcon={<EditIcon />}
+              onClick={() => navigate(`/admin/catalogs/llms/edit/${id}`)}
+            >
+              Edit catalog
+            </PrimaryButton>
+          </Can>
         </Box>
       </ContentBox>
     </>

@@ -451,22 +451,92 @@ func (a *API) adminStartReview(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": serializeSubmissionForAdmin(submission)})
 }
 
-// canAssignCatalogues reports whether the reviewer may write the catalogues
-// an approval of this resource type would add it to: tool catalogues for
-// tools and MCP servers, data catalogues for data sources. A plugin resource
-// hands the ids to the plugin, whose meaning it decides, so it needs every
-// catalogue write permission (fail closed). Admins hold all of them.
-func canAssignCatalogues(c *gin.Context, resourceType string) bool {
+// submissionTargets names, per submission resource type, the authz resource
+// and stored model of the object an approval creates or updates, and of the
+// catalogues it may be assigned to. Plugin resources are owned by their
+// plugin and have neither.
+type submissionTarget struct {
+	resource  string
+	model     func() interface{}
+	catalogue *catalogueKind
+}
+
+func submissionTargetFor(resourceType string) (submissionTarget, bool) {
 	switch resourceType {
-	case models.SubmissionResourceTypeTool, models.SubmissionResourceTypeMCPServer:
-		return authz.Can(c, authz.Write("tool-catalogues"))
+	case models.SubmissionResourceTypeTool:
+		return submissionTarget{"tools", func() interface{} { return &models.Tool{} }, &toolCatalogueKind}, true
 	case models.SubmissionResourceTypeDatasource:
-		return authz.Can(c, authz.Write("data-catalogues"))
-	default:
-		return authz.Can(c, authz.Write("tool-catalogues")) &&
-			authz.Can(c, authz.Write("data-catalogues")) &&
-			authz.Can(c, authz.Write("catalogues"))
+		return submissionTarget{"datasources", func() interface{} { return &models.Datasource{} }, &dataCatalogueKind}, true
+	case models.SubmissionResourceTypeMCPServer:
+		return submissionTarget{"mcp-servers", func() interface{} { return &models.MCPServer{} }, &toolCatalogueKind}, true
 	}
+	return submissionTarget{}, false
+}
+
+// requireApprovalCatalogues checks the catalogues an approval would add the
+// resource to: write in each catalogue's Workspace (404 for one that does
+// not exist or that the reviewer may not see, with the same body; 403 for
+// one they see but cannot write). Submissions:write alone must not let a reviewer publish a
+// resource into catalogues they cannot edit. A plugin resource hands the ids
+// to the plugin, whose meaning it decides, so it needs every catalogue write
+// permission globally (fail closed). Admins hold all of them.
+func (a *API) requireApprovalCatalogues(c *gin.Context, resourceType string, ids []uint) bool {
+	target, ok := submissionTargetFor(resourceType)
+	if !ok {
+		for _, res := range []string{"tool-catalogues", "data-catalogues", "catalogues"} {
+			if !a.holds(c, authz.Write(res)) {
+				c.AbortWithStatusJSON(http.StatusForbidden, authz.Denied(authz.Write(res)))
+				return false
+			}
+		}
+		return true
+	}
+	k := *target.catalogue
+	if a.workspaceCheckMode(c) == workspaceOpen {
+		return true
+	}
+	stored, err := a.workspaceOf(k.model, ids)
+	if err != nil {
+		simpleError(c, http.StatusInternalServerError, "Internal Server Error", err.Error())
+		c.Abort()
+		return false
+	}
+	// A missing catalogue and one the reviewer may not see answer alike.
+	notFound := func(c *gin.Context) { simpleError(c, http.StatusNotFound, "Not Found", k.notFound) }
+	for _, id := range ids {
+		ws, found := stored[id]
+		if !found {
+			notFound(c)
+			c.Abort()
+			return false
+		}
+		if !a.requireVisible(c, k.resource, ws, notFound) || !a.requireInWorkspace(c, authz.Write(k.resource), ws) {
+			return false
+		}
+	}
+	return true
+}
+
+// approvalWorkspace resolves the Workspace a new datasource, tool or MCP
+// server created by an approval lands in. Submissions:write (global) is what
+// lets a reviewer approve, so a reviewer who holds no write on the resource
+// anywhere still approves into the Default workspace, as before. A reviewer
+// who holds it follows the landing rule (D5): one Workspace lands there,
+// several need workspace_id (422 workspace_required). A named workspace_id
+// must be covered by the reviewer's write (422 invalid_workspace). Update
+// submissions change an existing object where it is, and plugin resources
+// are the plugin's own: both resolve to 0.
+func (a *API) approvalWorkspace(c *gin.Context, sub *models.Submission, requested *uint) (uint, bool) {
+	target, ok := submissionTargetFor(sub.ResourceType)
+	if !ok || (sub.IsUpdate && sub.TargetResourceID != nil) {
+		return 0, true
+	}
+	if requested == nil && a.workspaceCheckMode(c) == workspaceCheck {
+		if all, ids := authz.WorkspacesWith(c, authz.Write(target.resource)); !all && len(ids) == 0 {
+			return 0, true
+		}
+	}
+	return a.resolveCreateWorkspace(c, target.resource, requested)
 }
 
 // adminApproveSubmission handles POST /api/v1/submissions/:id/approve
@@ -511,34 +581,34 @@ func (a *API) adminApproveSubmission(c *gin.Context) {
 		return
 	}
 
+	pending, err := a.service.GetSubmissionByID(uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Not Found", Detail: "submission not found"}},
+		})
+		return
+	}
+	// Where a new object lands.
+	workspaceID, ok := a.approvalWorkspace(c, pending, attrs.WorkspaceID)
+	if !ok {
+		return
+	}
 	// Approval writes catalogue memberships from assigned_catalogues, which
-	// editing a catalogue directly gates behind that catalogue type's write
-	// permission. Ask for the same here: submissions:write alone must not let
-	// a reviewer publish a resource into catalogues they cannot edit.
-	if len(services.AssignedCatalogueIDs(attrs.AssignedCatalogues)) > 0 {
-		pending, err := a.service.GetSubmissionByID(uint(id))
-		if err != nil {
-			c.JSON(http.StatusNotFound, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Not Found", Detail: "submission not found"}},
-			})
-			return
-		}
-		if !canAssignCatalogues(c, pending.ResourceType) {
-			c.JSON(http.StatusForbidden, ErrorResponse{
-				Errors: []struct {
-					Title  string `json:"title"`
-					Detail string `json:"detail"`
-				}{{Title: "Forbidden", Detail: "assigning catalogues needs write permission on those catalogues; approve without assigned_catalogues or ask a catalogue administrator"}},
-			})
-			return
-		}
+	// editing a catalogue directly gates behind write in that catalogue's
+	// Workspace. Ask for the same here.
+	if ids := services.AssignedCatalogueIDs(attrs.AssignedCatalogues); len(ids) > 0 && !a.requireApprovalCatalogues(c, pending.ResourceType, ids) {
+		return
 	}
 
 	submission, err := a.service.ApproveSubmissionWithOptions(uint(id), currentUser.ID, attrs.FinalPrivacyScore, attrs.AssignedCatalogues, attrs.ReviewNotes,
-		services.SubmissionApproveOptions{GatewayTags: attrs.GatewayTags, Publish: attrs.Publish})
+		services.SubmissionApproveOptions{GatewayTags: attrs.GatewayTags, Publish: attrs.Publish, WorkspaceID: workspaceID})
+	if isWorkspaceNotFound(err) {
+		invalidWorkspace(c)
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {

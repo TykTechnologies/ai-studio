@@ -4,6 +4,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -33,6 +34,22 @@ func (a *API) createGroup(c *gin.Context) {
 		return
 	}
 
+	// Linked catalogues must be visible to the caller (404 otherwise).
+	for _, link := range []struct {
+		kind catalogueKind
+		ids  *[]uint
+	}{
+		{llmCatalogueKind, &input.Data.Attributes.Catalogues},
+		{dataCatalogueKind, &input.Data.Attributes.DataCatalogues},
+		{toolCatalogueKind, &input.Data.Attributes.ToolCatalogues},
+	} {
+		ids, ok := a.mergeTeamCatalogueLinks(c, link.kind, *link.ids, nil)
+		if !ok {
+			return
+		}
+		*link.ids = ids
+	}
+
 	group, err := a.service.CreateGroup(
 		input.Data.Attributes.Name,
 		input.Data.Attributes.Members,
@@ -45,7 +62,7 @@ func (a *API) createGroup(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{"data": a.finishGroup(c, serializeGroup(group))})
+	c.JSON(http.StatusCreated, gin.H{"data": a.finishGroup(c, a.serializeTeam(c, group))})
 }
 
 // @Summary Get a group by ID
@@ -82,7 +99,7 @@ func (a *API) getGroup(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": a.finishGroup(c, serializeGroup(group))})
+	c.JSON(http.StatusOK, gin.H{"data": a.finishGroup(c, a.serializeTeam(c, group))})
 }
 
 // @Summary Update a group
@@ -128,6 +145,27 @@ func (a *API) updateGroup(c *gin.Context) {
 		helpers.SendErrorResponse(c, helpers.NewBadRequestError(err.Error()))
 		return
 	}
+	// A submitted catalogue list replaces the visible links only: links to
+	// catalogues the caller cannot see are kept.
+	for _, link := range []struct {
+		key    string
+		kind   catalogueKind
+		ids    *[]uint
+		stored []uint
+	}{
+		{"catalogues", llmCatalogueKind, &input.Data.Attributes.Catalogues, base.Catalogues},
+		{"data_catalogues", dataCatalogueKind, &input.Data.Attributes.DataCatalogues, base.DataCatalogues},
+		{"tool_catalogues", toolCatalogueKind, &input.Data.Attributes.ToolCatalogues, base.ToolCatalogues},
+	} {
+		if _, ok := present[link.key]; !ok {
+			continue
+		}
+		ids, ok := a.mergeTeamCatalogueLinks(c, link.kind, *link.ids, link.stored)
+		if !ok {
+			return
+		}
+		*link.ids = ids
+	}
 
 	group, err := a.service.UpdateGroup(
 		uint(id),
@@ -142,7 +180,7 @@ func (a *API) updateGroup(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": a.finishGroup(c, serializeGroup(group))})
+	c.JSON(http.StatusOK, gin.H{"data": a.finishGroup(c, a.serializeTeam(c, group))})
 }
 
 // @Summary Delete a group
@@ -228,6 +266,10 @@ func (a *API) listGroups(c *gin.Context) {
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
+	// Catalogues the caller cannot see are left out, names and counts (B4f).
+	for i := range groups {
+		a.hideTeamCatalogues(c, &groups[i])
+	}
 	c.JSON(http.StatusOK, gin.H{"data": a.finishGroupList(c, serializeGroupsForList(groups, memberCounts))})
 }
 
@@ -280,6 +322,11 @@ func (a *API) addUserToGroup(c *gin.Context) {
 	err = a.service.AddUserToGroup(uint(userID), uint(groupID))
 	if ee, exceeded := entitlements.AsExceeded(err); exceeded {
 		helpers.SendErrorResponse(c, ee.HTTPError())
+		return
+	}
+	var he helpers.ErrorResponse
+	if errors.As(err, &he) {
+		helpers.SendErrorResponse(c, he)
 		return
 	}
 	if err != nil {
@@ -415,6 +462,11 @@ func (a *API) updateGroupUsers(c *gin.Context) {
 		helpers.SendErrorResponse(c, ee.HTTPError())
 		return
 	}
+	var he helpers.ErrorResponse
+	if errors.As(err, &he) {
+		helpers.SendErrorResponse(c, he)
+		return
+	}
 	if err != nil {
 		helpers.SendErrorResponse(c, helpers.NewInternalServerError("Failed to update group users: "+err.Error()))
 		return
@@ -546,6 +598,9 @@ func (a *API) addCatalogueToGroup(c *gin.Context) {
 		return
 	}
 
+	if !a.requireCatalogueVisible(c, llmCatalogueKind, uint(catalogueID)) {
+		return
+	}
 	err = a.service.AddCatalogueToGroup(uint(catalogueID), uint(groupID))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -595,6 +650,9 @@ func (a *API) removeCatalogueFromGroup(c *gin.Context) {
 		return
 	}
 
+	if !a.requireCatalogueVisible(c, llmCatalogueKind, uint(catalogueID)) {
+		return
+	}
 	err = a.service.RemoveCatalogueFromGroup(uint(catalogueID), uint(groupID))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
@@ -632,7 +690,8 @@ func (a *API) listGroupCatalogues(c *gin.Context) {
 		return
 	}
 
-	catalogues, err := a.service.GetGroupCatalogues(uint(groupID))
+	// Hidden catalogues are left out in the query.
+	catalogues, err := a.service.GetGroupCatalogues(uint(groupID), a.workspaceListScope(c, "catalogues", "catalogues.workspace_id"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -731,6 +790,9 @@ func (a *API) addDataCatalogueToGroup(c *gin.Context) {
 		return
 	}
 
+	if !a.requireCatalogueVisible(c, dataCatalogueKind, uint(dataCatalogueID)) {
+		return
+	}
 	err = a.service.AddDataCatalogueToGroup(uint(dataCatalogueID), uint(groupID))
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -790,6 +852,9 @@ func (a *API) removeDataCatalogueFromGroup(c *gin.Context) {
 		return
 	}
 
+	if !a.requireCatalogueVisible(c, dataCatalogueKind, uint(dataCatalogueID)) {
+		return
+	}
 	err = a.service.RemoveDataCatalogueFromGroup(uint(dataCatalogueID), uint(groupID))
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -837,7 +902,8 @@ func (a *API) listGroupDataCatalogues(c *gin.Context) {
 		return
 	}
 
-	dataCatalogues, err := a.service.GetGroupDataCatalogues(uint(groupID))
+	// Hidden data catalogues are left out in the query.
+	dataCatalogues, err := a.service.GetGroupDataCatalogues(uint(groupID), a.workspaceListScope(c, "data-catalogues", "data_catalogues.workspace_id"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -897,6 +963,9 @@ func (a *API) addToolCatalogueToGroup(c *gin.Context) {
 		return
 	}
 
+	if !a.requireCatalogueVisible(c, toolCatalogueKind, uint(toolCatalogueID)) {
+		return
+	}
 	err = a.service.AddToolCatalogueToGroup(uint(toolCatalogueID), uint(groupID))
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -955,6 +1024,9 @@ func (a *API) removeToolCatalogueFromGroup(c *gin.Context) {
 		return
 	}
 
+	if !a.requireCatalogueVisible(c, toolCatalogueKind, uint(toolCatalogueID)) {
+		return
+	}
 	err = a.service.RemoveToolCatalogueFromGroup(uint(toolCatalogueID), uint(groupID))
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -1004,7 +1076,9 @@ func (a *API) listGroupToolCatalogues(c *gin.Context) {
 
 	pageSize, pageNumber, all := getPaginationParams(c)
 
-	toolCatalogues, totalCount, totalPages, err := a.service.GetGroupToolCatalogues(uint(groupID), pageSize, pageNumber, all)
+	// Hidden catalogues are left out before the count, so totals match.
+	toolCatalogues, totalCount, totalPages, err := a.service.GetGroupToolCatalogues(uint(groupID), pageSize, pageNumber, all,
+		a.workspaceListScope(c, "tool-catalogues", "tool_catalogues.workspace_id"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -1045,6 +1119,28 @@ func (a *API) updateGroupCatalogues(c *gin.Context) {
 		return
 	}
 
+	stored, err := a.service.GetGroupByID(uint(id), "Catalogues", "DataCatalogues", "ToolCatalogues")
+	if err != nil {
+		helpers.SendErrorResponse(c, err)
+		return
+	}
+	_, storedCats, storedData, storedTools := stored.ExtractAssociationsIDs()
+	for _, link := range []struct {
+		kind   catalogueKind
+		ids    *[]uint
+		stored []uint
+	}{
+		{llmCatalogueKind, &req.Data.Attributes.Catalogues, storedCats},
+		{dataCatalogueKind, &req.Data.Attributes.DataCatalogues, storedData},
+		{toolCatalogueKind, &req.Data.Attributes.ToolCatalogues, storedTools},
+	} {
+		ids, ok := a.mergeTeamCatalogueLinks(c, link.kind, *link.ids, link.stored)
+		if !ok {
+			return
+		}
+		*link.ids = ids
+	}
+
 	err = a.service.UpdateGroupCatalogues(
 		uint(id),
 		req.Data.Attributes.Catalogues,
@@ -1073,6 +1169,7 @@ func serializeToolCatalogue(tc *models.ToolCatalogue, db *gorm.DB) ToolCatalogue
 			Icon             string         `json:"icon"`
 			Tools            []ToolResponse `json:"tools"`
 			Tags             []TagResponse  `json:"tags"`
+			WorkspaceID      uint           `json:"workspace_id,omitempty"`
 		}{
 			Name:             tc.Name,
 			ShortDescription: tc.ShortDescription,
@@ -1082,4 +1179,11 @@ func serializeToolCatalogue(tc *models.ToolCatalogue, db *gorm.DB) ToolCatalogue
 			Tags:             serializeTags(tc.Tags),
 		},
 	}
+}
+
+// serializeTeam serializes a team for the admin API, leaving out the
+// catalogues the caller cannot see (B4f).
+func (a *API) serializeTeam(c *gin.Context, group *models.Group) GroupResponse {
+	a.hideTeamCatalogues(c, group)
+	return serializeGroup(group)
 }

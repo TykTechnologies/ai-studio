@@ -10,9 +10,17 @@ import { permissionLabel } from '../../rbac/permissions';
  *
  *   <PublishSwitch permission={P.LLMS_PUBLISH} checked={llm.active} onChange={...} name="active" label="Active" />
  */
-const PublishSwitch = ({ permission, label, checked, onChange, name, disabled = false, control = 'switch', ...rest }) => {
-  const { can } = usePermissions();
-  const allowed = !permission || can(permission);
+const PublishSwitch = ({ permission, label, checked, onChange, name, disabled = false, control = 'switch', workspaceId, ...rest }) => {
+  const { can, canIn, canAnywhere } = usePermissions();
+  // workspaceId: the object's Workspace (publish there); null for an object
+  // being created in a Workspace not chosen yet (publish anywhere). Omitted:
+  // the global permission, as before.
+  let allowed = !permission;
+  if (permission) {
+    if (workspaceId === undefined) allowed = can(permission);
+    else if (workspaceId === null || workspaceId === '') allowed = canAnywhere ? canAnywhere(permission) : can(permission);
+    else allowed = canIn ? canIn(workspaceId, permission) : can(permission);
+  }
   const Control = control === 'checkbox' ? Checkbox : Switch;
   const element = (
     <FormControlLabel

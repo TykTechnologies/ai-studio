@@ -32,6 +32,15 @@ var (
 	ErrDuplicateRole     = errors.New("a role with that name already exists")
 	ErrDuplicateBinding  = errors.New("that role is already assigned to this subject")
 	ErrHostManaged       = errors.New("this role is assigned by the application AI Studio is embedded in; change it there")
+	// ErrInvalidScope: a binding scope other than global or an existing
+	// Workspace (canonical id); see WorkspaceScopeID.
+	ErrInvalidScope = errors.New("invalid binding scope: use no scope, or scope_type \"workspace\" with the id of an existing Workspace")
+	// ErrOwnerScopeForbidden: the Owner role is always global (decision D3).
+	ErrOwnerScopeForbidden = errors.New("the Owner role cannot be assigned within a Workspace")
+	// ErrServiceAccountOwner refuses the Owner role for a service account
+	// (Enterprise; answered 409 service_account, like the other Owner
+	// rules).
+	ErrServiceAccountOwner = errors.New("the Owner role cannot be given to a service account")
 )
 
 // Subject identifies who a role is bound to.
@@ -55,11 +64,24 @@ type BindingInput struct {
 	ScopeID   string
 }
 
+// Binding scope types. A binding with an empty scope is global and covers
+// every Workspace (decision D1).
+const (
+	ScopeTypeGlobal    = ""
+	ScopeTypeWorkspace = "workspace"
+)
+
 // BindingFilter narrows ListBindings. Zero values mean "no filter".
 type BindingFilter struct {
 	SubjectType string
 	SubjectID   uint
 	RoleID      uint
+	// ScopeType and ScopeID filter by binding scope. ScopeType "" means no
+	// filter (it does not select global bindings only; GlobalOnly does).
+	ScopeType string
+	ScopeID   string
+	// GlobalOnly keeps global bindings only (IsGlobalBinding).
+	GlobalOnly bool
 }
 
 // RoleSummary is the compact role shape returned alongside users, groups and
@@ -91,6 +113,19 @@ type Effective struct {
 	Permissions authz.Set
 	Roles       []RoleSummary
 	Sources     map[string][]PermissionSource
+	// Workspaces is the access the user holds only inside a Workspace, from
+	// Workspace-scoped bindings, keyed by Workspace id. Global access
+	// (above) covers every Workspace and is not repeated here. Empty in CE.
+	Workspaces map[uint]WorkspaceEffective
+}
+
+// WorkspaceEffective is the access Workspace-scoped bindings grant inside
+// one Workspace: the roles, the resulting set (stamped resources only,
+// decision D2) and per permission the bindings that granted it.
+type WorkspaceEffective struct {
+	Permissions authz.Set
+	Roles       []RoleSummary
+	Sources     map[string][]PermissionSource
 }
 
 // RoleCounts is how many users and groups hold a role directly.
@@ -111,9 +146,15 @@ type Service interface {
 	// treats as enabled and the community stub ignores.
 	SetLicenseCheck(check func() bool)
 
-	// Resolve computes the user's effective permission set. It is called at
-	// most once per request by the authorization middleware.
+	// Resolve computes the user's global effective permission set: what
+	// unscoped bindings grant, covering every Workspace. The authorization
+	// middleware uses ResolveGrants, whose Global is this set.
 	Resolve(ctx context.Context, user *models.User) (authz.Set, error)
+
+	// ResolveGrants computes the user's global set (what Resolve returns)
+	// and, per Workspace, the permissions Workspace-scoped bindings grant
+	// there. The authorization middleware calls it at most once per request.
+	ResolveGrants(ctx context.Context, user *models.User) (authz.Grants, error)
 
 	// EffectivePermissions returns the set and the roles behind it.
 	EffectivePermissions(ctx context.Context, userID uint) (*Effective, error)

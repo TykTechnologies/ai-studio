@@ -22,8 +22,9 @@ func serializeCatalogues(catalogues models.Catalogues) []CatalogueResponse {
 			Type: "catalogues",
 			ID:   strconv.FormatUint(uint64(catalogue.ID), 10),
 			Attributes: struct {
-				Name     string   `json:"name"`
-				LLMNames []string `json:"llm_names"`
+				Name        string   `json:"name"`
+				LLMNames    []string `json:"llm_names"`
+				WorkspaceID uint     `json:"workspace_id,omitempty"`
 			}{
 				Name:     catalogue.Name,
 				LLMNames: llmNames,
@@ -65,6 +66,7 @@ func serializeDataCatalogues(dataCatalogues models.DataCatalogues) []DataCatalog
 				Icon             string               `json:"icon"`
 				Datasources      []DatasourceResponse `json:"datasources"`
 				Tags             []TagResponse        `json:"tags"`
+				WorkspaceID      uint                 `json:"workspace_id,omitempty"`
 			}{
 				Name:             dataCatalogue.Name,
 				ShortDescription: dataCatalogue.ShortDescription,
@@ -92,6 +94,7 @@ func serializeToolCatalogues(toolCatalogues models.ToolCatalogues, db *gorm.DB) 
 				Icon             string         `json:"icon"`
 				Tools            []ToolResponse `json:"tools"`
 				Tags             []TagResponse  `json:"tags"`
+				WorkspaceID      uint           `json:"workspace_id,omitempty"`
 			}{
 				Name:             tc.Name,
 				ShortDescription: tc.ShortDescription,

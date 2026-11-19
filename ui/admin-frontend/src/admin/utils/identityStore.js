@@ -12,6 +12,18 @@ import { hasPermission, toArray, FULL_ADMIN } from '../rbac/permissions';
 let identity = null;
 const listeners = new Set();
 
+/**
+ * Maps /common/me's workspaces (Enterprise): per Workspace, the permissions
+ * the user holds there through Workspace-scoped roles. The global
+ * permissions cover every Workspace and are not repeated here.
+ */
+const buildWorkspaces = (list) =>
+  (Array.isArray(list) ? list : []).map((w) => ({
+    id: Number(w.id),
+    name: w.name || '',
+    permissions: new Set(Array.isArray(w.permissions) ? w.permissions : []),
+  }));
+
 /** Builds the identity view from a raw /common/me payload ({ id, attributes }). */
 export const buildIdentity = (me) => {
   if (!me) return null;
@@ -19,10 +31,16 @@ export const buildIdentity = (me) => {
   const permissionList = Array.isArray(attributes.permissions) ? attributes.permissions : [];
   const isFullAdmin = attributes.is_admin === true || permissionList.includes(FULL_ADMIN);
   const permissions = new Set(isFullAdmin ? [FULL_ADMIN, ...permissionList] : permissionList);
-  const hasAdminAccess =
+  // has_admin_access means "holds some permission globally". A user whose
+  // only roles are scoped to a Workspace has none, but still has an admin
+  // surface: /common/me says so with admin_nav_hint (Workspaces .57).
+  // hasAdminAccess gates the admin routes and navigation, so it takes
+  // either; the server still authorizes every call.
+  const hasGlobalAdminAccess =
     typeof attributes.has_admin_access === 'boolean'
       ? attributes.has_admin_access
       : isFullAdmin || permissions.size > 0;
+  const hasAdminAccess = hasGlobalAdminAccess || attributes.admin_nav_hint === true;
   return {
     id: me.id,
     email: attributes.email,
@@ -30,11 +48,17 @@ export const buildIdentity = (me) => {
     isAdmin: attributes.is_admin === true,
     isFullAdmin,
     hasAdminAccess,
+    hasGlobalAdminAccess,
     rbacEnabled: attributes.rbac_enabled === true,
     // Owner role (the Super Admin without roles): may open the License page.
     isOwner: attributes.is_owner === true,
     permissions,
     roles: Array.isArray(attributes.roles) ? attributes.roles : [],
+    workspaces: buildWorkspaces(attributes.workspaces),
+    // /common/me's account_type is the legacy role label (e.g. "Admin",
+    // "Service account"), not the users API's account type ("" | "service"):
+    // kept as a label only.
+    roleLabel: attributes.account_type || '',
     uiOptions: attributes.ui_options || {},
     entitlements: attributes.entitlements || null,
     raw: me,

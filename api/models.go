@@ -85,6 +85,10 @@ type UserAttributes struct {
 	NotificationsEnabled bool               `json:"notifications_enabled"`
 	AccessToSSOConfig    bool               `json:"access_to_sso_config"`
 	Role                 string             `json:"role"`
+
+	// AccountType is "" for a person or "service" for a service account.
+	AccountType string `json:"account_type"`
+
 	Groups               []GroupResponse    `json:"groups,omitempty"`
 	Roles                []rbac.RoleSummary `json:"roles,omitempty"`
 
@@ -263,6 +267,7 @@ type LLMResponse struct {
 		TracingContentModeMax    string `json:"tracing_content_mode_max"`
 		TracingPropagationOptOut bool   `json:"tracing_propagation_opt_out"`
 		AllowInternalHost        bool   `json:"allow_internal_host"`
+		WorkspaceID              uint   `json:"workspace_id"`
 	} `json:"attributes"`
 }
 
@@ -283,8 +288,9 @@ type CatalogueResponse struct {
 	Type       string `json:"type"`
 	ID         string `json:"id"`
 	Attributes struct {
-		Name     string   `json:"name"`
-		LLMNames []string `json:"llm_names"`
+		Name        string   `json:"name"`
+		LLMNames    []string `json:"llm_names"`
+		WorkspaceID uint     `json:"workspace_id,omitempty"`
 	} `json:"attributes"`
 }
 
@@ -416,6 +422,9 @@ type DatasourceResponse struct {
 		// AllowInternalHost: the datasource's own host may be an internal
 		// address (an administrator's switch).
 		AllowInternalHost bool `json:"allow_internal_host"`
+		// WorkspaceID is the Workspace that owns the datasource (admin
+		// responses).
+		WorkspaceID uint `json:"workspace_id,omitempty"`
 	} `json:"attributes"`
 }
 
@@ -445,6 +454,7 @@ type DataCatalogueResponse struct {
 		Icon             string               `json:"icon"`
 		Datasources      []DatasourceResponse `json:"datasources"`
 		Tags             []TagResponse        `json:"tags"`
+		WorkspaceID      uint                 `json:"workspace_id,omitempty"`
 	} `json:"attributes"`
 }
 
@@ -571,6 +581,9 @@ type AppResponse struct {
 		IsOrphaned       bool                   `json:"is_orphaned"`
 		Metadata         map[string]interface{} `json:"metadata,omitempty"`
 		Namespace        string                 `json:"namespace,omitempty"`
+		// WorkspaceID is the Workspace that owns the App (Enterprise
+		// Workspaces); a stored 0 reads as the Default.
+		WorkspaceID uint `json:"workspace_id,omitempty"`
 		PluginResources  []PluginResourceOutput `json:"plugin_resources,omitempty"`
 		// Tyk-managed MCP servers bound to the app (Enterprise).
 		MCPServerIDs []uint               `json:"mcp_server_ids"`
@@ -746,6 +759,8 @@ type ToolResponseAttributes struct {
 	// AllowInternalHost: the tool's own API hosts may be internal addresses
 	// (an administrator's switch).
 	AllowInternalHost bool `json:"allow_internal_host"`
+	// WorkspaceID is the Workspace that owns the tool (admin responses).
+	WorkspaceID uint `json:"workspace_id,omitempty"`
 
 	// Flattened into the attributes; see toolGatewayAccess.
 	ToolGatewayAccess
@@ -910,6 +925,8 @@ type FilterAttributes struct {
 	Namespace      string                 `json:"namespace"`
 	Kind           string                 `json:"kind"`
 	Config         map[string]interface{} `json:"config,omitempty"`
+	// WorkspaceID is the Workspace that owns the filter.
+	WorkspaceID uint `json:"workspace_id,omitempty"`
 }
 
 // FilterResponse represents the response for filter-related operations
@@ -1004,6 +1021,7 @@ type ToolCatalogueResponse struct {
 		Icon             string         `json:"icon"`
 		Tools            []ToolResponse `json:"tools"`
 		Tags             []TagResponse  `json:"tags"`
+		WorkspaceID      uint           `json:"workspace_id,omitempty"`
 	} `json:"attributes"`
 }
 
@@ -1211,12 +1229,21 @@ type UserWithEntitlementsResponse struct {
 		// HasAdminAccess is true when the user holds at least one permission
 		// and may therefore open the administration surface.
 		HasAdminAccess bool `json:"has_admin_access"`
+		// AdminNavHint tells the UI to show the admin navigation: the user
+		// holds some permission, globally or within a Workspace. A UI hint
+		// only: it is not is_admin, and nothing on the server authorizes on it.
+		AdminNavHint bool `json:"admin_nav_hint"`
 		// Permissions is the effective permission set; ["*"] for full admins.
 		Permissions []string `json:"permissions"`
 		// Roles lists the roles behind the permissions (Enterprise only).
 		Roles []rbac.RoleSummary `json:"roles"`
 		// RBACEnabled reports whether fine-grained roles are active.
 		RBACEnabled bool `json:"rbac_enabled"`
+		// Workspaces lists, per Workspace, the permissions the user holds
+		// there through Workspace-scoped roles, for per-object UI gating
+		// (Enterprise). Permissions above are global and cover every
+		// Workspace.
+		Workspaces []WorkspaceAccess `json:"workspaces"`
 		// IsOwner: the user holds the Owner role (the Super Admin without
 		// roles), and so may open the License page.
 		IsOwner bool `json:"is_owner"`
@@ -1439,6 +1466,9 @@ type FileStoreResponse struct {
 		Content         string    `json:"-"`
 		Length          int       `json:"length"`
 		LastProcessedOn time.Time `json:"last_processed_on"`
+		// WorkspaceID is the Workspace that owns the entry (Enterprise
+		// Workspaces); a stored 0 reads as the Default.
+		WorkspaceID uint `json:"workspace_id,omitempty"`
 	} `json:"attributes"`
 }
 
@@ -1469,6 +1499,8 @@ type SecretResponse struct {
 		// ReferencedBy lists the objects that read this secret through a
 		// $SECRET/<name> reference. Always present, empty when nothing does.
 		ReferencedBy []SecretReferenceResponse `json:"referenced_by"`
+		// WorkspaceID is the Workspace that owns the secret.
+		WorkspaceID uint `json:"workspace_id"`
 	} `json:"attributes"`
 }
 

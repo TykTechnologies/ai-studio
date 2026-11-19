@@ -96,6 +96,7 @@ func adminNav(in navInputs) []NavItem {
 			when(f("feature_groups") && (!f("feature_gateway") || f("feature_portal") || f("feature_chat")),
 				page("groups", "Teams", "/admin/groups", r("groups"))),
 			when(f("feature_rbac"), page("roles", "Roles", "/admin/roles", r("roles"))),
+			when(f("feature_rbac"), page("workspaces", "Workspaces", "/admin/workspaces", r("workspaces"))),
 			when(in.identityProviders, page("sso-profiles", "Identity providers", "/admin/sso-profiles", r("sso-profiles"))),
 		),
 	)
@@ -442,7 +443,9 @@ func (a *API) getNavManifest(c *gin.Context) {
 	feature := func(name string) bool { v, _ := fs[name].(bool); return v }
 
 	manifest := NavManifest{Surfaces: []NavItem{}, Admin: []NavItem{}, Portal: []NavItem{}, Chat: []NavItem{}}
-	hasAdmin := !perms.IsEmpty()
+	// The admin surface shows for anyone holding something, globally or in a
+	// Workspace (the same rule as admin_nav_hint on /common/me).
+	hasAdmin := authz.CanAnywhere(c, authz.AnyAdmin)
 	if hasAdmin {
 		manifest.Surfaces = append(manifest.Surfaces, NavItem{ID: "admin", Text: "Admin", Icon: "gear", Path: "/admin"})
 	}
@@ -456,7 +459,11 @@ func (a *API) getNavManifest(c *gin.Context) {
 	// Each menu degrades on its own: a failing lookup costs its entries
 	// (logged), never the whole manifest.
 	if hasAdmin {
-		allow := func(p string) bool { return authz.Can(c, authz.Permission(p)) }
+		// An entry shows when its permission is held globally or, for a
+		// Workspace resource, in any Workspace: the route gate's rule.
+		// Workspace grants never satisfy a global permission (D2), so
+		// global-only entries stay global.
+		allow := func(p string) bool { return authz.CanAnywhere(c, authz.Permission(p)) }
 		var plugins []services.SidebarMenuItem
 		if a.service.PluginManifestService != nil {
 			plugins, err = a.service.PluginManifestService.GetSidebarMenuItemsFor(allow)

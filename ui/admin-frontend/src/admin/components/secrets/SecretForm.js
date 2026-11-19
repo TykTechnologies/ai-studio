@@ -25,12 +25,21 @@ import {
   useUnsavedForm,
   useConfirmNavigation,
 } from "../../../components/unsaved-changes";
+import { P } from "../../rbac/permissions";
+import WorkspaceSelect from "../workspaces/WorkspaceSelect";
+import { useCanMove, workspaceFieldError } from "../workspaces/workspaceFields";
 
 const SecretForm = () => {
   const [formData, setFormData] = useState({
     var_name: "",
     value: "",
+    workspace_id: null, // Enterprise: the Workspace it lives in (landing rule when null)
   });
+  // The stored Workspace of the secret being edited: a different
+  // workspace_id on save is a move (refused while it is referenced).
+  const [originalWorkspaceId, setOriginalWorkspaceId] = useState(null);
+  const [workspaceError, setWorkspaceError] = useState("");
+  const canMove = useCanMove(P.SECRETS_WRITE);
   const [loaded, setLoaded] = useState(false);
   const [valueModified, setValueModified] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
@@ -63,7 +72,9 @@ const SecretForm = () => {
       setFormData({
         var_name: secretData.var_name,
         value: secretData.value,
+        workspace_id: secretData.workspace_id ?? null,
       });
+      setOriginalWorkspaceId(secretData.workspace_id ?? null);
       setLoaded(true);
     } catch (error) {
       console.error("Error fetching secret", error);
@@ -118,6 +129,12 @@ const SecretForm = () => {
       attributes.value = formData.value;
     }
 
+    // workspace_id is sent only to choose one (create) or to move (edit).
+    const workspaceId = formData.workspace_id;
+    if (workspaceId !== null && workspaceId !== undefined && (!id || Number(workspaceId) !== Number(originalWorkspaceId))) {
+      attributes.workspace_id = Number(workspaceId);
+    }
+
     const secretData = {
       data: {
         type: "secrets",
@@ -145,9 +162,17 @@ const SecretForm = () => {
       });
     } catch (error) {
       console.error("Error saving secret", error);
+      const wsError = workspaceFieldError(error);
+      if (wsError) {
+        setWorkspaceError(wsError);
+        setSnackbar({ open: true, message: wsError, severity: "error" });
+        return;
+      }
+      // The server names why (e.g. a referenced secret cannot move).
+      const detail = error.response?.data?.errors?.[0]?.detail;
       setSnackbar({
         open: true,
-        message: "Failed to save secret. Please try again.",
+        message: detail ? `Failed to save secret: ${detail}` : "Failed to save secret. Please try again.",
         severity: "error",
       });
     }
@@ -219,6 +244,20 @@ const SecretForm = () => {
                     </InputAdornment>
                   ),
                 }}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              {/* Workspace (Enterprise): where it is created; on edit, the move control. */}
+              <WorkspaceSelect
+                permission={P.SECRETS_WRITE}
+                value={formData.workspace_id}
+                onChange={(ws) => {
+                  setFormData((prev) => ({ ...prev, workspace_id: ws }));
+                  setWorkspaceError("");
+                }}
+                disabled={Boolean(id) && !canMove}
+                error={workspaceError}
+                helperText={id ? "Moving it to another Workspace needs write in both; a referenced secret cannot move." : "The Workspace it is created in."}
               />
             </Grid>
             <Grid item xs={12}>

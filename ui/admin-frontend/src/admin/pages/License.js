@@ -110,7 +110,20 @@ const License = () => {
                 <TableBody>
                   {(report.limits || []).map((limit) => (
                     <TableRow key={limit.key} data-testid={`license-limit-${limit.key}`}>
-                      <TableCell>{limit.label}</TableCell>
+                      <TableCell>
+                        {limit.label}
+                        {(limit.parts || []).map((part) => (
+                          <Typography
+                            key={part.key}
+                            variant="caption"
+                            display="block"
+                            color="text.secondary"
+                            data-testid={`license-limit-${limit.key}-${part.key}`}
+                          >
+                            of which {part.label.toLowerCase()}: {part.used}
+                          </Typography>
+                        ))}
+                      </TableCell>
                       <TableCell>
                         {usageText(limit)}
                         {!limit.unlimited && limit.used >= limit.max && (

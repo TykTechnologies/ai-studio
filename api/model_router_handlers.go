@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services/model_router"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -30,8 +31,17 @@ type ModelRouterInput struct {
 			ShortDescription string `json:"short_description"`
 			LongDescription  string `json:"long_description"`
 			LogoURL          string `json:"logo_url"`
+			// WorkspaceID places the router (create) or moves it
+			// (update); omitted = the landing rule / no move.
+			WorkspaceID *uint `json:"workspace_id"`
 		} `json:"attributes"`
 	} `json:"data"`
+}
+
+// modelRouterNotFound is the not-found answer, also given for a router in
+// a Workspace the caller cannot see.
+func modelRouterNotFound(c *gin.Context) {
+	simpleError(c, http.StatusNotFound, "Not Found", "Model router not found")
 }
 
 // ModelPoolInput represents a pool in the input
@@ -86,9 +96,18 @@ func (a *API) createModelRouter(c *gin.Context) {
 		respondModelRouterError(c, err)
 		return
 	}
+	workspaceID, ok := a.resolveCreateWorkspace(c, "model-routers", input.Data.Attributes.WorkspaceID)
+	if !ok {
+		return
+	}
+	router.WorkspaceID = workspaceID
+	if !a.requireRouterLLMRead(c, len(router.Pools) > 0) {
+		return
+	}
 
-	// Creating a router already active is the publish action on model-routers.
-	if !a.requirePublishToCreateLive(c, "model-routers", router.Active) {
+	// Creating a router already active is the publish action on
+	// model-routers, in its Workspace.
+	if !a.requirePublishToCreateLiveIn(c, "model-routers", workspaceID, router.Active) {
 		return
 	}
 
@@ -102,6 +121,7 @@ func (a *API) createModelRouter(c *gin.Context) {
 		a.service.SystemEvents.EmitModelRouterCreated(router, router.ID, 0)
 	}
 
+	router.Catalogues = a.visibleCatalogues(c, router.Catalogues)
 	c.JSON(http.StatusCreated, gin.H{"data": a.serializeModelRouter(router)})
 }
 
@@ -130,20 +150,16 @@ func (a *API) getModelRouter(c *gin.Context) {
 	}
 
 	router, err := a.service.ModelRouterService.GetRouter(uint(id))
-	if err != nil {
-		statusCode := http.StatusNotFound
-		if err == model_router.ErrEnterpriseFeature {
-			statusCode = http.StatusPaymentRequired
-		}
-		c.JSON(statusCode, ErrorResponse{
-			Errors: []struct {
-				Title  string `json:"title"`
-				Detail string `json:"detail"`
-			}{{Title: "Error", Detail: err.Error()}},
-		})
+	if err != nil || router == nil {
+		// A missing router answers like a hidden one (modelRouterNotFound).
+		a.respondModelRouterLookupError(c, uint(id), err)
 		return
 	}
 
+	if !a.requireVisible(c, "model-routers", router.WorkspaceID, modelRouterNotFound) {
+		return
+	}
+	router.Catalogues = a.visibleCatalogues(c, router.Catalogues)
 	c.JSON(http.StatusOK, gin.H{"data": a.serializeModelRouter(router)})
 }
 
@@ -205,20 +221,44 @@ func (a *API) updateModelRouter(c *gin.Context) {
 		return
 	}
 
+	if !a.requireVisible(c, "model-routers", existing.WorkspaceID, modelRouterNotFound) ||
+		!a.requireInWorkspace(c, authz.Write("model-routers"), existing.WorkspaceID) {
+		return
+	}
+	move := input.Data.Attributes.WorkspaceID != nil && *input.Data.Attributes.WorkspaceID != existing.WorkspaceID
+	if move && !a.requireMove(c, "model-routers", existing.WorkspaceID, *input.Data.Attributes.WorkspaceID) {
+		return
+	}
 	router := a.inputToModelRouter(&input, existing.Active)
 	router.ID = uint(id)
 	if err := models.CheckLogoURL(router.LogoURL); err != nil {
 		respondModelRouterError(c, err)
 		return
 	}
-	if !a.requirePublishIfChanged(c, "model-routers", existing.Active, router.Active) {
+	if !a.requireRouterLLMRead(c, len(router.Pools) > 0) {
+		return
+	}
+	if !a.requirePublishIfChangedIn(c, "model-routers", existing.WorkspaceID, existing.Active, router.Active) {
 		return
 	}
 
+	// A move goes first (workspace_id with updated_at, guarded on the stored
+	// value) and is undone if the update fails; the update itself never
+	// writes workspace_id (.42).
+	var moveTo *uint
+	if move {
+		moveTo = input.Data.Attributes.WorkspaceID
+	}
+	finishMove, ok := a.beginMove(c, &models.ModelRouter{}, router.ID, existing.WorkspaceID, moveTo)
+	if !ok {
+		return
+	}
 	if err := a.service.ModelRouterService.UpdateRouter(router); err != nil {
+		finishMove(false)
 		respondModelRouterError(c, err)
 		return
 	}
+	finishMove(true)
 
 	// Emit system event for model router update
 	if a.service.SystemEvents != nil {
@@ -232,6 +272,7 @@ func (a *API) updateModelRouter(c *gin.Context) {
 		return
 	}
 
+	updatedRouter.Catalogues = a.visibleCatalogues(c, updatedRouter.Catalogues)
 	c.JSON(http.StatusOK, gin.H{"data": a.serializeModelRouter(updatedRouter)})
 }
 
@@ -259,6 +300,7 @@ func (a *API) deleteModelRouter(c *gin.Context) {
 		return
 	}
 
+	// The router's Workspace is checked by the route (onVisibleObject).
 	if err := a.service.ModelRouterService.DeleteRouter(uint(id)); err != nil {
 		a.respondModelRouterLookupError(c, uint(id), err)
 		return
@@ -300,6 +342,11 @@ func (a *API) listModelRouters(c *gin.Context) {
 	if !ok {
 		return
 	}
+	filters, ok := a.workspaceListFilters(c, "model-routers")
+	if !ok {
+		return
+	}
+	opts.Filters = append(opts.Filters, filters...)
 
 	routers, totalCount, totalPages, err := a.service.ListModelRouters(pageSize, pageNumber, all, opts)
 	if err != nil {
@@ -309,6 +356,7 @@ func (a *API) listModelRouters(c *gin.Context) {
 
 	serialized := make([]map[string]interface{}, len(routers))
 	for i, router := range routers {
+		router.Catalogues = a.visibleCatalogues(c, router.Catalogues)
 		serialized[i] = a.serializeModelRouter(&router)
 	}
 
@@ -362,6 +410,7 @@ func (a *API) toggleModelRouterActive(c *gin.Context) {
 		return
 	}
 
+	// The router's Workspace is checked by the route (onVisibleObject).
 	if err := a.service.ModelRouterService.ToggleRouterActive(uint(id), *input.Active); err != nil {
 		a.respondModelRouterLookupError(c, uint(id), err)
 		return
@@ -374,6 +423,7 @@ func (a *API) toggleModelRouterActive(c *gin.Context) {
 		return
 	}
 
+	router.Catalogues = a.visibleCatalogues(c, router.Catalogues)
 	c.JSON(http.StatusOK, gin.H{"data": a.serializeModelRouter(router)})
 }
 
@@ -500,6 +550,7 @@ func (a *API) serializeModelRouter(router *models.ModelRouter) map[string]interf
 			"api_compat":  router.APICompat,
 			"active":      router.Active,
 			"namespace":   router.Namespace,
+			"workspace_id": router.WorkspaceID,
 			"pools":       pools,
 			"created_at":  router.CreatedAt,
 			"updated_at":  router.UpdatedAt,
@@ -545,7 +596,7 @@ func (a *API) respondModelRouterLookupError(c *gin.Context, id uint, err error) 
 		return
 	}
 	if exists, lookupErr := a.rowExists(&models.ModelRouter{}, id); lookupErr == nil && !exists {
-		simpleError(c, http.StatusNotFound, "Not Found", "Model router not found")
+		modelRouterNotFound(c)
 		return
 	}
 	if err == nil {

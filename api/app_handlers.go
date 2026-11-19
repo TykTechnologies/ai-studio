@@ -8,6 +8,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/gin-gonic/gin"
@@ -27,7 +28,8 @@ import (
 // @Security BearerAuth
 func (a *API) createApp(c *gin.Context) {
 	var input AppInput
-	if err := c.ShouldBindJSON(&input); err != nil {
+	// Bound with the body kept, so workspace_id can be read from it too.
+	if err := c.ShouldBindBodyWith(&input, binding.JSON); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{
 			Errors: []struct {
 				Title  string `json:"title"`
@@ -47,10 +49,20 @@ func (a *API) createApp(c *gin.Context) {
 		return
 	}
 
+	// The Workspace the App lands in (decision D5); binding servers and
+	// routers and publishing it live are checked there.
+	workspaceID, ok := a.resolveCreateFromBody(c, "apps")
+	if !ok {
+		return
+	}
+
 	datasourceIDs := input.Data.Attributes.DatasourceIDs
 	llmIDs := input.Data.Attributes.LLMIDs
 	toolIDs := input.Data.Attributes.ToolIDs // Added toolIDs
 	metadata := input.Data.Attributes.Metadata
+	if !a.requireAppMemberRead(c, llmIDs, toolIDs, datasourceIDs) {
+		return
+	}
 
 	// Convert plugin resource inputs to service selections
 	var pluginResources []services.PluginResourceSelection
@@ -65,13 +77,13 @@ func (a *API) createApp(c *gin.Context) {
 	// MCP server bindings are validated before the app exists so a refusal
 	// leaves nothing behind.
 	if input.Data.Attributes.MCPServerIDs != nil {
-		actorID, actorAdmin := adminAppActor(c)
+		actorID, actorAdmin := a.adminAppActorIn(c, workspaceID)
 		if !a.validateAppMCPBindings(c, actorID, actorAdmin, llmIDs, *input.Data.Attributes.MCPServerIDs) {
 			return
 		}
 	}
 	// So are router grants.
-	routerOpts, ok := a.adminAppRouterOptions(c, input.Data.Attributes.ModelRouterIDs, input.Data.Attributes.SemanticRouterIDs)
+	routerOpts, ok := a.adminAppRouterOptions(c, 0, input.Data.Attributes.ModelRouterIDs, input.Data.Attributes.SemanticRouterIDs)
 	if !ok {
 		return
 	}
@@ -82,14 +94,14 @@ func (a *API) createApp(c *gin.Context) {
 	wantActive := true
 	if input.Data.Attributes.IsActive != nil {
 		wantActive = *input.Data.Attributes.IsActive
-		if !a.requirePublishToCreateLive(c, "apps", wantActive) {
+		if !a.requirePublishToCreateLiveIn(c, "apps", workspaceID, wantActive) {
 			return
 		}
-	} else if !a.canPublish(c, "apps") {
+	} else if !a.canPublishAppIn(c, workspaceID) {
 		wantActive = false
 	}
 
-	var appOpts []services.AppOption
+	appOpts := []services.AppOption{services.WithAppWorkspace(workspaceID)}
 	if input.Data.Attributes.TeamID != nil {
 		if !a.authorizeAppTeam(c, input.Data.Attributes.UserID, input.Data.Attributes.TeamID) {
 			return
@@ -147,6 +159,10 @@ func (a *API) createApp(c *gin.Context) {
 			metadata, // Pass metadata
 			append(routerOpts, appOpts...)...,
 		)
+	}
+	if isWorkspaceNotFound(err) {
+		invalidWorkspace(c)
+		return
 	}
 	if err != nil {
 		if errors.Is(err, services.ERRPrivacyScoreMismatch) {
@@ -287,6 +303,30 @@ func (a *API) updateApp(c *gin.Context) {
 		})
 		return
 	}
+	// Apps are hidden outside the caller's Workspaces (workspace_full): a
+	// hidden App answers as a missing one. Write in its Workspace; a
+	// changed workspace_id is a move (write in both).
+	stored, err := a.service.GetAppByID(uint(id))
+	if err != nil {
+		appNotFound(c)
+		return
+	}
+	if !a.requireVisible(c, "apps", stored.WorkspaceID, appNotFound) {
+		return
+	}
+	requested, ok := boundWorkspaceID(c)
+	if !ok {
+		return
+	}
+	moveTo, ok := a.checkObjectUpdate(c, "apps", stored.WorkspaceID, requested)
+	if !ok {
+		return
+	}
+	dest := stored.WorkspaceID // where the App is after this request
+	if moveTo != nil {
+		dest = *moveTo
+	}
+
 	// The same goes for every other attribute: PATCH changes only the keys
 	// the body holds, so a metadata-only PATCH must not blank the App's
 	// name, owner or LLM access (dg5).
@@ -308,6 +348,9 @@ func (a *API) updateApp(c *gin.Context) {
 	llmIDs := input.Data.Attributes.LLMIDs
 	toolIDs := input.Data.Attributes.ToolIDs // Added toolIDs
 	metadata := input.Data.Attributes.Metadata
+	if !a.requireAppMemberRead(c, llmIDs, toolIDs, datasourceIDs) {
+		return
+	}
 
 	// Flipping the active switch is the publish action on apps; an omitted
 	// switch keeps its value.
@@ -322,7 +365,7 @@ func (a *API) updateApp(c *gin.Context) {
 			})
 			return
 		}
-		if !a.requirePublishIfChanged(c, "apps", existing.IsActive, *input.Data.Attributes.IsActive) {
+		if !a.requirePublishIfChangedIn(c, "apps", existing.WorkspaceID, existing.IsActive, *input.Data.Attributes.IsActive) {
 			return
 		}
 	}
@@ -338,12 +381,12 @@ func (a *API) updateApp(c *gin.Context) {
 	}
 
 	if input.Data.Attributes.MCPServerIDs != nil {
-		actorID, actorAdmin := adminAppActor(c)
+		actorID, actorAdmin := a.adminAppActorIn(c, dest)
 		if !a.validateAppMCPBindings(c, actorID, actorAdmin, llmIDs, *input.Data.Attributes.MCPServerIDs) {
 			return
 		}
 	}
-	routerOpts, ok := a.adminAppRouterOptions(c, input.Data.Attributes.ModelRouterIDs, input.Data.Attributes.SemanticRouterIDs)
+	routerOpts, ok := a.adminAppRouterOptions(c, stored.ID, input.Data.Attributes.ModelRouterIDs, input.Data.Attributes.SemanticRouterIDs)
 	if !ok {
 		return
 	}
@@ -376,6 +419,14 @@ func (a *API) updateApp(c *gin.Context) {
 	// A change to the App's resources by anyone but a full administrator
 	// clears its attested guardrail capability.
 	appOpts = append(appOpts, capabilityActorOption(c))
+
+	// The move goes first; a failed update puts it back.
+	finishMove, ok := a.beginMove(c, &models.App{}, stored.ID, stored.WorkspaceID, moveTo)
+	if !ok {
+		return
+	}
+	updated := false
+	defer func() { finishMove(updated) }()
 
 	var app *models.App
 	if len(pluginResources) > 0 {
@@ -448,6 +499,10 @@ func (a *API) updateApp(c *gin.Context) {
 		})
 		return
 	}
+	if moveTo != nil {
+		app.WorkspaceID = *moveTo
+	}
+	updated = true
 
 	if input.Data.Attributes.IsActive != nil && app.IsActive != *input.Data.Attributes.IsActive {
 		reset := app.GuardrailCapabilityReset
@@ -544,7 +599,11 @@ func (a *API) getAppsByUserID(c *gin.Context) {
 		return
 	}
 
-	apps, err := a.service.GetAppsByUserID(uint(userID))
+	scopes, ok := a.listWorkspaceScopes(c, "apps", "apps.workspace_id")
+	if !ok {
+		return
+	}
+	apps, err := a.service.GetAppsByUserID(uint(userID), scopes...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -555,7 +614,7 @@ func (a *API) getAppsByUserID(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeApps(apps)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializeAppsIn(apps)})
 }
 
 // @Summary Count apps by user ID
@@ -581,7 +640,11 @@ func (a *API) countAppsByUserID(c *gin.Context) {
 		return
 	}
 
-	count, err := a.service.CountAppsByUserID(uint(userID))
+	scopes, ok := a.listWorkspaceScopes(c, "apps", "apps.workspace_id")
+	if !ok {
+		return
+	}
+	count, err := a.service.CountAppsByUserID(uint(userID), scopes...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -602,6 +665,7 @@ func serializeApp(app *models.App) AppResponse {
 	}
 	resp.Attributes.Name = app.Name
 	resp.Attributes.Description = app.Description
+	resp.Attributes.WorkspaceID = app.WorkspaceID
 	resp.Attributes.UserID = app.UserID
 	resp.Attributes.CredentialID = app.CredentialID
 	// The credential is preloaded by every app query (App.Get, Apps.List*,
@@ -634,6 +698,7 @@ func serializeApp(app *models.App) AppResponse {
 // This is called by handlers that have access to the service layer.
 func (a *API) serializeAppWithPluginResources(app *models.App) AppResponse {
 	resp := serializeApp(app)
+	resp.Attributes.WorkspaceID = a.responseWorkspaceID(app.WorkspaceID)
 
 	// Fetch plugin resource associations
 	aprs, err := a.service.GetAppPluginResources(app.ID)
@@ -736,7 +801,13 @@ func (a *API) getAppByName(c *gin.Context) {
 		return
 	}
 
-	app, err := a.service.GetAppByName(name)
+	// Only among the Apps the caller may see: a hidden App answers as a
+	// missing one.
+	scopes, ok := a.listWorkspaceScopes(c, "apps", "apps.workspace_id")
+	if !ok {
+		return
+	}
+	app, err := a.service.GetAppByName(name, scopes...)
 	if err != nil {
 		c.JSON(http.StatusNotFound, ErrorResponse{
 			Errors: []struct {
@@ -747,7 +818,7 @@ func (a *API) getAppByName(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializeApp(app)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializeAppIn(app)})
 }
 
 // @Summary Activate app credential
@@ -888,15 +959,22 @@ func (a *API) listApps(c *gin.Context) {
 	sort := c.Query("sort")
 	searchTerm := c.Query("search")
 
+	// Only the Apps the caller may see (workspace_full), plus the optional
+	// ?workspace_id= filter; totals and pages follow.
+	scopes, ok := a.listWorkspaceScopes(c, "apps", "apps.workspace_id")
+	if !ok {
+		return
+	}
+
 	var apps models.Apps
 	var totalCount int64
 	var totalPages int
 	var err error
 
 	if searchTerm != "" {
-		apps, totalCount, totalPages, err = a.service.SearchApps(searchTerm, pageSize, pageNumber, all, sort)
+		apps, totalCount, totalPages, err = a.service.SearchApps(searchTerm, pageSize, pageNumber, all, sort, scopes...)
 	} else {
-		apps, totalCount, totalPages, err = a.service.ListAppsWithPagination(pageSize, pageNumber, all, sort)
+		apps, totalCount, totalPages, err = a.service.ListAppsWithPagination(pageSize, pageNumber, all, sort, scopes...)
 	}
 
 	if err != nil {
@@ -911,7 +989,7 @@ func (a *API) listApps(c *gin.Context) {
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, gin.H{"data": serializeApps(apps)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializeAppsIn(apps)})
 }
 
 // @Summary Search apps
@@ -942,7 +1020,11 @@ func (a *API) searchApps(c *gin.Context) {
 	pageSize, pageNumber, all := getPaginationParams(c)
 	sort := c.Query("sort")
 
-	apps, totalCount, totalPages, err := a.service.SearchApps(searchTerm, pageSize, pageNumber, all, sort)
+	scopes, ok := a.listWorkspaceScopes(c, "apps", "apps.workspace_id")
+	if !ok {
+		return
+	}
+	apps, totalCount, totalPages, err := a.service.SearchApps(searchTerm, pageSize, pageNumber, all, sort, scopes...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -955,7 +1037,7 @@ func (a *API) searchApps(c *gin.Context) {
 
 	c.Header("X-Total-Count", strconv.FormatInt(totalCount, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(totalPages))
-	c.JSON(http.StatusOK, gin.H{"data": serializeApps(apps)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializeAppsIn(apps)})
 }
 
 // @Summary Count all apps
@@ -968,7 +1050,11 @@ func (a *API) searchApps(c *gin.Context) {
 // @Router /apps/count [get]
 // @Security BearerAuth
 func (a *API) countApps(c *gin.Context) {
-	count, err := a.service.CountApps()
+	scopes, ok := a.listWorkspaceScopes(c, "apps", "apps.workspace_id")
+	if !ok {
+		return
+	}
+	count, err := a.service.CountApps(scopes...)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Errors: []struct {
@@ -1007,6 +1093,9 @@ func (a *API) addToolToApp(c *gin.Context) {
 		return
 	}
 
+	if !a.requireMemberRead(c, "tools") {
+		return
+	}
 	app, err := a.service.AddToolToApp(uint(appID), uint(toolID), capabilityActorOption(c))
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -1017,7 +1106,7 @@ func (a *API) addToolToApp(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, createErrorResponse("Internal Server Error", err.Error()))
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": serializeApp(app)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializeAppIn(app)})
 }
 
 // @Summary Remove a tool from an app
@@ -1182,4 +1271,49 @@ func boundAttributeKeys(c *gin.Context) (map[string]json.RawMessage, error) {
 		return nil, errors.New("request body has no data.attributes object")
 	}
 	return present, nil
+}
+
+// canPublishAppIn is canPublish("apps") for an App in a Workspace: with
+// Workspace checks on, publish must cover that Workspace, never merely
+// somewhere.
+func (a *API) canPublishAppIn(c *gin.Context, workspaceID uint) bool {
+	if a.workspaceCheckMode(c) == workspaceCheck {
+		return a.holdsIn(c, workspaceID, authz.Publish("apps"))
+	}
+	return a.canPublish(c, "apps")
+}
+
+// appNotFound is the admin App routes' not-found answer, also given for an
+// App the caller may not see (onObject, requireVisible).
+var appNotFound = notFoundBody("App not found")
+
+// serializeAppIn is serializeApp with the App's Workspace read as the API
+// means it (a stored 0 is the Default).
+func (a *API) serializeAppIn(app *models.App) AppResponse {
+	resp := serializeApp(app)
+	resp.Attributes.WorkspaceID = a.responseWorkspaceID(app.WorkspaceID)
+	return resp
+}
+
+func (a *API) serializeAppsIn(apps []models.App) []AppResponse {
+	out := make([]AppResponse, len(apps))
+	for i := range apps {
+		out[i] = a.serializeAppIn(&apps[i])
+	}
+	return out
+}
+
+// requireAppMemberRead: linking LLMs, tools and datasources to an App needs
+// read on each kind it names, in some scope (they are read-global, D4), as
+// for catalogue members (requireMemberRead).
+func (a *API) requireAppMemberRead(c *gin.Context, llmIDs, toolIDs, datasourceIDs []uint) bool {
+	for _, m := range []struct {
+		ids      []uint
+		resource string
+	}{{llmIDs, "llms"}, {toolIDs, "tools"}, {datasourceIDs, "datasources"}} {
+		if len(m.ids) > 0 && !a.requireMemberRead(c, m.resource) {
+			return false
+		}
+	}
+	return true
 }
