@@ -9,6 +9,8 @@ Typical uses:
 - Give each team a Workspace for its Apps and agents, and let its members manage only those.
 - Give automation, such as the [Tyk Operator](#operator-recipe), its own Workspace, so it manages only its own objects and can tell when a push to the edges would carry someone else's changes.
 
+New to Workspaces? Read [Roles, teams and Workspaces](#roles-teams-and-workspaces), then follow [Getting started](#getting-started-a-workspace-for-a-team). If your installation already has users and objects, see [Adopting Workspaces in an existing installation](#adopting-workspaces-in-an-existing-installation).
+
 ## Roles, teams and Workspaces
 
 - A **role** says *what* someone may do (see [Roles and Permissions](./rbac)).
@@ -25,6 +27,58 @@ A role assigned in a Workspace can be any role, built-in or custom, except **Own
 ::: warning A global role on a team everyone is in
 A global role covers every Workspace. If you give a global role (Editor, say) to a team that everyone belongs to, such as Default, everyone in that team can work in every Workspace. Give such teams a scoped role instead.
 :::
+
+### Words used on this page
+
+| Term | Meaning |
+|---|---|
+| **Team** | A set of users. The API calls teams *groups* (`/api/v1/groups`, `"subject_type": "group"`, the `groups` permission). |
+| **Role assignment** | A role given to a user, service account or team, globally or within one Workspace. The API calls it a *binding* (`/api/v1/rbac/bindings`). |
+| **Global** / **scoped** | A global role assignment applies everywhere; a scoped one applies only within its Workspace. |
+| **Workspace** | Who manages an object. Not to be confused with a **namespace**, which is where an object is deployed (which edge gateways receive it). |
+| **Model provider** | An LLM configuration. The API and permissions call it `llms`. |
+| **Catalogue** | Also spelled *catalog* in places. A set of model providers, data sources or tools offered to teams in the Portal. |
+
+## Getting started: a Workspace for a team
+
+This walkthrough gives a team, *Payments*, a Workspace where its members manage their own Apps, agents and model providers, and nothing else. You need a global Administrator (or Owner) role.
+
+1. **Create the Workspace.** **Access → Workspaces → Add Workspace**, name it *Payments*.
+2. **Create the team.** **Access → Teams → Add team**, name it *Payments engineers*, and add its members. If your identity provider already has a group for them, map it onto the team instead (see [Single Sign-On](./sso)).
+3. **Give the team a role within the Workspace.** Open the *Payments* Workspace, **Access** tab, **Add user or team**, choose *Payments engineers* and the role *Editor* (or a [custom role](./rbac) with less).
+4. **Take away wider access.** A global role still covers every Workspace, so check that the members hold no global role that gives them more than you intend: on each member's page (**Users → Edit user**), the *Roles* selector and the teams listed there, including *Default*. The *Effective permissions* panel shows what they hold globally and, separately, in each Workspace.
+5. **Move the team's existing objects in.** Open each App, agent, router or model provider the team owns, change its **Workspace** to *Payments* and save. Objects move one at a time, and you need write permission in both Workspaces. Deleting a Workspace is the only bulk move (its objects go to Default).
+6. **Decide who pushes to the edges.** Pushing configuration to edge gateways is a global action that a Workspace role never grants (see [When a push is stained](#when-a-push-is-stained)). Either your administrators push for the team, or you give someone a global role with `edges:read` and `edges:execute`. Either way, a push delivers the whole namespace, with every team's waiting changes.
+
+The team's members can now sign in to the administration console. What they see there is described in the next section.
+
+## What someone with only a Workspace role sees
+
+Take Alice, a member of *Payments engineers* from the walkthrough above. Her only role is *Editor* within *Payments*. She has no global role.
+
+- **She can sign in to the administration console.** The menu shows only the sections where she holds a permission, in any Workspace: model management, context management, Apps, agents, catalogues. Users, teams, roles, edges, analytics, plugins and settings are missing, because a Workspace role never grants global resources, even though Editor includes some of them (reading users, for example).
+- **Model providers, tools, data sources and the other shared building blocks:** she sees all of them, with credentials redacted. She can change, delete, publish and test only those in *Payments*. She can open one from another Workspace, but not change, delete, publish or test it.
+- **Apps, agents, routers and catalogues:** she sees only those in *Payments*. The others are missing from her lists and answer "not found", as if they did not exist.
+- **Creating:** everything she creates lands in *Payments*: the form's Workspace selector offers only *Payments*, already selected.
+- **Linking:** she can link a *Payments* App to any model provider, tool or data source she can see, including one in the Default workspace. Her App then uses its credentials when serving requests (see [Linking is using](#what-is-visible-across-workspaces)).
+- **Pushing:** she cannot push to edges, read edge status, or open analytics.
+- **Portal and Chat:** unchanged by Workspaces. What she sees there still depends on her teams' catalogues and on the *Show Portal* and *Show Chat* switches on her account.
+
+If Alice were also given *Viewer* globally, she would see everything read-only, and could still change only *Payments* objects.
+
+## Adopting Workspaces in an existing installation
+
+Upgrading changes nothing: every object lands in the Default workspace and every role assignment stays global. Creating a Workspace changes nothing either. Access is restricted only once you replace global role assignments with scoped ones. A suggested order:
+
+1. **List the global role assignments.** Each user's and team's page shows them, or use `GET /api/v1/rbac/bindings?scope_type=global`. After an upgrade from 2.2, administrators hold *Administrator* globally and everyone else holds no role; any role assigned since then is global too.
+2. **Choose your Workspaces.** Usually one per team that owns Apps and agents. Shared building blocks (model providers, tools, data sources) can stay in the Default workspace: everyone can read and link them, and only people with a role in Default (or a global one) can change them.
+3. **Create the Workspaces and move objects into them**, as in steps 1 and 5 of [Getting started](#getting-started-a-workspace-for-a-team).
+4. **Assign roles within each Workspace** to the team that owns it.
+5. **Remove the global assignments those people no longer need.** Pay particular attention to roles assigned to the *Default* team, which every user belongs to (see the warning above). Keep global roles for the people who administer the whole installation and for those who push to edges.
+6. **Check a member's view.** Their *Effective permissions* panel should show little or nothing globally, and the expected roles under each Workspace.
+7. **Plan namespaces with Workspaces in mind.** A push delivers a whole namespace, so a team that pushes for itself is best given its own namespace (see [Edge Gateways](./edge-gateways)).
+
+To undo, assign the global roles again: objects can stay where they are.
 
 ## What is visible across Workspaces
 
@@ -124,6 +178,21 @@ GET    /api/v1/rbac/bindings?scope_type=workspace&scope_id=7
 | `409 owner_scope_forbidden` | Assigning the Owner role within a Workspace |
 
 `GET /common/me`, `GET /api/v1/rbac/me` and `GET /api/v1/rbac/users/:id/effective` list, under `workspaces`, the permissions held in each Workspace. A user's page in the administration UI shows them per Workspace too.
+
+## When a push is stained
+
+A Workspace is who manages an object; a namespace is which edge gateways receive it. The two are independent, and **every push delivers the whole namespace**, with every change waiting in it, whichever Workspace it belongs to. The push dialog shows each waiting change's Workspace and a count per Workspace, so check it before you push.
+
+Pushing is a **global** action (`edges:read` and `edges:execute`). A role within a Workspace never lets someone push, so in practice people with a global role push for everyone.
+
+A push is **stained** when it would carry changes from outside a given Workspace. This only matters to API clients that ask AI Studio to refuse such pushes (`only_workspace_id`), such as the [Tyk Operator](#operator-recipe) set to refuse. A push from the administration UI is never refused for this.
+
+- **What blocks a client:** any change waiting in its namespace from another Workspace, or from no Workspace at all (plugins, model prices and other global objects). It stays blocked until that change has been pushed.
+- **Two clients can block each other.** If client A manages Workspace *Payments* and client B manages *Data*, both refuse stained pushes, and both push to the same namespace, then A's waiting change stains B's push and B's stains A's. Neither can push.
+- **How to unblock:** someone with a global push role opens the push dialog for that namespace, checks the waiting changes and their Workspaces, and pushes. That delivers everything waiting, so every client's next push is clean. A client set to *allow* stained pushes unblocks the namespace the same way.
+- **How to avoid it:** give each team, and each automated client, its own namespace; keep objects in the global namespace to a minimum, since they reach, and stain, every namespace; and push foreign changes promptly rather than leaving them waiting.
+
+See [Pushes limited to one Workspace](./edge-gateways#pushes-limited-to-one-workspace) for the API details.
 
 ## Operator recipe
 

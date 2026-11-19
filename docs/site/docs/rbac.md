@@ -8,7 +8,7 @@ Roles are an **Enterprise Edition** feature. In Community Edition a user is eith
 
 - A **permission** is `resource:action`, for example `llms:write` or `audit:read`. Actions are `read`, `write` (create and update), `delete`, `execute` (test, call, reload, sync) and `publish` (make live: set an LLM, tool, data source, app or agent active, enable a plugin, activate a metadata schema). Write, delete, execute and publish each include read. Publish does not include write, so you can build a *submitter* role that drafts providers without releasing them and a *reviewer* role that releases them: a submitter who flips the Active switch gets `403` with `"permission": "llms:publish"`, and the switch is disabled in the form.
 - A **role** is a named set of permissions.
-- Roles are **assigned to users and to teams**. Someone's access is the union of their own roles and the roles of every team they belong to, so mapping identity provider groups onto teams (see [Single Sign-On](./sso)) assigns roles automatically.
+- Roles are **assigned to users and to teams** (the API calls teams *groups*, and an assignment a *binding*; see [Words used](./workspaces#words-used-on-this-page)). Someone's access is the union of their own roles and the roles of every team they belong to, so mapping identity provider groups onto teams (see [Single Sign-On](./sso)) assigns roles automatically.
 - Permissions apply everywhere: navigation, pages, buttons, and every management API call, including calls made with a user's API key.
 
 The Portal and Chat surfaces are unchanged: whether a user sees them is still controlled by the *Show Portal* and *Show Chat* switches, and what they see inside them by their teams' catalogues.
@@ -62,6 +62,63 @@ Roles assigned globally, like every assignment made before Workspaces existed, a
 - **One plugin only**: every installed plugin with pages or resource types appears in the Plugins group of the matrix under its own name, with read (open its pages and configuration), write (call its actions, edit its configuration) and execute. Tick those instead of `Installed plugins: execute`, which unlocks every plugin at once. Grants on a plugin that is later uninstalled are kept on the role and listed as "Not installed" until it returns.
 - **Inside a plugin**: plugins can declare finer rows beneath their own entry (for example the Asset Catalog's *Asset types*, *Assets*, *Access requests* and one *Assets: &lt;type&gt;* row per asset class, each with read/write/delete/publish). Which plugin actions each row unlocks is documented by the plugin; `Installed plugins: execute` or Administrator still grants everything.
 - **LLM cost analyst**: a custom role with only `analytics:read` and `model-prices:read`.
+
+## Permissions reference
+
+Every permission the role editor offers, in the same groups. Write, delete, execute and publish each include read. What *execute* and *publish* mean for each resource is shown as a tooltip in the role editor.
+
+- **Workspaces** says how the permission behaves when it is given within a [Workspace](./workspaces): **Global** permissions count only when given globally; **Shared building block** objects can be read from every Workspace and changed only in their own; **Owned** objects are hidden outside the Workspaces a person has a role in; **Follows its App** is governed by the App's Workspace.
+- **Marked** repeats the role editor's markers: *sensitive* rows (a shield) expose sensitive data, and *grants access* rows (a key) can give access to other people.
+
+Installed plugins with pages or resource types add their own rows to the Plugins group (see [Recipes](#recipes)).
+
+| Group | Resource | Permission | Actions | Workspaces | Marked |
+|---|---|---|---|---|---|
+| Analytics | Analytics | `analytics` | read | Global |  |
+|  | Proxy logs | `proxy-logs` | read | Global | sensitive |
+|  | Agent traces | `traces` | read, write, delete, execute | Global |  |
+|  | Agent trace content | `trace-content` | read | Global | sensitive |
+| Plugins | Installed plugins | `plugins` | read, write, delete, execute, publish | Global | grants access |
+|  | Marketplace | `marketplace` | read, write, delete, execute | Global |  |
+| Model management | Model providers | `llms` | read, write, delete, publish | Shared building block |  |
+|  | Model prices | `model-prices` | read, write, delete | Global |  |
+|  | Model routers | `model-routers` | read, write, delete, publish | Owned |  |
+|  | Semantic routers | `semantic-routers` | read, write, delete, publish | Owned |  |
+|  | Embedders | `embedders` | read, write, delete | Shared building block |  |
+| Context management | Data sources | `datasources` | read, write, delete, execute, publish | Shared building block |  |
+|  | Tools | `tools` | read, write, delete, execute, publish | Shared building block |  |
+|  | MCP servers | `mcp-servers` | read, write, delete, execute, publish | Shared building block |  |
+|  | Filters | `filters` | read, write, delete, execute | Shared building block |  |
+|  | File stores | `filestores` | read, write, delete | Shared building block |  |
+|  | Tags | `tags` | read, write, delete | Global |  |
+| Community | Submission queue | `submissions` | read, write, execute | Global |  |
+|  | Attestation templates | `attestation-templates` | read, write, delete | Global |  |
+| Access | Users | `users` | read, write, delete | Global | grants access |
+|  | Teams | `groups` | read, write, delete | Global | grants access |
+|  | Roles | `roles` | read, write, delete | Global | grants access |
+|  | Workspaces | `workspaces` | read, write, delete | Global | grants access |
+|  | Identity providers | `sso-profiles` | read, write, delete | Global | sensitive, grants access |
+| Governance | Audit trail | `audit` | read | Global | sensitive |
+|  | Compliance | `compliance` | read | Global |  |
+|  | Metadata schemas | `metadata` | read, write, delete, publish | Global |  |
+|  | Log exports | `exports` | read, write | Global | sensitive |
+|  | Webhooks | `webhooks` | read, write, delete, execute | Global | sensitive, grants access |
+| Settings | Tyk connections | `tyk-connections` | read, write, delete, execute | Global | sensitive, grants access |
+|  | Secrets | `secrets` | read, write, delete | Shared building block |  |
+|  | Branding | `branding` | read, write | Global |  |
+| AI Portal | Apps | `apps` | read, write, delete, publish | Owned |  |
+|  | Credentials | `credentials` | read, write, delete | Follows its App | sensitive |
+|  | MCP credentials | `mcp-credentials` | read, write, delete, execute | Follows its App | sensitive, grants access |
+|  | Edge gateways | `edges` | read, write, delete, execute | Global |  |
+| Chat | Chats | `chats` | read, write, delete | Global |  |
+|  | Agents | `agents` | read, write, delete, execute, publish | Owned |  |
+|  | Model call settings | `llm-settings` | read, write, delete | Global |  |
+|  | Chat history | `chat-history` | read, write, delete | Global | sensitive |
+| Catalogs | LLM catalogues | `catalogues` | read, write, delete | Owned |  |
+|  | Data catalogues | `data-catalogues` | read, write, delete | Owned |  |
+|  | Tool catalogues | `tool-catalogues` | read, write, delete | Owned |  |
+
+Built-in roles map onto this table as follows. **Editor** has everything except `roles`, `workspaces`, `sso-profiles`, `audit`, `exports`, `proxy-logs`, `chat-history` and `trace-content`; it only reads `users`, `groups`, `metadata` and `traces`, and has only read and execute on `plugins` and `marketplace`. **Viewer** has read on everything except `proxy-logs`, `chat-history`, `exports`, `audit`, `credentials`, `sso-profiles` and `trace-content`. **Auditor** is Viewer plus read on `audit`, `compliance`, `proxy-logs`, `chat-history` and `exports`. Owner and Administrator have everything.
 
 ## API
 
