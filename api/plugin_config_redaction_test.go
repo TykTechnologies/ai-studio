@@ -7,6 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -100,6 +103,14 @@ func seedEmbedders(t *testing.T, db *gorm.DB, plugin *models.Plugin, llm *models
 	return app, agent
 }
 
+// sweepMayFail lists the plugin read routes that answer 5xx in this test API
+// because they need a running plugin or an OCI client. Neither serialises a
+// plugin row.
+var sweepMayFail = map[string]bool{
+	"/api/v1/plugins/oci/cached":        true, // lists OCI cache entries
+	"/api/v1/plugins/:id/config-schema": true, // asks the plugin for its schema
+}
+
 // No read route returns a secret. Called as an authenticated administrator
 // (who holds plugins:read) on the real router, permission checks on.
 //
@@ -189,6 +200,12 @@ func TestPluginConfigRedaction_NoReadRouteReturnsASecret(t *testing.T) {
 				w := get(path)
 				called++
 				require.NotEqual(t, http.StatusUnauthorized, w.Code, "GET %s: the sweep must be authenticated", route.Path)
+				// A 5xx body proves nothing: the UI registry leak hid behind
+				// a 500 from a service this test API did not have. So no
+				// plugin route may fail here unnoticed.
+				if w.Code >= 500 && strings.Contains(route.Path, "plugin") && !sweepMayFail[route.Path] {
+					t.Errorf("GET %s answered %d, so the sweep did not see its response: %s", route.Path, w.Code, w.Body.String())
+				}
 				assert.NotContains(t, w.Body.String(), redactionSecretMark, "GET %s (%d) returns a secret", route.Path, w.Code)
 			}
 			assert.Greater(t, called, 150, "the management and portal read routes were called")
@@ -363,4 +380,44 @@ func TestPluginConfigRedaction_MarkerMisuse(t *testing.T) {
 		"config": map[string]any{"redis_addr": "r", "redis_password": services.REDACTED_VALUE}})
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	assert.Equal(t, map[string]interface{}{"redis_addr": "r"}, storedPluginConfig(t, db, plugin.ID))
+}
+
+// A stored row that embeds a plugin in its JSON carries the plugin's
+// configuration to whoever the row is served to. Each such field is listed
+// here with what keeps its configuration from leaving; a new one fails this
+// test until it is looked at and added.
+func TestPluginConfigRedaction_KnownPluginCarriers(t *testing.T) {
+	known := map[string]string{
+		"agent_config.go:Plugin":         "redactAgentWith",
+		"llm.go:Plugins":                 "serializeLLM builds PluginResponse; RedactLLMCredentials drops config",
+		"llm_plugin.go:Plugin":           "the LLM plugin routes build PluginResponse with a redactor",
+		"plugin_manifest.go:Plugin":      "UIRegistry: redactRegistryPlugins; RegisteredPlugin is never served",
+		"plugin_schedule.go:Plugin":      "redactSchedulePlugin",
+		"marketplace.go:Plugin":          "InstalledPluginVersion is never served as a row",
+		"plugin_resource_type.go:Plugin": "serializePluginResourceType emits plugin_id and plugin_name only",
+	}
+	field := regexp.MustCompile("^\\s+(\\w+)\\s+(?:\\*|\\[\\]\\*?)?Plugin\\s+`[^`]*json:\"([^\"]*)\"")
+	files, err := filepath.Glob("../models/*.go")
+	require.NoError(t, err)
+	require.NotEmpty(t, files)
+	found := map[string]bool{}
+	for _, file := range files {
+		if strings.HasSuffix(file, "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(file)
+		require.NoError(t, err)
+		for _, line := range strings.Split(string(src), "\n") {
+			m := field.FindStringSubmatch(line)
+			if m == nil || m[2] == "-" {
+				continue
+			}
+			key := filepath.Base(file) + ":" + m[1]
+			found[key] = true
+			assert.Contains(t, known, key, "models/%s embeds a plugin in its JSON (field %s): redact its configuration wherever the row is served, cover the route in the sweep above, then list it here", filepath.Base(file), m[1])
+		}
+	}
+	for key := range known {
+		assert.True(t, found[key], "%s is listed but no longer exists; remove it", key)
+	}
 }
