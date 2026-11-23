@@ -50,6 +50,24 @@ const pluginSchemaMaxExpansion = 64
 // The zero value (and nil) classify by key name.
 type PluginConfigSecrets struct {
 	root map[string]interface{}
+	// patterns memoises the compiled patternProperties expressions (nil: a
+	// pattern that does not compile). One classifier serves one request, so
+	// it is not shared between goroutines.
+	patterns map[string]*regexp.Regexp
+}
+
+// patternMatches reports whether key matches a patternProperties pattern. A
+// pattern that does not compile counts as matching.
+func (s *PluginConfigSecrets) patternMatches(pattern, key string) bool {
+	re, seen := s.patterns[pattern]
+	if !seen {
+		re, _ = regexp.Compile(pattern)
+		if s.patterns == nil {
+			s.patterns = map[string]*regexp.Regexp{}
+		}
+		s.patterns[pattern] = re
+	}
+	return re == nil || re.MatchString(key)
 }
 
 // NewPluginConfigSecrets builds the classifier for a plugin's configuration
@@ -254,7 +272,7 @@ func (s *PluginConfigSecrets) child(p position, key string) position {
 				if !ok {
 					continue
 				}
-				if re, err := regexp.Compile(pattern); err != nil || re.MatchString(key) {
+				if s.patternMatches(pattern, key) {
 					c.add(s, sub)
 					matched = true
 				}

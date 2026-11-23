@@ -127,6 +127,37 @@ func (a *API) requireAgentInWorkspace(c *gin.Context, ag *models.AgentConfig, pe
 // configuration, its plugin and its App are left out (their ids kept), as
 // they can carry credentials (tgoe).
 func (a *API) redactAgent(c *gin.Context, ag *models.AgentConfig) {
+	a.redactAgentWith(c, ag, a.agentRedactor(ag))
+}
+
+// agentRedactor loads, in one query, the secret-field classifiers of the
+// plugins the agents are built on.
+func (a *API) agentRedactor(agents ...*models.AgentConfig) pluginRedactor {
+	plugins := make([]*models.Plugin, 0, len(agents))
+	for _, ag := range agents {
+		if ag == nil {
+			continue
+		}
+		if ag.Plugin != nil {
+			plugins = append(plugins, ag.Plugin)
+		} else if command := a.pluginCommand(ag.PluginID); command != "" {
+			// Not preloaded: the command is all the classifier needs.
+			plugins = append(plugins, &models.Plugin{ID: ag.PluginID, Command: command})
+		}
+	}
+	return a.pluginRedactorFor(plugins...)
+}
+
+// agentPluginCommand is the command of the agent's plugin, "" if unknown.
+func (a *API) agentPluginCommand(ag *models.AgentConfig) string {
+	if ag.Plugin != nil {
+		return ag.Plugin.Command
+	}
+	return a.pluginCommand(ag.PluginID)
+}
+
+// redactAgentWith is redactAgent with the redactor already loaded (a list).
+func (a *API) redactAgentWith(c *gin.Context, ag *models.AgentConfig, red pluginRedactor) {
 	if !onAdminAPI(c) {
 		ag.Config = nil
 		ag.Plugin = nil
@@ -140,14 +171,14 @@ func (a *API) redactAgent(c *gin.Context, ag *models.AgentConfig) {
 		// secret fields are redacted like the plugin's own
 		// (plugin_config_redaction.go); a write that sends the marker back
 		// keeps the stored value (restoreAgentConfig).
-		ag.Config = a.redactPluginOverride(ag.PluginID, ag.Config)
+		ag.Config = red.secrets(a.agentPluginCommand(ag)).RedactPluginConfig(ag.Config)
 	}
 	if ag.Plugin != nil {
 		// A copy: the secret fields of the plugin's configuration are
 		// redacted for every reader (plugin_config_redaction.go).
 		plugin := *ag.Plugin
 		if a.mayReadPluginConfig(c) {
-			plugin.Config = a.pluginRedactorFor(&plugin).config(&plugin)
+			plugin.Config = red.config(&plugin)
 		} else {
 			plugin.Config = nil
 		}
@@ -618,6 +649,12 @@ func (a *API) HandleListAgents(c *gin.Context) {
 
 	// Filter agents by user access (groups)
 	accessibleAgents := make([]models.AgentConfig, 0)
+	// One redactor for the page: the plugins' secret-field classifiers.
+	listed := make([]*models.AgentConfig, len(agents))
+	for i := range agents {
+		listed[i] = &agents[i]
+	}
+	red := a.agentRedactor(listed...)
 	for i := range agents {
 		// Check access. On the admin API the Workspace scope (in SQL, above)
 		// is the visibility rule, so totals match the page; the team check
@@ -640,7 +677,7 @@ func (a *API) HandleListAgents(c *gin.Context) {
 		}
 
 		if hasAccess {
-			a.redactAgent(c, &agents[i])
+			a.redactAgentWith(c, &agents[i], red)
 			accessibleAgents = append(accessibleAgents, agents[i])
 		}
 	}
