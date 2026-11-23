@@ -31,6 +31,7 @@ import (
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
 	"github.com/rs/zerolog/log"
+	"golang.org/x/sync/singleflight"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -214,6 +215,18 @@ type PluginManager struct {
 
 	// Serializes concurrent ReconcilePlugins calls
 	reconcileMu sync.Mutex
+
+	// loadFailures remembers each plugin's last failed load for
+	// loadRetryInterval (PluginLoadRetryInterval when zero), so requests that
+	// need the plugin are refused without a new attempt each (see
+	// load_failures.go). Its own lock: failures are recorded and read while
+	// mu is held and while it is not.
+	loadFailuresMu    sync.RWMutex
+	loadFailures      map[uint]*loadFailure
+	loadRetryInterval time.Duration
+	// requestLoads shares one load attempt between the concurrent requests
+	// that need the same plugin.
+	requestLoads singleflight.Group
 }
 
 // HandshakeConfig is used to do a basic handshake between
@@ -374,8 +387,31 @@ func (pm *PluginManager) checkGRPCHost(command string, addr net.Addr, exempt net
 	return nil
 }
 
-// LoadPlugin loads a plugin by ID
+// LoadPlugin loads a plugin by ID. It always tries, whatever an earlier
+// attempt did, and its outcome is what requests see for the next
+// PluginLoadRetryInterval (loadPluginForRequest).
 func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
+	return pm.loadPluginNamed(pluginID, "")
+}
+
+// loadPluginNamed is LoadPlugin for a caller that knows the plugin's name,
+// for the log line of a load that fails before the plugin could be read.
+func (pm *PluginManager) loadPluginNamed(pluginID uint, name string) (*LoadedPlugin, error) {
+	loaded, err := pm.loadPlugin(pluginID)
+	if err != nil {
+		pm.mu.RLock()
+		if health, ok := pm.pluginHealth[pluginID]; ok && health.Name != "" {
+			name = health.Name
+		}
+		pm.mu.RUnlock()
+		pm.rememberLoadFailure(pluginID, name, err)
+		return nil, err
+	}
+	pm.forgetLoadFailure(pluginID)
+	return loaded, nil
+}
+
+func (pm *PluginManager) loadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	startTime := time.Now()
 
 	pm.mu.Lock()
@@ -703,7 +739,8 @@ func (pm *PluginManager) ReloadPlugin(pluginID uint) error {
 	return err
 }
 
-// GetPluginsForLLM returns loaded plugins for a specific LLM and hook type
+// GetPluginsForLLM returns loaded plugins for a specific LLM and hook type.
+// When one of them cannot be loaded the error wraps a *PluginLoadError.
 func (pm *PluginManager) GetPluginsForLLM(llmID uint, hookType interfaces.HookType) ([]*LoadedPlugin, error) {
 	// Get plugins from database (this ensures we have the latest associations)
 	pluginsData, err := pm.service.GetPluginsForLLM(llmID)
@@ -732,13 +769,13 @@ func (pm *PluginManager) GetPluginsForLLM(llmID uint, hookType interfaces.HookTy
 		pm.mu.RUnlock()
 
 		if !exists {
-			// Try to load the plugin (this will acquire its own lock)
-			loadedPlugin, err = pm.LoadPlugin(pluginData.ID)
+			// Try to load the plugin (this will acquire its own lock). A
+			// failure is an error for the whole list, never a shorter list:
+			// the caller must refuse the request, not run it past the
+			// plugins that did load. The failure is logged where it is
+			// remembered, once per state change.
+			loadedPlugin, err = pm.loadPluginForRequest(pluginData.ID, pluginData.Name)
 			if err != nil {
-				log.Error().
-					Uint("plugin_id", pluginData.ID).
-					Err(err).
-					Msg("Failed to auto-load plugin")
 				return nil, fmt.Errorf("failed to load plugin %d: %w", pluginData.ID, err)
 			}
 		}
@@ -2346,7 +2383,7 @@ func (pm *PluginManager) PrewarmAllPlugins(ctx context.Context) error {
 
 		// Load the plugin - this will start the session loop and trigger OnSessionReady
 		startTime := time.Now()
-		_, err := pm.LoadPlugin(plugin.ID)
+		_, err := pm.loadPluginNamed(plugin.ID, plugin.Name)
 		if err != nil {
 			log.Error().
 				Uint("plugin_id", plugin.ID).
@@ -3040,6 +3077,8 @@ func (pm *PluginManager) ReconcilePlugins(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("reconcile aborted: %w", err)
 	}
+
+	pm.pruneLoadFailures(desiredPlugins)
 
 	// Phase 3: Compute diff
 	var toUnload []uint

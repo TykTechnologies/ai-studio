@@ -324,6 +324,42 @@ uses the same rules as `SourceOf`.
 
 ---
 
+## A Plugin That Cannot Be Loaded Refuses Traffic (Microgateway)
+
+Every check above ends in "the plugin is not loaded". On an edge that used to
+mean the LLM's requests ran without **any** of its pre_auth and post_auth
+plugins: the hooks read a `GetPluginsForLLM` error as "no plugins"
+(2.3.0-rc4 finding M1: an llm-firewall block bypassed by attaching a second,
+unsigned plugin). Now:
+
+- `PluginManager.GetPluginsForLLM` returns an error wrapping
+  `*plugins.PluginLoadError` when a plugin of the requested hook type cannot be
+  loaded, never a shorter list.
+- The pre_auth and post_auth hooks (`microgateway/internal/api/auth_hooks.go`,
+  `respondPluginsUnavailable`) refuse the request on any error from it: `503`,
+  `Retry-After: 30`, `{"error":{"message","type":"api_error","code":"plugin_load_failed"}}`
+  (`api.PluginLoadFailedCode`), in AWS's error shape on a Bedrock runtime
+  call. The message names the LLM; the plugin and the cause are only logged.
+  There is no setting that restores the old behavior.
+- **Remembered failures** (`microgateway/plugins/load_failures.go`): a failed
+  load is remembered for `PluginLoadRetryInterval` (30 s). Request-path loads
+  (`loadPluginForRequest`, used by `GetPluginsForLLM` and `GetAuthPlugins`)
+  return the remembered error without an OCI fetch, signature check, exec or
+  connect, and concurrent requests for one plugin share one attempt
+  (singleflight). `LoadPlugin`, `ReloadPlugin` and `ReconcilePlugins` (a
+  configuration sync) always try, and their outcome replaces what is
+  remembered. Reconcile drops the entries of removed plugins.
+- **Logging**: `rememberLoadFailure` logs at ERROR with the plugin ID, name
+  and cause when a failure starts or its cause changes, and
+  `forgetLoadFailure` at INFO when the plugin loads again. Refused requests
+  log at debug level.
+
+Not covered: auth plugins keep their rule (a `503` only when none of the
+endpoint's auth plugins loads), a plugin that is loaded but unhealthy is still
+skipped, and response hooks still fail open on a lookup error.
+
+---
+
 ## Architecture
 
 ### Service Layer Pattern
