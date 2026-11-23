@@ -45,7 +45,7 @@ func toolImportConnection(c models.TykConnectionResponse) ToolImportConnection {
 // listToolImportConnections godoc
 // @Summary Tyk connections the Tools import can read APIs from
 // @Description Slim projection of every non-disabled Tyk connection, for the Tools import wizard.
-// @Tags Tools
+// @Tags tools
 // @Produce json
 // @Success 200 {array} ToolImportConnection
 // @Failure 403 {object} models.ErrorResponse "Enterprise feature"
@@ -70,7 +70,7 @@ func (a *API) listToolImportConnections(c *gin.Context) {
 
 // listToolImportAPIs godoc
 // @Summary Tyk OAS APIs on a connection
-// @Tags Tools
+// @Tags tools
 // @Produce json
 // @Param id path int true "Connection ID"
 // @Param q query string false "search"
@@ -94,7 +94,7 @@ func (a *API) listToolImportAPIs(c *gin.Context) {
 
 // getToolImportAPIDocument godoc
 // @Summary One Tyk OAS API definition, credentials masked
-// @Tags Tools
+// @Tags tools
 // @Produce json
 // @Param id path int true "Connection ID"
 // @Param api_id path string true "Tyk API id"

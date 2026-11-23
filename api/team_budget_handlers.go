@@ -217,7 +217,7 @@ const maxTeamCostsWindow = 366 * 24 * time.Hour
 
 // @Summary Spend per team
 // @Description Cost, tokens and requests per team over a window of at most 366 days; defaults to the last 30 days (Enterprise)
-// @Tags analytics
+// @Tags Analytics
 // @Produce json
 // @Param start_date query string false "Start date (YYYY-MM-DD)"
 // @Param end_date query string false "End date (YYYY-MM-DD, inclusive)"
