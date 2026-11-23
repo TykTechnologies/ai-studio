@@ -268,6 +268,7 @@ Every configuration object now belongs to a **Workspace**, and a role can be ass
 - **OpenAI and Ollama requests with multi-part content** (text and images) were refused with `400`.
 - **Calls to a model alias were recorded at zero cost.** They're now priced by the requested model when the reported one has no price.
 - **`flex` and `priority` OpenAI calls** are now recorded with their service tier.
+- **Agent metrics were not exported over OTLP** (Enterprise). An exporter entry with `signals: [metrics]` received only the two gauges (`tyk_agent_sessions_active`, `tyk_tracing_coverage_ratio`); the session duration, per-turn LLM and tool call histograms, the cost counter and the correlation link and export failure counters never arrived, because the metrics endpoint's start-up discarded the exporter's instruments. They are all exported now, whatever the start-up order.
 - **Anthropic `count_tokens` and batch calls** no longer create zero-cost chat records.
 - **OpenAI moderations without a `model`** are no longer refused.
 - **Native OpenAI decision calls weren't recorded.**

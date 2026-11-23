@@ -176,3 +176,65 @@ func collectKeys(t *testing.T, r *sdkmetric.ManualReader) map[string][]string {
 	}
 	return out
 }
+
+// The OTLP exporter's meter may be registered before or after Init, and Init
+// may run again: in every order the reader receives all agent instruments.
+// Init used to reset the list of meters, so a meter added before it kept only
+// the two observable gauges (bound to it by their callbacks) and lost every
+// counter and histogram (midsommar-clean-6bg5.25).
+func TestAgentMetrics_ExportedWhateverTheRegistrationOrder(t *testing.T) {
+	all := []string{
+		"tyk_agent_session_duration", "tyk_agent_turn_llm_calls", "tyk_agent_turn_tool_calls",
+		"tyk_agent_cost", "tyk_tracing_correlation_links", "tyk_tracing_export_failures",
+		"tyk_agent_sessions_active", "tyk_tracing_coverage_ratio",
+	}
+	newReader := func(t *testing.T) *sdkmetric.ManualReader {
+		t.Helper()
+		reader := sdkmetric.NewManualReader()
+		provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+		if err := AddAgentMetricsMeter(provider.Meter("agenttracing")); err != nil {
+			t.Fatal(err)
+		}
+		return reader
+	}
+	check := func(t *testing.T, reader *sdkmetric.ManualReader) {
+		t.Helper()
+		t.Cleanup(func() { SetActiveSessionsFn(nil) })
+		recordAgentSamples(context.Background())
+		got := collectKeys(t, reader)
+		for _, name := range all {
+			if _, ok := got[name]; !ok {
+				t.Errorf("%s was not exported", name)
+			}
+		}
+	}
+
+	t.Run("meter added before Init", func(t *testing.T) {
+		reader := newReader(t)
+		Init()
+		check(t, reader)
+	})
+	t.Run("meter added after Init", func(t *testing.T) {
+		Init()
+		check(t, newReader(t))
+	})
+	t.Run("Init again after the meter was added", func(t *testing.T) {
+		Init()
+		reader := newReader(t)
+		Init()
+		check(t, reader)
+	})
+	t.Run("the Prometheus endpoint still has them", func(t *testing.T) {
+		newReader(t)
+		h := Init()
+		t.Cleanup(func() { SetActiveSessionsFn(nil) })
+		recordAgentSamples(context.Background())
+		body := scrape(t, h)
+		for _, name := range []string{"tyk_agent_session_duration_seconds_bucket", "tyk_agent_turn_llm_calls_bucket",
+			"tyk_agent_turn_tool_calls_bucket", "tyk_agent_cost_total", "tyk_tracing_correlation_links_total"} {
+			if !strings.Contains(body, name) {
+				t.Errorf("scrape is missing %s", name)
+			}
+		}
+	})
+}

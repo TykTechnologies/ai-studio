@@ -40,7 +40,15 @@ type agentInstruments struct {
 
 var (
 	agentSetsMu sync.RWMutex
-	agentSets   []*agentInstruments
+	// agentPrimary is the set on the meter Init (or InitWithProvider)
+	// registered; a later Init replaces it. agentAdded are the sets on the
+	// meters AddAgentMetricsMeter was given (OTLP metric exporters). They
+	// are kept apart so that neither call order loses a set: Init used to
+	// reset one shared list, which dropped every meter added before it, and
+	// the OTLP exporter then received the two observable gauges (bound to
+	// the meter by their callbacks) but none of the counters and histograms.
+	agentPrimary *agentInstruments
+	agentAdded   []*agentInstruments
 
 	agentIncludeApp atomic.Bool
 	// agentMetricsOff switches off the tyk_agent_* metrics
@@ -76,14 +84,15 @@ func SetActiveSessionsFn(fn func() (int64, bool)) {
 }
 
 // AddAgentMetricsMeter registers the agent instruments on another meter (an
-// OTLP metric exporter's), so every recording reaches it too.
+// OTLP metric exporter's), so every recording reaches it too. It may be
+// called before or after Init.
 func AddAgentMetricsMeter(meter otelmetric.Meter) error {
 	set, err := newAgentInstruments(meter)
 	if err != nil {
 		return err
 	}
 	agentSetsMu.Lock()
-	agentSets = append(agentSets, set)
+	agentAdded = append(agentAdded, set)
 	agentSetsMu.Unlock()
 	return nil
 }
@@ -94,8 +103,9 @@ func initAgentMetrics(meter otelmetric.Meter) {
 		panic("failed to create agent tracing metrics: " + err.Error())
 	}
 	agentSetsMu.Lock()
-	// Init may run again (tests); the Prometheus set is always the first.
-	agentSets = []*agentInstruments{set}
+	// Init may run again (tests): it replaces its own set and leaves the
+	// added meters alone, whether they were added before or after it.
+	agentPrimary = set
 	agentSetsMu.Unlock()
 }
 
@@ -156,12 +166,14 @@ func newAgentInstruments(meter otelmetric.Meter) (*agentInstruments, error) {
 }
 
 func agentEach(fn func(*agentInstruments)) {
-	if !initialized.Load() {
-		return
-	}
 	agentSetsMu.RLock()
 	defer agentSetsMu.RUnlock()
-	for _, s := range agentSets {
+	// The primary set only once Init has finished, as every other recorder
+	// of this package; an added meter records from the moment it is added.
+	if agentPrimary != nil && initialized.Load() {
+		fn(agentPrimary)
+	}
+	for _, s := range agentAdded {
 		fn(s)
 	}
 }
