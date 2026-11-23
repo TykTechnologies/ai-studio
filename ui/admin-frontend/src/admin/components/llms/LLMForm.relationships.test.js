@@ -4,6 +4,8 @@ import "@testing-library/jest-dom";
 import { ThemeProvider } from "@mui/material/styles";
 import { MemoryRouter } from "react-router-dom";
 import testTheme from "../../utils/testTheme";
+import { PermissionsProvider } from "../../context/PermissionsContext";
+import { clearIdentity } from "../../utils/identityStore";
 import LLMForm from "./LLMForm";
 import apiClient from "../../utils/apiClient";
 import pluginService from "../../services/pluginService";
@@ -81,18 +83,27 @@ const DirtyProbe = () => {
   return <span data-testid="registry-dirty">{String(isDirty)}</span>;
 };
 
-const renderForm = ({ withGuard = false } = {}) =>
+// The caller's permissions: plugins and teams are global resources the form
+// only reads for a caller who holds them (midsommar-clean-6bg5.10).
+const globalReader = {
+  id: "1",
+  attributes: { has_admin_access: true, rbac_enabled: true, permissions: ["plugins:read"] },
+};
+
+const renderForm = ({ withGuard = false, identity = globalReader } = {}) =>
   render(
     <ThemeProvider theme={testTheme}>
       <MemoryRouter>
-        {withGuard ? (
-          <UnsavedChangesProvider>
+        <PermissionsProvider identity={identity}>
+          {withGuard ? (
+            <UnsavedChangesProvider>
+              <LLMForm />
+              <DirtyProbe />
+            </UnsavedChangesProvider>
+          ) : (
             <LLMForm />
-            <DirtyProbe />
-          </UnsavedChangesProvider>
-        ) : (
-          <LLMForm />
-        )}
+          )}
+        </PermissionsProvider>
       </MemoryRouter>
     </ThemeProvider>,
   );
@@ -146,6 +157,31 @@ describe("LLMForm filters picker and commit semantics", () => {
     // The ordered plugin list is still saved through its own endpoint.
     await waitFor(() => expect(apiClient.put).toHaveBeenCalledWith("/llms/5/plugins", { plugin_ids: [] }));
     expect(mockNavigate).toHaveBeenCalledWith("/admin/llms", expect.anything());
+  });
+
+  // midsommar-clean-6bg5.10: plugins are a global resource. Someone with only
+  // a Workspace role cannot list them: the form does not ask (no 403), hides
+  // the Plugins section, and saving leaves the attached plugins alone.
+  it("without plugins:read: no plugin list call, no Plugins section, and the plugin list is not rewritten on save", async () => {
+    const workspaceEditor = {
+      id: "9",
+      attributes: {
+        has_admin_access: true,
+        rbac_enabled: true,
+        permissions: [],
+        workspaces: [{ id: 2, name: "W1", permissions: ["llms:read", "llms:write", "filters:read"] }],
+      },
+    };
+    renderForm({ identity: workspaceEditor });
+    await screen.findByDisplayValue("Primary");
+    expect(screen.queryByText("Plugins")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Update model provider" }));
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith("/admin/llms", expect.anything()));
+    expect(pluginService.listPlugins).not.toHaveBeenCalled();
+    expect(apiClient.put).not.toHaveBeenCalled();
+    clearIdentity();
   });
 
   it("moves a filter up the chain and submits the new order", async () => {

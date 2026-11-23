@@ -57,6 +57,7 @@ The team's members can now sign in to the administration console. What they see 
 Take Alice, a member of *Payments engineers* from the walkthrough above. Her only role is *Editor* within *Payments*. She has no global role.
 
 - **She can sign in to the administration console.** The menu shows only the sections where she holds a permission, in any Workspace: model management, context management, Apps, agents, catalogues. Users, teams, roles, edges, analytics, plugins and settings are missing, because a Workspace role never grants global resources, even though Editor includes some of them (reading users, for example).
+- **Forms work.** The forms for her Workspace's objects offer what they need to be filled in: as owner of an App or a data source, herself and the other members of *Payments*; as an App's team, the teams that hold a role in *Payments*; namespace names; and the governed-metadata fields of a model provider, tool or data source. See [Lookups for the forms](#lookups-for-the-forms). Plugin sections, usage charts and proxy logs are not shown: they are global.
 - **Model providers, tools, data sources and the other shared building blocks:** she sees all of them, with credentials redacted. She can change, delete, publish and test only those in *Payments*. She can open one from another Workspace, but not change, delete, publish or test it.
 - **Apps, agents, routers and catalogues:** she sees only those in *Payments*. The others are missing from her lists and answer "not found", as if they did not exist.
 - **Creating:** everything she creates lands in *Payments*: the form's Workspace selector offers only *Payments*, already selected.
@@ -117,6 +118,24 @@ Workspaces govern the administration UI and the management API. These parts of A
 - **Governed metadata** on MCP servers and plugin resources needs the global `metadata` permission.
 
 Management API routes on Workspace objects that are not Workspace-aware require their permission **globally**, so a person with only Workspace roles is refused (403) rather than given wider access.
+
+### Lookups for the forms
+
+A few lists that belong to no Workspace are needed to fill in the form of a Workspace object. Someone who holds the listed write permission **in any Workspace**, and not the global permission, gets a reduced answer from these routes and from no other route of the same resource:
+
+| Route | Also open to | What a Workspace role gets |
+|---|---|---|
+| `GET /api/v1/users` | `apps:write` or `datasources:write` | The caller and the **members** of the Workspaces where they hold that permission: `id`, `name` and `email` only. `search` and `sort` work on name and email; other filters are ignored. |
+| `GET /api/v1/users/:id` | the same | The same fields for the same people; anyone else answers `404`, as a user that does not exist. |
+| `GET /api/v1/groups` | `apps:write` | The teams that hold a role in those Workspaces: `id` and `name` only. |
+| `GET /api/v1/namespaces` | write on model providers, data sources, Apps, tools, filters, model routers or semantic routers | Namespace names only (no edge, object or token counts). |
+| `GET /api/v1/metadata/schemas/resolve?object_type=` | write on that object type (`llm`, `tool`, `datasource`) | The resolved schema, as for `metadata:read`. |
+| `GET /api/v1/metadata/vocabularies` | write on model providers, tools or data sources | The vocabularies, as for `metadata:read`. |
+| `GET /api/v1/vendors/llm-drivers`, `/vendors/embedders`, `/vendors/vector-stores` | the same read permission, held in any Workspace | The list of supported vendors. |
+
+A **member** of a Workspace is a user who holds a role assigned within it, directly or through a team. So giving a team that everyone belongs to (such as *Default*) a role within a Workspace makes every user visible, by name and email, to that Workspace's editors. People who hold only a global role are not members: an App they own shows its owner as `User #<id>` to a Workspace editor.
+
+A holder of the global permission (`users:read`, `groups:read`, `edges:read`, `metadata:read`) gets the full answer, unchanged. The lookups only read: the write routes and the sub-routes (`/users/:id/...`, `/groups/:id/...`) still need the global permission, and the API does not yet refuse an owner or team from outside your Workspaces when an App or data source is saved.
 
 ## Managing Workspaces
 
@@ -265,7 +284,7 @@ curl -X POST "$STUDIO/api/v1/namespaces/default/reload" -H "Authorization: Beare
 curl -X POST "$STUDIO/api/v1/namespaces/default/reload" -H "Authorization: Bearer $SA_KEY"
 ```
 
-The service account cannot change objects outside its Workspace (a Default-workspace model provider answers `403 permission_denied` with `llms:write`) or reach global resources it has no role for (`GET /api/v1/users` answers `403` with `users:read`).
+The service account cannot change objects outside its Workspace (a Default-workspace model provider answers `403 permission_denied` with `llms:write`) or reach global resources it has no role for (`PATCH /api/v1/users/44` answers `403` with `users:write`, and `GET /api/v1/edges` answers `403` with `edges:read`). `GET /api/v1/users` answers it with the [lookup](#lookups-for-the-forms) form only: the members of its Workspace, by id, name and email.
 
 ## Upgrading and rolling back
 

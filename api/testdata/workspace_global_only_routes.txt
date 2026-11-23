@@ -4,9 +4,6 @@
 GET /api/v1/tools/import/tyk/connections
 GET /api/v1/tools/import/tyk/connections/:id/apis
 GET /api/v1/tools/import/tyk/connections/:id/apis/:api_id
-GET /api/v1/vendors/embedders
-GET /api/v1/vendors/llm-drivers
-GET /api/v1/vendors/vector-stores
 PATCH /api/v1/tyk-connections/:id/policies/:pid  # stays global: acts on a global Tyk connection (.37)
 POST /api/v1/credentials
 POST /api/v1/semantic-routers/test

@@ -106,10 +106,27 @@ describe("AppDetails Workspaces", () => {
     expect(await screen.findByRole("button", { name: "Approve this App" })).toBeInTheDocument();
   });
 
+  // midsommar-clean-6bg5.10: analytics and proxy logs are global. Without
+  // them the page makes no such call (no 403) and hides the sections; an
+  // owner the caller may not see (404) is a placeholder, not an error.
+  it("makes no analytics or proxy log call without the global permission and shows a hidden owner as a placeholder", async () => {
+    mockApp(Promise.resolve({ data: { data: app(2) } }));
+    const base = apiClient.get.getMockImplementation();
+    apiClient.get.mockImplementation((url, config) =>
+      url === "/users/2" ? Promise.reject({ response: { status: 404 } }) : base(url, config),
+    );
+    renderDetails();
+    expect(await screen.findByTestId("app-owner-hidden")).toHaveTextContent("User #2");
+    expect(screen.queryByText("Proxy Logs")).not.toBeInTheDocument();
+    expect(screen.queryByText("Token Usage")).not.toBeInTheDocument();
+    const asked = apiClient.get.mock.calls.map(([url]) => url);
+    expect(asked.filter((url) => url.startsWith("/analytics/"))).toEqual([]);
+  });
+
   it("an App of another Workspace shows no Edit, Reset Budget or Approve", async () => {
     mockApp(Promise.resolve({ data: { data: app(3) } }));
     renderDetails();
-    await screen.findByText("Proxy Logs");
+    await screen.findByText("App Information");
     await screen.findByText("Credential Information");
     expect(screen.queryByRole("button", { name: "Edit app" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reset Budget" })).not.toBeInTheDocument();

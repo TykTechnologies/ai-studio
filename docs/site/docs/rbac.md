@@ -67,7 +67,7 @@ Roles assigned globally, like every assignment made before Workspaces existed, a
 
 Every permission the role editor offers, in the same groups. Write, delete, execute and publish each include read. What *execute* and *publish* mean for each resource is shown as a tooltip in the role editor.
 
-- **Workspaces** says how the permission behaves when it is given within a [Workspace](./workspaces): **Global** permissions count only when given globally; **Shared building block** objects can be read from every Workspace and changed only in their own; **Owned** objects are hidden outside the Workspaces a person has a role in; **Follows its App** is governed by the App's Workspace.
+- **Workspaces** says how the permission behaves when it is given within a [Workspace](./workspaces): **Global** permissions count only when given globally (a few read-only [lookups](./workspaces#lookups-for-the-forms) on users, teams, namespaces and metadata also answer, in reduced form, someone who may write Apps, data sources or model providers within a Workspace); **Shared building block** objects can be read from every Workspace and changed only in their own; **Owned** objects are hidden outside the Workspaces a person has a role in; **Follows its App** is governed by the App's Workspace.
 - **Marked** repeats the role editor's markers: *sensitive* rows (a shield) expose sensitive data, and *grants access* rows (a key) can give access to other people.
 
 Installed plugins with pages or resource types add their own rows to the Plugins group (see [Recipes](#recipes)).

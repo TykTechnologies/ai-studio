@@ -56,6 +56,7 @@ import PublishSwitch from "../rbac/PublishSwitch";
 import PrivacyLevelInput from "../common/privacy/PrivacyLevelInput";
 import { isValidPrivacyScore } from "../common/privacy/privacyLevels";
 import { P } from "../../rbac/permissions";
+import { usePermissions } from "../../context/PermissionsContext";
 import WorkspaceSelect from "../workspaces/WorkspaceSelect";
 import { useCanMove, workspaceFieldError } from "../workspaces/workspaceFields";
 import pluginService from "../../services/pluginService";
@@ -169,6 +170,11 @@ const LLMForm = () => {
   const { id } = useParams();
   const theme = useTheme();
   const { isEnterprise } = useEdition();
+  // Plugins are global: someone with only a Workspace role cannot list them,
+  // so the Plugins section is hidden and the model provider's plugin list is
+  // left alone on save (it is not sent, so nothing attached is dropped).
+  const { can } = usePermissions();
+  const canReadPlugins = can(P.PLUGINS_READ);
   const [newModel, setNewModel] = useState("");
 
   // Unsaved-changes tracking over everything the form saves (the LLM record,
@@ -278,6 +284,10 @@ const LLMForm = () => {
   };
 
   const fetchPlugins = async () => {
+    if (!canReadPlugins) {
+      setPluginsLoading(false);
+      return;
+    }
     setPluginsLoading(true);
     try {
       const response = await pluginService.listPlugins(1, 100, '', true);
@@ -526,7 +536,7 @@ const LLMForm = () => {
       const llmId = id || llmResponse.data?.data?.id;
       
       // Update plugins separately if LLM was saved successfully
-      if (llmId) {
+      if (llmId && canReadPlugins) {
         const pluginIds = plugins ? plugins.map((pluginId) => parseInt(pluginId, 10)) : [];
         await apiClient.put(`/llms/${llmId}/plugins`, {
           plugin_ids: pluginIds,
@@ -1098,6 +1108,7 @@ const LLMForm = () => {
           )}
 
           {/* Plugin Assignment Section */}
+          {canReadPlugins && (
           <StyledAccordion>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Typography>Plugins</Typography>
@@ -1200,6 +1211,7 @@ const LLMForm = () => {
               )}
             </AccordionDetails>
           </StyledAccordion>
+          )}
 
           {/* Governance metadata (Enterprise; hidden when no schema applies) */}
           <GovernedMetadataFields

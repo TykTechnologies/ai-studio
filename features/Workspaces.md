@@ -101,6 +101,21 @@ The helpers allow everything in TestMode and for a legacy caller outside `/api/v
 
 **Inserts lock their Workspace.** Every stamped model's `BeforeCreate` takes the Workspace row `FOR SHARE` (Postgres) inside the create's transaction (`wsstamp`), so an object never lands in a Workspace a concurrent delete is removing (422 `invalid_workspace` then). Never create stamped rows on a `SkipDefaultTransaction` session.
 
+### Lookups for the forms (6bg5.10)
+
+Users, teams, edges and metadata are global resources, but the forms of Workspace objects need a few of their lists. Each is opened route by route (`api/workspace_lookups.go`), never through the shared gate: the route is registered through `InWorkspace()` with a dynamic any-of list (`lookupPerms`: the global permission first, then the Workspace writes whose form needs the list), and a wrapper serves the holder of the global permission with the unchanged handler and everyone else with a reduced answer. `lookupScopeOf` gives the Workspaces where the caller holds one of the writes.
+
+| Route | Global | Also (in any Workspace) | Reduced answer |
+|---|---|---|---|
+| `GET /users`, `GET /users/:id` | `users:read` | `apps:write`, `datasources:write` | The caller and the members of those Workspaces (a role binding scoped to the Workspace, on the user or on a team the user is in): `id`, `name`, `email`. List: `search` and `sort` on name and email, paging; every other parameter ignored. By id: anyone else is 404 with the missing-user body |
+| `GET /groups` | `groups:read` | `apps:write` | Teams with a binding scoped to those Workspaces: `id`, `name` |
+| `GET /namespaces` | `edges:read` | write on llms, datasources, apps, tools, filters, model-routers, semantic-routers | Names only |
+| `GET /metadata/schemas/resolve` | `metadata:read` | write on the resource of `?object_type` (llm, tool, datasource) | Unchanged handler |
+| `GET /metadata/vocabularies` | `metadata:read` | write on llms, tools, datasources | Unchanged handler |
+| `GET /vendors/*` | none | the route's own read (llms, datasources) | Unchanged handler (static lists) |
+
+Sub-routes and writes of users and teams stay global-only. The write path does not check that an App's or data source's owner or team is one the caller can see (deferred, midsommar-clean-23zg). In the UI, calls a Workspace-only role cannot make are not made: plugin lists and plugin resource types (the sections are hidden; saving keeps what is attached: the LLM form does not send `PUT /llms/:id/plugins`, the App form resends the loaded `plugin_resources`), App analytics, MCP usage and proxy logs on the App page, and a team's budget report in the App form.
+
 ### Credential material
 
 Read-global reads are metadata. A route that returns raw credential material of an object needs **write** in the object's Workspace: an LLM's `config_override` and resource-signing key, an agent's configuration (`agents:write`), and so on. The upstream credential of an MCP server (`GET /mcp-servers/:id/handoff?include_secrets=true`) needs `mcp-servers:execute` in the server's Workspace; the handoff without secrets is read-global. The configuration of an embedded plugin is shown only to holders of global `plugins:read` (the same rule as `GET /plugins`). Secret values are never returned.

@@ -648,10 +648,13 @@ func (a *API) setupRoutes() error {
 	// User routes
 	v1.POST("/logout", authz.AnyAdmin, a.handleLogout)
 	v1.POST("/users", authz.Write("users"), a.createUser)
-	v1.GET("/users/:id", authz.Read("users"), a.getUser)
+	// The two user reads are also lookups for Workspace writers, who get a
+	// reduced, filtered answer (workspace_lookups.go). Every other /users
+	// route needs users permissions globally.
+	v1.InWorkspace().HandleAnyFn("GET", "/users/:id", lookupPerms(authz.Read("users"), usersLookupWrites...), a.userLookup(a.getUser))
 	v1.PATCH("/users/:id", authz.Write("users"), a.updateUser)
 	v1.DELETE("/users/:id", authz.Delete("users"), a.deleteUser)
-	v1.GET("/users", authz.Read("users"), a.listUsers)
+	v1.InWorkspace().HandleAnyFn("GET", "/users", lookupPerms(authz.Read("users"), usersLookupWrites...), a.usersLookup(a.listUsers))
 	v1.GET("/users/:id/catalogues", authz.Read("users"), a.getUserAccessibleCatalogues)
 	v1.POST("/users/:id/roll-api-key", authz.Write("users"), a.rollUserAPIKey)
 	v1.DELETE("/users/:id/api-key", authz.Write("users"), a.revokeUserAPIKey)
@@ -664,7 +667,8 @@ func (a *API) setupRoutes() error {
 	v1.GET("/groups/:id", authz.Read("groups"), a.getGroup)
 	v1.PATCH("/groups/:id", authz.Write("groups"), a.updateGroup)
 	v1.DELETE("/groups/:id", authz.Delete("groups"), a.deleteGroup)
-	v1.GET("/groups", authz.Read("groups"), a.listGroups)
+	// Also the team lookup of the App form (workspace_lookups.go).
+	v1.InWorkspace().HandleAnyFn("GET", "/groups", lookupPerms(authz.Read("groups"), groupsLookupWrites...), a.groupsLookup(a.listGroups))
 	v1.POST("/groups/:id/users", authz.Write("groups"), a.addUserToGroup)
 	v1.DELETE("/groups/:id/users/:userId", authz.Delete("groups"), a.removeUserFromGroup)
 	v1.GET("/groups/:id/users", authz.Read("groups"), a.listGroupUsers)
@@ -939,9 +943,11 @@ func (a *API) setupRoutes() error {
 	v1.GET("/model-prices/by-name", authz.Write("model-prices"), a.getOrCreateModelPriceByName)
 
 	// Vendor routes
-	v1.GET("/vendors/llm-drivers", authz.Read("llms"), a.getAvailableLLMDrivers)
-	v1.GET("/vendors/embedders", authz.Read("datasources"), a.getAvailableEmbedders)
-	v1.GET("/vendors/vector-stores", authz.Read("datasources"), a.getAvailableVectorStores)
+	// Static catalogues of what this build supports: no object is touched,
+	// so the permission held in any Workspace is enough.
+	v1.InWorkspace().GET("/vendors/llm-drivers", authz.Read("llms"), a.getAvailableLLMDrivers)
+	v1.InWorkspace().GET("/vendors/embedders", authz.Read("datasources"), a.getAvailableEmbedders)
+	v1.InWorkspace().GET("/vendors/vector-stores", authz.Read("datasources"), a.getAvailableVectorStores)
 
 	// Filter routes
 	v1.InWorkspace().POST("/filters", authz.Write("filters"), a.createFilter)
@@ -1312,13 +1318,15 @@ func (a *API) setupRoutes() error {
 	v1.GET("/metadata/object-types", authz.Read("metadata"), a.listMetadataObjectTypes)
 	v1.GET("/metadata/schemas", authz.Read("metadata"), a.listMetadataSchemas)
 	v1.POST("/metadata/schemas", authz.Write("metadata"), a.createMetadataSchema)
-	v1.GET("/metadata/schemas/resolve", authz.Read("metadata"), a.resolveMetadataSchema)
+	// The form of a governed object renders the resolved schema, so its
+	// writer may read it (and the vocabularies it refers to).
+	v1.InWorkspace().HandleAnyFn("GET", "/metadata/schemas/resolve", metadataResolvePerms, a.resolveMetadataSchema)
 	v1.GET("/metadata/schemas/:id", authz.Read("metadata"), a.getMetadataSchema)
 	v1.PATCH("/metadata/schemas/:id", authz.Write("metadata"), a.updateMetadataSchema)
 	v1.POST("/metadata/schemas/:id/activate", authz.Publish("metadata"), a.activateMetadataSchema)
 	v1.POST("/metadata/schemas/:id/deactivate", authz.Publish("metadata"), a.deactivateMetadataSchema)
 	v1.DELETE("/metadata/schemas/:id", authz.Delete("metadata"), a.deleteMetadataSchema)
-	v1.GET("/metadata/vocabularies", authz.Read("metadata"), a.listMetadataVocabularies)
+	v1.InWorkspace().HandleAnyFn("GET", "/metadata/vocabularies", lookupPerms(authz.Read("metadata"), metadataLookupWrites...), a.listMetadataVocabularies)
 	v1.POST("/metadata/vocabularies", authz.Write("metadata"), a.createMetadataVocabulary)
 	v1.GET("/metadata/vocabularies/:id", authz.Read("metadata"), a.getMetadataVocabulary)
 	v1.PATCH("/metadata/vocabularies/:id", authz.Write("metadata"), a.updateMetadataVocabulary)
@@ -1377,7 +1385,8 @@ func (a *API) setupRoutes() error {
 	v1.DELETE("/edges/:edge_id", authz.Delete("edges"), a.deleteEdge)
 
 	// Namespace Management routes (Hub-and-Spoke)
-	v1.GET("/namespaces", authz.Read("edges"), a.listNamespaces)
+	// Namespace names for the forms of namespaced objects (workspace_lookups.go).
+	v1.InWorkspace().HandleAnyFn("GET", "/namespaces", lookupPerms(authz.Read("edges"), namespacesLookupWrites...), a.namespacesLookup(a.listNamespaces))
 	v1.POST("/namespaces/:namespace/reload", authz.Execute("edges"), a.triggerNamespaceReload)
 	v1.GET("/namespaces/:namespace/edges", authz.Read("edges"), a.getNamespaceEdges)
 
