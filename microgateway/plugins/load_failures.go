@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -11,8 +12,9 @@ import (
 // PluginLoadRetryInterval is how long a failed plugin load is remembered.
 // A request that needs the plugin within that time is refused at once, with
 // no new OCI fetch, signature check, exec or connect; the first request after
-// it tries the load again. A configuration sync (ReconcilePlugins) and an
-// explicit LoadPlugin or ReloadPlugin always try at once.
+// it starts a new attempt (see loadPluginForRequest). A configuration sync
+// (ReconcilePlugins) and an explicit LoadPlugin or ReloadPlugin always try at
+// once.
 const PluginLoadRetryInterval = 30 * time.Second
 
 // PluginLoadError says a plugin a request needs could not be loaded. Callers
@@ -51,13 +53,24 @@ func (pm *PluginManager) loadRetryIntervalOrDefault() time.Duration {
 // rememberedLoadFailure returns the plugin's last load failure while it is
 // still fresh, else nil.
 func (pm *PluginManager) rememberedLoadFailure(pluginID uint) *PluginLoadError {
+	failed, fresh := pm.lastLoadFailure(pluginID)
+	if !fresh {
+		return nil
+	}
+	return failed
+}
+
+// lastLoadFailure returns the plugin's last load failure, if it has not
+// loaded since, and whether it is fresh: less than the retry interval old.
+func (pm *PluginManager) lastLoadFailure(pluginID uint) (failed *PluginLoadError, fresh bool) {
 	pm.loadFailuresMu.RLock()
 	defer pm.loadFailuresMu.RUnlock()
 	f, ok := pm.loadFailures[pluginID]
-	if !ok || time.Since(f.at) >= pm.loadRetryIntervalOrDefault() {
-		return nil
+	if !ok {
+		return nil, false
 	}
-	return &PluginLoadError{PluginID: pluginID, PluginName: f.name, Remembered: true, Err: f.err}
+	return &PluginLoadError{PluginID: pluginID, PluginName: f.name, Remembered: true, Err: f.err},
+		time.Since(f.at) < pm.loadRetryIntervalOrDefault()
 }
 
 // rememberLoadFailure records a failed load. It logs the plugin and the cause
@@ -111,15 +124,38 @@ func (pm *PluginManager) pruneLoadFailures(desired map[uint]PluginData) {
 	}
 }
 
-// loadPluginForRequest loads a plugin a request needs. Unlike LoadPlugin it
-// does not try again while an earlier failure is remembered, and concurrent
-// requests for the same plugin share one attempt. Every error is a
-// *PluginLoadError.
+// pluginLoadWaitTimeout bounds how long a request waits for the load of a
+// plugin it needs. A load that takes longer goes on, and the request is
+// refused.
+const pluginLoadWaitTimeout = 20 * time.Second
+
+// errPluginLoadInProgress is the cause given to a request that did not wait
+// for a load to finish.
+var errPluginLoadInProgress = errors.New("the plugin is still loading")
+
+func (pm *PluginManager) loadWaitTimeoutOrDefault() time.Duration {
+	if pm.loadWaitTimeout > 0 {
+		return pm.loadWaitTimeout
+	}
+	return pluginLoadWaitTimeout
+}
+
+// loadPluginForRequest loads a plugin a request needs. Every error is a
+// *PluginLoadError. Unlike LoadPlugin:
+//
+//   - while an earlier failure is remembered it does not try again;
+//   - once that failure is older than the retry interval it starts one new
+//     attempt in the background and still refuses this request at once, so
+//     requests for a plugin that keeps failing never queue behind its retries;
+//   - concurrent requests for the same plugin share one attempt, and wait for
+//     it (a plugin loading for the first time) no longer than the load wait
+//     timeout.
 func (pm *PluginManager) loadPluginForRequest(pluginID uint, name string) (*LoadedPlugin, error) {
-	if failed := pm.rememberedLoadFailure(pluginID); failed != nil {
+	failed, fresh := pm.lastLoadFailure(pluginID)
+	if fresh {
 		return nil, failed
 	}
-	v, err, _ := pm.requestLoads.Do(strconv.FormatUint(uint64(pluginID), 10), func() (interface{}, error) {
+	result := pm.requestLoads.DoChan(strconv.FormatUint(uint64(pluginID), 10), func() (interface{}, error) {
 		// A request that waited behind another's attempt takes its result.
 		if failed := pm.rememberedLoadFailure(pluginID); failed != nil {
 			return nil, failed
@@ -130,8 +166,20 @@ func (pm *PluginManager) loadPluginForRequest(pluginID uint, name string) (*Load
 		}
 		return lp, nil
 	})
-	if err != nil {
-		return nil, err
+	if failed != nil {
+		// The retry runs without this request.
+		return nil, failed
 	}
-	return v.(*LoadedPlugin), nil
+
+	timer := time.NewTimer(pm.loadWaitTimeoutOrDefault())
+	defer timer.Stop()
+	select {
+	case r := <-result:
+		if r.Err != nil {
+			return nil, r.Err
+		}
+		return r.Val.(*LoadedPlugin), nil
+	case <-timer.C:
+		return nil, &PluginLoadError{PluginID: pluginID, PluginName: name, Err: errPluginLoadInProgress}
+	}
 }

@@ -227,6 +227,43 @@ type PluginManager struct {
 	// requestLoads shares one load attempt between the concurrent requests
 	// that need the same plugin.
 	requestLoads singleflight.Group
+	// loadWaitTimeout bounds how long a request waits for a load it needs
+	// (pluginLoadWaitTimeout when zero).
+	loadWaitTimeout time.Duration
+
+	// pluginLoadLocks serializes the loads and unloads of one plugin. mu is
+	// not held across a load's slow steps (OCI fetch, process start, connect
+	// to a grpc:// host, Initialize) or an unload's RPCs, so those only make
+	// the callers that need that plugin wait. Lock order: a plugin's load
+	// lock, then mu; never take a load lock while holding mu.
+	pluginLoadLocks keyedMutex
+
+	// grpcClientAddrs holds, per grpc:// plugin client, the address that
+	// createPluginClient resolved and checked, for connectWithRetry to probe
+	// (*plugin.Client -> net.Addr).
+	grpcClientAddrs sync.Map
+}
+
+// keyedMutex is one mutex per plugin ID.
+type keyedMutex struct {
+	mu    sync.Mutex
+	locks map[uint]*sync.Mutex
+}
+
+// lock locks the ID's mutex and returns its unlock.
+func (k *keyedMutex) lock(id uint) (unlock func()) {
+	k.mu.Lock()
+	if k.locks == nil {
+		k.locks = make(map[uint]*sync.Mutex)
+	}
+	m, ok := k.locks[id]
+	if !ok {
+		m = &sync.Mutex{}
+		k.locks[id] = m
+	}
+	k.mu.Unlock()
+	m.Lock()
+	return m.Unlock
 }
 
 // HandshakeConfig is used to do a basic handshake between
@@ -414,11 +451,20 @@ func (pm *PluginManager) loadPluginNamed(pluginID uint, name string) (*LoadedPlu
 func (pm *PluginManager) loadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	startTime := time.Now()
 
-	pm.mu.Lock()
+	// One load (or unload) of this plugin at a time. The manager's lock is
+	// taken only to read and to store: holding it across the connect made
+	// one unreachable grpc:// plugin stall every request on the gateway,
+	// since each needs mu to find its own plugins.
+	unlock := pm.pluginLoadLocks.lock(pluginID)
+	defer unlock()
 
-	// Check if plugin is already loaded
-	if existingPlugin, exists := pm.loadedPlugins[pluginID]; exists {
-		pm.mu.Unlock()
+	pm.mu.RLock()
+	existingPlugin, exists := pm.loadedPlugins[pluginID]
+	pm.mu.RUnlock()
+
+	// Check if plugin is already loaded (by this call's predecessor on the
+	// plugin's load lock, for one)
+	if exists {
 		// Update health status for already loaded plugin (after releasing lock)
 		pm.updatePluginHealthSafe(pluginID, PluginData{
 			ID: pluginID, Name: existingPlugin.Name,
@@ -426,8 +472,6 @@ func (pm *PluginManager) loadPlugin(pluginID uint) (*LoadedPlugin, error) {
 		}, PluginStatusReady, nil, time.Since(startTime))
 		return existingPlugin, nil
 	}
-
-	pm.mu.Unlock()
 
 	// Get plugin from database (without holding lock)
 	pluginData, err := pm.service.GetPlugin(pluginID)
@@ -451,16 +495,6 @@ func (pm *PluginManager) loadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	// Mark as loading
 	pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusLoading, nil, 0)
 
-	// Reacquire lock for the rest of the operation
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-
-	// Double-check if another goroutine loaded it while we were unlocked
-	if existingPlugin, exists := pm.loadedPlugins[pluginID]; exists {
-		pm.updatePluginHealth(pluginID, pluginData, PluginStatusReady, nil, time.Since(startTime))
-		return existingPlugin, nil
-	}
-
 	// Create plugin client based on command scheme
 	client, err := pm.createPluginClient(pluginData.Command, pluginData.exemption())
 	if err != nil {
@@ -472,7 +506,7 @@ func (pm *PluginManager) loadPlugin(pluginID uint) (*LoadedPlugin, error) {
 				Str("source", string(notAllowed.Source)).
 				Msg("Plugin not loaded: its source is not allowed by PLUGINS_ALLOWED_SOURCES")
 		}
-		pm.updatePluginHealth(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
+		pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
 		return nil, fmt.Errorf("failed to create plugin client: %w", err)
 	}
 
@@ -480,7 +514,7 @@ func (pm *PluginManager) loadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	rpcClient, err := pm.connectWithRetry(client, pluginData.Command)
 	if err != nil {
 		client.Kill()
-		pm.updatePluginHealth(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
+		pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
 		return nil, fmt.Errorf("failed to connect to plugin: %w", err)
 	}
 
@@ -488,7 +522,7 @@ func (pm *PluginManager) loadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	raw, err := rpcClient.Dispense("plugin")
 	if err != nil {
 		client.Kill()
-		pm.updatePluginHealth(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
+		pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
 		return nil, fmt.Errorf("failed to dispense plugin: %w", err)
 	}
 
@@ -503,7 +537,7 @@ func (pm *PluginManager) loadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	} else {
 		client.Kill()
 		err := fmt.Errorf("plugin does not implement PluginServiceClient interface")
-		pm.updatePluginHealth(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
+		pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
 		return nil, err
 	}
 
@@ -546,22 +580,25 @@ func (pm *PluginManager) loadPlugin(pluginID uint) (*LoadedPlugin, error) {
 
 	// Setup service broker BEFORE Initialize (like AI Studio does)
 	// This way the broker ID is available in the first and only Initialize call
-	if pm.managementServer != nil {
+	pm.mu.RLock()
+	managementServer, eventServer := pm.managementServer, pm.eventServer
+	pm.mu.RUnlock()
+	if managementServer != nil {
 		if clientWrapper, ok := raw.(*MicrogatewayPluginClient); ok {
 			// Use SetupServiceBrokerWithEvents if event server is available
 			var setupBrokerID uint32
 			var err error
 			log.Debug().
 				Uint("plugin_id", pluginID).
-				Bool("has_event_server", pm.eventServer != nil).
+				Bool("has_event_server", eventServer != nil).
 				Msg("Setting up service broker for plugin")
-			if pm.eventServer != nil {
-				setupBrokerID, err = clientWrapper.SetupServiceBrokerWithEvents(pluginID, pm.managementServer, pm.eventServer)
+			if eventServer != nil {
+				setupBrokerID, err = clientWrapper.SetupServiceBrokerWithEvents(pluginID, managementServer, eventServer)
 			} else {
 				log.Warn().
 					Uint("plugin_id", pluginID).
 					Msg("eventServer is nil - plugin will NOT be able to subscribe to events")
-				setupBrokerID, err = clientWrapper.SetupServiceBroker(pluginID, pm.managementServer)
+				setupBrokerID, err = clientWrapper.SetupServiceBroker(pluginID, managementServer)
 			}
 			if err != nil {
 				log.Warn().
@@ -572,7 +609,7 @@ func (pm *PluginManager) loadPlugin(pluginID uint) (*LoadedPlugin, error) {
 				log.Debug().
 					Uint("plugin_id", pluginID).
 					Uint32("broker_id", setupBrokerID).
-					Bool("has_event_server", pm.eventServer != nil).
+					Bool("has_event_server", eventServer != nil).
 					Msg("Service broker setup complete")
 
 				// Add broker ID to config so plugin receives it in Initialize
@@ -591,14 +628,14 @@ func (pm *PluginManager) loadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	})
 	if err != nil {
 		client.Kill()
-		pm.updatePluginHealth(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
+		pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
 		return nil, fmt.Errorf("failed to initialize plugin: %w", err)
 	}
 
 	if !initResp.Success {
 		client.Kill()
 		err := fmt.Errorf("plugin initialization failed: %s", initResp.ErrorMessage)
-		pm.updatePluginHealth(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
+		pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
 		return nil, err
 	}
 
@@ -618,8 +655,10 @@ func (pm *PluginManager) loadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	}
 
 	// Store references
+	pm.mu.Lock()
 	pm.loadedPlugins[pluginID] = loadedPlugin
 	pm.pluginClients[pluginID] = client
+	pm.mu.Unlock()
 
 	// Start health monitoring
 	go pm.monitorPluginHealth(pluginID)
@@ -640,15 +679,14 @@ func (pm *PluginManager) loadPlugin(pluginID uint) (*LoadedPlugin, error) {
 	}
 
 	// Fetch custom endpoint registrations outside the write lock (blocking gRPC call).
-	// Store the plugin reference before releasing the lock so we can use it.
-	pm.mu.Unlock()
 	endpointRoutes := pm.fetchPluginEndpoints(pluginID, loadedPlugin)
 	pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusReady, nil, time.Since(startTime))
-	pm.mu.Lock()
 
 	// Store routes under write lock (fast, no I/O)
 	if len(endpointRoutes) > 0 {
+		pm.mu.Lock()
 		pm.storePluginEndpoints(pluginID, endpointRoutes)
+		pm.mu.Unlock()
 	}
 
 	log.Debug().
@@ -663,21 +701,45 @@ func (pm *PluginManager) loadPlugin(pluginID uint) (*LoadedPlugin, error) {
 
 // UnloadPlugin unloads a plugin by ID
 func (pm *PluginManager) UnloadPlugin(pluginID uint) error {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
+	// Not while the plugin is loading (see pluginLoadLocks).
+	unlock := pm.pluginLoadLocks.lock(pluginID)
+	defer unlock()
 
+	// Take the plugin out of the manager first, then stop it without the
+	// manager's lock: the RPCs below wait up to their timeouts on a plugin
+	// that is gone, and every request needs the lock to find its plugins.
+	pm.mu.Lock()
 	loadedPlugin, exists := pm.loadedPlugins[pluginID]
 	if !exists {
+		pm.mu.Unlock()
 		return fmt.Errorf("plugin %d is not loaded", pluginID)
 	}
+
+	// Unregister custom endpoints for this plugin
+	pm.unregisterPluginEndpoints(pluginID)
+
+	// Remove from maps
+	delete(pm.loadedPlugins, pluginID)
+	delete(pm.pluginClients, pluginID)
+	delete(pm.reattachConfigs, pluginID)
+
+	// Remove from LLM mappings
+	for llmID, pluginIDs := range pm.llmPluginMap {
+		var newPluginIDs []uint
+		for _, pID := range pluginIDs {
+			if pID != pluginID {
+				newPluginIDs = append(newPluginIDs, pID)
+			}
+		}
+		pm.llmPluginMap[llmID] = newPluginIDs
+	}
+	pm.mu.Unlock()
 
 	// Close session first (before Shutdown) to allow cleanup
 	// Try to get client wrapper for session close
 	if loadedPlugin.GRPCClient != nil {
 		if clientWrapper, ok := loadedPlugin.GRPCClient.(*MicrogatewayPluginClient); ok {
-			pm.mu.Unlock() // Release lock for session close
 			pm.closePluginSession(pluginID, clientWrapper)
-			pm.mu.Lock() // Re-acquire lock
 		}
 	}
 
@@ -701,25 +763,6 @@ func (pm *PluginManager) UnloadPlugin(pluginID uint) error {
 	if loadedPlugin.Client != nil {
 		loadedPlugin.Client.Kill()
 	}
-
-	// Remove from maps
-	delete(pm.loadedPlugins, pluginID)
-	delete(pm.pluginClients, pluginID)
-	delete(pm.reattachConfigs, pluginID)
-
-	// Remove from LLM mappings
-	for llmID, pluginIDs := range pm.llmPluginMap {
-		var newPluginIDs []uint
-		for _, pID := range pluginIDs {
-			if pID != pluginID {
-				newPluginIDs = append(newPluginIDs, pID)
-			}
-		}
-		pm.llmPluginMap[llmID] = newPluginIDs
-	}
-
-	// Unregister custom endpoints for this plugin
-	pm.unregisterPluginEndpoints(pluginID)
 
 	log.Debug().
 		Uint("plugin_id", pluginID).
@@ -1216,13 +1259,15 @@ func (pm *PluginManager) createPluginClient(command string, exempt netguard.Exem
 			Str("address", reattachConfig.Addr.String()).
 			Msg("Creating client for external gRPC plugin")
 
-		return plugin.NewClient(&plugin.ClientConfig{
+		client := plugin.NewClient(&plugin.ClientConfig{
 			HandshakeConfig:  pm.handshakeConfig,
 			Plugins:          pm.pluginMap,
 			Reattach:         reattachConfig,
 			AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
 			Logger:           pluginLogger(),
-		}), nil
+		})
+		pm.grpcClientAddrs.Store(client, reattachConfig.Addr)
+		return client, nil
 	} else {
 		// Local executable - use exec.Command with security validation
 		cmdPath := command
@@ -1368,7 +1413,43 @@ func (pm *PluginManager) parseGRPCReattachConfig(grpcURL string) (*plugin.Reatta
 // resolveTCPAddr resolves gRPC plugin addresses; a variable so tests can stub DNS.
 var resolveTCPAddr = net.ResolveTCPAddr
 
-// connectWithRetry connects to a plugin with retry logic for external services
+// Bounds on connecting to a grpc:// plugin. One load makes
+// grpcConnectAttempts attempts, each at most grpcConnectTimeout to reach the
+// host plus grpcPingTimeout for the plugin to answer, grpcConnectRetryDelay
+// apart: 19 seconds when the host drops packets, 34 at most. Variables so
+// tests can shorten them.
+var (
+	grpcConnectAttempts   = 3
+	grpcConnectTimeout    = 5 * time.Second
+	grpcPingTimeout       = 5 * time.Second
+	grpcConnectRetryDelay = 2 * time.Second
+)
+
+// dialGRPCPlugin opens the probe connection to a grpc:// plugin's address; a
+// variable so tests can stand in for an unreachable host.
+var dialGRPCPlugin = func(ctx context.Context, addr net.Addr) (net.Conn, error) {
+	var d net.Dialer
+	return d.DialContext(ctx, addr.Network(), addr.String())
+}
+
+// probeGRPCPlugin checks that a grpc:// plugin's address accepts a
+// connection within grpcConnectTimeout. go-plugin's own check when it attaches
+// is a net.Dial without a timeout: to a host that drops packets it returns
+// when the kernel gives up, a minute or more later.
+func probeGRPCPlugin(addr net.Addr) error {
+	ctx, cancel := context.WithTimeout(context.Background(), grpcConnectTimeout)
+	defer cancel()
+	conn, err := dialGRPCPlugin(ctx, addr)
+	if err != nil {
+		return fmt.Errorf("no connection to %s within %s: %w", addr, grpcConnectTimeout, err)
+	}
+	_ = conn.Close()
+	return nil
+}
+
+// connectWithRetry connects to a plugin with retry logic for external
+// services. It must not be called with pm.mu held: for a grpc:// plugin it
+// waits on the network (see the bounds above).
 func (pm *PluginManager) connectWithRetry(client *plugin.Client, command string) (plugin.ClientProtocol, error) {
 	isExternal := plugin_security.SourceOf(command) == plugin_security.SourceGRPC
 
@@ -1377,28 +1458,25 @@ func (pm *PluginManager) connectWithRetry(client *plugin.Client, command string)
 		return client.Client()
 	}
 
-	// For external gRPC services, implement retry logic
-	maxRetries := 3
-	retryDelay := time.Second * 2
+	// The address createPluginClient resolved and checked.
+	var addr net.Addr
+	if v, ok := pm.grpcClientAddrs.LoadAndDelete(client); ok {
+		addr, _ = v.(net.Addr)
+	}
 
 	var lastErr error
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := 0; attempt < grpcConnectAttempts; attempt++ {
 		if attempt > 0 {
 			log.Debug().
 				Str("command", command).
 				Int("attempt", attempt+1).
-				Int("max_retries", maxRetries).
-				Dur("delay", retryDelay).
+				Int("max_retries", grpcConnectAttempts).
+				Dur("delay", grpcConnectRetryDelay).
 				Msg("Retrying connection to external gRPC plugin")
-			time.Sleep(retryDelay)
+			time.Sleep(grpcConnectRetryDelay)
 		}
 
-		// Create context with timeout for connection attempt
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		// Attempt connection
-		rpcClient, err := client.Client()
+		rpcClient, err := pm.connectGRPCPluginOnce(client, addr)
 		if err != nil {
 			lastErr = err
 			log.Warn().
@@ -1406,39 +1484,6 @@ func (pm *PluginManager) connectWithRetry(client *plugin.Client, command string)
 				Int("attempt", attempt+1).
 				Err(err).
 				Msg("Failed to connect to external gRPC plugin")
-			continue
-		}
-
-		// Test the connection with a ping
-		raw, err := rpcClient.Dispense("plugin")
-		if err != nil {
-			lastErr = err
-			log.Warn().
-				Str("command", command).
-				Int("attempt", attempt+1).
-				Err(err).
-				Msg("Failed to dispense plugin interface")
-			continue
-		}
-
-		pluginClient, ok := raw.(pb.PluginServiceClient)
-		if !ok {
-			lastErr = fmt.Errorf("plugin does not implement PluginServiceClient interface")
-			continue
-		}
-
-		// Test with a ping request
-		_, pingErr := pluginClient.Ping(ctx, &pb.PingRequest{
-			Timestamp: time.Now().Unix(),
-		})
-
-		if pingErr != nil {
-			lastErr = pingErr
-			log.Warn().
-				Str("command", command).
-				Int("attempt", attempt+1).
-				Err(pingErr).
-				Msg("Plugin ping failed during connection test")
 			continue
 		}
 
@@ -1450,7 +1495,40 @@ func (pm *PluginManager) connectWithRetry(client *plugin.Client, command string)
 		return rpcClient, nil
 	}
 
-	return nil, fmt.Errorf("failed to connect to external gRPC plugin after %d attempts: %w", maxRetries, lastErr)
+	return nil, fmt.Errorf("failed to connect to external gRPC plugin after %d attempts: %w", grpcConnectAttempts, lastErr)
+}
+
+// connectGRPCPluginOnce makes one bounded attempt to connect to a grpc://
+// plugin and have it answer a ping.
+func (pm *PluginManager) connectGRPCPluginOnce(client *plugin.Client, addr net.Addr) (plugin.ClientProtocol, error) {
+	if addr != nil {
+		if err := probeGRPCPlugin(addr); err != nil {
+			return nil, err
+		}
+	}
+
+	rpcClient, err := client.Client()
+	if err != nil {
+		return nil, err
+	}
+
+	raw, err := rpcClient.Dispense("plugin")
+	if err != nil {
+		return nil, fmt.Errorf("failed to dispense plugin interface: %w", err)
+	}
+
+	pluginClient, ok := raw.(pb.PluginServiceClient)
+	if !ok {
+		return nil, fmt.Errorf("plugin does not implement PluginServiceClient interface")
+	}
+
+	// Test with a ping request
+	ctx, cancel := context.WithTimeout(context.Background(), grpcPingTimeout)
+	defer cancel()
+	if _, err := pluginClient.Ping(ctx, &pb.PingRequest{Timestamp: time.Now().Unix()}); err != nil {
+		return nil, fmt.Errorf("plugin ping failed during connection test: %w", err)
+	}
+	return rpcClient, nil
 }
 
 // GetLoadedPlugins returns a list of all loaded plugins
@@ -1503,9 +1581,6 @@ func (pm *PluginManager) RefreshLLMPluginMapping(llmID uint) error {
 
 // LoadGlobalDataCollectionPlugins loads global data collection plugins from configuration
 func (pm *PluginManager) LoadGlobalDataCollectionPlugins(configs []DataCollectionPluginConfig) error {
-	pm.mu.Lock()
-	defer pm.mu.Unlock()
-
 	for _, cfg := range configs {
 		if !cfg.Enabled {
 			log.Debug().Str("plugin", cfg.Name).Msg("Skipping disabled plugin")
@@ -1535,9 +1610,12 @@ func (pm *PluginManager) LoadGlobalDataCollectionPlugins(configs []DataCollectio
 			continue
 		}
 
-		// Store global plugin
+		// Store global plugin. The lock is taken only here, not across the
+		// load above, which may wait on a grpc:// host.
+		pm.mu.Lock()
 		pm.globalDataPlugins[cfg.Name] = globalPlugin
 		pm.dataCollectionHookTypes[cfg.Name] = cfg.HookTypes
+		pm.mu.Unlock()
 
 		log.Debug().
 			Str("plugin", cfg.Name).

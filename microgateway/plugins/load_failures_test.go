@@ -82,8 +82,9 @@ func TestGetPluginsForLLM_LoadFailureIsRememberedAndLoggedOnce(t *testing.T) {
 	assert.Empty(t, list)
 }
 
-// After the retry interval the next request tries the load again; the same
-// cause is not logged a second time.
+// After the retry interval the next request starts a new attempt in the
+// background and is itself refused at once; the same cause is not logged a
+// second time.
 func TestGetPluginsForLLM_RetriesAfterTheInterval(t *testing.T) {
 	t.Setenv("MICROGATEWAY_ALLOW_ALL_PLUGIN_PATHS", "1")
 	logs := captureLogs(t)
@@ -100,9 +101,16 @@ func TestGetPluginsForLLM_RetriesAfterTheInterval(t *testing.T) {
 	requirePluginLoadError(t, err, 7)
 	time.Sleep(40 * time.Millisecond)
 	_, err = pm.GetPluginsForLLM(1, interfaces.HookTypePreAuth)
-	assert.False(t, requirePluginLoadError(t, err, 7).Remembered, "the interval has passed: a new attempt")
+	assert.True(t, requirePluginLoadError(t, err, 7).Remembered, "refused with the last failure, not held for the retry")
 
-	assert.EqualValues(t, 2, svc.loads.Load())
+	require.Eventually(t, func() bool { return svc.loads.Load() >= 2 }, 2*time.Second, 5*time.Millisecond,
+		"the interval has passed: a new attempt")
+	// Let the attempt finish before the logs are read.
+	require.Eventually(t, func() bool {
+		_, fresh := pm.lastLoadFailure(7)
+		return fresh
+	}, 2*time.Second, 5*time.Millisecond)
+	pm.loadRetryInterval = time.Hour
 	assert.Equal(t, 1, strings.Count(logs.String(), "Plugin could not be loaded"), "same cause, logged once:\n%s", logs.String())
 }
 
