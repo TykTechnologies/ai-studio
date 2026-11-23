@@ -95,7 +95,7 @@ describe("ResourceSigningKeySection", () => {
     expect(apiClient.post).not.toHaveBeenCalled();
 
     fireEvent.mouseDown(within(dialog).getByLabelText(/Keep the current key valid for/));
-    fireEvent.click(await screen.findByRole("option", { name: /Revoke immediately/ }));
+    fireEvent.click(await screen.findByRole("option", { name: /No grace period/ }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Rotate" }));
 
     await waitFor(() =>

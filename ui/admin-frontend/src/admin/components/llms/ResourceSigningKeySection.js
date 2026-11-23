@@ -31,7 +31,7 @@ const GRACE_OPTIONS = [
   { hours: 720, label: "30 days (default)" },
   { hours: 168, label: "7 days" },
   { hours: 24, label: "1 day" },
-  { hours: 0, label: "Revoke immediately" },
+  { hours: 0, label: "No grace period" },
 ];
 
 const formatTime = (iso) => (iso ? new Date(iso).toLocaleString() : "");

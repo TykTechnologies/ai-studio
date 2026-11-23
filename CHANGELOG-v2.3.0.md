@@ -126,7 +126,7 @@ Some of the most useful OpenAI and Anthropic SDK features aren't a simple reques
 - **Batches are screened and billed correctly.** Every request in a batch passes the model allow-list and the LLM's filters, and batch usage is recorded once, at the batch price.
 - **Billing to match your contract.** Set a price multiplier per service tier, for example `{"batch": 0.4}` for negotiated batch pricing. A new **Service Tiers** Dashboard panel reports usage by tier (`batch`, `flex`, `priority`).
 - **Anthropic workspaces.** Pin an LLM to an Anthropic workspace, and every call made for it runs there.
-- **Signing keys you can rotate.** Each LLM has its own signing key for resource ids, so rotating the vendor API key no longer breaks outstanding ids. You can rotate the signing key from the LLM page, with a grace period.
+- **Signing keys you can rotate.** Each LLM has its own signing key for resource ids, so rotating the vendor API key no longer breaks outstanding ids. You can rotate the signing key from the LLM page, with a grace period. After the grace period an old id is refused by every gateway except the one that created the resource, which keeps accepting the creating App's own ids; another App's id is refused everywhere.
 - **Better screening on OpenAI.** Filters and guardrails now read the prompts of `/v1/responses`, `/v1/embeddings`, `/v1/completions` and `/v1/moderations`.
 
 See the [proxy guide](docs/site/docs/proxy.md).
@@ -658,6 +658,7 @@ These plugins are released to the marketplace for 2.3.0. Versions marked † nee
 
 ## Known issues
 
+- **Rotating a resource signing key does not revoke ids on the gateway that created the resource.** After a rotation, even with a grace period of 0, the gateway that created a batch (or other native resource) still accepts the creating App's old ids, and an id whose signature was altered, because it also finds the resource in its own record of that App's resources. Every other gateway refuses them, and another App is refused everywhere. To cut an App off from its resources, deactivate its key or the App.
 - **Model and Semantic Routers don't route decision calls yet.** They answer `400`.
 - **Studio Chat can't use a Bedrock LLM.** A chat on one is saved, but its session fails to start. This is not new in 2.3.
 - **Decision models haven't been tested against a self-hosted llama.cpp server.** They are tested against OpenAI `gpt-6-luna` and TypeSafe `jev-latest`.
