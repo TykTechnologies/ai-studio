@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -51,9 +52,11 @@ func setGRPCConnectBounds(t *testing.T, attempts int, timeout, delay time.Durati
 	t.Cleanup(func() { grpcConnectAttempts, grpcConnectTimeout, grpcConnectRetryDelay = a, c, d })
 }
 
-// waitForLoad returns when no load of the plugin is in progress, so a
-// background attempt does not outlive the test's stubs.
+// waitForLoad returns when no request-path load of the plugin is in
+// progress, so a background attempt (and what it logs when it ends) does not
+// outlive the test's stubs.
 func waitForLoad(pm *PluginManager, pluginID uint) {
+	_, _, _ = pm.requestLoads.Do(strconv.FormatUint(uint64(pluginID), 10), func() (interface{}, error) { return nil, nil })
 	pm.pluginLoadLocks.lock(pluginID)()
 }
 

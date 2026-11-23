@@ -106,11 +106,7 @@ func TestGetPluginsForLLM_RetriesAfterTheInterval(t *testing.T) {
 	require.Eventually(t, func() bool { return svc.loads.Load() >= 2 }, 2*time.Second, 5*time.Millisecond,
 		"the interval has passed: a new attempt")
 	// Let the attempt finish before the logs are read.
-	require.Eventually(t, func() bool {
-		_, fresh := pm.lastLoadFailure(7)
-		return fresh
-	}, 2*time.Second, 5*time.Millisecond)
-	pm.loadRetryInterval = time.Hour
+	waitForLoad(pm, 7)
 	assert.Equal(t, 1, strings.Count(logs.String(), "Plugin could not be loaded"), "same cause, logged once:\n%s", logs.String())
 }
 
