@@ -77,9 +77,11 @@ func (a *API) pluginRedactorForList(plugins []models.Plugin) pluginRedactor {
 // withConfig says whether the caller may read plugin configuration (the
 // mayReadPluginConfig rule: plugins:read). Such a caller gets the
 // configuration with its secret fields redacted, as on the plugin routes.
-// Anyone else gets none: redaction follows the plugin's schema, so a secret
-// under a key the schema does not mark, or of a plugin with no cached schema,
-// would otherwise reach readers who have no use for the configuration.
+// Anyone else gets neither the configuration nor the command: redaction
+// follows the plugin's schema, so a secret under a key the schema does not
+// mark, or of a plugin with no cached schema, would otherwise reach readers
+// who have no use for the configuration; and a command line can hold a
+// credential (a URL with userinfo).
 func (a *API) redactRegistryPlugins(entries []models.UIRegistry, withConfig bool) {
 	var red pluginRedactor
 	if withConfig {
@@ -102,6 +104,7 @@ func (a *API) redactRegistryPlugins(entries []models.UIRegistry, withConfig bool
 			plugin.Config = red.config(&plugin)
 		} else {
 			plugin.Config = nil
+			plugin.Command = ""
 		}
 		entries[i].Plugin = &plugin
 	}

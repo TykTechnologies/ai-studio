@@ -438,19 +438,28 @@ func TestPluginConfigRedaction_RegistryConfigNeedsPluginsRead(t *testing.T) {
 			a.service.PluginManifestService = services.NewPluginManifestService(db, nil)
 			plugin, llm := seedSecretPlugin(t, db, withSchema)
 			seedEmbedders(t, db, plugin, llm)
-			// A secret the schema does not mark and no key-name rule knows.
+			// Secrets the schema does not mark and no key-name rule knows,
+			// and a credential in the command line.
 			cfg := redactionTestConfig()
 			cfg["upstream"] = redactionSecretMark + "unmarked"
+			cfg["dsn"] = "postgres://svc:" + redactionSecretMark + "dsn@db:5432/x"
+			cfg["signing_key"] = redactionSecretMark + "signing"
+			cfg["pat"] = redactionSecretMark + "pat"
 			plugin.Config = cfg
+			plugin.Command = "grpc://svc:" + redactionSecretMark + "cmd@plugins.internal:9000"
 			require.NoError(t, db.Save(plugin).Error)
+			if withSchema {
+				require.NoError(t, (&models.PluginConfigSchema{}).Upsert(db, plugin.Command, redactionAPISchema))
+			}
 
 			type registryBody struct {
 				Data []struct {
 					ComponentTag string `json:"component_tag"`
 					Plugin       *struct {
-						ID     uint                   `json:"id"`
-						Name   string                 `json:"name"`
-						Config map[string]interface{} `json:"config"`
+						ID      uint                   `json:"id"`
+						Name    string                 `json:"name"`
+						Config  map[string]interface{} `json:"config"`
+						Command string                 `json:"command"`
 					} `json:"plugin"`
 				} `json:"data"`
 			}
@@ -470,13 +479,17 @@ func TestPluginConfigRedaction_RegistryConfigNeedsPluginsRead(t *testing.T) {
 				body := decode(w)
 				assert.Equal(t, "rate-limiter-portal", body.Data[0].ComponentTag)
 				assert.Nil(t, body.Data[0].Plugin.Config, "a portal user gets no plugin configuration")
+				assert.Empty(t, body.Data[0].Plugin.Command, "nor its command")
 				assert.NotContains(t, w.Body.String(), redactionSecretMark)
 				assert.NotContains(t, w.Body.String(), "redis:6379")
 			})
 
 			t.Run("administrator on the portal route", func(t *testing.T) {
 				w := apitest.PerformAuthRequest(a.router, http.MethodGet, "/common/plugins/portal-ui-registry", nil, admin.APIKey)
-				assert.Nil(t, decode(w).Data[0].Plugin.Config, "the portal route never carries configuration")
+				body := decode(w)
+				assert.Nil(t, body.Data[0].Plugin.Config, "the portal route never carries configuration")
+				assert.Empty(t, body.Data[0].Plugin.Command, "nor the command")
+				assert.NotContains(t, w.Body.String(), redactionSecretMark)
 			})
 
 			// The admin route under the real permission gate, with the
@@ -505,6 +518,7 @@ func TestPluginConfigRedaction_RegistryConfigNeedsPluginsRead(t *testing.T) {
 				body := decode(w)
 				assert.Equal(t, "rate-limiter-admin", body.Data[0].ComponentTag)
 				assert.Nil(t, body.Data[0].Plugin.Config, "no plugins:read, no configuration")
+				assert.Empty(t, body.Data[0].Plugin.Command, "and no command")
 				assert.NotContains(t, w.Body.String(), redactionSecretMark, "not even a secret the schema does not mark")
 				assert.NotContains(t, w.Body.String(), "redis:6379")
 			})
@@ -515,6 +529,7 @@ func TestPluginConfigRedaction_RegistryConfigNeedsPluginsRead(t *testing.T) {
 				require.NotNil(t, body.Data[0].Plugin.Config)
 				assert.Equal(t, "redis:6379", body.Data[0].Plugin.Config["redis_addr"])
 				assert.Equal(t, services.REDACTED_VALUE, body.Data[0].Plugin.Config["redis_password"])
+				assert.NotEmpty(t, body.Data[0].Plugin.Command, "a plugins:read holder sees the command, as on the plugin routes")
 			})
 		})
 	}
