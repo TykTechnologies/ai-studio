@@ -1604,6 +1604,7 @@ func (a *API) getUIRegistry(c *gin.Context) {
 		visible = append(visible, entry)
 	}
 	entries = visible
+	a.redactRegistryPlugins(entries)
 
 	c.JSON(http.StatusOK, gin.H{"data": entries})
 }
@@ -2469,6 +2470,7 @@ func (a *API) getPortalUIRegistry(c *gin.Context) {
 		})
 		return
 	}
+	a.redactRegistryPlugins(entries)
 
 	c.JSON(http.StatusOK, gin.H{"data": entries})
 }

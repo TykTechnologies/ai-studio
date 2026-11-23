@@ -69,6 +69,39 @@ func (a *API) pluginRedactorForList(plugins []models.Plugin) pluginRedactor {
 	return a.pluginRedactorFor(ptrs...)
 }
 
+// redactRegistryPlugins replaces the plugin each UI registry entry embeds
+// with a copy whose configuration is redacted. The entries are served as
+// stored rows, so without this the embedded plugin carries its secrets to
+// every caller of the registry routes (midsommar-clean-6bg5.9).
+func (a *API) redactRegistryPlugins(entries []models.UIRegistry) {
+	plugins := make([]*models.Plugin, 0, len(entries))
+	for i := range entries {
+		if entries[i].Plugin != nil {
+			plugins = append(plugins, entries[i].Plugin)
+		}
+	}
+	if len(plugins) == 0 {
+		return
+	}
+	red := a.pluginRedactorFor(plugins...)
+	for i := range entries {
+		if entries[i].Plugin == nil {
+			continue
+		}
+		plugin := *entries[i].Plugin
+		plugin.Config = red.config(&plugin)
+		entries[i].Plugin = &plugin
+	}
+}
+
+// redactSchedulePlugin does the same for the plugin a schedule embeds.
+func (a *API) redactSchedulePlugin(schedule *models.PluginSchedule) {
+	if schedule == nil || schedule.Plugin.ID == 0 {
+		return
+	}
+	schedule.Plugin.Config = a.pluginRedactorFor(&schedule.Plugin).config(&schedule.Plugin)
+}
+
 // serializePlugin is serializePlugin with the plugin's own redactor.
 func (a *API) serializePlugin(plugin *models.Plugin) PluginResponse {
 	return serializePlugin(plugin, a.pluginRedactorFor(plugin))

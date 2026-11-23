@@ -89,6 +89,13 @@ func seedEmbedders(t *testing.T, db *gorm.DB, plugin *models.Plugin, llm *models
 		Config: map[string]interface{}{"redis_addr": "agent:6379", "redis_password": redactionSecretMark + "agent"}}
 	require.NoError(t, db.Create(agent).Error)
 	require.NoError(t, db.Create(&models.InstalledPluginVersion{PluginID: plugin.ID, MarketplacePluginID: "com.example.rate-limiter", InstalledVersion: "1.0.0", InstallSource: "manual"}).Error)
+	// Rows that embed the plugin through a relationship: its UI mounts
+	// (admin and portal), its stored manifest and a resource type.
+	for _, scope := range []string{"admin", "portal"} {
+		require.NoError(t, db.Create(&models.UIRegistry{PluginID: plugin.ID, SlotType: "sidebar.section", RoutePattern: "/" + scope + "/plugins/rate-limiter",
+			ComponentTag: "rate-limiter-" + scope, EntryPoint: "ui/main.js", IsActive: true, Scope: scope}).Error)
+	}
+	require.NoError(t, db.Create(&models.PluginResourceType{PluginID: plugin.ID, Slug: "limits", Name: "Limits", IsActive: true, SupportsSubmissions: true}).Error)
 	require.NoError(t, db.Create(&models.PluginSchedule{PluginID: plugin.ID, ManifestScheduleID: "sync", Name: "Sync", CronExpr: "0 * * * *", Config: "{}"}).Error)
 	return app, agent
 }
@@ -106,8 +113,13 @@ func TestPluginConfigRedaction_NoReadRouteReturnsASecret(t *testing.T) {
 		t.Run(fmt.Sprintf("schema=%v", withSchema), func(t *testing.T) {
 			a, admin, _ := setupAuthzAPI(t)
 			db := a.service.DB
+			// The test service has no manifest service; without one the
+			// UI registry routes answer 500 and prove nothing.
+			a.service.PluginManifestService = services.NewPluginManifestService(db, nil)
 			plugin, llm := seedSecretPlugin(t, db, withSchema)
 			_, agent := seedEmbedders(t, db, plugin, llm)
+			var schedule models.PluginSchedule
+			require.NoError(t, db.Where("plugin_id = ?", plugin.ID).First(&schedule).Error)
 			get := func(path string) *httptest.ResponseRecorder {
 				return apitest.PerformAuthRequest(a.router, http.MethodGet, path, nil, admin.APIKey)
 			}
@@ -121,7 +133,13 @@ func TestPluginConfigRedaction_NoReadRouteReturnsASecret(t *testing.T) {
 				fmt.Sprintf("/api/v1/llms/%d/plugins", llm.ID):                      "redis:6379",
 				fmt.Sprintf("/api/v1/llms/%d/plugins/%d/config", llm.ID, plugin.ID): "override:6379",
 				"/api/v1/agents":                                                    "redis:6379",
-				fmt.Sprintf("/api/v1/agents/%d", agent.ID):                          "redis:6379",
+				// The UI registries embed the plugin of each mount; the
+				// frontend reads them on every admin and portal page.
+				"/api/v1/plugins/ui-registry":        "redis:6379",
+				"/common/plugins/portal-ui-registry": "redis:6379",
+				// A schedule embeds its plugin.
+				fmt.Sprintf("/api/v1/plugins/%d/schedules/%d", plugin.ID, schedule.ID): "redis:6379",
+				fmt.Sprintf("/api/v1/agents/%d", agent.ID):                             "redis:6379",
 			}
 			for path, readable := range carriers {
 				w := get(path)
@@ -129,6 +147,12 @@ func TestPluginConfigRedaction_NoReadRouteReturnsASecret(t *testing.T) {
 				assert.Contains(t, w.Body.String(), readable, "GET %s carries the plugin's readable configuration", path)
 				assert.NotContains(t, w.Body.String(), redactionSecretMark, "GET %s returns a secret", path)
 			}
+			// A schedule update answers with the schedule, plugin embedded.
+			w := apitest.PerformAuthRequest(a.router, http.MethodPut, fmt.Sprintf("/api/v1/plugins/%d/schedules/%d", plugin.ID, schedule.ID),
+				map[string]interface{}{"name": "Sync hourly"}, admin.APIKey)
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			assert.Contains(t, w.Body.String(), "Sync hourly")
+			assert.NotContains(t, w.Body.String(), redactionSecretMark, "PUT schedule returns a secret")
 			// The agent's own configuration follows the plugin's schema.
 			for _, path := range []string{"/api/v1/agents", fmt.Sprintf("/api/v1/agents/%d", agent.ID)} {
 				assert.Contains(t, get(path).Body.String(), "agent:6379", path)
@@ -138,6 +162,7 @@ func TestPluginConfigRedaction_NoReadRouteReturnsASecret(t *testing.T) {
 				":pluginId", fmt.Sprint(plugin.ID), ":plugin_id", fmt.Sprint(plugin.ID),
 				":type", models.HookTypePostAuth, ":hookType", models.HookTypePostAuth,
 				":object_type", "llm", ":object_id", fmt.Sprint(llm.ID),
+				":schedule_id", fmt.Sprint(schedule.ID),
 			)
 			called := 0
 			for _, route := range a.router.Routes() {
