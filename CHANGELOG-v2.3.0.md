@@ -314,6 +314,7 @@ Every configuration object now belongs to a **Workspace**, and a role can be ass
 - **An unusable OpenAPI spec is refused** when creating or updating a REST tool, instead of leaving the tool broken. **Import from URL** says why.
 - **The vector store list** shows the stores actually supported (PGVector and Redis, not Milvus).
 - **Model price recalculation** keeps batch records at batch price and works on SQLite. The cost breakdown of batch records now adds up.
+- **The cost breakdown of calls priced under a model alias was all zero.** When the vendor reported a dated snapshot (`gpt-5.5-2026-04-23`) and the price was set under the name the client asked for (`gpt-5.5`), the per-model prompt, response and cache costs showed 0 next to a non-zero total. The breakdown now uses the price the call was billed at, so it adds up to the total, for synchronous and batch calls.
 
 ### Plugin runtime
 - **Plugin SDK module graph referenced a private module.** A plugin importing `pkg/plugin_sdk` inherited a requirement on `github.com/TykTechnologies/ai-studio-enterprise/v2`, which nobody outside Tyk can fetch, so `go list -m all` (and tools built on it, such as govulncheck, Dependabot and Renovate) failed. Building was not affected. From 2.3.0 the SDK's module graph resolves from the public Go proxy. If you added a placeholder `replace` for that module to your plugin's `go.mod`, remove it after upgrading the SDK; existing plugin binaries don't need rebuilding.

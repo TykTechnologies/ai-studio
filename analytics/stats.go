@@ -894,26 +894,45 @@ type VendorModelCost struct {
 // costBreakdownColumns are the prompt_cost, response_cost, cache_write_cost
 // and cache_read_cost aggregates of GetTotalCostPerVendorAndModel.
 //
-// Each row's components are priced at today's model_prices, billing unset
-// cache prices the way models.CachePricesFor does, and then scaled by the
-// row's recorded cost over that list cost. So the breakdown always adds up to
-// total_cost (the recorded cost, which budgets bill): batch rows recorded at a
-// price multiplier (models.IPriceAdjustedResponse) and rows whose price
-// changed after they were recorded split their recorded cost in list-price
-// proportions. A zero or missing list cost leaves the components unscaled
-// (they are zero then anyway).
+// Each row's components are priced at today's price of the model the row was
+// billed under, billing unset cache prices the way models.CachePricesFor
+// does, and then scaled by the row's recorded cost over that list cost. So
+// the breakdown always adds up to total_cost (the recorded cost, which
+// budgets bill): batch rows recorded at a price multiplier
+// (models.IPriceAdjustedResponse) and rows whose price changed after they
+// were recorded split their recorded cost in list-price proportions. A zero
+// or missing list cost leaves the components unscaled (they are zero then
+// anyway).
+//
+// "The model the row was billed under" follows the gateway's rule (proxy
+// priceForExchange): the reported model (llm_chat_records.name, joined as
+// model_prices) when it has a price, else the model the caller asked for
+// (requested_model, joined as requested_prices). Vendors answer an alias
+// with the snapshot it resolved to (gpt-5.5 comes back as
+// gpt-5.5-2026-04-23), the snapshot has no price of its own, or only the
+// all-zero row a lookup leaves behind, and the row was billed at the alias's
+// price. Reading only the reported model's price made every component of
+// such a row zero while its total was not.
 var costBreakdownColumns = func() string {
 	quoted := make([]string, len(models.CacheFallbackVendors))
 	for i, v := range models.CacheFallbackVendors {
 		quoted[i] = "'" + strings.ReplaceAll(v, "'", "''") + "'"
 	}
-	cpit := "COALESCE(model_prices.cpit, 0)"
+	// reportedPriced mirrors proxy.unpriced: a row with all four rates zero
+	// (or no row) is no price.
+	reportedPriced := "(COALESCE(model_prices.cpt, 0) <> 0 OR COALESCE(model_prices.cpit, 0) <> 0 OR " +
+		"COALESCE(model_prices.cache_write_pt, 0) <> 0 OR COALESCE(model_prices.cache_read_pt, 0) <> 0)"
+	rate := func(col string) string {
+		return fmt.Sprintf("(CASE WHEN %s THEN COALESCE(model_prices.%s, 0) ELSE COALESCE(requested_prices.%s, 0) END)",
+			reportedPriced, col, col)
+	}
+	cpit := rate("cpit")
 	cachePrice := func(col string) string {
-		return fmt.Sprintf("CASE WHEN llm_chat_records.vendor IN (%s) AND COALESCE(model_prices.%s, 0) = 0 THEN %s ELSE COALESCE(model_prices.%s, 0) END",
-			strings.Join(quoted, ", "), col, cpit, col)
+		return fmt.Sprintf("CASE WHEN llm_chat_records.vendor IN (%s) AND %s = 0 THEN %s ELSE %s END",
+			strings.Join(quoted, ", "), rate(col), cpit, rate(col))
 	}
 	prompt := "llm_chat_records.prompt_tokens * " + cpit
-	response := "llm_chat_records.response_tokens * COALESCE(model_prices.cpt, 0)"
+	response := "llm_chat_records.response_tokens * " + rate("cpt")
 	cacheWrite := "llm_chat_records.cache_write_prompt_tokens * (" + cachePrice("cache_write_pt") + ")"
 	cacheRead := "llm_chat_records.cache_read_prompt_tokens * (" + cachePrice("cache_read_pt") + ")"
 	list := fmt.Sprintf("((%s) + (%s) + (%s) + (%s)) * 10000", prompt, response, cacheWrite, cacheRead)
@@ -935,6 +954,11 @@ func GetTotalCostPerVendorAndModel(db *gorm.DB, startDate, endDate time.Time, in
 
 	query := db.Table("llm_chat_records").
 		Joins("LEFT JOIN model_prices ON model_prices.model_name = llm_chat_records.name AND model_prices.vendor = llm_chat_records.vendor").
+		// The price of the model the caller asked for, which the row was
+		// billed at when the reported model has none (costBreakdownColumns).
+		// Only the breakdown reads it: the grouping, and so the rows
+		// returned, are unchanged.
+		Joins("LEFT JOIN model_prices AS requested_prices ON requested_prices.model_name = llm_chat_records.requested_model AND requested_prices.vendor = llm_chat_records.vendor AND llm_chat_records.requested_model <> '' AND llm_chat_records.requested_model <> llm_chat_records.name").
 		Select(`
 			COALESCE(NULLIF(llm_chat_records.name, ''), 'Unknown') as model,
 			model_prices.id as model_price_id,

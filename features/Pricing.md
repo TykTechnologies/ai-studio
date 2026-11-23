@@ -42,6 +42,7 @@ The Model Pricing system provides the mechanism to define and manage the costs a
 *   **Analytics (`analytics/analytics.go`, `analytics/stats.go`):** Records and reports on costs.
     *   `RecordContentMessage`: Calls `PriceService.GetModelPriceByModelNameAndVendor` to get price details before saving `LLMChatRecord`.
     *   Reporting functions (e.g., `GetTotalCostPerVendorAndModel`): Join `llm_chat_records` with `model_prices` to provide detailed cost breakdowns.
+    *   The cost breakdown of `GetTotalCostPerVendorAndModel` (`costBreakdownColumns`) splits each record's stored cost in the proportions of the price it was billed at: the reported model's price (`llm_chat_records.name`) when that has one, else the price of `requested_model` (a second join, `requested_prices`), the same rule as the gateway's `priceForExchange`. A reported model with no price row, or with the all-zero row a lookup creates, is "no price". Rows are still grouped by the reported model. Reading only the reported model's price made the components of every alias-priced record zero (6bg5.7). A record with no price under either name keeps zero components and its total.
 *   **Budget Service (`services/budget_service.go`):**
     *   *Dependency:* Calls `ModelPrice.GetByModelNameAndVendor` to retrieve the currency associated with an LLM for notification formatting.
 
