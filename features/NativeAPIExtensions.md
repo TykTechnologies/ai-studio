@@ -292,8 +292,9 @@ IDs.
   IDs" section (`ui/admin-frontend/src/admin/components/llms/ResourceSigningKeySection.js`)
   showing the current and previous kid, their source and the previous key's
   expiry. Users with `llms` write get "Rotate signing key", which confirms in a
-  dialog with a grace period (30 days default, 7 days, 1 day or revoke
-  immediately) and warns when a still-active previous key will be dropped.
+  dialog with a grace period (30 days default, 7 days, 1 day or "No grace
+  period", which was labelled "Revoke immediately" until 6bg5.27: it does not
+  revoke the creating App's ids on the creating node) and warns when a still-active previous key will be dropped.
   Other vendors do not show the section (`NATIVE_RESOURCE_VENDORS`).
 - **Edges:** the snapshot's `LLMConfig` carries
   `resource_signing_secret_encrypted`, `resource_signing_secret_prev_encrypted`
