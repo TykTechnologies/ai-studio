@@ -20,6 +20,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/services/budget"
 	"github.com/TykTechnologies/midsommar/v2/switches"
+	bedrockVendor "github.com/TykTechnologies/midsommar/v2/vendors/bedrock"
 	"github.com/andybalholm/brotli"
 )
 
@@ -182,6 +183,15 @@ func buildChatRecordFor(service services.ServiceInterface, llm *models.LLM, app 
 		cacheWritePT = price.CacheWritePT
 		cacheReadPT = price.CacheReadPT
 		currency = price.Currency
+		// Bedrock reports no model, so the record would be named by the
+		// identifier the client sent. When that was priced under the model
+		// it names (vendorPricingAlias), name the record by the priced
+		// model: requested_model keeps what the client sent, and the same
+		// model reads the same in analytics however it was addressed.
+		if llm.Vendor == models.BEDROCK && !unpriced(price) && price.ModelName != "" &&
+			price.ModelName != model && price.ModelName != requested {
+			model = price.ModelName
+		}
 	} else {
 		log.Printf("Price not found for model: %s, vendor: %s", model, llm.Vendor)
 	}
@@ -248,17 +258,48 @@ func requestedModel(r *http.Request) string {
 // name they configured. Without the fallback such calls were recorded at
 // zero cost and never reached a budget. A miss is a zero price on both the
 // Studio and the edge side (Studio stores one), so "no price" is all rates
-// zero.
+// zero. A Bedrock exchange with no price under either name is priced by the
+// model its identifier names (vendorPricingAlias).
 func priceForExchange(service services.ServiceInterface, reported, requested, vendor string) (*models.ModelPrice, error) {
 	price, err := service.GetModelPriceByModelNameAndVendor(reported, vendor)
-	if requested == "" || requested == reported || (err == nil && price != nil && !unpriced(price)) {
-		return price, err
+	if err == nil && price != nil && !unpriced(price) {
+		return price, nil
 	}
-	fallback, ferr := service.GetModelPriceByModelNameAndVendor(requested, vendor)
-	if ferr == nil && fallback != nil && !unpriced(fallback) {
-		return fallback, nil
+	if requested != "" && requested != reported {
+		fallback, ferr := service.GetModelPriceByModelNameAndVendor(requested, vendor)
+		if ferr == nil && fallback != nil && !unpriced(fallback) {
+			return fallback, nil
+		}
+	}
+	if alias := vendorPricingAlias(service, reported, requested, vendor); alias != nil {
+		return alias, nil
 	}
 	return price, err
+}
+
+// vendorPricingAlias prices an exchange neither of whose names has a price
+// by another name the vendor gives the same model. Bedrock addresses one
+// model by its id, by a cross-region inference-profile id and by ARN, and an
+// admin prices one of them: without this a call by ARN was recorded at zero
+// cost and never reached a budget. The names are derived from the identifier
+// alone (bedrockVendor.PricingModelIDs); an identifier that names no model
+// has none and stays unpriced. nil when no such name has a price.
+func vendorPricingAlias(service services.ServiceInterface, reported, requested, vendor string) *models.ModelPrice {
+	if vendor != string(models.BEDROCK) {
+		return nil
+	}
+	names := []string{reported}
+	if requested != "" && requested != reported {
+		names = append(names, requested)
+	}
+	for _, name := range names {
+		for _, id := range bedrockVendor.PricingModelIDs(name) {
+			if p, err := service.GetModelPriceByModelNameAndVendor(id, vendor); err == nil && p != nil && !unpriced(p) {
+				return p
+			}
+		}
+	}
+	return nil
 }
 
 func unpriced(p *models.ModelPrice) bool {

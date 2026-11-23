@@ -264,6 +264,7 @@ Every configuration object now belongs to a **Workspace**, and a role can be ass
 - **Bedrock streaming dropped tools, images and documents** on `converse-stream`, so tool use didn't work when streaming. Requests and events are now passed through intact.
 - **Bedrock streams could end early under load** on the `/ai/` and `/anthropic/` bridges, and a broken Bedrock stream looked like a complete answer. It now ends with an error.
 - **A Bedrock LLM moved to a new endpoint kept calling the old one** until a restart.
+- **Bedrock calls by inference-profile ARN were recorded at zero cost**, so an App could keep spending past its budget by naming a model by its ARN. A Bedrock call is now priced by the identifier as sent, else by the profile id or model id that an inference-profile or foundation-model ARN names, else by the model behind a cross-region profile id (`apac.amazon.nova-lite-v1:0` → `amazon.nova-lite-v1:0`). Application inference profiles and provisioned or custom models have ids that name no model: price them under their full ARN.
 - **OpenAI and Ollama requests with multi-part content** (text and images) were refused with `400`.
 - **Calls to a model alias were recorded at zero cost.** They're now priced by the requested model when the reported one has no price.
 - **`flex` and `priority` OpenAI calls** are now recorded with their service tier.
