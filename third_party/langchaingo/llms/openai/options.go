@@ -51,3 +51,32 @@ func WithReasoningEffort(effort string) llms.CallOption {
 		opts.Metadata["openai:reasoning_effort"] = effort
 	}
 }
+
+// extraBodyKey is where WithExtraBody keeps its fields in the call metadata.
+const extraBodyKey = "openai:extra_body"
+
+// WithExtraBody adds top-level fields to the chat completion request body as
+// they are (service_tier, user, store, parallel_tool_calls, logprobs,
+// top_logprobs, prompt_cache_key, safety_identifier, ...). Tyk: not in
+// upstream. The OpenAI-shaped bridges use it to forward request parameters
+// this driver has no option for, which it used to drop. A field the driver
+// sets itself (model, messages, stream, temperature, ...) is never
+// overridden. Several calls merge; a nil or empty map adds nothing.
+func WithExtraBody(fields map[string]any) llms.CallOption {
+	return func(opts *llms.CallOptions) {
+		if len(fields) == 0 {
+			return
+		}
+		if opts.Metadata == nil {
+			opts.Metadata = make(map[string]interface{})
+		}
+		merged, _ := opts.Metadata[extraBodyKey].(map[string]any)
+		if merged == nil {
+			merged = make(map[string]any, len(fields))
+		}
+		for k, v := range fields {
+			merged[k] = v
+		}
+		opts.Metadata[extraBodyKey] = merged
+	}
+}

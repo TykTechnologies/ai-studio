@@ -232,6 +232,22 @@ The operations are counted in the `aistudio_native_*` metrics (see [Observabilit
     print(response.choices[0].message.content)
     ```
 
+*   **Request parameters:** on this endpoint and on the Main Ingress, the parameters of an OpenAI chat completion request reach the vendor as follows. "As sent" means the value goes into the vendor request unchanged; "not sent" means the vendor has no equivalent the gateway translates, so the parameter is left out on purpose.
+
+    | Parameter | OpenAI | Anthropic | Google AI | Bedrock (Converse) |
+    |---|---|---|---|---|
+    | `stop` (string or list) | as sent | `stop_sequences` | `stopSequences` | `inferenceConfig.stopSequences` |
+    | `top_p` | as sent | `top_p` | `topP` | `inferenceConfig.topP` |
+    | `service_tier` | as sent | not sent | not sent | not sent |
+    | `user` | as sent | not sent | not sent | not sent |
+    | `store` | as sent | not sent | not sent | not sent |
+    | `parallel_tool_calls` | as sent | not sent | not sent | not sent |
+    | `logprobs`, `top_logprobs` | as sent | not sent | not sent | not sent |
+    | `prompt_cache_key` | as sent | not sent | not sent | not sent |
+    | `safety_identifier` | as sent | not sent | not sent | not sent |
+
+    For OpenAI the response carries the `service_tier` the call was served at (`flex`, `priority`, `default`), and the call is recorded with that tier, as on the vendor-native endpoint. A streamed response does not repeat it on each chunk. Whether OpenAI accepts a value for a given model (for example `flex`) is OpenAI's answer, returned as its error.
+
 *   **`tool_choice`:** on this endpoint and on the Main Ingress, OpenAI's `tool_choice` is translated for vendors that do not speak it:
 
     | `tool_choice` | Anthropic | Google AI | Bedrock (Converse) |
