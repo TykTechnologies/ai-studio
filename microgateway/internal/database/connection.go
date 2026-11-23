@@ -192,8 +192,34 @@ func autoMigrate(db *gorm.DB) error {
 	)
 }
 
+// sqlParamsEnabled reports whether DB_LOG_SQL_PARAMS opts SQL values into
+// the logs (local debugging only).
+func sqlParamsEnabled() bool {
+	return strings.EqualFold(os.Getenv("DB_LOG_SQL_PARAMS"), "true")
+}
+
+// ParameterizedQueries below does not cover every statement. One that ends
+// in Scan (Raw(...).Scan and the like) is run with gorm's own recording
+// logger, whose filter is this package variable, a no-op by default: such
+// statements were logged with their values, when they failed or were slow
+// at the default log level, and always at "info". The same rule is set for
+// it here, for every gorm.DB in the process.
+func init() {
+	logger.RecorderParamsFilter = func(_ context.Context, sql string, params ...interface{}) (string, []interface{}) {
+		if sqlParamsEnabled() {
+			return sql, params
+		}
+		return sql, nil
+	}
+}
+
 // getGormLogger returns appropriate GORM logger based on log level
 func getGormLogger(logLevel string) logger.Interface {
+	return newGormLogger(logLevel, log.New(os.Stdout, "\r\n", log.LstdFlags))
+}
+
+// newGormLogger is getGormLogger writing to w.
+func newGormLogger(logLevel string, w logger.Writer) logger.Interface {
 	var level logger.LogLevel
 
 	switch logLevel {
@@ -210,7 +236,7 @@ func getGormLogger(logLevel string) logger.Interface {
 	}
 
 	return logger.New(
-		log.New(os.Stdout, "\r\n", log.LstdFlags),
+		w,
 		logger.Config{
 			SlowThreshold:             time.Second,
 			LogLevel:                  level,
@@ -219,7 +245,7 @@ func getGormLogger(logLevel string) logger.Interface {
 			// Statements are logged with placeholders, never their values
 			// (rows' contents: credentials, payloads), unless
 			// DB_LOG_SQL_PARAMS=true asks for them in local debugging.
-			ParameterizedQueries: !strings.EqualFold(os.Getenv("DB_LOG_SQL_PARAMS"), "true"),
+			ParameterizedQueries: !sqlParamsEnabled(),
 		},
 	)
 }
