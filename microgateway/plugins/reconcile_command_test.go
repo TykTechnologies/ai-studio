@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -141,9 +142,34 @@ func copyOfTestBinary(t *testing.T, self string) string {
 	return dst
 }
 
+// pushedService is the gateway's plugin database as configuration pushes
+// change it while requests read it.
+type pushedService struct {
+	mu sync.RWMutex
+	*mockPluginService
+}
+
+func (s *pushedService) GetPlugin(id uint) (PluginData, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.mockPluginService.GetPlugin(id)
+}
+
+func (s *pushedService) GetPluginsForLLM(llmID uint) ([]PluginData, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.mockPluginService.GetPluginsForLLM(llmID)
+}
+
+func (s *pushedService) GetAllActiveGatewayPlugins() ([]PluginData, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.mockPluginService.GetAllActiveGatewayPlugins()
+}
+
 // reloadFixture is a manager with one running plugin, loaded from the test
 // binary, attached to LLM 1.
-func reloadFixture(t *testing.T) (pm *PluginManager, svc *mockPluginService, self string) {
+func reloadFixture(t *testing.T) (pm *PluginManager, svc *pushedService, self string) {
 	t.Helper()
 	self, err := os.Executable()
 	require.NoError(t, err)
@@ -152,7 +178,7 @@ func reloadFixture(t *testing.T) (pm *PluginManager, svc *mockPluginService, sel
 	t.Setenv(pluginenv.EnvPassthrough, msgSizeHelperEnv+",PLUGIN_RUNTIME")
 	t.Setenv("MICROGATEWAY_ALLOW_ALL_PLUGIN_PATHS", "1")
 
-	svc = &mockPluginService{}
+	svc = &pushedService{mockPluginService: &mockPluginService{}}
 	setPluginCommand(svc, self)
 	pm = NewPluginManager(svc)
 	t.Cleanup(func() { _ = pm.UnloadPlugin(1) })
@@ -163,8 +189,10 @@ func reloadFixture(t *testing.T) (pm *PluginManager, svc *mockPluginService, sel
 
 // setPluginCommand is what a configuration push that changed the plugin's
 // command leaves in the gateway's database.
-func setPluginCommand(svc *mockPluginService, command string) {
+func setPluginCommand(svc *pushedService, command string) {
 	p := PluginData{ID: 1, Name: "llm-load-balancer", HookType: "post_auth", Command: command, IsActive: true}
+	svc.mu.Lock()
+	defer svc.mu.Unlock()
 	svc.allActiveGwPlugins = []PluginData{p}
 	svc.getPluginByID = map[uint]PluginData{1: p}
 	svc.pluginsByLLM = map[uint][]PluginData{1: {p}}
@@ -240,4 +268,45 @@ func TestReconcile_ChangedCommandThatFailsToLoadStopsTheOldPlugin(t *testing.T) 
 	list, err := pm.GetPluginsForLLM(1, interfaces.HookTypePostAuth)
 	require.Error(t, err, "the LLM's plugin list is an error, not an empty list")
 	assert.Empty(t, list)
+}
+
+// While a plugin is being swapped, a request for its LLM never gets a plugin
+// list without it: it gets the plugin (the old one, or the new one once it
+// is ready) or an error, which the hooks answer by refusing the request.
+func TestReconcile_SwapWindowNeverYieldsAListWithoutThePlugin(t *testing.T) {
+	pm, svc, self := reloadFixture(t)
+	versionBPath := copyOfTestBinary(t, self)
+
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	var requests, empty int
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			list, err := pm.GetPluginsForLLM(1, interfaces.HookTypePostAuth)
+			requests++
+			if err == nil && len(list) != 1 {
+				empty++
+			}
+		}
+	}()
+
+	// Swap back and forth while requests keep asking.
+	for i := 0; i < 3; i++ {
+		setPluginCommand(svc, versionBPath)
+		require.NoError(t, pm.ReconcilePlugins(context.Background()))
+		setPluginCommand(svc, self)
+		require.NoError(t, pm.ReconcilePlugins(context.Background()))
+	}
+	close(stop)
+	<-done
+
+	require.NotZero(t, requests)
+	assert.Zero(t, empty, "of %d requests during the swaps, none may get a list without the plugin", requests)
+	assert.True(t, pm.IsPluginLoaded(1))
 }
