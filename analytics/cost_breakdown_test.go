@@ -251,3 +251,75 @@ func TestCostBreakdown_AfterPriceRecalculation(t *testing.T) {
 		assertBreakdown(t, row, half, "recalculated batch")
 	})
 }
+
+// A record billed under the model the caller asked for (an alias the vendor
+// answered with a dated snapshot that has no price of its own) splits its
+// recorded cost by the alias's price. The breakdown used to read only the
+// reported model's price, so every component of such a row was zero while its
+// total was not (midsommar-clean-6bg5.7). It covers a snapshot with no price
+// row at all and one with the all-zero row a price lookup leaves behind, sync
+// and batch (0.5x) records, and leaves dated-name-priced records as they were.
+func TestCostBreakdown_AliasPricedRecords(t *testing.T) {
+	forEachBreakdownDB(t, func(t *testing.T, db *gorm.DB) {
+		now := time.Now().UTC().Truncate(time.Second)
+		const llmID = 12
+		vendor := string(models.OPENAI)
+		alias := models.ModelPrice{ModelName: "gpt-5.5", Vendor: vendor, CPIT: 0.000010, CPT: 0.000030, CacheReadPT: 0.000001, Currency: "USD"}
+		dated := models.ModelPrice{ModelName: "gpt-4o-2024-08-06", Vendor: vendor, CPIT: 0.000004, CPT: 0.000016, Currency: "USD"}
+		// The zero row the gateway's lookup of an unpriced reported model creates.
+		zero := models.ModelPrice{ModelName: "gpt-5.5-2026-04-23", Vendor: vendor, Currency: "USD"}
+		// An alias of the dated-priced model, with a different price: not used,
+		// because the reported model has its own.
+		aliasOfDated := models.ModelPrice{ModelName: "gpt-4o", Vendor: vendor, CPIT: 0.000099, CPT: 0.000099, Currency: "USD"}
+		for _, p := range []*models.ModelPrice{&alias, &dated, &zero, &aliasOfDated} {
+			require.NoError(t, db.Create(p).Error)
+		}
+		listCost := func(p models.ModelPrice) float64 {
+			return models.ChatRecordCost(vendor, p.CPT, p.CPIT, p.CacheWritePT, p.CacheReadPT,
+				breakdownUsage.prompt, breakdownUsage.response, breakdownUsage.cacheWrite, breakdownUsage.cacheRead)
+		}
+		record := func(name, requested string, cost float64) {
+			rec := breakdownRecord(llmID, vendor, name, breakdownUsage, cost, now)
+			rec.RequestedModel = requested
+			require.NoError(t, db.Create(rec).Error)
+		}
+		aliasList, datedList := listCost(alias), listCost(dated)
+
+		// Reported snapshot with a zero price row: one sync and one batch record.
+		record("gpt-5.5-2026-04-23", "gpt-5.5", aliasList)
+		record("gpt-5.5-2026-04-23", "gpt-5.5", aliasList*0.5)
+		// Reported snapshot with no price row at all.
+		record("gpt-5.5-2026-06-01", "gpt-5.5", aliasList)
+		// Priced under the dated name: the requested alias's price is ignored.
+		record("gpt-4o-2024-08-06", "gpt-4o", datedList)
+		record("gpt-4o-2024-08-06", "", datedList)
+
+		rows := breakdownRows(t, db, llmID, now)
+		require.Len(t, rows, 3, "one row per reported model, as before")
+
+		scaled := func(p models.ModelPrice, factor float64) [4]float64 {
+			c := listComponents(vendor, p, breakdownUsage)
+			for i := range c {
+				c[i] *= factor
+			}
+			return c
+		}
+		zeroRow := rows["gpt-5.5-2026-04-23"]
+		assert.InDelta(t, aliasList*1.5/10000, zeroRow.TotalCost, 1e-12)
+		assert.Greater(t, zeroRow.PromptCost, 0.0)
+		assertBreakdown(t, zeroRow, scaled(alias, 1.5), "alias-priced, zero row for the snapshot, sync + batch")
+
+		noRow := rows["gpt-5.5-2026-06-01"]
+		assert.Nil(t, noRow.ModelPriceID)
+		assertBreakdown(t, noRow, scaled(alias, 1), "alias-priced, no row for the snapshot")
+
+		datedRow := rows["gpt-4o-2024-08-06"]
+		assert.InDelta(t, datedList*2/10000, datedRow.TotalCost, 1e-12)
+		assertBreakdown(t, datedRow, scaled(dated, 2), "dated-name-priced: unchanged, the alias's price is not used")
+
+		// Every row adds up.
+		for model, row := range rows {
+			assert.InDelta(t, row.TotalCost, row.PromptCost+row.ResponseCost+row.CacheWriteCost+row.CacheReadCost, 1e-12, model)
+		}
+	})
+}
