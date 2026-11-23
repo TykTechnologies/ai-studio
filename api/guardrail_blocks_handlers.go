@@ -34,7 +34,7 @@ type GuardrailBlock struct {
 // getUserAppGuardrailBlocks godoc
 // @Summary List the guardrail blocks of one of the user's Apps
 // @Description The requests of an App that guardrail filters shared with App owners (evidence.share_with_app_owners) blocked, quarantined or changed in the last days (default 7, at most 90): when, the filter, the action, the reason code and sentence the caller got, and the request id. Never the text. Newest first, at most 100.
-// @Tags Portal
+// @Tags portal
 // @Produce json
 // @Param id path int true "App ID"
 // @Param days query int false "How many days back (1-90, default 7)"

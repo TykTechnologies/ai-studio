@@ -10082,7 +10082,7 @@ paths:
       - BearerAuth: []
       summary: Spend per team
       tags:
-      - analytics
+      - Analytics
   /analytics/token-usage-and-cost-for-app:
     get:
       consumes:
@@ -17394,7 +17394,7 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       summary: List the guardrail blocks of one of the user's Apps
       tags:
-      - Portal
+      - portal
   /common/apps/{id}/guardrail-blocks/{event_id}/report:
     post:
       consumes:
@@ -26464,7 +26464,7 @@ paths:
             $ref: '#/definitions/models.ErrorResponse'
       summary: Tyk connections the Tools import can read APIs from
       tags:
-      - Tools
+      - tools
   /tools/import/tyk/connections/{id}/apis:
     get:
       parameters:
@@ -26488,7 +26488,7 @@ paths:
             type: array
       summary: Tyk OAS APIs on a connection
       tags:
-      - Tools
+      - tools
   /tools/import/tyk/connections/{id}/apis/{api_id}:
     get:
       parameters:
@@ -26511,7 +26511,7 @@ paths:
             $ref: '#/definitions/tykmcp.SourceAPIDocument'
       summary: One Tyk OAS API definition, credentials masked
       tags:
-      - Tools
+      - tools
   /tools/search:
     get:
       consumes:
@@ -27494,7 +27494,7 @@ paths:
       parameters:
       - description: User ID
         in: path
-        name: userId
+        name: user_id
         required: true
         type: integer
       produces:

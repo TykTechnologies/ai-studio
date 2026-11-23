@@ -2049,7 +2049,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "analytics"
+                    "Analytics"
                 ],
                 "summary": "Spend per team",
                 "parameters": [
@@ -13270,7 +13270,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Portal"
+                    "portal"
                 ],
                 "summary": "List the guardrail blocks of one of the user's Apps",
                 "parameters": [
@@ -25784,7 +25784,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Tools"
+                    "tools"
                 ],
                 "summary": "Tyk connections the Tools import can read APIs from",
                 "responses": {
@@ -25812,7 +25812,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Tools"
+                    "tools"
                 ],
                 "summary": "Tyk OAS APIs on a connection",
                 "parameters": [
@@ -25849,7 +25849,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Tools"
+                    "tools"
                 ],
                 "summary": "One Tyk OAS API definition, credentials masked",
                 "parameters": [
@@ -28822,7 +28822,7 @@ const docTemplate = `{
                     {
                         "type": "integer",
                         "description": "User ID",
-                        "name": "userId",
+                        "name": "user_id",
                         "in": "path",
                         "required": true
                     }
