@@ -51,8 +51,8 @@ func (pm *PluginManager) loadRetryIntervalOrDefault() time.Duration {
 // rememberedLoadFailure returns the plugin's last load failure while it is
 // still fresh, else nil.
 func (pm *PluginManager) rememberedLoadFailure(pluginID uint) *PluginLoadError {
-	pm.loadFailuresMu.Lock()
-	defer pm.loadFailuresMu.Unlock()
+	pm.loadFailuresMu.RLock()
+	defer pm.loadFailuresMu.RUnlock()
 	f, ok := pm.loadFailures[pluginID]
 	if !ok || time.Since(f.at) >= pm.loadRetryIntervalOrDefault() {
 		return nil
@@ -124,7 +124,7 @@ func (pm *PluginManager) loadPluginForRequest(pluginID uint, name string) (*Load
 		if failed := pm.rememberedLoadFailure(pluginID); failed != nil {
 			return nil, failed
 		}
-		lp, err := pm.LoadPlugin(pluginID)
+		lp, err := pm.loadPluginNamed(pluginID, name)
 		if err != nil {
 			return nil, &PluginLoadError{PluginID: pluginID, PluginName: name, Err: err}
 		}

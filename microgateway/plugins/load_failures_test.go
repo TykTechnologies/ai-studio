@@ -220,3 +220,18 @@ func TestReconcile_PrunesRememberedFailuresOfRemovedPlugins(t *testing.T) {
 	require.NoError(t, pm.ReconcilePlugins(context.Background()))
 	assert.Nil(t, pm.rememberedLoadFailure(9))
 }
+
+// A load that fails before the plugin could be read is still logged with
+// the name the caller knew.
+func TestLoadFailure_LoggedWithTheNameWhenThePluginCannotBeRead(t *testing.T) {
+	logs := captureLogs(t)
+	p := PluginData{ID: 4, Name: "unreadable", HookType: "post_auth", Command: "/bin/true", IsActive: true}
+	pm := NewPluginManager(&mockPluginService{
+		pluginsByLLM: map[uint][]PluginData{1: {p}},
+		errGetPlugin: errors.New("database is locked"),
+	})
+
+	_, err := pm.GetPluginsForLLM(1, interfaces.HookTypePostAuth)
+	assert.Equal(t, "unreadable", requirePluginLoadError(t, err, 4).PluginName)
+	assert.Contains(t, logs.String(), `"plugin_name":"unreadable"`)
+}

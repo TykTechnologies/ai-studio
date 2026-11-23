@@ -221,7 +221,7 @@ type PluginManager struct {
 	// need the plugin are refused without a new attempt each (see
 	// load_failures.go). Its own lock: failures are recorded and read while
 	// mu is held and while it is not.
-	loadFailuresMu    sync.Mutex
+	loadFailuresMu    sync.RWMutex
 	loadFailures      map[uint]*loadFailure
 	loadRetryInterval time.Duration
 	// requestLoads shares one load attempt between the concurrent requests
@@ -391,11 +391,16 @@ func (pm *PluginManager) checkGRPCHost(command string, addr net.Addr, exempt net
 // attempt did, and its outcome is what requests see for the next
 // PluginLoadRetryInterval (loadPluginForRequest).
 func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
+	return pm.loadPluginNamed(pluginID, "")
+}
+
+// loadPluginNamed is LoadPlugin for a caller that knows the plugin's name,
+// for the log line of a load that fails before the plugin could be read.
+func (pm *PluginManager) loadPluginNamed(pluginID uint, name string) (*LoadedPlugin, error) {
 	loaded, err := pm.loadPlugin(pluginID)
 	if err != nil {
-		name := ""
 		pm.mu.RLock()
-		if health, ok := pm.pluginHealth[pluginID]; ok {
+		if health, ok := pm.pluginHealth[pluginID]; ok && health.Name != "" {
 			name = health.Name
 		}
 		pm.mu.RUnlock()
@@ -2378,7 +2383,7 @@ func (pm *PluginManager) PrewarmAllPlugins(ctx context.Context) error {
 
 		// Load the plugin - this will start the session loop and trigger OnSessionReady
 		startTime := time.Now()
-		_, err := pm.LoadPlugin(plugin.ID)
+		_, err := pm.loadPluginNamed(plugin.ID, plugin.Name)
 		if err != nil {
 			log.Error().
 				Uint("plugin_id", plugin.ID).

@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
@@ -50,7 +52,7 @@ func hookRequest(path string) *http.Request {
 func requirePluginLoadRefusal(t *testing.T, rec *httptest.ResponseRecorder, slug string) {
 	t.Helper()
 	require.Equal(t, http.StatusServiceUnavailable, rec.Code)
-	assert.Equal(t, "30", rec.Header().Get("Retry-After"))
+	assert.Equal(t, strconv.Itoa(int(plugins.PluginLoadRetryInterval/time.Second)), rec.Header().Get("Retry-After"))
 	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 
 	var body struct {
