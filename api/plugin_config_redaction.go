@@ -70,26 +70,39 @@ func (a *API) pluginRedactorForList(plugins []models.Plugin) pluginRedactor {
 }
 
 // redactRegistryPlugins replaces the plugin each UI registry entry embeds
-// with a copy whose configuration is redacted. The entries are served as
-// stored rows, so without this the embedded plugin carries its secrets to
-// every caller of the registry routes (midsommar-clean-6bg5.9).
-func (a *API) redactRegistryPlugins(entries []models.UIRegistry) {
-	plugins := make([]*models.Plugin, 0, len(entries))
-	for i := range entries {
-		if entries[i].Plugin != nil {
-			plugins = append(plugins, entries[i].Plugin)
+// with a copy that is safe to serve. The entries are served as stored rows,
+// so without this the embedded plugin carries its secrets to every caller of
+// the registry routes (midsommar-clean-6bg5.9).
+//
+// withConfig says whether the caller may read plugin configuration (the
+// mayReadPluginConfig rule: plugins:read). Such a caller gets the
+// configuration with its secret fields redacted, as on the plugin routes.
+// Anyone else gets none: redaction follows the plugin's schema, so a secret
+// under a key the schema does not mark, or of a plugin with no cached schema,
+// would otherwise reach readers who have no use for the configuration.
+func (a *API) redactRegistryPlugins(entries []models.UIRegistry, withConfig bool) {
+	var red pluginRedactor
+	if withConfig {
+		plugins := make([]*models.Plugin, 0, len(entries))
+		for i := range entries {
+			if entries[i].Plugin != nil {
+				plugins = append(plugins, entries[i].Plugin)
+			}
+		}
+		if len(plugins) > 0 {
+			red = a.pluginRedactorFor(plugins...)
 		}
 	}
-	if len(plugins) == 0 {
-		return
-	}
-	red := a.pluginRedactorFor(plugins...)
 	for i := range entries {
 		if entries[i].Plugin == nil {
 			continue
 		}
 		plugin := *entries[i].Plugin
-		plugin.Config = red.config(&plugin)
+		if withConfig {
+			plugin.Config = red.config(&plugin)
+		} else {
+			plugin.Config = nil
+		}
 		entries[i].Plugin = &plugin
 	}
 }

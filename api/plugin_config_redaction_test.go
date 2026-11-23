@@ -13,10 +13,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
 	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
@@ -146,8 +148,9 @@ func TestPluginConfigRedaction_NoReadRouteReturnsASecret(t *testing.T) {
 				"/api/v1/agents":                                                    "redis:6379",
 				// The UI registries embed the plugin of each mount; the
 				// frontend reads them on every admin and portal page.
-				"/api/v1/plugins/ui-registry":        "redis:6379",
-				"/common/plugins/portal-ui-registry": "redis:6379",
+				"/api/v1/plugins/ui-registry": "redis:6379",
+				// The portal registry carries the mount but no configuration at all.
+				"/common/plugins/portal-ui-registry": "rate-limiter-portal",
 				// A schedule embeds its plugin.
 				fmt.Sprintf("/api/v1/plugins/%d/schedules/%d", plugin.ID, schedule.ID): "redis:6379",
 				fmt.Sprintf("/api/v1/agents/%d", agent.ID):                             "redis:6379",
@@ -419,5 +422,100 @@ func TestPluginConfigRedaction_KnownPluginCarriers(t *testing.T) {
 	}
 	for key := range known {
 		assert.True(t, found[key], "%s is listed but no longer exists; remove it", key)
+	}
+}
+
+// The UI registries are read by people who have no business with plugin
+// configuration: every admin-console role loads the admin one, every portal
+// user the portal one. Redaction follows the plugin's schema, so it cannot
+// protect a secret under a key the schema does not mark. Those readers get
+// the mount and the plugin's identity, and no configuration.
+func TestPluginConfigRedaction_RegistryConfigNeedsPluginsRead(t *testing.T) {
+	for _, withSchema := range []bool{true, false} {
+		t.Run(fmt.Sprintf("schema=%v", withSchema), func(t *testing.T) {
+			a, admin, member := setupAuthzAPI(t)
+			db := a.service.DB
+			a.service.PluginManifestService = services.NewPluginManifestService(db, nil)
+			plugin, llm := seedSecretPlugin(t, db, withSchema)
+			seedEmbedders(t, db, plugin, llm)
+			// A secret the schema does not mark and no key-name rule knows.
+			cfg := redactionTestConfig()
+			cfg["upstream"] = redactionSecretMark + "unmarked"
+			plugin.Config = cfg
+			require.NoError(t, db.Save(plugin).Error)
+
+			type registryBody struct {
+				Data []struct {
+					ComponentTag string `json:"component_tag"`
+					Plugin       *struct {
+						ID     uint                   `json:"id"`
+						Name   string                 `json:"name"`
+						Config map[string]interface{} `json:"config"`
+					} `json:"plugin"`
+				} `json:"data"`
+			}
+			decode := func(w *httptest.ResponseRecorder) registryBody {
+				t.Helper()
+				require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+				var body registryBody
+				require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+				require.Len(t, body.Data, 1, w.Body.String())
+				require.NotNil(t, body.Data[0].Plugin)
+				assert.Equal(t, "rate-limiter", body.Data[0].Plugin.Name, "the mount still names its plugin")
+				return body
+			}
+
+			t.Run("portal user", func(t *testing.T) {
+				w := apitest.PerformAuthRequest(a.router, http.MethodGet, "/common/plugins/portal-ui-registry", nil, member.APIKey)
+				body := decode(w)
+				assert.Equal(t, "rate-limiter-portal", body.Data[0].ComponentTag)
+				assert.Nil(t, body.Data[0].Plugin.Config, "a portal user gets no plugin configuration")
+				assert.NotContains(t, w.Body.String(), redactionSecretMark)
+				assert.NotContains(t, w.Body.String(), "redis:6379")
+			})
+
+			t.Run("administrator on the portal route", func(t *testing.T) {
+				w := apitest.PerformAuthRequest(a.router, http.MethodGet, "/common/plugins/portal-ui-registry", nil, admin.APIKey)
+				assert.Nil(t, decode(w).Data[0].Plugin.Config, "the portal route never carries configuration")
+			})
+
+			// The admin route under the real permission gate, with the
+			// caller's grants set by the test.
+			var grants authz.Grants
+			engine := gin.New()
+			engine.GET("/api/v1/plugins/ui-registry", func(c *gin.Context) {
+				c.Set("user", member)
+				g := grants
+				authz.WithContext(c, authz.NewGrantsContext(member.ID, false, func() (authz.Grants, error) { return g, nil }))
+			}, a.requireRoutePermission(), a.getUIRegistry)
+			call := func(g authz.Grants) *httptest.ResponseRecorder {
+				grants = g
+				w := httptest.NewRecorder()
+				engine.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/plugins/ui-registry", nil))
+				return w
+			}
+			var entry models.UIRegistry
+			require.NoError(t, db.Preload("Plugin").Where("scope = ?", "admin").First(&entry).Error)
+			page := authz.Permission(services.RequiredPermissionOf(&entry))
+
+			t.Run("Viewer without plugins:read", func(t *testing.T) {
+				// Holds what the plugin's page needs and read on other
+				// things, but not plugins:read.
+				w := call(authz.GlobalGrants(authz.NewSet(page, authz.Read("llms"), authz.Read("apps"))))
+				body := decode(w)
+				assert.Equal(t, "rate-limiter-admin", body.Data[0].ComponentTag)
+				assert.Nil(t, body.Data[0].Plugin.Config, "no plugins:read, no configuration")
+				assert.NotContains(t, w.Body.String(), redactionSecretMark, "not even a secret the schema does not mark")
+				assert.NotContains(t, w.Body.String(), "redis:6379")
+			})
+
+			t.Run("holder of plugins:read", func(t *testing.T) {
+				w := call(authz.GlobalGrants(authz.NewSet(page, authz.Read("plugins"))))
+				body := decode(w)
+				require.NotNil(t, body.Data[0].Plugin.Config)
+				assert.Equal(t, "redis:6379", body.Data[0].Plugin.Config["redis_addr"])
+				assert.Equal(t, services.REDACTED_VALUE, body.Data[0].Plugin.Config["redis_password"])
+			})
+		})
 	}
 }
