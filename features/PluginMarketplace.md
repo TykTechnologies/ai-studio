@@ -105,11 +105,35 @@ RBAC resources were never registered.
 ### Edge gateways
 
 `system.plugin.updated` changes the namespace snapshot checksum, so edges go **Pending** until the
-configuration is pushed. An edge reloads a plugin when its `checksum` or config differs from what it has
-loaded. The config is deliberately unchanged by an upgrade, so the upgrade writes the target's OCI digest to
-`plugins.checksum`; that is what makes an edge reload the plugin and pull the new artifact. For OCI plugins
-`checksum` therefore holds the **artifact digest**, not a hash of the binary. This works with edges that are
-already deployed.
+configuration is pushed. An edge reloads a plugin when its `command`, `checksum`, config or
+`allow_internal_host` differs from what it has loaded (`plugins.diffPluginStates`, called by
+`PluginManager.ReconcilePlugins` after every configuration sync). The config is deliberately unchanged by an
+upgrade, so the upgrade writes the target's OCI digest to `plugins.checksum`; that is what makes an edge
+before 2.3.0 reload the plugin and pull the new artifact. For OCI plugins `checksum` therefore holds the
+**artifact digest**, not a hash of the binary. This works with edges that are already deployed.
+
+From 2.3.0 an edge also reloads on a changed `command` alone (2.3.0-rc4 finding M4: a plugin pointed at a
+new file or OCI reference by hand kept running its old process until the edge restarted):
+
+- The command is compared as the exact string the plugin was loaded from (`LoadedPlugin.Command`): a new
+  file path, `grpc://` address, OCI digest or OCI query parameter is a change; the same command is never a
+  reload, so a push that does not touch a plugin leaves its process alone. An OCI reference by tag alone
+  whose tag was moved to another image is not seen as a change; use digests.
+- A reload stops the old process and loads the plugin as on a first load, with every check of one (allowed
+  sources, path, internal hosts, OCI fetch and signature for the new digest). If the load fails, the old
+  process stays stopped, the plugin is `failed` in the edge's plugin health, and requests to its LLMs are
+  refused (see `features/PluginSecurity.md`), until a push with a loadable command or the next retry.
+- Requests that are in the old process when it is stopped fail with the plugin-chain error (`500`); requests
+  that arrive during the swap wait for the new process.
+- Service scopes: the edge reads the plugin's record on every service call, and the old binary is stopped.
+  But the record the hub pushes carries the plugin's declared `service_scopes` whatever its approval state in
+  AI Studio, and an edge keeps no approval state. So on an edge a new binary has its declared scopes as soon
+  as the configuration is pushed, also while AI Studio shows the approval as pending. This is not new with
+  the reload (an edge restart loaded the new binary with the same scopes); it is a known issue
+  (midsommar-clean-5dr1, see the known issues in `CHANGELOG-v2.3.0.md`).
+- The reconcile log names what changed (`"changed":["command"]`), not the values.
+- The edge reports READY for a push once the configuration is stored; the reconcile runs right after, and
+  its outcome is in the edge's log and plugin health, not in what AI Studio shows for the edge.
 
 ## Limits and follow-ups
 
@@ -118,6 +142,7 @@ already deployed.
 - Auto-update (`installed_plugin_versions.auto_update`) is not implemented.
 - In a multi-node AI Studio deployment only the node that served the request restarts the plugin process,
   the same limitation as reloading a plugin today.
-- The edge reconcile does not compare `command`, so a *hand-edited* command that leaves checksum and config
-  alone is not reloaded on edges. Upgrades are unaffected.
+- An edge before 2.3.0 does not compare `command`, so a *hand-edited* command that leaves checksum and
+  config alone is not reloaded there until the edge restarts. Marketplace upgrades are unaffected.
+- AI Studio does not show whether an edge has reloaded a changed plugin, or failed to.
 - No notification is raised when a sync finds new updates; the Plugins page is where they show.
