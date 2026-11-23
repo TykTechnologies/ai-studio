@@ -26,6 +26,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
+
+	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
 // JudgePromptVersion names the judge prompt. It is part of the key of a
@@ -55,7 +57,54 @@ const (
 	judgeMaxAnswerBytes = 512
 	// JudgeMaxTokens bounds the judge's answer: one small JSON object.
 	JudgeMaxTokens = 64
+	// JudgeReasoningMaxTokens is the output limit sent for a judge model
+	// that reasons before it answers. Its vendors count the reasoning
+	// tokens against the same limit as the answer, so with JudgeMaxTokens
+	// such a model often spent the whole budget thinking and returned no
+	// answer at all (no verdict on 8 of 20 flags in the 2.3.0-rc4 test).
+	// The visible answer is still bounded: the parser reads at most
+	// judgeMaxAnswerBytes and refuses anything that is not the one small
+	// JSON object.
+	JudgeReasoningMaxTokens = 2048
 )
+
+// judgeReasoningModel reports whether a judge model reasons by default, with
+// reasoning tokens counted against its output limit: OpenAI's o-series and
+// GPT-5 family, and Google's Gemini 2.5 and 3 families. Anthropic models
+// think only when a request asks for it, and the judge never does.
+func judgeReasoningModel(vendor models.Vendor, model string) bool {
+	m := strings.ToLower(strings.TrimSpace(model))
+	if i := strings.LastIndex(m, "/"); i >= 0 {
+		m = m[i+1:] // "models/gemini-2.5-flash"
+	}
+	switch vendor {
+	case models.OPENAI:
+		for _, family := range []string{"o1", "o3", "o4", "gpt-5"} {
+			if m == family || strings.HasPrefix(m, family+"-") || strings.HasPrefix(m, family+".") {
+				return true
+			}
+		}
+	case models.GOOGLEAI, models.VERTEX:
+		return strings.HasPrefix(m, "gemini-2.5") || strings.HasPrefix(m, "gemini-3")
+	}
+	return false
+}
+
+// JudgeTokenLimit is the output token limit of a judge call: JudgeMaxTokens,
+// or JudgeReasoningMaxTokens for a model that reasons (judgeReasoningModel).
+// model "" means the LLM's default model.
+func JudgeTokenLimit(llm *models.LLM, model string) int {
+	if llm == nil {
+		return JudgeMaxTokens
+	}
+	if model == "" {
+		model = llm.DefaultModel
+	}
+	if judgeReasoningModel(llm.Vendor, model) {
+		return JudgeReasoningMaxTokens
+	}
+	return JudgeMaxTokens
+}
 
 // Judge verdicts.
 const (

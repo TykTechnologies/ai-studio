@@ -1,6 +1,7 @@
 package scripting
 
 import (
+	"github.com/TykTechnologies/midsommar/v2/models"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -285,5 +286,55 @@ func TestJudgeCovers(t *testing.T) {
 	}
 	if judgeCovers(long, in, []*guardrails.Span{{Start: at + 10, End: at}}) {
 		t.Error("an inverted span is covered")
+	}
+}
+
+// A judge model that reasons before it answers has its reasoning tokens
+// counted against the output limit, so with the 64-token answer limit it
+// often returned no answer at all (midsommar-clean-6bg5.26). Such a model
+// gets the larger limit; every other model keeps the 64 tokens.
+func TestJudgeTokenLimit(t *testing.T) {
+	for _, tc := range []struct {
+		vendor models.Vendor
+		model  string
+		want   int
+	}{
+		{models.OPENAI, "gpt-5.6-luna", JudgeReasoningMaxTokens},
+		{models.OPENAI, "gpt-5", JudgeReasoningMaxTokens},
+		{models.OPENAI, "GPT-5-mini", JudgeReasoningMaxTokens},
+		{models.OPENAI, "o3", JudgeReasoningMaxTokens},
+		{models.OPENAI, "o3-mini", JudgeReasoningMaxTokens},
+		{models.OPENAI, "o4-mini", JudgeReasoningMaxTokens},
+		{models.OPENAI, "o1-preview", JudgeReasoningMaxTokens},
+		{models.GOOGLEAI, "gemini-2.5-flash", JudgeReasoningMaxTokens},
+		{models.GOOGLEAI, "models/gemini-3.6-flash", JudgeReasoningMaxTokens},
+		{models.VERTEX, "gemini-2.5-pro", JudgeReasoningMaxTokens},
+
+		{models.OPENAI, "gpt-4o", JudgeMaxTokens},
+		{models.OPENAI, "gpt-4o-mini", JudgeMaxTokens},
+		{models.OPENAI, "gpt-4.1", JudgeMaxTokens},
+		{models.OPENAI, "o365-assistant", JudgeMaxTokens},
+		{models.OPENAI, "gpt-50", JudgeMaxTokens},
+		{models.GOOGLEAI, "gemini-2.0-flash", JudgeMaxTokens},
+		{models.ANTHROPIC, "claude-sonnet-5", JudgeMaxTokens},
+		{models.ANTHROPIC, "claude-haiku-5-5", JudgeMaxTokens},
+		{models.ANTHROPIC, "gpt-5", JudgeMaxTokens}, // the family is OpenAI's
+		{models.BEDROCK, "amazon.nova-lite-v1:0", JudgeMaxTokens},
+		{models.OLLAMA, "o3", JudgeMaxTokens},
+	} {
+		got := JudgeTokenLimit(&models.LLM{Vendor: tc.vendor}, tc.model)
+		if got != tc.want {
+			t.Errorf("%s %q: limit %d, want %d", tc.vendor, tc.model, got, tc.want)
+		}
+	}
+	// No model named: the LLM's default model decides.
+	if got := JudgeTokenLimit(&models.LLM{Vendor: models.OPENAI, DefaultModel: "gpt-5.6-luna"}, ""); got != JudgeReasoningMaxTokens {
+		t.Errorf("default model: limit %d", got)
+	}
+	if got := JudgeTokenLimit(&models.LLM{Vendor: models.OPENAI, DefaultModel: "gpt-4o"}, ""); got != JudgeMaxTokens {
+		t.Errorf("default model: limit %d", got)
+	}
+	if got := JudgeTokenLimit(nil, "gpt-5"); got != JudgeMaxTokens {
+		t.Errorf("nil LLM: limit %d", got)
 	}
 }

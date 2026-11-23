@@ -242,6 +242,7 @@ Every configuration object now belongs to a **Workspace**, and a role can be ass
 - **Studio Chat failed on Claude Sonnet 5 and later**, which reject `temperature` and `top_p` (`400 temperature is deprecated for this model`), and chat titles weren't generated there. New model call settings default `temperature` and `top_p` to `0`, which means not sent, so the vendor's default applies. The title call no longer sends a temperature.
 
 ### Guardrails and filters
+- **The LLM-judge second opinion gave no verdict with a reasoning model.** A judge such as an OpenAI GPT-5 or o-series model, or Gemini 2.5 or 3, spent the 64-token answer limit on its reasoning and returned nothing, so the filter's own verdict stood and Soften mode had no effect. These models now get a 2048-token output limit; the answer itself is still one small JSON object, and other models keep the 64-token limit.
 - **Redacting a request flattened tool-using conversations**, dropping tool calls, images and cache settings, so the vendor refused the request. Redactions are now made in place.
 - **A redaction that couldn't be applied could let unredacted text through** on a fail-open guardrail. Such requests are now blocked, or the tool result quarantined.
 - **Escaped text could hide from guardrails**, for example instructions after an escaped newline or written as `\u` escapes. Text is now decoded before it's checked.
