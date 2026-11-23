@@ -743,6 +743,7 @@ func (a *API) getLLMsByPrivacyScoreRange(c *gin.Context) {
 func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 	// Use preloaded plugins to avoid N+1 queries
 	plugins := make([]PluginResponse, len(llm.Plugins))
+	red := a.pluginRedactorFor(llm.Plugins...)
 	for i, plugin := range llm.Plugins {
 		plugins[i] = PluginResponse{
 			Type: "plugins",
@@ -767,7 +768,7 @@ func (a *API) serializeLLM(llm *models.LLM) LLMResponse {
 				Description:       plugin.Description,
 				Command:           plugin.Command,
 				Checksum:          plugin.Checksum,
-				Config:            plugin.Config,
+				Config:            red.config(plugin),
 				PluginType:        plugin.GetCapabilityCategory(),
 				OCIReference:      plugin.OCIReference,
 				Manifest:          plugin.Manifest,
@@ -875,6 +876,12 @@ func redactMetadataSecrets(metadata models.JSONMap) map[string]interface{} {
 
 func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 	result := make([]LLMResponse, len(llms))
+	// One redactor for the plugins of every LLM on the page.
+	var listed []*models.Plugin
+	for _, llm := range llms {
+		listed = append(listed, llm.Plugins...)
+	}
+	red := a.pluginRedactorFor(listed...)
 	for i, llm := range llms {
 		// Serialize plugins inline to avoid N+1 queries from function calls
 		plugins := make([]PluginResponse, len(llm.Plugins))
@@ -902,7 +909,7 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 					Description:       plugin.Description,
 					Command:           plugin.Command,
 					Checksum:          plugin.Checksum,
-					Config:            plugin.Config,
+					Config:            red.config(plugin),
 					HookType:          plugin.HookType,
 					IsActive:          plugin.IsActive,
 					Namespace:         plugin.Namespace,
@@ -1044,6 +1051,8 @@ func (a *API) getLLMPluginConfig(c *gin.Context) {
 		return
 	}
 
+	// The override follows the plugin's schema, so its secret fields are
+	// redacted like the plugin's own configuration.
 	response := gin.H{
 		"data": gin.H{
 			"type": "llm-plugin-config",
@@ -1051,7 +1060,7 @@ func (a *API) getLLMPluginConfig(c *gin.Context) {
 			"attributes": gin.H{
 				"llm_id":          llmID,
 				"plugin_id":       pluginID,
-				"config_override": config,
+				"config_override": a.redactPluginOverride(uint(pluginID), config),
 			},
 		},
 	}
@@ -1112,6 +1121,20 @@ func (a *API) updateLLMPluginConfig(c *gin.Context) {
 		return
 	}
 
+	// A redaction marker sent back in a secret field keeps the stored
+	// override value.
+	if req.ConfigOverride != nil {
+		stored, err := a.service.PluginService.GetLLMPluginConfig(uint(llmID), uint(pluginID))
+		if err != nil {
+			stored = nil // the update below reports a missing association
+		}
+		restored, ok := a.restorePluginConfig(c, a.pluginCommand(uint(pluginID)), req.ConfigOverride, stored)
+		if !ok {
+			return
+		}
+		req.ConfigOverride = restored
+	}
+
 	if err := a.service.PluginService.UpdateLLMPluginConfig(uint(llmID), uint(pluginID), req.ConfigOverride); err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			c.JSON(http.StatusNotFound, ErrorResponse{
@@ -1139,7 +1162,7 @@ func (a *API) updateLLMPluginConfig(c *gin.Context) {
 			"attributes": gin.H{
 				"llm_id":          llmID,
 				"plugin_id":       pluginID,
-				"config_override": req.ConfigOverride,
+				"config_override": a.redactPluginOverride(uint(pluginID), req.ConfigOverride),
 			},
 		},
 	}

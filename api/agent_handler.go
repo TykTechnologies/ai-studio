@@ -14,6 +14,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/chat_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 	"github.com/gosimple/slug"
 )
@@ -127,6 +128,64 @@ func (a *API) requireAgentInWorkspace(c *gin.Context, ag *models.AgentConfig, pe
 // configuration, its plugin and its App are left out (their ids kept), as
 // they can carry credentials (tgoe).
 func (a *API) redactAgent(c *gin.Context, ag *models.AgentConfig) {
+	a.redactAgentWith(c, ag, a.agentRedactor(ag))
+}
+
+// agentRedactor loads the secret-field classifiers of the plugins the agents
+// are built on: one query for the classifiers, and one more for the commands
+// of plugins that were not preloaded with their agent (they are then set on
+// the agent's Plugin-less copy as a command only, see agentPluginCommand).
+func (a *API) agentRedactor(agents ...*models.AgentConfig) pluginRedactor {
+	plugins := make([]*models.Plugin, 0, len(agents))
+	var missing []uint
+	for _, ag := range agents {
+		if ag == nil {
+			continue
+		}
+		if ag.Plugin != nil {
+			plugins = append(plugins, ag.Plugin)
+		} else if ag.PluginID != 0 {
+			missing = append(missing, ag.PluginID)
+		}
+	}
+	if len(missing) > 0 && a.service != nil && a.service.DB != nil {
+		var rows []models.Plugin
+		if err := a.service.DB.Select("id", "command").Where("id IN ?", missing).Find(&rows).Error; err == nil {
+			for i := range rows {
+				plugins = append(plugins, &rows[i])
+			}
+		}
+	}
+	red := a.pluginRedactorFor(plugins...)
+	if len(missing) == 0 {
+		return red
+	}
+	// Remember the commands looked up, under a key no real command has.
+	out := make(pluginRedactor, len(red)+len(plugins))
+	for k, v := range red {
+		out[k] = v
+	}
+	for _, p := range plugins {
+		out[agentPluginKey(p.ID)] = red.secrets(p.Command)
+	}
+	return out
+}
+
+// agentPluginKey is where agentRedactor keeps the classifier of a plugin id.
+func agentPluginKey(id uint) string { return "\x00plugin-id:" + strconv.FormatUint(uint64(id), 10) }
+
+// agentSecrets is the classifier for an agent's own configuration, which
+// follows its plugin's schema. A plugin agentRedactor could not find is
+// classified by key name.
+func agentSecrets(ag *models.AgentConfig, red pluginRedactor) *services.PluginConfigSecrets {
+	if ag.Plugin != nil {
+		return red.secrets(ag.Plugin.Command)
+	}
+	return red[agentPluginKey(ag.PluginID)]
+}
+
+// redactAgentWith is redactAgent with the redactor already loaded (a list).
+func (a *API) redactAgentWith(c *gin.Context, ag *models.AgentConfig, red pluginRedactor) {
 	if !onAdminAPI(c) {
 		ag.Config = nil
 		ag.Plugin = nil
@@ -135,9 +194,23 @@ func (a *API) redactAgent(c *gin.Context, ag *models.AgentConfig) {
 	}
 	if !a.holdsIn(c, ag.WorkspaceID, authz.Write("agents")) {
 		ag.Config = nil
+	} else {
+		// The agent's configuration follows its plugin's schema, so its
+		// secret fields are redacted like the plugin's own
+		// (plugin_config_redaction.go); a write that sends the marker back
+		// keeps the stored value (restoreAgentConfig).
+		ag.Config = agentSecrets(ag, red).RedactPluginConfig(ag.Config)
 	}
-	if ag.Plugin != nil && !a.mayReadPluginConfig(c) {
-		ag.Plugin.Config = nil
+	if ag.Plugin != nil {
+		// A copy: the secret fields of the plugin's configuration are
+		// redacted for every reader (plugin_config_redaction.go).
+		plugin := *ag.Plugin
+		if a.mayReadPluginConfig(c) {
+			plugin.Config = red.config(&plugin)
+		} else {
+			plugin.Config = nil
+		}
+		ag.Plugin = &plugin
 	}
 	// The linked App is shown only to a caller who may see it (.55): one in
 	// another Workspace is left out (app_hidden), its id kept.
@@ -604,6 +677,12 @@ func (a *API) HandleListAgents(c *gin.Context) {
 
 	// Filter agents by user access (groups)
 	accessibleAgents := make([]models.AgentConfig, 0)
+	// One redactor for the page: the plugins' secret-field classifiers.
+	listed := make([]*models.AgentConfig, len(agents))
+	for i := range agents {
+		listed[i] = &agents[i]
+	}
+	red := a.agentRedactor(listed...)
 	for i := range agents {
 		// Check access. On the admin API the Workspace scope (in SQL, above)
 		// is the visibility rule, so totals match the page; the team check
@@ -626,7 +705,7 @@ func (a *API) HandleListAgents(c *gin.Context) {
 		}
 
 		if hasAccess {
-			a.redactAgent(c, &agents[i])
+			a.redactAgentWith(c, &agents[i], red)
 			accessibleAgents = append(accessibleAgents, agents[i])
 		}
 	}
@@ -817,7 +896,13 @@ func (a *API) HandleCreateAgent(c *gin.Context) {
 	agentConfig.Description = req.Description
 	agentConfig.PluginID = req.PluginID
 	agentConfig.AppID = req.AppID
-	agentConfig.Config = req.Config
+	// A redaction marker in a new agent's secret field has no stored value
+	// to stand for; it is dropped, never stored as the credential.
+	newConfig, ok := a.restorePluginConfig(c, a.pluginCommand(req.PluginID), req.Config, nil)
+	if !ok {
+		return
+	}
+	agentConfig.Config = newConfig
 	if agentConfig.Config == nil {
 		agentConfig.Config = make(map[string]interface{})
 	}
@@ -946,7 +1031,13 @@ func (a *API) HandleUpdateAgent(c *gin.Context) {
 	agentConfig.Name = req.Name
 	agentConfig.Slug = slug.Make(req.Name)
 	agentConfig.Description = req.Description
-	agentConfig.Config = req.Config
+	// The API returns the configuration's secret fields redacted; a write
+	// that sends the marker back keeps the stored value.
+	restoredConfig, ok := a.restorePluginConfig(c, a.pluginCommand(agentConfig.PluginID), req.Config, agentConfig.Config)
+	if !ok {
+		return
+	}
+	agentConfig.Config = restoredConfig
 	if req.IsActive != nil {
 		agentConfig.IsActive = *req.IsActive
 	}

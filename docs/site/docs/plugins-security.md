@@ -16,7 +16,7 @@ A plugin is a program you choose to run next to AI Studio or the Microgateway. E
 | CPU and memory limits | No | Apply them at the container or OS level if you need them. |
 | Filesystem isolation | No | A plugin can read and write whatever the host's user can. |
 | Network egress filtering | No | See [Network egress](#network-egress). |
-| Secret redaction in plugin config | Partial: `$SECRET/` references are resolved for the plugin (in AI Studio, and encrypted in transit to edges), and the stored config keeps the reference; literal values are not redacted | See [Plugin configuration and secrets](#plugin-configuration-and-secrets). |
+| Secret redaction in plugin config | Partial: `$SECRET/` references are resolved for the plugin (in AI Studio, and encrypted in transit to edges), and the stored config keeps the reference; a literal value in a field the plugin's schema marks as secret is never returned by the management API (it is stored, and reaches the plugin, in clear) | See [Plugin configuration and secrets](#plugin-configuration-and-secrets). |
 
 ## Network egress
 
@@ -83,11 +83,14 @@ Because the plugin receives the secret's value, adding a `$SECRET/` reference to
 
 What this means in practice:
 
-- Anyone who can read the plugin's configuration in AI Studio (an administrator with plugin read access, or the database) can read a credential stored in it literally. Store a `$SECRET/` reference instead.
+- **Secret fields are redacted on read.** A config field the plugin's schema marks `"format": "password"` or `"writeOnly": true` (at any depth, including inside lists) is returned as `[redacted]` by every management API response that carries the plugin's configuration: the plugin, plugin lists, the plugins embedded in model provider and agent responses, the per-model-provider override, an agent's own configuration, plugin schedules, and `system.plugin.*` events. The plugin UI registries carry neither the configuration nor the plugin's command for a caller without `plugins:read`, and never on the portal. Model providers carried by `system.llm.*` events and object hooks list their plugins without any configuration. The plugin detail page and the edit form show `[redacted]` too. A `$SECRET/` reference is shown as the reference.
+- **Saving keeps what you did not retype.** A write that sends `[redacted]` back in a secret field keeps the stored value; a new value replaces it; an empty value clears it. `[redacted]` is refused (`400`) anywhere else, so it cannot be used to copy a secret into a readable field, and inside a list an entry keeps its secret only when the rest of the entry is unchanged and in the same place.
+- **Fields the schema does not mark are returned as stored.** Anyone with plugin read access, and anyone with database access, can read a credential kept in an unmarked field. When no schema is known for a plugin (it declares none, or it has not been loaded yet), string fields whose name contains `password`, `secret`, `token`, `api_key`, `private_key`, `credential` or `authorization` are redacted instead.
+- Redaction protects the value from being read back. It does not stop someone who may **write** the plugin's configuration from pointing the plugin at a server they control while keeping the stored password; plugin write access is already equivalent to running code as the plugin. Store a `$SECRET/` reference where you can.
 - The plugin process receives the credential in clear text, resolved or not. Only give a plugin a credential you would be comfortable giving to the plugin's author.
 - **Plugin authors**: do not log configuration values, and do not echo them in errors or UI responses. If your plugin needs a credential, document which config field holds it, keep the field optional where you can, and consider letting operators supply it from a file mounted only into your deployment.
 
-Optional hardening, such as marking config fields as secret and redacting them in transit, is tracked in [#445](https://github.com/TykTechnologies/ai-studio/issues/445).
+Further hardening, such as redacting secret fields in transit to the plugin process, is tracked in [#445](https://github.com/TykTechnologies/ai-studio/issues/445).
 
 ## Command validation
 

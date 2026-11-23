@@ -44,7 +44,10 @@ func LLMCredentialValue(v any) (string, bool) {
 // RedactLLMCredentials is a copy of l for anything that leaves the process
 // (system events, cluster_events, object hooks): a literal api_key and the
 // literal values of credential metadata keys read CredentialRedacted, and
-// references are kept, as the API shows them. l is not changed.
+// references are kept, as the API shows them. The plugins attached to the
+// LLM are listed without their configuration, which can hold the plugins'
+// own credentials (a Redis password, a vault token): an event subscriber or
+// an object hook gets the LLM, not its plugins' settings. l is not changed.
 func RedactLLMCredentials(l *LLM) *LLM {
 	if l == nil {
 		return nil
@@ -55,6 +58,7 @@ func RedactLLMCredentials(l *LLM) *LLM {
 	}
 	// Its filters' guardrail connection secrets too (2ze).
 	out.Filters = redactLLMFilters(l.Filters)
+	out.Plugins = withoutPluginConfig(l.Plugins)
 	if l.Metadata != nil {
 		out.Metadata = make(JSONMap, len(l.Metadata))
 		for k, v := range l.Metadata {
@@ -86,6 +90,46 @@ func RestoreLLMCredentials(original, modified *LLM) {
 			} else {
 				delete(modified.Metadata, k)
 			}
+		}
+	}
+	restorePluginConfig(original.Plugins, modified.Plugins)
+}
+
+// withoutPluginConfig copies plugins with their configuration left out.
+func withoutPluginConfig(plugins []*Plugin) []*Plugin {
+	if plugins == nil {
+		return nil
+	}
+	out := make([]*Plugin, len(plugins))
+	for i, p := range plugins {
+		if p == nil {
+			continue
+		}
+		cp := *p
+		cp.Config = nil
+		out[i] = &cp
+	}
+	return out
+}
+
+// restorePluginConfig gives the plugins of an object hook's result the
+// configuration withoutPluginConfig left out, by plugin id. A hook does not
+// see a plugin's configuration, so whatever it put there is not taken.
+func restorePluginConfig(original, modified []*Plugin) {
+	byID := make(map[uint]*Plugin, len(original))
+	for _, p := range original {
+		if p != nil {
+			byID[p.ID] = p
+		}
+	}
+	for _, p := range modified {
+		if p == nil {
+			continue
+		}
+		if orig := byID[p.ID]; orig != nil {
+			p.Config = orig.Config
+		} else {
+			p.Config = nil
 		}
 	}
 }

@@ -56,6 +56,7 @@ func (a *API) CreatePluginSchedule(c *gin.Context) {
 		return
 	}
 
+	a.redactSchedulePlugin(schedule)
 	c.JSON(http.StatusCreated, schedule)
 }
 
@@ -112,6 +113,7 @@ func (a *API) GetPluginScheduleDetail(c *gin.Context) {
 		return
 	}
 
+	a.redactSchedulePlugin(schedule)
 	c.JSON(http.StatusOK, schedule)
 }
 
@@ -229,6 +231,7 @@ func (a *API) UpdatePluginSchedule(c *gin.Context) {
 		return
 	}
 
+	a.redactSchedulePlugin(schedule)
 	c.JSON(http.StatusOK, schedule)
 }
 

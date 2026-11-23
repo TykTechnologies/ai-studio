@@ -1073,3 +1073,26 @@ func (s *PluginService) AuthorizePluginServiceAccess(pluginID uint, adminApprova
 
 	return nil
 }
+// ConfigSecretsForCommands returns, per plugin command, the classifier of
+// secret configuration fields (see NewPluginConfigSecrets), built from the
+// cached configuration schema of that command. It reads the cache only: a
+// read of a plugin never starts or calls the plugin. A schema whose cache
+// entry was invalidated is still used (the last schema the plugin declared
+// is a better guide than key names). A command without a cached schema is
+// absent from the map; callers then classify by key name.
+func (s *PluginService) ConfigSecretsForCommands(commands []string) map[string]*PluginConfigSecrets {
+	out := make(map[string]*PluginConfigSecrets, len(commands))
+	if s == nil || s.db == nil || len(commands) == 0 {
+		return out
+	}
+	var rows []models.PluginConfigSchema
+	if err := s.db.Unscoped().Where("command IN ?", commands).Order("updated_at ASC").Find(&rows).Error; err != nil {
+		log.Warn().Err(err).Msg("Plugin config schemas could not be read; classifying secret fields by key name")
+		return out
+	}
+	for i := range rows {
+		// Later rows (the most recently updated) win.
+		out[rows[i].Command] = NewPluginConfigSecrets(rows[i].SchemaJSON)
+	}
+	return out
+}

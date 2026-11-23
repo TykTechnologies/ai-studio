@@ -1,7 +1,7 @@
 import React from "react";
 import { render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom";
-import SchemaFormRenderer, { fieldUiSchemas } from "./SchemaFormRenderer";
+import SchemaFormRenderer, { fieldUiSchemas, hasRedactedValue, REDACTED_VALUE } from "./SchemaFormRenderer";
 
 // midsommar-clean-yyo: a string field with a description over 100 characters
 // was turned into a textarea, which overrode format "password" and showed
@@ -191,5 +191,46 @@ describe("SchemaFormRenderer secret fields", () => {
     expect(ui.api_token).toEqual({ "ui:widget": "password" });
     expect(ui.notes["ui:widget"]).toBe("textarea");
     expect(ui.vault.token).toEqual({ "ui:widget": "password" });
+  });
+});
+
+// midsommar-clean-6bg5.9: the API returns a stored secret as "[redacted]",
+// never the value. The form keeps the field masked and says what saving does.
+describe("SchemaFormRenderer with secrets redacted by the API", () => {
+  const redactedSchema = {
+    type: "object",
+    properties: {
+      redis_addr: { type: "string", title: "Redis address" },
+      redis_password: { type: "string", format: "password", title: "Redis password" },
+      backend: {
+        type: "object",
+        properties: { redis: { type: "object", properties: { password: { type: "string", format: "password", title: "Nested password" } } } },
+      },
+    },
+  };
+
+  it("finds a redacted value at any depth", () => {
+    expect(hasRedactedValue({ a: "x", b: { c: [{ d: REDACTED_VALUE }] } })).toBe(true);
+    expect(hasRedactedValue({ a: "x", b: { c: ["y"] }, n: 1, z: null })).toBe(false);
+    expect(hasRedactedValue(undefined)).toBe(false);
+  });
+
+  it("explains that an untouched secret is kept, and shows no note without one", () => {
+    const { unmount } = render(
+      <SchemaFormRenderer
+        schema={redactedSchema}
+        formData={{ redis_addr: "redis:6379", redis_password: REDACTED_VALUE, backend: { redis: { password: REDACTED_VALUE } } }}
+        onChange={() => {}}
+      />
+    );
+    expect(screen.getByTestId("plugin-config-redacted-note")).toHaveTextContent(/keeps its stored value/);
+    for (const input of screen.getAllByDisplayValue(REDACTED_VALUE)) {
+      expect(input).toHaveAttribute("type", "password");
+    }
+    expect(screen.getAllByDisplayValue(REDACTED_VALUE)).toHaveLength(2);
+    unmount();
+
+    render(<SchemaFormRenderer schema={redactedSchema} formData={{ redis_addr: "redis:6379" }} onChange={() => {}} />);
+    expect(screen.queryByTestId("plugin-config-redacted-note")).not.toBeInTheDocument();
   });
 });

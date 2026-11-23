@@ -4,10 +4,23 @@ import { Form } from '@rjsf/mui';
 import validator from '@rjsf/validator-ajv8';
 
 // A secret field: format "password", or writeOnly. It must render masked
-// whatever else applies to it. Masking is display-only: the plugin config API
-// still returns stored values to the form.
+// whatever else applies to it. The plugin config API marks the same fields
+// (services/plugin_config_redaction.go) and returns a stored secret as
+// REDACTED_VALUE, never the value; sending that marker back keeps it.
 export const isSecretProperty = (property) =>
   Boolean(property) && (property.format === 'password' || property.writeOnly === true);
+
+// What the API returns in place of a stored secret.
+export const REDACTED_VALUE = '[redacted]';
+
+// hasRedactedValue reports whether a configuration holds a stored secret the
+// API did not return, at any depth.
+export const hasRedactedValue = (value) => {
+  if (value === REDACTED_VALUE) return true;
+  if (Array.isArray(value)) return value.some(hasRedactedValue);
+  if (value && typeof value === 'object') return Object.values(value).some(hasRedactedValue);
+  return false;
+};
 
 // Follows a local "$ref" ("#/definitions/X", "#/$defs/X") against the root
 // schema, as RJSF does, so a secret declared in a definition is still seen.
@@ -175,6 +188,14 @@ const SchemaFormRenderer = ({
   try {
     return (
       <Box>
+        {hasRedactedValue(formData) && (
+          <Alert severity="info" sx={{ mb: 2 }} data-testid="plugin-config-redacted-note">
+            <Typography variant="body2">
+              Stored secrets are not shown. A secret field left as it is keeps its stored value; type a new
+              value to replace it, or clear the field to remove it.
+            </Typography>
+          </Alert>
+        )}
         {/* Schema Form */}
         <Form
           schema={schema}

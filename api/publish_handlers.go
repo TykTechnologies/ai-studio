@@ -256,7 +256,7 @@ func (a *API) setPluginActive(c *gin.Context, active bool) {
 	if a.service.SystemEvents != nil {
 		a.service.SystemEvents.EmitPluginUpdated(plugin, plugin.ID, 0)
 	}
-	c.JSON(http.StatusOK, gin.H{"data": serializePlugin(plugin)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializePlugin(plugin)})
 }
 
 // --- Metadata schemas ---

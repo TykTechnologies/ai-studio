@@ -181,6 +181,7 @@ func (a *API) listPlugins(c *gin.Context) {
 	}
 
 	// Serialize plugins inline to avoid N+1 queries from function calls
+	red := a.pluginRedactorForList(plugins)
 	for i, plugin := range plugins {
 		pluginResponse := PluginResponse{
 			Type: "plugins",
@@ -205,7 +206,7 @@ func (a *API) listPlugins(c *gin.Context) {
 				Description:  plugin.Description,
 				Command:      plugin.Command,
 				Checksum:     plugin.Checksum,
-				Config:       plugin.Config,
+				Config:       red.config(&plugin),
 				HookType:     plugin.HookType,
 				IsActive:     plugin.IsActive,
 				Namespace:    plugin.Namespace,
@@ -319,6 +320,13 @@ func (a *API) createPlugin(c *gin.Context) {
 		return
 	}
 
+	// A redaction marker in a new plugin's secret field has no stored value
+	// to stand for; it is dropped, never stored as the credential.
+	restored, ok := a.restorePluginConfig(c, req.Command, req.Config, nil)
+	if !ok {
+		return
+	}
+	req.Config = restored
 	if !requireSecretReadForReferences(c, nil, req.Config) {
 		return
 	}
@@ -539,6 +547,15 @@ func (a *API) updatePlugin(c *gin.Context) {
 		return
 	}
 
+	// The API returns secret configuration fields redacted; a write that
+	// sends the marker back keeps the stored value.
+	if req.Config != nil {
+		restored, ok := a.restorePluginConfig(c, originalPlugin.Command, req.Config, originalPlugin.Config)
+		if !ok {
+			return
+		}
+		req.Config = restored
+	}
 	if !requireSecretReadForReferences(c, originalPlugin.Config, req.Config) {
 		return
 	}
@@ -995,8 +1012,9 @@ func (a *API) getLLMPlugins(c *gin.Context) {
 	}
 
 	response := make([]PluginResponse, len(plugins))
+	red := a.pluginRedactorForList(plugins)
 	for i, plugin := range plugins {
-		response[i] = a.pluginForObjectRead(c, serializePlugin(&plugin))
+		response[i] = a.pluginForObjectRead(c, serializePlugin(&plugin, red))
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": response})
@@ -1192,12 +1210,14 @@ func (a *API) reloadPlugin(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Plugin reloaded and manifest registered successfully",
-		"plugin":  serializePlugin(plugin),
+		"plugin":  a.serializePlugin(plugin),
 	})
 }
 
-// serializePlugin converts a Plugin model to API response format
-func serializePlugin(plugin *models.Plugin) PluginResponse {
+// serializePlugin converts a Plugin model to API response format. The
+// plugin's configuration is returned with its secret fields redacted (red;
+// see plugin_config_redaction.go).
+func serializePlugin(plugin *models.Plugin, red pluginRedactor) PluginResponse {
 	response := PluginResponse{
 		Type: "plugins",
 		ID:   strconv.FormatUint(uint64(plugin.ID), 10),
@@ -1221,7 +1241,7 @@ func serializePlugin(plugin *models.Plugin) PluginResponse {
 			Description:  plugin.Description,
 			Command:      plugin.Command,
 			Checksum:     plugin.Checksum,
-			Config:       plugin.Config,
+			Config:       red.config(plugin),
 			HookType:     plugin.HookType,
 			IsActive:     plugin.IsActive,
 			Namespace:    plugin.Namespace,
@@ -1316,6 +1336,11 @@ func (a *API) createOCIPlugin(c *gin.Context) {
 		return
 	}
 
+	restoredConfig, ok := a.restorePluginConfig(c, "", req.Config, nil)
+	if !ok {
+		return
+	}
+	req.Config = restoredConfig
 	if !requireSecretReadForReferences(c, nil, req.Config) {
 		return
 	}
@@ -1423,7 +1448,7 @@ func (a *API) refreshOCIPlugin(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": serializePlugin(plugin)})
+	c.JSON(http.StatusOK, gin.H{"data": a.serializePlugin(plugin)})
 }
 
 // @Summary Get plugins by type
@@ -1482,8 +1507,9 @@ func (a *API) getPluginsByType(c *gin.Context) {
 
 	// Serialize response
 	response := make([]PluginResponse, len(plugins))
+	red := a.pluginRedactorForList(plugins)
 	for i, plugin := range plugins {
-		response[i] = serializePlugin(&plugin)
+		response[i] = serializePlugin(&plugin, red)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": response})
@@ -1521,8 +1547,9 @@ func (a *API) getAIStudioPluginsWithManifests(c *gin.Context) {
 
 	// Serialize response
 	response := make([]PluginResponse, len(plugins))
+	red := a.pluginRedactorForList(plugins)
 	for i, plugin := range plugins {
-		response[i] = serializePlugin(&plugin)
+		response[i] = serializePlugin(&plugin, red)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": response})
@@ -1577,6 +1604,7 @@ func (a *API) getUIRegistry(c *gin.Context) {
 		visible = append(visible, entry)
 	}
 	entries = visible
+	a.redactRegistryPlugins(entries, a.mayReadPluginConfig(c))
 
 	c.JSON(http.StatusOK, gin.H{"data": entries})
 }
@@ -2442,6 +2470,8 @@ func (a *API) getPortalUIRegistry(c *gin.Context) {
 		})
 		return
 	}
+	// Portal users never get plugin configuration.
+	a.redactRegistryPlugins(entries, false)
 
 	c.JSON(http.StatusOK, gin.H{"data": entries})
 }
