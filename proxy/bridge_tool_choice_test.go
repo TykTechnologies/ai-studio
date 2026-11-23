@@ -2,12 +2,14 @@ package proxy
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/google/generative-ai-go/genai"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -200,12 +202,12 @@ func TestBridgeToolChoice_AnthropicAndGoogle(t *testing.T) {
 			`"none"`:      `{"type":"none"}`,
 			forcedGetTime: `{"type":"tool","name":"get_time"}`,
 		}},
-		// The SDK sends the mode as its enum number: AUTO 1, ANY 2, NONE 3.
+		// The SDK sends the mode as its enum number.
 		{"google", models.GOOGLEAI, "gemini-2.5-flash", func(*testing.T) http.HandlerFunc { return serveGeminiAnyShape }, "toolConfig", map[string]string{
-			`"auto"`:      `{"functionCallingConfig":{"mode":1}}`,
-			`"required"`:  `{"functionCallingConfig":{"mode":2}}`,
-			`"none"`:      `{"functionCallingConfig":{"mode":3}}`,
-			forcedGetTime: `{"functionCallingConfig":{"mode":2,"allowedFunctionNames":["get_time"]}}`,
+			`"auto"`:      fmt.Sprintf(`{"functionCallingConfig":{"mode":%d}}`, genai.FunctionCallingAuto),
+			`"required"`:  fmt.Sprintf(`{"functionCallingConfig":{"mode":%d}}`, genai.FunctionCallingAny),
+			`"none"`:      fmt.Sprintf(`{"functionCallingConfig":{"mode":%d}}`, genai.FunctionCallingNone),
+			forcedGetTime: fmt.Sprintf(`{"functionCallingConfig":{"mode":%d,"allowedFunctionNames":["get_time"]}}`, genai.FunctionCallingAny),
 		}},
 	} {
 		t.Run(vendor.name, func(t *testing.T) {
