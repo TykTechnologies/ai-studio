@@ -117,8 +117,6 @@ Workspaces govern the administration UI and the management API. These parts of A
 - **Plugin resources** (what a plugin offers to Apps, such as the MCP servers of a registry plugin) are global too. Attaching one to an App that the App does not have yet needs the global `plugins:read` permission as well as write on the App: without it the admin UI does not show the pickers and the API answers `403`. Someone who can edit the App can still save it with the plugin resources it has, and remove them.
 - **Access management**: users, teams, roles, App quotas and the license are global.
 - **Governed metadata** on MCP servers and plugin resources needs the global `metadata` permission.
-<!-- PENDING DECISION (midsommar-clean-0ovt): delete this item if 0ovt is fixed in rc5. -->
-- **Plugin resources are global, and attaching one needs only `apps:write`.** The admin UI hides the plugin resource pickers from someone without the global `plugins` read permission, but the API accepts a plugin resource on an App from anyone who may edit that App. Someone with a role in one Workspace who knows a plugin id, resource type and instance id can attach that instance to their App.
 
 Management API routes on Workspace objects that are not Workspace-aware require their permission **globally**, so a person with only Workspace roles is refused (403) rather than given wider access.
 
