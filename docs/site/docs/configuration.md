@@ -72,7 +72,7 @@ Remember that fundamental system parameters are typically set via environment va
 *   Email Server Settings (`SMTP_*`, `FROM_EMAIL`)
 *   Registration Settings (`ALLOW_REGISTRATIONS`, `FILTER_SIGNUP_DOMAINS`)
 *   Log Level (`LOG_LEVEL`: `trace`, `debug`, `info`, `warn`, `error`; default `info`)
-*   SQL values in logs (`DB_LOG_SQL_PARAMS`, default off). AI Studio logs SQL statements at `debug`, and slow or failed ones at any level, with their placeholders only, never the values: those are rows' contents, credentials included. `DB_LOG_SQL_PARAMS=true` logs the values too (AI Studio logs a warning at startup when it is set). Use it only for local debugging. The Microgateway reads the same variable.
+*   SQL values in logs (`DB_LOG_SQL_PARAMS`, default off). AI Studio logs SQL statements at `debug`, and slow or failed ones at any level, with their placeholders only, not the values: those are rows' contents, credentials included. <!-- PENDING DECISION (midsommar-clean-wftu): delete the next sentence if wftu is fixed in rc5. --> One exception in 2.3.0: a statement whose result is read with a scan (cluster events among them) is logged with its values whatever this setting says, so treat the logs as sensitive and do not run production at `debug`. `DB_LOG_SQL_PARAMS=true` logs the values too (AI Studio logs a warning at startup when it is set). Use it only for local debugging. The Microgateway reads the same variable.
 
 ### Sharing a Postgres database
 Studio's table names are unprefixed and include common ones such as `users`, `roles` and `audit_records`. To run Studio in a database another application also uses, set `DATABASE_SCHEMA` to a lower-case schema name: Studio creates the schema if it does not exist (the database user needs the `CREATE` privilege on the database for that, or create the schema beforehand) and keeps all of its tables there, whatever `search_path` the database defaults to. A `DATABASE_URL` that sets a different `search_path` is refused.
@@ -236,7 +236,7 @@ Every action on the management API is recorded for incident reconstruction. On b
 See [Audit Trail](./audit-trail.md) for the record schema, redaction rules and API.
 
 ### Agent Call Tracing (Enterprise)
-Turns gateway traffic into sessions, turns and span trees. Off by default. It runs only in Enterprise Edition with a valid licence and `AGENT_TRACING_ENABLED=true`; in Community Edition the setting is ignored with a warning. Invalid values log a warning at start-up and fall back to the default.
+Turns gateway traffic into sessions, turns and span trees. Off by default. It runs only in Enterprise Edition with a valid license and `AGENT_TRACING_ENABLED=true`; in Community Edition the setting is ignored with a warning. Invalid values log a warning at start-up and fall back to the default.
 
 *   Enable (`AGENT_TRACING_ENABLED`): default `false`
 *   Key (`AGENT_TRACING_KEY`): root key for fingerprints and payload encryption; falls back to `TYK_AI_SECRET_KEY`
