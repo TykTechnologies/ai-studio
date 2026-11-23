@@ -130,7 +130,11 @@ const AppForm = () => {
   // is not a full administrator clears its attested capability, so its
   // softened guardrail exceptions may block again. Warned about before the
   // save, when the app has one and a guardrail applies to it.
-  const { isFullAdmin } = usePermissions();
+  const { isFullAdmin, can } = usePermissions();
+  // Plugins are global: someone with only a Workspace role cannot list plugin
+  // resource types, so the calls are skipped and the section stays hidden.
+  // The selections loaded with the App are still sent on save, unchanged.
+  const canReadPlugins = can(P.PLUGINS_READ);
   const loadedResources = useRef(null);
   const [capability, setCapability] = useState(null);
   const [resetConfirm, setResetConfirm] = useState(null);
@@ -232,6 +236,7 @@ const AppForm = () => {
   }, [id, fetchCredential]);
 
   const fetchPluginResourceTypes = async () => {
+    if (!canReadPlugins) return;
     try {
       const response = await apiClient.get("/plugin-resource-types");
       const types = response.data.data || [];

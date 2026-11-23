@@ -74,6 +74,7 @@ import { useEdition } from "../../context/EditionContext";
 import { getAppStatus } from "../../../utils/appStatus";
 import Can from "../rbac/Can";
 import { P } from "../../rbac/permissions";
+import { usePermissions } from "../../context/PermissionsContext";
 import NotFound from "../../pages/NotFound";
 import { useWorkspaceAccess } from "../workspaces/workspaceFields";
 
@@ -136,6 +137,11 @@ const AppDetails = () => {
   const { isEnterprise } = useEdition();
   // Actions are checked in the App's Workspace (Workspaces E4).
   const { canOn } = useWorkspaceAccess();
+  // Analytics and proxy logs are global: someone with only a Workspace role
+  // does not hold them, so the calls are skipped and the sections hidden.
+  const { can } = usePermissions();
+  const canReadAnalytics = can(P.ANALYTICS_READ);
+  const canReadProxyLogs = can(P.PROXY_LOGS_READ);
   const [app, setApp] = useState(null);
   const [credential, setCredential] = useState(null);
   const [user, setUser] = useState(null);
@@ -193,6 +199,7 @@ const AppDetails = () => {
 
   // Define fetchProxyLogs before the useEffect that uses it
   const fetchProxyLogs = useCallback(async () => {
+    if (!canReadProxyLogs) return;
     try {
       const params = {
         start_date: startDate,
@@ -216,7 +223,7 @@ const AppDetails = () => {
     } catch (error) {
       console.error("Error fetching proxy logs", error);
     }
-  }, [startDate, endDate, id, page, pageSize, debouncedProxyLogSearch, updatePaginationData]);
+  }, [startDate, endDate, id, page, pageSize, debouncedProxyLogSearch, updatePaginationData, canReadProxyLogs]);
 
   const fetchAppDetails = useCallback(async () => {
     setLoading(true);
@@ -441,6 +448,7 @@ const AppDetails = () => {
   };
 
   const fetchTokenUsageAndCost = async () => {
+    if (!canReadAnalytics) return;
     try {
       const [usageResponse, budgetResponse, interactionsResponse] = await Promise.all([
         apiClient.get(`/analytics/usage`, {
@@ -475,7 +483,9 @@ const AppDetails = () => {
       const response = await apiClient.get(`/users/${userId}`);
       setUser(response.data.data);
     } catch (error) {
-      console.error("Error fetching user", error);
+      // 404: the owner is not someone this caller may see (a user outside
+      // their Workspaces). Shown as a neutral placeholder, not an error.
+      setUser(false);
     }
   };
 
@@ -683,6 +693,8 @@ const AppDetails = () => {
         </Box>
       </TitleBox>
       <ContentBox>
+        {canReadAnalytics && (
+          <>
         <Section title="Token Usage">
           <Box height={300} mb={4}>
             <Line options={tokenChartOptions} data={tokenChartData} />
@@ -708,7 +720,10 @@ const AppDetails = () => {
             />
           </Box>
         </Section>
+          </>
+        )}
 
+        {canReadAnalytics && (
         <AppMCPUsage
           client={apiClient}
           path={adminAppPath(id)}
@@ -717,6 +732,7 @@ const AppDetails = () => {
           boundServers={app?.attributes?.mcp_servers || []}
           admin
         />
+        )}
 
         <Section title="App Information">
           <Grid container spacing={2}>
@@ -752,6 +768,10 @@ const AppDetails = () => {
                   </Box>
                 ) : user ? (
                   user.attributes.name
+                ) : user === false ? (
+                  <Typography component="span" color="text.secondary" data-testid="app-owner-hidden">
+                    User #{app.attributes.user_id}
+                  </Typography>
                 ) : (
                   "Loading..."
                 )}
@@ -1003,6 +1023,7 @@ const AppDetails = () => {
           </>
         )}
 
+        {canReadProxyLogs && (
         <Section
           title="Proxy Logs"
           actions={
@@ -1115,6 +1136,7 @@ const AppDetails = () => {
             onPageSizeChange={handlePageSizeChange}
           />
         </Section>
+        )}
 
       </ContentBox>
       <Snackbar

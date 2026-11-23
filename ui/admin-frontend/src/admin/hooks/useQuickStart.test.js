@@ -33,6 +33,13 @@ jest.mock('../utils/cacheService', () => ({
   },
 }));
 
+// The caller's permissions: users:write unless a test says otherwise.
+let mockCanWriteUsers = true;
+jest.mock('../context/PermissionsContext', () => ({
+  __esModule: true,
+  usePermissions: () => ({ can: (perm) => perm === 'users:write' && mockCanWriteUsers }),
+}));
+
 // Test component that uses the useQuickStart hook
 const TestComponent = () => {
   const quickStartData = useQuickStart();
@@ -87,6 +94,7 @@ describe('useQuickStart Hook', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCanWriteUsers = true;
     
     // Default mock implementation for useUserEntitlements
     useUserEntitlements.mockReturnValue(mockUserEntitlements);
@@ -272,6 +280,29 @@ describe('useQuickStart Hook', () => {
     // Verify showQuickStart is set to false
     const data = JSON.parse(screen.getByTestId('quick-start-data').textContent);
     expect(data.showQuickStart).toBe(false);
+  });
+
+  // midsommar-clean-6bg5.10: dismissing Quick Start writes the user record
+  // (users:write, global). Someone without it, such as a role held only
+  // within a Workspace, is not offered Quick Start and never sends the call
+  // that answered 403.
+  test('is not offered, and skip sends nothing, without users:write', async () => {
+    mockCanWriteUsers = false;
+    apiClient.get.mockResolvedValue({ data: { count: 0 } });
+    useUserEntitlements.mockReturnValue(mockUserEntitlements);
+
+    render(<TestComponent />);
+    await waitFor(() => {
+      const data = JSON.parse(screen.getByTestId('quick-start-data').textContent);
+      expect(data.loading).toBe(false);
+    });
+    expect(JSON.parse(screen.getByTestId('quick-start-data').textContent).showQuickStart).toBe(false);
+
+    await act(async () => {
+      screen.getByTestId('skip-button').click();
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(skipQuickStartForUser).not.toHaveBeenCalled();
   });
 
   test('handleQuickStartSkip sets showQuickStart to false and calls skipQuickStartForUser', async () => {

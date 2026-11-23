@@ -54,6 +54,37 @@ describe("EmbedderPicker", () => {
     expect(onChange).toHaveBeenCalledWith("2", rows[1]);
   });
 
+  // midsommar-clean-6bg5.10: a role held only in a Workspace reads embedders
+  // (GET /embedders is Workspace-checked). The picker used the global-only
+  // check and told a Workspace Editor "Your role does not include access".
+  it("lists embedders for a role held only in a Workspace", async () => {
+    const onChange = jest.fn();
+    render(
+      <ThemeProvider theme={testTheme}>
+        <MemoryRouter>
+          <PermissionsProvider
+            identity={{
+              id: "9",
+              attributes: {
+                has_admin_access: true,
+                rbac_enabled: true,
+                permissions: [],
+                workspaces: [{ id: 2, name: "W1", permissions: ["embedders:read", "datasources:write"] }],
+              },
+            }}
+          >
+            <EmbedderPicker value="" onChange={onChange} />
+          </PermissionsProvider>
+        </MemoryRouter>
+      </ThemeProvider>,
+    );
+    await waitFor(() => expect(apiClient.get).toHaveBeenCalledWith("/embedders", expect.anything()));
+    expect(screen.queryByText(/Your role does not include access to embedders/)).not.toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: /Embedder/ }));
+    fireEvent.click(await within(screen.getByRole("listbox")).findByText("Local"));
+    expect(onChange).toHaveBeenCalledWith("2", rows[1]);
+  });
+
   it("offers inline creation only with embedders:write", async () => {
     renderPicker(["embedders:read"]);
     await waitFor(() => expect(apiClient.get).toHaveBeenCalled());

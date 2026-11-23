@@ -2,15 +2,22 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Box, Grid, Typography } from "@mui/material";
 import { teamBudgetsService } from "../../services/teamBudgetsService";
+import { usePermissions } from "../../context/PermissionsContext";
+import { P } from "../../rbac/permissions";
 
 // AppTeamBudgetRow shows the team an App's spend counts towards and, when
 // that team hands out budgets from a pool, says so (Enterprise).
 const AppTeamBudgetRow = ({ app, FieldLabel, FieldValue }) => {
   const teamId = app?.attributes?.team_id;
   const [report, setReport] = useState(null);
+  // A team's budget report needs teams read globally; without it (a role
+  // held only within a Workspace) the row names the team by id and the
+  // call is not made.
+  const { can } = usePermissions();
+  const canReadTeamBudget = can(P.GROUPS_READ);
 
   useEffect(() => {
-    if (!teamId) {
+    if (!teamId || !canReadTeamBudget) {
       setReport(null);
       return;
     }
@@ -18,7 +25,7 @@ const AppTeamBudgetRow = ({ app, FieldLabel, FieldValue }) => {
       .getReport(teamId)
       .then(setReport)
       .catch(() => setReport(null));
-  }, [teamId]);
+  }, [teamId, canReadTeamBudget]);
 
   const pooled = report?.enabled && report?.managed;
 
@@ -30,7 +37,9 @@ const AppTeamBudgetRow = ({ app, FieldLabel, FieldValue }) => {
       <Grid item xs={9}>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }} data-testid="app-team-budget">
           <FieldValue>
-            {teamId ? (
+            {teamId && !canReadTeamBudget ? (
+              <Typography component="span" data-testid="app-team-plain">Team {teamId}</Typography>
+            ) : teamId ? (
               <Link to={`/admin/groups/${teamId}`}>{report?.team_name || `Team ${teamId}`}</Link>
             ) : (
               <Typography component="span" color="text.defaultSubdued">Not attributed to a team</Typography>

@@ -4,6 +4,8 @@ import "@testing-library/jest-dom";
 import { ThemeProvider } from "@mui/material/styles";
 import { MemoryRouter } from "react-router-dom";
 import testTheme from "../../utils/testTheme";
+import { PermissionsProvider } from "../../context/PermissionsContext";
+import { clearIdentity } from "../../utils/identityStore";
 import AppForm from "./AppForm";
 import apiClient, { appToolAPI } from "../../utils/apiClient";
 import { useEdition } from "../../context/EditionContext";
@@ -95,18 +97,27 @@ const DirtyProbe = () => {
   return <span data-testid="registry-dirty">{String(isDirty)}</span>;
 };
 
-const renderForm = ({ withGuard = false } = {}) =>
+// The caller's permissions: plugins and teams are global resources the form
+// only reads for a caller who holds them (midsommar-clean-6bg5.10).
+const globalReader = {
+  id: "1",
+  attributes: { has_admin_access: true, rbac_enabled: true, permissions: ["plugins:read", "groups:read"] },
+};
+
+const renderForm = ({ withGuard = false, identity = globalReader } = {}) =>
   render(
     <ThemeProvider theme={testTheme}>
       <MemoryRouter>
-        {withGuard ? (
-          <UnsavedChangesProvider>
+        <PermissionsProvider identity={identity}>
+          {withGuard ? (
+            <UnsavedChangesProvider>
+              <AppForm />
+              <DirtyProbe />
+            </UnsavedChangesProvider>
+          ) : (
             <AppForm />
-            <DirtyProbe />
-          </UnsavedChangesProvider>
-        ) : (
-          <AppForm />
-        )}
+          )}
+        </PermissionsProvider>
       </MemoryRouter>
     </ThemeProvider>,
   );
@@ -201,6 +212,35 @@ describe("AppForm relationships and commit semantics", () => {
       { plugin_id: 3, resource_type_slug: "vector-db", instance_ids: ["i1"] },
       { plugin_id: 9, resource_type_slug: "agent", instance_ids: ["legacy-agent"] },
     ]);
+  });
+
+  // midsommar-clean-6bg5.10: plugins are a global resource. Someone with only
+  // a Workspace role cannot list plugin resource types: the form does not ask
+  // (no 403), hides the section, and saving keeps what the App has attached.
+  it("does not ask for plugin resource types without plugins:read and resends the App's bindings unchanged", async () => {
+    const workspaceEditor = {
+      id: "9",
+      attributes: {
+        has_admin_access: true,
+        rbac_enabled: true,
+        permissions: [],
+        workspaces: [{ id: 2, name: "W1", permissions: ["apps:read", "apps:write"] }],
+      },
+    };
+    renderForm({ identity: workspaceEditor });
+    await screen.findByDisplayValue("Sales bot");
+    await waitFor(() => expect(pickerItems("model provider")).toEqual(["OpenAI"]));
+    expect(picker("vector dbs")).toBeUndefined();
+
+    fireEvent.click(screen.getByRole("button", { name: "Update app" }));
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
+    const [, body] = apiClient.patch.mock.calls[0];
+    expect(body.data.attributes.plugin_resources).toEqual([
+      { plugin_id: 3, resource_type_slug: "vector-db", instance_ids: ["i1"] },
+    ]);
+    const asked = apiClient.get.mock.calls.map(([url]) => url);
+    expect(asked.filter((url) => url.startsWith("/plugin-resource-types"))).toEqual([]);
+    clearIdentity();
   });
 
   // Model routers (Enterprise) are granted like model providers; the picker

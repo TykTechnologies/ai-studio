@@ -32,9 +32,12 @@ const EmbedderPicker = ({
   required = false,
   label = "Embedder",
 }) => {
-  const { can } = usePermissions();
-  const canRead = can(P.EMBEDDERS_READ);
-  const canCreate = can(P.EMBEDDERS_WRITE);
+  // Embedders are Workspace objects: the list is readable with the
+  // permission in any Workspace (the server filters), so a Workspace-scoped
+  // role is checked with canAnywhere, not the global-only can.
+  const { can, canAnywhere = can } = usePermissions();
+  const canRead = canAnywhere(P.EMBEDDERS_READ);
+  const canCreate = canAnywhere(P.EMBEDDERS_WRITE);
   const [rows, setRows] = useState([]);
   const [loadFailed, setLoadFailed] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);

@@ -3,6 +3,8 @@ import { FormControl, FormHelperText, InputLabel, MenuItem, Select } from "@mui/
 import apiClient from "../../utils/apiClient";
 import { listAll } from "../../utils/listAll";
 import { teamBudgetsService, formatMoney } from "../../services/teamBudgetsService";
+import { usePermissions } from "../../context/PermissionsContext";
+import { P } from "../../rbac/permissions";
 
 // poolSummary describes what a team's pool can give a new or edited App.
 const poolSummary = (report) => {
@@ -19,6 +21,11 @@ const poolSummary = (report) => {
 const AppTeamField = ({ value, onChange }) => {
   const [teams, setTeams] = useState([]);
   const [report, setReport] = useState(null);
+  // A team's budget report needs teams read globally. Someone with only a
+  // Workspace role picks from the teams of their Workspaces (GET /groups
+  // answers them a reduced list) and does not get the pool summary.
+  const { can } = usePermissions();
+  const canReadTeamBudget = can(P.GROUPS_READ);
 
   useEffect(() => {
     listAll(apiClient, "/groups")
@@ -27,7 +34,7 @@ const AppTeamField = ({ value, onChange }) => {
   }, []);
 
   useEffect(() => {
-    if (!value) {
+    if (!value || !canReadTeamBudget) {
       setReport(null);
       return;
     }
@@ -35,7 +42,7 @@ const AppTeamField = ({ value, onChange }) => {
       .getReport(value)
       .then(setReport)
       .catch(() => setReport(null));
-  }, [value]);
+  }, [value, canReadTeamBudget]);
 
   return (
     <FormControl fullWidth>
