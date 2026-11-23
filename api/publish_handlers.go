@@ -221,7 +221,7 @@ func (a *API) setAppActive(c *gin.Context, active bool) {
 // @Success 200 {object} PluginResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
-// @Router /api/v1/plugins/{id}/enable [post]
+// @Router /plugins/{id}/enable [post]
 // @Security BearerAuth
 func (a *API) enablePlugin(c *gin.Context) { a.setPluginActive(c, true) }
 
@@ -232,7 +232,7 @@ func (a *API) enablePlugin(c *gin.Context) { a.setPluginActive(c, true) }
 // @Success 200 {object} PluginResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
-// @Router /api/v1/plugins/{id}/disable [post]
+// @Router /plugins/{id}/disable [post]
 // @Security BearerAuth
 func (a *API) disablePlugin(c *gin.Context) { a.setPluginActive(c, false) }
 
@@ -266,7 +266,7 @@ func (a *API) setPluginActive(c *gin.Context, active bool) {
 // @Tags governed-metadata
 // @Param id path int true "Schema ID"
 // @Success 200 {object} map[string]interface{}
-// @Router /api/v1/metadata/schemas/{id}/activate [post]
+// @Router /metadata/schemas/{id}/activate [post]
 func (a *API) activateMetadataSchema(c *gin.Context) { a.setMetadataSchemaActive(c, true) }
 
 // @Summary Deactivate a governed metadata schema
@@ -274,7 +274,7 @@ func (a *API) activateMetadataSchema(c *gin.Context) { a.setMetadataSchemaActive
 // @Tags governed-metadata
 // @Param id path int true "Schema ID"
 // @Success 200 {object} map[string]interface{}
-// @Router /api/v1/metadata/schemas/{id}/deactivate [post]
+// @Router /metadata/schemas/{id}/deactivate [post]
 func (a *API) deactivateMetadataSchema(c *gin.Context) { a.setMetadataSchemaActive(c, false) }
 
 func (a *API) setMetadataSchemaActive(c *gin.Context, active bool) {

@@ -21,7 +21,7 @@ import (
 // @Produce json
 // @Success 201 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/groups [post]
+// Swagger: the Enterprise handler documents /groups [post].
 // @Security BearerAuth
 func (a *API) createGroup(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Group management requires Enterprise Edition"))
@@ -35,7 +35,7 @@ func (a *API) createGroup(c *gin.Context) {
 // @Param id path int true "Group ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 404 {object} ErrorResponse
-// @Router /api/v1/groups/{id} [get]
+// Swagger: the Enterprise handler documents /groups/{id} [get].
 // @Security BearerAuth
 func (a *API) getGroup(c *gin.Context) {
 	// CE: Only allow access to Default group
@@ -71,7 +71,7 @@ func (a *API) getGroup(c *gin.Context) {
 // @Param id path int true "Group ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/groups/{id} [patch]
+// Swagger: the Enterprise handler documents /groups/{id} [patch].
 // @Security BearerAuth
 func (a *API) updateGroup(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Group management requires Enterprise Edition"))
@@ -85,7 +85,7 @@ func (a *API) updateGroup(c *gin.Context) {
 // @Param id path int true "Group ID"
 // @Success 204
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/groups/{id} [delete]
+// Swagger: the Enterprise handler documents /groups/{id} [delete].
 // @Security BearerAuth
 func (a *API) deleteGroup(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Group management requires Enterprise Edition"))
@@ -98,7 +98,7 @@ func (a *API) deleteGroup(c *gin.Context) {
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/groups [get]
+// Swagger: the Enterprise handler documents /groups [get].
 // @Security BearerAuth
 func (a *API) listGroups(c *gin.Context) {
 	// CE: Return only the Default group
@@ -163,7 +163,7 @@ func (a *API) listGroups(c *gin.Context) {
 // @Param id path int true "Group ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/groups/{id}/users [post]
+// Swagger: the Enterprise handler documents /groups/{id}/users [post].
 // @Security BearerAuth
 func (a *API) addUserToGroup(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Group management requires Enterprise Edition"))
@@ -178,7 +178,7 @@ func (a *API) addUserToGroup(c *gin.Context) {
 // @Param userId path int true "User ID"
 // @Success 204
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/groups/{id}/users/{userId} [delete]
+// Swagger: the Enterprise handler documents /groups/{id}/users/{userId} [delete].
 // @Security BearerAuth
 func (a *API) removeUserFromGroup(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Group management requires Enterprise Edition"))
@@ -192,7 +192,7 @@ func (a *API) removeUserFromGroup(c *gin.Context) {
 // @Param id path int true "Group ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/groups/{id}/users [get]
+// Swagger: the Enterprise handler documents /groups/{id}/users [get].
 // @Security BearerAuth
 func (a *API) listGroupUsers(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Group management requires Enterprise Edition"))
@@ -206,7 +206,7 @@ func (a *API) listGroupUsers(c *gin.Context) {
 // @Param id path int true "Group ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/groups/{id}/users [put]
+// Swagger: the Enterprise handler documents /groups/{id}/users [put].
 // @Security BearerAuth
 func (a *API) updateGroupUsers(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Group management requires Enterprise Edition"))
@@ -220,7 +220,7 @@ func (a *API) updateGroupUsers(c *gin.Context) {
 // @Param id path int true "Group ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/groups/{id}/catalogues [post]
+// Swagger: the Enterprise handler documents /groups/{id}/catalogues [post].
 // @Security BearerAuth
 func (a *API) addCatalogueToGroup(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Group management requires Enterprise Edition"))
@@ -235,7 +235,7 @@ func (a *API) addCatalogueToGroup(c *gin.Context) {
 // @Param catalogueId path int true "Catalogue ID"
 // @Success 204
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/groups/{id}/catalogues/{catalogueId} [delete]
+// Swagger: the Enterprise handler documents /groups/{id}/catalogues/{catalogueId} [delete].
 // @Security BearerAuth
 func (a *API) removeCatalogueFromGroup(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Group management requires Enterprise Edition"))
@@ -249,7 +249,7 @@ func (a *API) removeCatalogueFromGroup(c *gin.Context) {
 // @Param id path int true "Group ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/groups/{id}/catalogues [get]
+// Swagger: the Enterprise handler documents /groups/{id}/catalogues [get].
 // @Security BearerAuth
 func (a *API) listGroupCatalogues(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Group management requires Enterprise Edition"))
@@ -263,7 +263,7 @@ func (a *API) listGroupCatalogues(c *gin.Context) {
 // @Param userId path int true "User ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/users/{userId}/groups [get]
+// Swagger: the Enterprise handler documents /users/{userId}/groups [get].
 // @Security BearerAuth
 func (a *API) getUserGroups(c *gin.Context) {
 	// CE: All users are in Default group, return it
@@ -293,7 +293,7 @@ func (a *API) getUserGroups(c *gin.Context) {
 // @Param id path int true "Group ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/groups/{id}/data-catalogues [post]
+// Swagger: the Enterprise handler documents /groups/{id}/data-catalogues [post].
 // @Security BearerAuth
 func (a *API) addDataCatalogueToGroup(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Group management requires Enterprise Edition"))
@@ -308,7 +308,7 @@ func (a *API) addDataCatalogueToGroup(c *gin.Context) {
 // @Param catalogueId path int true "Data Catalogue ID"
 // @Success 204
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/groups/{id}/data-catalogues/{catalogueId} [delete]
+// @Router /groups/{id}/data-catalogues/{catalogueId} [delete]
 // @Security BearerAuth
 func (a *API) removeDataCatalogueFromGroup(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Group management requires Enterprise Edition"))
@@ -322,7 +322,7 @@ func (a *API) removeDataCatalogueFromGroup(c *gin.Context) {
 // @Param id path int true "Group ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/groups/{id}/data-catalogues [get]
+// Swagger: the Enterprise handler documents /groups/{id}/data-catalogues [get].
 // @Security BearerAuth
 func (a *API) listGroupDataCatalogues(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Group management requires Enterprise Edition"))
@@ -336,7 +336,7 @@ func (a *API) listGroupDataCatalogues(c *gin.Context) {
 // @Param id path int true "Group ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/groups/{id}/tool-catalogues [post]
+// Swagger: the Enterprise handler documents /groups/{id}/tool-catalogues [post].
 // @Security BearerAuth
 func (a *API) addToolCatalogueToGroup(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Group management requires Enterprise Edition"))
@@ -351,7 +351,7 @@ func (a *API) addToolCatalogueToGroup(c *gin.Context) {
 // @Param catalogueId path int true "Tool Catalogue ID"
 // @Success 204
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/groups/{id}/tool-catalogues/{catalogueId} [delete]
+// @Router /groups/{id}/tool-catalogues/{catalogueId} [delete]
 // @Security BearerAuth
 func (a *API) removeToolCatalogueFromGroup(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Group management requires Enterprise Edition"))
@@ -365,7 +365,7 @@ func (a *API) removeToolCatalogueFromGroup(c *gin.Context) {
 // @Param id path int true "Group ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/groups/{id}/tool-catalogues [get]
+// Swagger: the Enterprise handler documents /groups/{id}/tool-catalogues [get].
 // @Security BearerAuth
 func (a *API) listGroupToolCatalogues(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Group management requires Enterprise Edition"))
@@ -379,7 +379,7 @@ func (a *API) listGroupToolCatalogues(c *gin.Context) {
 // @Param id path int true "Group ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/groups/{id}/catalogues [put]
+// Swagger: the Enterprise handler documents /groups/{id}/catalogues [put].
 // @Security BearerAuth
 func (a *API) updateGroupCatalogues(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Group management requires Enterprise Edition"))

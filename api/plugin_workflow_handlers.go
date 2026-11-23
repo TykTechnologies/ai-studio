@@ -59,7 +59,7 @@ type WorkflowStatusResponse struct {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins/{id}/validate-and-load [post]
+// @Router /plugins/{id}/validate-and-load [post]
 // @Security BearerAuth
 func (a *API) validateAndLoadPlugin(c *gin.Context) {
 	idParam := c.Param("id")
@@ -296,7 +296,7 @@ func (a *API) validateAndLoadPlugin(c *gin.Context) {
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins/cleanup-orphaned-registry [post]
+// @Router /plugins/cleanup-orphaned-registry [post]
 // @Security BearerAuth
 func (a *API) cleanupOrphanedUIRegistry(c *gin.Context) {
 	err := a.service.PluginService.CleanupOrphanedUIRegistryEntries()
@@ -326,7 +326,7 @@ func (a *API) cleanupOrphanedUIRegistry(c *gin.Context) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins/{id}/approve-scopes [post]
+// @Router /plugins/{id}/approve-scopes [post]
 // @Security BearerAuth
 func (a *API) approvePluginScopes(c *gin.Context) {
 	idParam := c.Param("id")
@@ -401,7 +401,7 @@ func (a *API) approvePluginScopes(c *gin.Context) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins/{id}/workflow-status [get]
+// @Router /plugins/{id}/workflow-status [get]
 // @Security BearerAuth
 func (a *API) getPluginWorkflowStatus(c *gin.Context) {
 	idParam := c.Param("id")

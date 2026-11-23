@@ -441,7 +441,7 @@ func (a *API) handleResendVerification(c *gin.Context) {
 // @Produce json
 // @Success 200 {object} UserWithEntitlementsResponse
 // @Failure 401 {object} ErrorResponse
-// @Router /api/v1/me [get]
+// @Router /me [get]
 // @Security BearerAuth
 func (a *API) handleMe(c *gin.Context) {
 	user, exists := c.Get("user")

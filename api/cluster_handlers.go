@@ -24,7 +24,7 @@ func (a *API) SetClusterStatus(f ClusterStatusFunc) {
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Failure 503 {object} ErrorResponse
-// @Router /api/v1/cluster/status [get]
+// @Router /cluster/status [get]
 // @Security BearerAuth
 func (a *API) getClusterStatus(c *gin.Context) {
 	if a.clusterStatus == nil {

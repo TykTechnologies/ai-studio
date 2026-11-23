@@ -59,7 +59,7 @@ func licenseErrorResponse(c *gin.Context, err error) {
 // @Success 200 {object} entitlements.Report
 // @Failure 402 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
-// @Router /api/v1/license [get]
+// @Router /license [get]
 // @Security BearerAuth
 func (a *API) getLicense(c *gin.Context) {
 	if !a.requireOwner(c) {
@@ -83,7 +83,7 @@ func (a *API) getLicense(c *gin.Context) {
 // @Failure 402 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
-// @Router /api/v1/license/namespaces/{namespace} [delete]
+// @Router /license/namespaces/{namespace} [delete]
 // @Security BearerAuth
 func (a *API) releaseLicensedNamespace(c *gin.Context) {
 	if !a.requireOwner(c) {

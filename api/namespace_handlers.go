@@ -52,7 +52,7 @@ type ReloadResponse struct {
 // @Produce json
 // @Success 200 {object} NamespaceListResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/namespaces [get]
+// @Router /namespaces [get]
 // @Security BearerAuth
 func (a *API) listNamespaces(c *gin.Context) {
 	namespaces, err := a.service.NamespaceService.ListNamespaces()
@@ -122,7 +122,7 @@ func (a *API) listNamespaces(c *gin.Context) {
 // @Param body body PushPreconditionInput false "Optional push precondition (Enterprise Workspaces): refuse the push while changes from outside this Workspace are pending"
 // @Failure 409 {object} PushStainedBody "push_stained (only_workspace_id), or no edges to push to"
 // @Failure 422 {object} ErrorResponse "only_workspace_id names no Workspace"
-// @Router /api/v1/namespaces/{namespace}/reload [post]
+// @Router /namespaces/{namespace}/reload [post]
 // @Security BearerAuth
 func (a *API) triggerNamespaceReload(c *gin.Context) {
 	namespace := c.Param("namespace")
@@ -150,7 +150,7 @@ func (a *API) triggerNamespaceReload(c *gin.Context) {
 // @Param namespace path string true "Namespace name (use 'global' for global namespace)"
 // @Success 200 {object} EdgeListResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/namespaces/{namespace}/edges [get]
+// @Router /namespaces/{namespace}/edges [get]
 // @Security BearerAuth
 func (a *API) getNamespaceEdges(c *gin.Context) {
 	namespace := c.Param("namespace")
@@ -210,7 +210,7 @@ func (a *API) getNamespaceEdges(c *gin.Context) {
 // @Success 200 {object} ReloadResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/reload-operations/{operation_id}/status [get]
+// @Router /reload-operations/{operation_id}/status [get]
 // @Security BearerAuth
 func (a *API) getReloadOperationStatus(c *gin.Context) {
 	a.pushStatus(c)

@@ -998,7 +998,7 @@ func (a *API) serializeLLMs(llms models.LLMs) []LLMResponse {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/llms/{id}/plugins/{pluginId}/config [get]
+// @Router /llms/{id}/plugins/{pluginId}/config [get]
 // @Security BearerAuth
 func (a *API) getLLMPluginConfig(c *gin.Context) {
 	llmID, err := strconv.ParseUint(c.Param("id"), 10, 32)
@@ -1071,7 +1071,7 @@ func (a *API) getLLMPluginConfig(c *gin.Context) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/llms/{id}/plugins/{pluginId}/config [put]
+// @Router /llms/{id}/plugins/{pluginId}/config [put]
 // @Security BearerAuth
 func (a *API) updateLLMPluginConfig(c *gin.Context) {
 	llmID, err := strconv.ParseUint(c.Param("id"), 10, 32)

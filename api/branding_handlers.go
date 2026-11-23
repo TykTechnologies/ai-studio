@@ -19,7 +19,7 @@ import (
 // @Produce json
 // @Success 200 {object} BrandingSettingsResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/branding/settings [get]
+// @Router /branding/settings [get]
 func (a *API) getBrandingSettings(c *gin.Context) {
 	settings, err := a.service.GetBrandingSettings()
 	if err != nil {
@@ -60,7 +60,7 @@ func (a *API) getBrandingSettings(c *gin.Context) {
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/branding/settings [put]
+// @Router /branding/settings [put]
 // @Security BearerAuth
 func (a *API) updateBrandingSettings(c *gin.Context) {
 	// Get current user
@@ -166,7 +166,7 @@ func (a *API) updateBrandingSettings(c *gin.Context) {
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/branding/logo [post]
+// @Router /branding/logo [post]
 // @Security BearerAuth
 func (a *API) uploadLogo(c *gin.Context) {
 	// Get current user
@@ -260,7 +260,7 @@ func (a *API) uploadLogo(c *gin.Context) {
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/branding/favicon [post]
+// @Router /branding/favicon [post]
 // @Security BearerAuth
 func (a *API) uploadFavicon(c *gin.Context) {
 	// Get current user
@@ -352,7 +352,7 @@ func (a *API) uploadFavicon(c *gin.Context) {
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/branding/reset [post]
+// @Router /branding/reset [post]
 // @Security BearerAuth
 func (a *API) resetBranding(c *gin.Context) {
 	// Get current user
@@ -415,7 +415,7 @@ func (a *API) resetBranding(c *gin.Context) {
 // @Success 200 {file} file
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/branding/logo [get]
+// @Router /branding/logo [get]
 func (a *API) serveLogo(c *gin.Context) {
 	asset, err := a.service.BrandingLogo()
 	a.serveBrandingAsset(c, asset, err, "logo", "logos/tyk-portal-logo.png", "image/png")
@@ -491,7 +491,7 @@ func etagMatches(header, etag string) bool {
 // @Success 200 {file} file
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/branding/favicon [get]
+// @Router /branding/favicon [get]
 func (a *API) serveFavicon(c *gin.Context) {
 	asset, err := a.service.BrandingFavicon()
 	a.serveBrandingAsset(c, asset, err, "favicon", "sun.ico", "image/x-icon")

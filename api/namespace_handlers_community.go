@@ -17,7 +17,7 @@ import (
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/namespaces [get]
+// @Router /namespaces [get]
 // @Security BearerAuth
 func (a *API) listNamespaces(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Multi-tenant namespaces require Enterprise Edition"))
@@ -31,7 +31,7 @@ func (a *API) listNamespaces(c *gin.Context) {
 // @Param namespace path string true "Namespace name"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/namespaces/{namespace}/reload [post]
+// @Router /namespaces/{namespace}/reload [post]
 // @Security BearerAuth
 func (a *API) triggerNamespaceReload(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Namespace-based reload requires Enterprise Edition"))
@@ -45,7 +45,7 @@ func (a *API) triggerNamespaceReload(c *gin.Context) {
 // @Param namespace path string true "Namespace name"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/namespaces/{namespace}/edges [get]
+// @Router /namespaces/{namespace}/edges [get]
 // @Security BearerAuth
 func (a *API) getNamespaceEdges(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Multi-tenant namespaces require Enterprise Edition"))
@@ -60,7 +60,7 @@ func (a *API) getNamespaceEdges(c *gin.Context) {
 // @Success 200 {object} map[string]interface{}
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/reload-operations/{operation_id}/status [get]
+// @Router /reload-operations/{operation_id}/status [get]
 // @Security BearerAuth
 func (a *API) getReloadOperationStatus(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Namespace reload operations require Enterprise Edition"))

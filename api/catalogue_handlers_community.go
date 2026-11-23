@@ -17,7 +17,7 @@ import (
 // @Produce json
 // @Success 201 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/catalogues [post]
+// Swagger: the Enterprise handler documents /catalogues [post].
 // @Security BearerAuth
 func (a *API) createCatalogue(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("LLM catalogue management requires Enterprise Edition"))
@@ -31,7 +31,7 @@ func (a *API) createCatalogue(c *gin.Context) {
 // @Param id path int true "Catalogue ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/catalogues/{id} [get]
+// Swagger: the Enterprise handler documents /catalogues/{id} [get].
 // @Security BearerAuth
 func (a *API) getCatalogue(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("LLM catalogue management requires Enterprise Edition"))
@@ -45,7 +45,7 @@ func (a *API) getCatalogue(c *gin.Context) {
 // @Param id path int true "Catalogue ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/catalogues/{id} [patch]
+// Swagger: the Enterprise handler documents /catalogues/{id} [patch].
 // @Security BearerAuth
 func (a *API) updateCatalogue(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("LLM catalogue management requires Enterprise Edition"))
@@ -59,7 +59,7 @@ func (a *API) updateCatalogue(c *gin.Context) {
 // @Param id path int true "Catalogue ID"
 // @Success 204
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/catalogues/{id} [delete]
+// Swagger: the Enterprise handler documents /catalogues/{id} [delete].
 // @Security BearerAuth
 func (a *API) deleteCatalogue(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("LLM catalogue management requires Enterprise Edition"))
@@ -72,7 +72,7 @@ func (a *API) deleteCatalogue(c *gin.Context) {
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/catalogues [get]
+// Swagger: the Enterprise handler documents /catalogues [get].
 // @Security BearerAuth
 func (a *API) listCatalogues(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("LLM catalogue management requires Enterprise Edition"))
@@ -85,7 +85,7 @@ func (a *API) listCatalogues(c *gin.Context) {
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/catalogues/search [get]
+// Swagger: the Enterprise handler documents /catalogues/search [get].
 // @Security BearerAuth
 func (a *API) searchCatalogues(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("LLM catalogue management requires Enterprise Edition"))
@@ -99,7 +99,7 @@ func (a *API) searchCatalogues(c *gin.Context) {
 // @Param id path int true "Catalogue ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/catalogues/{id}/llms [post]
+// Swagger: the Enterprise handler documents /catalogues/{id}/llms [post].
 // @Security BearerAuth
 func (a *API) addLLMToCatalogue(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("LLM catalogue management requires Enterprise Edition"))
@@ -114,7 +114,7 @@ func (a *API) addLLMToCatalogue(c *gin.Context) {
 // @Param llmId path int true "LLM ID"
 // @Success 204
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/catalogues/{id}/llms/{llmId} [delete]
+// Swagger: the Enterprise handler documents /catalogues/{id}/llms/{llmId} [delete].
 // @Security BearerAuth
 func (a *API) removeLLMFromCatalogue(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("LLM catalogue management requires Enterprise Edition"))
@@ -128,7 +128,7 @@ func (a *API) removeLLMFromCatalogue(c *gin.Context) {
 // @Param id path int true "Catalogue ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/catalogues/{id}/llms [get]
+// Swagger: the Enterprise handler documents /catalogues/{id}/llms [get].
 // @Security BearerAuth
 func (a *API) listCatalogueLLMs(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("LLM catalogue management requires Enterprise Edition"))
@@ -141,7 +141,7 @@ func (a *API) listCatalogueLLMs(c *gin.Context) {
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/catalogues/search-by-name [get]
+// @Router /catalogues/search-by-name [get]
 // @Security BearerAuth
 func (a *API) searchCataloguesByNameStub(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("LLM catalogue management requires Enterprise Edition"))

@@ -103,7 +103,7 @@ func parsePluginIDParam(c *gin.Context) (uint, bool) {
 // @Failure 404 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins/{id}/upgrade/preview [post]
+// @Router /plugins/{id}/upgrade/preview [post]
 // @Security BearerAuth
 func (a *API) previewPluginUpgrade(c *gin.Context) {
 	id, ok := parsePluginIDParam(c)
@@ -138,7 +138,7 @@ func (a *API) previewPluginUpgrade(c *gin.Context) {
 // @Failure 409 {object} ErrorResponse
 // @Failure 422 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins/{id}/upgrade [post]
+// @Router /plugins/{id}/upgrade [post]
 // @Security BearerAuth
 func (a *API) upgradePlugin(c *gin.Context) {
 	id, ok := parsePluginIDParam(c)

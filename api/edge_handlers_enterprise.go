@@ -63,7 +63,7 @@ type EdgeListResponse struct {
 // @Param limit query int false "Items per page" default(20)
 // @Success 200 {object} EdgeListResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/edges [get]
+// @Router /edges [get]
 // @Security BearerAuth
 func (a *API) listEdges(c *gin.Context) {
 	// Parse query parameters
@@ -131,7 +131,7 @@ func (a *API) listEdges(c *gin.Context) {
 // @Success 200 {object} object{data=EdgeResponse}
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/edges/{edge_id} [get]
+// @Router /edges/{edge_id} [get]
 // @Security BearerAuth
 func (a *API) getEdge(c *gin.Context) {
 	edgeID := c.Param("edge_id")
@@ -186,7 +186,7 @@ func (a *API) getEdge(c *gin.Context) {
 // @Param body body PushPreconditionInput false "Optional push precondition (Enterprise Workspaces): refuse the push while changes from outside this Workspace are pending"
 // @Failure 409 {object} PushStainedBody "push_stained (only_workspace_id), or no edges to push to"
 // @Failure 422 {object} ErrorResponse "only_workspace_id names no Workspace"
-// @Router /api/v1/edges/{edge_id}/reload [post]
+// @Router /edges/{edge_id}/reload [post]
 // @Security BearerAuth
 func (a *API) triggerEdgeReload(c *gin.Context) {
 	edgeID := c.Param("edge_id")
@@ -212,7 +212,7 @@ func (a *API) triggerEdgeReload(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Success 200 {array} interface{}
-// @Router /api/v1/edges/reload-operations [get]
+// @Router /edges/reload-operations [get]
 // @Security BearerAuth
 func (a *API) listReloadOperations(c *gin.Context) {
 	a.listPushes(c)
@@ -227,7 +227,7 @@ func (a *API) listReloadOperations(c *gin.Context) {
 // @Success 204 "No Content"
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/edges/{edge_id} [delete]
+// @Router /edges/{edge_id} [delete]
 // @Security BearerAuth
 func (a *API) deleteEdge(c *gin.Context) {
 	edgeID := c.Param("edge_id")
@@ -276,7 +276,7 @@ func (a *API) deleteEdge(c *gin.Context) {
 // @Param body body PushPreconditionInput false "Optional push precondition (Enterprise Workspaces): refuse the push while changes from outside this Workspace are pending"
 // @Failure 409 {object} PushStainedBody "push_stained (only_workspace_id), or no edges to push to"
 // @Failure 422 {object} ErrorResponse "only_workspace_id names no Workspace"
-// @Router /api/v1/edges/reload-all [post]
+// @Router /edges/reload-all [post]
 // @Security BearerAuth
 func (a *API) reloadAllEdges(c *gin.Context) {
 	// ENT: every edge in every namespace, as one push operation.
