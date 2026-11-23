@@ -11,6 +11,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 	bedrockVendor "github.com/TykTechnologies/midsommar/v2/vendors/bedrock"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
@@ -43,11 +44,33 @@ func bedrockConverseInput(conf *models.LLM, req *ChatCompletionRequest, model st
 	// Build inference config
 	inferenceConfig := bedrockVendor.BuildInferenceConfig(req.OutputTokenLimit(), req.Temperature, req.TopP, req.Stop)
 
-	// Build tool config
+	// Build tool config, with the caller's tool_choice (it used to be dropped).
 	var toolConfig *types.ToolConfiguration
 	if len(req.Tools) > 0 {
-		toolDefs := openAIToolsToToolDefs(req.Tools)
-		toolConfig = bedrockVendor.BuildToolConfig(toolDefs)
+		choice, err := llms.ResolveToolChoice(req.ToolChoice)
+		if err != nil {
+			return nil, attemptFailure{err: err, status: http.StatusBadRequest, hasStatus: true}
+		}
+		// Converse cannot be told to call no tool. Sending no tools has that
+		// effect, so "none" does that. The one case it cannot cover is a
+		// conversation that already holds tool calls: Bedrock refuses those
+		// without the tool configuration, and agent frameworks send exactly
+		// that ("none" on the turn that should only summarise). There the
+		// tools are sent and "none" is not enforced, as before this change,
+		// rather than refusing a request that used to work.
+		if choice.Mode != llms.ToolChoiceNone || req.hasToolHistory() {
+			toolConfig = bedrockVendor.BuildToolConfig(openAIToolsToToolDefs(req.Tools))
+			if toolConfig != nil {
+				switch choice.Mode {
+				case llms.ToolChoiceAuto:
+					toolConfig.ToolChoice = bedrockVendor.ToolChoiceAuto()
+				case llms.ToolChoiceRequired:
+					toolConfig.ToolChoice = bedrockVendor.ToolChoiceAny()
+				case llms.ToolChoiceFunction:
+					toolConfig.ToolChoice = bedrockVendor.ToolChoiceTool(choice.Name)
+				}
+			}
+		}
 	}
 
 	return &bedrockruntime.ConverseInput{

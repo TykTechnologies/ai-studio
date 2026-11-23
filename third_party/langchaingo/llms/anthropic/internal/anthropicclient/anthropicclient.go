@@ -134,8 +134,10 @@ type MessageRequest struct {
 	MaxTokens   int           `json:"max_tokens,omitempty"`
 	TopP        float64       `json:"top_p,omitempty"`
 	Tools       []Tool        `json:"tools,omitempty"`
-	StopWords   []string      `json:"stop_sequences,omitempty"`
-	Stream      bool          `json:"stream,omitempty"`
+	// Tyk: tool_choice ({"type":"auto"|"any"|"tool"|"none"}); nil sends none.
+	ToolChoice *ToolChoice `json:"tool_choice,omitempty"`
+	StopWords  []string    `json:"stop_sequences,omitempty"`
+	Stream     bool        `json:"stream,omitempty"`
 
 	// Extended thinking parameters (Claude 3.7+)
 	Thinking *ThinkingConfig `json:"thinking,omitempty"`
@@ -157,6 +159,7 @@ func (c *Client) CreateMessage(ctx context.Context, r *MessageRequest) (*Message
 		StopWords:              r.StopWords,
 		TopP:                   r.TopP,
 		Tools:                  r.Tools,
+		ToolChoice:             r.ToolChoice, // Tyk
 		Stream:                 r.Stream,
 		Thinking:               r.Thinking,
 		StreamingFunc:          r.StreamingFunc,

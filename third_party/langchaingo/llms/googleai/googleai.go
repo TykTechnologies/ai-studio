@@ -99,6 +99,10 @@ func (g *GoogleAI) GenerateContent(
 	if model.Tools, err = convertTools(opts.Tools); err != nil {
 		return nil, err
 	}
+	// Tyk: honour tool_choice (upstream drops it).
+	if model.ToolConfig, err = toolConfigFromOptions(&opts, model.Tools); err != nil {
+		return nil, err
+	}
 
 	// set model.ResponseMIMEType from either opts.JSONMode or opts.ResponseMIMEType
 	switch {
@@ -575,4 +579,31 @@ func showContent(w io.Writer, cs []*genai.Content) {
 			}
 		}
 	}
+}
+
+// toolConfigFromOptions maps the caller's tool_choice to Gemini's function
+// calling mode: auto -> AUTO, required -> ANY, a function -> ANY restricted
+// to that function, none -> NONE. Without tools nothing is sent. Tyk: not in
+// upstream, which dropped tool_choice.
+func toolConfigFromOptions(opts *llms.CallOptions, tools []*genai.Tool) (*genai.ToolConfig, error) {
+	choice, err := llms.ResolveToolChoice(opts.ToolChoice)
+	if err != nil {
+		return nil, err
+	}
+	if len(tools) == 0 {
+		return nil, nil
+	}
+	switch choice.Mode {
+	case llms.ToolChoiceAuto:
+		return &genai.ToolConfig{FunctionCallingConfig: &genai.FunctionCallingConfig{Mode: genai.FunctionCallingAuto}}, nil
+	case llms.ToolChoiceRequired:
+		return &genai.ToolConfig{FunctionCallingConfig: &genai.FunctionCallingConfig{Mode: genai.FunctionCallingAny}}, nil
+	case llms.ToolChoiceFunction:
+		return &genai.ToolConfig{FunctionCallingConfig: &genai.FunctionCallingConfig{
+			Mode: genai.FunctionCallingAny, AllowedFunctionNames: []string{choice.Name},
+		}}, nil
+	case llms.ToolChoiceNone:
+		return &genai.ToolConfig{FunctionCallingConfig: &genai.FunctionCallingConfig{Mode: genai.FunctionCallingNone}}, nil
+	}
+	return nil, nil
 }

@@ -300,6 +300,12 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 		respondWithOAIError(w, http.StatusBadRequest, "missing required fields", nil, false)
 		return
 	}
+	// tool_choice is translated for vendors that do not speak OpenAI's
+	// shape; a value that cannot be translated is refused, never ignored.
+	if err := req.ValidateToolChoice(conf.Vendor); err != nil {
+		respondWithOAIError(w, http.StatusBadRequest, err.Error(), nil, false)
+		return
+	}
 
 	// Bedrock rungs translate with the AWS SDK rather than a langchaingo
 	// driver, over the same /llm/call/ loopback; each rung of the waterfall

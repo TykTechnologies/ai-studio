@@ -141,6 +141,11 @@ func generateMessagesContent(ctx context.Context, o *LLM, messages []llms.Messag
 	}
 
 	tools := toolsToTools(opts.Tools)
+	// Tyk: honour tool_choice (upstream drops it).
+	toolChoice, err := toolChoiceFromOptions(opts, len(tools))
+	if err != nil {
+		return nil, fmt.Errorf("anthropic: %w", err)
+	}
 
 	betaHeaders, thinking := extractThinkingOptions(o, opts)
 
@@ -153,6 +158,7 @@ func generateMessagesContent(ctx context.Context, o *LLM, messages []llms.Messag
 		Temperature:            temperatureFromOptions(opts),
 		TopP:                   opts.TopP,
 		Tools:                  tools,
+		ToolChoice:             toolChoice, // Tyk
 		Thinking:               thinking,
 		BetaHeaders:            betaHeaders,
 		StreamingFunc:          opts.StreamingFunc,
@@ -266,6 +272,30 @@ func processAnthropicResponse(result *anthropicclient.MessageResponsePayload) (*
 	return &llms.ContentResponse{
 		Choices: choices,
 	}, nil
+}
+
+// toolChoiceFromOptions maps the caller's tool_choice to Anthropic's:
+// auto -> auto, required -> any, a function -> tool, none -> none. Without
+// tools there is nothing to choose and nothing is sent. Tyk: not in upstream.
+func toolChoiceFromOptions(opts *llms.CallOptions, toolCount int) (*anthropicclient.ToolChoice, error) {
+	choice, err := llms.ResolveToolChoice(opts.ToolChoice)
+	if err != nil {
+		return nil, err
+	}
+	if toolCount == 0 {
+		return nil, nil
+	}
+	switch choice.Mode {
+	case llms.ToolChoiceAuto:
+		return &anthropicclient.ToolChoice{Type: "auto"}, nil
+	case llms.ToolChoiceRequired:
+		return &anthropicclient.ToolChoice{Type: "any"}, nil
+	case llms.ToolChoiceFunction:
+		return &anthropicclient.ToolChoice{Type: "tool", Name: choice.Name}, nil
+	case llms.ToolChoiceNone:
+		return &anthropicclient.ToolChoice{Type: "none"}, nil
+	}
+	return nil, nil
 }
 
 func toolsToTools(tools []llms.Tool) []anthropicclient.Tool {
