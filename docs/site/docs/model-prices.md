@@ -93,6 +93,18 @@ The admin form and detail page show prices **per million tokens**. The REST API 
 
 To store $3 per million input tokens, send `"cpit": 0.000003`. A value above `0.01` per token is rejected with HTTP 400, because it is almost certainly a per-million figure sent to a per-token field. The error message gives the value to send instead.
 
+#### **Bedrock: model ids, inference profiles and ARNs**
+
+A Bedrock model can be called by its model id (`amazon.nova-lite-v1:0`), by a cross-region inference-profile id (`apac.amazon.nova-lite-v1:0`) or by ARN (`arn:aws:bedrock:ap-southeast-2:123456789012:inference-profile/apac.amazon.nova-lite-v1:0`). You do not need a price entry per spelling. A call is priced by the first of these that has a price:
+
+1. the identifier exactly as the client sent it;
+2. for an inference-profile ARN, the profile id it ends with; for a foundation-model ARN, the model id it ends with;
+3. for a profile id (`us.`, `eu.`, `apac.`, `jp.`, `au.`, `ca.`, `us-gov.` or `global.` in front of a model id), the model id without that prefix.
+
+So one price under `amazon.nova-lite-v1:0` covers every way of calling that model, and a price under `apac.amazon.nova-lite-v1:0` applies to that profile only, if cross-region calls cost you something else. The usage record keeps the identifier the client sent as the requested model and shows the model the price was found under as the model name.
+
+An **application inference profile** (`...:application-inference-profile/<id>`), a provisioned, custom or imported model has an id that does not name its model. AI Studio does not guess: such calls are recorded at zero cost unless you add a price under the full ARN. Add one for every such ARN you allow on a model provider.
+
 ### Edit/Create Model Prices
 
 The **Edit/Create Model Price Form** allows administrators to define or update the cost structure for a specific Large Language Model (LLM). The pricing information configured here is used for cost tracking and billing purposes and must align with the model names used in API calls or the model settings screen.
