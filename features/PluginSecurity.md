@@ -346,9 +346,25 @@ unsigned plugin). Now:
   (`loadPluginForRequest`, used by `GetPluginsForLLM` and `GetAuthPlugins`)
   return the remembered error without an OCI fetch, signature check, exec or
   connect, and concurrent requests for one plugin share one attempt
-  (singleflight). `LoadPlugin`, `ReloadPlugin` and `ReconcilePlugins` (a
-  configuration sync) always try, and their outcome replaces what is
-  remembered. Reconcile drops the entries of removed plugins.
+  (singleflight). Once the failure is older than the interval, the next
+  request starts one attempt in the background and is refused with the
+  remembered error, so no request waits on a retry. A request for a plugin
+  with no remembered failure (its first load) waits for the load at most
+  `pluginLoadWaitTimeout` (20 s). `LoadPlugin`, `ReloadPlugin` and
+  `ReconcilePlugins` (a configuration sync) always try, and their outcome
+  replaces what is remembered. Reconcile drops the entries of removed plugins.
+- **Locking** (2.3.0-rc4 finding M2: one unreachable `grpc://` plugin stalled
+  every request on the edge for minutes): `PluginManager.mu` guards the
+  manager's maps and is never held across a load's slow steps (OCI fetch,
+  process start, connect, `Initialize`) or an unload's RPCs (`CloseSession`,
+  `Shutdown`). Loads and unloads of one plugin are serialized by its entry in
+  `pluginLoadLocks`; lock order is the plugin's load lock, then `mu`.
+  `UnloadPlugin` removes the plugin from the maps first and then stops it.
+- **grpc:// connect bounds** (`connectWithRetry`): 3 attempts, 2 s apart, each
+  a probe dial of the checked address with a 5 s timeout
+  (`probeGRPCPlugin`; go-plugin's own reattach check is a `net.Dial` with no
+  timeout) and a ping with a 5 s timeout: 19 s for a host that drops packets,
+  34 s at most.
 - **Logging**: `rememberLoadFailure` logs at ERROR with the plugin ID, name
   and cause when a failure starts or its cause changes, and
   `forgetLoadFailure` at INFO when the plugin loads again. Refused requests
