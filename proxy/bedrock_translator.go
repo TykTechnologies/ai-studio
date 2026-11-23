@@ -3,7 +3,6 @@ package proxy
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -30,9 +29,6 @@ import (
 // Converse call) is returned as an attemptFailure the loop can act on; only
 // a successful call is turned into a response and written.
 
-// errBedrockToolChoiceNone is the one tool_choice Bedrock cannot honour.
-var errBedrockToolChoiceNone = errors.New(`tool_choice "none" is not supported on Bedrock when the conversation already contains tool calls or tool results: Converse has no such setting; remove tool_choice, or send the request without the tool messages`)
-
 // bedrockConverseInput builds the Converse request for model.
 func bedrockConverseInput(conf *models.LLM, req *ChatCompletionRequest, model string) (*bedrockruntime.ConverseInput, attemptFailure) {
 	// Determine model ID
@@ -55,14 +51,14 @@ func bedrockConverseInput(conf *models.LLM, req *ChatCompletionRequest, model st
 		if err != nil {
 			return nil, attemptFailure{err: err, status: http.StatusBadRequest, hasStatus: true}
 		}
-		if choice.Mode == llms.ToolChoiceNone {
-			// Converse cannot be told to call no tool. Sending no tools has
-			// that effect, but Bedrock refuses a conversation that holds tool
-			// calls without the tool configuration.
-			if req.hasToolHistory() {
-				return nil, attemptFailure{err: errBedrockToolChoiceNone, status: http.StatusBadRequest, hasStatus: true}
-			}
-		} else {
+		// Converse cannot be told to call no tool. Sending no tools has that
+		// effect, so "none" does that. The one case it cannot cover is a
+		// conversation that already holds tool calls: Bedrock refuses those
+		// without the tool configuration, and agent frameworks send exactly
+		// that ("none" on the turn that should only summarise). There the
+		// tools are sent and "none" is not enforced, as before this change,
+		// rather than refusing a request that used to work.
+		if choice.Mode != llms.ToolChoiceNone || req.hasToolHistory() {
 			toolConfig = bedrockVendor.BuildToolConfig(openAIToolsToToolDefs(req.Tools))
 			if toolConfig != nil {
 				switch choice.Mode {

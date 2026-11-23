@@ -139,9 +139,6 @@ func TestBridgeToolChoice_Bedrock(t *testing.T) {
 }
 
 func TestBridgeToolChoice_RefusedWith400(t *testing.T) {
-	history := `{"model":"anthropic.claude-3","messages":[{"role":"user","content":"time?"},` +
-		`{"role":"assistant","content":"","tool_calls":[{"id":"c1","type":"function","function":{"name":"get_time","arguments":"{}"}}]},` +
-		`{"role":"tool","tool_call_id":"c1","content":"12:00"}],` + bridgeTools + `,"tool_choice":"none"}`
 	for _, tc := range []struct {
 		name, body, want string
 	}{
@@ -149,7 +146,6 @@ func TestBridgeToolChoice_RefusedWith400(t *testing.T) {
 		{"an unknown word", bridgeToolBody("anthropic.claude-3", `"sometimes"`, false), "unsupported tool_choice"},
 		{"an object that names no function", bridgeToolBody("anthropic.claude-3", `{"type":"allowed_tools"}`, false), "unsupported tool_choice"},
 		{"required without tools", `{"model":"anthropic.claude-3","messages":[{"role":"user","content":"hi"}],"tool_choice":"required"}`, "needs at least one tool"},
-		{"none with tool history on Bedrock", history, `tool_choice \"none\" is not supported on Bedrock`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h, v := converseHarness(t, false)
@@ -159,6 +155,31 @@ func TestBridgeToolChoice_RefusedWith400(t *testing.T) {
 			assert.Empty(t, v.calls(), "nothing reaches the vendor")
 		})
 	}
+}
+
+// Bedrock cannot be told to call no tool, and refuses a conversation that
+// holds tool calls without the tool definitions. Agent frameworks send
+// exactly that on the turn that should only summarise, and it worked before
+// (with "none" ignored), so it still does: the tools are sent, no toolChoice.
+func TestBridgeToolChoice_BedrockNoneWithToolHistoryStillWorks(t *testing.T) {
+	body := `{"model":"anthropic.claude-3","messages":[{"role":"user","content":"time?"},` +
+		`{"role":"assistant","content":"","tool_calls":[{"id":"c1","type":"function","function":{"name":"get_time","arguments":"{}"}}]},` +
+		`{"role":"tool","tool_call_id":"c1","content":"12:00"}],` + bridgeTools + `,"tool_choice":"none"}`
+	h, v := converseHarness(t, false)
+	resp, out := h.post("/ai/primary/v1/chat/completions", body)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(out))
+	calls := v.calls()
+	require.Len(t, calls, 1)
+	var sent struct {
+		ToolConfig *struct {
+			Tools      []json.RawMessage `json:"tools"`
+			ToolChoice json.RawMessage   `json:"toolChoice"`
+		} `json:"toolConfig"`
+	}
+	require.NoError(t, json.Unmarshal(calls[0].Body, &sent), string(calls[0].Body))
+	require.NotNil(t, sent.ToolConfig, "the tool definitions the conversation needs are sent")
+	assert.Len(t, sent.ToolConfig.Tools, 2)
+	assert.Empty(t, sent.ToolConfig.ToolChoice)
 }
 
 // Anthropic and Google go through the in-tree langchaingo drivers, which
