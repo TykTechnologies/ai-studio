@@ -74,6 +74,16 @@ per team. It is not part of the licence. See the admin guide,
 The Enterprise microgateway verifies its `TYK_AI_LICENSE` the same way
 (signature, expiry and the AI Studio product). It does not enforce limits.
 
+**Plugins on a microgateway** ask the gateway for the license through the
+service broker (`GetLicenseInfo`, answered by `MicrogatewayManagementServer`
+from the licensing service). Enterprise plugins ask as soon as their session
+is ready and exit when told "community", which is what the broker answers
+while it has no licensing service. So `main` wires the licensing service into
+the broker right after it builds the service container (`wirePluginLicensing`),
+before the pre-warm, a configuration sync or a request can start a plugin,
+and the plugin manager starts no plugin while the broker has none
+(`plugins.ErrLicensingNotConfigured`, `checkLicensingConfigured`).
+
 ## How it fits together
 
 - `services/licensing` is the public licence interface (validity, features,

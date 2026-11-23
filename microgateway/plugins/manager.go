@@ -406,6 +406,12 @@ func (pm *PluginManager) LoadPlugin(pluginID uint) (*LoadedPlugin, error) {
 		return nil, err
 	}
 
+	// No plugin process before its service broker can answer license checks.
+	if err := pm.checkLicensingConfigured(); err != nil {
+		pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
+		return nil, err
+	}
+
 	// Mark as loading
 	pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusLoading, nil, 0)
 
