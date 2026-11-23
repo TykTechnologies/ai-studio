@@ -32,11 +32,22 @@ var gormConfigSkippedDirs = map[string]bool{
 	"enterprise": true, "community": true, "tyk-internal": true,
 }
 
+func isNilIdent(expr ast.Expr) bool {
+	id, ok := expr.(*ast.Ident)
+	return ok && id.Name == "nil"
+}
+
+// isNewOf reports whether call is new(T) for a T that isType accepts.
+func isNewOf(call *ast.CallExpr, isType func(ast.Expr) bool) bool {
+	fn, ok := call.Fun.(*ast.Ident)
+	return ok && fn.Name == "new" && len(call.Args) == 1 && isType(call.Args[0])
+}
+
 // Every database connection in AI Studio and the Microgateway logs SQL
 // through a logger that drops statement values (DB_LOG_SQL_PARAMS opts them
 // back in). This test keeps it that way: outside the files listed above, no
-// non-test Go file may write a gorm.Config literal or call gorm.Open without
-// a configuration. The PostgreSQL chat queue, the pgvector datasource
+// non-test Go file may write a gorm.Config literal, build one with new(),
+// or call gorm.Open without a configuration or with a nil one. The PostgreSQL chat queue, the pgvector datasource
 // connection and the start-up checks did, with an empty gorm.Config, and so
 // logged failed and slow statements with message and document content.
 func TestEveryGormConnectionUsesTheFilteredLogger(t *testing.T) {
@@ -98,8 +109,13 @@ func TestEveryGormConnectionUsesTheFilteredLogger(t *testing.T) {
 					problem = "builds a gorm.Config itself; use logger.GetGormConfig() (and set further fields on what it returns)"
 				}
 			case *ast.CallExpr:
-				if isGorm(node.Fun, "Open") && len(node.Args) < 2 {
+				switch {
+				case isGorm(node.Fun, "Open") && len(node.Args) < 2:
 					problem = "calls gorm.Open without a configuration; pass logger.GetGormConfig()"
+				case isGorm(node.Fun, "Open") && isNilIdent(node.Args[1]):
+					problem = "calls gorm.Open with a nil configuration; pass logger.GetGormConfig()"
+				case isNewOf(node, func(e ast.Expr) bool { return isGorm(e, "Config") }):
+					problem = "builds a gorm.Config with new(); use logger.GetGormConfig() (and set further fields on what it returns)"
 				}
 			}
 			if problem == "" {
