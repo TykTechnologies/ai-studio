@@ -243,6 +243,36 @@ describe("AppForm relationships and commit semantics", () => {
     clearIdentity();
   });
 
+  // midsommar-clean-6bg5.74: the same holds when the form does ask and the
+  // server refuses (the permissions the UI holds are stale, or the route's
+  // rule changes): no picker, and the save still carries the App's bindings.
+  it("resends the App's plugin resources unchanged when the resource type list answers 403", async () => {
+    const forbidden = Object.assign(new Error("Request failed with status code 403"), {
+      response: { status: 403, data: { errors: [{ title: "Forbidden" }] } },
+    });
+    const base = apiClient.get.getMockImplementation();
+    apiClient.get.mockImplementation((url) =>
+      url.startsWith("/plugin-resource-types") ? Promise.reject(forbidden) : base(url),
+    );
+
+    renderForm();
+    await screen.findByDisplayValue("Sales bot");
+    await waitFor(() => expect(pickerItems("model provider")).toEqual(["OpenAI"]));
+    await waitFor(() =>
+      expect(apiClient.get.mock.calls.map(([url]) => url)).toContain("/plugin-resource-types"),
+    );
+    expect(picker("vector dbs")).toBeUndefined();
+
+    fireEvent.change(screen.getByDisplayValue("Sales bot"), { target: { value: "Sales bot 2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Update app" }));
+    await waitFor(() => expect(apiClient.patch).toHaveBeenCalled());
+    const [, body] = apiClient.patch.mock.calls[0];
+    expect(body.data.attributes.name).toBe("Sales bot 2");
+    expect(body.data.attributes.plugin_resources).toEqual([
+      { plugin_id: 3, resource_type_slug: "vector-db", instance_ids: ["i1"] },
+    ]);
+  });
+
   // Model routers (Enterprise) are granted like model providers; the picker
   // only shows when there are routers or the app already holds one.
   it("binds model routers through model_router_ids", async () => {
