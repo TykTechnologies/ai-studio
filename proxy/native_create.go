@@ -196,6 +196,7 @@ func (c *nativeCall) admit(w http.ResponseWriter, body []byte) ([]byte, bool) {
 			c.fail(w, http.StatusForbidden, nativeErrPermission, msg)
 			return nil, false
 		}
+		c.requestedModels = append(c.requestedModels, it.Model)
 	}
 
 	runners := requestFilterRunners(c.nr.llm)
@@ -447,6 +448,36 @@ func (c *nativeCall) checkScreened(rt nativeapi.ResourceType, vendorID string) e
 	return nil
 }
 
+// inheritRequestedModels adds the requested models of the resource vendorID
+// (type rt), whose content this call runs at the vendor (a batch's input
+// file), to the call's own, so the row of the resource it creates carries
+// them. Best effort: without the row (another node's upload, a ledger read
+// that failed) the usage is priced by the model the vendor reports.
+func (c *nativeCall) inheritRequestedModels(rt nativeapi.ResourceType, vendorID string) {
+	if c.store == nil {
+		return
+	}
+	row, err := c.store.GetByOwner(c.r.Context(), c.nr.llm.ID, c.app.ID, rt.Name, vendorID)
+	if err != nil {
+		return
+	}
+	c.requestedModels = append(c.requestedModels, row.RequestedModelList()...)
+}
+
+// createdRequestedModels are the models to store on the row of the resource
+// this call creates: what admit and the referenced resources named, else
+// the request's own model (a background response on the synchronous chain,
+// read by the model validation middleware).
+func (c *nativeCall) createdRequestedModels() []string {
+	if len(c.requestedModels) > 0 {
+		return c.requestedModels
+	}
+	if m := requestedModel(c.r); m != "" {
+		return []string{m}
+	}
+	return nil
+}
+
 // ledgerCreated writes the ledger row of a resource of type rt the vendor
 // just created (raw as the vendor sent it, wrapped as the client gets it).
 // If the row cannot be written the resource is cancelled upstream and the
@@ -470,6 +501,7 @@ func (c *nativeCall) ledgerCreated(rt nativeapi.ResourceType, raw, wrapped []byt
 	if id := authidentity.From(c.r.Context()); id != nil {
 		row.OnBehalfOf, row.ActingAgent = id.OnBehalfOf(), id.ActingAgent()
 	}
+	row.SetRequestedModels(c.createdRequestedModels())
 	if c.op.Admit != nil {
 		// admit screened the content with the filters of this same LLM
 		// snapshot.

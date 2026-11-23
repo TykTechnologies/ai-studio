@@ -163,7 +163,13 @@ const (
 	//     a service account's API key works there as an ordinary user's with
 	//     its global bindings; it still has no password and an undeliverable
 	//     email, so it cannot sign in interactively there either.
-	SchemaVersion          = 45
+	// 46: native_resources.requested_models (nullable text; additive): the
+	//     models a batch, batch input file or background response asked for,
+	//     so usage accounted later from results that only name the vendor's
+	//     snapshot is priced under the requested model
+	//     (midsommar-clean-6bg5.6). Older code ignores the column; rows it
+	//     writes have none and are priced by the reported model, as before.
+	SchemaVersion          = 46
 	MinReaderSchemaVersion = 42
 )
 
