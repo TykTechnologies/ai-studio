@@ -123,13 +123,20 @@ func (p *Proxy) asyncUsageContext() context.Context {
 // recordAsyncUsage records the usage of a settled resource: per model and
 // price, one proxy log row and one chat record (priced through
 // buildChatRecordFor, so the multiplier applies) through
-// analytics.RecordExchange, then the budget. The records carry the creating
+// analytics.RecordExchange, then the budget. A record is priced like a
+// synchronous call: by the model the vendor reported, and when that has no
+// price, by the model the creating request asked for
+// (NativeResource.RequestedModelFor), which is also its requested_model. The records carry the creating
 // request's identity from the ledger row. It never uses
 // RecordChatRecordsBatch, which the edge does not pulse to the hub.
 func (p *Proxy) recordAsyncUsage(row *models.NativeResource, llm *models.LLM, app *models.App, usage *nativeUsage, ts time.Time) {
 	for _, k := range usage.order {
 		t := usage.byKey[k]
-		rec := buildChatRecordFor(p.gatewayService, llm, app, t.usage, t.usage.Model, ts)
+		// The results name the model the vendor resolved; the ledger row
+		// knows what the client asked for. Passing the reported name as
+		// the requested one left a price set under the alias unused and
+		// the usage at zero cost.
+		rec := buildChatRecordFor(p.gatewayService, llm, app, t.usage, row.RequestedModelFor(t.usage.Model), ts)
 		rec.OnBehalfOf, rec.ActingAgent = row.OnBehalfOf, row.ActingAgent
 		summary, _ := json.Marshal(map[string]any{
 			"native_resource": row.ResourceType,

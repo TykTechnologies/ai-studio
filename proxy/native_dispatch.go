@@ -195,6 +195,10 @@ type nativeCall struct {
 	status   int
 	// reqBody and respBody are what the proxy log records.
 	reqBody, respBody []byte
+	// requestedModels are the models this call's content asks for: the
+	// admitted items' models, and those of the resources it runs (a batch's
+	// input file). ledgerCreated stores them on the created resource's row.
+	requestedModels []string
 }
 
 // opName names the call's operation for metrics.
@@ -517,6 +521,7 @@ func (c *nativeCall) requestBody(w http.ResponseWriter) ([]byte, bool) {
 				if err := c.checkScreened(rt, v); err != nil {
 					return "", err
 				}
+				c.inheritRequestedModels(rt, v)
 			}
 			return v, nil
 		}); err != nil {

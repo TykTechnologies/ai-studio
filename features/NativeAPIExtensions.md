@@ -302,6 +302,7 @@ row.
 | `vendor`, `llm_id`, `app_id`, `user_id`, `on_behalf_of`, `acting_agent` | Owner and identity of the creating request (stamped on usage recorded later) |
 | `resource_type`, `vendor_resource_id`, `parent_id` | The resource; unique `(llm_id, resource_type, vendor_resource_id)` |
 | `screening_digest` | On a resource an `Admit` op created: the digest of the request filters that screened it (`none` without filters). Schema version 11; never returned to clients |
+| `requested_models` | JSON array of the distinct models the creating request asked for, in order of first use, at most 64 (more: none kept). A batch's `params.model` values, the `body.model` of an uploaded batch input file's lines (an OpenAI batch's row inherits its input file's list at create), a background response's `model`. Used to price usage accounted later (see Pricing below). Studio schema version 46; never returned to clients |
 | `state`, `snapshot`, `ended_at`, `results_expire_at` | Last vendor view (snapshot is the wrapped object, served by list) |
 | `accounting_state`, `claim_token`, `claimed_at`, `accounted_at` | Accounting: `none`, `pending`, `claimed`, `accounted`, `unaccountable`, `lost` |
 | `next_poll_at`, `poll_failures` | Reconciler scheduling; index `(accounting_state, next_poll_at)` |
@@ -354,6 +355,20 @@ pulse. Pricing:
   tier is a batch result. An LLM's `price_multipliers` override replaces the
   vendor's multiplier for the tiers it names (see
   [Price multiplier overrides](#price-multiplier-overrides)).
+- **Which price:** as for a synchronous call (`priceForExchange`): the price
+  of the model the vendor reported, and when that model has no price, the
+  price of the model the client asked for. Results and polled objects name
+  only the vendor's model (a dated snapshot of an alias), so the requested
+  model comes from the ledger row: `NativeResource.RequestedModelFor(reported)`
+  picks, from `requested_models`, the model equal to the reported one, else
+  the longest one the reported name extends at a separator
+  (`claude-haiku-4-5` for `claude-haiku-4-5-20251001`), else the only one
+  when the request named a single model, else the reported name. The record's
+  `name` is the reported model and its `requested_model` the resolved one. A
+  row without the list (written before the column existed, a batch whose
+  input file was uploaded on another node, more than 64 distinct models) is
+  priced by the reported name only, and a model with no price under either
+  name is recorded at zero cost.
 - **Unbilled lines:** errored, canceled and expired lines are not billed.
 - **Timestamp:** the accounting time, which matches budget-period semantics.
 - **Cost breakdown:** the analytics breakdown (prompt, response, cache write

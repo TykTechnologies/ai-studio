@@ -75,6 +75,12 @@ The table displays the following columns:
 #### **Quick Insights**
 This section simplifies the process of tracking and updating LLM pricing, ensuring transparency and control over usage costs. The ability to edit or add prices directly from this interface provides flexibility for managing vendor costs dynamically as new models or pricing structures are introduced.
 
+#### **Which price applies to a call**
+
+Vendors often answer a model alias with the dated snapshot it resolved to: a call to `claude-haiku-4-5` is reported as `claude-haiku-4-5-20251001`. AI Studio prices a call by the model the vendor **reported**; when that model has no price, it uses the price of the model the client **asked for**. So you can set a price under the alias, under the dated name, or both; when both exist the dated (reported) model's price applies. A model with no price under either name is recorded at zero cost.
+
+The same rule covers usage that is recorded after the request has ended: Anthropic Message Batches, OpenAI Batches and background Responses. Their cost is the applicable price times the tier's multiplier (batch usage is billed at half the list price unless the model provider's price multipliers say otherwise). Records keep both names: the reported model as the model name and the model the client asked for as the requested model. A batch whose requests name several models that share no prefix with the model the vendor reports is priced by the reported name only.
+
 #### **Units in the API**
 The admin form and detail page show prices **per million tokens**. The REST API (`/api/v1/model-prices`) stores and returns them **per single token**:
 

@@ -403,6 +403,7 @@ TABLE native_resources
   column `vendor_resource_id` text NOT NULL
   column `parent_id` integer
   column `screening_digest` text
+  column `requested_models` text
   column `state` text
   column `snapshot` text
   column `ended_at` datetime
