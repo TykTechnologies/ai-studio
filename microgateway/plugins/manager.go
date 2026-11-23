@@ -166,6 +166,10 @@ type EndpointRoute struct {
 
 // PluginManager manages the lifecycle of plugins
 type PluginManager struct {
+	// mu guards the maps below. Every read and write of loadedPlugins,
+	// llmPluginMap, pluginClients and reattachConfigs holds it, also now that
+	// loads and unloads no longer hold it across their slow steps: they take
+	// it for each map access and release it before any I/O.
 	mu              sync.RWMutex
 	loadedPlugins   map[uint]*LoadedPlugin          // Plugin ID -> loaded plugin
 	llmPluginMap    map[uint][]uint                 // LLM ID -> Plugin IDs (ordered)
