@@ -125,8 +125,12 @@ new file or OCI reference by hand kept running its old process until the edge re
   refused (see `features/PluginSecurity.md`), until a push with a loadable command or the next retry.
 - Requests that are in the old process when it is stopped fail with the plugin-chain error (`500`); requests
   that arrive during the swap wait for the new process.
-- Service scopes are read from the plugin's record on every service call, so a new binary runs with what the
-  record says now (pending scopes: no service access), never with what the old binary was approved for.
+- Service scopes: the edge reads the plugin's record on every service call, and the old binary is stopped.
+  But the record the hub pushes carries the plugin's declared `service_scopes` whatever its approval state in
+  AI Studio, and an edge keeps no approval state. So on an edge a new binary has its declared scopes as soon
+  as the configuration is pushed, also while AI Studio shows the approval as pending. This is not new with
+  the reload (an edge restart loaded the new binary with the same scopes); it is a known issue
+  (midsommar-clean-5dr1, see the known issues in `CHANGELOG-v2.3.0.md`).
 - The reconcile log names what changed (`"changed":["command"]`), not the values.
 - The edge reports READY for a push once the configuration is stored; the reconcile runs right after, and
   its outcome is in the edge's log and plugin health, not in what AI Studio shows for the edge.
