@@ -135,9 +135,23 @@ func (a *API) redactAgent(c *gin.Context, ag *models.AgentConfig) {
 	}
 	if !a.holdsIn(c, ag.WorkspaceID, authz.Write("agents")) {
 		ag.Config = nil
+	} else {
+		// The agent's configuration follows its plugin's schema, so its
+		// secret fields are redacted like the plugin's own
+		// (plugin_config_redaction.go); a write that sends the marker back
+		// keeps the stored value (restoreAgentConfig).
+		ag.Config = a.redactPluginOverride(ag.PluginID, ag.Config)
 	}
-	if ag.Plugin != nil && !a.mayReadPluginConfig(c) {
-		ag.Plugin.Config = nil
+	if ag.Plugin != nil {
+		// A copy: the secret fields of the plugin's configuration are
+		// redacted for every reader (plugin_config_redaction.go).
+		plugin := *ag.Plugin
+		if a.mayReadPluginConfig(c) {
+			plugin.Config = a.pluginRedactorFor(&plugin).config(&plugin)
+		} else {
+			plugin.Config = nil
+		}
+		ag.Plugin = &plugin
 	}
 	// The linked App is shown only to a caller who may see it (.55): one in
 	// another Workspace is left out (app_hidden), its id kept.
@@ -817,7 +831,13 @@ func (a *API) HandleCreateAgent(c *gin.Context) {
 	agentConfig.Description = req.Description
 	agentConfig.PluginID = req.PluginID
 	agentConfig.AppID = req.AppID
-	agentConfig.Config = req.Config
+	// A redaction marker in a new agent's secret field has no stored value
+	// to stand for; it is dropped, never stored as the credential.
+	newConfig, ok := a.restorePluginConfig(c, a.pluginCommand(req.PluginID), req.Config, nil)
+	if !ok {
+		return
+	}
+	agentConfig.Config = newConfig
 	if agentConfig.Config == nil {
 		agentConfig.Config = make(map[string]interface{})
 	}
@@ -946,7 +966,13 @@ func (a *API) HandleUpdateAgent(c *gin.Context) {
 	agentConfig.Name = req.Name
 	agentConfig.Slug = slug.Make(req.Name)
 	agentConfig.Description = req.Description
-	agentConfig.Config = req.Config
+	// The API returns the configuration's secret fields redacted; a write
+	// that sends the marker back keeps the stored value.
+	restoredConfig, ok := a.restorePluginConfig(c, a.pluginCommand(agentConfig.PluginID), req.Config, agentConfig.Config)
+	if !ok {
+		return
+	}
+	agentConfig.Config = restoredConfig
 	if req.IsActive != nil {
 		agentConfig.IsActive = *req.IsActive
 	}

@@ -610,6 +610,9 @@ func (s *Service) SetEventBus(bus eventbridge.Bus) {
 	s.EventBus = bus
 	if bus != nil {
 		s.SystemEvents = NewSystemEventEmitter(bus, "control")
+		s.SystemEvents.SetPluginSecrets(func(commands []string) map[string]*PluginConfigSecrets {
+			return s.PluginService.ConfigSecretsForCommands(commands)
+		})
 		s.SubscribeResourceInstanceChanges(bus)
 		logger.Debug("Initialized system event emitter")
 	}

@@ -30,8 +30,9 @@ func (a *API) getEndpointAuthPlugins(objectType string) gin.HandlerFunc {
 			return
 		}
 		response := make([]PluginResponse, len(plugins))
+		red := a.pluginRedactorForList(plugins)
 		for i := range plugins {
-			response[i] = a.pluginForObjectRead(c, serializePlugin(&plugins[i]))
+			response[i] = a.pluginForObjectRead(c, serializePlugin(&plugins[i], red))
 		}
 		c.JSON(http.StatusOK, gin.H{"data": response})
 	}

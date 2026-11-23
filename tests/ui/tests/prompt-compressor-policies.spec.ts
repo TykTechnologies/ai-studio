@@ -124,8 +124,10 @@ test('Prompt Compressor policies can be created, bound, refused when invalid and
             // Unchanged engine keys with a policy change save, the token kept
             const keep = await rpc(page, pluginId, 'saveConfig', { config: { ...shown, mode: 'audit' } });
             expect(keep.data.saved, JSON.stringify(keep.data)).toBe(true);
+            // The host's plugin API never returns a secret field: a stored
+            // token reads as "[redacted]" (an emptied one would read as "").
             const kept = await storedConfig(page, pluginId);
-            expect([kept.mode, kept.engine_e2e_url, kept.engine_e2e_token]).toEqual(['audit', 'http://127.0.0.1:9', 'e2e-literal']);
+            expect([kept.mode, kept.engine_e2e_url, kept.engine_e2e_token]).toEqual(['audit', 'http://127.0.0.1:9', '[redacted]']);
         }
 
         // --- read-only role (Enterprise) ----------------------------------------

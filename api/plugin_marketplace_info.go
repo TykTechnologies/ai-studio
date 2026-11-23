@@ -45,7 +45,7 @@ func decoratePluginResponse(response *PluginResponse, plugin *models.Plugin, row
 
 // serializePluginWithMarketplace serializes one plugin including its marketplace link.
 func (a *API) serializePluginWithMarketplace(plugin *models.Plugin) PluginResponse {
-	response := serializePlugin(plugin)
+	response := a.serializePlugin(plugin)
 	tracked, err := models.GetInstalledPluginVersions(a.service.DB, []uint{plugin.ID})
 	if err != nil {
 		log.Warn().Err(err).Uint("plugin_id", plugin.ID).Msg("Failed to load marketplace link for plugin")

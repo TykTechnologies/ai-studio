@@ -109,6 +109,47 @@ type ObjectEventPayload struct {
 type SystemEventEmitter struct {
 	bus    eventbridge.Bus
 	nodeID string
+	// pluginSecrets returns the secret-field classifiers of plugin
+	// commands (PluginService.ConfigSecretsForCommands); nil classifies by
+	// key name. See redactPluginForEvent.
+	pluginSecrets func(commands []string) map[string]*PluginConfigSecrets
+}
+
+// SetPluginSecrets sets the source of the plugins' secret-field classifiers
+// used to redact the plugin a plugin event carries.
+func (e *SystemEventEmitter) SetPluginSecrets(source func(commands []string) map[string]*PluginConfigSecrets) {
+	if e != nil {
+		e.pluginSecrets = source
+	}
+}
+
+// redactPluginForEvent is the plugin a system.plugin.* event carries: a copy
+// with the secret fields of its configuration redacted
+// (plugin_config_redaction.go), since the payload reaches every subscribed
+// plugin and the cluster_events table. Done here so no caller can forget.
+// Anything that is not a plugin is passed through.
+func (e *SystemEventEmitter) redactPluginForEvent(object interface{}) interface{} {
+	var plugin models.Plugin
+	switch p := object.(type) {
+	case *models.Plugin:
+		if p == nil {
+			return object
+		}
+		plugin = *p
+	case models.Plugin:
+		plugin = p
+	default:
+		return object
+	}
+	plugin.Config = e.pluginSecretsFor(plugin.Command)[plugin.Command].RedactPluginConfig(plugin.Config)
+	return &plugin
+}
+
+func (e *SystemEventEmitter) pluginSecretsFor(commands ...string) map[string]*PluginConfigSecrets {
+	if e == nil || e.pluginSecrets == nil || len(commands) == 0 {
+		return nil // a nil classifier classifies by key name
+	}
+	return e.pluginSecrets(commands)
 }
 
 // NewSystemEventEmitter creates a new SystemEventEmitter
@@ -294,12 +335,12 @@ func (e *SystemEventEmitter) EmitFilterDeleted(objectID uint, userID uint) {
 
 // EmitPluginCreated emits an event when a Plugin is created
 func (e *SystemEventEmitter) EmitPluginCreated(plugin interface{}, objectID uint, userID uint) {
-	e.EmitObjectEvent(TopicPluginCreated, "plugin", "created", objectID, userID, plugin)
+	e.EmitObjectEvent(TopicPluginCreated, "plugin", "created", objectID, userID, e.redactPluginForEvent(plugin))
 }
 
 // EmitPluginUpdated emits an event when a Plugin is updated
 func (e *SystemEventEmitter) EmitPluginUpdated(plugin interface{}, objectID uint, userID uint) {
-	e.EmitObjectEvent(TopicPluginUpdated, "plugin", "updated", objectID, userID, plugin)
+	e.EmitObjectEvent(TopicPluginUpdated, "plugin", "updated", objectID, userID, e.redactPluginForEvent(plugin))
 }
 
 // EmitPluginDeleted emits an event when a Plugin is deleted
