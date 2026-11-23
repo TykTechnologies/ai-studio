@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -11,6 +12,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
@@ -41,7 +43,7 @@ func CreateAuthHooks(serviceContainer *services.ServiceContainer, pluginManager 
 // ===================================
 // Executes BEFORE authentication, NO access to user/app data
 
-func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManager *plugins.PluginManager, llms *hookLLMLookup) func(http.ResponseWriter, *http.Request) bool {
+func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManager pluginChain, llms *hookLLMLookup) func(http.ResponseWriter, *http.Request) bool {
 	return func(w http.ResponseWriter, r *http.Request) bool {
 		// Only process LLM requests
 		if !strings.HasPrefix(r.URL.Path, "/llm/") {
@@ -73,7 +75,12 @@ func createPreAuthHook(serviceContainer *services.ServiceContainer, pluginManage
 
 		// Check for pre-auth plugins
 		pluginList, err := pluginManager.GetPluginsForLLM(llmID, "pre_auth")
-		if err != nil || isEmptySlice(pluginList) {
+		if err != nil {
+			// Not "no plugins": the request is refused (see below).
+			respondPluginsUnavailable(w, r, llmSlug, vendor, "pre_auth", err)
+			return true
+		}
+		if isEmptySlice(pluginList) {
 			return false // No plugins, continue
 		}
 
@@ -322,13 +329,14 @@ func (a *pluginAuthenticator) authenticate(r *http.Request, target proxy.AuthTar
 // ===================================
 // Executes AFTER successful authentication, HAS access to authenticated user/app data
 
-// postAuthChain is what the post-auth hook needs from the plugin manager.
-type postAuthChain interface {
+// pluginChain is what the pre- and post-auth hooks need from the plugin
+// manager.
+type pluginChain interface {
 	GetPluginsForLLM(llmID uint, hookType interfaces.HookType) ([]*plugins.LoadedPlugin, error)
 	ExecutePluginChain(llmID uint, hookType interfaces.HookType, input interface{}, pluginCtx *interfaces.PluginContext) (interface{}, error)
 }
 
-func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManager postAuthChain, llms *hookLLMLookup) func(http.ResponseWriter, *http.Request, uint) bool {
+func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManager pluginChain, llms *hookLLMLookup) func(http.ResponseWriter, *http.Request, uint) bool {
 	return func(w http.ResponseWriter, r *http.Request, appID uint) bool {
 		// Only for LLM requests
 		if !strings.HasPrefix(r.URL.Path, "/llm/") {
@@ -358,7 +366,12 @@ func createPostAuthHook(serviceContainer *services.ServiceContainer, pluginManag
 
 		// Check for post-auth plugins
 		pluginList, err := pluginManager.GetPluginsForLLM(llmID, "post_auth")
-		if err != nil || isEmptySlice(pluginList) {
+		if err != nil {
+			// Not "no plugins": the request is refused (see below).
+			respondPluginsUnavailable(w, r, llmSlug, vendor, "post_auth", err)
+			return true
+		}
+		if isEmptySlice(pluginList) {
 			return false // No plugins, continue
 		}
 
@@ -662,6 +675,47 @@ func respondPluginChainError(w http.ResponseWriter, err error) {
 		return
 	}
 	respondWithError(w, http.StatusInternalServerError, "Plugin execution failed", nil)
+}
+
+// PluginLoadFailedCode is the error code of the 503 a request gets when the
+// plugins of its LLM could not be loaded. Clients and tests match on it.
+const PluginLoadFailedCode = "plugin_load_failed"
+
+// respondPluginsUnavailable refuses a request whose LLM has plugins that
+// could not be loaded, or whose plugin list could not be read. The request
+// must not go on: the missing plugin may be the one enforcing policy (a
+// firewall, a rate limiter), and running the rest of the chain without it, or
+// none of it, would send upstream what it was there to stop. There is no
+// setting that lets such a request through.
+//
+// The client gets a retryable 503 naming the LLM; which plugin and why (a
+// path, a registry, a signature) is only in the log. The plugin manager logs
+// that once when the failure starts or changes, so here it is at debug level.
+func respondPluginsUnavailable(w http.ResponseWriter, r *http.Request, llmSlug, vendor, phase string, err error) {
+	var loadErr *plugins.PluginLoadError
+	if errors.As(err, &loadErr) {
+		log.Debug().Err(err).Str("llm_slug", llmSlug).Str("phase", phase).
+			Msg("Request refused: a plugin of its LLM is not loaded")
+	} else {
+		log.Warn().Err(err).Str("llm_slug", llmSlug).Str("phase", phase).
+			Msg("Request refused: the plugins of its LLM could not be looked up")
+	}
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"error": map[string]string{
+			"message": fmt.Sprintf("A plugin attached to LLM %q could not be loaded, so the gateway did not forward the request. Retry shortly; if this continues, ask your administrator to check the gateway's plugins.", llmSlug),
+			"type":    "api_error",
+			"code":    PluginLoadFailedCode,
+		},
+	})
+	writeBlockedPluginResponse(w, &interfaces.PluginResponse{
+		StatusCode: http.StatusServiceUnavailable,
+		Headers: map[string]string{
+			"Content-Type": "application/json",
+			"Retry-After":  strconv.Itoa(int(plugins.PluginLoadRetryInterval / time.Second)),
+		},
+		Body: body,
+	}, isBedrockRuntimeCall(vendor, r))
 }
 
 func respondWithError(w http.ResponseWriter, statusCode int, message string, err error) {

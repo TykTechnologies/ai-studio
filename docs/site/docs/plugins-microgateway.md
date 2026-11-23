@@ -117,6 +117,25 @@ Supports both unary responses and streaming (SSE) via the `stream_response` flag
 
 **Full Guide**: [Custom Endpoints Guide](plugins-custom-endpoints.md)
 
+## When a Plugin Cannot Be Loaded
+
+An edge gateway refuses requests to an LLM while one of the LLM's pre-auth or post-auth plugins cannot be loaded. The plugin that failed may be the one enforcing policy (a firewall, a rate limiter), so the gateway does not run the rest of the chain without it and does not forward the request. Before 2.3.0 such a request skipped every plugin on the LLM and went to the vendor.
+
+- **What fails a load.** A missing or unsigned binary, a failed signature or transparency-log check, a source that `PLUGINS_ALLOWED_SOURCES` refuses, an internal host that is not allowed, an unreachable registry or `grpc://` host, or a plugin that does not start.
+- **What the client gets.** `503` with `Retry-After: 30` and an error whose `code` is `plugin_load_failed`. The message names the LLM, not the plugin or the cause:
+
+  ```json
+  {"error": {"message": "A plugin attached to LLM \"claude\" could not be loaded, so the gateway did not forward the request. ...", "type": "api_error", "code": "plugin_load_failed"}}
+  ```
+
+  On `/ai/`, `/v1`, `/anthropic/` and `/router/` the refusal arrives in that endpoint's error format with the same status, and a failover waterfall moves on to its next rung. An AWS SDK calling a Bedrock LLM gets a `ServiceUnavailableException`.
+- **Where to look.** The gateway logs the plugin and the cause once when the failure starts or its cause changes (`Plugin could not be loaded; requests to the LLMs it is attached to are refused until it loads`), not once per request, and logs once more when the plugin loads again. The plugin's health is `failed`.
+- **Retries.** A failed load is remembered for 30 seconds. Requests in that time are refused at once, with no new registry request, signature check or connection attempt; the first request after it tries the load again. A configuration push from AI Studio retries at once.
+- **Other LLMs** on the same gateway are not affected.
+- There is no setting that lets requests through without the plugin. Fix the plugin, or detach it from the LLM (or deactivate it) in AI Studio and push the configuration.
+
+Auth plugins have their own rule (see [above](#2-authhandler)): the request is refused with a `503` only when none of the endpoint's auth plugins can be loaded. Response plugins that cannot be loaded do not stop a response.
+
 ## Where Request Plugins Run
 
 Pre-auth, post-auth and response plugins run on the gateway's `/llm/` endpoints, on the vendor's own API. The other LLM endpoints reach them through the gateway itself:

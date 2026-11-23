@@ -57,10 +57,12 @@ func (pm *PluginManager) GetAuthPlugins(endpointType string, endpointID uint) (a
 		lp, ok := pm.loadedPlugins[p.ID]
 		pm.mu.RUnlock()
 		if !ok {
-			lp, err = pm.LoadPlugin(p.ID)
+			// The failure is logged where it is remembered, once per state
+			// change (rememberLoadFailure), not for every request.
+			lp, err = pm.loadPluginForRequest(p.ID, p.Name)
 			if err != nil {
-				log.Error().Err(err).Uint("plugin_id", p.ID).Str("plugin_name", p.Name).
-					Msg("Failed to load auth plugin; it cannot authenticate requests")
+				log.Debug().Err(err).Uint("plugin_id", p.ID).Str("plugin_name", p.Name).
+					Msg("Auth plugin is not loaded; it cannot authenticate requests")
 				continue
 			}
 		}
