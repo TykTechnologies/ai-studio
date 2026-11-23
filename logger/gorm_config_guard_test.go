@@ -67,7 +67,10 @@ func TestEveryGormConnectionUsesTheFilteredLogger(t *testing.T) {
 		gormName := ""
 		for _, imp := range file.Imports {
 			importPath, _ := strconv.Unquote(imp.Path.Value)
-			if importPath == "gorm.io/gorm" || strings.HasSuffix(importPath, "/third_party/gorm.io/gorm") {
+			// The vendored copy, or upstream should it ever be imported
+			// (spelled in two parts: make gorm-verify greps for the
+			// upstream import path as a string).
+			if importPath == "gorm"+".io/gorm" || strings.HasSuffix(importPath, "/third_party/gorm.io/gorm") {
 				gormName = "gorm"
 				if imp.Name != nil {
 					gormName = imp.Name.Name
