@@ -148,7 +148,7 @@ func currentUserID(c *gin.Context) uint {
 // @Summary Check governed metadata availability
 // @Tags governed-metadata
 // @Success 200 {object} map[string]bool
-// @Router /api/v1/metadata/available [get]
+// @Router /metadata/available [get]
 func (a *API) isGovernedMetadataAvailable(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"available": governed_metadata.IsEnterpriseAvailable()})
 }
@@ -156,7 +156,7 @@ func (a *API) isGovernedMetadataAvailable(c *gin.Context) {
 // @Summary List object types that can carry governed metadata
 // @Tags governed-metadata
 // @Success 200 {object} map[string][]governed_metadata.ObjectTypeInfo
-// @Router /api/v1/metadata/object-types [get]
+// @Router /metadata/object-types [get]
 func (a *API) listMetadataObjectTypes(c *gin.Context) {
 	types, err := a.governedMetadata().ListObjectTypes()
 	if writeGovernedMetadataError(c, err) {
@@ -177,7 +177,7 @@ func serializeMetadataSchema(s *models.MetadataSchema) gin.H {
 // @Tags governed-metadata
 // @Success 200 {object} map[string]interface{}
 // @Failure 403 {object} models.ErrorResponse
-// @Router /api/v1/metadata/schemas [get]
+// @Router /metadata/schemas [get]
 func (a *API) listMetadataSchemas(c *gin.Context) {
 	if !governed_metadata.IsEnterpriseAvailable() {
 		writeGovernedMetadataError(c, governed_metadata.ErrEnterpriseFeature)
@@ -198,7 +198,7 @@ func (a *API) listMetadataSchemas(c *gin.Context) {
 // @Tags governed-metadata
 // @Param id path int true "Schema ID"
 // @Success 200 {object} map[string]interface{}
-// @Router /api/v1/metadata/schemas/{id} [get]
+// @Router /metadata/schemas/{id} [get]
 func (a *API) getMetadataSchema(c *gin.Context) {
 	id, ok := parseIDParam(c)
 	if !ok {
@@ -233,7 +233,7 @@ func applySchemaInput(target *models.MetadataSchema, in *MetadataSchemaInput) {
 // @Success 201 {object} map[string]interface{}
 // @Failure 400 {object} models.ErrorResponse
 // @Failure 409 {object} models.ErrorResponse
-// @Router /api/v1/metadata/schemas [post]
+// @Router /metadata/schemas [post]
 func (a *API) createMetadataSchema(c *gin.Context) {
 	var in MetadataSchemaInput
 	if err := c.ShouldBindJSON(&in); err != nil {
@@ -264,7 +264,7 @@ func (a *API) createMetadataSchema(c *gin.Context) {
 // @Param id path int true "Schema ID"
 // @Param schema body MetadataSchemaInput true "Schema"
 // @Success 200 {object} map[string]interface{}
-// @Router /api/v1/metadata/schemas/{id} [patch]
+// @Router /metadata/schemas/{id} [patch]
 func (a *API) updateMetadataSchema(c *gin.Context) {
 	id, ok := parseIDParam(c)
 	if !ok {
@@ -315,7 +315,7 @@ func (a *API) updateMetadataSchema(c *gin.Context) {
 // @Tags governed-metadata
 // @Param id path int true "Schema ID"
 // @Success 204
-// @Router /api/v1/metadata/schemas/{id} [delete]
+// @Router /metadata/schemas/{id} [delete]
 func (a *API) deleteMetadataSchema(c *gin.Context) {
 	id, ok := parseIDParam(c)
 	if !ok {
@@ -331,7 +331,7 @@ func (a *API) deleteMetadataSchema(c *gin.Context) {
 // @Tags governed-metadata
 // @Param object_type query string true "Object type (llm, tool, datasource, plugin_resource:<id>:<slug>)"
 // @Success 200 {object} governed_metadata.ResolvedSchema
-// @Router /api/v1/metadata/schemas/resolve [get]
+// @Router /metadata/schemas/resolve [get]
 func (a *API) resolveMetadataSchema(c *gin.Context) {
 	objectType := strings.TrimSpace(c.Query("object_type"))
 	if objectType == "" {
@@ -356,7 +356,7 @@ func serializeMetadataVocabulary(v *models.MetadataVocabulary) gin.H {
 // @Summary List controlled vocabularies
 // @Tags governed-metadata
 // @Success 200 {object} map[string]interface{}
-// @Router /api/v1/metadata/vocabularies [get]
+// @Router /metadata/vocabularies [get]
 func (a *API) listMetadataVocabularies(c *gin.Context) {
 	if !governed_metadata.IsEnterpriseAvailable() {
 		writeGovernedMetadataError(c, governed_metadata.ErrEnterpriseFeature)
@@ -377,7 +377,7 @@ func (a *API) listMetadataVocabularies(c *gin.Context) {
 // @Tags governed-metadata
 // @Param id path int true "Vocabulary ID"
 // @Success 200 {object} map[string]interface{}
-// @Router /api/v1/metadata/vocabularies/{id} [get]
+// @Router /metadata/vocabularies/{id} [get]
 func (a *API) getMetadataVocabulary(c *gin.Context) {
 	id, ok := parseIDParam(c)
 	if !ok {
@@ -394,7 +394,7 @@ func (a *API) getMetadataVocabulary(c *gin.Context) {
 // @Tags governed-metadata
 // @Param vocabulary body MetadataVocabularyInput true "Vocabulary"
 // @Success 201 {object} map[string]interface{}
-// @Router /api/v1/metadata/vocabularies [post]
+// @Router /metadata/vocabularies [post]
 func (a *API) createMetadataVocabulary(c *gin.Context) {
 	var in MetadataVocabularyInput
 	if err := c.ShouldBindJSON(&in); err != nil {
@@ -417,7 +417,7 @@ func (a *API) createMetadataVocabulary(c *gin.Context) {
 // @Param id path int true "Vocabulary ID"
 // @Param vocabulary body MetadataVocabularyInput true "Vocabulary"
 // @Success 200 {object} map[string]interface{}
-// @Router /api/v1/metadata/vocabularies/{id} [patch]
+// @Router /metadata/vocabularies/{id} [patch]
 func (a *API) updateMetadataVocabulary(c *gin.Context) {
 	id, ok := parseIDParam(c)
 	if !ok {
@@ -456,7 +456,7 @@ func (a *API) updateMetadataVocabulary(c *gin.Context) {
 // @Param id path int true "Vocabulary ID"
 // @Success 204
 // @Failure 409 {object} models.ErrorResponse "Referenced by a schema field"
-// @Router /api/v1/metadata/vocabularies/{id} [delete]
+// @Router /metadata/vocabularies/{id} [delete]
 func (a *API) deleteMetadataVocabulary(c *gin.Context) {
 	id, ok := parseIDParam(c)
 	if !ok {
@@ -476,7 +476,7 @@ func (a *API) deleteMetadataVocabulary(c *gin.Context) {
 // @Tags governed-metadata
 // @Param body body ValidateMetadataInput true "Values"
 // @Success 200 {object} governed_metadata.ValidationResult
-// @Router /api/v1/metadata/validate [post]
+// @Router /metadata/validate [post]
 func (a *API) validateObjectMetadata(c *gin.Context) {
 	var in ValidateMetadataInput
 	if err := c.ShouldBindJSON(&in); err != nil || strings.TrimSpace(in.ObjectType) == "" {
@@ -510,7 +510,7 @@ func serializeObjectMetadata(rec *models.ObjectMetadata) gin.H {
 // @Param object_id path string true "Object ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 404 {object} models.ErrorResponse
-// @Router /api/v1/metadata/objects/{object_type}/{object_id} [get]
+// @Router /metadata/objects/{object_type}/{object_id} [get]
 func (a *API) getObjectMetadata(c *gin.Context) {
 	rec, err := a.governedMetadata().GetObjectMetadata(c.Param("object_type"), c.Param("object_id"))
 	if writeGovernedMetadataError(c, err) {
@@ -526,7 +526,7 @@ func (a *API) getObjectMetadata(c *gin.Context) {
 // @Param body body ObjectMetadataInput true "Values"
 // @Success 200 {object} map[string]interface{}
 // @Failure 422 {object} MetadataValidationErrorResponse
-// @Router /api/v1/metadata/objects/{object_type}/{object_id} [put]
+// @Router /metadata/objects/{object_type}/{object_id} [put]
 func (a *API) setObjectMetadata(c *gin.Context) {
 	var in ObjectMetadataInput
 	if err := c.ShouldBindJSON(&in); err != nil {
@@ -549,7 +549,7 @@ func (a *API) setObjectMetadata(c *gin.Context) {
 // @Param object_type path string true "Object type"
 // @Param object_id path string true "Object ID"
 // @Success 204
-// @Router /api/v1/metadata/objects/{object_type}/{object_id} [delete]
+// @Router /metadata/objects/{object_type}/{object_id} [delete]
 func (a *API) deleteObjectMetadata(c *gin.Context) {
 	if !governed_metadata.IsEnterpriseAvailable() {
 		writeGovernedMetadataError(c, governed_metadata.ErrEnterpriseFeature)
@@ -569,7 +569,7 @@ func (a *API) deleteObjectMetadata(c *gin.Context) {
 // @Param object_id path string true "Object ID"
 // @Param limit query int false "Max entries (default 100)"
 // @Success 200 {object} map[string]interface{}
-// @Router /api/v1/metadata/objects/{object_type}/{object_id}/audit [get]
+// @Router /metadata/objects/{object_type}/{object_id}/audit [get]
 func (a *API) getObjectMetadataAudit(c *gin.Context) {
 	if !governed_metadata.IsEnterpriseAvailable() {
 		writeGovernedMetadataError(c, governed_metadata.ErrEnterpriseFeature)
@@ -588,7 +588,7 @@ func (a *API) getObjectMetadataAudit(c *gin.Context) {
 // @Param object_type query string false "Filter by object type"
 // @Param status query string false "Filter by status (missing, invalid, expired, warnings, valid)"
 // @Success 200 {object} governed_metadata.ComplianceReport
-// @Router /api/v1/metadata/compliance [get]
+// @Router /metadata/compliance [get]
 func (a *API) getMetadataComplianceReport(c *gin.Context) {
 	report, err := a.governedMetadata().ComplianceReport(governed_metadata.ComplianceFilter{
 		ObjectType: strings.TrimSpace(c.Query("object_type")),

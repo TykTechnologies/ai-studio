@@ -29,7 +29,7 @@ func NewSyncStatusHandlers(syncStatusService *services.SyncStatusService) *SyncS
 // @Tags sync
 // @Produce json
 // @Success 200 {object} map[string]interface{}
-// @Router /api/v1/sync/status [get]
+// @Router /sync/status [get]
 // @Security BearerAuth
 func (h *SyncStatusHandlers) GetSyncStatus(c *gin.Context) {
 	summary, err := h.syncStatusService.GetNamespaceSyncSummary()
@@ -57,7 +57,7 @@ func (h *SyncStatusHandlers) GetSyncStatus(c *gin.Context) {
 // @Produce json
 // @Success 200 {object} map[string]services.PendingChanges
 // @Failure 422 {object} map[string]interface{} "invalid_workspace: unknown Workspace"
-// @Router /api/v1/sync/pending-changes [get]
+// @Router /sync/pending-changes [get]
 // @Security BearerAuth
 func (h *SyncStatusHandlers) GetPendingChanges(c *gin.Context) {
 	namespace := c.Query("namespace")
@@ -112,7 +112,7 @@ func (h *SyncStatusHandlers) GetPendingChanges(c *gin.Context) {
 // @Param namespace path string true "Namespace"
 // @Produce json
 // @Success 200 {object} map[string]interface{}
-// @Router /api/v1/sync/status/{namespace} [get]
+// @Router /sync/status/{namespace} [get]
 // @Security BearerAuth
 func (h *SyncStatusHandlers) GetNamespaceSyncStatus(c *gin.Context) {
 	namespace := c.Param("namespace")
@@ -139,7 +139,7 @@ func (h *SyncStatusHandlers) GetNamespaceSyncStatus(c *gin.Context) {
 // @Param limit query int false "Limit results" default(50)
 // @Produce json
 // @Success 200 {object} map[string]interface{}
-// @Router /api/v1/sync/audit [get]
+// @Router /sync/audit [get]
 // @Security BearerAuth
 func (h *SyncStatusHandlers) GetSyncAuditLog(c *gin.Context) {
 	namespace := c.Query("namespace")

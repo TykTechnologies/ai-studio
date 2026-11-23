@@ -91,7 +91,7 @@ type PluginListResponse struct {
 // @Param limit query int false "Items per page" default(20)
 // @Success 200 {object} PluginListResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins [get]
+// @Router /plugins [get]
 // @Security BearerAuth
 func (a *API) listPlugins(c *gin.Context) {
 	// Parse query parameters
@@ -286,7 +286,7 @@ func (a *API) listPlugins(c *gin.Context) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 409 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins [post]
+// @Router /plugins [post]
 // @Security BearerAuth
 func (a *API) createPlugin(c *gin.Context) {
 	var req services.CreatePluginRequest
@@ -424,7 +424,7 @@ func (a *API) createPlugin(c *gin.Context) {
 // @Success 200 {object} PluginResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins/{id} [get]
+// @Router /plugins/{id} [get]
 // @Security BearerAuth
 func (a *API) getPlugin(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
@@ -473,7 +473,7 @@ func (a *API) getPlugin(c *gin.Context) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins/{id} [patch]
+// @Router /plugins/{id} [patch]
 // @Security BearerAuth
 func (a *API) updatePlugin(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
@@ -767,7 +767,7 @@ func (a *API) applyPluginActivation(plugin *models.Plugin, wasActive, loadOnActi
 // @Success 204 "No Content"
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins/{id} [delete]
+// @Router /plugins/{id} [delete]
 // @Security BearerAuth
 func (a *API) deletePlugin(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
@@ -865,7 +865,7 @@ func (a *API) deletePlugin(c *gin.Context) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins/{id}/data [delete]
+// @Router /plugins/{id}/data [delete]
 // @Security BearerAuth
 func (a *API) clearPluginData(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
@@ -916,7 +916,7 @@ func (a *API) clearPluginData(c *gin.Context) {
 // @Success 200 {object} map[string]interface{}
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins/{id}/test [post]
+// @Router /plugins/{id}/test [post]
 // @Security BearerAuth
 func (a *API) testPlugin(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
@@ -969,7 +969,7 @@ func (a *API) testPlugin(c *gin.Context) {
 // @Success 200 {array} PluginResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/llms/{id}/plugins [get]
+// @Router /llms/{id}/plugins [get]
 // @Security BearerAuth
 func (a *API) getLLMPlugins(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
@@ -1013,7 +1013,7 @@ func (a *API) getLLMPlugins(c *gin.Context) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/llms/{id}/plugins [put]
+// @Router /llms/{id}/plugins [put]
 // @Security BearerAuth
 func (a *API) updateLLMPlugins(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
@@ -1076,7 +1076,7 @@ func (a *API) updateLLMPlugins(c *gin.Context) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins/{id}/reload [post]
+// @Router /plugins/{id}/reload [post]
 // @Security BearerAuth
 func (a *API) reloadPlugin(c *gin.Context) {
 	if a.service.AIStudioPluginManager == nil {
@@ -1302,7 +1302,7 @@ func serializePlugin(plugin *models.Plugin) PluginResponse {
 // @Success 201 {object} PluginResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins/oci [post]
+// @Router /plugins/oci [post]
 // @Security BearerAuth
 func (a *API) createOCIPlugin(c *gin.Context) {
 	var req services.CreateOCIPluginRequest
@@ -1358,7 +1358,7 @@ func (a *API) createOCIPlugin(c *gin.Context) {
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins/oci/cached [get]
+// @Router /plugins/oci/cached [get]
 // @Security BearerAuth
 func (a *API) listCachedOCIPlugins(c *gin.Context) {
 	plugins, err := a.service.PluginService.ListCachedOCIPlugins()
@@ -1385,7 +1385,7 @@ func (a *API) listCachedOCIPlugins(c *gin.Context) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins/{id}/refresh [post]
+// @Router /plugins/{id}/refresh [post]
 // @Security BearerAuth
 func (a *API) refreshOCIPlugin(c *gin.Context) {
 	idParam := c.Param("id")
@@ -1435,7 +1435,7 @@ func (a *API) refreshOCIPlugin(c *gin.Context) {
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins/type/{type} [get]
+// @Router /plugins/type/{type} [get]
 // @Security BearerAuth
 func (a *API) getPluginsByType(c *gin.Context) {
 	typeParam := c.Param("type")
@@ -1496,7 +1496,7 @@ func (a *API) getPluginsByType(c *gin.Context) {
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins/ai-studio/manifests [get]
+// @Router /plugins/ai-studio/manifests [get]
 // @Security BearerAuth
 func (a *API) getAIStudioPluginsWithManifests(c *gin.Context) {
 	// Get all plugins and filter for studio_ui hook type with manifests
@@ -1537,7 +1537,7 @@ func (a *API) getAIStudioPluginsWithManifests(c *gin.Context) {
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins/ui-registry [get]
+// @Router /plugins/ui-registry [get]
 // @Security BearerAuth
 func (a *API) getUIRegistry(c *gin.Context) {
 	if a.service.PluginManifestService == nil {
@@ -1588,7 +1588,7 @@ func (a *API) getUIRegistry(c *gin.Context) {
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins/sidebar-menu [get]
+// @Router /plugins/sidebar-menu [get]
 // @Security BearerAuth
 func (a *API) getSidebarMenuItems(c *gin.Context) {
 	if a.service.PluginManifestService == nil {
@@ -1629,7 +1629,7 @@ func (a *API) getSidebarMenuItems(c *gin.Context) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins/{id}/ui/load [post]
+// @Router /plugins/{id}/ui/load [post]
 // @Security BearerAuth
 func (a *API) loadPluginUI(c *gin.Context) {
 	if a.service.PluginManifestService == nil {
@@ -1686,7 +1686,7 @@ func (a *API) loadPluginUI(c *gin.Context) {
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins/{id}/ui/unload [post]
+// @Router /plugins/{id}/ui/unload [post]
 // @Security BearerAuth
 func (a *API) unloadPluginUI(c *gin.Context) {
 	if a.service.PluginManifestService == nil {
@@ -1735,7 +1735,7 @@ func (a *API) unloadPluginUI(c *gin.Context) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins/{id}/manifest/parse [post]
+// @Router /plugins/{id}/manifest/parse [post]
 // @Security BearerAuth
 func (a *API) parsePluginManifest(c *gin.Context) {
 	if a.service.PluginManifestService == nil {
@@ -2022,7 +2022,7 @@ func (a *API) servePluginAsset(c *gin.Context) {
 // @Success 200 {object} map[string]interface{}
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
-// @Router /api/v1/plugins/{id}/status [get]
+// @Router /plugins/{id}/status [get]
 // @Security BearerAuth
 func (a *API) getPluginStatus(c *gin.Context) {
 	idParam := c.Param("id")
@@ -2092,7 +2092,7 @@ func (a *API) getPluginStatus(c *gin.Context) {
 // @Accept json
 // @Produce json
 // @Success 200 {object} map[string]interface{}
-// @Router /api/v1/plugins/loaded [get]
+// @Router /plugins/loaded [get]
 // @Security BearerAuth
 func (a *API) getLoadedPlugins(c *gin.Context) {
 	if a.service.AIStudioPluginManager == nil {
@@ -2151,7 +2151,7 @@ func (a *API) getLoadedPlugins(c *gin.Context) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/plugins/{id}/rpc/{method} [post]
+// @Router /plugins/{id}/rpc/{method} [post]
 // @Security BearerAuth
 func (a *API) callPluginRPC(c *gin.Context) {
 	if a.service.AIStudioPluginManager == nil {

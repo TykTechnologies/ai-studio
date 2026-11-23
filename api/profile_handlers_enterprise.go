@@ -159,7 +159,7 @@ func serializeProfiles(profiles models.Profiles) []ProfileListItem {
 // @Success 201 {object} ProfileResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/sso-profiles [post]
+// @Router /sso-profiles [post]
 // @Security BearerAuth
 func (a *API) createProfile(c *gin.Context) {
 	var input ProfileInput
@@ -223,7 +223,7 @@ func (a *API) createProfile(c *gin.Context) {
 // @Success 200 {object} ProfileResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
-// @Router /api/v1/sso-profiles/{id} [get]
+// @Router /sso-profiles/{id} [get]
 // @Security BearerAuth
 func (a *API) getProfile(c *gin.Context) {
 	id := c.Param("profile_id")
@@ -252,7 +252,7 @@ func (a *API) getProfile(c *gin.Context) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/sso-profiles/{id} [put]
+// @Router /sso-profiles/{id} [put]
 // @Security BearerAuth
 func (a *API) updateProfile(c *gin.Context) {
 	id := c.Param("profile_id")
@@ -318,7 +318,7 @@ func (a *API) updateProfile(c *gin.Context) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/sso-profiles/{id} [delete]
+// @Router /sso-profiles/{id} [delete]
 // @Security BearerAuth
 func (a *API) deleteProfile(c *gin.Context) {
 	id := c.Param("profile_id")
@@ -346,7 +346,7 @@ func (a *API) deleteProfile(c *gin.Context) {
 // @Success 200 {object} ProfilesResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/sso-profiles [get]
+// @Router /sso-profiles [get]
 // @Security BearerAuth
 func (a *API) listProfiles(c *gin.Context) {
 	pageSize, pageNumber, all := getPaginationParams(c)
@@ -389,7 +389,7 @@ func (a *API) listProfiles(c *gin.Context) {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /api/v1/sso-profiles/{profile_id}/use-in-login-page [post]
+// @Router /sso-profiles/{profile_id}/use-in-login-page [post]
 // @Security BearerAuth
 func (a *API) setProfileUseInLoginPage(c *gin.Context) {
 	id := c.Param("profile_id")

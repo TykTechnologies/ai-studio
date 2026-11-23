@@ -17,7 +17,7 @@ import (
 // @Produce json
 // @Success 201 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/data-catalogues [post]
+// Swagger: the Enterprise handler documents /data-catalogues [post].
 // @Security BearerAuth
 func (a *API) createDataCatalogue(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Data catalogue management requires Enterprise Edition"))
@@ -31,7 +31,7 @@ func (a *API) createDataCatalogue(c *gin.Context) {
 // @Param id path int true "Data Catalogue ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/data-catalogues/{id} [get]
+// Swagger: the Enterprise handler documents /data-catalogues/{id} [get].
 // @Security BearerAuth
 func (a *API) getDataCatalogue(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Data catalogue management requires Enterprise Edition"))
@@ -45,7 +45,7 @@ func (a *API) getDataCatalogue(c *gin.Context) {
 // @Param id path int true "Data Catalogue ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/data-catalogues/{id} [patch]
+// Swagger: the Enterprise handler documents /data-catalogues/{id} [patch].
 // @Security BearerAuth
 func (a *API) updateDataCatalogue(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Data catalogue management requires Enterprise Edition"))
@@ -59,7 +59,7 @@ func (a *API) updateDataCatalogue(c *gin.Context) {
 // @Param id path int true "Data Catalogue ID"
 // @Success 204
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/data-catalogues/{id} [delete]
+// Swagger: the Enterprise handler documents /data-catalogues/{id} [delete].
 // @Security BearerAuth
 func (a *API) deleteDataCatalogue(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Data catalogue management requires Enterprise Edition"))
@@ -72,7 +72,7 @@ func (a *API) deleteDataCatalogue(c *gin.Context) {
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/data-catalogues [get]
+// Swagger: the Enterprise handler documents /data-catalogues [get].
 // @Security BearerAuth
 func (a *API) listDataCatalogues(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Data catalogue management requires Enterprise Edition"))
@@ -85,7 +85,7 @@ func (a *API) listDataCatalogues(c *gin.Context) {
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/data-catalogues/search [get]
+// Swagger: the Enterprise handler documents /data-catalogues/search [get].
 // @Security BearerAuth
 func (a *API) searchDataCatalogues(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Data catalogue management requires Enterprise Edition"))
@@ -99,7 +99,7 @@ func (a *API) searchDataCatalogues(c *gin.Context) {
 // @Param id path int true "Data Catalogue ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/data-catalogues/{id}/tags [post]
+// Swagger: the Enterprise handler documents /data-catalogues/{id}/tags [post].
 // @Security BearerAuth
 func (a *API) addTagToDataCatalogue(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Data catalogue management requires Enterprise Edition"))
@@ -114,7 +114,7 @@ func (a *API) addTagToDataCatalogue(c *gin.Context) {
 // @Param tagId path int true "Tag ID"
 // @Success 204
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/data-catalogues/{id}/tags/{tagId} [delete]
+// Swagger: the Enterprise handler documents /data-catalogues/{id}/tags/{tagId} [delete].
 // @Security BearerAuth
 func (a *API) removeTagFromDataCatalogue(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Data catalogue management requires Enterprise Edition"))
@@ -128,7 +128,7 @@ func (a *API) removeTagFromDataCatalogue(c *gin.Context) {
 // @Param id path int true "Data Catalogue ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/data-catalogues/{id}/datasources [post]
+// Swagger: the Enterprise handler documents /data-catalogues/{id}/datasources [post].
 // @Security BearerAuth
 func (a *API) addDatasourceToDataCatalogue(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Data catalogue management requires Enterprise Edition"))
@@ -143,7 +143,7 @@ func (a *API) addDatasourceToDataCatalogue(c *gin.Context) {
 // @Param datasourceId path int true "Datasource ID"
 // @Success 204
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/data-catalogues/{id}/datasources/{datasourceId} [delete]
+// Swagger: the Enterprise handler documents /data-catalogues/{id}/datasources/{datasourceId} [delete].
 // @Security BearerAuth
 func (a *API) removeDatasourceFromDataCatalogue(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Data catalogue management requires Enterprise Edition"))
@@ -157,7 +157,7 @@ func (a *API) removeDatasourceFromDataCatalogue(c *gin.Context) {
 // @Param tagName path string true "Tag name"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/data-catalogues/by-tag/{tagName} [get]
+// @Router /data-catalogues/by-tag/{tagName} [get]
 // @Security BearerAuth
 func (a *API) getDataCataloguesByTag(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Data catalogue management requires Enterprise Edition"))
@@ -171,7 +171,7 @@ func (a *API) getDataCataloguesByTag(c *gin.Context) {
 // @Param datasourceId path int true "Datasource ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/data-catalogues/by-datasource/{datasourceId} [get]
+// @Router /data-catalogues/by-datasource/{datasourceId} [get]
 // @Security BearerAuth
 func (a *API) getDataCataloguesByDatasource(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Data catalogue management requires Enterprise Edition"))

@@ -79,7 +79,7 @@ func respondEndpointAuthPluginError(c *gin.Context, err error) {
 // @Param id path int true "Datasource ID"
 // @Success 200 {array} PluginResponse
 // @Failure 404 {object} ErrorResponse
-// @Router /api/v1/datasources/{id}/auth-plugins [get]
+// @Router /datasources/{id}/auth-plugins [get]
 // @Security BearerAuth
 func _docDatasourceAuthPluginsGet() {}
 
@@ -93,7 +93,7 @@ func _docDatasourceAuthPluginsGet() {}
 // @Success 200 {object} SuccessResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
-// @Router /api/v1/datasources/{id}/auth-plugins [put]
+// @Router /datasources/{id}/auth-plugins [put]
 // @Security BearerAuth
 func _docDatasourceAuthPluginsPut() {}
 
@@ -103,7 +103,7 @@ func _docDatasourceAuthPluginsPut() {}
 // @Param id path int true "Tool ID"
 // @Success 200 {array} PluginResponse
 // @Failure 404 {object} ErrorResponse
-// @Router /api/v1/tools/{id}/auth-plugins [get]
+// @Router /tools/{id}/auth-plugins [get]
 // @Security BearerAuth
 func _docToolAuthPluginsGet() {}
 
@@ -117,7 +117,7 @@ func _docToolAuthPluginsGet() {}
 // @Success 200 {object} SuccessResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
-// @Router /api/v1/tools/{id}/auth-plugins [put]
+// @Router /tools/{id}/auth-plugins [put]
 // @Security BearerAuth
 func _docToolAuthPluginsPut() {}
 
@@ -127,7 +127,7 @@ func _docToolAuthPluginsPut() {}
 // @Param id path int true "Model router ID"
 // @Success 200 {array} PluginResponse
 // @Failure 404 {object} ErrorResponse
-// @Router /api/v1/model-routers/{id}/auth-plugins [get]
+// @Router /model-routers/{id}/auth-plugins [get]
 // @Security BearerAuth
 func _docModelRouterAuthPluginsGet() {}
 
@@ -140,7 +140,7 @@ func _docModelRouterAuthPluginsGet() {}
 // @Success 200 {object} SuccessResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
-// @Router /api/v1/model-routers/{id}/auth-plugins [put]
+// @Router /model-routers/{id}/auth-plugins [put]
 // @Security BearerAuth
 func _docModelRouterAuthPluginsPut() {}
 
@@ -150,7 +150,7 @@ func _docModelRouterAuthPluginsPut() {}
 // @Param id path int true "Semantic router ID"
 // @Success 200 {array} PluginResponse
 // @Failure 404 {object} ErrorResponse
-// @Router /api/v1/semantic-routers/{id}/auth-plugins [get]
+// @Router /semantic-routers/{id}/auth-plugins [get]
 // @Security BearerAuth
 func _docSemanticRouterAuthPluginsGet() {}
 
@@ -163,7 +163,7 @@ func _docSemanticRouterAuthPluginsGet() {}
 // @Success 200 {object} SuccessResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
-// @Router /api/v1/semantic-routers/{id}/auth-plugins [put]
+// @Router /semantic-routers/{id}/auth-plugins [put]
 // @Security BearerAuth
 func _docSemanticRouterAuthPluginsPut() {}
 
@@ -173,7 +173,7 @@ func _docSemanticRouterAuthPluginsPut() {}
 // @Param id path int true "Plugin ID"
 // @Success 200 {array} PluginResponse
 // @Failure 404 {object} ErrorResponse
-// @Router /api/v1/plugins/{id}/auth-plugins [get]
+// @Router /plugins/{id}/auth-plugins [get]
 // @Security BearerAuth
 func _docPluginAuthPluginsGet() {}
 
@@ -187,6 +187,6 @@ func _docPluginAuthPluginsGet() {}
 // @Success 200 {object} SuccessResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
-// @Router /api/v1/plugins/{id}/auth-plugins [put]
+// @Router /plugins/{id}/auth-plugins [put]
 // @Security BearerAuth
 func _docPluginAuthPluginsPut() {}

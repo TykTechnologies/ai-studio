@@ -17,7 +17,7 @@ import (
 // @Produce json
 // @Success 201 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/tool-catalogues [post]
+// Swagger: the Enterprise handler documents /tool-catalogues [post].
 // @Security BearerAuth
 func (a *API) createToolCatalogue(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Tool catalogue management requires Enterprise Edition"))
@@ -31,7 +31,7 @@ func (a *API) createToolCatalogue(c *gin.Context) {
 // @Param id path int true "Tool Catalogue ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/tool-catalogues/{id} [get]
+// Swagger: the Enterprise handler documents /tool-catalogues/{id} [get].
 // @Security BearerAuth
 func (a *API) getToolCatalogue(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Tool catalogue management requires Enterprise Edition"))
@@ -45,7 +45,7 @@ func (a *API) getToolCatalogue(c *gin.Context) {
 // @Param id path int true "Tool Catalogue ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/tool-catalogues/{id} [patch]
+// Swagger: the Enterprise handler documents /tool-catalogues/{id} [patch].
 // @Security BearerAuth
 func (a *API) updateToolCatalogue(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Tool catalogue management requires Enterprise Edition"))
@@ -59,7 +59,7 @@ func (a *API) updateToolCatalogue(c *gin.Context) {
 // @Param id path int true "Tool Catalogue ID"
 // @Success 204
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/tool-catalogues/{id} [delete]
+// Swagger: the Enterprise handler documents /tool-catalogues/{id} [delete].
 // @Security BearerAuth
 func (a *API) deleteToolCatalogue(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Tool catalogue management requires Enterprise Edition"))
@@ -72,7 +72,7 @@ func (a *API) deleteToolCatalogue(c *gin.Context) {
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/tool-catalogues [get]
+// Swagger: the Enterprise handler documents /tool-catalogues [get].
 // @Security BearerAuth
 func (a *API) listToolCatalogues(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Tool catalogue management requires Enterprise Edition"))
@@ -85,7 +85,7 @@ func (a *API) listToolCatalogues(c *gin.Context) {
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/tool-catalogues/search [get]
+// Swagger: the Enterprise handler documents /tool-catalogues/search [get].
 // @Security BearerAuth
 func (a *API) searchToolCatalogues(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Tool catalogue management requires Enterprise Edition"))
@@ -99,7 +99,7 @@ func (a *API) searchToolCatalogues(c *gin.Context) {
 // @Param id path int true "Tool Catalogue ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/tool-catalogues/{id}/tools [post]
+// Swagger: the Enterprise handler documents /tool-catalogues/{id}/tools [post].
 // @Security BearerAuth
 func (a *API) addToolToToolCatalogue(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Tool catalogue management requires Enterprise Edition"))
@@ -114,7 +114,7 @@ func (a *API) addToolToToolCatalogue(c *gin.Context) {
 // @Param toolId path int true "Tool ID"
 // @Success 204
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/tool-catalogues/{id}/tools/{toolId} [delete]
+// Swagger: the Enterprise handler documents /tool-catalogues/{id}/tools/{toolId} [delete].
 // @Security BearerAuth
 func (a *API) removeToolFromToolCatalogue(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Tool catalogue management requires Enterprise Edition"))
@@ -128,7 +128,7 @@ func (a *API) removeToolFromToolCatalogue(c *gin.Context) {
 // @Param id path int true "Tool Catalogue ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/tool-catalogues/{id}/tools [get]
+// Swagger: the Enterprise handler documents /tool-catalogues/{id}/tools [get].
 // @Security BearerAuth
 func (a *API) getToolCatalogueTools(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Tool catalogue management requires Enterprise Edition"))
@@ -142,7 +142,7 @@ func (a *API) getToolCatalogueTools(c *gin.Context) {
 // @Param id path int true "Tool Catalogue ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/tool-catalogues/{id}/tools/secure [get]
+// @Router /tool-catalogues/{id}/tools/secure [get]
 // @Security BearerAuth
 func (a *API) getToolCatalogueToolsSecure(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Tool catalogue management requires Enterprise Edition"))
@@ -157,7 +157,7 @@ func (a *API) getToolCatalogueToolsSecure(c *gin.Context) {
 // @Param toolId path int true "Tool ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/tool-catalogues/{catalogueId}/tools/{toolId}/documentation [get]
+// @Router /tool-catalogues/{catalogueId}/tools/{toolId}/documentation [get]
 // @Security BearerAuth
 func (a *API) GetToolDocumentation(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Tool catalogue management requires Enterprise Edition"))
@@ -171,7 +171,7 @@ func (a *API) GetToolDocumentation(c *gin.Context) {
 // @Param id path int true "Tool Catalogue ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/tool-catalogues/{id}/tags [post]
+// Swagger: the Enterprise handler documents /tool-catalogues/{id}/tags [post].
 // @Security BearerAuth
 func (a *API) addTagToToolCatalogue(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Tool catalogue management requires Enterprise Edition"))
@@ -186,7 +186,7 @@ func (a *API) addTagToToolCatalogue(c *gin.Context) {
 // @Param tagId path int true "Tag ID"
 // @Success 204
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/tool-catalogues/{id}/tags/{tagId} [delete]
+// Swagger: the Enterprise handler documents /tool-catalogues/{id}/tags/{tagId} [delete].
 // @Security BearerAuth
 func (a *API) removeTagFromToolCatalogue(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Tool catalogue management requires Enterprise Edition"))
@@ -200,7 +200,7 @@ func (a *API) removeTagFromToolCatalogue(c *gin.Context) {
 // @Param id path int true "Tool Catalogue ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/tool-catalogues/{id}/tags [get]
+// Swagger: the Enterprise handler documents /tool-catalogues/{id}/tags [get].
 // @Security BearerAuth
 func (a *API) getToolCatalogueTags(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Tool catalogue management requires Enterprise Edition"))
@@ -215,7 +215,7 @@ func (a *API) getToolCatalogueTags(c *gin.Context) {
 // @Param toolId path int true "Tool ID"
 // @Success 200 {object} map[string]interface{}
 // @Failure 402 {object} ErrorResponse
-// @Router /api/v1/tool-catalogues/{catalogueId}/tools/{toolId}/apps [get]
+// @Router /tool-catalogues/{catalogueId}/tools/{toolId}/apps [get]
 // @Security BearerAuth
 func (a *API) getToolUserApps(c *gin.Context) {
 	helpers.SendErrorResponse(c, helpers.NewPaymentRequiredError("Tool catalogue management requires Enterprise Edition"))
