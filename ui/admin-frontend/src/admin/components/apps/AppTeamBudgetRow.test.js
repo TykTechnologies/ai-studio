@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import AppTeamBudgetRow from "./AppTeamBudgetRow";
 import { teamBudgetsService } from "../../services/teamBudgetsService";
+import { PermissionsProvider } from "../../context/PermissionsContext";
 
 jest.mock("../../services/teamBudgetsService", () => {
   const actual = jest.requireActual("../../services/teamBudgetsService");
@@ -11,10 +12,14 @@ jest.mock("../../services/teamBudgetsService", () => {
 
 const Label = ({ children }) => <span>{children}</span>;
 
-const renderRow = (attributes) =>
+const identity = (permissions) => ({ id: "1", attributes: { has_admin_access: true, rbac_enabled: true, permissions } });
+
+const renderRow = (attributes, permissions = ["groups:read"]) =>
   render(
     <MemoryRouter>
-      <AppTeamBudgetRow app={{ id: "7", attributes }} FieldLabel={Label} FieldValue={Label} />
+      <PermissionsProvider identity={identity(permissions)}>
+        <AppTeamBudgetRow app={{ id: "7", attributes }} FieldLabel={Label} FieldValue={Label} />
+      </PermissionsProvider>
     </MemoryRouter>,
   );
 
@@ -38,7 +43,20 @@ describe("AppTeamBudgetRow", () => {
     expect(screen.queryByTestId("app-team-pool-note")).not.toBeInTheDocument();
   });
 
+  // midsommar-clean-6bg5.10: the report needs teams read globally. Without
+  // it (a role held only within a Workspace) the call is not made (it
+  // answered 403) and the team is named by id, without a link to a page the
+  // caller cannot open.
+  it("names the team by id and asks for no report without groups:read", () => {
+    teamBudgetsService.getReport.mockClear();
+    renderRow({ team_id: 3, monthly_budget: 5 }, []);
+    expect(screen.getByTestId("app-team-plain")).toHaveTextContent("Team 3");
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(teamBudgetsService.getReport).not.toHaveBeenCalled();
+  });
+
   it("handles an App with no team", () => {
+    teamBudgetsService.getReport.mockClear();
     renderRow({ team_id: null });
     expect(screen.getByText("Not attributed to a team")).toBeInTheDocument();
     expect(teamBudgetsService.getReport).not.toHaveBeenCalled();

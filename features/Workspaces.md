@@ -114,7 +114,7 @@ Users, teams, edges and metadata are global resources, but the forms of Workspac
 | `GET /metadata/vocabularies` | `metadata:read` | write on llms, tools, datasources | Unchanged handler |
 | `GET /vendors/*` | none | the route's own read (llms, datasources) | Unchanged handler (static lists) |
 
-Sub-routes and writes of users and teams stay global-only. The write path does not check that an App's or data source's owner or team is one the caller can see (deferred, midsommar-clean-23zg). In the UI, calls a Workspace-only role cannot make are not made: plugin lists and plugin resource types (the sections are hidden; saving keeps what is attached: the LLM form does not send `PUT /llms/:id/plugins`, the App form resends the loaded `plugin_resources`), App analytics, MCP usage and proxy logs on the App page, and a team's budget report in the App form.
+Sub-routes and writes of users and teams stay global-only. The write path does not check that an App's or data source's owner or team is one the caller can see (deferred, midsommar-clean-23zg). In the UI, calls a Workspace-only role cannot make are not made: plugin lists and plugin resource types (the sections are hidden; saving keeps what is attached: the LLM form does not send `PUT /llms/:id/plugins`, the App form resends the loaded `plugin_resources`), App analytics, MCP usage and proxy logs on the App page, a team's budget report (App form and App page, where the team is then named by id), and the Quick Start wizard, which is not offered to a caller without global `users:write` because dismissing it writes the user record.
 
 ### Credential material
 

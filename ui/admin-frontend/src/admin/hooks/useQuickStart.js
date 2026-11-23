@@ -4,11 +4,19 @@ import apiClient from '../utils/apiClient';
 import { skipQuickStartForUser } from '../services/userService';
 import cacheService from '../utils/cacheService';
 import { CACHE_KEYS } from '../utils/constants';
+import { usePermissions } from '../context/PermissionsContext';
+import { P } from '../rbac/permissions';
 
 const useQuickStart = () => {
   const [showQuickStart, setShowQuickStart] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  // Dismissing Quick Start is stored on the user record, which needs
+  // users:write globally. Someone without it (a role held only within a
+  // Workspace, a read-only role) could never dismiss it for good, and the
+  // attempt answered 403, so Quick Start is not offered to them.
+  const { can } = usePermissions();
+  const canDismiss = can(P.USERS_WRITE);
 
   const {
     userName,
@@ -46,7 +54,7 @@ const useQuickStart = () => {
     ])
       .then(([userEntitlements, appsCount, daysLeft]) => {
         const skipQuickStart = userEntitlements?.ui_options?.skip_quick_start;
-        if (appsCount === 0 && !skipQuickStart) {
+        if (appsCount === 0 && !skipQuickStart && canDismiss) {
           setShowQuickStart(true);
         }
       })
@@ -57,7 +65,7 @@ const useQuickStart = () => {
       .finally(() => {
         setLoading(false);
       });
-  }, [fetchUserEntitlements, fetchAppsCount]);
+  }, [fetchUserEntitlements, fetchAppsCount, canDismiss]);
 
   useEffect(() => {
     fetchQuickStartData();
@@ -68,7 +76,7 @@ const useQuickStart = () => {
   };
 
   const handleQuickStartSkip = useCallback(async () => {
-    if (userId && !userEntitlements?.ui_options?.skip_quick_start) {
+    if (userId && canDismiss && !userEntitlements?.ui_options?.skip_quick_start) {
       try {
         await skipQuickStartForUser(userId);
         cacheService.remove(CACHE_KEYS.USER_ENTITLEMENTS);
@@ -77,7 +85,7 @@ const useQuickStart = () => {
       }
     }
     setShowQuickStart(false);
-  }, [userId, userEntitlements]);
+  }, [userId, userEntitlements, canDismiss]);
 
   const combinedError = entitlementsError || error;
 
