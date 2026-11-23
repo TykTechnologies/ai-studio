@@ -112,15 +112,21 @@ type NativeResource struct {
 // the model the vendor reports, as before the column existed.
 const NativeRequestedModelsMax = 64
 
+// NativeRequestedModelMaxLen is the longest model name a ledger row keeps,
+// the bound the hub puts on an edge's requested model at ingest. A longer
+// name (the names come from request bodies) is left out, so the usage it
+// produced is priced by the reported model.
+const NativeRequestedModelMaxLen = 256
+
 // SetRequestedModels stores the distinct, non-empty names of requested in
-// order of first use. More than NativeRequestedModelsMax distinct names
-// store nothing.
+// order of first use, leaving out names over NativeRequestedModelMaxLen.
+// More than NativeRequestedModelsMax distinct names store nothing.
 func (r *NativeResource) SetRequestedModels(requested []string) {
 	r.RequestedModels = ""
 	seen := make(map[string]bool, len(requested))
 	distinct := make([]string, 0, len(requested))
 	for _, m := range requested {
-		if m == "" || seen[m] {
+		if m == "" || len(m) > NativeRequestedModelMaxLen || seen[m] {
 			continue
 		}
 		seen[m] = true

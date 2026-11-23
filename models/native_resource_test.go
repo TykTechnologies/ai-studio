@@ -2,6 +2,7 @@ package models
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -51,6 +52,10 @@ func TestNativeResource_SetRequestedModels(t *testing.T) {
 	assert.Empty(t, row.RequestedModels, "over the cap nothing is kept")
 	row.SetRequestedModels(many[:NativeRequestedModelsMax])
 	assert.Len(t, row.RequestedModelList(), NativeRequestedModelsMax)
+
+	long := strings.Repeat("m", NativeRequestedModelMaxLen+1)
+	row.SetRequestedModels([]string{long, "a", long[:NativeRequestedModelMaxLen]})
+	assert.Equal(t, []string{"a", long[:NativeRequestedModelMaxLen]}, row.RequestedModelList(), "a name over the length bound is left out")
 
 	row.RequestedModels = "not json"
 	assert.Nil(t, row.RequestedModelList())

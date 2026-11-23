@@ -302,7 +302,7 @@ row.
 | `vendor`, `llm_id`, `app_id`, `user_id`, `on_behalf_of`, `acting_agent` | Owner and identity of the creating request (stamped on usage recorded later) |
 | `resource_type`, `vendor_resource_id`, `parent_id` | The resource; unique `(llm_id, resource_type, vendor_resource_id)` |
 | `screening_digest` | On a resource an `Admit` op created: the digest of the request filters that screened it (`none` without filters). Schema version 11; never returned to clients |
-| `requested_models` | JSON array of the distinct models the creating request asked for, in order of first use, at most 64 (more: none kept). A batch's `params.model` values, the `body.model` of an uploaded batch input file's lines (an OpenAI batch's row inherits its input file's list at create), a background response's `model`. Used to price usage accounted later (see Pricing below). Studio schema version 46; never returned to clients |
+| `requested_models` | JSON array of the distinct models the creating request asked for, in order of first use, at most 64 (more: none kept), names over 256 bytes left out. A batch's `params.model` values, the `body.model` of an uploaded batch input file's lines (an OpenAI batch's row inherits its input file's list at create), a background response's `model`. Used to price usage accounted later (see Pricing below). Studio schema version 46; never returned to clients |
 | `state`, `snapshot`, `ended_at`, `results_expire_at` | Last vendor view (snapshot is the wrapped object, served by list) |
 | `accounting_state`, `claim_token`, `claimed_at`, `accounted_at` | Accounting: `none`, `pending`, `claimed`, `accounted`, `unaccountable`, `lost` |
 | `next_poll_at`, `poll_failures` | Reconciler scheduling; index `(accounting_state, next_poll_at)` |
