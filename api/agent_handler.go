@@ -14,6 +14,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/chat_session"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/authz"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/gin-gonic/gin"
 	"github.com/gosimple/slug"
 )
@@ -130,30 +131,57 @@ func (a *API) redactAgent(c *gin.Context, ag *models.AgentConfig) {
 	a.redactAgentWith(c, ag, a.agentRedactor(ag))
 }
 
-// agentRedactor loads, in one query, the secret-field classifiers of the
-// plugins the agents are built on.
+// agentRedactor loads the secret-field classifiers of the plugins the agents
+// are built on: one query for the classifiers, and one more for the commands
+// of plugins that were not preloaded with their agent (they are then set on
+// the agent's Plugin-less copy as a command only, see agentPluginCommand).
 func (a *API) agentRedactor(agents ...*models.AgentConfig) pluginRedactor {
 	plugins := make([]*models.Plugin, 0, len(agents))
+	var missing []uint
 	for _, ag := range agents {
 		if ag == nil {
 			continue
 		}
 		if ag.Plugin != nil {
 			plugins = append(plugins, ag.Plugin)
-		} else if command := a.pluginCommand(ag.PluginID); command != "" {
-			// Not preloaded: the command is all the classifier needs.
-			plugins = append(plugins, &models.Plugin{ID: ag.PluginID, Command: command})
+		} else if ag.PluginID != 0 {
+			missing = append(missing, ag.PluginID)
 		}
 	}
-	return a.pluginRedactorFor(plugins...)
+	if len(missing) > 0 && a.service != nil && a.service.DB != nil {
+		var rows []models.Plugin
+		if err := a.service.DB.Select("id", "command").Where("id IN ?", missing).Find(&rows).Error; err == nil {
+			for i := range rows {
+				plugins = append(plugins, &rows[i])
+			}
+		}
+	}
+	red := a.pluginRedactorFor(plugins...)
+	if len(missing) == 0 {
+		return red
+	}
+	// Remember the commands looked up, under a key no real command has.
+	out := make(pluginRedactor, len(red)+len(plugins))
+	for k, v := range red {
+		out[k] = v
+	}
+	for _, p := range plugins {
+		out[agentPluginKey(p.ID)] = red.secrets(p.Command)
+	}
+	return out
 }
 
-// agentPluginCommand is the command of the agent's plugin, "" if unknown.
-func (a *API) agentPluginCommand(ag *models.AgentConfig) string {
+// agentPluginKey is where agentRedactor keeps the classifier of a plugin id.
+func agentPluginKey(id uint) string { return "\x00plugin-id:" + strconv.FormatUint(uint64(id), 10) }
+
+// agentSecrets is the classifier for an agent's own configuration, which
+// follows its plugin's schema. A plugin agentRedactor could not find is
+// classified by key name.
+func agentSecrets(ag *models.AgentConfig, red pluginRedactor) *services.PluginConfigSecrets {
 	if ag.Plugin != nil {
-		return ag.Plugin.Command
+		return red.secrets(ag.Plugin.Command)
 	}
-	return a.pluginCommand(ag.PluginID)
+	return red[agentPluginKey(ag.PluginID)]
 }
 
 // redactAgentWith is redactAgent with the redactor already loaded (a list).
@@ -171,7 +199,7 @@ func (a *API) redactAgentWith(c *gin.Context, ag *models.AgentConfig, red plugin
 		// secret fields are redacted like the plugin's own
 		// (plugin_config_redaction.go); a write that sends the marker back
 		// keeps the stored value (restoreAgentConfig).
-		ag.Config = red.secrets(a.agentPluginCommand(ag)).RedactPluginConfig(ag.Config)
+		ag.Config = agentSecrets(ag, red).RedactPluginConfig(ag.Config)
 	}
 	if ag.Plugin != nil {
 		// A copy: the secret fields of the plugin's configuration are
