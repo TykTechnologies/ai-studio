@@ -131,7 +131,7 @@ Also recorded:
 - **One call, one span.** The assembled LLM span is exported under the gateway span id. While export is active, the proxy leaves out its own live span for captured requests. Hub replicas set this when the worker starts; edges get it through `assembled_export_active` (jyx.90). An edge with `AGENT_TRACING_KEEP_LIVE_SPAN=true` keeps its live span under its own id, linked to the gateway span id, with metadata only (jyx.176).
 - **`user.id`.** `AGENT_TRACING_EXPORT_USER_ID_MODE`: `hashed` (default, keys.PseudonymizeUserID), `raw` or `off` (jyx.173).
 - **Metrics.**
-  - Core instruments: `metrics/agenttracing.go` and `metrics/agentmetrics.go`.
+  - Core instruments: `metrics/agenttracing.go` and `metrics/agentmetrics.go`. The agent instruments of `agentmetrics.go` exist once per meter: one set on the meter `metrics.Init` registers (Prometheus) and one per meter the Enterprise OTLP exporter adds with `AddAgentMetricsMeter`. The two are kept apart (`agentPrimary`, `agentAdded`), so the exporter's meter may be added before or after `Init`, and a later `Init` replaces only its own set (6bg5.25: `Init` used to reset one shared list, and an exporter added before it kept the observable gauges but lost every counter and histogram). The instruments of `agenttracing.go` (`capture_dropped`, `export_attributes_dropped`, `queue_depth`) are on the Prometheus meter only.
   - The assembler records them after each commit.
   - Exporter entries with `signals: [metrics]` also push them over OTLP from every replica.
 

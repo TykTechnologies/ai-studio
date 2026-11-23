@@ -699,7 +699,9 @@ From the Tyk Weaver registry the exporter is checked against:
 
 ## Metrics
 
-These metrics are on the Prometheus endpoint, and pushed over OTLP to exporter entries with `signals: [metrics]`. Exception: `capture_dropped` and `queue_depth` are on Prometheus only.
+These metrics are on the Prometheus endpoint, and pushed over OTLP to exporter entries with `signals: [metrics]`. Exception: `capture_dropped`, `export_attributes_dropped` and `queue_depth` are on Prometheus only.
+
+The table gives the Prometheus names. Over OTLP the same instruments arrive under their OpenTelemetry names, without the Prometheus suffixes: `tyk_agent_session_duration` (unit `s`), `tyk_agent_turn_llm_calls`, `tyk_agent_turn_tool_calls`, `tyk_agent_cost`, `tyk_agent_sessions_active`, `tyk_tracing_correlation_links`, `tyk_tracing_coverage_ratio` and `tyk_tracing_export_failures`. A collector that writes to Prometheus adds the suffixes back.
 
 | Metric | Type | Attributes |
 |---|---|---|
