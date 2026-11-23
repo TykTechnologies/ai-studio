@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"testing"
 
@@ -37,8 +38,8 @@ func TestJudgeCall_OutputLimitPerModel(t *testing.T) {
 		model string
 		want  string
 	}{
-		{"gpt-5.6-luna", "2048"},
-		{"gpt-4o-mini", "64"},
+		{"gpt-5.6-luna", strconv.Itoa(JudgeReasoningMaxTokens)},
+		{"gpt-4o-mini", strconv.Itoa(JudgeMaxTokens)},
 	} {
 		out, err := judgeCall(context.Background(), llm, tc.model, "system", "user")
 		if err != nil {

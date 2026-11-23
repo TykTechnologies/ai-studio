@@ -68,24 +68,39 @@ const (
 	JudgeReasoningMaxTokens = 2048
 )
 
-// judgeReasoningModel reports whether a judge model reasons by default, with
-// reasoning tokens counted against its output limit: OpenAI's o-series and
-// GPT-5 family, and Google's Gemini 2.5 and 3 families. Anthropic models
-// think only when a request asks for it, and the judge never does.
+// judgeReasoningFamilies are the model families that reason by default, with
+// reasoning tokens counted against the output limit, per vendor: OpenAI's
+// o-series and GPT-5 family, and Google's Gemini 2.5 and 3 families.
+// Anthropic models think only when a request asks for it, and the judge
+// never does. A family matches a model that is its name or continues it with
+// "-" or "." (OpenAI), or that starts with it (Gemini). Add a family here
+// when a vendor ships one; an unlisted reasoning model gets JudgeMaxTokens
+// and gives no verdict, which is fail-closed.
+var judgeReasoningFamilies = map[models.Vendor]struct {
+	families []string
+	// prefix: a model matches when it starts with the family name.
+	prefix bool
+}{
+	models.OPENAI:   {families: []string{"o1", "o3", "o4", "gpt-5"}},
+	models.GOOGLEAI: {families: []string{"gemini-2.5", "gemini-3"}, prefix: true},
+	models.VERTEX:   {families: []string{"gemini-2.5", "gemini-3"}, prefix: true},
+}
+
+// judgeReasoningModel reports whether a judge model is in one of its
+// vendor's judgeReasoningFamilies.
 func judgeReasoningModel(vendor models.Vendor, model string) bool {
 	m := strings.ToLower(strings.TrimSpace(model))
 	if i := strings.LastIndex(m, "/"); i >= 0 {
 		m = m[i+1:] // "models/gemini-2.5-flash"
 	}
-	switch vendor {
-	case models.OPENAI:
-		for _, family := range []string{"o1", "o3", "o4", "gpt-5"} {
-			if m == family || strings.HasPrefix(m, family+"-") || strings.HasPrefix(m, family+".") {
-				return true
-			}
+	entry := judgeReasoningFamilies[vendor]
+	for _, family := range entry.families {
+		switch {
+		case entry.prefix && strings.HasPrefix(m, family):
+			return true
+		case m == family || strings.HasPrefix(m, family+"-") || strings.HasPrefix(m, family+"."):
+			return true
 		}
-	case models.GOOGLEAI, models.VERTEX:
-		return strings.HasPrefix(m, "gemini-2.5") || strings.HasPrefix(m, "gemini-3")
 	}
 	return false
 }
