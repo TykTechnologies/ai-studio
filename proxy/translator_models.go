@@ -42,6 +42,8 @@ type ChatCompletionRequest struct {
 	ToolChoice          any             `json:"tool_choice,omitempty"`
 	ParallelToolCalls   *bool           `json:"parallel_tool_calls,omitempty"`
 	User                *string         `json:"user,omitempty"`
+	PromptCacheKey      *string         `json:"prompt_cache_key,omitempty"`
+	SafetyIdentifier    *string         `json:"safety_identifier,omitempty"`
 }
 
 type Message struct {
@@ -169,6 +171,13 @@ func (r *ChatCompletionRequest) ToLangchainOptions(conf *models.LLM) []llms.Call
 		options = append(options, llms.WithTools(langchainTools))
 	}
 
+	// Parameters only OpenAI has (service_tier, user, store, ...) go to an
+	// OpenAI upstream verbatim; they used to be dropped, so flex and
+	// priority never took effect through the bridges.
+	if conf.Vendor == models.OPENAI {
+		options = append(options, openai.WithExtraBody(r.openAIOnlyParams()))
+	}
+
 	// tool_choice goes to the driver as the client sent it: the OpenAI
 	// driver forwards it, and the Anthropic, Google AI and Vertex drivers
 	// read it with llms.ResolveToolChoice (they used to drop it).
@@ -215,9 +224,62 @@ func (r *ChatCompletionRequest) GetStop() ([]string, bool) {
 		return []string{v}, true
 	case []string:
 		return v, true
+	case []any:
+		// A JSON array decodes to []any: this is the shape clients send,
+		// and it used to fall through, so a list of stop sequences was
+		// dropped for every vendor behind a langchaingo driver.
+		out := make([]string, 0, len(v))
+		for _, item := range v {
+			s, ok := item.(string)
+			if !ok {
+				return nil, false
+			}
+			out = append(out, s)
+		}
+		return out, len(out) > 0
 	default:
 		return nil, false
 	}
+}
+
+// openAIOnlyParams are the request parameters the bridge forwards to an
+// OpenAI upstream as the client sent them: those that exist only in OpenAI's
+// API (and are not sent to other vendors), and top_p
+// (docs/site/docs/proxy.md has the table). A parameter the client did not
+// send is not in the map.
+func (r *ChatCompletionRequest) openAIOnlyParams() map[string]any {
+	out := map[string]any{}
+	// top_p is here too: the OpenAI driver has never sent its TopP option,
+	// and Studio Chat relies on that for models that refuse top_p, so the
+	// bridge forwards the client's own value instead of changing the driver.
+	if r.TopP != nil {
+		out["top_p"] = *r.TopP
+	}
+	if r.ServiceTier != nil && *r.ServiceTier != "" {
+		out["service_tier"] = *r.ServiceTier
+	}
+	if r.User != nil && *r.User != "" {
+		out["user"] = *r.User
+	}
+	if r.Store != nil {
+		out["store"] = *r.Store
+	}
+	if r.ParallelToolCalls != nil {
+		out["parallel_tool_calls"] = *r.ParallelToolCalls
+	}
+	if r.LogProbs != nil {
+		out["logprobs"] = *r.LogProbs
+	}
+	if r.TopLogProbs != nil {
+		out["top_logprobs"] = *r.TopLogProbs
+	}
+	if r.PromptCacheKey != nil && *r.PromptCacheKey != "" {
+		out["prompt_cache_key"] = *r.PromptCacheKey
+	}
+	if r.SafetyIdentifier != nil && *r.SafetyIdentifier != "" {
+		out["safety_identifier"] = *r.SafetyIdentifier
+	}
+	return out
 }
 
 // toolChoiceTranslated reports whether the bridge translates tool_choice for
@@ -321,6 +383,9 @@ type ChatCompletionResponse struct {
 	Model   string                 `json:"model"`
 	Choices []ChatCompletionChoice `json:"choices"`
 	Usage   CompletionUsage        `json:"usage"`
+	// ServiceTier is the tier the vendor says it served the call at
+	// (OpenAI: "default", "flex", "priority"); left out when it said none.
+	ServiceTier string `json:"service_tier,omitempty"`
 }
 
 type ChatCompletionChoice struct {
@@ -577,6 +642,17 @@ func NewChatCompletionResponse(llmResponse *llms.ContentResponse, model string, 
 
 	for i, group := range groupContentChoices(llmResponse.Choices, n) {
 		response.Choices = append(response.Choices, newChatCompletionChoice(i, group))
+	}
+
+	// The service tier, when the driver reports one (the OpenAI driver).
+	for _, choice := range llmResponse.Choices {
+		if choice == nil {
+			continue
+		}
+		if tier, _ := choice.GenerationInfo["ServiceTier"].(string); tier != "" {
+			response.ServiceTier = tier
+			break
+		}
 	}
 
 	// Note: Usage stats would need to be set separately as they're not part of ContentResponse

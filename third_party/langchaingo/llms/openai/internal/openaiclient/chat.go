@@ -83,6 +83,11 @@ type ChatRequest struct {
 
 	// Metadata allows you to specify additional information that will be passed to the model.
 	Metadata map[string]any `json:"metadata,omitempty"`
+
+	// ExtraBody holds further top-level fields for the request body, sent as
+	// they are unless the request already has that field. Tyk: not in
+	// upstream (see openai.WithExtraBody).
+	ExtraBody map[string]any `json:"-"`
 }
 
 // MarshalJSON ensures that only one of MaxTokens or MaxCompletionTokens is sent.
@@ -123,7 +128,26 @@ func (r ChatRequest) MarshalJSON() ([]byte, error) {
 		aux.MaxCompletionTokens = nil
 	}
 
-	return json.Marshal(&aux)
+	body, err := json.Marshal(&aux)
+	if err != nil || len(r.ExtraBody) == 0 {
+		return body, err
+	}
+	// Tyk: merge ExtraBody under the fields the request already carries.
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		return nil, err
+	}
+	for k, v := range r.ExtraBody {
+		if _, set := fields[k]; set {
+			continue
+		}
+		raw, err := json.Marshal(v)
+		if err != nil {
+			return nil, err
+		}
+		fields[k] = raw
+	}
+	return json.Marshal(fields)
 }
 
 // isReasoningModel returns true if the model is a reasoning model that has temperature constraints.
@@ -384,6 +408,8 @@ type ChatCompletionResponse struct {
 	Object            string                  `json:"object,omitempty"`
 	Usage             ChatUsage               `json:"usage,omitempty"`
 	SystemFingerprint string                  `json:"system_fingerprint"`
+	// ServiceTier is the tier the call was served at. Tyk: not in upstream.
+	ServiceTier string `json:"service_tier,omitempty"`
 }
 
 type Usage struct {
@@ -422,6 +448,8 @@ type StreamedChatResponsePayload struct {
 		FinishReason FinishReason `json:"finish_reason,omitempty"`
 	} `json:"choices,omitempty"`
 	SystemFingerprint string `json:"system_fingerprint"`
+	// ServiceTier is the tier the call is served at. Tyk: not in upstream.
+	ServiceTier string `json:"service_tier,omitempty"`
 	// An optional field that will only be present when you set stream_options: {"include_usage": true} in your request.
 	// When present, it contains a null value except for the last chunk which contains the token usage statistics
 	// for the entire request.
@@ -628,6 +656,10 @@ func combineStreamingChatResponse(
 	for streamResponse := range responseChan {
 		if streamResponse.Error != nil {
 			return nil, streamResponse.Error
+		}
+		// Tyk: keep the service tier the chunks report.
+		if streamResponse.ServiceTier != "" {
+			response.ServiceTier = streamResponse.ServiceTier
 		}
 
 		if streamResponse.Usage != nil {

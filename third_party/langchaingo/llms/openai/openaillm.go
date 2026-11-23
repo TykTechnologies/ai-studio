@@ -267,8 +267,15 @@ func (o *LLM) GenerateContent(ctx context.Context, messages []llms.MessageConten
 		apiMetadata = nil
 	}
 
+	// Tyk: fields for the request body the driver has no option for.
+	var extraBody map[string]any
+	if opts.Metadata != nil {
+		extraBody, _ = opts.Metadata[extraBodyKey].(map[string]any)
+	}
+
 	req := &openaiclient.ChatRequest{
 		Model:                  opts.Model,
+		ExtraBody:              extraBody, // Tyk
 		StopWords:              opts.StopWords,
 		Messages:               chatMsgs,
 		StreamingFunc:          opts.StreamingFunc,
@@ -345,6 +352,9 @@ func (o *LLM) GenerateContent(ctx context.Context, messages []llms.MessageConten
 			ReasoningContent: c.Message.ReasoningContent,
 			StopReason:       fmt.Sprint(c.FinishReason),
 			GenerationInfo: map[string]any{
+				// Tyk: the service tier the vendor served the call at ("" if
+				// it did not say), so a bridge can report it to its client.
+				"ServiceTier":       result.ServiceTier,
 				"CompletionTokens":  result.Usage.CompletionTokens,
 				"PromptTokens":      result.Usage.PromptTokens,
 				"TotalTokens":       result.Usage.TotalTokens,
