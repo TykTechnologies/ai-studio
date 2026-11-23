@@ -73,6 +73,9 @@ func (a *API) createApp(c *gin.Context) {
 			InstanceIDs:      pr.InstanceIDs,
 		})
 	}
+	if !a.requireNewPluginResourcesReadable(c, nil, pluginResources) {
+		return
+	}
 
 	// MCP server bindings are validated before the app exists so a refusal
 	// leaves nothing behind.
@@ -378,6 +381,9 @@ func (a *API) updateApp(c *gin.Context) {
 			ResourceTypeSlug: pr.ResourceTypeSlug,
 			InstanceIDs:      pr.InstanceIDs,
 		})
+	}
+	if !a.requireNewPluginResourcesReadable(c, &stored.ID, pluginResources) {
+		return
 	}
 
 	if input.Data.Attributes.MCPServerIDs != nil {
@@ -1306,6 +1312,50 @@ func (a *API) serializeAppsIn(apps []models.App) []AppResponse {
 // requireAppMemberRead: linking LLMs, tools and datasources to an App needs
 // read on each kind it names, in some scope (they are read-global, D4), as
 // for catalogue members (requireMemberRead).
+// requireNewPluginResourcesReadable refuses, with 403, an App write that adds
+// a plugin resource instance the caller could not have picked: adding one
+// that is not already on the App needs plugins:read, the permission that
+// lists resource types and their instances. Plugin resource instances are
+// global and can carry upstream credentials, so without this an App writer
+// in one Workspace could attach any instance by guessing its ids
+// (midsommar-clean-6bg5.82).
+//
+// Instances already on the App need nothing more: a save that sends them
+// back keeps them, and one that leaves some out removes those. appID is nil
+// on create, where every instance is new. A resource type the caller names
+// that does not exist counts as new, so the answer does not tell a caller
+// without plugins:read which types exist.
+func (a *API) requireNewPluginResourcesReadable(c *gin.Context, appID *uint, selections []services.PluginResourceSelection) bool {
+	if len(selections) == 0 || a.workspaceCheckMode(c) == workspaceOpen || authz.Can(c, authz.Read("plugins")) {
+		return true
+	}
+	for _, sel := range selections {
+		if len(sel.InstanceIDs) == 0 {
+			continue
+		}
+		existing := map[string]bool{}
+		if appID != nil {
+			if prt, err := a.service.GetPluginResourceTypeByPluginAndSlug(sel.PluginID, sel.ResourceTypeSlug); err == nil {
+				var rows []models.AppPluginResource
+				if err := a.service.DB.Where("app_id = ? AND plugin_resource_type_id = ?", *appID, prt.ID).Find(&rows).Error; err != nil {
+					simpleError(c, http.StatusInternalServerError, "Internal Server Error", "could not load the App's plugin resources")
+					return false
+				}
+				for _, r := range rows {
+					existing[r.InstanceID] = true
+				}
+			}
+		}
+		for _, id := range sel.InstanceIDs {
+			if !existing[id] {
+				c.AbortWithStatusJSON(http.StatusForbidden, authz.Denied(authz.Read("plugins")))
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func (a *API) requireAppMemberRead(c *gin.Context, llmIDs, toolIDs, datasourceIDs []uint) bool {
 	for _, m := range []struct {
 		ids      []uint
