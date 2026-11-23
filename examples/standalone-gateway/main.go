@@ -69,7 +69,8 @@ func realWorldExample() {
 			log.Fatal("DATABASE_URL environment variable required")
 		}
 
-		db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		// logger.GetGormConfig() logs SQL without its values
+		db, err := gorm.Open(postgres.Open(dsn), logger.GetGormConfig())
 		if err != nil {
 			log.Fatalf("Failed to connect to database: %v", err)
 		}

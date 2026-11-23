@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"log/slog"
 	"os"
 	"sync"
@@ -380,7 +381,7 @@ func (f *DeferredPostgreSQLQueueFactory) poolFor(databaseURL string) (*gorm.DB, 
 	}
 
 	// Import the required database packages
-	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{})
+	db, err := gorm.Open(postgres.Open(databaseURL), postgresQueueGormConfig())
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to PostgreSQL database: %w", err)
 	}
@@ -487,4 +488,14 @@ func (f *SharedPostgreSQLQueueFactory) CreateQueue(sessionID string, config map[
 		"connection_shared", true)
 
 	return NewOptimizedPostgreSQLQueue(sessionID, f.db, psqlConfig)
+}
+
+// postgresQueueGormConfig is the gorm configuration of the queue's database
+// connections. Its logger is the application's: a statement is logged with
+// placeholders, never its values, unless DB_LOG_SQL_PARAMS=true. An empty
+// gorm.Config gets gorm's default logger, which prints a slow or failed
+// statement with its values, and this connection's statements carry chat
+// messages.
+func postgresQueueGormConfig() *gorm.Config {
+	return logger.GetGormConfig()
 }
