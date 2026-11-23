@@ -3,6 +3,7 @@ package plugins
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -109,6 +111,11 @@ type LoadedPlugin struct {
 	Config        map[string]interface{}
 	RawConfig     []byte
 	Checksum      string
+	// Command is the command the plugin was loaded from (a file path, a
+	// grpc:// address or an OCI reference with its digest). A change reloads
+	// it (ReconcilePlugins): the old process must not go on serving after
+	// its binary was replaced in AI Studio.
+	Command string
 	// AllowInternalHost is the switch the plugin was loaded with; a change
 	// reloads it (ReconcilePlugins), so turning it off refuses an internal
 	// host instead of keeping the connection.
@@ -658,6 +665,7 @@ func (pm *PluginManager) loadPlugin(pluginID uint) (*LoadedPlugin, error) {
 		Config:     config,
 		RawConfig:  pluginData.Config,
 		Checksum:   pluginData.Checksum,
+		Command:    pluginData.Command,
 		IsHealthy:  true,
 
 		AllowInternalHost: pluginData.AllowInternalHost,
@@ -3145,6 +3153,61 @@ func (pm *PluginManager) getDesiredPluginState() (map[uint]PluginData, error) {
 	return result, nil
 }
 
+// loadedPluginState is what a loaded plugin was loaded with, for
+// ReconcilePlugins to compare with what the gateway's database now says.
+type loadedPluginState struct {
+	Command           string
+	Checksum          string
+	RawConfig         []byte
+	AllowInternalHost bool
+}
+
+// pluginReload is a loaded plugin the reconcile reloads, and which of its
+// loaded properties changed.
+type pluginReload struct {
+	ID      uint
+	Changed []string
+}
+
+// diffPluginStates compares the loaded plugins with the desired ones: those
+// no longer desired are unloaded, those whose command, checksum, config or
+// allow-internal-host switch changed are reloaded, in ID order. Plugins that
+// are desired and not loaded are left to the pre-warm.
+//
+// The command is compared as the exact string the plugin was loaded from. A
+// new file path, grpc:// address, OCI digest or OCI query parameter is a
+// change. An OCI reference by tag alone whose tag was moved to another image
+// is not: nothing in the command says so (use digests, as the marketplace
+// does).
+func diffPluginStates(loaded map[uint]loadedPluginState, desired map[uint]PluginData) (toUnload []uint, toReload []pluginReload) {
+	for id, state := range loaded {
+		want, exists := desired[id]
+		if !exists {
+			toUnload = append(toUnload, id)
+			continue
+		}
+		var changed []string
+		if state.Command != want.Command {
+			changed = append(changed, "command")
+		}
+		if state.Checksum != want.Checksum {
+			changed = append(changed, "checksum")
+		}
+		if !bytes.Equal(state.RawConfig, want.Config) {
+			changed = append(changed, "config")
+		}
+		if state.AllowInternalHost != want.AllowInternalHost {
+			changed = append(changed, "allow_internal_host")
+		}
+		if len(changed) > 0 {
+			toReload = append(toReload, pluginReload{ID: id, Changed: changed})
+		}
+	}
+	slices.Sort(toUnload)
+	slices.SortFunc(toReload, func(a, b pluginReload) int { return cmp.Compare(a.ID, b.ID) })
+	return toUnload, toReload
+}
+
 // ReconcilePlugins compares currently loaded plugins with the database state and
 // reconciles differences: unloads removed plugins, reloads changed plugins, loads
 // new plugins, and refreshes endpoint registrations. Call this after a configuration
@@ -3156,18 +3219,14 @@ func (pm *PluginManager) ReconcilePlugins(ctx context.Context) error {
 	log.Info().Msg("Starting plugin reconciliation after configuration sync")
 
 	// Phase 1: Snapshot currently loaded (non-global, non-builtin) plugins
-	type pluginState struct {
-		Checksum          string
-		RawConfig         []byte
-		AllowInternalHost bool
-	}
 	pm.mu.RLock()
-	loadedStates := make(map[uint]pluginState, len(pm.loadedPlugins))
+	loadedStates := make(map[uint]loadedPluginState, len(pm.loadedPlugins))
 	for id, lp := range pm.loadedPlugins {
 		if lp.IsGlobal || lp.BuiltinPlugin != nil {
 			continue
 		}
-		loadedStates[id] = pluginState{
+		loadedStates[id] = loadedPluginState{
+			Command:           lp.Command,
 			Checksum:          lp.Checksum,
 			RawConfig:         lp.RawConfig,
 			AllowInternalHost: lp.AllowInternalHost,
@@ -3184,18 +3243,7 @@ func (pm *PluginManager) ReconcilePlugins(ctx context.Context) error {
 	pm.pruneLoadFailures(desiredPlugins)
 
 	// Phase 3: Compute diff
-	var toUnload []uint
-	var toReload []uint
-
-	for id, loadedState := range loadedStates {
-		desired, exists := desiredPlugins[id]
-		if !exists {
-			toUnload = append(toUnload, id)
-		} else if loadedState.Checksum != desired.Checksum || !bytes.Equal(loadedState.RawConfig, desired.Config) ||
-			loadedState.AllowInternalHost != desired.AllowInternalHost {
-			toReload = append(toReload, id)
-		}
-	}
+	toUnload, toReload := diffPluginStates(loadedStates, desiredPlugins)
 
 	log.Info().
 		Int("to_unload", len(toUnload)).
@@ -3213,10 +3261,20 @@ func (pm *PluginManager) ReconcilePlugins(ctx context.Context) error {
 		}
 	}
 
-	for _, id := range toReload {
-		log.Info().Uint("plugin_id", id).Msg("Reloading changed plugin")
-		if err := pm.ReloadPlugin(id); err != nil {
-			log.Error().Uint("plugin_id", id).Err(err).Msg("Failed to reload changed plugin")
+	for _, change := range toReload {
+		// What changed, never the values: a command or a config may hold
+		// credentials.
+		log.Info().Uint("plugin_id", change.ID).Str("plugin_name", desiredPlugins[change.ID].Name).
+			Strs("changed", change.Changed).Msg("Reloading changed plugin")
+		// The old process is stopped first, then the plugin is loaded as on
+		// a first load, with every check of one (allowed sources, path,
+		// internal hosts, OCI fetch and signature). When that fails the old
+		// process stays stopped: nothing serves from a binary AI Studio no
+		// longer names.
+		if err := pm.ReloadPlugin(change.ID); err != nil {
+			log.Error().Uint("plugin_id", change.ID).Str("plugin_name", desiredPlugins[change.ID].Name).
+				Strs("changed", change.Changed).Err(err).
+				Msg("Failed to reload changed plugin; its previous process is stopped and it is not loaded")
 		}
 	}
 
