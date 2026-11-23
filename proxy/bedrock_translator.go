@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"errors"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/analytics"
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	bedrockVendor "github.com/TykTechnologies/midsommar/v2/vendors/bedrock"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -28,6 +30,9 @@ import (
 // Converse call) is returned as an attemptFailure the loop can act on; only
 // a successful call is turned into a response and written.
 
+// errBedrockToolChoiceNone is the one tool_choice Bedrock cannot honour.
+var errBedrockToolChoiceNone = errors.New(`tool_choice "none" is not supported on Bedrock when the conversation already contains tool calls or tool results: Converse has no such setting; remove tool_choice, or send the request without the tool messages`)
+
 // bedrockConverseInput builds the Converse request for model.
 func bedrockConverseInput(conf *models.LLM, req *ChatCompletionRequest, model string) (*bedrockruntime.ConverseInput, attemptFailure) {
 	// Determine model ID
@@ -43,11 +48,33 @@ func bedrockConverseInput(conf *models.LLM, req *ChatCompletionRequest, model st
 	// Build inference config
 	inferenceConfig := bedrockVendor.BuildInferenceConfig(req.OutputTokenLimit(), req.Temperature, req.TopP, req.Stop)
 
-	// Build tool config
+	// Build tool config, with the caller's tool_choice (it used to be dropped).
 	var toolConfig *types.ToolConfiguration
 	if len(req.Tools) > 0 {
-		toolDefs := openAIToolsToToolDefs(req.Tools)
-		toolConfig = bedrockVendor.BuildToolConfig(toolDefs)
+		choice, err := llms.ResolveToolChoice(req.ToolChoice)
+		if err != nil {
+			return nil, attemptFailure{err: err, status: http.StatusBadRequest, hasStatus: true}
+		}
+		if choice.Mode == llms.ToolChoiceNone {
+			// Converse cannot be told to call no tool. Sending no tools has
+			// that effect, but Bedrock refuses a conversation that holds tool
+			// calls without the tool configuration.
+			if req.hasToolHistory() {
+				return nil, attemptFailure{err: errBedrockToolChoiceNone, status: http.StatusBadRequest, hasStatus: true}
+			}
+		} else {
+			toolConfig = bedrockVendor.BuildToolConfig(openAIToolsToToolDefs(req.Tools))
+			if toolConfig != nil {
+				switch choice.Mode {
+				case llms.ToolChoiceAuto:
+					toolConfig.ToolChoice = bedrockVendor.ToolChoiceAuto()
+				case llms.ToolChoiceRequired:
+					toolConfig.ToolChoice = bedrockVendor.ToolChoiceAny()
+				case llms.ToolChoiceFunction:
+					toolConfig.ToolChoice = bedrockVendor.ToolChoiceTool(choice.Name)
+				}
+			}
+		}
 	}
 
 	return &bedrockruntime.ConverseInput{

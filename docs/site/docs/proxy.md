@@ -232,6 +232,18 @@ The operations are counted in the `aistudio_native_*` metrics (see [Observabilit
     print(response.choices[0].message.content)
     ```
 
+*   **`tool_choice`:** on this endpoint and on the Main Ingress, OpenAI's `tool_choice` is translated for vendors that do not speak it:
+
+    | `tool_choice` | Anthropic | Google AI | Bedrock (Converse) |
+    |---|---|---|---|
+    | `"auto"` | `{"type":"auto"}` | mode `AUTO` | `toolChoice.auto` |
+    | `"required"` | `{"type":"any"}` | mode `ANY` | `toolChoice.any` |
+    | `{"type":"function","function":{"name":"f"}}` | `{"type":"tool","name":"f"}` | mode `ANY`, `allowedFunctionNames: ["f"]` | `toolChoice.tool` |
+    | `"none"` | `{"type":"none"}` | mode `NONE` | the tools are not sent (Converse has no such setting) |
+    | not set | not sent | not sent | not sent |
+
+    A value that cannot be translated is refused with **400**, never ignored: a word other than these, an object that is not a named function, a function that is not in `tools`, `"required"` without tools, and on Bedrock `"none"` when the conversation already contains tool calls or results (Bedrock needs the tool definitions for those). A vendor can still refuse a choice a particular model does not support. OpenAI-compatible vendors receive `tool_choice` exactly as sent.
+
 ### 4. Anthropic Messages Endpoint (`/anthropic/{llmSlug}`)
 
 *   **Purpose:** accepts native Anthropic Messages API requests and translates them to Bedrock Converse, so clients that speak the Anthropic API — Claude Code, for example — can drive a Bedrock-backed LLM through the gateway.

@@ -1,6 +1,8 @@
 package proxy
 
 import (
+	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -167,6 +169,9 @@ func (r *ChatCompletionRequest) ToLangchainOptions(conf *models.LLM) []llms.Call
 		options = append(options, llms.WithTools(langchainTools))
 	}
 
+	// tool_choice goes to the driver as the client sent it: the OpenAI
+	// driver forwards it, and the Anthropic, Google AI and Vertex drivers
+	// read it with llms.ResolveToolChoice (they used to drop it).
 	if r.ToolChoice != nil {
 		options = append(options, llms.WithToolChoice(r.ToolChoice))
 	}
@@ -213,6 +218,57 @@ func (r *ChatCompletionRequest) GetStop() ([]string, bool) {
 	default:
 		return nil, false
 	}
+}
+
+// toolChoiceTranslated reports whether the bridge translates tool_choice for
+// a vendor itself (the vendor does not speak OpenAI's shape). For the other
+// vendors the value is forwarded untouched and the vendor judges it.
+func toolChoiceTranslated(vendor models.Vendor) bool {
+	switch vendor {
+	case models.ANTHROPIC, models.GOOGLEAI, models.VERTEX, models.BEDROCK:
+		return true
+	}
+	return false
+}
+
+// ValidateToolChoice checks a tool_choice the bridge has to translate: it
+// must be "auto", "none", "required" or a named function; "required" and a
+// named function need tools; and a named function must be one of them. The
+// error is for the client (400). Nothing is checked for vendors that take
+// OpenAI's tool_choice as it is.
+func (r *ChatCompletionRequest) ValidateToolChoice(vendor models.Vendor) error {
+	if r.ToolChoice == nil || !toolChoiceTranslated(vendor) {
+		return nil
+	}
+	choice, err := llms.ResolveToolChoice(r.ToolChoice)
+	if err != nil {
+		return fmt.Errorf("%w for %s models through this endpoint", err, vendor)
+	}
+	switch choice.Mode {
+	case llms.ToolChoiceRequired:
+		if len(r.Tools) == 0 {
+			return errors.New(`tool_choice "required" needs at least one tool in tools`)
+		}
+	case llms.ToolChoiceFunction:
+		for _, tool := range r.Tools {
+			if tool.Function.Name == choice.Name {
+				return nil
+			}
+		}
+		return fmt.Errorf("tool_choice names the function %q, which is not in tools", choice.Name)
+	}
+	return nil
+}
+
+// hasToolHistory reports whether the conversation already holds tool calls
+// or tool results.
+func (r *ChatCompletionRequest) hasToolHistory() bool {
+	for _, msg := range r.Messages {
+		if msg.Role == "tool" || len(msg.ToolCalls) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *ChatCompletionRequest) GetToolChoice() (string, *FunctionConfig, bool) {

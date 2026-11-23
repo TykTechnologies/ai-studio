@@ -347,6 +347,22 @@ func BuildInferenceConfig(maxTokens *int, temperature *float64, topP *float64, s
 	return config
 }
 
+// ToolChoiceAny, ToolChoiceAuto and ToolChoiceTool build Converse's
+// toolChoice: some tool must be called, the model decides, or the named tool
+// must be called. Converse has no "call no tool": a caller that wants none
+// sends no tool configuration.
+func ToolChoiceAny() types.ToolChoice {
+	return &types.ToolChoiceMemberAny{Value: types.AnyToolChoice{}}
+}
+
+func ToolChoiceAuto() types.ToolChoice {
+	return &types.ToolChoiceMemberAuto{Value: types.AutoToolChoice{}}
+}
+
+func ToolChoiceTool(name string) types.ToolChoice {
+	return &types.ToolChoiceMemberTool{Value: types.SpecificToolChoice{Name: aws.String(name)}}
+}
+
 // BuildToolConfig converts tool definitions to Bedrock ToolConfiguration.
 func BuildToolConfig(tools []ToolDef) *types.ToolConfiguration {
 	if len(tools) == 0 {

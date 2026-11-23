@@ -33,6 +33,13 @@ type ChatMessage struct {
 	Content interface{} `json:"content"`
 }
 
+// ToolChoice is Anthropic's tool_choice. Tyk: not in upstream.
+type ToolChoice struct {
+	// Type is "auto", "any" (some tool), "tool" (the one in Name) or "none".
+	Type string `json:"type"`
+	Name string `json:"name,omitempty"`
+}
+
 type messagePayload struct {
 	Model       string        `json:"model"`
 	Messages    []ChatMessage `json:"messages"`
@@ -42,7 +49,9 @@ type messagePayload struct {
 	Stream      bool          `json:"stream,omitempty"`
 	Temperature *float64      `json:"temperature,omitempty"`
 	Tools       []Tool        `json:"tools,omitempty"`
-	TopP        float64       `json:"top_p,omitempty"`
+	// Tyk: see MessageRequest.ToolChoice.
+	ToolChoice *ToolChoice `json:"tool_choice,omitempty"`
+	TopP       float64     `json:"top_p,omitempty"`
 
 	// Extended thinking parameters (Claude 3.7+)
 	Thinking *ThinkingConfig `json:"thinking,omitempty"`
