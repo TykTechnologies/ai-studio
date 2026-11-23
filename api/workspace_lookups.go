@@ -186,17 +186,18 @@ func lookupOrder(sortParam string, columns ...string) string {
 	return "id ASC"
 }
 
-// lookupPage applies ?page, ?page_size and ?all to q, sets the total headers
-// and reports false after answering an error.
-func lookupPage(c *gin.Context, q *gorm.DB) (*gorm.DB, int64, int, bool) {
+// lookupPage applies ?page, ?page_size and ?all to q, sets the totals in the
+// X-Total-Count and X-Total-Pages headers (what the full lists and the UI's
+// listAll use) and reports false after answering an error.
+func lookupPage(c *gin.Context, q *gorm.DB) (*gorm.DB, bool) {
 	pageSize, pageNumber, all := getPaginationParams(c)
 	if c.IsAborted() {
-		return nil, 0, 0, false
+		return nil, false
 	}
 	var total int64
 	if err := q.Session(&gorm.Session{}).Count(&total).Error; err != nil {
 		simpleError(c, http.StatusInternalServerError, "Internal Server Error", "lookup failed")
-		return nil, 0, 0, false
+		return nil, false
 	}
 	pages := 1
 	if !all {
@@ -205,7 +206,7 @@ func lookupPage(c *gin.Context, q *gorm.DB) (*gorm.DB, int64, int, bool) {
 	}
 	c.Header("X-Total-Count", strconv.FormatInt(total, 10))
 	c.Header("X-Total-Pages", strconv.Itoa(pages))
-	return q, total, pages, true
+	return q, true
 }
 
 // lookupSearch narrows q to rows whose listed columns contain ?search.
@@ -233,7 +234,7 @@ func (a *API) usersLookup(full gin.HandlerFunc) gin.HandlerFunc {
 			return
 		}
 		q := lookupSearch(c, a.visibleUsers(c, scope), "users.name", "users.email")
-		q, _, _, ok := lookupPage(c, q)
+		q, ok := lookupPage(c, q)
 		if !ok {
 			return
 		}
@@ -294,7 +295,7 @@ func (a *API) groupsLookup(full gin.HandlerFunc) gin.HandlerFunc {
 		q := a.service.DB.Model(&models.Group{}).
 			Where("groups.id IN (?)", a.workspaceBindingSubjects(scope, models.RoleBindingSubjectGroup))
 		q = lookupSearch(c, q, "groups.name")
-		q, total, pages, ok := lookupPage(c, q)
+		q, ok := lookupPage(c, q)
 		if !ok {
 			return
 		}
@@ -308,7 +309,7 @@ func (a *API) groupsLookup(full gin.HandlerFunc) gin.HandlerFunc {
 		for i := range groups {
 			data[i] = lookupGroup(&groups[i])
 		}
-		c.JSON(http.StatusOK, gin.H{"data": data, "meta": gin.H{"total_count": total, "total_pages": pages}})
+		c.JSON(http.StatusOK, gin.H{"data": data})
 	}
 }
 
