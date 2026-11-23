@@ -238,6 +238,11 @@ type PluginManager struct {
 	// lock, then mu; never take a load lock while holding mu.
 	pluginLoadLocks keyedMutex
 
+	// shutDown is set by Shutdown (guarded by mu). Loads no longer hold mu
+	// while they start a plugin, so one may finish after Shutdown stopped the
+	// others; it stops its own process instead of storing it.
+	shutDown bool
+
 	// grpcClientAddrs holds, per grpc:// plugin client, the address that
 	// createPluginClient resolved and checked, for connectWithRetry to probe
 	// (*plugin.Client -> net.Addr).
@@ -654,8 +659,17 @@ func (pm *PluginManager) loadPlugin(pluginID uint) (*LoadedPlugin, error) {
 		AllowInternalHost: pluginData.AllowInternalHost,
 	}
 
-	// Store references
+	// Store references. A load that was still running when the manager shut
+	// down must not leave its process behind: Shutdown has already stopped
+	// the plugins it found in the maps.
 	pm.mu.Lock()
+	if pm.shutDown {
+		pm.mu.Unlock()
+		client.Kill()
+		err := errors.New("the plugin manager has shut down")
+		pm.updatePluginHealthSafe(pluginID, pluginData, PluginStatusFailed, err, time.Since(startTime))
+		return nil, err
+	}
 	pm.loadedPlugins[pluginID] = loadedPlugin
 	pm.pluginClients[pluginID] = client
 	pm.mu.Unlock()
@@ -1068,6 +1082,7 @@ func (pm *PluginManager) Shutdown(ctx context.Context) error {
 
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
+	pm.shutDown = true
 
 	var errors []error
 

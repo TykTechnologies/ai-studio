@@ -278,3 +278,24 @@ func TestUnloadPlugin_HangingShutdownDoesNotStallOtherPlugins(t *testing.T) {
 		t.Fatal("UnloadPlugin did not return")
 	}
 }
+
+// A load still running when the manager shuts down does not leave its plugin
+// process behind: Shutdown stops what is in the maps, and the load, which no
+// longer holds the manager's lock, would have stored its plugin afterwards.
+func TestLoadPlugin_AfterShutdownStopsItsOwnProcess(t *testing.T) {
+	self, err := os.Executable()
+	require.NoError(t, err)
+	t.Setenv(msgSizeHelperEnv, "gatewayplugin_sdk")
+	t.Setenv("PLUGIN_RUNTIME", "gateway")
+	t.Setenv(pluginenv.EnvPassthrough, msgSizeHelperEnv+",PLUGIN_RUNTIME")
+	t.Setenv("MICROGATEWAY_ALLOW_ALL_PLUGIN_PATHS", "1")
+
+	p := PluginData{ID: 1, Name: "late", HookType: "post_auth", Command: self, IsActive: true}
+	pm := NewPluginManager(&mockPluginService{getPluginByID: map[uint]PluginData{1: p}})
+	require.NoError(t, pm.Shutdown(context.Background()))
+
+	_, err = pm.LoadPlugin(1)
+	require.Error(t, err)
+	assert.False(t, pm.IsPluginLoaded(1))
+	assert.Empty(t, pm.GetLoadedPlugins())
+}
