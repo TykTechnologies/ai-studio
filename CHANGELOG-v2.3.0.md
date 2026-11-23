@@ -268,6 +268,7 @@ Every configuration object now belongs to a **Workspace**, and a role can be ass
 - **Calls to a model alias were recorded at zero cost.** They're now priced by the requested model when the reported one has no price.
 - **`flex` and `priority` OpenAI calls** are now recorded with their service tier.
 - **Anthropic `count_tokens` and batch calls** no longer create zero-cost chat records.
+- **Non-streamed Anthropic responses with a thinking block were not accounted.** A response holding any content block other than text or `tool_use` (thinking, redacted thinking, server tools, web search results) wrote no analytics record, proxy log, budget cost or trace span, on Studio and on edges, and the raw block was written to the log. Current Claude models add a thinking block to tool-use answers, so agent calls went unbilled and untraced. Every block type is now accounted, and blocks are no longer logged. Expect recorded Anthropic spend to rise to what the vendor bills.
 - **OpenAI moderations without a `model`** are no longer refused.
 - **Native OpenAI decision calls weren't recorded.**
 - **A filtered stream with a `Content-Length` could arrive truncated.**

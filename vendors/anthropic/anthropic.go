@@ -63,11 +63,19 @@ func (v *Anthropic) AnalyzeResponse(llm *models.LLM, app *models.App, statusCode
 	// keeps /v1/messages/batches* and /v1/messages/count_tokens out: they
 	// carry no usage and used to log as zero-cost chat records.
 	if strings.HasSuffix(pathLower, "/messages") {
-		response = &responses.AnthropicResponse{}
-		err := json.Unmarshal(body, response)
+		parsed := &responses.AnthropicResponse{}
+		err := json.Unmarshal(body, parsed)
 		if err != nil {
 			return nil, nil, nil, err
 		}
+		if types := parsed.UnmodelledContentTypes(); len(types) > 0 {
+			// The type only: a content block can carry model output.
+			logrus.WithFields(logrus.Fields{
+				"llm_id":      llm.ID,
+				"block_types": types,
+			}).Debug("Anthropic response has content blocks that are not modelled; they are ignored for accounting")
+		}
+		response = parsed
 
 		return llm, app, response, nil
 	}

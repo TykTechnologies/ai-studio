@@ -2,7 +2,6 @@ package responses
 
 import (
 	"encoding/json"
-	"fmt"
 )
 
 // Tool used for the request message payload.
@@ -12,7 +11,9 @@ type Tool struct {
 	InputSchema any    `json:"input_schema,omitempty"`
 }
 
-// Content can be TextContent or ToolUseContent depending on the type.
+// Content is one block of an Anthropic message: TextContent, ToolUseContent,
+// ThinkingContent, RedactedThinkingContent, or OtherContent for every block
+// type this package does not model.
 type Content interface {
 	GetType() string
 }
@@ -47,6 +48,40 @@ func (trc ToolResultContent) GetType() string {
 	return trc.Type
 }
 
+// ThinkingContent is an extended-thinking block. Thinking may be empty: current
+// Claude models add an empty thinking block to tool-use answers.
+type ThinkingContent struct {
+	Type      string `json:"type"`
+	Thinking  string `json:"thinking"`
+	Signature string `json:"signature,omitempty"`
+}
+
+func (tc ThinkingContent) GetType() string {
+	return tc.Type
+}
+
+// RedactedThinkingContent is a thinking block the vendor returned encrypted.
+type RedactedThinkingContent struct {
+	Type string `json:"type"`
+	Data string `json:"data,omitempty"`
+}
+
+func (rtc RedactedThinkingContent) GetType() string {
+	return rtc.Type
+}
+
+// OtherContent stands for a content block this package does not model
+// (server_tool_use, web_search_tool_result, a block type added after this code
+// was written, or a known type whose body did not parse). Only the type is
+// kept: the block can carry model output and must not reach a log.
+type OtherContent struct {
+	Type string `json:"type"`
+}
+
+func (oc OtherContent) GetType() string {
+	return oc.Type
+}
+
 // This is from langchaingo's implementation
 type AnthropicResponse struct {
 	Content      []Content `json:"content"`
@@ -76,33 +111,62 @@ func (m *AnthropicResponse) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
+	// The response is read for accounting: usage, model and the tool count. A
+	// content block this package cannot read never fails the whole response,
+	// because the caller would then drop the analytics record, the budget
+	// charge and the trace span for a call the vendor billed.
 	for _, raw := range aux.Content {
 		var typeStruct struct {
 			Type string `json:"type"`
 		}
 		if err := json.Unmarshal(raw, &typeStruct); err != nil {
-			return err
+			m.Content = append(m.Content, &OtherContent{})
+			continue
 		}
 
+		var block Content
 		switch typeStruct.Type {
 		case "text":
-			tc := &TextContent{}
-			if err := json.Unmarshal(raw, tc); err != nil {
-				return err
-			}
-			m.Content = append(m.Content, tc)
+			block = &TextContent{}
 		case "tool_use":
-			tuc := &ToolUseContent{}
-			if err := json.Unmarshal(raw, tuc); err != nil {
-				return err
-			}
-			m.Content = append(m.Content, tuc)
+			block = &ToolUseContent{}
+		case "thinking":
+			block = &ThinkingContent{}
+		case "redacted_thinking":
+			block = &RedactedThinkingContent{}
 		default:
-			return fmt.Errorf("unknown content type: %s\n%v", typeStruct.Type, string(raw))
+			m.Content = append(m.Content, &OtherContent{Type: typeStruct.Type})
+			continue
 		}
+		if err := json.Unmarshal(raw, block); err != nil {
+			// A tool_use block stays a tool_use block for the tool count.
+			if typeStruct.Type == "tool_use" {
+				block = &ToolUseContent{Type: typeStruct.Type}
+			} else {
+				block = &OtherContent{Type: typeStruct.Type}
+			}
+		}
+		m.Content = append(m.Content, block)
 	}
 
 	return nil
+}
+
+// UnmodelledContentTypes returns the types of the content blocks that were
+// kept as OtherContent, in order and without duplicates. It is for logging:
+// the type only, never the block.
+func (a *AnthropicResponse) UnmodelledContentTypes() []string {
+	var types []string
+	seen := map[string]bool{}
+	for _, c := range a.Content {
+		oc, ok := c.(*OtherContent)
+		if !ok || seen[oc.Type] {
+			continue
+		}
+		seen[oc.Type] = true
+		types = append(types, oc.Type)
+	}
+	return types
 }
 
 func (a *AnthropicResponse) GetPromptTokens() int {
