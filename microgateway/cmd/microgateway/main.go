@@ -173,6 +173,7 @@ func main() {
 			log.Fatal().Err(err).Msg("Failed to initialize hub-spoke services")
 		}
 		serviceContainer = hubSpokeContainer.ServiceContainer
+		wirePluginLicensing(serviceContainer.PluginManager, licensingService)
 		
 		// Connect edge client to provider if in edge mode
 		if cfg.IsEdge() && edgeClient != nil {
@@ -404,6 +405,7 @@ func main() {
 		if err != nil {
 			log.Fatal().Err(err).Msg("Failed to initialize services")
 		}
+		wirePluginLicensing(serviceContainer.PluginManager, licensingService)
 	}
 
 	// Background writes (analytics, budget usage) get their own connection so
@@ -448,16 +450,6 @@ func main() {
 	}
 	if !cfg.IsEdge() {
 		services.WarnIfAtLLMLimit(db, licensingService.MaxLLMs)
-	}
-
-	// Wire licensing service to management server for plugin license checks
-	if mgmtServer := serviceContainer.PluginManager.GetManagementServer(); mgmtServer != nil {
-		if setter, ok := mgmtServer.(interface {
-			SetLicensingService(services.LicensingServiceInterface)
-		}); ok {
-			setter.SetLicensingService(licensingService)
-			log.Debug().Msg("Licensing service wired to management server for plugin access")
-		}
 	}
 
 	server.StartProfiling(&cfg.Observability)
@@ -764,6 +756,25 @@ func databaseConfig(cfg *config.Config) database.DatabaseConfig {
 		AutoMigrate:     cfg.Database.AutoMigrate,
 		LogLevel:        cfg.Database.LogLevel,
 	}
+}
+
+// wirePluginLicensing gives the plugins' service broker the licensing service
+// that answers their GetLicenseInfo calls. It runs right after the service
+// container is built, before anything can start a plugin process (the
+// pre-warm, a configuration sync's reconcile, a request): Enterprise plugins
+// ask for the license as soon as their session is ready, and one that is told
+// "community" exits. The plugin manager refuses to start a plugin until this
+// has run (plugins.ErrLicensingNotConfigured).
+func wirePluginLicensing(pm interface{ GetManagementServer() interface{} }, licensingService services.LicensingServiceInterface) {
+	setter, ok := pm.GetManagementServer().(interface {
+		SetLicensingService(services.LicensingServiceInterface)
+	})
+	if !ok {
+		log.Warn().Msg("The plugin management server takes no licensing service; plugins cannot check the license")
+		return
+	}
+	setter.SetLicensingService(licensingService)
+	log.Debug().Msg("Licensing service wired to management server for plugin access")
 }
 
 // licenseThenDatabase is the start of the microgateway in the order that

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
@@ -39,6 +40,7 @@ type MicrogatewayManagementServer struct {
 	managementService     ManagementServiceInterface
 	cryptoService         CryptoServiceInterface
 	controlPayloadQueue   ControlPayloadQueueInterface
+	licensingMu           sync.RWMutex
 	licensingService      LicensingServiceInterface
 	// storeRequestBodies is ANALYTICS_STORE_REQUESTS: whether this gateway
 	// keeps request bodies at all (LLMInfo.stores_request_bodies).
@@ -73,9 +75,26 @@ func (s *MicrogatewayManagementServer) SetStoreRequestBodies(store bool) {
 	s.storeRequestBodies = store
 }
 
-// SetLicensingService sets the licensing service for license info queries
+// SetLicensingService sets the licensing service for license info queries.
+// It must be called before any plugin is started (see LicensingConfigured).
 func (s *MicrogatewayManagementServer) SetLicensingService(svc LicensingServiceInterface) {
+	s.licensingMu.Lock()
+	defer s.licensingMu.Unlock()
 	s.licensingService = svc
+}
+
+// LicensingConfigured reports whether the licensing service has been set.
+// The plugin manager starts no plugin before it is (plugins.licensingGate):
+// a plugin that asks for the license first is told "community", and
+// Enterprise plugins exit on that.
+func (s *MicrogatewayManagementServer) LicensingConfigured() bool {
+	return s.licensing() != nil
+}
+
+func (s *MicrogatewayManagementServer) licensing() LicensingServiceInterface {
+	s.licensingMu.RLock()
+	defer s.licensingMu.RUnlock()
+	return s.licensingService
 }
 
 // validatePluginScope validates that the calling plugin has the required scope
@@ -712,7 +731,8 @@ func (s *MicrogatewayManagementServer) GetLicenseInfo(ctx context.Context, req *
 	}
 
 	// If no licensing service is configured, we're in community mode
-	if s.licensingService == nil {
+	licensingService := s.licensing()
+	if licensingService == nil {
 		log.Debug().
 			Uint32("plugin_id", req.Context.PluginId).
 			Msg("GetLicenseInfo called but no licensing service configured (community mode)")
@@ -727,8 +747,8 @@ func (s *MicrogatewayManagementServer) GetLicenseInfo(ctx context.Context, req *
 	}
 
 	// Get license info from the licensing service
-	isValid := s.licensingService.IsValid()
-	daysLeft := s.licensingService.DaysLeft()
+	isValid := licensingService.IsValid()
+	daysLeft := licensingService.DaysLeft()
 
 	// Build response for enterprise mode
 	resp := &pb.GetLicenseInfoResponse{

@@ -275,6 +275,7 @@ Every configuration object now belongs to a **Workspace**, and a role can be ass
 - **`/llm/rest` with a streaming request skipped response filters.** It's now filtered.
 
 ### Edges and control plane
+- **Enterprise plugins crashed when an edge started** (Enterprise). On a new or recreated edge (every upgrade, every Kubernetes rollout), the edge started its plugins before it could answer their license check. Enterprise plugins such as llm-load-balancer and advanced-llm-cache were told the edge ran Community Edition and exited (`License validation failed: enterprise license required`), and the LLMs using them returned `500` for about 30 seconds until the health check restarted the plugins. The edge can now answer the license check before any plugin starts.
 - **Edges ran an LLM's plugins in install order** instead of the order set in AI Studio. The order you set now applies on edges too.
 - **Edges didn't enforce an LLM's monthly budget** (Enterprise). An LLM budget now applies across AI Studio and every edge, and is kept across restarts. AI Studio and the edges must all run 2.3.
 - **One non-UTF-8 record stopped an edge's analytics for good**, along with its budget usage and compliance events.
