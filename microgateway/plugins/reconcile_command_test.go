@@ -252,7 +252,7 @@ func TestReconcile_ChangedCommandReplacesTheRunningPlugin(t *testing.T) {
 // plugin health, and requests for its LLM get an error, not a list without
 // the plugin.
 func TestReconcile_ChangedCommandThatFailsToLoadStopsTheOldPlugin(t *testing.T) {
-	pm, svc, _ := reloadFixture(t)
+	pm, svc, self := reloadFixture(t)
 	versionA := loadedPlugin(pm, 1)
 
 	setPluginCommand(svc, "/nonexistent/llm-load-balancer-1.2.1")
@@ -265,9 +265,19 @@ func TestReconcile_ChangedCommandThatFailsToLoadStopsTheOldPlugin(t *testing.T) 
 	assert.Equal(t, PluginStatusFailed, health.Status)
 	assert.Equal(t, "/nonexistent/llm-load-balancer-1.2.1", health.Command)
 
+	// The hooks answer this error with 503 plugin_load_failed: the request
+	// is refused, not run without the plugin.
 	list, err := pm.GetPluginsForLLM(1, interfaces.HookTypePostAuth)
 	require.Error(t, err, "the LLM's plugin list is an error, not an empty list")
+	requirePluginLoadError(t, err, 1)
 	assert.Empty(t, list)
+
+	// A push with a command that loads brings the plugin back at once.
+	setPluginCommand(svc, self)
+	require.NoError(t, pm.ReconcilePlugins(context.Background()))
+	list, err = pm.GetPluginsForLLM(1, interfaces.HookTypePostAuth)
+	require.NoError(t, err)
+	assert.Len(t, list, 1)
 }
 
 // While a plugin is being swapped, a request for its LLM never gets a plugin
