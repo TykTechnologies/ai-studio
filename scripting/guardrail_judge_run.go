@@ -85,7 +85,7 @@ var judgeClients = llmclient.New(nil)
 
 // judgeCall asks the judge LLM; a variable so tests can stand in a judge.
 var judgeCall = func(ctx context.Context, llm *models.LLM, model, system, user string) (llmclient.Completion, error) {
-	return judgeClients.GenerateFor(ctx, llm, model, system, user, JudgeMaxTokens)
+	return judgeClients.GenerateFor(ctx, llm, model, system, user, JudgeTokenLimit(llm, model))
 }
 
 // judgeCache holds opinions per (app, judge LLM version, model, prompt

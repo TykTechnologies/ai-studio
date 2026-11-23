@@ -26,6 +26,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
+
+	"github.com/TykTechnologies/midsommar/v2/models"
 )
 
 // JudgePromptVersion names the judge prompt. It is part of the key of a
@@ -55,7 +57,69 @@ const (
 	judgeMaxAnswerBytes = 512
 	// JudgeMaxTokens bounds the judge's answer: one small JSON object.
 	JudgeMaxTokens = 64
+	// JudgeReasoningMaxTokens is the output limit sent for a judge model
+	// that reasons before it answers. Its vendors count the reasoning
+	// tokens against the same limit as the answer, so with JudgeMaxTokens
+	// such a model often spent the whole budget thinking and returned no
+	// answer at all (no verdict on 8 of 20 flags in the 2.3.0-rc4 test).
+	// The visible answer is still bounded: the parser reads at most
+	// judgeMaxAnswerBytes and refuses anything that is not the one small
+	// JSON object.
+	JudgeReasoningMaxTokens = 2048
 )
+
+// judgeReasoningFamilies are the model families that reason by default, with
+// reasoning tokens counted against the output limit, per vendor: OpenAI's
+// o-series and GPT-5 family, and Google's Gemini 2.5 and 3 families.
+// Anthropic models think only when a request asks for it, and the judge
+// never does. A family matches a model that is its name or continues it with
+// "-" or "." (OpenAI), or that starts with it (Gemini). Add a family here
+// when a vendor ships one; an unlisted reasoning model gets JudgeMaxTokens
+// and gives no verdict, which is fail-closed.
+var judgeReasoningFamilies = map[models.Vendor]struct {
+	families []string
+	// prefix: a model matches when it starts with the family name.
+	prefix bool
+}{
+	models.OPENAI:   {families: []string{"o1", "o3", "o4", "gpt-5"}},
+	models.GOOGLEAI: {families: []string{"gemini-2.5", "gemini-3"}, prefix: true},
+	models.VERTEX:   {families: []string{"gemini-2.5", "gemini-3"}, prefix: true},
+}
+
+// judgeReasoningModel reports whether a judge model is in one of its
+// vendor's judgeReasoningFamilies.
+func judgeReasoningModel(vendor models.Vendor, model string) bool {
+	m := strings.ToLower(strings.TrimSpace(model))
+	if i := strings.LastIndex(m, "/"); i >= 0 {
+		m = m[i+1:] // "models/gemini-2.5-flash"
+	}
+	entry := judgeReasoningFamilies[vendor]
+	for _, family := range entry.families {
+		switch {
+		case entry.prefix && strings.HasPrefix(m, family):
+			return true
+		case m == family || strings.HasPrefix(m, family+"-") || strings.HasPrefix(m, family+"."):
+			return true
+		}
+	}
+	return false
+}
+
+// JudgeTokenLimit is the output token limit of a judge call: JudgeMaxTokens,
+// or JudgeReasoningMaxTokens for a model that reasons (judgeReasoningModel).
+// model "" means the LLM's default model.
+func JudgeTokenLimit(llm *models.LLM, model string) int {
+	if llm == nil {
+		return JudgeMaxTokens
+	}
+	if model == "" {
+		model = llm.DefaultModel
+	}
+	if judgeReasoningModel(llm.Vendor, model) {
+		return JudgeReasoningMaxTokens
+	}
+	return JudgeMaxTokens
+}
 
 // Judge verdicts.
 const (
