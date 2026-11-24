@@ -612,8 +612,15 @@ func (a *API) updatePlugin(c *gin.Context) {
 
 	// Handle plugin activation state changes for AI Studio plugins
 	loadImmediately := req.LoadImmediately != nil && *req.LoadImmediately
-	a.applyPluginActivation(plugin, originalPlugin.IsActive, loadImmediately)
-	if plugin.AllowInternalHost != originalPlugin.AllowInternalHost {
+	commandChanged := services.PluginBinaryChanged(originalPlugin.Command, originalPlugin.OCIReference, plugin)
+	a.applyPluginActivation(plugin, originalPlugin.IsActive, loadImmediately && !commandChanged)
+	if commandChanged {
+		// Another binary: the service stored the plugin unapproved. Studio
+		// stops the old process and starts the new one, which says what
+		// scopes it declares; an administrator approves them again.
+		plugin = a.reloadForCommandChange(plugin)
+		loadImmediately = false // done, by the reload
+	} else if plugin.AllowInternalHost != originalPlugin.AllowInternalHost {
 		a.reloadForInternalHostChange(plugin)
 	} else if !(loadImmediately && plugin.SupportsHookType(models.HookTypeStudioUI)) &&
 		originalPlugin.IsActive && plugin.IsActive && pluginConfigChanged(originalPlugin.Config, plugin.Config) {
@@ -691,6 +698,56 @@ func (a *API) reloadForInternalHostChange(plugin *models.Plugin) {
 	if err := a.reloadLoadedPlugin(plugin); err != nil {
 		log.Printf("Plugin %s not reloaded after its Allow internal host switch changed: %v", plugin.Name, err)
 	}
+}
+
+// reloadForCommandChange brings Studio in line with a plugin whose command
+// was just changed (and whose approval the update withdrew): the process of
+// the old binary is stopped, so it no longer serves; if Studio runs this
+// plugin and it is active, the new binary is started, its declared service
+// scopes are stored as pending approval, and its UI is registered again.
+// When the new binary cannot be loaded the plugin is left not running and
+// unapproved, never on the old binary. It returns the plugin as stored
+// afterwards.
+func (a *API) reloadForCommandChange(plugin *models.Plugin) *models.Plugin {
+	mgr := a.service.AIStudioPluginManager
+	if mgr == nil {
+		return plugin
+	}
+	wasLoaded := mgr.IsPluginLoaded(plugin.ID)
+	if wasLoaded {
+		if err := mgr.UnloadPlugin(plugin.ID); err != nil {
+			log.Printf("Plugin %s (ID %d): the process of its previous command could not be stopped after the command changed: %v", plugin.Name, plugin.ID, err)
+			return plugin
+		}
+	}
+	if !plugin.IsActive || !(wasLoaded || services.PluginRunsInStudio(plugin)) {
+		return plugin
+	}
+	if _, err := mgr.LoadPlugin(plugin.ID); err != nil {
+		log.Printf("Plugin %s (ID %d) is not running: its new command could not be loaded: %v", plugin.Name, plugin.ID, err)
+		return plugin
+	}
+	// The new binary's own declaration replaces the old one's scopes; they
+	// stay unapproved.
+	if err := a.service.PluginService.ExtractAndStoreServiceScopes(plugin.ID); err != nil {
+		log.Printf("Plugin %s (ID %d): could not read the service scopes its new command declares: %v", plugin.Name, plugin.ID, err)
+	}
+	if plugin.SupportsHookType(models.HookTypeStudioUI) && a.service.PluginManifestService != nil {
+		if manifestJSON, err := mgr.GetPluginManifest(plugin.ID); err != nil {
+			log.Printf("Plugin %s (ID %d): could not fetch the manifest of its new command: %v", plugin.Name, plugin.ID, err)
+		} else {
+			manifest := &models.PluginManifest{}
+			if err := json.Unmarshal([]byte(manifestJSON), manifest); err != nil {
+				log.Printf("Plugin %s (ID %d): could not parse the manifest of its new command: %v", plugin.Name, plugin.ID, err)
+			} else if err := a.service.PluginManifestService.RegisterPluginUI(plugin, manifest); err != nil {
+				log.Printf("Plugin %s (ID %d): could not register the UI of its new command: %v", plugin.Name, plugin.ID, err)
+			}
+		}
+	}
+	if stored, err := a.service.PluginService.GetPlugin(plugin.ID); err == nil {
+		return stored
+	}
+	return plugin
 }
 
 // reloadLoadedPlugin stops a plugin Studio has loaded and, when it is active,

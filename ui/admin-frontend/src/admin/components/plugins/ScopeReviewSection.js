@@ -207,6 +207,7 @@ const ScopeReviewSection = ({ scopes = [], onApprove, onDeny, loading = false, d
           <Box display="flex" gap={2}>
             <Box
               component="button"
+              type="button"
               onClick={onDeny}
               disabled={disabled || loading}
               sx={{
@@ -233,6 +234,7 @@ const ScopeReviewSection = ({ scopes = [], onApprove, onDeny, loading = false, d
 
             <Box
               component="button"
+              type="button"
               onClick={onApprove}
               disabled={disabled || loading}
               sx={{
@@ -387,6 +389,7 @@ const ScopeReviewSection = ({ scopes = [], onApprove, onDeny, loading = false, d
         <Box display="flex" gap={2}>
           <Box
             component="button"
+            type="button"
             onClick={onDeny}
             disabled={disabled || loading}
             sx={{
@@ -413,6 +416,7 @@ const ScopeReviewSection = ({ scopes = [], onApprove, onDeny, loading = false, d
 
           <Box
             component="button"
+            type="button"
             onClick={onApprove}
             disabled={disabled || loading}
             sx={{

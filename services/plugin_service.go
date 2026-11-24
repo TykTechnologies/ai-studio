@@ -230,6 +230,16 @@ func UpdateHostCheckExemption(allowInternalHost bool, stored, command string) ne
 	return netguard.CommandExemption(allowInternalHost || command == stored, command)
 }
 
+// PluginBinaryChanged reports whether plugin now names another binary than
+// the command and OCI reference it had.
+func PluginBinaryChanged(commandBefore, ociReferenceBefore string, plugin *models.Plugin) bool {
+	return plugin.Command != commandBefore || plugin.OCIReference != ociReferenceBefore
+}
+
+// PluginRunsInStudio reports whether Studio itself runs plugin (a UI, an
+// agent, object hooks), as opposed to a gateway-only plugin.
+func PluginRunsInStudio(plugin *models.Plugin) bool { return loadsAtStart(plugin) }
+
 // UpdatePlugin updates an existing plugin (adapted from microgateway)
 func (s *PluginService) UpdatePlugin(id uint, req *UpdatePluginRequest) (*models.Plugin, error) {
 	plugin, err := s.GetPlugin(id)
@@ -247,6 +257,9 @@ func (s *PluginService) UpdatePlugin(id uint, req *UpdatePluginRequest) (*models
 	if req.AllowInternalHost != nil {
 		plugin.AllowInternalHost = *req.AllowInternalHost
 	}
+	// What Studio and the gateways run for this plugin before the update:
+	// approval of its service scopes was given for that binary.
+	binaryBefore := [2]string{plugin.Command, plugin.OCIReference}
 	if req.Command != nil {
 		// A plugin whose source the policy no longer allows can still be
 		// edited, but not saved with a disallowed command.
@@ -288,6 +301,16 @@ func (s *PluginService) UpdatePlugin(id uint, req *UpdatePluginRequest) (*models
 			}
 		}
 		plugin.OCIReference = *req.OCIReference
+	}
+
+	// A different command is a different binary: the administrator approved
+	// the service scopes of the old one, not of this one. Approval is
+	// withdrawn with the same write that stores the command, whatever else
+	// the update carries, so no request shape keeps it (6bg5.97). A marketplace
+	// upgrade does not come through here: PluginUpgradeService compares the
+	// declared scopes itself.
+	if PluginBinaryChanged(binaryBefore[0], binaryBefore[1], plugin) {
+		plugin.ServiceAccessAuthorized = false
 	}
 
 	if err := plugin.Update(s.db); err != nil {
