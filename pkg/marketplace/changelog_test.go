@@ -56,6 +56,8 @@ func TestFetchChangelog(t *testing.T) {
 	}))
 	defer server.Close()
 
+	// The servers are on 127.0.0.1, which the fetcher refuses by default.
+	t.Setenv("ALLOW_INTERNAL_NETWORK_ACCESS", "true")
 	f := NewFetcher(5 * time.Second)
 
 	body, err := f.FetchChangelog(context.Background(), server.URL+"/ok/CHANGELOG.md")
