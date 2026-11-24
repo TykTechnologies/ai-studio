@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -108,19 +109,39 @@ func HKDFKeyMaterial(material string) []byte {
 // DeriveCredentialSigningKey derives the resource signing key of a vendor
 // credential: HKDF-SHA256(credential, info "tyk-native-resource/v1"), with a
 // short credential hashed first in FIPS mode (HKDFKeyMaterial).
+//
+// A value that is still a $SECRET/ or $ENV/ reference is not a credential:
+// it is the reference's text, which anyone who can read the LLM sees, so a
+// key derived from it could be computed by any of them. It is refused
+// (ErrUnresolvedCredential), whichever path asks.
 func DeriveCredentialSigningKey(credential string) ([]byte, error) {
 	if credential == "" {
 		return nil, errors.New("empty credential")
 	}
-	return hkdf.Key(sha256.New, HKDFKeyMaterial(credential), nil, credentialKeyInfo, sha256.Size)
+	if secrets.IsReference(credential) {
+		return nil, ErrUnresolvedCredential
+	}
+	return deriveCredentialSigningKey(HKDFKeyMaterial(credential))
 }
+
+func deriveCredentialSigningKey(material []byte) ([]byte, error) {
+	return hkdf.Key(sha256.New, material, nil, credentialKeyInfo, sha256.Size)
+}
+
+// ErrUnresolvedCredential: the credential is a $SECRET/ or $ENV/ reference
+// that did not resolve, so no signing key can be derived from it.
+var ErrUnresolvedCredential = errors.New("credential is an unresolved reference")
 
 // storedCredentialKey is the previous-key value that keeps IDs signed with
 // apiKey's derived key verifiable: the derived key itself, encrypted. "" when
-// the LLM has no credential (it could not have handed out IDs).
+// the LLM has no credential (it could not have handed out IDs), and when its
+// credential is a reference that does not resolve: the gateway that handed
+// out IDs signed them with the resolved credential, never with the
+// reference's text, and a key derived from that text would be forgeable
+// (midsommar-clean-6bg5.94).
 func storedCredentialKey(apiKey string) (string, error) {
 	credential := secrets.GetValue(apiKey, false)
-	if credential == "" {
+	if credential == "" || secrets.IsReference(credential) {
 		return "", nil
 	}
 	key, err := DeriveCredentialSigningKey(credential)
@@ -265,6 +286,96 @@ func BackfillLLMResourceSigningSecrets(db *gorm.DB, grace time.Duration, now tim
 				"resource_signing_secret_prev":     prev,
 				"resource_signing_prev_expires_at": expires,
 				"resource_signing_rotated_at":      now,
+			})
+		if res.Error != nil {
+			return n, res.Error
+		}
+		n += int(res.RowsAffected)
+	}
+	return n, nil
+}
+
+// ClearReferenceDerivedSigningKeys removes previous signing keys that were
+// derived from the text of a credential reference instead of the credential.
+//
+// 2.3 builds before rc6 ran the upgrade backfill before the secret store
+// could resolve references, so for an LLM whose credential was $SECRET/NAME
+// (or an $ENV/NAME the allowlist refuses) the stored "vendor-credential" key
+// is HKDF of the literal reference text, which every reader of the LLM
+// knows. Such a key lets any App mint IDs for another App's resources.
+//
+// A stored key is recognised by recomputing it: it is compared with the key
+// derived from every reference text this database can name, which are the
+// credential references of all LLM rows (deleted ones included), a
+// $SECRET/ reference for every stored secret, and an $ENV/ reference for
+// every allowlisted variable, each derived both ways (plain, and hashed as
+// FIPS builds do for short material). A match is cleared together with its
+// expiry; nothing else is touched. What this cannot recognise is a key
+// derived from a reference that no longer appears anywhere (the LLM's
+// credential was changed to another reference and the old secret deleted):
+// rotate that LLM's signing key.
+//
+// It only compares and clears, so it is safe on every start. Returns the
+// rows cleared.
+func ClearReferenceDerivedSigningKeys(db *gorm.DB) (int, error) {
+	var rows []LLM
+	if err := db.Unscoped().Model(&LLM{}).Select("id", "api_key", "resource_signing_secret_prev").
+		Where("resource_signing_secret_prev IS NOT NULL AND resource_signing_secret_prev <> ''").
+		Find(&rows).Error; err != nil {
+		return 0, err
+	}
+	if len(rows) == 0 {
+		return 0, nil
+	}
+
+	references := map[string]struct{}{}
+	var apiKeys []LLM
+	if err := db.Unscoped().Model(&LLM{}).Select("id", "api_key").Find(&apiKeys).Error; err != nil {
+		return 0, err
+	}
+	for _, l := range apiKeys {
+		if secrets.IsReference(l.APIKey) {
+			references[l.APIKey] = struct{}{}
+		}
+	}
+	var names []string
+	if err := db.Unscoped().Model(&secrets.Secret{}).Pluck("var_name", &names).Error; err != nil {
+		return 0, err
+	}
+	for _, name := range names {
+		references[secrets.SecretRefPrefix+name] = struct{}{}
+	}
+	for _, name := range strings.Split(os.Getenv(secrets.EnvRefAllowlistVar), ",") {
+		if name = strings.TrimSpace(name); name != "" {
+			references[secrets.EnvRefPrefix+name] = struct{}{}
+		}
+	}
+
+	forgeable := map[string]struct{}{}
+	for ref := range references {
+		sum := sha256.Sum256([]byte(ref))
+		for _, material := range [][]byte{[]byte(ref), sum[:]} {
+			key, err := deriveCredentialSigningKey(material)
+			if err != nil {
+				// FIPS-only mode refuses short material; the hashed form
+				// covers it.
+				continue
+			}
+			forgeable[ResourceSigningDerivedKeyPrefix+base64.RawURLEncoding.EncodeToString(key)] = struct{}{}
+		}
+	}
+
+	n := 0
+	for _, row := range rows {
+		prev := secrets.DecryptValue(row.ResourceSigningSecretPrev)
+		if _, bad := forgeable[prev]; !bad {
+			continue
+		}
+		res := db.Unscoped().Model(&LLM{}).
+			Where("id = ? AND resource_signing_secret_prev = ?", row.ID, row.ResourceSigningSecretPrev).
+			UpdateColumns(map[string]interface{}{
+				"resource_signing_secret_prev":     "",
+				"resource_signing_prev_expires_at": nil,
 			})
 		if res.Error != nil {
 			return n, res.Error
