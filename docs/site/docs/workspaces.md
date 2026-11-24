@@ -114,6 +114,7 @@ Workspaces govern the administration UI and the management API. These parts of A
 - **Edges and namespaces.** They belong to no Workspace (see [Pushes limited to one Workspace](./edge-gateways.md#pushes-limited-to-one-workspace) for how the two meet).
 - **Analytics, logs, traces and the audit trail**, including compliance reports, MCP analytics, guardrail block reports and proxy log exports: global, governed by their global permissions.
 - **Plugins and webhooks**: global, even though each records the Workspace it was created in.
+- **Plugin resources** (what a plugin offers to Apps, such as the MCP servers of a registry plugin) are global too. Attaching one to an App that the App does not have yet needs the global `plugins:read` permission as well as write on the App: without it the admin UI does not show the pickers and the API answers `403`. Someone who can edit the App can still save it with the plugin resources it has, and remove them.
 - **Access management**: users, teams, roles, App quotas and the license are global.
 - **Governed metadata** on MCP servers and plugin resources needs the global `metadata` permission.
 

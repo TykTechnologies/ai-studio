@@ -42,8 +42,10 @@ func newAppPluginResourceFixture(t *testing.T) *appPluginResourceFixture {
 	f.caller.Name, f.caller.Email, f.caller.Password, f.caller.EmailVerified = "editor", "editor@example.com", "hash", true
 	require.NoError(t, f.caller.Create(f.db))
 
-	f.plugin = &models.Plugin{Name: "asset-catalog", Command: "/usr/bin/catalog", HookType: models.HookTypeResourceProvider,
-		HookTypes: []string{models.HookTypeResourceProvider}, IsActive: true}
+	// Shaped like a proxying provider (custom endpoints + resources), so its
+	// resource types grant access through an App and can be attached.
+	f.plugin = &models.Plugin{Name: "mcp-registry", Command: "/usr/bin/registry", HookType: models.HookTypeCustomEndpoint,
+		HookTypes: []string{models.HookTypeCustomEndpoint, models.HookTypeResourceProvider}, IsActive: true}
 	require.NoError(t, f.db.Create(f.plugin).Error)
 	require.NoError(t, a.service.RegisterPluginResourceTypes(f.plugin.ID, []models.PluginResourceType{
 		{Slug: "vector-db", Name: "Vector DB"},
@@ -70,6 +72,7 @@ func newAppPluginResourceFixture(t *testing.T) *appPluginResourceFixture {
 	}, a.requireRoutePermission())
 	g.GET("/apps/:id", a.onObject(&models.App{}, authz.Read("apps"), appNotFound), a.getApp)
 	g.PATCH("/apps/:id", a.updateApp)
+	g.POST("/apps", a.createApp)
 	g.GET("/plugin-resource-types", a.listPluginResourceTypes)
 	return f
 }
@@ -183,5 +186,98 @@ func TestWorkspaceEditor_AppSaveKeepsPluginResources(t *testing.T) {
 		w := save("Not mine", got.Data.Attributes.PluginResources)
 		assert.NotEqual(t, http.StatusOK, w.Code)
 		assert.Equal(t, before, f.stored())
+	})
+}
+
+// Plugin resource instances are global and can carry upstream credentials
+// (an MCP server's auth headers). Attaching one to an App needed only
+// apps:write, so a Workspace-scoped Editor could attach any instance by
+// guessing plugin id, type and instance id. Adding an instance that is not
+// already on the App now needs plugins:read, the permission that lists them
+// (midsommar-clean-6bg5.82). Keeping and removing stay with the App writer.
+func TestAppPluginResources_AddingNeedsPluginsRead(t *testing.T) {
+	f := newAppPluginResourceFixture(t)
+	path := fmt.Sprintf("/api/v1/apps/%d", f.app.ID)
+	before := []string{"prompt/p-1", "vector-db/vdb-1", "vector-db/vdb-2"}
+	require.Equal(t, before, f.stored())
+
+	editor := scoped(f.w1, authz.Read("apps"), authz.Write("apps"))
+	withPluginsRead := authz.Grants{Global: authz.NewSet(authz.Read("plugins")),
+		Workspaces: map[uint]authz.Set{f.w1: authz.NewSet(authz.Read("apps"), authz.Write("apps"))}}
+
+	patch := func(g authz.Grants, resources ...PluginResourceInput) *httptest.ResponseRecorder {
+		f.grants = g
+		return f.do(http.MethodPatch, path, map[string]interface{}{"data": map[string]interface{}{"type": "apps",
+			"attributes": map[string]interface{}{"name": "With resources", "user_id": f.caller.ID, "plugin_resources": resources}}})
+	}
+	vdb := func(ids ...string) PluginResourceInput {
+		return PluginResourceInput{PluginID: f.plugin.ID, ResourceTypeSlug: "vector-db", InstanceIDs: ids}
+	}
+	denied := func(t *testing.T, w *httptest.ResponseRecorder) {
+		t.Helper()
+		require.Equal(t, http.StatusForbidden, w.Code, w.Body.String())
+		assert.Contains(t, w.Body.String(), "plugins", "the refusal names the missing permission")
+	}
+
+	t.Run("an Editor without plugins:read cannot add an instance", func(t *testing.T) {
+		denied(t, patch(editor, vdb("vdb-1", "vdb-2", "guessed-id")))
+		assert.Equal(t, before, f.stored(), "the App is unchanged")
+	})
+
+	t.Run("nor swap one for another", func(t *testing.T) {
+		denied(t, patch(editor, vdb("guessed-id")))
+		assert.Equal(t, before, f.stored())
+	})
+
+	t.Run("nor add one of a type the App has none of, or of a type that does not exist", func(t *testing.T) {
+		require.NoError(t, f.api.service.RegisterPluginResourceTypes(f.plugin.ID, []models.PluginResourceType{
+			{Slug: "vector-db", Name: "Vector DB"}, {Slug: "prompt", Name: "Prompt"}, {Slug: "mcp_servers", Name: "MCP Servers"},
+		}))
+		denied(t, patch(editor, PluginResourceInput{PluginID: f.plugin.ID, ResourceTypeSlug: "mcp_servers", InstanceIDs: []string{"srv-1"}}))
+		// The same answer for a type that does not exist: no oracle.
+		denied(t, patch(editor, PluginResourceInput{PluginID: f.plugin.ID, ResourceTypeSlug: "no-such-type", InstanceIDs: []string{"x"}}))
+		denied(t, patch(editor, PluginResourceInput{PluginID: 9999, ResourceTypeSlug: "vector-db", InstanceIDs: []string{"vdb-1"}}))
+		assert.Equal(t, before, f.stored())
+	})
+
+	t.Run("nor create an App with one", func(t *testing.T) {
+		f.grants = editor
+		w := f.do(http.MethodPost, "/api/v1/apps", map[string]interface{}{"data": map[string]interface{}{"type": "apps",
+			"attributes": map[string]interface{}{"name": "New with a guess", "user_id": f.caller.ID, "workspace_id": f.w1,
+				"plugin_resources": []PluginResourceInput{vdb("vdb-1")}}}})
+		denied(t, w)
+		var n int64
+		require.NoError(t, f.db.Model(&models.App{}).Where("name = ?", "New with a guess").Count(&n).Error)
+		assert.Zero(t, n, "no App is created")
+	})
+
+	t.Run("the Editor can still remove one", func(t *testing.T) {
+		w := patch(editor, vdb("vdb-1"))
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		assert.Equal(t, []string{"prompt/p-1", "vector-db/vdb-1"}, f.stored())
+	})
+
+	t.Run("and cannot put it back", func(t *testing.T) {
+		denied(t, patch(editor, vdb("vdb-1", "vdb-2")))
+		assert.Equal(t, []string{"prompt/p-1", "vector-db/vdb-1"}, f.stored())
+	})
+
+	t.Run("a caller with plugins:read can add", func(t *testing.T) {
+		w := patch(withPluginsRead, vdb("vdb-1", "vdb-2", "vdb-3"))
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		assert.Equal(t, []string{"prompt/p-1", "vector-db/vdb-1", "vector-db/vdb-2", "vector-db/vdb-3"}, f.stored())
+	})
+
+	t.Run("a global administrator is unaffected", func(t *testing.T) {
+		w := patch(authz.GlobalGrants(authz.NewSet(authz.Read("apps"), authz.Write("apps"), authz.Read("plugins"))), vdb("vdb-1", "vdb-4"))
+		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		assert.Equal(t, []string{"prompt/p-1", "vector-db/vdb-1", "vector-db/vdb-4"}, f.stored())
+	})
+
+	t.Run("plugins:read alone does not let someone write another Workspace's App", func(t *testing.T) {
+		w := patch(authz.Grants{Global: authz.NewSet(authz.Read("plugins")),
+			Workspaces: map[uint]authz.Set{f.w2: authz.NewSet(authz.Read("apps"), authz.Write("apps"))}}, vdb("vdb-1", "vdb-9"))
+		assert.NotEqual(t, http.StatusOK, w.Code)
+		assert.Equal(t, []string{"prompt/p-1", "vector-db/vdb-1", "vector-db/vdb-4"}, f.stored())
 	})
 }
