@@ -113,10 +113,17 @@ jobs:
   # hub-edge sync, a proxied call) of the -fips images and .debs; the full
   # package smoke includes it. release.yml reuses a passing gate run only if
   # this job passed in it.
+  # ubuntu-24.04, not ubuntu-latest: the package smoke installs Chromium on
+  # the runner (npx playwright install --with-deps, in the make target), and
+  # the Playwright version tests/packaging pins does not support Ubuntu 26.04,
+  # which ubuntu-latest now is ("Playwright does not support chromium on
+  # ubuntu26.04-x64"). Lift the pin once the smoke runs Playwright in
+  # Microsoft's image, as ui-tests.yml does, or on a Playwright that supports
+  # the newer runner.
   package-smoke:
     name: Package Smoke Tests (ENT)
     if: inputs.include_package_smoke == true || inputs.include_fips_smoke == true
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
       - name: Checkout
