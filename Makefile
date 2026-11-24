@@ -470,8 +470,11 @@ test-fips-smoke:
 
 test-package-smoke-ent: package-ent
 	@echo "🧪 Running package smoke tests (ENT)..."
-	@# Source license from dev/.env.secrets if available
-	$(eval export TYK_AI_LICENSE=$(shell grep -s '^TYK_AI_LICENSE=' dev/.env.secrets | cut -d= -f2-))
+	@# Take the license from dev/.env.secrets only when the environment has
+	@# none. Unconditionally, this line exported an empty value over the one CI
+	@# passes (there is no dev/.env.secrets there), and the Enterprise binaries
+	@# in the smoke container exited at start (tests/makefile).
+	$(if $(TYK_AI_LICENSE),,$(eval export TYK_AI_LICENSE=$(shell grep -s '^TYK_AI_LICENSE=' dev/.env.secrets | cut -d= -f2-)))
 	@if [ -z "$$TYK_AI_LICENSE" ]; then \
 		echo "⚠️  Warning: TYK_AI_LICENSE not set. ENT smoke tests may fail."; \
 		echo "   Set it in dev/.env.secrets or export TYK_AI_LICENSE=..."; \
