@@ -362,7 +362,7 @@ Some legitimate traffic looks exactly like an attack: a code-review bot whose pu
 {"provider": "http", "on_detect": "block", "judge": {"mode": "record", "llm_id": 12, "model": "claude-haiku-5-5", "timeout_ms": 3000}, ...}
 ```
 
-In the filter form this is the collapsed **Second opinion (LLM judge)** section: a mode, the judge LLM (any active chat LLM; the model defaults to its default model) and, under Advanced, the timeout.
+In the filter form this is the collapsed **Second opinion (LLM judge)** section: a mode, the judge LLM (any active chat LLM; the model defaults to its default model; avoid `claude-haiku-4-5`, whose answers are cut off at the judge's 64-token limit on about a third of flags, so it often gives no opinion) and, under Advanced, the timeout.
 
 **Choosing the judge model.** The judge answers with one small JSON object, so a small, fast model is the best fit. Most models are limited to 64 output tokens per judged segment. Models that reason before they answer (OpenAI `o1`, `o3`, `o4` and the GPT-5 family; Gemini 2.5 and 3) count their reasoning against that limit, so for them the limit is 2048 tokens: they work as judge, but each judged segment can cost up to 2048 output tokens and takes longer, so raise the timeout (default 3000 ms) if the judge often times out. When a judge call gives no usable answer, the filter's own verdict stands.
 

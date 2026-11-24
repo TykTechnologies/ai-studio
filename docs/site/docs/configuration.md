@@ -236,7 +236,7 @@ Every action on the management API is recorded for incident reconstruction. On b
 See [Audit Trail](./audit-trail.md) for the record schema, redaction rules and API.
 
 ### Agent Call Tracing (Enterprise)
-Turns gateway traffic into sessions, turns and span trees. Off by default. It runs only in Enterprise Edition with a valid licence and `AGENT_TRACING_ENABLED=true`; in Community Edition the setting is ignored with a warning. Invalid values log a warning at start-up and fall back to the default.
+Turns gateway traffic into sessions, turns and span trees. Off by default. It runs only in Enterprise Edition with a valid license and `AGENT_TRACING_ENABLED=true`; in Community Edition the setting is ignored with a warning. Invalid values log a warning at start-up and fall back to the default.
 
 *   Enable (`AGENT_TRACING_ENABLED`): default `false`
 *   Key (`AGENT_TRACING_KEY`): root key for fingerprints and payload encryption; falls back to `TYK_AI_SECRET_KEY`

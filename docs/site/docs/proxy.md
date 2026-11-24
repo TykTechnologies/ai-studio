@@ -258,7 +258,7 @@ The operations are counted in the `aistudio_native_*` metrics (see [Observabilit
     | `"none"` | `{"type":"none"}` | mode `NONE` | the tools are not sent (Converse has no such setting); see below |
     | not set | not sent | not sent | not sent |
 
-    A value that cannot be translated is refused with **400**, never ignored: a word other than these, an object that is not a named function, a function that is not in `tools`, and `"required"` without tools. One case is **not enforced**: on Bedrock, `"none"` in a conversation that already contains tool calls or results. Bedrock needs the tool definitions for such a conversation and has no setting for "call no tool", so the tools are sent and the model may still call one, as before 2.3. A vendor can still refuse a choice a particular model does not support. OpenAI-compatible vendors receive `tool_choice` exactly as sent.
+    A value that cannot be translated is refused with **400**, never ignored: a word other than these, an object that is not a named function, a function that is not in `tools`, and `"required"` without tools. One case is **not enforced**: on Bedrock, `"none"` in a conversation that already contains tool calls or results. Bedrock needs the tool definitions for such a conversation and has no setting for "call no tool", so the tools are sent and the model may still call one, as before 2.3. A vendor can still refuse a choice a particular model does not support. OpenAI-compatible vendors receive `tool_choice` exactly as sent. With a forced function, Anthropic and Bedrock may add a parallel call to another tool after the forced one; OpenAI and Google answer with the forced call alone.
 
 ### 4. Anthropic Messages Endpoint (`/anthropic/{llmSlug}`)
 
