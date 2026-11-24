@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"log"
 	"math/rand"
 	"time"
@@ -72,7 +73,7 @@ func connectToDatabase(dbType, connStr string) (*gorm.DB, error) {
 		return nil, fmt.Errorf("unsupported database type: %s", dbType)
 	}
 
-	return gorm.Open(dialector, &gorm.Config{})
+	return gorm.Open(dialector, logger.GetGormConfig())
 }
 
 func dropTables(db *gorm.DB) error {

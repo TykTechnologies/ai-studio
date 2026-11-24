@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/TykTechnologies/midsommar/v2/logger"
 	"net"
 	"net/http"
 	"net/url"
@@ -111,7 +112,17 @@ func openPostgres(d *models.Datasource) (*gorm.DB, error) {
 	}
 	cfg.DialFunc = exemption(d).DialContext
 	cfg.LookupFunc = pgLookup(d)
-	return gorm.Open(postgres.New(postgres.Config{Conn: stdlib.OpenDB(*cfg)}), &gorm.Config{})
+	return gorm.Open(postgres.New(postgres.Config{Conn: stdlib.OpenDB(*cfg)}), pgvectorGormConfig())
+}
+
+// pgvectorGormConfig is the gorm configuration of a datasource's pgvector
+// connection. Its logger is the application's: a statement is logged with
+// placeholders, never its values, unless DB_LOG_SQL_PARAMS=true. An empty
+// gorm.Config gets gorm's default logger, which prints a slow or failed
+// statement with its values, and this connection's statements carry
+// document chunks and embeddings.
+func pgvectorGormConfig() *gorm.Config {
+	return logger.GetGormConfig()
 }
 
 // pgLookup is pgx's host resolver for the datasource. pgx resolves a host

@@ -60,7 +60,9 @@ func testDatabaseConnectivity(cfg *config.AppConf) error {
 	defer cancel()
 
 	// Open database connection with timeout
-	db, err := gorm.Open(dialector, &gorm.Config{})
+	// logger.GetGormConfig: SQL is logged without its values (an empty
+	// gorm.Config gets gorm's default logger, which prints them).
+	db, err := gorm.Open(dialector, logger.GetGormConfig())
 	if err != nil {
 		return fmt.Errorf("failed to open database connection: %w", err)
 	}
@@ -280,7 +282,7 @@ func testPostgreSQLQueueConnectivity(pgConfig config.PostgreSQLQueueConfig) erro
 	defer cancel()
 
 	// Test database connection for PostgreSQL queues
-	db, err := gorm.Open(postgres.Open(databaseURL), &gorm.Config{})
+	db, err := gorm.Open(postgres.Open(databaseURL), logger.GetGormConfig())
 	if err != nil {
 		return fmt.Errorf("failed to connect to PostgreSQL for queue: %w", err)
 	}

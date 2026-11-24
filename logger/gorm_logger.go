@@ -19,7 +19,8 @@ type GormLogger struct {
 	SlowThreshold         time.Duration
 	IgnoreRecordNotFound  bool
 	// LogParams logs the SQL with its values. Off, a statement is logged
-	// with its placeholders only (ParamsFilter), at every level: the
+	// with its placeholders only (ParamsFilter, and recorderParamsFilter
+	// for statements that end in Scan), at every level: the
 	// values are rows' contents, credentials included (an LLM's API key, a
 	// cluster event's payload). DB_LOG_SQL_PARAMS=true turns it on, for
 	// local debugging only.
@@ -31,9 +32,40 @@ const sqlParamsEnv = "DB_LOG_SQL_PARAMS"
 
 var sqlParamsWarnOnce sync.Once
 
+// sqlParamsEnabled reports whether DB_LOG_SQL_PARAMS opts SQL values into
+// the logs.
+func sqlParamsEnabled() bool {
+	return strings.EqualFold(os.Getenv(sqlParamsEnv), "true")
+}
+
+// gorm does not run every statement through the logger's ParamsFilter. A
+// statement that ends in Scan (Raw(...).Scan, Model(...).Select(...).Scan:
+// about 70 call sites, the cluster event insert among them) is run with
+// gorm's own recording logger in place of ours, and the text that recorder
+// builds is what our Trace is then handed. The recorder's filter is the
+// package variable below, a no-op by default, so those statements were
+// logged with their values whatever DB_LOG_SQL_PARAMS said: at debug level
+// always, and at any level when one failed or was slow. The same rule is
+// set here for it. The variable is process-wide, which is what is wanted:
+// no gorm.DB in this process logs Scan statements with their values unless
+// the opt-in is set.
+func init() {
+	gormlogger.RecorderParamsFilter = recorderParamsFilter
+}
+
+// recorderParamsFilter drops a Scan statement's values unless
+// DB_LOG_SQL_PARAMS=true. It reads the setting on each call: the recorder
+// has no logger instance to ask.
+func recorderParamsFilter(_ context.Context, sql string, params ...interface{}) (string, []interface{}) {
+	if sqlParamsEnabled() {
+		return sql, params
+	}
+	return sql, nil
+}
+
 // NewGormLogger creates a new GORM logger that uses zerolog
 func NewGormLogger() *GormLogger {
-	logParams := strings.EqualFold(os.Getenv(sqlParamsEnv), "true")
+	logParams := sqlParamsEnabled()
 	if logParams {
 		sqlParamsWarnOnce.Do(func() {
 			Log.Warn().Msgf("%s=true: SQL statements are logged with their values, which include credentials and other row contents. Use it for local debugging only.", sqlParamsEnv)
