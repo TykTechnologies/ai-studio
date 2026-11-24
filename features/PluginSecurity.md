@@ -370,6 +370,15 @@ unsigned plugin). Now:
   `forgetLoadFailure` at INFO when the plugin loads again. Refused requests
   log at debug level.
 
+- **Readiness** (2.3.0-rc5 re-test finding U3): a failed or loading plugin
+  does not fail the edge's `/ready`. `ServiceContainer.Health()` checks the
+  database only; `ReadinessCheck` answers `200` and lists such plugins in
+  `plugins_not_ready` (`PluginManager.PluginsNotReady`: id, name and status,
+  no command or error text, since `/ready` is unauthenticated). Failing
+  readiness took every pod of an edge out of its Kubernetes Service for one
+  LLM's plugin. `ServiceContainer.PluginsReady()` keeps the old check for
+  the detailed health status (`GetDetailedHealthStatus`).
+
 Not covered: auth plugins keep their rule (a `503` only when none of the
 endpoint's auth plugins loads), a plugin that is loaded but unhealthy is still
 skipped, and response hooks still fail open on a lookup error.

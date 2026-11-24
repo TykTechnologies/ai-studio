@@ -83,8 +83,10 @@ spec:
             initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
             periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
           readinessProbe:
-            # /ready, not /health: it checks the database and plugin health, so
-            # a pod that cannot serve is taken out of the Service.
+            # /ready, not /health: it checks the database, so a pod that cannot
+            # serve is taken out of the Service. A plugin that failed to load
+            # does not fail it (only that plugin's LLMs are refused); the
+            # body lists such plugins.
             httpGet:
               path: /ready
               port: http

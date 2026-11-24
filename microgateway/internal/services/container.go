@@ -310,25 +310,26 @@ func (sc *ServiceContainer) GetGatewayService() GatewayServiceInterface {
 	return sc.GatewayService
 }
 
-// Health checks all service health including plugins
+// Health reports whether the gateway can serve at all: today, whether its
+// database answers. It is what /ready fails on.
+//
+// It does not look at plugins. A plugin that has failed to load, or is still
+// loading, affects the LLMs it is attached to and no others: requests to
+// those LLMs are refused (503 plugin_load_failed) and every other LLM is
+// served. That is a steady state a gateway can be in for hours (a missing
+// signature key, a source PLUGINS_ALLOWED_SOURCES refuses, an unreachable
+// grpc:// host, an edge on its last-known-good configuration). Failing
+// readiness on it made Kubernetes take every pod of the edge out of the
+// Service, since they all have the same configuration, and turned one LLM's
+// plugin fault into an outage of all LLMs. Plugin state is reported by
+// PluginsReady and in /ready's body.
 func (sc *ServiceContainer) Health() error {
 	// Check database health
 	if err := database.IsHealthy(sc.DB); err != nil {
 		return fmt.Errorf("database unhealthy: %w", err)
 	}
 
-	// Check plugin health
 	if sc.PluginManager != nil {
-		if !sc.PluginManager.IsAllPluginsReady() {
-			healthSummary := sc.PluginManager.GetPluginHealthSummary()
-			if failedCount, ok := healthSummary["failed_plugins"].(int); ok && failedCount > 0 {
-				return fmt.Errorf("plugin health check failed: %d plugins failed", failedCount)
-			}
-			if loadingCount, ok := healthSummary["loading_plugins"].(int); ok && loadingCount > 0 {
-				return fmt.Errorf("plugin health check failed: %d plugins still loading", loadingCount)
-			}
-		}
-
 		// Check OCI plugin system health if enabled
 		if ociClient := sc.PluginManager.GetOCIClient(); ociClient != nil {
 			ociStats := sc.PluginManager.GetOCIStats()
@@ -339,6 +340,23 @@ func (sc *ServiceContainer) Health() error {
 		}
 	}
 
+	return nil
+}
+
+// PluginsReady reports whether every plugin the gateway tracks has loaded:
+// an error says how many have failed or are still loading. It does not
+// decide readiness (see Health); the detailed health status reports it.
+func (sc *ServiceContainer) PluginsReady() error {
+	if sc.PluginManager == nil || sc.PluginManager.IsAllPluginsReady() {
+		return nil
+	}
+	healthSummary := sc.PluginManager.GetPluginHealthSummary()
+	if failedCount, ok := healthSummary["failed_plugins"].(int); ok && failedCount > 0 {
+		return fmt.Errorf("plugin health check failed: %d plugins failed", failedCount)
+	}
+	if loadingCount, ok := healthSummary["loading_plugins"].(int); ok && loadingCount > 0 {
+		return fmt.Errorf("plugin health check failed: %d plugins still loading", loadingCount)
+	}
 	return nil
 }
 

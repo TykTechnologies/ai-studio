@@ -2693,6 +2693,32 @@ func (pm *PluginManager) IsAllPluginsReady() bool {
 	return true
 }
 
+// PluginNotReady names a plugin that has failed to load or is still loading.
+// It carries no command or error text: it is shown on the unauthenticated
+// /ready, and those can hold paths, registry hosts and signature details.
+type PluginNotReady struct {
+	ID     uint         `json:"id"`
+	Name   string       `json:"name"`
+	Status PluginStatus `json:"status"`
+}
+
+// PluginsNotReady returns the plugins that have failed to load or are still
+// loading, by ID. It is never nil, so it encodes as an empty JSON list when
+// every plugin is ready.
+func (pm *PluginManager) PluginsNotReady() []PluginNotReady {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+
+	notReady := []PluginNotReady{}
+	for id, health := range pm.pluginHealth {
+		if health.Status == PluginStatusFailed || health.Status == PluginStatusLoading {
+			notReady = append(notReady, PluginNotReady{ID: id, Name: health.Name, Status: health.Status})
+		}
+	}
+	slices.SortFunc(notReady, func(a, b PluginNotReady) int { return cmp.Compare(a.ID, b.ID) })
+	return notReady
+}
+
 // GetPluginHealthSummary returns a summary of plugin health
 func (pm *PluginManager) GetPluginHealthSummary() map[string]interface{} {
 	pm.mu.RLock()

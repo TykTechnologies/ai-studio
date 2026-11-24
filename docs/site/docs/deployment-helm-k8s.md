@@ -567,8 +567,14 @@ Notes on the defaults:
   `/tmp` is mounted for it, since SQLite needs somewhere to put temporary files.
 - `terminationGracePeriodSeconds` is 40s, comfortably above the 30s
   `SHUTDOWN_TIMEOUT`, so in-flight requests can drain before the pod is killed.
-- Readiness probes `/ready`, which checks the database and plugin health, rather
-  than `/health`, which only reports that the process is alive.
+- Readiness probes `/ready`, which checks the database, rather than `/health`,
+  which only reports that the process is alive. A plugin that has failed to
+  load, or is still loading, does not make a pod not ready: it stops the LLMs
+  it is attached to (`503 plugin_load_failed`), and the other LLMs on the pod
+  are served. `/ready` lists such plugins in its body (`plugins_not_ready`),
+  so watch that, or the gateway's log, rather than pod readiness for plugin
+  faults. Before 2.3.0 one failed plugin made `/ready` answer `503`, which
+  took every pod of the gateway out of the Service.
 
 ### Plugin Sources and Signatures
 

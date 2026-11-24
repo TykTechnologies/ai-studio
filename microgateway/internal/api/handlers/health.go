@@ -23,7 +23,17 @@ func HealthCheck(services *services.ServiceContainer) gin.HandlerFunc {
 	}
 }
 
-// ReadinessCheck returns the readiness status of the service
+// ReadinessCheck returns the readiness status of the service: 503 when the
+// gateway cannot serve at all (its database does not answer), else 200.
+//
+// A plugin that has failed to load or is still loading does not make the
+// gateway not ready. Only the LLMs that plugin is attached to are affected
+// (their requests are refused with 503 plugin_load_failed); taking the pod
+// out of service for it would take every other LLM down too. The body says
+// which plugins are not ready: "plugins_not_ready" lists each with its id,
+// name and status ("failed" or "loading"), and "plugin_health" has the
+// counts. The cause of a failure (a path, a registry, a signature) is not
+// in the body: /ready is unauthenticated. It is in the gateway's log.
 func ReadinessCheck(services *services.ServiceContainer) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Check if all critical services are ready
@@ -48,9 +58,11 @@ func ReadinessCheck(services *services.ServiceContainer) gin.HandlerFunc {
 			"service": "microgateway",
 		}
 
-		// Add plugin health summary to readiness response
+		// Add plugin health summary to readiness response, and the plugins
+		// that are not ready by name (always present, empty when all are).
 		if services.PluginManager != nil {
 			response["plugin_health"] = services.PluginManager.GetPluginHealthSummary()
+			response["plugins_not_ready"] = services.PluginManager.PluginsNotReady()
 		}
 
 		// An edge says which control endpoint it is on. It is ready either
