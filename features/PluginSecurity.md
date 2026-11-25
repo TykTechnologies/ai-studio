@@ -903,3 +903,13 @@ Plugin Security provides **defense in depth** with multiple security layers:
 - Supply chain security via OCI signature verification (trusted sources)
 
 The security model ensures that even CE users have fundamental protections, while ENT users get enterprise-grade security controls for production environments.
+
+## A command change withdraws scope approval (6bg5.97)
+
+A plugin's service scopes are approved for the binary its command names. `PluginService.UpdatePlugin` sets `service_access_authorized` to false whenever the stored command or OCI reference changes (`PluginBinaryChanged`), in the same write as the command, so no request shape keeps the approval: command alone, command with configuration, with `load_immediately`, or the whole form. A marketplace upgrade does not go through `UpdatePlugin`; `PluginUpgradeService` compares declared scopes itself. `POST /plugins/:id/refresh` pulls the same OCI reference again and does not touch approval.
+
+`updatePlugin` (`api/plugin_handlers.go`) then calls `reloadForCommandChange`: the process of the old binary is unloaded from Studio; if Studio runs the plugin (`PluginRunsInStudio`) and it is active, the new binary is loaded, its declared scopes are stored unapproved (`ExtractAndStoreServiceScopes`) and its UI is registered. A failed load leaves the plugin not running and unapproved. `load_immediately` is ignored on that request (the reload did it). Approval is `POST /plugins/:id/approve-scopes` as before; the running process's service calls are refused while unapproved (`services/grpc/auth_interceptor.go`).
+
+The edit form (`PluginForm.js`) derives "command changed" from the field and the stored command, warns, saves, and then shows `ScopeReviewSection` with the scopes from `GET /plugins/:id/workflow-status`; Accept approves and returns to the list, Decline leaves the plugin saved and unapproved. The review's buttons are `type="button"` (inside the form they used to submit it).
+
+Not changed here: edges get the declared scopes with the configuration whatever the approval state (midsommar-clean-5dr1, known issue).

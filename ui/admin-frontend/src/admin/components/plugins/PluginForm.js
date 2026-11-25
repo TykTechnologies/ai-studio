@@ -14,7 +14,6 @@ import {
   AccordionSummary,
   AccordionDetails,
   Button,
-  CircularProgress,
   Chip,
   Checkbox,
   ListItemText,
@@ -102,8 +101,6 @@ const PluginForm = ({ mode = 'create' }) => {
 
   // Command change detection state
   const [originalCommand, setOriginalCommand] = useState('');
-  const [requiresReapproval, setRequiresReapproval] = useState(false);
-  const [showCommandChangeWarning, setShowCommandChangeWarning] = useState(false);
   const [showScopeApproval, setShowScopeApproval] = useState(false);
   const [extractedScopes, setExtractedScopes] = useState([]);
   const [scopeLoading, setScopeLoading] = useState(false);
@@ -113,6 +110,13 @@ const PluginForm = ({ mode = 'create' }) => {
       fetchPlugin();
     }
   }, [id, isEdit]);
+
+  // A different command is a different binary, whatever hooks the plugin
+  // has: saving it withdraws the approval of its service scopes, and the form
+  // asks for it again after the save. (The warning used to hang on a handler
+  // no field called and on hook types the API does not return, so the step
+  // never appeared: 6bg5.97.)
+  const commandChanged = Boolean(isEdit) && loaded && formData.command !== originalCommand;
 
   const fetchPlugin = async () => {
     try {
@@ -146,30 +150,6 @@ const PluginForm = ({ mode = 'create' }) => {
         message: 'Failed to fetch plugin details',
         severity: 'error',
       });
-    }
-  };
-
-  const handleInputChange = (field) => (event) => {
-    const { name, value } = event.target;
-    const fieldName = name || field;
-
-    setFormData(prev => ({
-      ...prev,
-      [fieldName]: value
-    }));
-
-    // Command change detection for edit mode
-    // Check if plugin has UI or Agent hooks (which need scope approval)
-    if (fieldName === 'command' && isEdit && value !== originalCommand) {
-      const hasUIOrAgent = formData.hookType === 'studio_ui' || formData.hookType === 'agent' ||
-                          formData.hookTypes.includes('studio_ui') || formData.hookTypes.includes('agent');
-      if (hasUIOrAgent) {
-        setRequiresReapproval(true);
-        setShowCommandChangeWarning(true);
-        setShowScopeApproval(false);
-        // Reset any previous scope approval state
-        setExtractedScopes([]);
-      }
     }
   };
 
@@ -219,41 +199,18 @@ const PluginForm = ({ mode = 'create' }) => {
     }));
   };
 
-  // Command change handlers
-  const handleLoadNewScopes = async () => {
-    setScopeLoading(true);
+  // After a save that changed the command, the plugin is stored unapproved
+  // and Studio has loaded the new binary: show what it declares.
+  const reviewScopesAfterCommandChange = async () => {
+    let scopes = [];
     try {
-      // Call validate-and-load API to get new scopes and hook types
-      const response = await pluginService.validateAndLoadPlugin(id, {
-        command: formData.command,
-      });
-
-      const attrs = response.data.attributes;
-      setExtractedScopes(attrs.scopes || []);
-
-      // Update hook types from manifest
-      if (attrs.hook_types && attrs.hook_types.length > 0) {
-        setFormData(prev => ({
-          ...prev,
-          hookType: attrs.primary_hook || attrs.hook_types[0],
-          hookTypes: attrs.hook_types,
-          manifestHookTypes: attrs.hook_types,
-          hookTypesCustomized: false,
-        }));
-      }
-
-      setShowScopeApproval(true);
-      setShowCommandChangeWarning(false);
+      const status = await pluginService.getPluginWorkflowStatus(id);
+      scopes = status?.data?.attributes?.service_scopes || [];
     } catch (error) {
-      console.error('Error loading new scopes:', error);
-      setSnackbar({
-        open: true,
-        message: error.message || 'Failed to load plugin metadata',
-        severity: 'error',
-      });
-    } finally {
-      setScopeLoading(false);
+      console.error('Error loading the plugin scopes to review:', error);
     }
+    setExtractedScopes(scopes);
+    setShowScopeApproval(true);
   };
 
   const handleScopeApproval = async (approved) => {
@@ -261,12 +218,9 @@ const PluginForm = ({ mode = 'create' }) => {
       setScopeLoading(true);
       try {
         await pluginService.approvePluginScopes(id, true);
-        setRequiresReapproval(false);
         setShowScopeApproval(false);
-        setSnackbar({
-          open: true,
-          message: 'Plugin scopes approved successfully',
-          severity: 'success',
+        navigate('/admin/plugins', {
+          state: { snackbar: { message: 'Plugin updated and its scopes approved', severity: 'success' } },
         });
       } catch (error) {
         console.error('Error approving scopes:', error);
@@ -279,15 +233,12 @@ const PluginForm = ({ mode = 'create' }) => {
         setScopeLoading(false);
       }
     } else {
-      // User declined - revert command or navigate away
-      setFormData(prev => ({ ...prev, command: originalCommand }));
-      setRequiresReapproval(false);
-      setShowScopeApproval(false);
-      setShowCommandChangeWarning(false);
+      // Declined: the new command is saved and stays unapproved. Nothing is
+      // reverted, and the review stays on screen so it can be approved later.
       setSnackbar({
         open: true,
-        message: 'Command reverted to original value',
-        severity: 'info',
+        message: 'The plugin is saved with its new command but not approved: its service access stays off until its scopes are approved.',
+        severity: 'warning',
       });
     }
   };
@@ -346,6 +297,18 @@ const PluginForm = ({ mode = 'create' }) => {
       }
 
       markSaved();
+      if (isEdit && formData.command !== originalCommand) {
+        // The save withdrew the approval of the plugin's service scopes
+        // (another binary). Stay here for the re-approval step.
+        setOriginalCommand(formData.command);
+        await reviewScopesAfterCommandChange();
+        setSnackbar({
+          open: true,
+          message: 'Plugin saved. Its command changed, so review and approve its scopes.',
+          severity: 'info',
+        });
+        return;
+      }
       navigate('/admin/plugins', {
         state: { snackbar: { message: isEdit ? 'Plugin updated successfully' : 'Plugin created successfully', severity: 'success' } },
       });
@@ -596,34 +559,22 @@ const PluginForm = ({ mode = 'create' }) => {
           />
 
           {/* Command Change Warning */}
-          {showCommandChangeWarning && (
-            <Alert severity="warning" sx={{ mb: 3 }}>
-              <Box display="flex" alignItems="center" justifyContent="space-between">
-                <Box>
-                  <Typography variant="body2" fontWeight="medium">
-                    Command Changed - Scope Re-approval Required
-                  </Typography>
-                  <Typography variant="body2" sx={{ mt: 0.5 }}>
-                    AI Studio plugins require security approval when the command changes.
-                    Click "Load New Scopes" to review the new permissions.
-                  </Typography>
-                </Box>
-                <Button
-                  onClick={handleLoadNewScopes}
-                  variant="outlined"
-                  size="small"
-                  disabled={scopeLoading}
-                  startIcon={scopeLoading ? <CircularProgress size={16} /> : null}
-                >
-                  {scopeLoading ? 'Loading...' : 'Load New Scopes'}
-                </Button>
-              </Box>
+          {commandChanged && (
+            <Alert severity="warning" sx={{ mb: 3 }} data-testid="command-change-warning">
+              <Typography variant="body2" fontWeight="medium">
+                Command changed: scope re-approval required
+              </Typography>
+              <Typography variant="body2" sx={{ mt: 0.5 }}>
+                A different command runs a different binary. Saving withdraws the approval of this
+                plugin's service scopes and loads the new binary; you then review and approve the
+                scopes it declares. Until you approve them its service access is off.
+              </Typography>
             </Alert>
           )}
 
           {/* Scope Approval Section */}
           {showScopeApproval && (
-            <Box sx={{ mb: 3, p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+            <Box data-testid="scope-reapproval" sx={{ mb: 3, p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
               <ScopeReviewSection
                 scopes={extractedScopes}
                 onApprove={() => handleScopeApproval(true)}
