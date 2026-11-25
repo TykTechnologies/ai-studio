@@ -1107,7 +1107,9 @@ func (a *API) setupRoutes() error {
 		marketplaceAdmin.GET("/:id", authz.Read("marketplace"), adminHandlers.GetMarketplace)
 		marketplaceAdmin.PUT("/:id", authz.Write("marketplace"), adminHandlers.UpdateMarketplace)
 		marketplaceAdmin.DELETE("/:id", authz.Delete("marketplace"), adminHandlers.RemoveMarketplace)
-		marketplaceAdmin.POST("/validate", authz.Read("marketplace"), adminHandlers.ValidateMarketplaceURL)
+		// Validate makes AI Studio fetch a URL the caller chose, so it is a
+		// write: read-only roles (Viewer, Auditor) must not reach it.
+		marketplaceAdmin.POST("/validate", authz.Write("marketplace"), adminHandlers.ValidateMarketplaceURL)
 		marketplaceAdmin.POST("/:id/sync", authz.Execute("marketplace"), adminHandlers.SyncMarketplace)
 	}
 

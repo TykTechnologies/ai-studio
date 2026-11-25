@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/pkg/marketplace"
 	"github.com/TykTechnologies/midsommar/v2/services/marketplace_management"
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
@@ -42,6 +43,19 @@ func (h *MarketplaceAdminHandlers) AddMarketplace(c *gin.Context) {
 				Title  string `json:"title"`
 				Detail string `json:"detail"`
 			}{{Title: "Invalid Request", Detail: err.Error()}},
+		})
+		return
+	}
+
+	// An index on an internal address is refused when it is added, not only
+	// when it is fetched (the sync does that check again, on the address it
+	// connects to). The error is the same whatever the cause.
+	if err := marketplace.CheckIndexURL(req.URL); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Failed to Add Marketplace", Detail: err.Error()}},
 		})
 		return
 	}

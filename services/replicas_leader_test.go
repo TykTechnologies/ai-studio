@@ -99,6 +99,8 @@ func TestTelemetryManager_FirstReportWhenItBecomesLeader(t *testing.T) {
 // if it was skipped at start, instead of after MARKETPLACE_SYNC_INTERVAL
 // (an hour by default).
 func TestMarketplaceService_SyncsWhenItBecomesLeader(t *testing.T) {
+	// The index is on 127.0.0.1, which the fetcher refuses by default.
+	t.Setenv("ALLOW_INTERNAL_NETWORK_ACCESS", "true")
 	var fetches atomic.Int32
 	index := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fetches.Add(1)
