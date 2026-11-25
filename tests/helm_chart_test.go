@@ -167,7 +167,8 @@ func TestEdgeIDIsPerPod(t *testing.T) {
 }
 
 // TestReadinessUsesReadyEndpoint: /health only reports that the process is up,
-// while /ready checks the database and plugin health. Probing the wrong one
+// while /ready checks the database (and lists plugins that are not ready,
+// without failing on them). Probing the wrong one
 // leaves broken pods in the Service.
 func TestReadinessUsesReadyEndpoint(t *testing.T) {
 	workload := microgatewayWorkload(t, helmTemplate(t))

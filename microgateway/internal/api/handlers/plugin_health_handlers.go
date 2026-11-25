@@ -140,8 +140,12 @@ func GetDetailedHealthStatus(serviceContainer *services.ServiceContainer) gin.Ha
 			"status":  "healthy",
 		}
 
-		// Check overall health
+		// Check overall health. This detailed status, unlike /ready, also
+		// counts a failed or loading plugin as unhealthy, as it always has.
 		if err := serviceContainer.Health(); err != nil {
+			status["status"] = "unhealthy"
+			status["error"] = err.Error()
+		} else if err := serviceContainer.PluginsReady(); err != nil {
 			status["status"] = "unhealthy"
 			status["error"] = err.Error()
 		}
