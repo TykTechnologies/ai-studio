@@ -177,6 +177,7 @@ jobs:
         with:
           fetch-depth: 1
           path: midsommar
+          persist-credentials: false
 
       # Build the enterprise edition from the commit the submodule pins, not
       # from the enterprise repository's current main: the pin is what was
@@ -195,6 +196,7 @@ jobs:
           ref: ${{ steps.ent_pin.outputs.sha }}
           path: midsommar/enterprise
           token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
 
       -
         name: Set some outputs for later
@@ -349,6 +351,7 @@ jobs:
           labels: "org.opencontainers.image.title=${{ matrix.component }} (${{ matrix.edition }})\norg.opencontainers.image.description=Tyk AI ${{ matrix.component == 'studio' && 'Studio' || 'Microgateway' }} (${{ matrix.edition }})\norg.opencontainers.image.vendor=tyk.io\norg.opencontainers.image.version=${{ github.ref_name }}\n"
       -
         name: push image to prod
+        id: push
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: "midsommar/dist"
@@ -417,6 +420,7 @@ jobs:
           rm -rf fips-scan
       -
         name: Push the FIPS image
+        id: fips_push
         if: matrix.fips_docker_image != ''
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
@@ -450,6 +454,27 @@ jobs:
             dist/*.rpm
             !dist/*PAYG*.rpm
             !dist/*fips*.rpm
+
+      # Report only. The images are pushed straight to Docker Hub (multi-platform),
+      # so these scans run on the pushed digests, after everything is published.
+      # continue-on-error: the action fails on scanner errors even when not
+      # enforcing, and a red job invites re-running the publish steps.
+      -
+        name: Scan the image for secrets
+        if: startsWith(github.ref, 'refs/tags')
+        continue-on-error: true
+        uses: TykTechnologies/github-actions/.github/actions/secret-scan@production
+        with:
+          image: ${{ matrix.docker_image }}@${{ steps.push.outputs.digest }}
+          enforce: "false"
+      -
+        name: Scan the FIPS image for secrets
+        if: matrix.fips_docker_image != '' && startsWith(github.ref, 'refs/tags')
+        continue-on-error: true
+        uses: TykTechnologies/github-actions/.github/actions/secret-scan@production
+        with:
+          image: ${{ matrix.fips_docker_image }}@${{ steps.fips_push.outputs.digest }}
+          enforce: "false"
 
   # The built admin frontend, for hosts that embed Studio through pkg/studio.
   # They compile with -tags studio_noui (the ui package then embeds nothing)
