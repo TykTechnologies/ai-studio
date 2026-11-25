@@ -393,12 +393,24 @@ func New(opts Options) (_ *Studio, err error) {
 	if err := ensureDefaults(s.db, opts.SkipLLMDefaults, conf.SkipFilterDefaults); err != nil {
 		return nil, fmt.Errorf("studio: seed defaults: %w", err)
 	}
+	// The backfill below resolves each LLM's credential, so the secret store
+	// needs its database first: without it a $SECRET/ reference comes back
+	// as its own text and the key kept for old IDs was derived from that
+	// text (midsommar-clean-6bg5.94). NewServiceWithOCI sets it again later.
+	secrets.SetDBRef(s.db)
 	// LLMs created before native API resource signing secrets get one; the
 	// IDs they already handed out stay valid for the grace period.
 	if n, err := models.BackfillLLMResourceSigningSecrets(s.db, models.DefaultResourceSigningGrace, time.Now()); err != nil {
 		return nil, fmt.Errorf("studio: generate LLM resource signing secrets: %w", err)
 	} else if n > 0 {
 		logger.Infof("Generated native API resource signing secrets for %d LLM(s)", n)
+	}
+	// Databases upgraded with a 2.3 build before that order was fixed hold
+	// such keys: stop trusting them.
+	if n, err := models.ClearReferenceDerivedSigningKeys(s.db); err != nil {
+		return nil, fmt.Errorf("studio: clear reference-derived resource signing keys: %w", err)
+	} else if n > 0 {
+		logger.Warnf("Removed the previous native API resource signing key of %d LLM(s): it had been derived from the text of a credential reference, so resource IDs could be forged with it. Rotate the signing key of these LLMs if resource IDs may have been forged since the upgrade to 2.3, and push the configuration to edges", n)
 	}
 	// LLM credentials written before they were encrypted at rest, or while
 	// TYK_AI_SECRET_KEY was unset, are encrypted now (nothing without a key).
