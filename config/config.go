@@ -786,7 +786,9 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 	conf.LicenseTelemetryPeriod = parseDurationWithDefault(getenv, "LICENSE_TELEMETRY_PERIOD", 1*time.Hour)
 	conf.LicenseValidityPeriod = parseDurationWithDefault(getenv, "LICENSE_VALIDITY_CHECK_PERIOD", 24*time.Hour)
 
-	conf.LicenseDisableTelemetry = getenv("LICENSE_DISABLE_TELEMETRY") == "true"
+	// License telemetry is off by default; LICENSE_DISABLE_TELEMETRY=false (or 0) turns it on.
+	licenseDisableTelemetryStr := getenv("LICENSE_DISABLE_TELEMETRY")
+	conf.LicenseDisableTelemetry = licenseDisableTelemetryStr != "false" && licenseDisableTelemetryStr != "0"
 
 	telemetryConcurrency := getenv("LICENSE_TELEMETRY_CONCURRENCY")
 	if telemetryConcurrency != "" {
@@ -798,13 +800,9 @@ func loadFrom(fromEnv bool, getenv func(string) string) *AppConf {
 		conf.LicenseTelemetryConcurrency = 20 // Default
 	}
 
-	// Telemetry configuration - enabled by default, can be disabled by setting TELEMETRY_ENABLED=false
+	// Telemetry configuration - disabled by default, enabled by setting TELEMETRY_ENABLED=true (or 1)
 	telemetryEnabledStr := getenv("TELEMETRY_ENABLED")
-	if telemetryEnabledStr == "false" || telemetryEnabledStr == "0" {
-		conf.TelemetryEnabled = false
-	} else {
-		conf.TelemetryEnabled = true // Default to enabled
-	}
+	conf.TelemetryEnabled = telemetryEnabledStr == "true" || telemetryEnabledStr == "1"
 
 	// Metrics configuration - enabled by default
 	metricsEnabledStr := getenv("METRICS_ENABLED")

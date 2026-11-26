@@ -14,7 +14,7 @@ The **Midsommar Telemetry System** provides anonymized usage statistics collecti
 4. [Data Collection](#data-collection)
 5. [Privacy Considerations](#privacy-considerations)
 6. [Configuration](#configuration)
-7. [Opting Out](#opting-out)
+7. [Opting In](#opting-in)
 
 ---
 
@@ -172,7 +172,7 @@ type TelemetryPayload struct {
 ## Configuration
 
 ### Environment Variables:
-- `TELEMETRY_ENABLED` - Set to "false" or "0" to disable telemetry collection (default: enabled)
+- `TELEMETRY_ENABLED` - Set to "true" or "1" to enable telemetry collection (default: disabled since 2.3)
 
 ### Hardcoded Settings:
 - **Telemetry URL:** `https://telemetry.tyk.technology` 
@@ -188,30 +188,34 @@ type AppConf struct {
 ```
 
 ### Default Behavior:
-- **Telemetry is enabled by default**
-- Users must explicitly opt-out by setting `TELEMETRY_ENABLED=false`
+- **Telemetry is disabled by default** (since 2.3; earlier versions were opt-out)
+- Users must explicitly opt in by setting `TELEMETRY_ENABLED=true`
+- Helm (`config.telemetryEnabled`), the quickstart Compose env files and the deb/rpm `/etc/default/tyk-ai-studio` also set it off explicitly
 - When disabled, no data collection or network requests occur
 
 ---
 
-## Opting Out
+## Opting In
 
-### How to Disable Telemetry:
+### How to Enable Telemetry:
 
-**Option 1: Environment Variable**
+**Option 1: Environment Variable or .env file**
 ```bash
-export TELEMETRY_ENABLED=false
+TELEMETRY_ENABLED=true
 ```
 
-**Option 2: In .env file**
-```
-TELEMETRY_ENABLED=false
-```
-
-**Option 3: Docker/Container Environment**
+**Option 2: Docker/Container Environment**
 ```bash
-docker run -e TELEMETRY_ENABLED=false your-image
+docker run -e TELEMETRY_ENABLED=true your-image
 ```
+
+**Option 3: Helm**
+```yaml
+config:
+  telemetryEnabled: true
+```
+
+Enterprise Edition license telemetry is separate (see [Licensing.md](Licensing.md)): `LICENSE_DISABLE_TELEMETRY=false`, or `config.licenseTelemetryEnabled: true` in Helm.
 
 ### Verification:
 When telemetry is disabled, you'll see this log message at startup:
@@ -223,7 +227,7 @@ When telemetry is enabled, you'll see these log messages:
 ```
 Telemetry collection started - collecting usage statistics every 1h0m0s
 Telemetry data will be sent to: https://telemetry.tyk.technology
-To disable telemetry, set environment variable: TELEMETRY_ENABLED=false
+Telemetry is on because TELEMETRY_ENABLED=true; unset it or set it to false to turn it off
 ```
 
 ---

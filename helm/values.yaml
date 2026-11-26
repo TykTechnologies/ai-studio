@@ -181,6 +181,12 @@ config:
   blockInternalUpstreams: "true"
   allowedInternalHosts: ""
 
+  # Telemetry to Tyk, off by default since 2.3. telemetryEnabled sends
+  # anonymised usage counts (TELEMETRY_ENABLED); licenseTelemetryEnabled sends
+  # Enterprise Edition license usage reports (LICENSE_DISABLE_TELEMETRY=false).
+  telemetryEnabled: false
+  licenseTelemetryEnabled: false
+
   # Hub-Spoke: Control Plane Mode
   gatewayMode: "control"
   grpcPort: "50051"

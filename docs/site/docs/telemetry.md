@@ -11,7 +11,7 @@ weight: 25
 
 # Telemetry & Privacy
 
-Tyk AI Studio collects anonymized usage statistics to help improve the product and understand how features are being used.
+Tyk AI Studio can send anonymized usage statistics to Tyk to help improve the product and understand how features are being used. **Telemetry is off by default (since 2.3)**: nothing is sent unless you opt in.
 
 ## What Data is Collected
 
@@ -34,49 +34,55 @@ The telemetry system collects only aggregate statistics:
 - Instance identifiers are hashed and rotated daily
 - Data is sent over HTTPS to `https://telemetry.tyk.technology`
 
-## Disabling Telemetry
+## Enabling Telemetry
 
-Telemetry is **enabled by default** but can be easily disabled.
+There are two independent telemetry reports, both off by default:
 
-### Environment Variable
+| Report | Editions | Turn on with |
+|--------|----------|--------------|
+| Anonymized usage counts (described above) | Community and Enterprise | `TELEMETRY_ENABLED=true` |
+| License usage reports (usage counts and API interactions, license key hashed) | Enterprise | `LICENSE_DISABLE_TELEMETRY=false` |
 
-```bash
-export TELEMETRY_ENABLED=false
-```
-
-### Configuration File
-
-Add to your `.env` file:
-```
-TELEMETRY_ENABLED=false
-```
-
-### Docker Deployment
+### Environment Variable or `.env` File
 
 ```bash
-docker run -e TELEMETRY_ENABLED=false your-image
+TELEMETRY_ENABLED=true
+LICENSE_DISABLE_TELEMETRY=false   # Enterprise Edition
 ```
+
+### Docker Compose
+
+The quickstart env files (`quickstart/confs/midsommar-*.env`) set both explicitly to off; change them there.
 
 ### Helm/Kubernetes
 
 In your `values.yaml`:
 ```yaml
-env:
-  TELEMETRY_ENABLED: "false"
+config:
+  telemetryEnabled: true
+  licenseTelemetryEnabled: true   # Enterprise Edition
 ```
+
+### Linux Packages (deb/rpm)
+
+Edit `/etc/default/tyk-ai-studio` (also `/etc/sysconfig/tyk-ai-studio` on RPM systems), which a new install writes with both reports off, then `systemctl restart tyk-ai-studio`.
+
+### Upgrading from Earlier Versions
+
+Before 2.3 both reports were on unless turned off. On upgrade they turn off unless your configuration sets `TELEMETRY_ENABLED=true` or `LICENSE_DISABLE_TELEMETRY=false`; an existing `TELEMETRY_ENABLED=false` or `LICENSE_DISABLE_TELEMETRY=true` keeps working.
 
 ## Verification
 
-When telemetry is disabled, you'll see this log message at startup:
+When usage telemetry is off, you'll see this log message at startup:
 ```
 Telemetry is disabled
 ```
 
-When enabled, you'll see:
+When it is on, you'll see:
 ```
 Telemetry collection started - collecting usage statistics every 1h0m0s
 Telemetry data will be sent to: https://telemetry.tyk.technology
-To disable telemetry, set environment variable: TELEMETRY_ENABLED=false
+Telemetry is on because TELEMETRY_ENABLED=true; unset it or set it to false to turn it off
 ```
 
 ## Technical Details

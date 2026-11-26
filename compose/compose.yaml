@@ -7,6 +7,8 @@ services:
     environment:
       - DATABASE_URL=postgres://postgres:postgres@postgres:5432/postgres
       - DATABASE_TYPE=postgres
+      - TELEMETRY_ENABLED=false
+      - LICENSE_DISABLE_TELEMETRY=true
     depends_on:
       - postgres
     ports:

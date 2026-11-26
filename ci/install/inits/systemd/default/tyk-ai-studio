@@ -42,6 +42,12 @@ TYK_AI_SECRET_KEY=CHANGE-ME-generate-with-openssl-rand-hex-16
 MICROGATEWAY_ENCRYPTION_KEY=CHANGE-ME-generate-with-openssl-rand-hex-16
 
 # -----------------------------------------------------------------------------
+# Telemetry
+# -----------------------------------------------------------------------------
+# Anonymised usage counts sent to Tyk. Off by default; set true to opt in.
+TELEMETRY_ENABLED=false
+
+# -----------------------------------------------------------------------------
 # Logging
 # -----------------------------------------------------------------------------
 # Options: trace, debug, info, warn, error
@@ -109,7 +115,8 @@ GRPC_AUTH_TOKEN=CHANGE-ME-generate-with-openssl-rand-hex-16
 # SSO Configuration
 # Configure SSO profiles via the Admin UI at /admin/sso-profiles
 
-# Telemetry
+# License telemetry: set LICENSE_DISABLE_TELEMETRY=false to send it to Tyk
+LICENSE_DISABLE_TELEMETRY=true
 # LICENSE_TELEMETRY_URL=https://telemetry.tyk.technology/api/track
 # LICENSE_TELEMETRY_PERIOD=1h
 

@@ -102,7 +102,8 @@ and the plugin manager starts no plugin while the broker has none
 ## Telemetry
 
 Enterprise Edition sends anonymised usage counts (LLMs, Apps, users, chats
-and HTTP interactions) to Tyk unless `LICENSE_DISABLE_TELEMETRY=true`. The
+and HTTP interactions) to Tyk only when `LICENSE_DISABLE_TELEMETRY=false`
+(off by default since 2.3; any other value, or none, keeps it off). The
 licence key is hashed before it is sent. One report per deployment: only
 the leader replica reports.
 
@@ -112,7 +113,7 @@ the leader replica reports.
 TYK_AI_LICENSE=eyJhbGciOiJSUzI1NiIs...     # required in Enterprise Edition
 
 LICENSE_VALIDITY_CHECK_PERIOD=24h          # how often the licence is re-checked
-LICENSE_DISABLE_TELEMETRY=false            # true disables telemetry
+LICENSE_DISABLE_TELEMETRY=true             # default; false enables telemetry
 LICENSE_TELEMETRY_URL=...                  # telemetry endpoint
 LICENSE_TELEMETRY_PERIOD=1h                # how often telemetry is sent
 LICENSE_TELEMETRY_CONCURRENCY=20           # concurrent telemetry requests

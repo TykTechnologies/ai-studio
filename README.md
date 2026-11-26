@@ -398,11 +398,11 @@ ANTHROPIC_API_KEY=your-anthropic-key
 # Database Configuration
 DATABASE_URL=your-database-url
 
-# Telemetry (Optional)
-TELEMETRY_ENABLED=false  # Disable usage statistics collection
+# Telemetry (Optional, off by default)
+TELEMETRY_ENABLED=true  # Opt in to anonymised usage statistics
 ```
 
-**Privacy Note**: Tyk AI Studio collects anonymized usage statistics to improve the platform. No personal data or AI conversation content is collected. Set `TELEMETRY_ENABLED=false` to disable.
+**Privacy Note**: Telemetry is off by default. With `TELEMETRY_ENABLED=true`, Tyk AI Studio sends anonymized usage statistics to help improve the platform; no personal data or AI conversation content is collected. Enterprise Edition license telemetry is likewise off unless `LICENSE_DISABLE_TELEMETRY=false`.
 
 ## Development
 
