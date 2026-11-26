@@ -65,6 +65,10 @@ data:
   {{- with .Values.config.allowedInternalHosts }}
   LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS: {{ . | quote }}
   {{- end }}
+  {{- /* Telemetry: off unless explicitly true (boolean or string). Always
+         rendered, so an image whose built-in default is on stays off too. */}}
+  TELEMETRY_ENABLED: {{ ternary "true" "false" (eq (toString .Values.config.telemetryEnabled) "true") | quote }}
+  LICENSE_DISABLE_TELEMETRY: {{ ternary "false" "true" (eq (toString .Values.config.licenseTelemetryEnabled) "true") | quote }}
   {{- /* Hub-Spoke: Control Plane Mode */}}
   {{- if .Values.config.gatewayMode }}
   GATEWAY_MODE: {{ .Values.config.gatewayMode | quote }}

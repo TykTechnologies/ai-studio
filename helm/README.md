@@ -41,6 +41,8 @@ This Helm chart deploys Midsommar along with its optional components. It support
 | `config.fromEmail` | From email address | `"noreply@tyk.io"` |
 | `config.devMode` | Enable development mode | `"false"` |
 | `config.logLevel` | AI Studio log level (`LOG_LEVEL`): `trace`, `debug`, `info`, `warn`, `error` | `"info"` |
+| `config.telemetryEnabled` | Send anonymised usage counts to Tyk (`TELEMETRY_ENABLED`) | `false` |
+| `config.licenseTelemetryEnabled` | Enterprise Edition: send license usage reports to Tyk (`LICENSE_DISABLE_TELEMETRY=false`) | `false` |
 | `config.filterSignupDomains` | Restrict signup to specific domains | `""` |
 
 ### Database Configuration

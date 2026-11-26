@@ -74,7 +74,7 @@ func (tm *TelemetryManager) Start() {
 
 	logger.Debugf("Telemetry collection started - collecting usage statistics every %v", TelemetryPeriod)
 	logger.Debugf("Telemetry data will be sent to: %s", TelemetryURL)
-	logger.Debug("To disable telemetry, set environment variable: TELEMETRY_ENABLED=false")
+	logger.Debug("Telemetry is on because TELEMETRY_ENABLED=true; unset it or set it to false to turn it off")
 
 	// Send initial telemetry data. A replica that is not the leader yet
 	// (another replica holds the lease, or this process's crashed
