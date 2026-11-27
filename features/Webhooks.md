@@ -9,6 +9,8 @@ JSON payload, with retries, a dead-letter queue and a searchable delivery log.
 
 Target URLs are also credentials (a Slack, Discord or Teams incoming-webhook URL lets anyone post to the channel), so the URL leaves the `webhook_targets` row only masked by `models.MaskWebhookURL`. That covers `WebhookTargetResponse.url` (with `url_masked`), the delivery snapshot (stored masked, and masked on read by `WebhookDelivery.AfterFind` for older rows), transport errors (`maskURLError`; `MaskWebhookURLsInText` on stored errors), notifications and logs. A start-up sweep (`maskStoredURLs`) rewrites delivery and attempt rows written before. An update that sends the masked URL back keeps the stored one, and a changed URL that still contains `***` is refused.
 
+`webhook_targets.url` is `text` and read through `secrets.DecryptValue` (`WebhookTarget.AfterFind`) since schema 48 (o4a.21 part A, 2.3.0). The release still writes it in clear. A later release encrypts it on save, the way `headers` are encrypted (part B): 2.3.0 already reads both forms, so that upgrade rolls once every replica runs 2.3.0 or newer.
+
 Target URLs are an exfiltration vector, so the feature is built around
 approval: a target never receives a delivery until an administrator approves
 its URL, and any change to where it points sends it back for approval.

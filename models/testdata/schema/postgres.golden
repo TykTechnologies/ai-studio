@@ -2594,7 +2594,7 @@ TABLE webhook_targets
   column workspace_id bigint(int8) nullable=NO precision=64 scale=0 default=0
   column name character varying(varchar) nullable=NO len=200
   column description character varying(varchar) nullable=YES len=1024
-  column url character varying(varchar) nullable=NO len=2048
+  column url text(text) nullable=NO
   column status character varying(varchar) nullable=NO len=16
   column paused boolean(bool) nullable=YES
   column topic_filters text(text) nullable=YES
