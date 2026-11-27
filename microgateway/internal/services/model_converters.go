@@ -262,6 +262,10 @@ func ValidateCreateLLMRequest(req *CreateLLMRequest) error {
 		if req.Endpoint == "" {
 			return fmt.Errorf("endpoint is required for Ollama")
 		}
+	case "vertex":
+		if err := validateVertexLLM(req.Name, req.Endpoint, req.APIKey, true, true); err != nil {
+			return err
+		}
 	}
 
 	return nil

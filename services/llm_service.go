@@ -101,6 +101,9 @@ func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int,
 	if err := applyLLMOptions(llm, opts); err != nil {
 		return nil, err
 	}
+	if err := validateLLMVendorConfig(llm, true); err != nil {
+		return nil, err
+	}
 	if err := s.ValidateLLMFailover(llm, llm.Failover); err != nil {
 		return nil, err
 	}
@@ -203,6 +206,9 @@ func (s *Service) CreateLLMWithNamespace(name, apiKey, apiEndpoint string, priva
 		llm.Failover = *failover
 	}
 	if err := applyLLMOptions(llm, opts); err != nil {
+		return nil, err
+	}
+	if err := validateLLMVendorConfig(llm, true); err != nil {
 		return nil, err
 	}
 	if err := s.ValidateLLMFailover(llm, llm.Failover); err != nil {
@@ -336,6 +342,9 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 		llm.Failover = *failover
 	}
 	if err := applyLLMOptions(llm, opts); err != nil {
+		return nil, err
+	}
+	if err := validateLLMVendorConfig(llm, apiKey != "[redacted]"); err != nil {
 		return nil, err
 	}
 	if err := s.ValidateLLMFailover(llm, llm.Failover); err != nil {

@@ -21,7 +21,7 @@ let embedders = [
     name: "Gemini Platform (Vertex)",
     logo: withBase("/logos/vertex.png"),
     helpText:
-      "The Vertex Embed client requires a project name and a region, add this as the Database Connection string as {project:location} (project ID followed by a colon, followed by the region)",
+      "Set the endpoint to {project:location}: the Google Cloud project ID, a colon, and the region (for example my-project:us-central1). The API key is a Google credential JSON (a service account key or a Workload Identity Federation config).",
   },
   {
     code: "google_ai",
@@ -75,6 +75,21 @@ let vectorStores = [
     helpText: "",
   },
 ];
+
+// Help for the connection fields of a Gemini Platform (Vertex) LLM.
+export const VERTEX_LLM_HELP = {
+  endpoint:
+    "project:location: the Google Cloud project ID, a colon, and a region (my-project:us-central1), a multi-region (us, eu) or global. A full https URL is used as it is.",
+  apiKey:
+    "A Google credential JSON: a service account key, or a Workload Identity Federation config for keyless access from AWS, Azure or Kubernetes. You can also reference a stored secret as $SECRET/name. Leave it empty to use the host's Google credentials, if your operator has enabled them (AI_STUDIO_VERTEX_ADC).",
+  keylessWarning:
+    "No API key: gateway routes (/llm, /ai, /v1) refuse this model provider unless the operator has enabled the host's Google credentials (AI_STUDIO_VERTEX_ADC=true). Chat still uses the host's credentials for now, but that is deprecated and will need the same setting in the next release.",
+};
+
+// getLLMFieldHelp returns vendor-specific help for an LLM's endpoint and API
+// key fields, or null when the vendor has none.
+export const getLLMFieldHelp = (vendor) =>
+  vendor === "vertex" ? VERTEX_LLM_HELP : null;
 
 export const fetchVendors = async () => {
   try {

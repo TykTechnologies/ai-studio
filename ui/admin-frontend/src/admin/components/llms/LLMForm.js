@@ -4,6 +4,7 @@ import { slugConflictDetail, focusNameField } from "../../utils/slugConflict";
 import React, { useState, useEffect, useRef } from "react";
 import apiClient from "../../utils/apiClient";
 import focusFirstInvalid from "../../utils/focusFirstInvalid";
+import { getLLMFieldHelp } from "../../utils/vendorUtils";
 import { generateSlug } from "../../components/wizards/quick-start/utils";
 import {
   TextField,
@@ -817,6 +818,7 @@ const LLMForm = () => {
                         name="api_endpoint"
                         value={llm.api_endpoint}
                         onChange={handleChange}
+                        helperText={getLLMFieldHelp(llm.vendor)?.endpoint}
                       />
                     </Grid>
                     <Grid item xs={12}>
@@ -827,7 +829,10 @@ const LLMForm = () => {
                         type={showApiKey ? "text" : "password"}
                         value={llm.api_key}
                         onChange={handleChange}
-                        helperText="Enter the key, or reference a stored secret as $SECRET/name (environment variables as $ENV/NAME only when your operator allows them)."
+                        helperText={
+                          getLLMFieldHelp(llm.vendor)?.apiKey ||
+                          "Enter the key, or reference a stored secret as $SECRET/name (environment variables as $ENV/NAME only when your operator allows them)."
+                        }
                         InputProps={{
                           endAdornment: (
                             <InputAdornment position="end">
@@ -842,6 +847,13 @@ const LLMForm = () => {
                         }}
                       />
                     </Grid>
+                    {getLLMFieldHelp(llm.vendor) && !llm.api_key && (
+                      <Grid item xs={12}>
+                        <Alert severity="warning" data-testid="vertex-keyless-warning">
+                          {getLLMFieldHelp(llm.vendor).keylessWarning}
+                        </Alert>
+                      </Grid>
+                    )}
                     {llm.vendor === "anthropic" && (
                       <Grid item xs={12}>
                         <TextField

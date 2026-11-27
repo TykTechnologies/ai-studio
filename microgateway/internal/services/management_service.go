@@ -137,6 +137,19 @@ func (s *ManagementService) UpdateLLM(id uint, req *UpdateLLMRequest) (*database
 		return nil, fmt.Errorf("LLM not found: %w", err)
 	}
 
+	if llm.Vendor == "vertex" {
+		endpoint, key := llm.Endpoint, ""
+		if req.Endpoint != nil {
+			endpoint = *req.Endpoint
+		}
+		if req.APIKey != nil {
+			key = *req.APIKey
+		}
+		if err := validateVertexLLM(llm.Name, endpoint, key, req.Endpoint != nil, req.APIKey != nil && *req.APIKey != ""); err != nil {
+			return nil, err
+		}
+	}
+
 	// Update fields
 	if req.Name != nil {
 		llm.Name = *req.Name
@@ -461,7 +474,11 @@ func (s *ManagementService) validateCreateLLMRequest(req *CreateLLMRequest) erro
 		if req.APIKey == "" {
 			return fmt.Errorf("API key is required for Anthropic")
 		}
-	case "google", "vertex":
+	case "vertex":
+		if err := validateVertexLLM(req.Name, req.Endpoint, req.APIKey, true, true); err != nil {
+			return err
+		}
+	case "google":
 		// May require different validation
 	case "systemone":
 		// Decision models. The endpoint defaults to TypeSafe's hosted API, which
