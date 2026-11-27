@@ -64,6 +64,8 @@ export const eventSources = (metadata) => {
   if (kinds.includes("tool_definition")) sources.push(named("Tool definition", own, ": "));
   if (kinds.includes("tool_call")) sources.push(named("Tool call", own, " to "));
   if (kinds.includes("tool_result") || (kinds.length === 0 && roles.includes("tool"))) {
+    // The names are the results' when results are the only tool kind, or when
+    // the event predates kinds (toolKinds is then empty: they were all results).
     sources.push(named("Tool result", toolKinds.length <= 1 ? tools : [], " from "));
   } else if (toolKinds.length === 0 && tools.length > 0) {
     sources.push(named("Tool result", tools, " from "));
