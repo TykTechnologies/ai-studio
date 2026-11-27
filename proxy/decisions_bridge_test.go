@@ -436,3 +436,36 @@ func TestUnifiedListModels_ReportsCapabilities(t *testing.T) {
 	assert.Equal(t, "primary/jev-latest", list.Data[0].ID)
 	assert.Equal(t, []string{"decisions"}, list.Data[0].Capabilities)
 }
+
+// An OpenAI provider serves chat and decision models with one key: each
+// model is listed with its own capabilities, so a chat model (which answers
+// /v1/decisions with 404 model_not_found) is not advertised as a decision
+// model, nor a decision model as a chat one.
+func TestUnifiedListModels_ReportsCapabilitiesPerModel(t *testing.T) {
+	t.Parallel()
+	h := newFailoverHarness(t, serveSystemOneDecision(), serveStatus(500), func(primary, _ *models.LLM) {
+		primary.Vendor = models.OPENAI
+		primary.DefaultModel = "gpt-6-luna"
+		primary.AllowedModels = []string{"gpt-5.6-luna"}
+		primary.Failover = models.LLMFailover{}
+	})
+	req, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+strconv.Itoa(h.port)+"/v1/models", nil)
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+h.apiKey)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+
+	var list unifiedModelList
+	require.NoError(t, json.Unmarshal(body, &list))
+	caps := map[string][]string{}
+	for _, m := range list.Data {
+		caps[m.ID] = m.Capabilities
+	}
+	assert.Equal(t, map[string][]string{
+		"primary/gpt-5.6-luna": {"chat", "embeddings"},
+		"primary/gpt-6-luna":   {"decisions"},
+	}, caps, string(body))
+}
