@@ -10,14 +10,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Vertex and HuggingFace LLMs cannot be served on /ai and /v1: their drivers
-// cannot route through /llm/. The caller gets a 400 that says so and names the
-// /llm/ routes, and nothing leaves the gateway. Vertex used to send the
-// caller's App credential to generativelanguage.googleapis.com and fail there;
-// HuggingFace answered 500.
+// HuggingFace LLMs cannot be served on /ai and /v1: their driver cannot route
+// through /llm/. The caller gets a 400 that says so and names the /llm/
+// routes, and nothing leaves the gateway (HuggingFace answered 500). Vertex
+// is served there now (vertex_unified_test.go).
 func TestAI_UnsupportedVendorIsAClearClientError(t *testing.T) {
 	t.Parallel()
-	for _, vendor := range []models.Vendor{models.VERTEX, models.HUGGINGFACE} {
+	for _, vendor := range []models.Vendor{models.HUGGINGFACE} {
 		for name, body := range map[string]string{"buffered": failoverChatBody, "streaming": failoverStreamBody} {
 			t.Run(string(vendor)+"/"+name, func(t *testing.T) {
 				h := newFailoverHarness(t, serveOpenAIText("never"), serveOpenAIText("never"), func(primary, _ *models.LLM) {
@@ -50,7 +49,7 @@ func TestAI_UnsupportedVendorIsAClearClientError(t *testing.T) {
 func TestAI_UnsupportedVendorFailsOverToTheNextRung(t *testing.T) {
 	t.Parallel()
 	h := newFailoverHarness(t, serveOpenAIText("never"), serveOpenAIText("from the fallback"), func(primary, _ *models.LLM) {
-		primary.Vendor = models.VERTEX
+		primary.Vendor = models.HUGGINGFACE
 	})
 
 	resp, body := h.post("/ai/primary/v1/chat/completions", failoverChatBody)

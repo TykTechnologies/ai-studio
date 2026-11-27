@@ -187,7 +187,11 @@ func fetchDriverWithHTTPClient(LLMConfig *models.LLM, settings *models.LLMSettin
 		}
 		return ollama.New(opts...)
 
-	case models.GOOGLEAI:
+	case models.GOOGLEAI, models.VERTEX:
+		// Vertex speaks the Gemini API's wire format, so the Google AI client
+		// drives it too: on the loopback its Gemini API paths are mapped to
+		// the LLM's Vertex path on /llm/call (vertexGeminiPathMiddleware),
+		// and /llm/ sets Vertex's auth.
 		withEndpoint := func(endpoint string) googleai.Option {
 			return func(opts *googleai.Options) {
 				opts.ClientOptions = append(opts.ClientOptions, option.WithEndpoint(endpoint))
@@ -205,13 +209,6 @@ func fetchDriverWithHTTPClient(LLMConfig *models.LLM, settings *models.LLMSettin
 		}
 
 		return googleai.New(context.Background(), opts...)
-
-	case models.VERTEX:
-		// Not supported. The only client here speaks the Gemini Developer API,
-		// not Vertex's, and it cannot be pointed at the internal /llm/ route:
-		// it went to generativelanguage.googleapis.com carrying the caller's
-		// App credential, and failed there.
-		return nil, &UnsupportedOnUnifiedAPIError{Vendor: LLMConfig.Vendor}
 
 	case models.BEDROCK:
 		return nil, fmt.Errorf("vendor bedrock uses direct AWS SDK calls, not langchaingo HTTP clients")

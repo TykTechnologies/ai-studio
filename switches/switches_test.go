@@ -416,18 +416,18 @@ func TestFetchDriver_WithHTTPClient_AllVendors(t *testing.T) {
 			},
 		},
 		{
-			// Vertex has no client that can route through /llm/; the old one
-			// sent the caller's credential to generativelanguage.googleapis.com.
-			name:   "Vertex is not supported",
+			// The Google AI client drives Vertex through /llm/call, where its
+			// Gemini API paths are mapped to the Vertex path.
+			name:   "Vertex with custom HTTP client",
 			vendor: models.VERTEX,
 			llmConfig: &models.LLM{
-				Vendor: models.VERTEX,
-				APIKey: "test-key",
+				Vendor:      models.VERTEX,
+				APIKey:      "test-key",
+				APIEndpoint: "http://127.0.0.1:8080/llm/call/vertex",
 			},
 			settings: &models.LLMSettings{
-				ModelName: "gemini-pro",
+				ModelName: "gemini-2.5-flash",
 			},
-			wantErr: true,
 		},
 		{
 			name:   "HuggingFace is not supported",
