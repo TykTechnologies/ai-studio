@@ -31,7 +31,7 @@ func exceptionSnapshot(exceptions ...*pb.GuardrailExceptionConfig) *pb.Configura
 // heartbeat. A snapshot without exceptions removes them.
 func TestEdgeSync_GuardrailExceptionSoftensOnTheEdge(t *testing.T) {
 	t.Cleanup(func() { scripting.SetExceptionSource(nil) })
-	GuardrailExceptionHits.DrainMatched()
+	GuardrailExceptionHits.DrainCounts()
 	db := setupToolsSyncTestDB(t)
 	sync := NewEdgeSyncService(db, "")
 	p := &edgeFake{}
@@ -49,9 +49,11 @@ func TestEdgeSync_GuardrailExceptionSoftensOnTheEdge(t *testing.T) {
 	assert.False(t, out.Block, "softened to log")
 	require.NotEmpty(t, out.ComplianceEvents, "still recorded")
 	assert.Equal(t, []uint{21}, out.ComplianceEvents[0].Metadata["exceptions"])
-	assert.Equal(t, []uint32{21}, GuardrailExceptionHits.DrainMatched(), "the hit goes to the hub in the next heartbeat")
+	assert.False(t, run(10).Block)
+	// o4a.13: each request counts, not just the exception.
+	assert.Equal(t, map[uint32]uint32{21: 2}, GuardrailExceptionHits.DrainCounts(), "the hits go to the hub in the next heartbeat")
 	assert.True(t, run(11).Block, "another App keeps the filter's action")
-	assert.Empty(t, GuardrailExceptionHits.DrainMatched())
+	assert.Empty(t, GuardrailExceptionHits.DrainCounts())
 
 	require.NoError(t, sync.SyncConfiguration(exceptionSnapshot()))
 	assert.True(t, run(10).Block, "the next snapshot without it removes it")
@@ -224,4 +226,20 @@ func dropTimings(v any) any {
 		return out
 	}
 	return v
+}
+
+// The counts are bounded: ids beyond the cap are dropped, and a count
+// saturates rather than wrapping.
+func TestExceptionHitCounts_Bounded(t *testing.T) {
+	c := &exceptionHitCounts{}
+	for i := uint32(1); i <= maxPendingTemplateMatches+10; i++ {
+		c.addN(i, 1)
+	}
+	c.addN(1, ^uint32(0))
+	got := c.DrainCounts()
+	assert.Len(t, got, maxPendingTemplateMatches)
+	assert.Equal(t, ^uint32(0), got[1])
+	c.RequeueCounts(map[uint32]uint32{7: 2})
+	c.addN(7, 1)
+	assert.Equal(t, map[uint32]uint32{7: 3}, c.DrainCounts())
 }

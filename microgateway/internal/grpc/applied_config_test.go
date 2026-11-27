@@ -57,11 +57,22 @@ func TestHeartbeatRequeuesTemplateMatches(t *testing.T) {
 	assert.Equal(t, []uint32{4, 9}, matches.requeued)
 }
 
-// ... and so does it with the guardrail exception hits.
+type fakeExceptionHits struct{ pending, requeued map[uint32]uint32 }
+
+func (f *fakeExceptionHits) DrainCounts() map[uint32]uint32 {
+	out := f.pending
+	f.pending = nil
+	return out
+}
+
+func (f *fakeExceptionHits) RequeueCounts(c map[uint32]uint32) { f.requeued = c }
+
+// ... and so does it with the guardrail exception hits, with their counts
+// (o4a.13).
 func TestHeartbeatRequeuesExceptionHits(t *testing.T) {
 	client := NewSimpleEdgeClient(&config.Config{HubSpoke: config.HubSpokeConfig{EdgeID: "e"}}, "test", "hash", "time")
-	hits := &fakeTemplateMatches{pending: []uint32{12}}
+	hits := &fakeExceptionHits{pending: map[uint32]uint32{12: 3}}
 	client.SetExceptionHitSource(hits)
 	client.sendHeartbeatMessage() // no stream: the send fails
-	assert.Equal(t, []uint32{12}, hits.requeued)
+	assert.Equal(t, map[uint32]uint32{12: 3}, hits.requeued)
 }

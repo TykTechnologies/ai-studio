@@ -82,6 +82,8 @@ describe("AppPromptTemplates", () => {
     expect(within(row).getByText("user / any / both")).toBeInTheDocument();
     expect(await within(row).findByText("Ada Admin")).toBeInTheDocument();
     expect(within(screen.getByTestId("prompt-template-14")).getByText("proposed")).toBeInTheDocument();
+    // o4a.13: last matched is written at most every 10 minutes.
+    expect(screen.getByText("Last matched (±10 min)")).toHaveAttribute("title", "Recorded to within 10 minutes");
   });
 
   it("does not offer Approve to someone who is not a full administrator", async () => {

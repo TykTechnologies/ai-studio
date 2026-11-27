@@ -174,7 +174,8 @@ const AppPromptTemplates = ({ appId, embedded = false }) => {
                   <StyledTableHeaderCell>Status</StyledTableHeaderCell>
                   <StyledTableHeaderCell>Placement</StyledTableHeaderCell>
                   <StyledTableHeaderCell>Approved</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Last matched</StyledTableHeaderCell>
+                  {/* o4a.13: written at most every 10 minutes (expiry counts days). */}
+                  <StyledTableHeaderCell title="Recorded to within 10 minutes">Last matched (±10 min)</StyledTableHeaderCell>
                   <StyledTableHeaderCell>Expires</StyledTableHeaderCell>
                   <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                 </TableRow>

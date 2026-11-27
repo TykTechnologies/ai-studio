@@ -173,7 +173,8 @@ const AppGuardrailExceptions = ({ appId, capability }) => {
                   <StyledTableHeaderCell>Status</StyledTableHeaderCell>
                   <StyledTableHeaderCell>Approved</StyledTableHeaderCell>
                   <StyledTableHeaderCell>Hits</StyledTableHeaderCell>
-                  <StyledTableHeaderCell>Last hit</StyledTableHeaderCell>
+                  {/* o4a.13: written at most once a minute per exception. */}
+                  <StyledTableHeaderCell title="Recorded to within a minute">Last hit (±1 min)</StyledTableHeaderCell>
                   <StyledTableHeaderCell>Expires</StyledTableHeaderCell>
                   <StyledTableHeaderCell align="right">Actions</StyledTableHeaderCell>
                 </TableRow>

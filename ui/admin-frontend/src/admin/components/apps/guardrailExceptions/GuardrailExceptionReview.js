@@ -88,7 +88,8 @@ const GuardrailExceptionReview = ({ open, appId, exception, filterName, canAppro
           {row("Justification", exception.justification)}
           {row("Proposed by", userName(exception.proposed_by))}
           {exception.approved_at && row("Approved", `${userName(exception.approved_by)}, ${formatTime(exception.approved_at)}`)}
-          {row("Hits", `${exception.hit_count || 0} (last ${formatTime(exception.last_hit_at)})`)}
+          {/* o4a.13: hits are written at most once a minute per exception. */}
+          {row("Hits", `${exception.hit_count || 0} (last ${formatTime(exception.last_hit_at)}${exception.last_hit_at ? ", to within a minute" : ""})`)}
           {row(
             "Expires",
             expiry ? formatTime(expiry) : `${exception.expires_after_days} days without a hit, once approved`
