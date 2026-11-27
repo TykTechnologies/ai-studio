@@ -372,14 +372,15 @@ func TokenSource(llm *models.LLM) (oauth2.TokenSource, error) {
 }
 
 // EmbedderTokenSource is TokenSource for an embedder: its key, cached per
-// embedder ID. The test override sees it as an LLM named "embedder <ID>".
+// embedder ID. The test override sees it as an LLM named "embedder <ID>"
+// with the embedder's ID.
 func EmbedderTokenSource(spec *models.EmbedderSpec) (oauth2.TokenSource, error) {
 	if spec == nil {
 		return nil, fmt.Errorf("%w: no embedder", ErrNoCredential)
 	}
 	name := fmt.Sprintf("embedder %d", spec.EmbedderID)
 	if fn := currentOverride(); fn != nil {
-		return fn(&models.LLM{Name: name, Vendor: models.VERTEX, APIKey: spec.APIKey})
+		return fn(&models.LLM{ID: spec.EmbedderID, Name: name, Vendor: models.VERTEX, APIKey: spec.APIKey})
 	}
 	return tokenSourceFor(cacheKey{kind: "embedder", id: spec.EmbedderID}, name, spec.APIKey)
 }

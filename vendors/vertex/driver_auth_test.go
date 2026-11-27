@@ -2,8 +2,8 @@ package vertexVendor
 
 import (
 	"bytes"
-	"fmt"
 	"log/slog"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -13,11 +13,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
+	"google.golang.org/api/option"
 )
 
 type oauthTS = oauth2.TokenSource
-
-func typeName(v any) string { return fmt.Sprintf("%T", v) }
 
 // captureWarnings collects slog output for the test and resets the
 // once-per-owner deprecation memory.
@@ -34,15 +33,17 @@ func captureWarnings(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-// authOptionCount counts the token-source client options in opts.
+// authOptionCount counts the token-source client options in opts, by
+// comparing with the type option.WithTokenSource returns.
 func authOptionCount(opts []googleai.Option) int {
 	o := googleai.DefaultOptions()
 	for _, opt := range opts {
 		opt(&o)
 	}
+	want := reflect.TypeOf(option.WithTokenSource(nil))
 	n := 0
 	for _, co := range o.ClientOptions {
-		if strings.Contains(strings.ToLower(typeName(co)), "tokensource") {
+		if reflect.TypeOf(co) == want {
 			n++
 		}
 	}
