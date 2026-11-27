@@ -238,6 +238,22 @@ describe("TranscriptView", () => {
     expect(placeholders).toEqual(expect.arrayContaining(["Hashed: only a fingerprint was stored", "Redacted (3 values)"]));
   });
 
+  it("says a redacted tool-call-only response called tools, never 'Redacted (0 values)'", () => {
+    const toolsOnly = {
+      ...llm1,
+      tool_call_ids: ["call_1", "call_2"],
+      content_state: "redacted",
+      parts: [
+        llm1.parts[0],
+        { part: "response", content_state: "redacted", media_type: "application/json", original_bytes: 300, redaction_count: 0 },
+      ],
+    };
+    renderTranscript({ list: spans.map((s) => (s === llm1 ? toolsOnly : s)) });
+    const first = screen.getAllByTestId("assistant-step")[0];
+    expect(within(first).getByTestId("tool-calls-only")).toHaveTextContent("Called 2 tools");
+    expect(screen.queryByText(/Redacted \(0 values\)|nothing redacted/)).not.toBeInTheDocument();
+  });
+
   it("expands a sub-agent card in place, keeping the scroll position", () => {
     renderTranscript();
     const feed = screen.getByTestId("transcript");
