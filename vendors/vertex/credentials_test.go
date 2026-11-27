@@ -9,11 +9,11 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -32,6 +32,8 @@ type fakeGoogle struct {
 	srv   *httptest.Server
 	mints atomic.Int32
 	fail  atomic.Bool
+	// expiresIn overrides the minted tokens' lifetime in seconds (0: 3600).
+	expiresIn atomic.Int32
 }
 
 func newFakeGoogle(t *testing.T) *fakeGoogle {
@@ -53,8 +55,12 @@ func newFakeGoogle(t *testing.T) *fakeGoogle {
 			if r.Form.Get("grant_type") == "refresh_token" {
 				kind = "user"
 			}
+			exp := int32(3600)
+			if e := f.expiresIn.Load(); e > 0 {
+				exp = e
+			}
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"access_token": kind + "-" + itoa(n), "token_type": "Bearer", "expires_in": 3600,
+				"access_token": kind + "-" + itoa(n), "token_type": "Bearer", "expires_in": exp,
 			})
 		case "/sts": // external_account token exchange
 			if r.Form.Get("subject_token") != "oidc-subject-token" {
@@ -87,11 +93,10 @@ func itoa(n int32) string { return strconv.Itoa(int(n)) }
 // starts each test with an empty cache.
 func allowLocalEndpoints(t *testing.T) {
 	t.Helper()
-	prev := credentialURLAllowed
-	credentialURLAllowed = func(u *url.URL) bool { return u.Hostname() == "127.0.0.1" || isGoogleEndpoint(u) }
+	restore := AllowLoopbackCredentialEndpointsForTests()
 	resetTokenSourceCache()
 	t.Cleanup(func() {
-		credentialURLAllowed = prev
+		restore()
 		resetTokenSourceCache()
 	})
 }
@@ -203,7 +208,19 @@ func TestProxySetAuthHeader_ExternalAccountUsesSTS(t *testing.T) {
 		"token_url":          g.srv.URL + "/sts",
 		"credential_source":  map[string]any{"file": subject},
 	})
+	// A file source reads the host's identity: refused while the operator
+	// has not opted in, and STS is never called.
+	t.Setenv(ADCSetting, "")
 	h, err := authHeader(t, &models.LLM{ID: 2, Name: "wif", Vendor: models.VERTEX, APIKey: key})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrHostCredentialSource), err)
+	assert.True(t, errors.Is(err, ErrInvalidCredential))
+	assert.Contains(t, err.Error(), ADCSetting)
+	assert.Empty(t, h)
+	assert.Zero(t, g.mints.Load())
+
+	t.Setenv(ADCSetting, "true")
+	h, err = authHeader(t, &models.LLM{ID: 2, Name: "wif", Vendor: models.VERTEX, APIKey: key})
 	require.NoError(t, err)
 	assert.Equal(t, "Bearer sts-1", h)
 }
@@ -270,6 +287,8 @@ func TestProxySetAuthHeader_InvalidKeysErrorWithoutKeyMaterial(t *testing.T) {
 		"no client_email":    `{"type":"service_account","private_key":"` + secret + `"}`,
 		"foreign token_uri":  `{"type":"service_account","private_key":"` + secret + `","token_uri":"https://evil.example/token"}`,
 		"http google host":   `{"type":"service_account","private_key":"` + secret + `","token_uri":"http://oauth2.googleapis.com/token"}`,
+		"userinfo host":      `{"type":"service_account","private_key":"` + secret + `","token_uri":"https://oauth2.googleapis.com@evil.example/token"}`,
+		"fragment host":      `{"type":"service_account","private_key":"` + secret + `","token_uri":"https://evil.example#.googleapis.com"}`,
 		"lookalike host":     `{"type":"service_account","private_key":"` + secret + `","token_uri":"https://oauth2.googleapis.com.evil.example/token"}`,
 		"executable source":  `{"type":"external_account","audience":"x","subject_token_type":"y","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"executable":{"command":"/bin/echo ` + secret + `"}}}`,
 		"ssrf url source":    `{"type":"external_account","audience":"x","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"url":"http://10.0.0.5/admin?` + secret + `"}}`,
@@ -280,7 +299,7 @@ func TestProxySetAuthHeader_InvalidKeysErrorWithoutKeyMaterial(t *testing.T) {
 		"bad source type":    `{"type":"impersonated_service_account","service_account_impersonation_url":"https://iamcredentials.googleapis.com/v1/x:generateAccessToken","source_credentials":{"type":"nope","private_key":"` + secret + `"}}`,
 	}
 	// Point the validator back at the production rule.
-	credentialURLAllowed = isGoogleEndpoint
+	defer SetCredentialURLAllowedForTests(isGoogleEndpoint)()
 	for name, key := range cases {
 		t.Run(name, func(t *testing.T) {
 			_, err := authHeader(t, &models.LLM{ID: 9, Name: "bad", Vendor: models.VERTEX, APIKey: key})
@@ -326,12 +345,102 @@ func TestValidateCredentialJSON_ProductionHosts(t *testing.T) {
 	_, err = ValidateCredentialJSON(`{"type":"authorized_user","token_uri":"https://accounts.google.com/o/oauth2/token"}`)
 	require.NoError(t, err)
 
-	_, err = ValidateCredentialJSON(`{"type":"external_account","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"environment_id":"aws1","region_url":"http://169.254.169.254/latest/meta-data/placement/availability-zone"}}`)
-	require.NoError(t, err, "AWS WIF reads the instance metadata server")
+}
 
-	_, err = ValidateCredentialJSON(`{"type":"external_account","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"url":"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01","headers":{"Metadata":"True"}}}`)
-	require.NoError(t, err, "Azure WIF reads IMDS")
+// Host-sourced WIF configs (Martin, 2026-11-28): refused unless the
+// operator set AI_STUDIO_VERTEX_ADC=true, both at validation and at use.
+func TestValidateCredentialJSON_HostSourcedWIFNeedsOptIn(t *testing.T) {
+	hostSourced := map[string]string{
+		"AWS (environment + metadata)": `{"type":"external_account","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"environment_id":"aws1","region_url":"http://169.254.169.254/latest/meta-data/placement/availability-zone"}}`,
+		"AWS (environment only)":       `{"type":"external_account","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"environment_id":"aws1"}}`,
+		"Azure (IMDS)":                 `{"type":"external_account","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"url":"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01","headers":{"Metadata":"True"}}}`,
+		"Kubernetes projected token":   `{"type":"external_account","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"file":"/var/run/secrets/tokens/gcp-ksa/token"}}`,
+		"x509 certificate":             `{"type":"external_account","token_url":"https://sts.mtls.googleapis.com/v1/token","credential_source":{"certificate":{"use_default_certificate_config":true}}}`,
+		"impersonated, WIF source":     `{"type":"impersonated_service_account","service_account_impersonation_url":"https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/sa@p.iam.gserviceaccount.com:generateAccessToken","source_credentials":{"type":"external_account","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"file":"/var/run/token"}}}`,
+	}
+	for name, key := range hostSourced {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(ADCSetting, "")
+			_, err := ValidateCredentialJSON(key)
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, ErrHostCredentialSource), err)
+			assert.Contains(t, err.Error(), ADCSetting)
 
-	_, err = ValidateCredentialJSON(`{"type":"external_account","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"file":"/var/run/secrets/tokens/gcp-ksa/token"}}`)
-	require.NoError(t, err, "Kubernetes projected token file")
+			t.Setenv(ADCSetting, "true")
+			_, err = ValidateCredentialJSON(key)
+			assert.NoError(t, err)
+		})
+	}
+
+	// A credential that reads nothing of the host needs no opt-in.
+	t.Setenv(ADCSetting, "")
+	_, err := ValidateCredentialJSON(mustJSON(t, serviceAccountJSON(t, "https://oauth2.googleapis.com/token")))
+	assert.NoError(t, err)
+}
+
+func TestAccessToken_ConcurrentCallsMintOnce(t *testing.T) {
+	allowLocalEndpoints(t)
+	g := newFakeGoogle(t)
+	llm := &models.LLM{ID: 50, Name: "vx", Vendor: models.VERTEX, APIKey: mustJSON(t, serviceAccountJSON(t, g.srv.URL+"/token"))}
+
+	var wg sync.WaitGroup
+	tokens := make([]string, 32)
+	for i := range tokens {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			tok, err := AccessToken(llm)
+			assert.NoError(t, err)
+			tokens[i] = tok
+		}(i)
+	}
+	wg.Wait()
+	for _, tok := range tokens {
+		assert.Equal(t, "sa-1", tok)
+	}
+	assert.EqualValues(t, 1, g.mints.Load(), "concurrent first calls share one mint")
+}
+
+func TestAccessToken_RefreshedNearExpiry(t *testing.T) {
+	allowLocalEndpoints(t)
+	g := newFakeGoogle(t)
+	// oauth2 treats a token as expired 10 s early, so a 5 s token is
+	// refreshed on the next call.
+	g.expiresIn.Store(5)
+	llm := &models.LLM{ID: 51, Name: "vx", Vendor: models.VERTEX, APIKey: mustJSON(t, serviceAccountJSON(t, g.srv.URL+"/token"))}
+
+	h, err := authHeader(t, llm)
+	require.NoError(t, err)
+	assert.Equal(t, "Bearer sa-1", h)
+	h, err = authHeader(t, llm)
+	require.NoError(t, err)
+	assert.Equal(t, "Bearer sa-2", h, "an expiring token is replaced")
+
+	g.expiresIn.Store(3600)
+	h, _ = authHeader(t, llm)
+	assert.Equal(t, "Bearer sa-3", h)
+	h, _ = authHeader(t, llm)
+	assert.Equal(t, "Bearer sa-3", h, "a fresh token is reused")
+}
+
+func TestTokenSource_SharedKeyEntriesAreIndependent(t *testing.T) {
+	allowLocalEndpoints(t)
+	g := newFakeGoogle(t)
+	key := mustJSON(t, serviceAccountJSON(t, g.srv.URL+"/token"))
+	a := &models.LLM{ID: 60, Name: "a", Vendor: models.VERTEX, APIKey: key}
+	b := &models.LLM{ID: 61, Name: "b", Vendor: models.VERTEX, APIKey: key}
+	tsA, err := TokenSource(a)
+	require.NoError(t, err)
+	tsB, err := TokenSource(b)
+	require.NoError(t, err)
+
+	rotated := *a
+	rotated.APIKey = mustJSON(t, serviceAccountJSON(t, g.srv.URL+"/token"))
+	tsA2, err := TokenSource(&rotated)
+	require.NoError(t, err)
+	assert.NotSame(t, tsA, tsA2)
+
+	again, err := TokenSource(b)
+	require.NoError(t, err)
+	assert.Equal(t, tsB, again, "rotating one LLM's key keeps the other's source")
 }

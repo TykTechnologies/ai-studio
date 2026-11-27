@@ -226,6 +226,8 @@ A Gemini Platform (Vertex) LLM normally carries its own Google credential in its
 
 *   Use the host's Application Default Credentials for Vertex LLMs with an empty API key (`AI_STUDIO_VERTEX_ADC`): default `false`. When it is on, the lookup order is `GOOGLE_APPLICATION_CREDENTIALS`, then gcloud user credentials, then the GCP metadata server (GKE Workload Identity, Cloud Run, Compute Engine).
 
+The same setting governs Workload Identity Federation configs that read the host's own identity. An `external_account` credential whose `credential_source` is a file (such as a Kubernetes projected token), the instance metadata service (AWS, Azure, GCP), the AWS environment, or client certificate files is refused unless `AI_STUDIO_VERTEX_ADC=true`. It is refused both when the LLM is saved and when a request uses it, and the error names the setting. Otherwise anyone who can edit an LLM could borrow the host's cloud identity.
+
 The setting is off by default because it is a deliberate exception to the rule that the gateway never reads vendor credentials from the host. An LLM's own credential always takes precedence. When the setting is off, a key-less Vertex LLM is refused on gateway routes with an error that names this setting. The Microgateway reads the same variable, and each edge then needs its own GCP identity with access to Vertex AI. The startup log of AI Studio and of each edge says whether the setting is on and whether host credentials were found. It never logs the credentials themselves.
 
 ### Trusted prompt templates
