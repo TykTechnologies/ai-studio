@@ -157,3 +157,46 @@ func TestProxySetAuthHeader_DropsCallerGeminiKey(t *testing.T) {
 	assert.Empty(t, r.Header.Get("x-goog-api-key"))
 	assert.Equal(t, "alt=sse", r.URL.RawQuery)
 }
+
+func TestNativePathFromGeminiAPI(t *testing.T) {
+	llm := &models.LLM{Vendor: models.VERTEX, APIEndpoint: "my-project:us-central1"}
+	native := "/v1/projects/my-project/locations/us-central1/publishers/google/models/gemini-2.5-flash:"
+	for path, want := range map[string]string{
+		"/v1beta/models/gemini-2.5-flash:generateContent":       native + "generateContent",
+		"/v1beta/models/gemini-2.5-flash:streamGenerateContent": native + "streamGenerateContent",
+		"/v1/models/gemini-2.5-flash:generateContent":           native + "generateContent",
+		"/v1beta/models/gemini-2.5-flash:countTokens":           native + "countTokens",
+	} {
+		got, changed, err := NativePathFromGeminiAPI(llm, path)
+		require.NoError(t, err, path)
+		assert.True(t, changed, path)
+		assert.Equal(t, want, got, path)
+	}
+
+	// Anything else is left as it is: a Vertex path, other Gemini API calls.
+	for _, path := range []string{
+		native + "generateContent",
+		"/v1beta/models",
+		"/v1beta/models/gemini-2.5-flash",
+		"/v1beta/models/gemini-2.5-flash:generateContent/x",
+		"/v1beta/tunedModels/x:generateContent",
+		"/v2/models/gemini-2.5-flash:generateContent",
+	} {
+		got, changed, err := NativePathFromGeminiAPI(llm, path)
+		require.NoError(t, err, path)
+		assert.False(t, changed, path)
+		assert.Equal(t, path, got)
+	}
+
+	// A domain-scoped project keeps its colon; multi-region and global work.
+	got, _, err := NativePathFromGeminiAPI(&models.LLM{APIEndpoint: "example.com:proj:global"}, "/v1beta/models/m:generateContent")
+	require.NoError(t, err)
+	assert.Equal(t, "/v1/projects/example.com:proj/locations/global/publishers/google/models/m:generateContent", got)
+
+	// A URL endpoint names no project or location.
+	_, _, err = NativePathFromGeminiAPI(&models.LLM{APIEndpoint: "https://vertex.example"}, "/v1beta/models/m:generateContent")
+	assert.ErrorIs(t, err, ErrNoProjectLocation)
+	_, changed, err := NativePathFromGeminiAPI(&models.LLM{APIEndpoint: "https://vertex.example"}, native+"generateContent")
+	assert.NoError(t, err, "a Vertex path needs no mapping")
+	assert.False(t, changed)
+}

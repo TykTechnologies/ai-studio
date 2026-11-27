@@ -132,3 +132,32 @@ func UpstreamBaseURLFor(endpoint string) (string, error) {
 		return fmt.Sprintf("https://%s-aiplatform.googleapis.com", location), nil
 	}
 }
+
+// ErrNoProjectLocation is returned when a Gemini API path cannot be mapped to
+// a Vertex path because the LLM's endpoint is a URL, which names neither the
+// project nor the location.
+var ErrNoProjectLocation = errors.New("vertex LLM endpoint is a URL, so a Gemini API path cannot be mapped to a Vertex path; set the endpoint to project:location or call the Vertex path (/v1/projects/{project}/locations/{location}/publishers/google/models/{model}:{method})")
+
+// geminiAPIPath matches a Gemini API (generativelanguage) model call:
+// /v1beta/models/{model}:{method} or /v1/models/{model}:{method}.
+var geminiAPIPath = regexp.MustCompile(`^/(v1|v1beta)/models/([^/:]+):([A-Za-z]+)$`)
+
+// NativePathFromGeminiAPI maps a Gemini API path (what the Google AI client
+// sends) to the Vertex path for the LLM's project and location:
+//
+//	/v1beta/models/{m}:{method} -> /v1/projects/{p}/locations/{l}/publishers/google/models/{m}:{method}
+//
+// The query (alt=sse) is not part of path and stays as it is. changed is
+// false, with no error, for any other path (a Vertex path included), which is
+// left to the upstream as it is.
+func NativePathFromGeminiAPI(llm *models.LLM, path string) (native string, changed bool, err error) {
+	m := geminiAPIPath.FindStringSubmatch(path)
+	if m == nil {
+		return path, false, nil
+	}
+	project, location, ok := ParseProjectLocation(llm.APIEndpoint)
+	if !ok {
+		return path, false, ErrNoProjectLocation
+	}
+	return fmt.Sprintf("/v1/projects/%s/locations/%s/publishers/google/models/%s:%s", project, location, m[2], m[3]), true, nil
+}
