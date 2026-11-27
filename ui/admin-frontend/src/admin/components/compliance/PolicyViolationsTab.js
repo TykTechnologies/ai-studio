@@ -22,6 +22,25 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import apiClient from "../../utils/apiClient";
 
+// What a filter or guardrail did, for the event breakdowns (o4a.4): most
+// events let the request go on, so they are never counted as blocks.
+export const ACTION_LABELS = {
+  block: "blocked",
+  quarantine: "quarantined",
+  remove: "removed",
+  redact: "redacted",
+  alert: "alerted",
+  log: "logged",
+  other: "other",
+};
+const ACTION_ORDER = ["block", "quarantine", "remove", "redact", "alert", "log", "other"];
+
+/** actionBreakdown renders {quarantine: 2, block: 1} as "1 blocked · 2 quarantined". */
+export const actionBreakdown = (byAction) =>
+  ACTION_ORDER.filter((a) => (byAction || {})[a] > 0)
+    .map((a) => `${byAction[a]} ${ACTION_LABELS[a]}`)
+    .join(" · ");
+
 const PolicyViolationsTab = ({ data, onAppClick, startDate, endDate }) => {
   // Track expanded rows and their loaded records
   const [expandedRows, setExpandedRows] = useState({});
@@ -73,17 +92,37 @@ const PolicyViolationsTab = ({ data, onAppClick, startDate, endDate }) => {
     );
   }
 
+  // Blocked requests and filter or guardrail events are drawn apart; an
+  // older server sends only the summed timeline.
+  const split = Array.isArray(data.timeline_blocks) && Array.isArray(data.timeline_events);
   const chartData = {
     labels: data.timeline?.map((t) => t.date) || [],
-    datasets: [
-      {
-        label: "Policy Violations",
-        data: data.timeline?.map((t) => t.count) || [],
-        borderColor: "rgb(255, 159, 64)",
-        backgroundColor: "rgba(255, 159, 64, 0.5)",
-        tension: 0.1,
-      },
-    ],
+    datasets: split
+      ? [
+          {
+            label: "Blocked requests",
+            data: data.timeline_blocks.map((t) => t.count),
+            borderColor: "rgb(211, 47, 47)",
+            backgroundColor: "rgba(211, 47, 47, 0.5)",
+            tension: 0.1,
+          },
+          {
+            label: "Filter and guardrail events",
+            data: data.timeline_events.map((t) => t.count),
+            borderColor: "rgb(255, 159, 64)",
+            backgroundColor: "rgba(255, 159, 64, 0.5)",
+            tension: 0.1,
+          },
+        ]
+      : [
+          {
+            label: "Blocks and filter events",
+            data: data.timeline?.map((t) => t.count) || [],
+            borderColor: "rgb(255, 159, 64)",
+            backgroundColor: "rgba(255, 159, 64, 0.5)",
+            tension: 0.1,
+          },
+        ],
   };
 
   const chartOptions = {
@@ -150,6 +189,9 @@ const PolicyViolationsTab = ({ data, onAppClick, startDate, endDate }) => {
             <Typography variant="body2" color="text.secondary">
               Blocked Requests
             </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Refused by a policy, filter or guardrail
+            </Typography>
           </StyledPaper>
         </Grid>
         <Grid item xs={4}>
@@ -158,8 +200,13 @@ const PolicyViolationsTab = ({ data, onAppClick, startDate, endDate }) => {
               {data.total_flagged || 0}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Flagged Requests
+              Filter and guardrail events
             </Typography>
+            {actionBreakdown(data.events_by_action) && (
+              <Typography variant="caption" color="text.secondary" data-testid="events-by-action">
+                {actionBreakdown(data.events_by_action)}
+              </Typography>
+            )}
           </StyledPaper>
         </Grid>
         <Grid item xs={4}>
@@ -177,7 +224,7 @@ const PolicyViolationsTab = ({ data, onAppClick, startDate, endDate }) => {
       {/* Timeline Chart */}
       <StyledPaper sx={{ p: 2, mb: 3, height: 300 }}>
         <Typography variant="subtitle2" gutterBottom>
-          Policy Violations Over Time
+          Blocks and filter events over time
         </Typography>
         {data.timeline && data.timeline.length > 0 ? (
           <MemoizedLineChart options={chartOptions} data={chartData} />
@@ -190,7 +237,7 @@ const PolicyViolationsTab = ({ data, onAppClick, startDate, endDate }) => {
 
       {/* Violations Table with Expandable Rows */}
       <Typography variant="subtitle2" gutterBottom>
-        Violations by Application
+        Blocks and filter events by application
       </Typography>
       <TableContainer>
         <Table>
@@ -199,7 +246,8 @@ const PolicyViolationsTab = ({ data, onAppClick, startDate, endDate }) => {
               <StyledTableHeaderCell width={40}></StyledTableHeaderCell>
               <StyledTableHeaderCell>Application</StyledTableHeaderCell>
               <StyledTableHeaderCell>Violation Types</StyledTableHeaderCell>
-              <StyledTableHeaderCell align="right">Count</StyledTableHeaderCell>
+              <StyledTableHeaderCell align="right">Blocked</StyledTableHeaderCell>
+              <StyledTableHeaderCell align="right">Events</StyledTableHeaderCell>
               <StyledTableHeaderCell>Last Occurred</StyledTableHeaderCell>
             </TableRow>
           </TableHead>
@@ -253,7 +301,15 @@ const PolicyViolationsTab = ({ data, onAppClick, startDate, endDate }) => {
                         </Box>
                       </StyledTableCell>
                       <StyledTableCell align="right">
-                        <Typography fontWeight="bold">{violation.count}</Typography>
+                        <Typography fontWeight="bold">{violation.blocks ?? "-"}</Typography>
+                      </StyledTableCell>
+                      <StyledTableCell align="right">
+                        <Typography fontWeight="bold">{violation.events ?? violation.count}</Typography>
+                        {actionBreakdown(violation.events_by_action) && (
+                          <Typography variant="caption" color="text.secondary" component="div">
+                            {actionBreakdown(violation.events_by_action)}
+                          </Typography>
+                        )}
                       </StyledTableCell>
                       <StyledTableCell>
                         {new Date(violation.last_occurred).toLocaleString()}
@@ -262,7 +318,7 @@ const PolicyViolationsTab = ({ data, onAppClick, startDate, endDate }) => {
 
                     {/* Expanded Detail Row */}
                     <TableRow>
-                      <StyledTableCell colSpan={5} sx={{ py: 0, px: 0 }}>
+                      <StyledTableCell colSpan={6} sx={{ py: 0, px: 0 }}>
                         <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                           <Box sx={{ py: 2, px: 4, bgcolor: "action.hover" }}>
                             <Typography variant="subtitle2" gutterBottom sx={{ mb: 2 }}>
@@ -352,7 +408,7 @@ const PolicyViolationsTab = ({ data, onAppClick, startDate, endDate }) => {
               })
             ) : (
               <StyledTableRow>
-                <StyledTableCell colSpan={5} align="center">
+                <StyledTableCell colSpan={6} align="center">
                   <Typography color="text.secondary">No policy violations found</Typography>
                 </StyledTableCell>
               </StyledTableRow>
