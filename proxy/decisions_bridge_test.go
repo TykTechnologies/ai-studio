@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/switches"
 	"github.com/TykTechnologies/midsommar/v2/pkg/decisions"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -64,6 +65,35 @@ func TestDecisionBridge_OpenAIRouteForwardsTheBodyAsSent(t *testing.T) {
 	require.Len(t, recs, 1, "governance runs once, on the loopback hop")
 	assert.Equal(t, models.DecisionRequest, recs[0].RequestKind)
 	assert.Equal(t, 3, recs[0].DecisionQuestions)
+}
+
+// The per-model capability list only labels /v1/models: a model the OpenAI
+// decision-model list does not know (a family released later) is still
+// forwarded to /v1/decisions, answered and recorded; only its /v1/models
+// label lacks decisions (tkg.5, condition b).
+func TestDecisionBridge_UnlistedOpenAIModelIsStillServed(t *testing.T) {
+	t.Parallel()
+	h := newFailoverHarness(t, serveOpenAIDecision(), serveStatus(500), func(primary, _ *models.LLM) {
+		primary.Failover = models.LLMFailover{}
+		primary.AllowedModels = []string{"gpt-6-sol"}
+	})
+	require.NotContains(t, switches.ModelCapabilities(models.OPENAI, "gpt-6-sol"), "decisions", "the test needs a model the list does not know")
+
+	resp, out := h.post("/v1/decisions", unifiedDecisionBody(t, "primary/gpt-6-sol"))
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(out))
+	calls := h.primaryVendor.calls()
+	require.Len(t, calls, 1)
+	assert.Equal(t, "/v1/decisions", calls[0].Path)
+	var sent map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(calls[0].Body, &sent))
+	assert.JSONEq(t, `"gpt-6-sol"`, string(sent["model"]))
+	require.Len(t, decodeDecision(t, out).Answers, 3)
+
+	waitForAnalytics(t, h.db, 1)
+	h.proxy.waitForAnalyzers()
+	recs := h.chatRecords()
+	require.Len(t, recs, 1)
+	assert.Equal(t, models.DecisionRequest, recs[0].RequestKind)
 }
 
 func TestDecisionBridge_SystemOneRouteIsTranslatedBothWays(t *testing.T) {
