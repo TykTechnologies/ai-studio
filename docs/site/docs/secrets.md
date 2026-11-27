@@ -106,7 +106,7 @@ Secrets can be updated or deleted as needed. Updating a secret value will automa
 
 Secrets are commonly used in:
 
-*   **[LLM Configurations](./llm-management.md):** Storing API keys for providers like OpenAI, Anthropic, Google Vertex AI, etc.
+*   **[LLM Configurations](./llm-management.md):** Storing API keys for providers like OpenAI, Anthropic, Gemini Platform (Vertex), etc.
     *   *Example:* In the API Key field for an OpenAI configuration: `$SECRET/OPENAI_API_KEY`
 *   **[Tool Configurations](./tools.md):** Storing API keys, authentication tokens (Bearer, Basic Auth), or other credentials needed to interact with the external API the tool represents.
     *   *Example:* In a field for a custom header for a JIRA tool: `Authorization: Basic $SECRET/JIRA_BASIC_AUTH_TOKEN`

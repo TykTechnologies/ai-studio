@@ -20,7 +20,7 @@ const vendorData = {
     defaultEndpoint: "https://api.anthropic.com/v1/",
   },
   vertex: {
-    name: "Vertex AI",
+    name: "Gemini Platform (Vertex)",
     logo: withBase("/logos/vertex.png"),
     requiresAccessDetails: true,
   },

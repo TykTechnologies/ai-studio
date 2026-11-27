@@ -36,7 +36,7 @@ func (s *Service) GetAvailableLLMDrivers() ([]VendorDriverInfo, error) {
 			description = "Local Ollama models for self-hosted AI inference"
 			features = []string{"chat", "completion", "embedding", "local-deployment"}
 		case models.VERTEX:
-			description = "Google Cloud Vertex AI models for enterprise applications"
+			description = "Gemini Platform (Vertex) models on Google Cloud for enterprise applications"
 			features = []string{"chat", "completion", "embedding", "enterprise-grade"}
 		case models.GOOGLEAI:
 			description = "Google AI models including Gemini and PaLM"
@@ -77,7 +77,7 @@ func (s *Service) GetAvailableEmbedders() ([]VendorDriverInfo, error) {
 			description = "Local Ollama embedding models for self-hosted vector generation"
 			features = []string{"text-embedding", "local-deployment", "privacy-focused"}
 		case models.VERTEX:
-			description = "Google Cloud Vertex AI embedding models for enterprise search"
+			description = "Gemini Platform (Vertex) embedding models on Google Cloud for enterprise search"
 			features = []string{"text-embedding", "multilingual", "enterprise-grade"}
 		case models.GOOGLEAI:
 			description = "Google AI embedding models with advanced language understanding"

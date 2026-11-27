@@ -51,7 +51,7 @@ AI adoption brings significant challenges that require structured solutions:
 
 ### AI Gateway
 The heart of secure AI integration, providing:
-- **Multi-vendor LLM support**: OpenAI, Anthropic, Mistral, Vertex AI, Bedrock, Gemini, Huggingface, Ollama, and custom models
+- **Multi-vendor LLM support**: OpenAI, Anthropic, Mistral, Gemini Platform (Vertex), Bedrock, Gemini, Huggingface, Ollama, and custom models
 - **Secure API proxying**: Centralized access control and credential management  
 - **Usage monitoring**: Real-time tracking of costs, usage patterns, and performance
 - **Rate limiting**: Prevent excessive token consumption and manage budgets
@@ -356,7 +356,7 @@ func main() {
 - **OpenAI**: GPT models, Embeddings, and more
 - **Anthropic**: Claude models and assistants  
 - **Mistral**: Open source and commercial models
-- **Google**: Vertex AI and Gemini models
+- **Google**: Gemini Platform (Vertex) and Google AI (Gemini API) models
 - **AWS**: Bedrock model access
 - **Hugging Face**: Open source model ecosystem
 - **Ollama**: Local model deployment

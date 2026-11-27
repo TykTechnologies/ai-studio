@@ -6,7 +6,7 @@ Tyk AI Studio provides a centralized system for managing Large Language Model (L
 
 The LLM Management system allows you to:
 
-*   **Configure LLM Providers:** Connect to various LLM vendors (OpenAI, Anthropic, Google Vertex AI, Google AI, Hugging Face, Ollama).
+*   **Configure LLM Providers:** Connect to various LLM vendors (OpenAI, Anthropic, Gemini Platform (Vertex), Google AI, Hugging Face, Ollama).
 *   **Manage Models:** Specify which models from a provider are available for use within Tyk AI Studio.
 *   **Define Pricing:** Set input and output token costs for each model to enable accurate cost tracking.
 *   **Set Budgets:** Establish monthly spending limits for LLM usage, either globally for a model or per Application.
@@ -20,9 +20,9 @@ Administrators can configure connections to different LLM providers through the 
 2.  **Add New LLM:** Click "Add LLM Configuration".
 3.  **Provider Details:**
     *   **Name:** A user-friendly name for this configuration (e.g., "OpenAI GPT-4 Turbo").
-    *   **Vendor:** Select the LLM vendor. Supported vendors: `openai`, `anthropic`, `vertex` (Google Vertex AI), `google_ai`, `huggingface`, `ollama`.
+    *   **Vendor:** Select the LLM vendor. Supported vendors: `openai`, `anthropic`, `vertex` (Gemini Platform (Vertex); formerly shown as Vertex AI), `google_ai`, `huggingface`, `ollama`.
     *   **API Key/Credentials:** Securely provide the necessary authentication credentials. Use the **Secrets Management** system (`$SECRET/YourSecretName`) for best practice.
-        AI Studio and the Microgateway never read a vendor key, base URL or host from their own environment (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `HF_TOKEN`, `OLLAMA_HOST` and the like). A provider that needs a key and has none is refused rather than filled in from the host. The same applies to embedders and to Pinecone and Chroma data sources. Vertex AI is unchanged: it authenticates with the host's Google Cloud credentials.
+        AI Studio and the Microgateway never read a vendor key, base URL or host from their own environment (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `HF_TOKEN`, `OLLAMA_HOST` and the like). A provider that needs a key and has none is refused rather than filled in from the host. The same applies to embedders and to Pinecone and Chroma data sources. Gemini Platform (Vertex) is unchanged: it authenticates with the host's Google Cloud credentials.
     *   **Base URL (Optional):** Override the default API endpoint if needed (e.g., for self-hosted models or custom endpoints).
         Since 2.3 the gateway refuses a Base URL on an internal address (a local Ollama at `http://localhost:11434`, a model server on a private IP or in the cluster). An administrator can turn on **Allow internal host** for the LLM, which exempts its own endpoint (on every route, in Studio chat and on edges, and for its linked embedders), or name the host in `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS`. See [Outbound network policy](./proxy.md#outbound-network-policy).
 

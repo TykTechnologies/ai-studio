@@ -73,7 +73,7 @@ The Microgateway is a production-ready gateway for AI/LLM API management built o
 
 ## 📖 Key Concepts
 
-- **Multi-Provider Support**: OpenAI, Anthropic, Google AI, Vertex AI, Ollama
+- **Multi-Provider Support**: OpenAI, Anthropic, Google AI, Gemini Platform (Vertex), Ollama
 - **Budget Management**: Real-time cost tracking and enforcement
 - **Analytics & Monitoring**: Comprehensive usage analytics and performance metrics
 - **Plugin System**: Extensible architecture with OCI-distributed plugins

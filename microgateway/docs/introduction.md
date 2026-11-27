@@ -9,7 +9,7 @@ The Microgateway is an AI/LLM management platform built on the Midsommar AI Gate
 The Microgateway acts as a proxy between your applications and AI/LLM providers, offering:
 
 - **Centralized Management**: Single point of control for all AI/LLM interactions
-- **Multi-Provider Support**: Unified interface for OpenAI, Anthropic, Google AI, Vertex AI, and Ollama
+- **Multi-Provider Support**: Unified interface for OpenAI, Anthropic, Google AI, Gemini Platform (Vertex), and Ollama
 - **Cost Control**: Real-time budget management and cost tracking
 - **Security**: Token-based authentication with granular permission controls
 - **Analytics**: Usage monitoring and performance insights
@@ -59,7 +59,7 @@ The Microgateway acts as a proxy between your applications and AI/LLM providers,
 - **OpenAI**: GPT models, embeddings, fine-tuned models
 - **Anthropic**: Claude models with streaming support
 - **Google AI**: Gemini models and Google AI services
-- **Vertex AI**: Google Cloud AI platform integration
+- **Gemini Platform (Vertex)**: Google Cloud AI platform integration
 - **Ollama**: Local and self-hosted models
 
 #### Provider Features
