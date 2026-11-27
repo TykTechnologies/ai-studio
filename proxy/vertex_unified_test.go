@@ -11,8 +11,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/oauth2"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	vertexVendor "github.com/TykTechnologies/midsommar/v2/vendors/vertex"
 )
 
 // vertexEndpointSuffix makes a fake vendor's URL a Vertex endpoint naming the
@@ -252,4 +254,153 @@ func TestVertexUnified_FailoverOpenAIToVertex(t *testing.T) {
 		assertOnlyLLMCredential(t, h, c, "ya29.fallback-token")
 	}
 	require.Eventually(t, func() bool { return len(h.primaryVendor.calls()) >= 2 }, 5*time.Second, 10*time.Millisecond)
+}
+
+// openAIError decodes an OpenAI error envelope.
+func openAIError(t *testing.T, body []byte) (message, typ string) {
+	t.Helper()
+	var env struct {
+		Error struct {
+			Message string `json:"message"`
+			Type    string `json:"type"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(body, &env), string(body))
+	require.NotEmpty(t, env.Error.Message, string(body))
+	return env.Error.Message, env.Error.Type
+}
+
+// A credential that cannot be used answers the bridge's own error, with
+// nothing sent upstream: 502 when the token cannot be minted, and a refusal
+// naming the fix when the LLM has no key.
+func TestVertexUnified_CredentialFailures(t *testing.T) {
+	requireSerial(t)
+	for _, tc := range []struct {
+		name, key  string
+		override   bool
+		wantStatus int
+		wantText   string
+	}{
+		{"mint failure", `{"type":"service_account"}`, true, http.StatusBadGateway, ""},
+		{"no key", "", false, http.StatusBadGateway, vertexVendor.ADCSetting},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.override {
+				t.Cleanup(vertexVendor.SetTokenSourceOverride(func(*models.LLM) (oauth2.TokenSource, error) {
+					return failingTokenSource{}, nil
+				}))
+			}
+			fake := &fakeVertex{}
+			h := newFailoverHarness(t, fake.handler, serveOpenAIText("never"), func(primary, _ *models.LLM) {
+				primary.Vendor = models.VERTEX
+				primary.APIEndpoint += vertexEndpointSuffix
+				primary.APIKey = tc.key
+				primary.DefaultModel = "gemini-2.5-flash"
+				primary.Failover = models.LLMFailover{}
+			})
+			for _, body := range []string{failoverChatBody, failoverStreamBody} {
+				resp, out := h.post("/ai/primary/v1/chat/completions", strings.Replace(body, "gpt-4o", "gemini-2.5-flash", 1))
+				if tc.wantStatus != 0 {
+					assert.Equal(t, tc.wantStatus, resp.StatusCode, string(out))
+				}
+				assert.GreaterOrEqual(t, resp.StatusCode, 400, string(out))
+				assert.NotEqual(t, http.StatusInternalServerError, resp.StatusCode, string(out))
+				msg, _ := openAIError(t, out)
+				assert.NotContains(t, msg, "invalid_grant", "no token-endpoint detail")
+				if tc.wantText != "" {
+					assert.Contains(t, msg, tc.wantText)
+				}
+			}
+			assert.Empty(t, fake.snapshot(), "nothing reached the upstream")
+		})
+	}
+}
+
+// A model outside the LLM's allowed list is refused on /ai, and nothing
+// reaches the upstream: the inner hop validates the mapped Vertex path.
+func TestVertexUnified_AllowedModels(t *testing.T) {
+	t.Parallel()
+	fake := &fakeVertex{}
+	h := newFailoverHarness(t, fake.handler, serveOpenAIText("never"), func(primary, _ *models.LLM) {
+		primary.Vendor = models.VERTEX
+		primary.APIEndpoint += vertexEndpointSuffix
+		primary.APIKey = vertexTestToken
+		primary.DefaultModel = "gemini-2.5-flash"
+		primary.AllowedModels = []string{"^gemini-2.5-flash$"}
+		primary.Failover = models.LLMFailover{}
+	})
+	for _, stream := range []string{"false", "true"} {
+		resp, out := h.post("/ai/primary/v1/chat/completions", `{"model":"gemini-2.5-pro","stream":`+stream+`,"messages":[{"role":"user","content":"hi"}]}`)
+		assert.Equal(t, http.StatusForbidden, resp.StatusCode, string(out))
+		openAIError(t, out)
+	}
+	assert.Empty(t, fake.snapshot())
+
+	resp, out := h.post("/ai/primary/v1/chat/completions", `{"model":"gemini-2.5-flash","messages":[{"role":"user","content":"hi"}]}`)
+	assert.Equal(t, http.StatusOK, resp.StatusCode, string(out))
+}
+
+// A bare URL endpoint names no project or location: /ai and /v1 answer 400
+// with the accepted forms, and nothing reaches the upstream.
+func TestVertexUnified_BareURLEndpoint(t *testing.T) {
+	t.Parallel()
+	fake := &fakeVertex{}
+	h := newFailoverHarness(t, fake.handler, serveOpenAIText("never"), func(primary, _ *models.LLM) {
+		primary.Vendor = models.VERTEX
+		primary.APIKey = vertexTestToken
+		primary.DefaultModel = "gemini-2.5-flash"
+		primary.Failover = models.LLMFailover{}
+	})
+	for _, route := range []struct{ path, model string }{{"/ai/primary/v1/chat/completions", "gemini-2.5-flash"}, {"/v1/chat/completions", "primary/gemini-2.5-flash"}} {
+		resp, out := h.post(route.path, `{"model":"`+route.model+`","messages":[{"role":"user","content":"hi"}]}`)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "%s: %s", route.path, out)
+		msg, _ := openAIError(t, out)
+		assert.Contains(t, msg, "project:location", route.path)
+		assert.Contains(t, msg, "/projects/{project}/locations/{location}", route.path)
+	}
+	assert.Empty(t, fake.snapshot())
+}
+
+// A Vertex primary that answers 429 or 5xx fails over to the next rung; with
+// no rung, a 429 reaches the caller as a 429 (SDKs retry on it).
+func TestVertexUnified_FailoverFromVertex(t *testing.T) {
+	t.Parallel()
+	for _, status := range []int{http.StatusTooManyRequests, http.StatusServiceUnavailable} {
+		h := newFailoverHarness(t, serveStatus(status), serveOpenAIText("from the fallback"), func(primary, _ *models.LLM) {
+			primary.Vendor = models.VERTEX
+			primary.APIEndpoint += vertexEndpointSuffix
+			primary.APIKey = vertexTestToken
+			primary.DefaultModel = "gemini-2.5-flash"
+		})
+		for _, body := range []string{failoverChatBody, failoverStreamBody} {
+			resp, out := h.post("/ai/primary/v1/chat/completions", strings.Replace(body, "gpt-4o", "gemini-2.5-flash", 1))
+			require.Equal(t, http.StatusOK, resp.StatusCode, "%d: %s", status, out)
+			assert.Contains(t, string(out), "fallback")
+			assert.Equal(t, "fallback", resp.Header.Get(hdrServedLLM))
+		}
+		assert.NotEmpty(t, h.primaryVendor.calls(), "the Vertex rung was tried")
+	}
+
+	h := newFailoverHarness(t, serveStatus(http.StatusTooManyRequests), serveOpenAIText("never"), func(primary, _ *models.LLM) {
+		primary.Vendor = models.VERTEX
+		primary.APIEndpoint += vertexEndpointSuffix
+		primary.APIKey = vertexTestToken
+		primary.DefaultModel = "gemini-2.5-flash"
+		primary.Failover = models.LLMFailover{}
+	})
+	for _, body := range []string{failoverChatBody, failoverStreamBody} {
+		resp, out := h.post("/ai/primary/v1/chat/completions", strings.Replace(body, "gpt-4o", "gemini-2.5-flash", 1))
+		assert.Equal(t, http.StatusTooManyRequests, resp.StatusCode, string(out))
+	}
+}
+
+// The request's model, not the LLM's default, is the one in the upstream path.
+func TestVertexUnified_RequestModel(t *testing.T) {
+	t.Parallel()
+	h, fake := vertexUnifiedHarness(t)
+	resp, out := h.post("/ai/primary/v1/chat/completions", `{"model":"gemini-2.5-pro","messages":[{"role":"user","content":"hi"}]}`)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(out))
+	calls := fake.snapshot()
+	require.Len(t, calls, 1)
+	assert.Equal(t, strings.Replace(vertexLoopbackPath, "gemini-2.5-flash", "gemini-2.5-pro", 1), calls[0].path)
 }
