@@ -19,19 +19,25 @@ const readAll = () => {
 
 const keyOf = (appId, templateId) => `${appId}:${templateId}`;
 
-/** lastSeen returns { hash, at } or null. */
-export const lastSeen = (appId, templateId) => {
-  const e = readAll()[keyOf(appId, templateId)];
+const entryOf = (all, appId, templateId) => {
+  const e = all[keyOf(appId, templateId)];
   if (!e || typeof e.hash !== "string" || typeof e.at !== "string") return null;
   return { hash: e.hash, at: e.at };
 };
 
-/** rememberSeen records the version the reviewer is looking at now. */
+/** lastSeen returns { hash, at } or null. */
+export const lastSeen = (appId, templateId) => entryOf(readAll(), appId, templateId);
+
+/**
+ * rememberSeen records the version the reviewer is looking at now and
+ * returns what they saw before ({ hash, at } or null), in one read.
+ */
 export const rememberSeen = (appId, template, now = new Date()) => {
-  if (!template?.id || !template.content_hash) return;
+  if (!template?.id || !template.content_hash) return null;
+  const all = readAll();
+  const before = entryOf(all, appId, template.id);
   try {
-    const entry = { hash: String(template.content_hash).slice(0, 128), at: now.toISOString() };
-    const all = readAll();
+    const entry = { hash: String(template.content_hash), at: now.toISOString() };
     all[keyOf(appId, template.id)] = entry;
     const keys = Object.keys(all);
     if (keys.length > MAX_ENTRIES) {
@@ -44,4 +50,5 @@ export const rememberSeen = (appId, template, now = new Date()) => {
   } catch {
     // Storage full or unavailable: the review works without it.
   }
+  return before;
 };

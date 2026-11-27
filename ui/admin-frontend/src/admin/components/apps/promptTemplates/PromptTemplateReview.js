@@ -18,7 +18,7 @@ import PlacementDiagram from "./PlacementDiagram";
 import PromptTemplateStatus from "./PromptTemplateStatus";
 import { constBytes, expiresAt, isConst, placementLabel, previousApproved } from "./promptTemplateText";
 import { diffParts, isSmallEdit, samePlacement } from "./templateDiff";
-import { lastSeen, rememberSeen } from "./reviewSeen";
+import { rememberSeen } from "./reviewSeen";
 import {
   approvePromptTemplate,
   apiErrorMessage,
@@ -140,8 +140,7 @@ const PromptTemplateReview = ({ open, appId, template, all, canApprove, userName
   const [seen, setSeen] = useState(null);
   useEffect(() => {
     if (!open || !template?.id) return;
-    setSeen(lastSeen(appId, template.id));
-    rememberSeen(appId, template);
+    setSeen(rememberSeen(appId, template));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, appId, template?.id, template?.content_hash]);
 
