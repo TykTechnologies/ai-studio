@@ -601,6 +601,13 @@ definitions:
         type: string
       created_by:
         type: integer
+      edited_at:
+        description: |-
+          EditedAt and EditedBy: the last in-place change to this proposed
+          version's parts or placement; null when there was none.
+        type: string
+      edited_by:
+        type: integer
       expires_after_days:
         type: integer
       id:
@@ -1786,8 +1793,6 @@ definitions:
             type: string
           last_sync_ack:
             type: string
-          license_state:
-            type: string
           loaded_checksum:
             type: string
           loaded_version:
@@ -1796,6 +1801,7 @@ definitions:
             additionalProperties: true
             type: object
           namespace:
+            description: Always "default" in CE
             type: string
           owner_label:
             description: |-
@@ -6290,6 +6296,13 @@ definitions:
         description: Auth records per-primitive overrides from the definition.
       description:
         type: string
+      discovered:
+        description: |-
+          Discovered marks a tool known from the upstream's tools/list (the
+          registration wizard's discovery), not from the definition: a remote
+          proxy that allows every tool names none. Syncs keep such tools while
+          the definition names no tools of its own.
+        type: boolean
       name:
         type: string
       source:
@@ -8240,6 +8253,17 @@ definitions:
       description:
         description: Studio presentation and governance
         type: string
+      discovered_tools:
+        description: |-
+          DiscoveredTools is what the wizard's tool discovery listed (the
+          upstream's tools/list). A remote proxy's definition names no tools
+          when every tool is allowed, so Studio keeps this list as the server's
+          known tools (MCPPrimitive.Discovered) for the server page and the key
+          access editor. With an allow-list only the allowed tools are kept, with
+          their descriptions. Administrators only; never taken from a submission.
+        items:
+          $ref: '#/definitions/mcpintrospect.Tool'
+        type: array
       gateway_tags:
         description: Deployment target (segmented gateways)
         items:

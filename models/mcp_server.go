@@ -57,6 +57,11 @@ type MCPPrimitive struct {
 	Auth *MCPPrimitiveAuth `json:"auth,omitempty"`
 	// Source names the REST operation behind a REST-to-MCP tool.
 	Source string `json:"source,omitempty"`
+	// Discovered marks a tool known from the upstream's tools/list (the
+	// registration wizard's discovery), not from the definition: a remote
+	// proxy that allows every tool names none. Syncs keep such tools while
+	// the definition names no tools of its own.
+	Discovered bool `json:"discovered,omitempty"`
 }
 
 // MCPPrimitiveAuth is the per-primitive authentication override.

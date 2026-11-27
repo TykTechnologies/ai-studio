@@ -413,7 +413,7 @@ A call's gateway decisions are child spans of it, shown as chips in the transcri
 | Decision | What it records |
 |---|---|
 | Attempt, fallback | Each provider attempt of an `/ai/` or failover call, and why the gateway moved to the next one |
-| Guardrail | A guardrail that found something: blocked (`denied`), quarantined or redacted (`modified`), or only logged or alerted (`allowed`). It names the guardrail and lists the detectors and where they matched, for example `injection.instruction_override in tool_result (search_kb); quarantine`. The matched text is never recorded. Compliance events hold the full finding, the judge's verdict and the request id. The event's **Compliance event** link opens them on the Compliance page's Filter Events tab (with `compliance:read`; otherwise the request id is shown to search for). A guardrail that finds nothing records nothing |
+| Guardrail | A guardrail that found something: blocked (`denied`), quarantined, redacted or a tool definition removed (`modified`), or only logged or alerted (`allowed`). It names the guardrail and lists the detectors and where they matched, for example `injection.instruction_override in tool_result (search_kb); quarantine`, with one such part per action taken, strongest first. The matched text is never recorded. Compliance events hold the full finding, the judge's verdict and the request id. The event's **Compliance event** link opens them on the Compliance page's Filter Events tab (with `compliance:read`; otherwise the request id is shown to search for). A guardrail that finds nothing records nothing |
 | Filter | A script filter that blocked the call, by name |
 | Budget, rate limit | A budget or rate limit that refused the call |
 
