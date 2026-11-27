@@ -112,8 +112,11 @@ Choose a preset or write a template:
 - **slack** – a Slack incoming-webhook message that says who, what, where
   and when:
   - For a guardrail alert or outcome: the App, what the guardrail did (with
-    its detector, what it found, the score and any judge verdict), and the
-    filter, request and compliance event. It links to the event in AI Studio.
+    its detector, the kinds of finding such as `injection` or
+    `pii.email`, the score and any judge verdict), and the filter, request
+    id and compliance event. It never includes the flagged text or the
+    request's content, not even the masked excerpts an alert can carry. It
+    links to the event in AI Studio, where reading it needs permission.
   - For a change to an object: the user who made it, the change, and the
     object. When `SITE_URL` is set, it links to the object's page (except
     for a deleted object).
