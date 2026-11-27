@@ -51,12 +51,15 @@ func (f *fakeVertex) handler(w http.ResponseWriter, r *http.Request) {
 	f.mu.Unlock()
 
 	part := `{"text":"hello from vertex"}`
-	finish := "STOP"
+	finish := `"STOP"`
+	if strings.Contains(r.URL.Query().Get("$alt"), "enum-encoding=int") {
+		finish = "1" // STOP, as Vertex encodes it when asked for numbers
+	}
 	if _, ok := body["tools"]; ok {
 		part = `{"functionCall":{"name":"get_time","args":{"zone":"UTC"}}}`
 	}
 	usage := `"usageMetadata":{"promptTokenCount":9,"candidatesTokenCount":4,"totalTokenCount":13},"modelVersion":"gemini-2.5-flash"`
-	chunk := `{"candidates":[{"content":{"role":"model","parts":[` + part + `]},"finishReason":"` + finish + `"}],` + usage + `}`
+	chunk := `{"candidates":[{"content":{"role":"model","parts":[` + part + `]},"finishReason":` + finish + `}],` + usage + `}`
 	switch {
 	case strings.Contains(r.URL.Path, ":streamGenerateContent") && r.URL.Query().Get("alt") == "sse":
 		w.Header().Set("Content-Type", "text/event-stream")
