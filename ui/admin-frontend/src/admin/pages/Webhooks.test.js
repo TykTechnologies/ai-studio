@@ -241,6 +241,28 @@ describe("Webhooks", () => {
     expect(await screen.findByTestId("template-preview")).toHaveTextContent("evt_sample");
   });
 
+  it("previews a sample of the target's own topic, and of the one picked", async () => {
+    const guarded = { ...targets[0], topic_filters: ["guardrail.alert.secret-pasted", "guardrail.outcome.quarantined"] };
+    mockApi({ list: [guarded, targets[1]] });
+    renderPage();
+    await screen.findByText("Ops Slack");
+    fireEvent.click(screen.getByLabelText("actions for Ops Slack"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Preview" }));
+    await waitFor(() =>
+      expect(apiClient.post).toHaveBeenCalledWith("/webhooks/templates/preview", expect.objectContaining({ topic: "guardrail.alert.secret-pasted" }))
+    );
+
+    const picker = screen.getByTestId("preview-topic");
+    fireEvent.mouseDown(picker.parentElement.querySelector('[role="combobox"]') || picker.parentElement);
+    fireEvent.click(await screen.findByRole("option", { name: "guardrail.outcome.quarantined" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    await waitFor(() =>
+      expect(apiClient.post).toHaveBeenCalledWith("/webhooks/templates/preview", expect.objectContaining({ topic: "guardrail.outcome.quarantined" }))
+    );
+  });
+
   it("expands a target to show statistics and audit history", async () => {
     mockApi();
     renderPage();

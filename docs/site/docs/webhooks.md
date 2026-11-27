@@ -128,6 +128,12 @@ Choose a preset or write a template:
 - **custom** – a Go `text/template` that must render to JSON. Use
   **Preview** in the editor to render it against a sample event.
 
+**Preview** renders a sample event for one of the target's own topics: the
+first one, or the one you pick under **Preview topic** when the target has
+several. A guardrail topic gets a sample guardrail alert or outcome,
+shaped like a real one and with its **Open in AI Studio** link. A wildcard
+gets a sample of a matching topic.
+
 Example custom template:
 
 ```

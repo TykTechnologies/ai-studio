@@ -80,12 +80,16 @@ const TargetForm = ({ open, target, presets, topics, onClose, onSaved, initialTo
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [preview, setPreview] = useState(null);
+  // The subscribed topic the preview renders a sample of (wildcards are
+  // turned into a sample topic by the server). Empty: the first one.
+  const [previewTopic, setPreviewTopic] = useState("");
   const [headersTouched, setHeadersTouched] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setError(null);
     setPreview(null);
+    setPreviewTopic("");
     setHeadersTouched(false);
     if (target) {
       setForm({
@@ -115,7 +119,7 @@ const TargetForm = ({ open, target, presets, topics, onClose, onSaved, initialTo
       const res = await apiClient.post("/webhooks/templates/preview", {
         template_preset: form.template_preset,
         template_body: form.template_body,
-        topic: (form.topic_filters[0] || "").includes("*") ? "" : form.topic_filters[0],
+        topic: form.topic_filters.includes(previewTopic) ? previewTopic : form.topic_filters[0] || "",
       });
       setPreview(res.data);
     } catch (err) {
@@ -255,6 +259,23 @@ const TargetForm = ({ open, target, presets, topics, onClose, onSaved, initialTo
               {presets.find((p) => p.name === form.template_preset)?.description ||
                 "Go text/template producing JSON. Secrets in the event are redacted before rendering."}
             </Typography>
+            {form.topic_filters.length > 1 && (
+              <TextField
+                select
+                size="small"
+                label="Preview topic"
+                value={form.topic_filters.includes(previewTopic) ? previewTopic : form.topic_filters[0]}
+                onChange={(e) => setPreviewTopic(e.target.value)}
+                sx={{ minWidth: 200 }}
+                inputProps={{ "data-testid": "preview-topic" }}
+              >
+                {form.topic_filters.map((t) => (
+                  <MenuItem key={t} value={t}>
+                    {t}
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
             <Button size="small" onClick={runPreview}>
               Preview
             </Button>
