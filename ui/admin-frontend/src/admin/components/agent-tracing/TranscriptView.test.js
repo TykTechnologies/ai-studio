@@ -234,7 +234,6 @@ describe("TranscriptView", () => {
   it("shows the client-side tool and every content-state placeholder", () => {
     renderTranscript();
     expect(screen.getByTestId("client-side-badge")).toBeInTheDocument();
-    expect(screen.getByText("no result observed")).toBeInTheDocument();
     const placeholders = screen.getAllByTestId("content-placeholder").map((p) => p.textContent);
     expect(placeholders).toEqual(expect.arrayContaining(["Hashed: only a fingerprint was stored", "Redacted (3 values)"]));
   });
@@ -320,4 +319,26 @@ describe("TranscriptView", () => {
     expect(screen.queryByText(/Content not captured/)).not.toBeInTheDocument();
     expect(screen.getAllByText("2.0 KB, not captured").length).toBeGreaterThan(0);
   });
+
+  // midsommar-clean-eaa: a client-side tool whose result went back to the
+  // model has no tool_result part; only an abandoned call is "no result".
+  describe("no result observed", () => {
+    const abandoned = {
+      span_id: "0000000000000008", trace_id: TRACE2, parent_span_id: llm1.span_id, kind: "inferred_client_tool", name: "execute_tool run_shell",
+      tool_name: "run_shell", status: "error", error_type: "abandoned", error_message: "no result observed",
+      start_time: at(7), end_time: at(9), inferred: true, content_state: "not_captured",
+    };
+
+    it("does not flag a client-side tool whose result came back", () => {
+      renderTranscript();
+      expect(screen.getByTestId("client-side-badge")).toBeInTheDocument();
+      expect(screen.queryByText("no result observed")).toBeNull();
+    });
+
+    it("flags an abandoned client-side tool call", () => {
+      renderTranscript({ list: [...spans, abandoned] });
+      expect(screen.getAllByText("no result observed")).toHaveLength(1);
+    });
+  });
 });
+
