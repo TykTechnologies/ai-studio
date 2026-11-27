@@ -1786,6 +1786,8 @@ definitions:
             type: string
           last_sync_ack:
             type: string
+          license_state:
+            type: string
           loaded_checksum:
             type: string
           loaded_version:
@@ -1794,7 +1796,6 @@ definitions:
             additionalProperties: true
             type: object
           namespace:
-            description: Always "default" in CE
             type: string
           owner_label:
             description: |-
