@@ -608,9 +608,10 @@ func (p *Proxy) createHandler() http.Handler {
 	r.HandleFunc("/llm/stream/{llmSlug}/{rest:.*}", p.handleStreamingLLMRequest).Methods("POST").Handler(p.modelValidationMiddleware(http.HandlerFunc(p.handleStreamingLLMRequest)))
 	// Unified endpoint that automatically detects streaming vs non-streaming based on request
 	r.HandleFunc("/llm/call/{llmSlug}/{rest:.*}", p.handleUnifiedLLMRequest).Methods("POST").Handler(
-		p.streamDetectionMiddleware(
-			p.modelValidationMiddleware(
-				http.HandlerFunc(p.handleUnifiedLLMRequest))))
+		p.vertexGeminiPathMiddleware(
+			p.streamDetectionMiddleware(
+				p.modelValidationMiddleware(
+					http.HandlerFunc(p.handleUnifiedLLMRequest)))))
 
 	r.HandleFunc("/datasource/{dsSlug}", p.handleDatasourceRequest).Methods("POST")
 	r.HandleFunc("/datasource/{dsSlug}/vector", p.handleDatasourceVectorSearch).Methods("POST")
