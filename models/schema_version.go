@@ -173,12 +173,13 @@ const (
 	//     additive): the last in-place change to a proposed version's
 	//     parts or placement (midsommar-clean-o4a.11). Older code ignores
 	//     the columns; an edit it makes leaves them as they were.
-	// 48: webhook_targets.url widened to text and stored encrypted at rest
-	//     ($ENC/, like headers; midsommar-clean-o4a.21). A changed column
-	//     type and a value older code would use as written (it would post to
-	//     the ciphertext), so the minimum reader is 48.
+	// 48: webhook_targets.url widened from varchar(2048) to text, and read
+	//     through DecryptValue, so a later release can store it encrypted
+	//     ($ENC/) without breaking 2.3.0 readers (midsommar-clean-o4a.21,
+	//     part A). This release still writes plain URLs. Older code reads the
+	//     widened plain column as before, so the minimum reader stays.
 	SchemaVersion          = 48
-	MinReaderSchemaVersion = 48
+	MinReaderSchemaVersion = 42
 )
 
 // studioSchemaRowID is the one row of studio_schema.

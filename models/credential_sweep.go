@@ -18,7 +18,7 @@ var encryptedColumns = []struct {
 	columns []string
 }{
 	{"llms", []string{"api_key", "metadata", "resource_signing_secret", "resource_signing_secret_prev"}},
-	{"webhook_targets", []string{"url", "headers", "signing_secret", "prev_signing_secret"}},
+	{"webhook_targets", []string{"headers", "signing_secret", "prev_signing_secret"}},
 	{"tyk_connections", []string{"dashboard_access_token", "mdcb_access_token"}},
 	{"tyk_gateway_definitions", []string{"definition"}},
 	{"submissions", []string{"resource_payload"}},

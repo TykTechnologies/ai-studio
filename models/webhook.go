@@ -72,10 +72,12 @@ type WebhookTarget struct {
 
 	Name        string `gorm:"size:200;not null" json:"name"`
 	Description string `gorm:"size:1024" json:"description"`
-	// URL is encrypted at rest like Headers (BeforeSave/AfterFind): a
-	// Slack, Discord or Teams incoming-webhook URL is itself the credential.
-	// Text, not varchar(2048): the ciphertext of a long URL is longer than
-	// the URL. Never queried or searched in SQL.
+	// URL is read through secrets.DecryptValue (AfterFind) so a later
+	// release can store it encrypted ($ENC/) like Headers: a Slack, Discord
+	// or Teams incoming-webhook URL is itself the credential. This release
+	// still writes it in clear; a plain value reads unchanged. Text, not
+	// varchar(2048): the ciphertext of a long URL is longer than the URL
+	// (midsommar-clean-o4a.21, part A).
 	URL         string `gorm:"type:text;not null" json:"url"`
 	Status      string `gorm:"size:16;index:idx_webhook_targets_status;not null" json:"status"`
 	Paused      bool   `json:"paused"`
@@ -141,7 +143,6 @@ func encryptIfPlain(v string) string {
 // BeforeSave encrypts the header map and signing secrets before they hit the
 // DB and serialises the topic filters.
 func (t *WebhookTarget) BeforeSave(tx *gorm.DB) error {
-	t.URL = encryptIfPlain(t.URL)
 	t.Headers = encryptIfPlain(t.Headers)
 	t.SigningSecret = encryptIfPlain(t.SigningSecret)
 	t.PrevSigningSecret = encryptIfPlain(t.PrevSigningSecret)
