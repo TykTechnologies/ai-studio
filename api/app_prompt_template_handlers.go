@@ -49,8 +49,12 @@ type AppPromptTemplateResponse struct {
 	ApprovedAt       *time.Time          `json:"approved_at"`
 	ExpiresAfterDays int                 `json:"expires_after_days"`
 	LastMatchedAt    *time.Time          `json:"last_matched_at"`
-	CreatedAt        time.Time           `json:"created_at"`
-	UpdatedAt        time.Time           `json:"updated_at"`
+	// EditedAt and EditedBy: the last in-place change to this proposed
+	// version's parts or placement; null when there was none.
+	EditedAt  *time.Time `json:"edited_at"`
+	EditedBy  *uint      `json:"edited_by"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
 	// ContentHash identifies this version's reviewed content (name,
 	// version, placement, parts, expiry). Approving takes it back.
 	ContentHash string `json:"content_hash"`
@@ -69,6 +73,7 @@ func serializeAppPromptTemplate(t *models.AppPromptTemplate) AppPromptTemplateRe
 		Placement: t.Placement(), Parts: t.Parts, Status: t.Status,
 		CreatedBy: t.CreatedBy, ApprovedBy: t.ApprovedBy, ApprovedAt: t.ApprovedAt,
 		ExpiresAfterDays: t.ExpiresAfterDays, LastMatchedAt: t.LastMatchedAt,
+		EditedAt: t.EditedAt, EditedBy: t.EditedBy,
 		CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt, ContentHash: t.ContentHash(),
 	}
 }

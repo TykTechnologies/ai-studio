@@ -26,6 +26,15 @@ webhook target goes through an approval step:
    `WEBHOOKS_REQUIRE_DIFFERENT_APPROVER=true`) reviews the URL and approves
    it. Header values are stored encrypted and never displayed, only their
    names.
+
+   The URL is shown with its credentials hidden, because a chat webhook URL
+   is itself the credential: anyone who has it can post to the channel. The
+   target list, the Approve dialog, the edit form, the Deliveries log and
+   the API all show the scheme and host but replace the secret part with
+   `***`. That covers the path of Slack, Discord, Teams, Google Chat and
+   Zapier hooks, any query value, and any token-like path segment. To keep
+   the URL when you edit a target, leave the field as it is. To change it,
+   enter the whole new URL.
 4. Deliveries start. Changing the URL or the headers of an approved target
    sends it back to pending; revoking stops it and cancels queued deliveries.
 

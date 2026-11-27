@@ -7,6 +7,8 @@ model router changes, plus topics published by enterprise plugins such as the
 asset catalog) can be delivered to an administrator-approved URL as a signed
 JSON payload, with retries, a dead-letter queue and a searchable delivery log.
 
+Target URLs are also credentials (a Slack, Discord or Teams incoming-webhook URL lets anyone post to the channel), so the URL leaves the `webhook_targets` row only masked by `models.MaskWebhookURL`. That covers `WebhookTargetResponse.url` (with `url_masked`), the delivery snapshot (stored masked, and masked on read by `WebhookDelivery.AfterFind` for older rows), transport errors (`maskURLError`; `MaskWebhookURLsInText` on stored errors), notifications and logs. A start-up sweep (`maskStoredURLs`) rewrites delivery and attempt rows written before. An update that sends the masked URL back keeps the stored one, and a changed URL that still contains `***` is refused.
+
 Target URLs are an exfiltration vector, so the feature is built around
 approval: a target never receives a delivery until an administrator approves
 its URL, and any change to where it points sends it back for approval.
