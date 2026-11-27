@@ -27,3 +27,12 @@ type LLMVendorProvider interface {
 	// (e.g. /v1/decisions), or "" when the vendor serves no decision models.
 	DecisionEndpoint() string
 }
+
+// DecisionModelClassifier is implemented by a vendor that serves chat and
+// decision models under one LLM provider (OpenAI): it says which model ids
+// are decision models, so /v1/models can advertise each model's own
+// capabilities instead of the provider's. A vendor that serves decision
+// models only (System One) needs no classifier.
+type DecisionModelClassifier interface {
+	IsDecisionModel(model string) bool
+}

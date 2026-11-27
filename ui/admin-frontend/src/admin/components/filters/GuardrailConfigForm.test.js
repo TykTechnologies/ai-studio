@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import "@testing-library/jest-dom";
 import { ThemeProvider } from "@mui/material/styles";
 import testTheme from "../../utils/testTheme";
@@ -459,6 +459,24 @@ describe("GuardrailConfigForm shadow", () => {
     render(<Harness initial={{ ...emptyGuardrailConfig(), provider: "builtin", on_detect: "block" }} />);
     await screen.findByTestId("guardrail-tool-calls-scan");
     expect(screen.queryByTestId("guardrail-shadow")).not.toBeInTheDocument();
+  });
+
+  // o4a.8: a shadow filter's fail mode only labels its guardrail.error events.
+  it("never offers to block the request as a shadow filter's fail mode", async () => {
+    render(<Harness initial={{ ...emptyGuardrailConfig(), provider: "builtin", on_detect: "log", shadow: true, fail_mode: "closed" }} />);
+    const help = await screen.findByTestId("guardrail-fail-mode-help");
+    expect(help).toHaveTextContent("never blocks or changes traffic");
+    expect(help).not.toHaveTextContent("Fail closed blocks");
+    expect(screen.getByRole("combobox", { name: "If the provider fails" })).toHaveTextContent("Record as closed");
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "If the provider fails" }));
+    const options = within(await screen.findByRole("listbox")).getAllByRole("option").map((o) => o.textContent);
+    expect(options).toEqual(["Record as closed (default)", "Record as closed", "Record as open"]);
+  });
+
+  it("keeps the blocking wording without shadow", async () => {
+    render(<Harness initial={{ ...emptyGuardrailConfig(), provider: "builtin", on_detect: "log" }} />);
+    expect(await screen.findByTestId("guardrail-fail-mode-help")).toHaveTextContent("Fail closed blocks every request");
+    expect(screen.getByRole("combobox", { name: "If the provider fails" })).toHaveTextContent("Block the request (default)");
   });
 
   it("warns when a shadow filter has a non-log action", async () => {

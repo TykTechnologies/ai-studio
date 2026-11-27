@@ -230,6 +230,26 @@ func (v *OpenAI) DecisionEndpoint() string {
 	return decisions.OpenAIEndpoint
 }
 
+// openAIDecisionModels are the model families OpenAI serves on its
+// Decisions API (public beta). Other models on the same provider are chat
+// and embedding models: gpt-5.6-luna, for one, answers /v1/decisions with
+// 404 model_not_found. A dated snapshot (gpt-6-luna-2026-09-01) belongs to
+// its family. A new decision model is still callable before it is listed
+// here; only /v1/models does not advertise it as one.
+var openAIDecisionModels = []string{"gpt-6-luna"}
+
+// IsDecisionModel reports whether model is one of OpenAI's decision models
+// (models.DecisionModelClassifier).
+func (v *OpenAI) IsDecisionModel(model string) bool {
+	m := strings.ToLower(strings.TrimSpace(model))
+	for _, family := range openAIDecisionModels {
+		if m == family || strings.HasPrefix(m, family+"-") {
+			return true
+		}
+	}
+	return false
+}
+
 func setupOpenAIDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (llms.Model, error) {
 	// Guarded by the outbound policy, with the LLM's "Allow internal host"
 	// exemption for its own endpoint (chat sessions, semantic routing).
