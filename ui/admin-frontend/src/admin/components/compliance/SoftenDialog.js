@@ -30,6 +30,7 @@ import {
 } from "../../services/guardrailCapabilityService";
 import {
   ALERT_EVENT_PATTERN,
+  alertTopicText,
   allowedActions,
   apiErrorMessage,
   channelLabel,
@@ -236,7 +237,7 @@ const SoftenDialog = ({ open, target, onClose, onDone }) => {
                         value={alertEvent}
                         onChange={(e) => setAlertEvent(e.target.value)}
                         error={!!alertEvent && alertInvalid}
-                        helperText="Webhooks subscribe to guardrail.alert.<name> to hear whenever this exception lets something through."
+                        helperText={`Webhooks subscribe to ${alertTopicText(alertEvent)} to hear whenever this exception lets something through.`}
                         inputProps={{ "data-testid": "soften-alert-event" }}
                       />
                     </Grid>

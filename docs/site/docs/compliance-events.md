@@ -140,14 +140,16 @@ Admin-only (requires the v1 route group's auth middleware + `AdminOnly`).
 | `app_id` | uint | Filter by app. |
 | `event_type` | string (≤ 100 chars) | Exact match on `event_type`. |
 | `severity` | `info` / `warning` / `critical` | Whitelist; other values return 400. |
-| `limit` | int | Page size (default and max are deployment-dependent). |
-| `offset` | int | Page offset. |
+| `page_size` | int | Events per page: default 100, at most 1000 (larger values are capped). |
+| `page` | int | Page number, from 1. |
+| `limit` | int | Older form of `page_size`, used only when neither `page_size` nor `page` is given. |
+| `offset` | int | Older form of `page`: events to skip, used only with `limit`. |
 
 **Example:**
 
 ```bash
 curl -H "Authorization: Bearer $ADMIN_TOKEN" \
-  "https://studio.example.com/api/v1/compliance/events?start_date=2026-05-01&end_date=2026-05-14&severity=critical&limit=50"
+  "https://studio.example.com/api/v1/compliance/events?start_date=2026-05-01&end_date=2026-05-14&severity=critical&page_size=50"
 ```
 
 **Response shape:**
@@ -171,7 +173,8 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" \
       "timestamp": "2026-05-14T09:23:17Z"
     }
   ],
-  "total": 1
+  "total_count": 1,
+  "meta": { "total_count": 1, "total_pages": 1, "page_size": 50, "page_number": 1, "offset": 0 }
 }
 ```
 

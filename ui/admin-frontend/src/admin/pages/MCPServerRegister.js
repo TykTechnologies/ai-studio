@@ -59,8 +59,11 @@ export const selectedTools = (f) => (f.tool_access === "selected" ? [...new Set(
 /**
  * buildPayload turns the wizard state into the register request. It is
  * exported so the test can assert the exact body without driving every field.
+ * discovered is the tool list a finished discovery returned: AI Studio keeps
+ * it as the server's known tools, since a proxy that allows every tool names
+ * none in its definition.
  */
-export const buildPayload = (f) => {
+export const buildPayload = (f, discovered) => {
   const body = {
     connection_id: Number(f.connection_id),
     kind: f.kind,
@@ -83,6 +86,9 @@ export const buildPayload = (f) => {
       body.upstream_auth_token = f.upstream_auth_token;
     }
     body.allowed_tools = selectedTools(f);
+    if (discovered && discovered.length > 0) {
+      body.discovered_tools = discovered.map((t) => ({ name: t.name, title: t.title, description: t.description }));
+    }
     // Stored on the server; sent only when on (administrators only, w4e).
     if (f.allow_internal_host) body.allow_internal_host = true;
   } else {
@@ -265,6 +271,7 @@ const MCPServerRegister = () => {
   // Tool discovery for remote servers: Studio asks the upstream for its
   // tools/list. It goes stale when the URL or credential changes.
   const [discovery, setDiscovery] = useState({ status: "idle" });
+  const discoveredTools = discovery.status === "done" ? discovery.tools : undefined;
   const [workspaceError, setWorkspaceError] = useState("");
   const setWorkspace = useCallback((ws) => {
     setForm((f) => ({ ...f, workspace_id: ws }));
@@ -444,7 +451,7 @@ const MCPServerRegister = () => {
     if (step === 2) {
       setBusy(true);
       try {
-        const res = await apiClient.post("/mcp-servers/register?dry_run=1", buildPayload(form));
+        const res = await apiClient.post("/mcp-servers/register?dry_run=1", buildPayload(form, discoveredTools));
         setPreview(res.data);
         setStep(3);
       } catch (err) {
@@ -462,7 +469,7 @@ const MCPServerRegister = () => {
     setBusy(true);
     setError(null);
     try {
-      const res = await apiClient.post("/mcp-servers/register", buildPayload(form));
+      const res = await apiClient.post("/mcp-servers/register", buildPayload(form, discoveredTools));
       navigate(`/admin/mcp-servers/${res.data.server.id}`);
     } catch (err) {
       if (showWorkspaceError(err)) return;
