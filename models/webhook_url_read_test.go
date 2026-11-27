@@ -22,13 +22,16 @@ func TestWebhookTargetURL_ReadsPlainAndEncrypted(t *testing.T) {
 	require.NoError(t, db.Create(plain).Error)
 	var raw string
 	require.NoError(t, db.Table("webhook_targets").Select("url").Where("id = ?", "t-plain").Row().Scan(&raw))
-	assert.Equal(t, hook, raw, "saving still stores the url in clear")
+	assert.True(t, strings.HasPrefix(raw, "$ENC/"), "saving stores the url encrypted")
+	assert.NotContains(t, raw, "secretTokenValue")
 
 	enc := &WebhookTarget{ID: "t-enc", Name: "enc", URL: hook}
 	require.NoError(t, db.Create(enc).Error)
 	ciphertext := secrets.EncryptValue(hook)
 	require.True(t, strings.HasPrefix(ciphertext, "$ENC/"))
 	require.NoError(t, db.Exec("UPDATE webhook_targets SET url = ? WHERE id = ?", ciphertext, "t-enc").Error)
+	// A row written by 2.3.0, in clear.
+	require.NoError(t, db.Exec("UPDATE webhook_targets SET url = ? WHERE id = ?", hook, "t-plain").Error)
 
 	for _, id := range []string{"t-plain", "t-enc"} {
 		var got WebhookTarget
