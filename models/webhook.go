@@ -337,13 +337,12 @@ func (WebhookDelivery) TableName() string { return "webhook_deliveries" }
 // rows written before they were stored masked, so no read path (API,
 // export, logs) sees a credential.
 //
-// Rows written since snapshots are stored masked (and every row once the
-// start-up sweep ran) cost a substring check: the snapshot carries the
-// mask already, and an error without "://" quotes no URL.
+// It masks every snapshot, even one that already contains "***": a URL can
+// carry the mask in a harmless part and a secret elsewhere, and masking is
+// idempotent and does no I/O. An error without "://" quotes no URL and is
+// returned at once.
 func (d *WebhookDelivery) AfterFind(tx *gorm.DB) error {
-	if d.TargetURLSnapshot != "" && !WebhookURLIsMasked(d.TargetURLSnapshot) {
-		d.TargetURLSnapshot = MaskWebhookURL(d.TargetURLSnapshot)
-	}
+	d.TargetURLSnapshot = MaskWebhookURL(d.TargetURLSnapshot)
 	d.LastError = MaskWebhookURLsInText(d.LastError)
 	return nil
 }

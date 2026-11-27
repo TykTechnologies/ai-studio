@@ -125,12 +125,16 @@ func secretPathPrefix(host string) (int, bool) {
 	return 0, false
 }
 
-// looksLikeToken reports whether a path segment is probably a secret: 20 or
-// more characters mixing letters and digits (a Mattermost hook key, a
-// generated id). Readable segments (webhook, incoming-events, v1) stay.
+// looksLikeToken reports whether a path segment is probably a secret: 32 or
+// more characters of any kind; 20 or more that mix letters and digits (a
+// Mattermost hook key, a generated id); or 16 or more digits (a Discord
+// webhook id). Readable segments (webhook, incoming-events, v1) stay.
 func looksLikeToken(seg string) bool {
-	if seg == WebhookURLMask || len(seg) < 20 {
+	if seg == WebhookURLMask || len(seg) < 16 {
 		return false
+	}
+	if len(seg) >= 32 {
+		return true
 	}
 	letters, digits := 0, 0
 	for _, r := range seg {
@@ -141,7 +145,10 @@ func looksLikeToken(seg string) bool {
 			letters++
 		}
 	}
-	return letters > 0 && digits > 0
+	if letters == 0 && digits == len(seg) {
+		return true
+	}
+	return len(seg) >= 20 && letters > 0 && digits > 0
 }
 
 // urlInTextRe finds http(s) URLs in free text such as a Go transport error

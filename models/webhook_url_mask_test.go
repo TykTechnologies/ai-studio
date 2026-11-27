@@ -15,15 +15,17 @@ func TestMaskWebhookURL(t *testing.T) {
 		"https://hooks.zapier.com/hooks/catch/123/abcdef/":                                                                            "https://hooks.zapier.com/hooks/catch/***",
 		"https://chat.googleapis.com/v1/spaces/AAA/messages?key=K&token=T":                                                            "https://chat.googleapis.com/***?key=***&token=***",
 		// Any host: query values, user info and token-like segments.
-		"https://receiver.example.com/events?token=abc":                    "https://receiver.example.com/events?token=***",
-		"https://user:pass@receiver.example.com/events":                    "https://***@receiver.example.com/events",
-		"https://chat.example.com/hooks/k7x3m9p2q8r5t1w4y6z0abcd":          "https://chat.example.com/hooks/***",
-		"https://chat.example.com/hooks/k7x3m9p2q8r5t1w4y6z0abcd/user/123": "https://chat.example.com/hooks/***",
-		"https://receiver.example.com/webhooks/incoming-events/v1":         "https://receiver.example.com/webhooks/incoming-events/v1",
-		"https://receiver.example.com/":                                    "https://receiver.example.com/",
-		"https://receiver.example.com/a#frag":                              "https://receiver.example.com/a",
-		"not a url":                                                        WebhookURLMask,
-		"":                                                                 "",
+		"https://receiver.example.com/events?token=abc":                     "https://receiver.example.com/events?token=***",
+		"https://user:pass@receiver.example.com/events":                     "https://***@receiver.example.com/events",
+		"https://chat.example.com/hooks/k7x3m9p2q8r5t1w4y6z0abcd":           "https://chat.example.com/hooks/***",
+		"https://chat.example.com/hooks/k7x3m9p2q8r5t1w4y6z0abcd/user/123":  "https://chat.example.com/hooks/***",
+		"https://chat.example.com/hooks/abcdefghijklmnopqrstuvwxyzabcdefgh": "https://chat.example.com/hooks/***",
+		"https://chat.example.com/hooks/1234567890123456/x":                 "https://chat.example.com/hooks/***",
+		"https://receiver.example.com/webhooks/incoming-events/v1":          "https://receiver.example.com/webhooks/incoming-events/v1",
+		"https://receiver.example.com/":                                     "https://receiver.example.com/",
+		"https://receiver.example.com/a#frag":                               "https://receiver.example.com/a",
+		"not a url":                                                         WebhookURLMask,
+		"":                                                                  "",
 	} {
 		got := MaskWebhookURL(in)
 		assert.Equal(t, want, got, in)
@@ -38,4 +40,11 @@ func TestMaskWebhookURLsInText(t *testing.T) {
 	got := MaskWebhookURLsInText(`Post "https://hooks.slack.com/services/T1/B2/secret": dial tcp: lookup hooks.slack.com: no such host`)
 	assert.Equal(t, `Post "https://hooks.slack.com/services/***": dial tcp: lookup hooks.slack.com: no such host`, got)
 	assert.Equal(t, "status 500", MaskWebhookURLsInText("status 500"))
+}
+
+// A URL that carries the mask in a harmless part is still masked on read.
+func TestWebhookDeliveryAfterFindMasksEvenWithTheMaskPresent(t *testing.T) {
+	d := WebhookDelivery{TargetURLSnapshot: "https://hooks.slack.com/services/***/B0456/secretTokenValue123"}
+	assert.NoError(t, d.AfterFind(nil))
+	assert.Equal(t, "https://hooks.slack.com/services/***", d.TargetURLSnapshot)
 }
