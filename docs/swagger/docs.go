@@ -8631,13 +8631,25 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
-                        "description": "Maximum number of records, defaults to 100",
+                        "description": "Events per page, defaults to 100, at most 1000",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (1-based), defaults to 1",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Older form of page_size, used only without page_size and page",
                         "name": "limit",
                         "in": "query"
                     },
                     {
                         "type": "integer",
-                        "description": "Pagination offset, defaults to 0",
+                        "description": "Older form of page: events to skip, used only without page_size and page",
                         "name": "offset",
                         "in": "query"
                     }
@@ -8647,6 +8659,72 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/compliance.ComplianceEventsData"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/events-by-request": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "The App's compliance events that record request_id (the gateway's X-Tyk-AI-Request-ID) in their metadata, recorded within 10 minutes of at, oldest first, at most 20 (Enterprise). An agent trace's guardrail outcome links to them.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "Find the compliance events of one gateway request",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Gateway request id (tyai_ followed by 32 hex digits)",
+                        "name": "request_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "app_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "When the request ran (RFC 3339)",
+                        "name": "at",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.complianceEventsByRequestResponse"
                         }
                     },
                     "400": {
@@ -30903,9 +30981,6 @@ const docTemplate = `{
                         "last_sync_ack": {
                             "type": "string"
                         },
-                        "license_state": {
-                            "type": "string"
-                        },
                         "loaded_checksum": {
                             "type": "string"
                         },
@@ -30917,6 +30992,7 @@ const docTemplate = `{
                             "additionalProperties": true
                         },
                         "namespace": {
+                            "description": "Always \"default\" in CE",
                             "type": "string"
                         },
                         "owner_label": {
@@ -35205,6 +35281,17 @@ const docTemplate = `{
                 }
             }
         },
+        "api.complianceEventsByRequestResponse": {
+            "type": "object",
+            "properties": {
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/compliance.ComplianceEventRecord"
+                    }
+                }
+            }
+        },
         "api.createWebhookTargetResponse": {
             "type": "object",
             "properties": {
@@ -35834,6 +35921,14 @@ const docTemplate = `{
                         "$ref": "#/definitions/compliance.ComplianceEventRecord"
                     }
                 },
+                "meta": {
+                    "description": "Meta is the page the API returned, as on the other list endpoints;\nset by the handler.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/compliance.PageMeta"
+                        }
+                    ]
+                },
                 "timeline": {
                     "type": "array",
                     "items": {
@@ -35962,6 +36057,27 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "risk_score": {
+                    "type": "integer"
+                }
+            }
+        },
+        "compliance.PageMeta": {
+            "type": "object",
+            "properties": {
+                "offset": {
+                    "description": "Offset is the number of rows skipped (limit/offset requests may not\nfall on a page boundary).",
+                    "type": "integer"
+                },
+                "page_number": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                },
+                "total_pages": {
                     "type": "integer"
                 }
             }
@@ -37177,6 +37293,10 @@ const docTemplate = `{
                 },
                 "description": {
                     "type": "string"
+                },
+                "discovered": {
+                    "description": "Discovered marks a tool known from the upstream's tools/list (the\nregistration wizard's discovery), not from the definition: a remote\nproxy that allows every tool names none. Syncs keep such tools while\nthe definition names no tools of its own.",
+                    "type": "boolean"
                 },
                 "name": {
                     "type": "string"
@@ -39987,6 +40107,13 @@ const docTemplate = `{
                 "description": {
                     "description": "Studio presentation and governance",
                     "type": "string"
+                },
+                "discovered_tools": {
+                    "description": "DiscoveredTools is what the wizard's tool discovery listed (the\nupstream's tools/list). A remote proxy's definition names no tools\nwhen every tool is allowed, so Studio keeps this list as the server's\nknown tools (MCPPrimitive.Discovered) for the server page and the key\naccess editor. With an allow-list only the allowed tools are kept, with\ntheir descriptions. Administrators only; never taken from a submission.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/mcpintrospect.Tool"
+                    }
                 },
                 "gateway_tags": {
                     "description": "Deployment target (segmented gateways)",

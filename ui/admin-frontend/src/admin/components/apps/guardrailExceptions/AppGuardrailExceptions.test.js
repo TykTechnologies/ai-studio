@@ -217,7 +217,10 @@ describe("AppGuardrailExceptions (midsommar-clean-9u1j.6)", () => {
     expect(screen.getByTestId("gx-save")).toBeDisabled();
     fireEvent.change(screen.getByTestId("gx-alert-event"), { target: { value: "Bad Name" } });
     expect(screen.getByTestId("gx-save")).toBeDisabled();
+    expect(screen.getByText(/Webhooks subscribe to guardrail\.alert\. followed by this name\./)).toBeInTheDocument();
     fireEvent.change(screen.getByTestId("gx-alert-event"), { target: { value: "visor-pr-flag-2" } });
+    // o4a.12: the topic the alert raises, filled in from the name.
+    expect(screen.getByText(/Webhooks subscribe to guardrail\.alert\.visor-pr-flag-2\./)).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("gx-save"));
     await waitFor(() =>
       expect(apiClient.post).toHaveBeenCalledWith(

@@ -359,6 +359,13 @@ type RegisterInput struct {
 	// upstream's host on an internal address). Administrators only
 	// (checked by the API); never taken from a submission (w4e).
 	AllowInternalHost *bool `json:"allow_internal_host,omitempty"`
+	// DiscoveredTools is what the wizard's tool discovery listed (the
+	// upstream's tools/list). A remote proxy's definition names no tools
+	// when every tool is allowed, so Studio keeps this list as the server's
+	// known tools (MCPPrimitive.Discovered) for the server page and the key
+	// access editor. With an allow-list only the allowed tools are kept, with
+	// their descriptions. Administrators only; never taken from a submission.
+	DiscoveredTools []mcpintrospect.Tool `json:"discovered_tools,omitempty"`
 
 	// REST API to MCP
 	SourceAPIID string              `json:"source_api_id"`

@@ -2,6 +2,7 @@ import GovernedMetadataSummary from "../metadata/GovernedMetadataSummary";
 import Section from "../common/Section";
 import UsedBySection from "../common/UsedBySection";
 import PrivacyLevelChip from "../common/privacy/PrivacyLevelChip";
+import BodyNotStored from "../common/BodyNotStored";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useDebounce } from "use-debounce";
@@ -928,9 +929,11 @@ const LLMDetails = () => {
                       <Box sx={{ overflow: "auto", maxHeight: 200 }}>
                         <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                           <code>
-                            <ExpandableMessage
-                              message={log.attributes.request_body}
-                            />
+                            {log.attributes.request_body ? (
+                              <ExpandableMessage message={log.attributes.request_body} />
+                            ) : (
+                              <BodyNotStored />
+                            )}
                           </code>
                         </pre>
                       </Box>
@@ -939,9 +942,11 @@ const LLMDetails = () => {
                       <Box sx={{ overflow: "auto", maxHeight: 200 }}>
                         <pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                           <code>
-                            <ExpandableMessage
-                              message={log.attributes.response_body}
-                            />
+                            {log.attributes.response_body ? (
+                              <ExpandableMessage message={log.attributes.response_body} />
+                            ) : (
+                              <BodyNotStored />
+                            )}
                           </code>
                         </pre>
                       </Box>

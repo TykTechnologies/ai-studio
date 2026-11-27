@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 )
 
@@ -102,6 +104,9 @@ func TestAgentTraceGuardrail_QuarantineIsRecorded(t *testing.T) {
 	assert.Equal(t, "secrets.test in tool_result (read_file); quarantine", got[0].Detail)
 	assert.NotContains(t, got[0].Detail, "SECRET")
 	assert.NotEqual(t, agenttrace.StatusError, ev.Status, "a quarantine does not fail the call")
+	// tkg.2: the request id its compliance events record, to link them.
+	assert.Equal(t, resp.Header.Get(requestid.Header), ev.Attributes[agenttrace.AttrRequestID])
+	assert.True(t, requestid.Valid(ev.Attributes[agenttrace.AttrRequestID]))
 }
 
 // A guardrail block is recorded once, under the guardrail's name, not again
@@ -122,6 +127,33 @@ func TestAgentTraceGuardrail_BlockIsNamedOnce(t *testing.T) {
 	assert.Equal(t, "no secrets", got[0].Name)
 	assert.Equal(t, "secrets.test in text; block", got[0].Detail)
 	assert.Empty(t, gatewayEvents(ev, agenttrace.GatewayEventFilter), "no second, unnamed block event")
+	assert.Equal(t, resp.Header.Get(requestid.Header), ev.Attributes[agenttrace.AttrRequestID])
+}
+
+// tkg.2: the request id is the one the guardrail's compliance events carry,
+// never a fresh one, and nothing is noted without a valid id.
+func TestNoteRequestID(t *testing.T) {
+	const id = "tyai_0123456789abcdef0123456789abcdef"
+	out := &scripting.ScriptOutput{ComplianceEvents: []scripting.ComplianceEventOutput{
+		{Metadata: map[string]interface{}{"request_id": "not-an-id"}},
+		{Metadata: map[string]interface{}{"request_id": id}},
+	}}
+	withCapture(t)
+	note := func(ctx context.Context, out *scripting.ScriptOutput) map[string]string {
+		ctx, rec := agenttrace.Begin(ctx)
+		require.NotNil(t, rec)
+		noteRequestID(ctx, rec, out)
+		var attrs map[string]string
+		rec.Update(func(ev *agenttrace.Event) { attrs = ev.Attributes })
+		return attrs
+	}
+	assert.Equal(t, id, note(context.Background(), out)[agenttrace.AttrRequestID])
+
+	other := "tyai_ffffffffffffffffffffffffffffffff"
+	ctx := requestid.WithID(context.Background(), other, "")
+	assert.Equal(t, id, note(ctx, out)[agenttrace.AttrRequestID], "the events' id wins")
+	assert.Equal(t, other, note(ctx, &scripting.ScriptOutput{})[agenttrace.AttrRequestID], "else the request's")
+	assert.Empty(t, note(context.Background(), &scripting.ScriptOutput{})[agenttrace.AttrRequestID], "never minted")
 }
 
 // midsommar-clean-b66: an /ai/ call that a filter refused still records what
