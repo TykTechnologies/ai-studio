@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/TykTechnologies/midsommar/v2/metrics"
@@ -29,17 +30,31 @@ func recordPolicyBlock(ctx context.Context, rule, blockType string, detail ...st
 	if rule == "budget" {
 		typ = agenttrace.GatewayEventBudget
 	}
-	ge := agenttrace.GatewayEvent{Type: typ, Outcome: agenttrace.OutcomeBlock, Name: rule}
+	ge := agenttrace.GatewayEvent{Type: typ, Outcome: agenttrace.OutcomeBlock, Name: rule, At: time.Now()}
 	if len(detail) > 0 {
 		ge.Detail = boundDetail(detail[0])
 	}
-	rec.AddGatewayEvent(ge)
 	rec.Update(func(ev *agenttrace.Event) {
+		// The filter that blocked already recorded its own event, under its
+		// name (recordFilterOutcome): the rule would only repeat it.
+		if typ != agenttrace.GatewayEventFilter || !hasNamedBlock(ev.GatewayEvents) {
+			ev.GatewayEvents = append(ev.GatewayEvents, ge)
+		}
 		ev.Status = agenttrace.StatusError
 		if ev.ErrorType == "" {
 			ev.ErrorType = "policy_" + typ
 		}
 	})
+}
+
+// hasNamedBlock reports whether a filter or guardrail recorded its own block.
+func hasNamedBlock(events []agenttrace.GatewayEvent) bool {
+	for _, ge := range events {
+		if ge.Outcome == agenttrace.OutcomeBlock && (ge.Type == agenttrace.GatewayEventGuardrail || ge.Type == agenttrace.GatewayEventFilter) {
+			return true
+		}
+	}
+	return false
 }
 
 // recordGatewayEvent adds a gateway event to the request's capture.

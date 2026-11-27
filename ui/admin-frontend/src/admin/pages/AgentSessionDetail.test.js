@@ -79,6 +79,28 @@ describe("AgentSessionDetail", () => {
     expect(agentTracingService.getSession).not.toHaveBeenCalled();
   });
 
+  // tkg.14: scripts and assistive tech find the views as tabs by their
+  // names; the key hint is a shortcut, not part of the name.
+  it("exposes the views as a tablist with named tabs that switch the panel", async () => {
+    renderPage();
+    await screen.findByTestId("transcript");
+    const tablist = screen.getByRole("tablist", { name: "Session views" });
+    const transcript = within(tablist).getByRole("tab", { name: "Transcript" });
+    const timeline = within(tablist).getByRole("tab", { name: "Timeline" });
+    expect(transcript).toHaveAttribute("aria-selected", "true");
+    expect(transcript).toHaveAttribute("aria-keyshortcuts", "1");
+    expect(timeline).toHaveAttribute("aria-selected", "false");
+    expect(timeline).toHaveAttribute("aria-keyshortcuts", "2");
+    expect(screen.getByRole("tabpanel", { name: "Transcript" })).toContainElement(screen.getByTestId("transcript"));
+    expect(transcript).toHaveAttribute("aria-controls", screen.getByRole("tabpanel").id);
+
+    fireEvent.click(timeline);
+    expect(await screen.findByTestId("timeline-view")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Timeline" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel", { name: "Timeline" })).toContainElement(screen.getByTestId("timeline-view"));
+    expect(screen.queryByTestId("transcript")).not.toBeInTheDocument();
+  });
+
   it("renders the header, summary and timeline strips and loads every span page", async () => {
     renderPage();
     await loaded();

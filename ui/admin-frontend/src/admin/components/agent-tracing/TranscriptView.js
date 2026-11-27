@@ -35,6 +35,7 @@ const ROW_ESTIMATE = 96;
 // at the top (ContentModeNotice), instead of on every row.
 const NO_CONTENT_MODES = new Set(["off", "metadata", "hashed"]);
 const NOT_CAPTURED_STATES = new Set(["off", "not_captured", "metadata", "hashed"]);
+const CAPTURED_STATES = new Set(["full", "redacted", "truncated"]);
 
 const Placeholder = ({ span, part, fallback }) => {
   const { detail } = useSessionDetail();
@@ -196,7 +197,11 @@ const ToolCard = ({ item }) => {
     attr.catalogue_type && attr.catalogue_id
       ? resourceName(resources, { resource_type: attr.catalogue_type, resource_id: attr.catalogue_id })
       : "";
-  const noResult = !span.end_time || (clientSide && !resultPart);
+  // "No result observed" means the call was abandoned (the turn closed
+  // without its result) or is still open. A client-side tool's result is
+  // never stored on its span (it lives in the next request), so a missing
+  // tool_result part says nothing about whether the result came back.
+  const noResult = !span.end_time || span.error_type === "abandoned";
   return (
     <Box sx={{ mb: 0.5 }}>
       <SelectableBox
@@ -291,6 +296,11 @@ const AssistantStep = ({ row }) => {
   // jyx.51: the tools the request offered, and calls to tools it did not.
   const offered = attrNames(attrsOf(s)["tyk.tools.offered"]);
   const notOffered = attrNames(attrsOf(s)["tyk.tool_calls.not_offered"]);
+  // tkg.3: a captured response with no text only called tools; its tool
+  // cards follow, so it says so instead of showing a content placeholder.
+  const calls = (s.tool_call_ids || []).length;
+  const toolCallsOnly =
+    text == null && calls > 0 && !withheldText(s) && CAPTURED_STATES.has(partOf(s, "response")?.content_state);
   return (
     <Box sx={{ mb: 1 }} data-testid="assistant-step">
       <SelectableBox span={s} sx={{ p: 1.5 }}>
@@ -312,7 +322,15 @@ const AssistantStep = ({ row }) => {
             </Collapse>
           </Box>
         )}
-        {text != null ? <CapturedMarkdown content={text} /> : <Placeholder span={s} part="response" />}
+        {text != null ? (
+          <CapturedMarkdown content={text} />
+        ) : toolCallsOnly ? (
+          <Typography variant="caption" color="text.secondary" display="block" data-testid="tool-calls-only">
+            Called {calls} tool{calls === 1 ? "" : "s"}
+          </Typography>
+        ) : (
+          <Placeholder span={s} part="response" />
+        )}
         <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }} data-testid="step-meta">
           <Typography variant="caption" color="text.secondary">
             {s.response_model || s.request_model || "model ?"}

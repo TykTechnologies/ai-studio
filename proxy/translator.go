@@ -335,8 +335,10 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 		relay    *loopbackRelay // the served rung's cache headers
 	)
 	tried := 0
+	var attempted llmAttempt // the last rung tried, for a failure's capture
 	for i, a := range plan.attempts {
 		tried++
+		attempted = a
 		actx, cancel := context.WithTimeout(overall, plan.attemptTimeout)
 		if a.conf.Vendor == models.BEDROCK {
 			var fail attemptFailure
@@ -382,7 +384,7 @@ func (p *Proxy) CreateChatCompletionHandler(w http.ResponseWriter, r *http.Reque
 		// reporting it as our 500 tells the caller to retry a request that can
 		// never succeed, and hides a client error as a server one.
 		respondAttemptFailure(w, last, "failed to generate content")
-		p.captureOuterCall(r, llmAttempt{}, tried, last.statusOr(http.StatusBadGateway), reqBody, nil)
+		p.captureOuterFailure(r, requestFilterFormatOpenAI, attempted, tried, last.statusOr(http.StatusBadGateway), reqBody)
 		return
 	}
 	setServedHeaders(w, served)
@@ -587,8 +589,10 @@ func (p *Proxy) handleChatCompletionStream(
 		last   attemptFailure
 	)
 	tried := 0
+	var attempted llmAttempt // the last rung tried, for a failure's capture
 	for i, a := range plan.attempts {
 		tried++
+		attempted = a
 		gen := i
 		attemptGen, servedModel = gen, a.model
 		setServedHeaders(w, a) // header map is still open: nothing written yet
@@ -653,7 +657,7 @@ func (p *Proxy) handleChatCompletionStream(
 	}
 	if resp == nil {
 		p.failStreamAttempt(w, flusher, framesSent, last, "LLM call failed")
-		p.captureOuterCall(r, llmAttempt{}, tried, last.statusOr(http.StatusBadGateway), reqBody, nil)
+		p.captureOuterFailure(r, requestFilterFormatOpenAI, attempted, tried, last.statusOr(http.StatusBadGateway), reqBody)
 		return
 	}
 	conf = served.conf

@@ -489,7 +489,7 @@ func TestAgentTraceE2E_EdgeDemoAgent(t *testing.T) {
 
 	events := edgeSpans(doc, "gateway_event")
 	require.Len(t, events, 1)
-	assert.Equal(t, "request_filter", events[0].GatewayEvent.Name)
+	assert.Equal(t, "guard", events[0].GatewayEvent.Name)
 
 	doc, _ = h.export(e.appID, "5d0c7a4e-3f7b-4f2a-9b51-0f0a8f2c1d11")
 	assert.Equal(t, declared.HarnessClaudeCode, doc.Session.ExternalSource)
