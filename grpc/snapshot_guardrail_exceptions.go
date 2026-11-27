@@ -85,6 +85,11 @@ func snapshotGuardrailCapabilities(apps []models.App) []*pb.AppGuardrailCapabili
 // further than this.
 const maxEdgeExceptionHitsPerHeartbeat = 1 << 20
 
+// maxEdgeExceptionIDsPerHeartbeat is how many exception ids a heartbeat may
+// report: the edge holds at most this many between heartbeats
+// (microgateway services.maxPendingTemplateMatches).
+const maxEdgeExceptionIDsPerHeartbeat = 4096
+
 // exceptionHitRecorder counts the hits edges report and writes them as the
 // hub's own are (services.GuardrailExceptionHits): at most once a minute per
 // exception, holding the hits in between instead of dropping them (o4a.13:
@@ -116,6 +121,12 @@ func (s *ControlServer) recordEdgeGuardrailExceptionHits(edgeID, namespace strin
 	}
 	if len(want) == 0 {
 		return
+	}
+	if len(want) > maxEdgeExceptionIDsPerHeartbeat {
+		// An honest edge holds at most this many between heartbeats; more is
+		// not read, so a heartbeat cannot make the hub load an unbounded set.
+		logger.Log.Warn().Str("edge_id", edgeID).Int("reported", len(want)).Msg("Edge reported more guardrail exception hits than an edge holds; extra ignored")
+		want = want[:maxEdgeExceptionIDsPerHeartbeat]
 	}
 	namespace = models.CanonicalNamespace(namespace)
 	var rows []struct {

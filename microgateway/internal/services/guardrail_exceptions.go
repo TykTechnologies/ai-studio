@@ -109,6 +109,10 @@ type exceptionHitCounts struct {
 func (c *exceptionHitCounts) addN(id, n uint32) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.addLocked(id, n)
+}
+
+func (c *exceptionHitCounts) addLocked(id, n uint32) {
 	if c.n == nil {
 		c.n = map[uint32]uint32{}
 	}
@@ -133,8 +137,10 @@ func (c *exceptionHitCounts) DrainCounts() map[uint32]uint32 {
 
 // RequeueCounts puts back counts a heartbeat failed to deliver.
 func (c *exceptionHitCounts) RequeueCounts(counts map[uint32]uint32) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	for id, n := range counts {
-		c.addN(id, n)
+		c.addLocked(id, n)
 	}
 }
 
