@@ -147,11 +147,13 @@ const VERDICT_NOUN = {
   log: "log-only",
 };
 
+const JUDGE_LLM_DOWN_FIX = () => "Check the judge LLM is up, reachable from the gateway, and its credentials are valid.";
+
 // Why the judge gave no opinion, as the fix that fits it.
 const JUDGE_ERROR_FIX = {
   timeout: (filter) => `Raise the judge's timeout on ${filter}, or pick a faster judge model.`,
-  call_failed: () => "Check the judge LLM is up, reachable from the gateway, and its credentials are valid.",
-  judge_unavailable: () => "Check the judge LLM is up, reachable from the gateway, and its credentials are valid.",
+  call_failed: JUDGE_LLM_DOWN_FIX,
+  judge_unavailable: JUDGE_LLM_DOWN_FIX,
   unparseable: () => "The judge model's answer could not be read: pick a stronger judge model.",
   privacy: () => "Pick a judge LLM whose privacy score is at least the request's LLM's.",
   over_budget: () => "The judge LLM is over its budget: raise the budget or pick another judge LLM.",
