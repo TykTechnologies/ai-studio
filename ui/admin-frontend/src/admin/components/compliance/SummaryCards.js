@@ -128,7 +128,7 @@ const SummaryCards = ({ summary }) => {
       value: summary.policy_violations,
       trend: summary.policy_trend,
       icon: BlockIcon,
-      description: "403 blocked requests",
+      description: "Requests refused by a policy, filter or guardrail",
     },
     {
       type: "budget",

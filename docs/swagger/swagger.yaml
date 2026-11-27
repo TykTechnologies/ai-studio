@@ -5380,8 +5380,22 @@ definitions:
         type: integer
       app_name:
         type: string
+      blocks:
+        description: |-
+          Blocks are the app's refused requests (proxy_logs 4xx, as
+          TotalBlocks) and Events its warning and critical filter and
+          guardrail events, most of which let the request go on; Count is
+          their sum. EventsByAction splits Events by the action taken (see
+          PolicyViolationsData.EventsByAction).
+        type: integer
       count:
         type: integer
+      events:
+        type: integer
+      events_by_action:
+        additionalProperties:
+          type: integer
+        type: object
       last_occurred:
         type: string
       violation_types:
@@ -5392,7 +5406,19 @@ definitions:
     type: object
   compliance.PolicyViolationsData:
     properties:
+      events_by_action:
+        additionalProperties:
+          type: integer
+        description: |-
+          EventsByAction splits TotalFlagged by the action the filter or
+          guardrail took: block, quarantine, remove, redact, alert, log, or
+          other (an event that names no action, such as a filter script's).
+        type: object
       filter_blocks:
+        description: |-
+          FilterBlocks is per app: its blocked requests and its filter and
+          guardrail events (most of which let the request go on), despite the
+          name, which the API keeps.
         items:
           $ref: '#/definitions/compliance.PolicyViolation'
         type: array
@@ -5401,6 +5427,17 @@ definitions:
           $ref: '#/definitions/compliance.PolicyViolation'
         type: array
       timeline:
+        items:
+          $ref: '#/definitions/compliance.TimelineData'
+        type: array
+      timeline_blocks:
+        description: |-
+          TimelineBlocks and TimelineEvents split Timeline (their daily sum)
+          into blocked requests and filter and guardrail events.
+        items:
+          $ref: '#/definitions/compliance.TimelineData'
+        type: array
+      timeline_events:
         items:
           $ref: '#/definitions/compliance.TimelineData'
         type: array
