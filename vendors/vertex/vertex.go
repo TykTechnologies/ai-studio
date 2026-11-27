@@ -83,8 +83,15 @@ func (v *Vertex) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, stat
 		Model: "vertex"}, nil
 }
 
+// ProxySetAuthHeader sets a Google OAuth2 access token from the LLM's
+// credential chain (see credentials.go). On error the header is left unset
+// and the caller must not send the request.
 func (v *Vertex) ProxySetAuthHeader(r *http.Request, llm *models.LLM) error {
-	r.Header.Set("Authorization", fmt.Sprintf("Bearer %s", llm.APIKey))
+	token, err := AccessToken(llm)
+	if err != nil {
+		return err
+	}
+	r.Header.Set("Authorization", "Bearer "+token)
 	return nil
 }
 
