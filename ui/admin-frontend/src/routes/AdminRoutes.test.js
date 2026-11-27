@@ -36,6 +36,10 @@ jest.mock("../admin/components/filters/FilterForm", () => ({
   __esModule: true,
   default: () => <div>Filter form page</div>,
 }));
+jest.mock("../admin/pages/TykConnectionForm", () => ({
+  __esModule: true,
+  default: () => <div>Tyk connection form page</div>,
+}));
 jest.mock("../admin/pages/MetadataCompliance", () => ({
   __esModule: true,
   default: () => <div>Metadata coverage page</div>,
@@ -80,6 +84,23 @@ describe("AdminRoutes", () => {
     renderAt("/admin/tools/3/edit");
     expect(await screen.findByText("Tool form page")).toBeInTheDocument();
     expect(screen.getByTestId("location")).toHaveTextContent("/admin/tools/edit/3");
+  });
+
+  // tkg.13: a Tyk connection has no separate detail page; its id URL opens
+  // the connection's page (the form) instead of Page not found.
+  it("opens a Tyk connection at tyk-connections/:id and tyk-connections/:id/edit", async () => {
+    for (const path of ["/admin/tyk-connections/1", "/admin/tyk-connections/1/edit"]) {
+      const { unmount } = renderAt(path);
+      expect(await screen.findByText("Tyk connection form page")).toBeInTheDocument();
+      expect(screen.getByTestId("location")).toHaveTextContent("/admin/tyk-connections/edit/1");
+      unmount();
+    }
+  });
+
+  it("keeps tyk-connections/new on the new-connection form", async () => {
+    renderAt("/admin/tyk-connections/new");
+    expect(await screen.findByText("Tyk connection form page")).toBeInTheDocument();
+    expect(screen.getByTestId("location")).toHaveTextContent("/admin/tyk-connections/new");
   });
 
   it("shows a Page not found page with a link back to the overview for unknown paths", async () => {
