@@ -1,0 +1,69 @@
+[{
+  "candidates": [
+    {
+      "content": {
+        "role": "model",
+        "parts": [
+          {
+            "text": "x"
+          }
+        ]
+      }
+    }
+  ],
+  "usageMetadata": {
+    "trafficType": 1
+  },
+  "modelVersion": "gemini-3.5-flash",
+  "createTime": "2026-11-27T22:02:30.823752Z",
+  "responseId": "9v0Ja8ijMpbNi9sP4tbOqA0"
+}
+,
+{
+  "candidates": [
+    {
+      "content": {
+        "role": "model",
+        "parts": [
+          {
+            "text": "",
+            "thoughtSignature":"x"
+          }
+        ]
+      },
+      "finishReason": 1
+    }
+  ],
+  "promptFeedback": {
+    "safetyRatings": [
+      {
+        "category": 10,
+        "severity": 1,
+        "severityScore": 0.00023937225
+      }
+    ]
+  },
+  "usageMetadata": {
+    "promptTokenCount": 7,
+    "candidatesTokenCount": 1,
+    "totalTokenCount": 103,
+    "trafficType": 1,
+    "promptTokensDetails": [
+      {
+        "modality": 1,
+        "tokenCount": 7
+      }
+    ],
+    "candidatesTokensDetails": [
+      {
+        "modality": 1,
+        "tokenCount": 1
+      }
+    ],
+    "thoughtsTokenCount": 95
+  },
+  "modelVersion": "gemini-3.5-flash",
+  "createTime": "2026-11-27T22:02:30.823752Z",
+  "responseId": "9v0Ja8ijMpbNi9sP4tbOqA0"
+}
+]

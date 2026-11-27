@@ -1,9 +1,11 @@
 package proxy
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -414,4 +416,46 @@ func TestVertexUnified_RequestModel(t *testing.T) {
 	calls := fake.snapshot()
 	require.Len(t, calls, 1)
 	assert.Equal(t, strings.Replace(vertexLoopbackPath, "gemini-2.5-flash", "gemini-2.5-pro", 1), calls[0].path)
+}
+
+// A response recorded from Vertex on the loopback's query (candidate text
+// and thought signature replaced): two chunks, the first with a
+// usageMetadata of only trafficType, the counts on the last; gzip-encoded
+// when the client accepts it, as Vertex sends it. Both the caller's usage
+// and the chat record carry the counts.
+func TestVertexUnified_RecordedVertexStream(t *testing.T) {
+	t.Parallel()
+	recorded, err := os.ReadFile("testdata/vertex_stream_live.json")
+	require.NoError(t, err)
+	serve := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			_, _ = w.Write(recorded)
+			return
+		}
+		w.Header().Set("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(w)
+		_, _ = gz.Write(recorded)
+		_ = gz.Close()
+	}
+	h := newFailoverHarness(t, serve, serveOpenAIText("never"), func(primary, _ *models.LLM) {
+		primary.Vendor = models.VERTEX
+		primary.APIEndpoint += vertexEndpointSuffix
+		primary.APIKey = vertexTestToken
+		primary.DefaultModel = "gemini-3.5-flash"
+		primary.Failover = models.LLMFailover{}
+	})
+
+	resp, out := h.post("/ai/primary/v1/chat/completions", `{"model":"gemini-3.5-flash","messages":[{"role":"user","content":"Reply with the single word: pong"}],"max_tokens":256}`)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(out))
+	var got ChatCompletionResponse
+	require.NoError(t, json.Unmarshal(out, &got), string(out))
+	require.Len(t, got.Choices, 1)
+	assert.Equal(t, "x", got.Choices[0].Message.Content)
+	assert.Equal(t, 7, got.Usage.PromptTokens, string(out))
+	assert.Equal(t, 1, got.Usage.CompletionTokens, string(out))
+
+	recs := waitForChatRecords(t, h)
+	assert.Equal(t, 7, recs[0].PromptTokens)
+	assert.Equal(t, 96, recs[0].ResponseTokens, "analytics count the thinking tokens with the output")
 }
