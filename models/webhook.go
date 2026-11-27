@@ -252,8 +252,9 @@ func (t *WebhookTarget) ToResponse() WebhookTargetResponse {
 	if filters == nil {
 		filters = []string{}
 	}
+	maskedURL := MaskWebhookURL(t.URL)
 	return WebhookTargetResponse{
-		ID: t.ID, Name: t.Name, Description: t.Description, URL: MaskWebhookURL(t.URL), URLMasked: MaskWebhookURL(t.URL) != t.URL,
+		ID: t.ID, Name: t.Name, Description: t.Description, URL: maskedURL, URLMasked: maskedURL != t.URL,
 		Status: t.Status, Paused: t.Paused, TopicFilters: filters,
 		TemplatePreset: t.TemplatePreset, TemplateBody: t.TemplateBody,
 		HeaderNames: t.HeaderNames(), HasSigningSecret: t.SigningSecret != "",
@@ -335,8 +336,14 @@ func (WebhookDelivery) TableName() string { return "webhook_deliveries" }
 // AfterFind masks the URL snapshot (and URLs quoted in the last error) of
 // rows written before they were stored masked, so no read path (API,
 // export, logs) sees a credential.
+//
+// Rows written since snapshots are stored masked (and every row once the
+// start-up sweep ran) cost a substring check: the snapshot carries the
+// mask already, and an error without "://" quotes no URL.
 func (d *WebhookDelivery) AfterFind(tx *gorm.DB) error {
-	d.TargetURLSnapshot = MaskWebhookURL(d.TargetURLSnapshot)
+	if d.TargetURLSnapshot != "" && !WebhookURLIsMasked(d.TargetURLSnapshot) {
+		d.TargetURLSnapshot = MaskWebhookURL(d.TargetURLSnapshot)
+	}
 	d.LastError = MaskWebhookURLsInText(d.LastError)
 	return nil
 }
