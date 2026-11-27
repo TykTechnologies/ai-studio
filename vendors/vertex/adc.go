@@ -37,12 +37,19 @@ func ADCEnabled() bool {
 	return err == nil && v
 }
 
+// adcLookupTimeout bounds how long a request waits for the first lookup of
+// the host's credentials (the GCP metadata server probe can be slow).
+const adcLookupTimeout = 15 * time.Second
+
 var (
 	adcMu       sync.Mutex
 	adcSource   oauth2.TokenSource
 	adcKind     string
 	adcLastErr  error
 	adcFailedAt time.Time
+	// adcInflight is closed when the running lookup finishes; nil when no
+	// lookup runs.
+	adcInflight chan struct{}
 )
 
 // adcTokenSource returns the process-wide token source for the host's
@@ -50,26 +57,68 @@ var (
 // for the life of the process; a failed one is retried after
 // adcRetryInterval.
 func adcTokenSource() (oauth2.TokenSource, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), adcLookupTimeout)
+	defer cancel()
+	return adcTokenSourceCtx(ctx)
+}
+
+// adcTokenSourceCtx is adcTokenSource waiting at most until ctx is done.
+// One lookup runs at a time, without the lock held, and every caller waits
+// for it: the lookup's own context must outlive the request, since the
+// token source keeps it for refreshes.
+func adcTokenSourceCtx(ctx context.Context) (oauth2.TokenSource, error) {
+	adcMu.Lock()
+	if adcSource != nil {
+		ts := adcSource
+		adcMu.Unlock()
+		return ts, nil
+	}
+	if adcLastErr != nil && time.Since(adcFailedAt) < adcRetryInterval {
+		err := adcLastErr
+		adcMu.Unlock()
+		return nil, err
+	}
+	wait := adcInflight
+	if wait == nil {
+		wait = make(chan struct{})
+		adcInflight = wait
+		go runADCLookup(wait)
+	}
+	adcMu.Unlock()
+
+	select {
+	case <-wait:
+	case <-ctx.Done():
+		return nil, fmt.Errorf("%w: %s is enabled but looking up the host Google credentials timed out", ErrNoCredential, ADCSetting)
+	}
 	adcMu.Lock()
 	defer adcMu.Unlock()
 	if adcSource != nil {
 		return adcSource, nil
 	}
-	if adcLastErr != nil && time.Since(adcFailedAt) < adcRetryInterval {
-		return nil, adcLastErr
-	}
+	return nil, adcLastErr
+}
+
+// runADCLookup looks the host's credentials up and records the result.
+func runADCLookup(done chan struct{}) {
 	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, tokenHTTPClient)
 	creds, err := findDefaultCredentials(ctx, google.CredentialsParams{Scopes: []string{CloudPlatformScope}})
+
+	adcMu.Lock()
+	defer func() {
+		adcInflight = nil
+		adcMu.Unlock()
+		close(done)
+	}()
 	if err != nil {
 		slog.Warn("vertex: host Application Default Credentials not found", "setting", ADCSetting, "error", err)
 		adcLastErr = fmt.Errorf("%w: %s is enabled but no host Google credentials were found (GOOGLE_APPLICATION_CREDENTIALS, gcloud credentials or the GCP metadata server)", ErrNoCredential, ADCSetting)
 		adcFailedAt = time.Now()
-		return nil, adcLastErr
+		return
 	}
 	adcSource = oauth2.ReuseTokenSource(nil, creds.TokenSource)
 	adcKind = credentialKind(creds)
 	adcLastErr = nil
-	return adcSource, nil
 }
 
 // ADCState describes the host-credential setting for a startup log. It
@@ -85,34 +134,22 @@ type ADCState struct {
 }
 
 // CheckADC reports the ADC setting and, when it is on, whether the host's
-// credentials resolve to a token. It may contact the metadata server and
-// Google's token endpoint, so hosts call it off the startup path.
+// credentials resolve to a token. The lookup waits at most until ctx is
+// done; the token request is bounded by the token client's timeout. It may
+// contact the metadata server and Google's token endpoint, so hosts call it
+// off the startup path.
 func CheckADC(ctx context.Context) ADCState {
 	if !ADCEnabled() {
 		return ADCState{}
 	}
 	state := ADCState{Enabled: true}
-	type result struct {
-		ts  oauth2.TokenSource
-		err error
+	ts, err := adcTokenSourceCtx(ctx)
+	if err == nil {
+		_, err = ts.Token()
 	}
-	done := make(chan result, 1)
-	go func() {
-		ts, err := adcTokenSource()
-		if err == nil {
-			_, err = ts.Token()
-		}
-		done <- result{ts, err}
-	}()
-	select {
-	case <-ctx.Done():
-		state.Error = "timed out looking up host Google credentials"
+	if err != nil {
+		state.Error = "no usable host Google credentials; Vertex LLMs without an API key will be refused"
 		return state
-	case r := <-done:
-		if r.err != nil {
-			state.Error = "no usable host Google credentials; Vertex LLMs without an API key will be refused"
-			return state
-		}
 	}
 	state.Resolved = true
 	adcMu.Lock()
@@ -139,6 +176,6 @@ func credentialKind(creds *google.Credentials) string {
 // resetADC drops the cached host source. Tests only.
 func resetADC() {
 	adcMu.Lock()
-	adcSource, adcKind, adcLastErr, adcFailedAt = nil, "", nil, time.Time{}
+	adcSource, adcKind, adcLastErr, adcFailedAt, adcInflight = nil, "", nil, time.Time{}, nil
 	adcMu.Unlock()
 }

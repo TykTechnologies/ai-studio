@@ -3,8 +3,10 @@ package vertexVendor
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/stretchr/testify/assert"
@@ -116,4 +118,45 @@ func TestCheckADC_ReportsSourceWithoutSecrets(t *testing.T) {
 	state := CheckADC(context.Background())
 	assert.Equal(t, ADCState{Enabled: true, Resolved: true, Source: "service_account"}, state)
 	assert.NotContains(t, state.Source+state.Error, secret)
+}
+
+func TestADC_ConcurrentFirstLookupRunsOnceWithoutHoldingTheLock(t *testing.T) {
+	release := make(chan struct{})
+	var calls atomic.Int32
+	prev := findDefaultCredentials
+	findDefaultCredentials = func(context.Context, google.CredentialsParams) (*google.Credentials, error) {
+		calls.Add(1)
+		<-release
+		return metadataCreds("host-token"), nil
+	}
+	resetADC()
+	t.Cleanup(func() {
+		findDefaultCredentials = prev
+		resetADC()
+	})
+
+	// A caller whose deadline passes gives up; the lookup keeps running.
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	_, err := adcTokenSourceCtx(ctx)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrNoCredential))
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ts, err := adcTokenSourceCtx(context.Background())
+			if assert.NoError(t, err) {
+				tok, err := ts.Token()
+				assert.NoError(t, err)
+				assert.Equal(t, "host-token", tok.AccessToken)
+			}
+		}()
+	}
+	time.Sleep(20 * time.Millisecond)
+	close(release)
+	wg.Wait()
+	assert.EqualValues(t, 1, calls.Load(), "one lookup for every waiting caller")
 }
