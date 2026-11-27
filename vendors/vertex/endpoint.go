@@ -42,9 +42,12 @@ func ParseProjectLocation(endpoint string) (project, location string, ok bool) {
 	return project, location, true
 }
 
-// projectPattern is a project ID or number, domain-scoped ones
-// (example.com:my-project) included. It becomes part of the upstream path.
-var projectPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.:_-]*$`)
+// projectPattern is a project ID or number (lowercase letters, digits and
+// hyphens), optionally after one domain prefix: a domain-scoped project
+// (example.com:my-project). Nothing else may carry a colon, so a:b:location
+// (a not a domain) is refused rather than read as a project. It becomes part
+// of the upstream path.
+var projectPattern = regexp.MustCompile(`^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+:)?[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$`)
 
 // apiVersionPattern is a Vertex API version segment (v1, v1beta1).
 var apiVersionPattern = regexp.MustCompile(`^v[0-9]+((alpha|beta)[0-9]*)?$`)

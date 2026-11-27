@@ -22,6 +22,7 @@ func TestUpstreamBaseURL(t *testing.T) {
 		{"my-project:global", "https://aiplatform.googleapis.com"},
 		// A domain-scoped project ID keeps its own colon.
 		{"example.com:my-project:us-central1", "https://us-central1-aiplatform.googleapis.com"},
+		{"example.com:my-project:eu", "https://aiplatform.eu.rep.googleapis.com"},
 		// A URL passes through.
 		{"https://us-central1-aiplatform.googleapis.com", "https://us-central1-aiplatform.googleapis.com"},
 		{"https://psc.example.internal/vertex", "https://psc.example.internal/vertex"},
@@ -59,6 +60,17 @@ func TestUpstreamBaseURL_Invalid(t *testing.T) {
 		"https://vertex.example/v1/projects/p/locations/us-central1?x=1",
 		"https://vertex.example/v1/projects/%2e%2e/locations/us-central1",
 		"my%project:us-central1",
+		// Only one domain prefix may carry a colon in the project.
+		"a:b:us-central1",
+		"example.com:a:b:us-central1",
+		"example.com::us-central1",
+		":my-project:us-central1",
+		".com:my-project:us-central1",
+		"example..com:my-project:us-central1",
+		"My-Project:us-central1",
+		"my-project-:us-central1",
+		"https://vertex.example/v1/projects/a:b/locations/us-central1",
+		"https://vertex.example/v1/projects/example.com:a:b/locations/us-central1",
 	} {
 		t.Run(endpoint, func(t *testing.T) {
 			_, err := UpstreamBaseURL(&models.LLM{Vendor: models.VERTEX, APIEndpoint: endpoint})
@@ -68,12 +80,23 @@ func TestUpstreamBaseURL_Invalid(t *testing.T) {
 }
 
 func TestParseProjectLocation(t *testing.T) {
-	project, location, ok := ParseProjectLocation("example.com:my-project:us-central1")
-	require.True(t, ok)
-	assert.Equal(t, "example.com:my-project", project)
-	assert.Equal(t, "us-central1", location)
+	for endpoint, want := range map[string][2]string{
+		"my-project:us-central1":             {"my-project", "us-central1"},
+		"123456789012:eu":                    {"123456789012", "eu"},
+		"example.com:my-project:us-central1": {"example.com:my-project", "us-central1"},
+		"corp.example.co.uk:my-proj:global":  {"corp.example.co.uk:my-proj", "global"},
+	} {
+		project, location, ok := ParseProjectLocation(endpoint)
+		require.True(t, ok, endpoint)
+		assert.Equal(t, want[0], project, endpoint)
+		assert.Equal(t, want[1], location, endpoint)
+	}
+	for _, endpoint := range []string{"a:b:us-central1", "example.com::us-central1", "example.com:my-project:", "example.com:my-project"} {
+		_, _, ok := ParseProjectLocation(endpoint)
+		assert.False(t, ok, endpoint)
+	}
 
-	_, _, ok = ParseProjectLocation("https://us-central1-aiplatform.googleapis.com")
+	_, _, ok := ParseProjectLocation("https://us-central1-aiplatform.googleapis.com")
 	assert.False(t, ok)
 }
 
@@ -111,6 +134,7 @@ func TestParseURLEndpoint(t *testing.T) {
 		{"https://vertex.example/v1/projects/p/locations/us-central1/", "https://vertex.example", "p", "us-central1"},
 		{"http://127.0.0.1:8089/v1beta1/projects/123456/locations/global", "http://127.0.0.1:8089", "123456", "global"},
 		{"https://gw.example/vertex/v1/projects/example.com:p/locations/eu", "https://gw.example/vertex", "example.com:p", "eu"},
+		{"https://vertex.example/v1/projects/example.com:my-proj/locations/us-central1/", "https://vertex.example", "example.com:my-proj", "us-central1"},
 		{"https://vertex.example", "https://vertex.example", "", ""},
 		{"https://vertex.example/prefix/", "https://vertex.example/prefix/", "", ""},
 	} {
