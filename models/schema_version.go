@@ -169,7 +169,11 @@ const (
 	//     snapshot is priced under the requested model
 	//     (midsommar-clean-6bg5.6). Older code ignores the column; rows it
 	//     writes have none and are priced by the reported model, as before.
-	SchemaVersion          = 46
+	// 47: app_prompt_templates.edited_at and edited_by (nullable,
+	//     additive): the last in-place change to a proposed version's
+	//     parts or placement (midsommar-clean-o4a.11). Older code ignores
+	//     the columns; an edit it makes leaves them as they were.
+	SchemaVersion          = 47
 	MinReaderSchemaVersion = 42
 )
 

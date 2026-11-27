@@ -29213,6 +29213,13 @@ const docTemplate = `{
                 "created_by": {
                     "type": "integer"
                 },
+                "edited_at": {
+                    "description": "EditedAt and EditedBy: the last in-place change to this proposed\nversion's parts or placement; null when there was none.",
+                    "type": "string"
+                },
+                "edited_by": {
+                    "type": "integer"
+                },
                 "expires_after_days": {
                     "type": "integer"
                 },
