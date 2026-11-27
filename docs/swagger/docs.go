@@ -30988,6 +30988,9 @@ const docTemplate = `{
                         "last_sync_ack": {
                             "type": "string"
                         },
+                        "license_state": {
+                            "type": "string"
+                        },
                         "loaded_checksum": {
                             "type": "string"
                         },
@@ -30999,7 +31002,6 @@ const docTemplate = `{
                             "additionalProperties": true
                         },
                         "namespace": {
-                            "description": "Always \"default\" in CE",
                             "type": "string"
                         },
                         "owner_label": {
