@@ -30975,9 +30975,6 @@
                         "last_sync_ack": {
                             "type": "string"
                         },
-                        "license_state": {
-                            "type": "string"
-                        },
                         "loaded_checksum": {
                             "type": "string"
                         },
@@ -30989,6 +30986,7 @@
                             "additionalProperties": true
                         },
                         "namespace": {
+                            "description": "Always \"default\" in CE",
                             "type": "string"
                         },
                         "owner_label": {
@@ -37290,6 +37288,10 @@
                 "description": {
                     "type": "string"
                 },
+                "discovered": {
+                    "description": "Discovered marks a tool known from the upstream's tools/list (the\nregistration wizard's discovery), not from the definition: a remote\nproxy that allows every tool names none. Syncs keep such tools while\nthe definition names no tools of its own.",
+                    "type": "boolean"
+                },
                 "name": {
                     "type": "string"
                 },
@@ -40099,6 +40101,13 @@
                 "description": {
                     "description": "Studio presentation and governance",
                     "type": "string"
+                },
+                "discovered_tools": {
+                    "description": "DiscoveredTools is what the wizard's tool discovery listed (the\nupstream's tools/list). A remote proxy's definition names no tools\nwhen every tool is allowed, so Studio keeps this list as the server's\nknown tools (MCPPrimitive.Discovered) for the server page and the key\naccess editor. With an allow-list only the allowed tools are kept, with\ntheir descriptions. Administrators only; never taken from a submission.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/mcpintrospect.Tool"
+                    }
                 },
                 "gateway_tags": {
                     "description": "Deployment target (segmented gateways)",
