@@ -5248,6 +5248,12 @@ definitions:
         items:
           $ref: '#/definitions/compliance.ComplianceEventRecord'
         type: array
+      meta:
+        allOf:
+        - $ref: '#/definitions/compliance.PageMeta'
+        description: |-
+          Meta is the page the API returned, as on the other list endpoints;
+          set by the handler.
       timeline:
         items:
           $ref: '#/definitions/compliance.TimelineData'
@@ -5337,6 +5343,22 @@ definitions:
         description: HIGH, MEDIUM, LOW
         type: string
       risk_score:
+        type: integer
+    type: object
+  compliance.PageMeta:
+    properties:
+      offset:
+        description: |-
+          Offset is the number of rows skipped (limit/offset requests may not
+          fall on a page boundary).
+        type: integer
+      page_number:
+        type: integer
+      page_size:
+        type: integer
+      total_count:
+        type: integer
+      total_pages:
         type: integer
     type: object
   compliance.PolicyViolation:
@@ -14421,11 +14443,20 @@ paths:
         in: query
         name: severity
         type: string
-      - description: Maximum number of records, defaults to 100
+      - description: Events per page, defaults to 100, at most 1000
+        in: query
+        name: page_size
+        type: integer
+      - description: Page number (1-based), defaults to 1
+        in: query
+        name: page
+        type: integer
+      - description: Older form of page_size, used only without page_size and page
         in: query
         name: limit
         type: integer
-      - description: Pagination offset, defaults to 0
+      - description: 'Older form of page: events to skip, used only without page_size
+          and page'
         in: query
         name: offset
         type: integer
