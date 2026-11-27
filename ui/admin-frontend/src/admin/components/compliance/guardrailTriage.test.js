@@ -152,7 +152,8 @@ describe("eventGuide", () => {
       const g = eventGuide("guardrail.judge", judge({ verdict: "none", error: "timeout" }), "Wolf");
       expect(g.headline).toBe("Judge gave no opinion on the block verdict (timed out)");
       expect(g.why).toEqual(["Flagged by injection", "The block verdict stands"]);
-      expect(g.fix).toEqual(['Raise the judge\'s timeout on "Wolf", or pick a faster judge model.']);
+      // eventGuide quotes the filter name in every fix line: on "Wolf".
+      expect(g.fix).toEqual([`Raise the judge's timeout on ${JSON.stringify("Wolf")}, or pick a faster judge model.`]);
     });
 
     it("never falls back to the detector triage", () => {
