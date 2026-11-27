@@ -406,6 +406,21 @@ A session opens as:
 - **Transcript:** the conversation, with tool calls and results inline, and gateway decisions as chips. A session captured with content mode `off` or `metadata` shows its structure, timing, tokens and cost, and a notice says how to capture content (see [Content modes](#content-modes)).
 - **Timeline:** every span on a time axis, one labelled row per span, with each provider attempt. Zoomed in, it lists only the spans in view. **‹ Turn** and **Turn ›** step through the turns, and a session (or selected time range) with more than 20 turns or 200 spans opens on its first turn; **Fit** shows all of it. When more than 20 turns are in view, each lane shows its turns as bars instead of individual spans; click one to open that turn. With a time range set, the timeline's axis is the range, and an orange cursor on the activity strip marks the part of the session the timeline shows. Ctrl/⌘-scroll zooms; Shift-scroll, a sideways swipe or the scrollbar under the timeline pans; a drag selects a time range.
 
+### Gateway decisions
+
+A call's gateway decisions are child spans of it, shown as chips in the transcript:
+
+| Decision | What it records |
+|---|---|
+| Attempt, fallback | Each provider attempt of an `/ai/` or failover call, and why the gateway moved to the next one |
+| Guardrail | A guardrail that found something: blocked (`denied`), quarantined or redacted (`modified`), or only logged or alerted (`allowed`). It names the guardrail and lists the detectors and where they matched, for example `injection.instruction_override in tool_result (search_kb); quarantine`. The matched text is never recorded. Compliance events hold the full finding, the judge's verdict and the request id. A guardrail that finds nothing records nothing |
+| Filter | A script filter that blocked the call, by name |
+| Budget, rate limit | A budget or rate limit that refused the call |
+
+When several guardrails are attached, each sees the request as the one before it left it. So when a guardrail quarantines a tool result, a later guardrail sees only the placeholder and records nothing.
+
+A call the gateway refused before any vendor saw it still shows what was asked: the model, the LLM and the request, subject to the content mode. It has no response, tokens or cost.
+
 A drag on the activity strip above the views sets a time range that filters every view. Drag its edge handles (or focus one and use the arrow keys, Shift for bigger steps) to move the start or end, and drag the range itself to move it.
 
 The find bar searches names and metadata. With `trace-content:read` it also searches captured content, and that search is audited.

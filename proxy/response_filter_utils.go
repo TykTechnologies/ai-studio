@@ -239,6 +239,7 @@ func runResponseFilters(
 
 		// Record any compliance events reported by the script
 		scripting.RecordComplianceEvents(r.Context(), output, filter.Name, "proxy_response", uint(appID), 0, llm.ID, string(llm.Vendor), modelName)
+		recordFilterOutcome(r.Context(), filter, output)
 
 		// Check if filter blocks the response
 		if output.Block {
