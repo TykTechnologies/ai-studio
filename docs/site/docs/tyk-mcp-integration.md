@@ -303,6 +303,12 @@ descriptions to tick. Names you typed before discovering stay selected, and
 any the server does not offer are flagged so a typo is caught before the
 proxy exists. Changing the URL or the credential drops the list.
 
+AI Studio keeps the discovered tools with the server. A proxy that allows
+every tool names none in its definition, so these are the tools the server
+page lists and the key access editor offers; syncs keep them for as long as
+the definition names no tools of its own. With an allow-list, the server
+lists the allowed tools with the descriptions discovery found.
+
 This is the only call AI Studio makes to an upstream MCP server. It runs
 only from the administrator's wizard (it needs `mcp-servers` execute), goes
 through the integration's URL policy with no internal-host exemption, caps

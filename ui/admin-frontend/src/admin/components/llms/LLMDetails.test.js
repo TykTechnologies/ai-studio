@@ -209,3 +209,38 @@ describe("LLMDetails native API resource signing key", () => {
     expect(apiClient.get).not.toHaveBeenCalledWith("/llms/7/resource-signing-key");
   });
 });
+
+describe("LLMDetails proxy log bodies", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    clearIdentity();
+  });
+
+  it("says a body was not stored instead of showing an empty cell", async () => {
+    apiClient.get.mockImplementation((url) => {
+      if (url === "/llms/7") return Promise.resolve(llm(true));
+      if (url === "/analytics/proxy-logs-for-llm") {
+        return Promise.resolve({
+          data: {
+            data: [
+              {
+                id: "164",
+                attributes: { time_stamp: "2026-11-27T03:37:24Z", vendor: "anthropic", response_code: 200, request_body: "", response_body: '{"ok":true}' },
+              },
+            ],
+            meta: { total_count: 1, total_pages: 1 },
+          },
+        });
+      }
+      if (url === "/analytics/usage") return Promise.resolve({ data: { labels: [], datasets: [] } });
+      if (url === "/analytics/budget-usage") return Promise.resolve({ data: [] });
+      if (url === "/analytics/total-cost-per-vendor-and-model") return Promise.resolve({ data: [] });
+      return Promise.resolve({ data: { data: [] } });
+    });
+    renderWith(["llms:read"]);
+    const notStored = await screen.findByTestId("body-not-stored");
+    expect(notStored).toHaveTextContent("Not stored");
+    expect(notStored.getAttribute("title")).toMatch(/ANALYTICS_STORE_REQUESTS/);
+    expect(screen.getAllByTestId("body-not-stored")).toHaveLength(1);
+  });
+});

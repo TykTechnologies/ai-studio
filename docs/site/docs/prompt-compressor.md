@@ -129,7 +129,7 @@ The plugin has one configuration for every LLM it is attached to. Named **polici
 | `engine` | | An external engine (`name`, `kind` of `headroom` or `llmlingua2`, `timeout_ms`) for what levels 1 to 3 selected. |
 | `drop_tools` | `[]` | Tool definitions to remove from requests, by name or by a prefix ending in `*`, at any level. A token-cost setting, not an access control: see [Dropping tool definitions](#dropping-tool-definitions). |
 
-Token counts are estimates (UTF-8 bytes divided by 4), so they depend only on the text.
+The sizes in a policy (`min_unit_tokens`, `max_unit_tokens`, `mask_step_tokens`) are measured as UTF-8 bytes divided by 4, so what is compressed depends only on the text. The token figures the plugin reports are estimates from one estimator, the same on the **Savings** and **Preview** pages and in `X-Tyk-Compression-Tokens-Saved`: OpenAI-family models are counted with their tiktoken encoding (`o200k_base`, or `cl100k_base` for older models), calibrated on up to 8 KB of the request's own text; other vendors use a characters-per-token ratio (3.5 for Anthropic and Bedrock, 4 otherwise). The vendor's own count can differ. Prompt and cache-read tokens on the Savings page are the vendor's reported usage, not estimates.
 
 An invalid configuration is logged and turns compression off; it never stops the plugin loading.
 
@@ -181,15 +181,15 @@ The plugin adds a **Prompt Compressor** section to the admin sidebar. Each page 
 
 | Page | Permission | What it does |
 |---|---|---|
-| Savings | Compression savings: read | The dashboard. |
+| Savings | Compression savings: read | The **Savings** page. |
 | Policies | Compression policies: read, write | Edit the mode, the policies and their bindings. Validates before saving and warns that a change makes every affected session miss the prompt cache once. Edge gateways apply the change after the next configuration push. |
-| Preview | Compression preview: execute | Paste or upload a request body or a tool output, pick a policy, and see the output with every change marked, each strategy's decision, and which tool definitions `drop_tools` removed or kept and why. Nothing is stored and no engine is called. |
+| Preview | Compression preview: execute | Paste or upload a request body or a tool output, pick one of the saved policies (or edit a copy), and see the output with every change marked, each strategy's decision, and which tool definitions `drop_tools` removed or kept and why. Nothing is stored and no engine is called. |
 
-### The savings dashboard
+### The Savings page
 
 Each edge sends hourly totals per App, LLM, policy and outcome to Studio about once a minute. The records carry counts and IDs only: no prompt or tool text leaves the edge. Studio keeps 90 days.
 
-The dashboard shows, for a range from 24 hours to 90 days and optionally one App or LLM:
+The Savings page shows, for a range from 24 hours to 90 days and optionally one App or LLM:
 
 - **Tokens saved** (actual in enforce mode, projected in audit mode) and bytes saved.
 - **Cost saved at input price.** Saved tokens priced at the model's input price. This is an upper bound: tokens that would have been cache reads were worth less.

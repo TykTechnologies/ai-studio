@@ -601,6 +601,13 @@ definitions:
         type: string
       created_by:
         type: integer
+      edited_at:
+        description: |-
+          EditedAt and EditedBy: the last in-place change to this proposed
+          version's parts or placement; null when there was none.
+        type: string
+      edited_by:
+        type: integer
       expires_after_days:
         type: integer
       id:
@@ -1786,8 +1793,6 @@ definitions:
             type: string
           last_sync_ack:
             type: string
-          license_state:
-            type: string
           loaded_checksum:
             type: string
           loaded_version:
@@ -1796,6 +1801,7 @@ definitions:
             additionalProperties: true
             type: object
           namespace:
+            description: Always "default" in CE
             type: string
           owner_label:
             description: |-
@@ -5255,6 +5261,12 @@ definitions:
         items:
           $ref: '#/definitions/compliance.ComplianceEventRecord'
         type: array
+      meta:
+        allOf:
+        - $ref: '#/definitions/compliance.PageMeta'
+        description: |-
+          Meta is the page the API returned, as on the other list endpoints;
+          set by the handler.
       timeline:
         items:
           $ref: '#/definitions/compliance.TimelineData'
@@ -5344,6 +5356,22 @@ definitions:
         description: HIGH, MEDIUM, LOW
         type: string
       risk_score:
+        type: integer
+    type: object
+  compliance.PageMeta:
+    properties:
+      offset:
+        description: |-
+          Offset is the number of rows skipped (limit/offset requests may not
+          fall on a page boundary).
+        type: integer
+      page_number:
+        type: integer
+      page_size:
+        type: integer
+      total_count:
+        type: integer
+      total_pages:
         type: integer
     type: object
   compliance.PolicyViolation:
@@ -6231,6 +6259,13 @@ definitions:
         description: Auth records per-primitive overrides from the definition.
       description:
         type: string
+      discovered:
+        description: |-
+          Discovered marks a tool known from the upstream's tools/list (the
+          registration wizard's discovery), not from the definition: a remote
+          proxy that allows every tool names none. Syncs keep such tools while
+          the definition names no tools of its own.
+        type: boolean
       name:
         type: string
       source:
@@ -6943,7 +6978,9 @@ definitions:
       target_url:
         description: |-
           TargetURLSnapshot is the URL at enqueue time, kept so the log stays
-          meaningful after the target is edited or deleted.
+          meaningful after the target is edited or deleted. It is stored and
+          returned masked (MaskWebhookURL): deliveries never need the full URL,
+          and a chat webhook URL is a credential.
         type: string
       topic:
         type: string
@@ -7066,6 +7103,8 @@ definitions:
         type: string
       url:
         type: string
+      url_masked:
+        type: boolean
     type: object
   rbac.PermissionSource:
     properties:
@@ -8181,6 +8220,17 @@ definitions:
       description:
         description: Studio presentation and governance
         type: string
+      discovered_tools:
+        description: |-
+          DiscoveredTools is what the wizard's tool discovery listed (the
+          upstream's tools/list). A remote proxy's definition names no tools
+          when every tool is allowed, so Studio keeps this list as the server's
+          known tools (MCPPrimitive.Discovered) for the server page and the key
+          access editor. With an allow-list only the allowed tools are kept, with
+          their descriptions. Administrators only; never taken from a submission.
+        items:
+          $ref: '#/definitions/mcpintrospect.Tool'
+        type: array
       gateway_tags:
         description: Deployment target (segmented gateways)
         items:
@@ -14428,11 +14478,20 @@ paths:
         in: query
         name: severity
         type: string
-      - description: Maximum number of records, defaults to 100
+      - description: Events per page, defaults to 100, at most 1000
+        in: query
+        name: page_size
+        type: integer
+      - description: Page number (1-based), defaults to 1
+        in: query
+        name: page
+        type: integer
+      - description: Older form of page_size, used only without page_size and page
         in: query
         name: limit
         type: integer
-      - description: Pagination offset, defaults to 0
+      - description: 'Older form of page: events to skip, used only without page_size
+          and page'
         in: query
         name: offset
         type: integer

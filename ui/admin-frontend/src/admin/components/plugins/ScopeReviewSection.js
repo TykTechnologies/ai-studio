@@ -78,6 +78,61 @@ const SCOPE_CATEGORIES = {
     description: 'Reading model and semantic routers',
     color: 'primary',
   },
+  'datasources': {
+    label: 'Data sources',
+    description: 'Access to data source configurations, queries and embeddings',
+    color: 'warning',
+  },
+  'tags': {
+    label: 'Tags',
+    description: 'Access to the tags used to organise resources',
+    color: 'info',
+  },
+  'filters': {
+    label: 'Filters',
+    description: 'Access to request and response filter configurations',
+    color: 'warning',
+  },
+  'pricing': {
+    label: 'Model prices',
+    description: 'Access to the model price table AI Studio uses to cost usage',
+    color: 'info',
+  },
+  'data-catalogues': {
+    label: 'Data catalogues',
+    description: 'Access to the catalogues that publish data sources in the portal',
+    color: 'info',
+  },
+  'scheduler': {
+    label: 'Scheduled tasks',
+    description: "Running the plugin's own tasks on a schedule",
+    color: 'primary',
+  },
+  'metadata': {
+    label: 'Governed metadata',
+    description: 'Access to governed metadata on resources',
+    color: 'info',
+  },
+  'notifications': {
+    label: 'Notifications',
+    description: 'Raising in-app notifications',
+    color: 'info',
+  },
+  'control': {
+    label: 'Edge to AI Studio',
+    description: 'Sending data from the plugin on an edge gateway back to AI Studio',
+    color: 'info',
+  },
+  'budget': {
+    label: 'Budgets',
+    description: "Reading App and model provider budget status",
+    color: 'info',
+  },
+  'credentials': {
+    label: 'Credentials',
+    description: 'Checking App credentials presented to the gateway',
+    color: 'error',
+  },
   // Object hook categories
   'llm': {
     label: 'Model Provider Object Hooks',
@@ -106,6 +161,7 @@ export const SCOPE_DESCRIPTIONS = {
   'analytics.read': 'View analytics data and metrics',
   'analytics.detailed': 'Access detailed analytics reports',
   'analytics.reports': 'Generate and export analytics reports',
+  'analytics.write': 'Record custom metrics in analytics',
 
   // Plugin scopes
   'plugins.read': 'View plugin information and configurations',
@@ -115,17 +171,20 @@ export const SCOPE_DESCRIPTIONS = {
   // LLM scopes
   'llms.read': 'View Model Provider configurations and status',
   'llms.write': 'Create, update, and delete model provider configurations',
+  'llms.proxy': 'Call model providers through the AI Studio proxy',
 
   // Tools scopes
   'tools.read': 'View tool and data source configurations',
   'tools.write': 'Create, update, and delete tools and data sources',
   'tools.operations': 'Execute tool operations and queries',
+  'tools.execute': 'Run tool operations with parameters the plugin supplies',
 
   // App scopes
   'apps.read': 'View application configurations',
   'apps.write': 'Create, update, and delete applications',
 
   // Plugin KV storage
+  'kv.read': "Read the plugin's own key-value storage",
   'kv.readwrite': "Read and write the plugin's own key-value storage",
 
   // Resource type management (ResourceProvider plugins)
@@ -144,6 +203,27 @@ export const SCOPE_DESCRIPTIONS = {
   'apps.lifecycle': 'Suspend or reactivate applications and flag them for governance (cannot change what an application can access)',
   'metadata.read': 'Read governed metadata and its change history',
   'datasources.read': 'View data source configurations',
+  'datasources.write': 'Create, update, and delete data sources',
+  'datasources.query': 'Query data sources (search and vector queries)',
+  'datasources.embeddings': 'Create embeddings and write them to data sources',
+
+  // Other service scopes
+  'tags.read': 'View tags',
+  'tags.write': 'Create, update, and delete tags',
+  'filters.read': 'View filter configurations',
+  'filters.write': 'Create, update, and delete filters',
+  'pricing.read': 'View model prices, including cache-read prices',
+  'pricing.write': 'Create, update, and delete model prices',
+  'data-catalogues.read': 'View data catalogues',
+  'data-catalogues.write': 'Create, update, and delete data catalogues',
+  'scheduler.manage': "Create, update, and delete the plugin's own scheduled tasks",
+  'metadata.write': 'Change governed metadata on resources',
+  'notifications.write': 'Raise in-app notifications for administrators or a user',
+
+  // Gateway (edge) plugin scopes
+  'control.send': 'Send data from the edge gateway to AI Studio (queued, delivered with heartbeats)',
+  'budget.read': 'View the budget status of Apps and model providers',
+  'credentials.validate': 'Check whether an App credential presented to the gateway is valid',
 
   // LLM object hooks
   'llm.before_create': 'Hook called before creating a new model provider configuration',

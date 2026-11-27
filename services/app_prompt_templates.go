@@ -125,6 +125,12 @@ func (s *Service) UpdateAppPromptTemplate(appID, id, userID uint, spec PromptTem
 	if trusted && t.Status != templates.StatusProposed {
 		return s.CreateAppPromptTemplate(appID, userID, PromptTemplateSpec{Name: t.Name, Placement: new(next.Placement()), Parts: next.Parts, ExpiresAfterDays: &next.ExpiresAfterDays})
 	}
+	if trusted {
+		// A proposed version changed in place: the review shows who and
+		// when next to the proposal (o4a.11).
+		now, by := time.Now(), userID
+		next.EditedAt, next.EditedBy = &now, &by
+	}
 	if err := next.Update(s.DB); err != nil {
 		return nil, err
 	}

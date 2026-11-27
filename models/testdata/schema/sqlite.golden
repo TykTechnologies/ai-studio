@@ -319,6 +319,8 @@ TABLE app_prompt_templates
   column `approved_at` datetime
   column `expires_after_days` integer NOT NULL DEFAULT 30
   column `last_matched_at` datetime
+  column `edited_at` datetime
+  column `edited_by` integer
   index CREATE INDEX `idx_app_prompt_template_status` ON `app_prompt_templates`(`app_id`,`status`)
   index CREATE UNIQUE INDEX `idx_app_prompt_template_version` ON `app_prompt_templates`(`app_id`,`name`,`version`)
 TABLE app_semantic_routers
