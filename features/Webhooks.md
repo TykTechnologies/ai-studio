@@ -7,6 +7,8 @@ model router changes, plus topics published by enterprise plugins such as the
 asset catalog) can be delivered to an administrator-approved URL as a signed
 JSON payload, with retries, a dead-letter queue and a searchable delivery log.
 
+`webhook_targets.url` is stored encrypted at rest (`$ENC/`, like `headers`; schema 48, o4a.21). The column is `text`, because the ciphertext outgrows `varchar(2048)`. `WebhookTarget.AfterFind` decrypts it for the dispatcher and the API, and the API masks it again. A start-up migration (`encryptStoredTargetURLs`) encrypts rows written before, the FIPS credential sweep covers the column, and `ListTargets` searches name, description and the shown url in Go: the column is never queried, so its trigram index is dropped. The minimum reader schema is 48: older code would post to the ciphertext.
+
 Target URLs are an exfiltration vector, so the feature is built around
 approval: a target never receives a delivery until an administrator approves
 its URL, and any change to where it points sends it back for approval.

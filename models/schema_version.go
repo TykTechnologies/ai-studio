@@ -173,8 +173,12 @@ const (
 	//     additive): the last in-place change to a proposed version's
 	//     parts or placement (midsommar-clean-o4a.11). Older code ignores
 	//     the columns; an edit it makes leaves them as they were.
-	SchemaVersion          = 47
-	MinReaderSchemaVersion = 42
+	// 48: webhook_targets.url widened to text and stored encrypted at rest
+	//     ($ENC/, like headers; midsommar-clean-o4a.21). A changed column
+	//     type and a value older code would use as written (it would post to
+	//     the ciphertext), so the minimum reader is 48.
+	SchemaVersion          = 48
+	MinReaderSchemaVersion = 48
 )
 
 // studioSchemaRowID is the one row of studio_schema.

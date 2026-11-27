@@ -25,7 +25,8 @@ webhook target goes through an approval step:
 3. Another administrator (or the same one, unless
    `WEBHOOKS_REQUIRE_DIFFERENT_APPROVER=true`) reviews the URL and approves
    it. Header values are stored encrypted and never displayed, only their
-   names.
+   names. The URL is stored encrypted too, because a chat webhook URL is
+   itself the credential.
 4. Deliveries start. Changing the URL or the headers of an approved target
    sends it back to pending; revoking stops it and cancels queued deliveries.
 
