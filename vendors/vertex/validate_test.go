@@ -35,6 +35,8 @@ func TestValidateKey(t *testing.T) {
 	const secret = "s3cr3t-material"
 
 	require.NoError(t, ValidateKey(mustJSON(t, serviceAccountJSON(t, "https://oauth2.googleapis.com/token"))))
+	// Workload Identity Federation needs the operator's opt-in (#1138).
+	t.Setenv(ADCSetting, "true")
 	require.NoError(t, ValidateKey(`{"type":"external_account","audience":"//iam.googleapis.com/x","subject_token_type":"urn:ietf:params:oauth:token-type:jwt","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"file":"/var/run/token"}}`))
 	require.NoError(t, ValidateKey(`{"type":"authorized_user","client_id":"c","client_secret":"s","refresh_token":"r"}`))
 	require.NoError(t, ValidateKey("ya29.abc"))
