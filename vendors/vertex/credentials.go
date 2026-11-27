@@ -67,26 +67,12 @@ var (
 	ErrTokenMint = errors.New("vertex: could not obtain a Google access token")
 )
 
-// ErrHostCredentialSource: an external_account credential whose
-// credential_source reads the host's own identity while AI_STUDIO_VERTEX_ADC
-// is off. It is an ErrInvalidCredential.
-var ErrHostCredentialSource = fmt.Errorf("%w: the external_account credential_source uses this host's own cloud identity", ErrInvalidCredential)
-
-// hostCredentialSource names what of the host a credential_source reads, or
-// "" when it reads nothing of the host.
-func hostCredentialSource(file, srcURL, regionURL, imdsURL, environmentID string, certificate json.RawMessage) string {
-	switch {
-	case file != "":
-		return "a file on the host"
-	case srcURL != "" || regionURL != "" || imdsURL != "":
-		return "the instance metadata service"
-	case environmentID != "":
-		return "the AWS environment of the host"
-	case len(certificate) > 0 && string(certificate) != "null":
-		return "client certificate files on the host"
-	}
-	return ""
-}
+// ErrHostCredentialSource: an external_account (Workload Identity
+// Federation) credential while AI_STUDIO_VERTEX_ADC is off. Every WIF
+// credential acts with an identity the gateway's host supplies, so every one
+// needs the operator's opt-in, whatever its credential_source. It is an
+// ErrInvalidCredential.
+var ErrHostCredentialSource = fmt.Errorf("%w: Workload Identity Federation (external_account) credentials use this host's own cloud identity", ErrInvalidCredential)
 
 // supportedCredentialTypes are the Google credential JSON types accepted in
 // a Vertex LLM's key.
@@ -279,13 +265,17 @@ func validateCredentialJSON(raw []byte, depth int) (google.CredentialsType, erro
 				return "", fmt.Errorf("%w: %s must point at the cloud instance metadata service (169.254.169.254, fd00:ec2::254 or metadata.google.internal)", ErrInvalidCredential, field)
 			}
 		}
-		// A source read from the host (a file such as a Kubernetes projected
-		// token, the instance metadata service, the AWS environment, client
-		// certificate files) makes the gateway act with the host's own cloud
-		// identity. Like host ADC, that needs the operator's opt-in: anyone
-		// who can edit an LLM could otherwise borrow it (Martin, 2026-11-28).
-		if what := hostCredentialSource(src.File, src.URL, src.RegionURL, src.IMDSv2SessionTokenURL, src.EnvironmentID, src.Certificate); what != "" && !ADCEnabled() {
-			return "", fmt.Errorf("%w (%s); the operator must set %s=true to allow it", ErrHostCredentialSource, what, ADCSetting)
+		// Every WIF credential acts with an identity the host supplies (a
+		// projected token file, the metadata service, the AWS environment,
+		// certificate files), so it needs the operator's opt-in, like host
+		// ADC: anyone who can edit an LLM could otherwise borrow the host's
+		// identity (Martin, 2026-11-28). Fail closed: the gate does not
+		// depend on recognising the source.
+		if !ADCEnabled() {
+			return "", fmt.Errorf("%w; the operator must set %s=true on AI Studio and on every edge to allow them", ErrHostCredentialSource, ADCSetting)
+		}
+		if src.File == "" && src.URL == "" && src.EnvironmentID == "" && (len(src.Certificate) == 0 || string(src.Certificate) == "null") {
+			return "", fmt.Errorf("%w: external_account credential_source names no supported source (file, url, environment_id or certificate)", ErrInvalidCredential)
 		}
 	case google.ImpersonatedServiceAccount:
 		if f.ServiceAccountImpersonationURL == "" || len(f.SourceCredentials) == 0 {

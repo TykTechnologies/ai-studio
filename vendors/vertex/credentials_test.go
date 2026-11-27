@@ -347,8 +347,10 @@ func TestValidateCredentialJSON_ProductionHosts(t *testing.T) {
 
 }
 
-// Host-sourced WIF configs (Martin, 2026-11-28): refused unless the
-// operator set AI_STUDIO_VERTEX_ADC=true, both at validation and at use.
+// Every Workload Identity Federation credential (Martin, 2026-11-28),
+// including one an impersonated_service_account uses as its source, is
+// refused unless the operator set AI_STUDIO_VERTEX_ADC=true, both at
+// validation and at use.
 func TestValidateCredentialJSON_HostSourcedWIFNeedsOptIn(t *testing.T) {
 	hostSourced := map[string]string{
 		"AWS (environment + metadata)": `{"type":"external_account","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"environment_id":"aws1","region_url":"http://169.254.169.254/latest/meta-data/placement/availability-zone"}}`,
@@ -372,10 +374,43 @@ func TestValidateCredentialJSON_HostSourcedWIFNeedsOptIn(t *testing.T) {
 		})
 	}
 
-	// A credential that reads nothing of the host needs no opt-in.
+	// A service account key reads nothing of the host: no opt-in.
 	t.Setenv(ADCSetting, "")
 	_, err := ValidateCredentialJSON(mustJSON(t, serviceAccountJSON(t, "https://oauth2.googleapis.com/token")))
 	assert.NoError(t, err)
+}
+
+// The gate fails closed: it does not depend on recognising the source, and
+// an unrecognised or empty source is refused even with the opt-in.
+func TestValidateCredentialJSON_WIFGateFailsClosed(t *testing.T) {
+	cases := map[string]string{
+		"made-up source kind": `{"type":"external_account","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"vault":{"path":"secret/gcp"}}}`,
+		"empty source":        `{"type":"external_account","token_url":"https://sts.googleapis.com/v1/token","credential_source":{}}`,
+		"no source":           `{"type":"external_account","token_url":"https://sts.googleapis.com/v1/token"}`,
+	}
+	for name, key := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Setenv(ADCSetting, "")
+			_, err := ValidateCredentialJSON(key)
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, ErrHostCredentialSource), "needs the setting even with no recognised source: %v", err)
+
+			t.Setenv(ADCSetting, "true")
+			_, err = ValidateCredentialJSON(key)
+			require.Error(t, err, "an unrecognised or empty source is refused, not accepted")
+			assert.True(t, errors.Is(err, ErrInvalidCredential))
+			assert.False(t, errors.Is(err, ErrHostCredentialSource))
+			assert.Contains(t, err.Error(), "no supported source")
+		})
+	}
+
+	// Executable sources and non-metadata URLs are refused whatever the setting.
+	t.Setenv(ADCSetting, "true")
+	_, err := ValidateCredentialJSON(`{"type":"external_account","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"executable":{"command":"/bin/true"}}}`)
+	assert.True(t, errors.Is(err, ErrInvalidCredential))
+	assert.Contains(t, err.Error(), "executable")
+	_, err = ValidateCredentialJSON(`{"type":"external_account","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"url":"http://10.0.0.5/token"}}`)
+	assert.Contains(t, err.Error(), "metadata service")
 }
 
 func TestAccessToken_ConcurrentCallsMintOnce(t *testing.T) {
