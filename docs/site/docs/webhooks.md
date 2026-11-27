@@ -124,7 +124,9 @@ Example custom template:
 
 A template can use `.Summary`, the words the Slack preset is built from:
 `.Summary.Title`, `.Summary.Who`, `.Summary.What`, `.Summary.Where` and
-`.Summary.Link`.
+`.Summary.Link`. In a Slack message, pass names and other free text through
+`slackEscape`, which escapes `&`, `<` and `>`, so a name cannot add a link or
+an `@channel` mention.
 
 A template can use `.StudioLink`: the AI Studio page the event links to, set
 only for guardrail alerts and outcome events (topics only AI Studio raises)
