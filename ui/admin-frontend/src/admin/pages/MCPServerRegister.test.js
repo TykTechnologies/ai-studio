@@ -20,6 +20,7 @@ beforeEach(() => {
 const connections = [
   { id: 1, name: "Prod", status: "active", effective_mode: "full", capabilities: { rest_to_mcp_supported: { state: "ok" } } },
   { id: 2, name: "Catalogue only", status: "active", effective_mode: "catalogue", capabilities: {} },
+  { id: 3, name: "OSS gateways", kind: "gateway", status: "active", effective_mode: "full", capabilities: {} },
 ];
 
 const renderPage = () =>
@@ -95,10 +96,31 @@ describe("MCPServerRegister", () => {
     );
     expect(screen.getByText(/not reported by any data plane/)).toBeInTheDocument();
     expect(screen.getByTestId("preview")).toHaveTextContent("https://gw.example.com/weather-mcp/mcp");
+    expect(screen.getByTestId("create")).toHaveTextContent("Create on the Dashboard");
 
     fireEvent.click(screen.getByTestId("create"));
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith("/mcp-servers/register", expect.objectContaining({ name: "Weather MCP" })));
     expect(await screen.findByTestId("detail-page")).toBeInTheDocument();
+  });
+
+  it("names the Gateway, not a Dashboard, on a Tyk OSS Gateway connection", async () => {
+    apiClient.post.mockResolvedValue({ data: { definition: {}, warnings: [], endpoint_url: "https://gw.example.com/wiki/mcp", dashboard_validated: true } });
+    renderPage();
+    await screen.findByTestId("connection");
+    expect(screen.getByText(/connected Tyk Dashboard or Tyk Gateway/)).toBeInTheDocument();
+    await selectOption("connection", "OSS gateways");
+    expect(screen.getByText(/Create an MCP proxy on a connected Tyk Gateway from here/)).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("next"));
+    fireEvent.change(await screen.findByTestId("name"), { target: { value: "Wiki" } });
+    fireEvent.change(screen.getByTestId("upstream-url"), { target: { value: "https://wiki.example.com" } });
+    fireEvent.click(screen.getByTestId("next"));
+    fireEvent.click(await screen.findByTestId("next"));
+
+    const preview = await screen.findByTestId("preview");
+    expect(preview).toHaveTextContent("The Tyk Gateway validated this definition.");
+    expect(screen.getByText(/The definition AI Studio sends to the Gateway/)).toBeInTheDocument();
+    expect(screen.getByTestId("create")).toHaveTextContent("Create on the Gateway");
+    expect(screen.queryByText(/Dashboard/)).not.toBeInTheDocument();
   });
 
   it("builds a REST-to-MCP payload from picked operations", async () => {

@@ -42,13 +42,29 @@ const Body = ({ loadingSpans }) => {
       <SummaryStrip />
       <TimelineStrip />
       <FindBar />
+      {/* Each tab is named by its view alone ("Transcript"), so scripts and
+          screen readers find it by role and name; the key hint is visual only
+          and the shortcut is announced through aria-keyshortcuts. */}
       <Tabs value={current.value} onChange={(_, v) => dispatch({ type: "view", view: v })} aria-label="Session views" sx={{ mb: 1 }}>
         {VIEWS.map((v) => (
-          <Tab key={v.value} value={v.value} label={`${v.label} (${v.key})`} id={`view-tab-${v.value}`} />
+          <Tab
+            key={v.value}
+            value={v.value}
+            id={`view-tab-${v.value}`}
+            aria-controls="session-view-panel"
+            aria-keyshortcuts={v.key}
+            label={
+              <span>
+                <span id={`view-tab-label-${v.value}`}>{v.label}</span>
+                <span aria-hidden="true"> ({v.key})</span>
+              </span>
+            }
+            aria-labelledby={`view-tab-label-${v.value}`}
+          />
         ))}
       </Tabs>
       {loadingSpans && <LinearProgress aria-label="Loading spans" sx={{ mb: 1 }} />}
-      <Box role="tabpanel" aria-labelledby={`view-tab-${current.value}`}>
+      <Box role="tabpanel" id="session-view-panel" aria-labelledby={`view-tab-label-${current.value}`}>
         <View />
       </Box>
       <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>

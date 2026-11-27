@@ -110,6 +110,14 @@ test.describe('Agent sessions', () => {
         await importSession(page, s.doc);
         await gotoSession(page, s.id);
 
+        // The views are tabs a script finds by role and name (tkg.14).
+        const views = page.getByRole('tablist', { name: 'Session views' });
+        await views.getByRole('tab', { name: 'Timeline', exact: true }).click();
+        await expect(page.getByTestId('timeline-view')).toBeVisible();
+        await expect(views.getByRole('tab', { name: 'Timeline', exact: true })).toHaveAttribute('aria-selected', 'true');
+        await views.getByRole('tab', { name: 'Transcript', exact: true }).click();
+        await expect(page.getByTestId('transcript')).toBeVisible();
+
         // Keyboard only: 2 switches to the timeline, 1 back; n moves to the
         // next tool call, Enter opens it, Escape closes it.
         await page.keyboard.press('2');

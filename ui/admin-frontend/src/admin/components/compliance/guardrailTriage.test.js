@@ -114,6 +114,58 @@ describe("eventGuide", () => {
     expect(shadow.headline).toContain("(shadow: traffic unchanged)");
   });
 
+  // tkg.6: a judge event is a second opinion on a verdict, not a detection.
+  describe("guardrail.judge", () => {
+    const judge = (j) => ({ provider: "http", action: "log", blocked: false, request_id: "r1", judge: { action: "block", detectors: ["injection"], mode: "record", ...j } });
+
+    it("says the judge confirmed the verdict, with its reason", () => {
+      const g = eventGuide("guardrail.judge", judge({ verdict: "attack", reason: "role_override", agreed: true, coverage: "full", model: "claude-haiku-5-5", latency_ms: 840 }), "Wolf");
+      expect(g.headline).toBe("Judge confirmed the block verdict: an attack (role override)");
+      expect(g.why).toEqual(["Flagged by injection", "Asked claude-haiku-5-5 (840 ms)"]);
+      expect(g.fix).toEqual(["Nothing to fix: the judge backs the filter."]);
+      expect(g.code).toBe("");
+    });
+
+    it("says the judge disputed the verdict in record mode, and how to act on it", () => {
+      const g = eventGuide("guardrail.judge", judge({ verdict: "benign", reason: "quoted_example", agreed: false, coverage: "full" }), "Wolf");
+      expect(g.headline).toBe("Judge disputed the block verdict: benign (quoted example)");
+      expect(g.why).toContain("Record mode: the opinion is kept beside the verdict, which stands");
+      expect(g.fix[0]).toMatch(/detector is too strict/);
+      expect(g.fix[1]).toMatch(/soften mode/);
+    });
+
+    it("explains why a benign opinion with partial coverage could not soften", () => {
+      const g = eventGuide("guardrail.judge", judge({ verdict: "benign", reason: "code_or_data", agreed: false, coverage: "partial", mode: "soften", action: "quarantine" }), "Wolf");
+      expect(g.headline).toBe("Judge disputed the quarantine verdict: benign (code or data)");
+      expect(g.why).toContain("The judge was not shown everything flagged, so its opinion cannot soften the verdict");
+      expect(g.fix).toHaveLength(1);
+    });
+
+    it("says which verdict the judge softened, and to what", () => {
+      const g = eventGuide("guardrail.judge", judge({ verdict: "benign", reason: "code_or_data", agreed: false, coverage: "full", mode: "soften", softened_from: "block", softened_to: "log", cached: true }), "Wolf");
+      expect(g.headline).toBe("Judge softened the block verdict to log-only: benign (code or data)");
+      expect(g.why).toEqual(["Flagged by injection", "Soften mode: a benign opinion on everything flagged lowers the action to log-only", "Cached opinion"]);
+      expect(g.fix[0]).toMatch(/back to record mode/);
+    });
+
+    it("says why the judge gave no opinion, and the fix for it", () => {
+      const g = eventGuide("guardrail.judge", judge({ verdict: "none", error: "timeout" }), "Wolf");
+      expect(g.headline).toBe("Judge gave no opinion on the block verdict (timed out)");
+      expect(g.why).toEqual(["Flagged by injection", "The block verdict stands"]);
+      // eventGuide quotes the filter name in every fix line: on "Wolf".
+      expect(g.fix).toEqual([`Raise the judge's timeout on ${JSON.stringify("Wolf")}, or pick a faster judge model.`]);
+    });
+
+    it("never falls back to the detector triage", () => {
+      for (const j of [{ verdict: "attack", agreed: true }, { verdict: "benign", agreed: false }, { verdict: "none" }, {}]) {
+        const g = eventGuide("guardrail.judge", { action: "log", judge: j }, "Wolf");
+        expect(g.headline).not.toMatch(/Logged only|Detector judge/);
+        expect(g.fix.join(" ")).not.toMatch(/Raise the detector's threshold or exclude it/);
+      }
+      expect(eventGuide("guardrail.judge", undefined, "").headline).toBe("Judge gave no opinion on the filter's verdict");
+    });
+  });
+
   it("never gives more than two fixes", () => {
     const types = ["guardrail.unscanned", "guardrail.error", "guardrail.unreadable_request", "guardrail.unredactable", "guardrail.x"];
     for (const t of types) {

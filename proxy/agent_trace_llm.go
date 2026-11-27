@@ -143,14 +143,15 @@ func (p *Proxy) captureOuterCall(r *http.Request, served llmAttempt, tried, stat
 // format (the /anthropic/ bridge's Anthropic Messages).
 func (p *Proxy) captureOuterCallAs(r *http.Request, format string, served llmAttempt, tried, status int, reqBody, respBody []byte) {
 	rec := agenttrace.From(r.Context())
-	if rec == nil || served.conf == nil {
-		if rec != nil && served.conf == nil {
-			rec.Update(func(ev *agenttrace.Event) {
-				ev.Kind = agenttrace.KindLLMInference
-				ev.Attempt = uint32(tried)
-				ev.HTTPStatus, ev.Status = status, agenttrace.StatusError
-			})
-		}
+	if rec == nil {
+		return
+	}
+	if served.conf == nil {
+		rec.Update(func(ev *agenttrace.Event) {
+			ev.Kind = agenttrace.KindLLMInference
+			ev.Attempt = uint32(tried)
+			ev.HTTPStatus, ev.Status = status, agenttrace.StatusError
+		})
 		return
 	}
 	app, _ := r.Context().Value("app").(*models.App)
@@ -188,4 +189,46 @@ func firstNonEmptyString(vals ...string) string {
 		}
 	}
 	return ""
+}
+
+// captureOuterFailure records an /ai/ or /anthropic/ bridge call that no rung
+// answered (a filter or budget refused it, or every vendor failed): what was
+// asked, of which LLM and model (the last rung tried), the request as the
+// client sent it, and the status. Without it the refused turn has no user
+// message and no model (midsommar-clean-b66). There is no response, usage
+// or cost: nothing reached a vendor, or what did was refused.
+func (p *Proxy) captureOuterFailure(r *http.Request, format string, attempted llmAttempt, tried, status int, reqBody []byte) {
+	rec := agenttrace.From(r.Context())
+	if rec == nil {
+		return
+	}
+	if attempted.conf == nil {
+		p.captureOuterCallAs(r, format, llmAttempt{}, tried, status, reqBody, nil)
+		return
+	}
+	app, _ := r.Context().Value("app").(*models.App)
+	p.goAnalyzeFor(r, func() {
+		fp := agenttrace.CurrentFingerprinter()
+		var x agenttrace.Extracts
+		if req, err := extract.ParseRequestExtracts(format, reqBody, fp); err == nil {
+			req.Apply(&x)
+		}
+		rec.Update(func(ev *agenttrace.Event) {
+			ev.Kind = agenttrace.KindLLMInference
+			ev.Provider = metrics.GenAIProviderName(string(attempted.conf.Vendor))
+			ev.Operation = metrics.OperationChat
+			ev.RequestModel = attempted.model
+			ev.Resource = agenttrace.Resource{Type: agenttrace.ResourceLLM, ID: uintString(attempted.conf.ID), Name: attempted.conf.Name}
+			fillAppIdentity(ev, app)
+			ev.Attempt = uint32(tried)
+			ev.HTTPStatus, ev.Status = status, agenttrace.StatusError
+			if ev.ErrorType == "" {
+				ev.ErrorType = strconv.Itoa(status)
+			}
+			ev.EndTime = time.Now()
+			ev.Extracts = x
+		})
+		applyDeclaredBody(r.Context(), rec, reqBody)
+		rec.CaptureRaw(agenttrace.PartRequest, "application/json", reqBody)
+	})
 }

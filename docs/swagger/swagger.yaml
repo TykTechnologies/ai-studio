@@ -21,6 +21,10 @@ definitions:
         items:
           type: number
         type: array
+      failed:
+        items:
+          type: integer
+        type: array
       labels:
         items:
           type: string
@@ -44,11 +48,14 @@ definitions:
         type: number
       cost_per_thousand:
         description: |-
-          CostPerThousand is the cost of a thousand decision requests at this
-          period's average, the number decision pricing is usually compared on.
+          CostPerThousand is the cost of a thousand answered decision requests
+          at this period's average, the number decision pricing is usually
+          compared on.
         type: number
       currency:
         type: string
+      failed:
+        type: integer
       input_tokens:
         type: integer
       model:
@@ -70,6 +77,8 @@ definitions:
         additionalProperties:
           type: number
         type: object
+      failed:
+        type: integer
       input_tokens:
         type: integer
       questions:

@@ -193,8 +193,13 @@ export const partPlaceholder = (part) => {
     case "dropped":
       return { text: "Dropped: the gateway was under load and kept no content", loadable: false };
     case "redacted":
+      // A redaction count of 0 is redacted mode finding nothing to redact:
+      // it never reads as a redaction (tkg.3).
+      if (!part.redaction_count) {
+        return { text: `Captured (${formatBytes(part.original_bytes)}), nothing redacted`, loadable: true };
+      }
       return {
-        text: `Redacted (${part.redaction_count || 0} value${part.redaction_count === 1 ? "" : "s"})`,
+        text: `Redacted (${part.redaction_count} value${part.redaction_count === 1 ? "" : "s"})`,
         loadable: true,
       };
     case "truncated":

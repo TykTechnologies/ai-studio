@@ -12,7 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A request filter block is recorded as a filter gateway event; the denial
+// A request filter block is recorded as a filter gateway event named after
+// the filter (once: not again as the generic request_filter rule); the denial
 // still answers exactly as before, and the request's span is an errored LLM
 // call of the authenticated App.
 func TestAgentTraceEvents_RequestFilterBlock(t *testing.T) {
@@ -32,6 +33,6 @@ func TestAgentTraceEvents_RequestFilterBlock(t *testing.T) {
 	blocks := gatewayEvents(ev, agenttrace.GatewayEventFilter)
 	require.Len(t, blocks, 1)
 	assert.Equal(t, agenttrace.OutcomeBlock, blocks[0].Outcome)
-	assert.Equal(t, "request_filter", blocks[0].Name)
+	assert.Equal(t, "guard", blocks[0].Name)
 }
 

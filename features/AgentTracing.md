@@ -56,7 +56,7 @@ Also recorded:
 - **Tools** (`agent_trace_tools.go`).
   - MCP: `_meta.traceparent` is injected, and the recorder forks on SSE.
   - REST tool operations, datasources and plugin endpoints are captured too.
-- **Gateway events.** Retries, fallbacks, filter and guardrail decisions, budget and auth outcomes come from `agent_trace_events.go`. They become `gateway_event` child spans.
+- **Gateway events.** Retries, fallbacks, filter and guardrail decisions, budget and auth outcomes come from `agent_trace_events.go`. They become `gateway_event` child spans. A guardrail's outcome (block, quarantine/redact as `modify`, log/alert as `allow`) is recorded next to its compliance events by `recordFilterOutcome` (`agent_trace_guardrails.go`), named after the filter, with detector ids, kinds and tool names as detail (never content). A script filter that blocks records a `filter` event under its name; `recordPolicyBlock` adds the generic rule (`request_filter`, `response_filter`) only when no filter named its block. An `/ai/` or `/anthropic/` bridge call that no rung answered keeps its request side (`captureOuterFailure`): model, LLM, request extracts and the request part.
 - **Propagation.**
   - `injectUpstreamTrace` sends `traceparent` upstream, honouring the per-LLM opt-out.
   - `pkg/tracing/baggage.go` cuts baggage down to the allowlist.

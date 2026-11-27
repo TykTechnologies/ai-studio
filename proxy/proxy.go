@@ -2731,6 +2731,7 @@ func (p *Proxy) runRequestFiltersWith(runners []requestFilterRunner, llm *models
 
 		// Record any compliance events reported by the script
 		scripting.RecordComplianceEvents(r.Context(), output, filter.Name, "proxy_request", appID, 0, llm.ID, string(llm.Vendor), modelName)
+		recordFilterOutcome(r.Context(), filter, output)
 
 		// Check if request should be blocked
 		if output.Block {

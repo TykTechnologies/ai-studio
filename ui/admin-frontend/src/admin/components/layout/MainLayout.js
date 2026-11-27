@@ -26,7 +26,7 @@ const MainLayout = ({ hideAppBar, hideDrawer }) => {
             Pages keep their own horizontal gutters. */}
         {/* Sync status banner for edge gateway configuration sync */}
         <SyncStatusBanner />
-        {/* Near-limit licence and App quota notices (admin and portal) */}
+        {/* Near-limit licence notices for users with admin access */}
         <QuotaNagBar />
         <PushReminderToast />
         <PermissionDeniedToaster />
