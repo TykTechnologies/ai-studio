@@ -100,8 +100,14 @@ Choose a preset or write a template:
 
 - **standard** – a full envelope: event id, type, timestamps, the object
   (with secrets redacted), the actor and delivery metadata.
-- **slack** – a Slack incoming-webhook message summarising the event; for a
-  guardrail alert or outcome event it links to the event in AI Studio.
+- **slack** – a Slack incoming-webhook message that says who, what, where
+  and when:
+  - For a guardrail alert or outcome: the App, what the guardrail did (with
+    its detector, what it found, the score and any judge verdict), and the
+    filter, request and compliance event. It links to the event in AI Studio.
+  - For a change to an object: the user who made it, the change, and the
+    object. When `SITE_URL` is set, it links to the object's page (except
+    for a deleted object).
 - **minimal** – identifiers only.
 - **custom** – a Go `text/template` that must render to JSON. Use
   **Preview** in the editor to render it against a sample event.
@@ -115,6 +121,10 @@ Example custom template:
   "object": {{ toJson .Object }}
 }
 ```
+
+A template can use `.Summary`, the words the Slack preset is built from:
+`.Summary.Title`, `.Summary.Who`, `.Summary.What`, `.Summary.Where` and
+`.Summary.Link`.
 
 A template can use `.StudioLink`: the AI Studio page the event links to, set
 only for guardrail alerts and outcome events (topics only AI Studio raises)
