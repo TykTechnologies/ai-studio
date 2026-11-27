@@ -44,6 +44,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/pkg/mcpannotations"
 	"github.com/TykTechnologies/midsommar/v2/universalclient"
 	bedrockVendor "github.com/TykTechnologies/midsommar/v2/vendors/bedrock"
+	vertexVendor "github.com/TykTechnologies/midsommar/v2/vendors/vertex"
 	"github.com/gorilla/mux"
 	"github.com/gosimple/slug"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -1237,8 +1238,8 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 			// response IDs can be rewritten.
 			req.Header.Del("Accept-Encoding")
 		}
-		if llm.Vendor == models.BEDROCK {
-			return // signed at RoundTrip (sigV4Transport), after ReverseProxy's header changes
+		if authAtRoundTrip(llm) {
+			return // set at RoundTrip (sigV4Transport), where a failure answers 502 instead of going out unauthenticated
 		}
 		if err := p.setVendorAuthHeader(req, llm); err != nil {
 			logger.Errorf("ERROR setting vendor auth header in director: %v", err)
@@ -1248,7 +1249,7 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 	// upstreamGuardedTransport enforces the internal-network policy at dial
 	// time (post-DNS), closing the DNS-rebinding TOCTOU window.
 	var transport http.RoundTripper = upstreamTransport
-	if llm.Vendor == models.BEDROCK {
+	if authAtRoundTrip(llm) {
 		transport = &sigV4Transport{base: upstreamTransport, sign: func(req *http.Request) error { return p.setVendorAuthHeader(req, llm) }}
 	}
 	httpProxy := &httputil.ReverseProxy{
@@ -2122,7 +2123,11 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	// Continue the trace into the upstream, as the non-streaming director does.
 	injectUpstreamTrace(upstreamReq.Context(), upstreamReq.Header, llm)
 	if err := p.setVendorAuthHeader(upstreamReq, llm); err != nil {
-		respondWithError(w, http.StatusInternalServerError, "failed to set vendor auth header for streaming", err, false)
+		status := http.StatusInternalServerError
+		if errors.Is(err, vertexVendor.ErrTokenMint) {
+			status = http.StatusBadGateway // Google's token endpoint failed
+		}
+		respondWithError(w, status, "failed to set vendor auth header for streaming", err, false)
 		return
 	}
 
@@ -2544,6 +2549,16 @@ func (p *Proxy) WaitForAnalytics(ctx context.Context) error {
 func (p *Proxy) analyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, reqBody []byte, r *http.Request) {
 	AnalyzeResponse(p.gatewayService, llm, app, statusCode, body, reqBody, r)
 }
+
+// authAtRoundTrip reports whether the vendor's auth header is set by the
+// transport instead of the REST director. Bedrock signs the final request
+// (SigV4). Vertex mints a Google access token, which can fail; the director
+// cannot answer an error, so a failure there would send the request
+// unauthenticated, while the transport's error answers 502.
+func authAtRoundTrip(llm *models.LLM) bool {
+	return llm.Vendor == models.BEDROCK || llm.Vendor == models.VERTEX
+}
+
 func (p *Proxy) setVendorAuthHeader(r *http.Request, llm *models.LLM) error {
 	return switches.SetVendorAuthHeader(r, llm)
 }

@@ -6,7 +6,8 @@ import "net/http"
 // covers the request's headers, and httputil.ReverseProxy changes them after
 // its Director runs: it appends to X-Forwarded-For and removes the headers
 // the client listed in Connection. Signed in the Director, a Bedrock request
-// carrying either then failed with 403.
+// carrying either then failed with 403. Vertex sets its minted Google
+// access token here too, so a token failure fails the request (authAtRoundTrip).
 type sigV4Transport struct {
 	base http.RoundTripper
 	sign func(*http.Request) error
