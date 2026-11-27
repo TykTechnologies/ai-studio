@@ -52,3 +52,26 @@ func TestValidateKey(t *testing.T) {
 		assert.NotContains(t, err.Error(), secret)
 	}
 }
+
+func TestValidateConfig(t *testing.T) {
+	warn, err := ValidateConfig("proj", "ya29.t", true, true)
+	assert.Nil(t, warn)
+	assert.True(t, errors.Is(err, ErrInvalidEndpoint))
+
+	warn, err = ValidateConfig("proj", "ya29.t", false, true)
+	assert.NoError(t, err, "endpoint not being set is not checked")
+	assert.Nil(t, warn)
+
+	warn, err = ValidateConfig("my-proj:us-central1", "", true, true)
+	assert.NoError(t, err)
+	assert.True(t, IsWarning(warn), "key-less is a warning")
+
+	warn, err = ValidateConfig("my-proj:us-central1", "$SECRET/VERTEX", true, true)
+	assert.NoError(t, err, "a secret reference is resolved later")
+	assert.Nil(t, warn)
+
+	_, err = ValidateConfig("my-proj:us-central1", "junk", true, true)
+	assert.True(t, errors.Is(err, ErrInvalidCredential))
+	_, err = ValidateConfig("my-proj:us-central1", "junk", true, false)
+	assert.NoError(t, err, "a kept key is not re-checked")
+}

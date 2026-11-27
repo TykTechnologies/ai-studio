@@ -1,6 +1,7 @@
 package services
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
@@ -19,8 +20,8 @@ func TestManagementService_VertexLLMValidation(t *testing.T) {
 	svc := NewManagementService(db, database.NewRepository(db), NewCryptoService("12345678901234567890123456789012"))
 	const secret = "s3cr3t-material"
 
-	for _, bad := range []string{"proj", "a:b:c", ""} {
-		_, err := svc.CreateLLM(&CreateLLMRequest{Name: "vx-bad", Vendor: "vertex", Endpoint: bad, APIKey: "ya29.t", DefaultModel: "gemini-2.5-flash"})
+	for i, bad := range []string{"proj", "a:b:c", ""} {
+		_, err := svc.CreateLLM(&CreateLLMRequest{Name: fmt.Sprintf("vx-bad-%d", i), Vendor: "vertex", Endpoint: bad, APIKey: "ya29.t", DefaultModel: "gemini-2.5-flash"})
 		require.Error(t, err, bad)
 		assert.Contains(t, err.Error(), "project:location", bad)
 	}
@@ -46,7 +47,4 @@ func TestManagementService_VertexLLMValidation(t *testing.T) {
 	name := "vx-renamed"
 	_, err = svc.UpdateLLM(llm.ID, &UpdateLLMRequest{Name: &name})
 	require.NoError(t, err, "an update that leaves endpoint and key alone is not re-checked")
-
-	assert.Error(t, ValidateCreateLLMRequest(&CreateLLMRequest{Name: "c", Vendor: "vertex", Endpoint: "proj", DefaultModel: "m"}))
-	assert.NoError(t, ValidateCreateLLMRequest(&CreateLLMRequest{Name: "c", Vendor: "vertex", Endpoint: "proj-1:eu", DefaultModel: "m"}))
 }
