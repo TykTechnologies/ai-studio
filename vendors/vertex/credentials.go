@@ -8,8 +8,8 @@ package vertexVendor
 //     or authorized_user. Tokens are minted with golang.org/x/oauth2/google.
 //  2. A raw access token ("ya29." prefix), passed through as-is: tests and
 //     short manual use only, it expires within the hour.
-//  3. Host Application Default Credentials, only when an operator opts in
-//     (a separate task; until then an empty key is refused).
+//  3. Host Application Default Credentials, only when the key is empty and
+//     an operator opted in with AI_STUDIO_VERTEX_ADC=true (adc.go).
 //  4. Otherwise an error naming both options. A request is never sent
 //     unauthenticated.
 //
@@ -67,6 +67,13 @@ var (
 	ErrTokenMint = errors.New("vertex: could not obtain a Google access token")
 )
 
+// ErrHostCredentialSource: an external_account (Workload Identity
+// Federation) credential while AI_STUDIO_VERTEX_ADC is off. Every WIF
+// credential acts with an identity the gateway's host supplies, so every one
+// needs the operator's opt-in, whatever its credential_source. It is an
+// ErrInvalidCredential.
+var ErrHostCredentialSource = fmt.Errorf("%w: Workload Identity Federation (external_account) credentials use this host's own cloud identity", ErrInvalidCredential)
+
 // supportedCredentialTypes are the Google credential JSON types accepted in
 // a Vertex LLM's key.
 var supportedCredentialTypes = map[string]google.CredentialsType{
@@ -76,10 +83,52 @@ var supportedCredentialTypes = map[string]google.CredentialsType{
 	string(google.AuthorizedUser):             google.AuthorizedUser,
 }
 
-// credentialURLAllowed reports whether a token, STS or impersonation
-// endpoint named in a credential JSON may be called. Tests replace it to
-// point credentials at local fake endpoints.
-var credentialURLAllowed = isGoogleEndpoint
+// credentialURLAllowedFn reports whether a token, STS or impersonation
+// endpoint named in a credential JSON may be called. Tests replace it
+// (SetCredentialURLAllowedForTests) to point credentials at local fakes.
+var (
+	credentialURLMu        sync.RWMutex
+	credentialURLAllowedFn = isGoogleEndpoint
+)
+
+func credentialURLAllowed(u *url.URL) bool {
+	credentialURLMu.RLock()
+	defer credentialURLMu.RUnlock()
+	return credentialURLAllowedFn(u)
+}
+
+// SetCredentialURLAllowedForTests replaces the rule for the token, STS and
+// impersonation endpoints a credential JSON may name (production: https on
+// *.googleapis.com or accounts.google.com), so a test in another package can
+// point a real credential JSON at a fake token endpoint and exercise the
+// whole validation and minting path. It returns a function restoring the
+// previous rule. For tests only.
+func SetCredentialURLAllowedForTests(allow func(*url.URL) bool) (restore func()) {
+	credentialURLMu.Lock()
+	prev := credentialURLAllowedFn
+	credentialURLAllowedFn = allow
+	credentialURLMu.Unlock()
+	return func() {
+		credentialURLMu.Lock()
+		credentialURLAllowedFn = prev
+		credentialURLMu.Unlock()
+	}
+}
+
+// AllowLoopbackCredentialEndpointsForTests is SetCredentialURLAllowedForTests
+// with the production rule plus http(s) on 127.0.0.1, ::1 and localhost
+// (httptest servers). For tests only.
+func AllowLoopbackCredentialEndpointsForTests() (restore func()) {
+	return SetCredentialURLAllowedForTests(func(u *url.URL) bool {
+		if u.User == nil && (u.Scheme == "http" || u.Scheme == "https") {
+			switch u.Hostname() {
+			case "127.0.0.1", "::1", "localhost":
+				return true
+			}
+		}
+		return isGoogleEndpoint(u)
+	})
+}
 
 // credentialSourceURLAllowed reports whether an external_account
 // credential_source URL may be fetched. Tests replace it.
@@ -182,9 +231,12 @@ func validateCredentialJSON(raw []byte, depth int) (google.CredentialsType, erro
 		}
 		var src struct {
 			Executable            json.RawMessage `json:"executable"`
+			File                  string          `json:"file"`
 			URL                   string          `json:"url"`
 			RegionURL             string          `json:"region_url"`
 			IMDSv2SessionTokenURL string          `json:"imdsv2_session_token_url"`
+			EnvironmentID         string          `json:"environment_id"`
+			Certificate           json.RawMessage `json:"certificate"`
 		}
 		if len(f.CredentialSource) > 0 {
 			if err := json.Unmarshal(f.CredentialSource, &src); err != nil {
@@ -197,9 +249,9 @@ func validateCredentialJSON(raw []byte, depth int) (google.CredentialsType, erro
 		// The gateway fetches these URLs itself, so they are limited to the
 		// cloud instance metadata services WIF reads (AWS, Azure, GCP):
 		// anything else would let the key make the gateway request any
-		// internal URL. A file source is allowed (Kubernetes projected
-		// tokens): its content only ever goes to the pinned Google STS
-		// token_url above, and token errors are never returned to callers.
+		// internal URL. A file's content only ever goes to the pinned
+		// Google STS token_url above, and token errors are never returned
+		// to callers.
 		for field, raw := range map[string]string{
 			"credential_source.url":                      src.URL,
 			"credential_source.region_url":               src.RegionURL,
@@ -212,6 +264,18 @@ func validateCredentialJSON(raw []byte, depth int) (google.CredentialsType, erro
 			if err != nil || !credentialSourceURLAllowed(u) {
 				return "", fmt.Errorf("%w: %s must point at the cloud instance metadata service (169.254.169.254, fd00:ec2::254 or metadata.google.internal)", ErrInvalidCredential, field)
 			}
+		}
+		// Every WIF credential acts with an identity the host supplies (a
+		// projected token file, the metadata service, the AWS environment,
+		// certificate files), so it needs the operator's opt-in, like host
+		// ADC: anyone who can edit an LLM could otherwise borrow the host's
+		// identity (Martin, 2026-11-28). Fail closed: the gate does not
+		// depend on recognising the source.
+		if !ADCEnabled() {
+			return "", fmt.Errorf("%w; the operator must set %s=true on AI Studio and on every edge to allow them", ErrHostCredentialSource, ADCSetting)
+		}
+		if src.File == "" && src.URL == "" && src.EnvironmentID == "" && (len(src.Certificate) == 0 || string(src.Certificate) == "null") {
+			return "", fmt.Errorf("%w: external_account credential_source names no supported source (file, url, environment_id or certificate)", ErrInvalidCredential)
 		}
 	case google.ImpersonatedServiceAccount:
 		if f.ServiceAccountImpersonationURL == "" || len(f.SourceCredentials) == 0 {
@@ -302,6 +366,8 @@ func TokenSource(llm *models.LLM) (oauth2.TokenSource, error) {
 
 	key := strings.TrimSpace(llm.APIKey)
 	switch {
+	case key == "" && ADCEnabled():
+		return adcTokenSource()
 	case key == "":
 		return nil, fmt.Errorf("%w for LLM %q: set its API key to a Google credential JSON (a service account key or a Workload Identity Federation config), or have the operator enable host Application Default Credentials with %s=true", ErrNoCredential, llm.Name, ADCSetting)
 	case IsAccessToken(key):

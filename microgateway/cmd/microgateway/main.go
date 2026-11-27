@@ -100,6 +100,7 @@ func main() {
 	fips := fipsinfo.Current()
 	log.Info().Bool("enabled", fips.Enabled).Str("version", fips.Version).Bool("enforced", fips.Enforced).
 		Msg("FIPS 140-3")
+	go logVertexADCState()
 
 	// Garbage-collector defaults (GOGC, a soft GOMEMLIMIT under the memory
 	// limit) unless the operator set them. Overload shedding judges against

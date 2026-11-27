@@ -448,6 +448,7 @@ func New(opts Options) (_ *Studio, err error) {
 		return nil, fmt.Errorf("studio: start licensing: %w", err)
 	}
 	logger.Info("Licensing service initialized")
+	go logVertexADCState()
 
 	var ociConfig *ociplugins.OCIConfig
 	if conf.OCIPlugins.IsEnabled() {
