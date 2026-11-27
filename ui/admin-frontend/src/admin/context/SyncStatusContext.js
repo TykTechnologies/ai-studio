@@ -175,35 +175,41 @@ export const SyncStatusProvider = ({ children }) => {
   // look again a little later before concluding there is nothing to push;
   // otherwise the reminder was lost and only the 30-second poll showed the
   // banner (o4a.1).
-  const recheckTimers = useRef([]);
+  // One recheck at a time, in order; a new save, or unmounting, bumps the
+  // generation so an answer that arrives late raises nothing.
+  const recheck = useRef({ timer: null, generation: 0 });
   useEffect(() => {
-    const clearRechecks = () => {
-      recheckTimers.current.forEach(clearTimeout);
-      recheckTimers.current = [];
+    const cancelRechecks = () => {
+      clearTimeout(recheck.current.timer);
+      recheck.current.timer = null;
+      recheck.current.generation += 1;
     };
     const unregister = registerSyncStatusRefresh(async ({ saved = false } = {}) => {
-      clearRechecks();
+      cancelRechecks();
+      const generation = recheck.current.generation;
       const status = await refreshSyncStatus();
-      if (!saved) return;
+      if (!saved || generation !== recheck.current.generation) return;
       if (status?.has_pending) {
         setPushReminder({ id: Date.now() });
         return;
       }
       if (!(status?.data || []).length) return; // no edges: nothing will be pending
-      SAVE_RECHECK_DELAYS_MS.forEach((delay) => {
-        recheckTimers.current.push(
-          setTimeout(async () => {
-            const later = await refreshSyncStatus();
-            if (later?.has_pending) {
-              clearRechecks();
-              setPushReminder({ id: Date.now() });
-            }
-          }, delay)
-        );
-      });
+      const next = (i, previousDelay) => {
+        if (i >= SAVE_RECHECK_DELAYS_MS.length) return;
+        recheck.current.timer = setTimeout(async () => {
+          const later = await refreshSyncStatus();
+          if (generation !== recheck.current.generation) return;
+          if (later?.has_pending) {
+            setPushReminder({ id: Date.now() });
+            return;
+          }
+          next(i + 1, SAVE_RECHECK_DELAYS_MS[i]);
+        }, SAVE_RECHECK_DELAYS_MS[i] - previousDelay);
+      };
+      next(0, 0);
     });
     return () => {
-      clearRechecks();
+      cancelRechecks();
       unregister();
     };
   }, [refreshSyncStatus]);

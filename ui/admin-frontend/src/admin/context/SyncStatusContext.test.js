@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, act, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { SyncStatusProvider, useSyncStatus } from './SyncStatusContext';
+import { SyncStatusProvider, useSyncStatus, SAVE_RECHECK_DELAYS_MS } from './SyncStatusContext';
 import { notifyConfigChanged } from '../utils/configSyncNotifier';
 
 jest.mock('../services/syncStatusService', () => ({
@@ -179,10 +179,30 @@ describe('SyncStatusProvider', () => {
       // The change event is handled: the edges are now pending.
       syncStatusService.getSyncStatus.mockResolvedValue(pending);
       await act(async () => {
-        jest.advanceTimersByTime(1600);
+        jest.advanceTimersByTime(SAVE_RECHECK_DELAYS_MS[0] + 100);
       });
       await flush();
       expect(screen.getByTestId('reminder')).toHaveTextContent('shown');
+      // Found: no later recheck runs.
+      const calls = syncStatusService.getSyncStatus.mock.calls.length;
+      await act(async () => {
+        jest.advanceTimersByTime(SAVE_RECHECK_DELAYS_MS[SAVE_RECHECK_DELAYS_MS.length - 1]);
+      });
+      await flush();
+      expect(syncStatusService.getSyncStatus.mock.calls.length).toBe(calls);
+    });
+
+    it('stops looking again once unmounted', async () => {
+      syncStatusService.getSyncStatus.mockResolvedValue(inSync);
+      const { unmount } = render(<SyncStatusProvider><Probe /></SyncStatusProvider>);
+      await flush();
+      await saveThenRefresh(true);
+      const calls = syncStatusService.getSyncStatus.mock.calls.length;
+      unmount();
+      await act(async () => {
+        jest.advanceTimersByTime(SAVE_RECHECK_DELAYS_MS[SAVE_RECHECK_DELAYS_MS.length - 1] + 100);
+      });
+      expect(syncStatusService.getSyncStatus.mock.calls.length).toBe(calls);
     });
 
     it('does not look again when no edge is registered', async () => {
