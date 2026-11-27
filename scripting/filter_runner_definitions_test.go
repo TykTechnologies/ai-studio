@@ -82,10 +82,24 @@ func TestGuardrailToolDefinitions_Remove(t *testing.T) {
 	if len(defs) < 2 || defs[0].Role != guardrails.RoleSystem || defs[0].ToolName == "" {
 		t.Errorf("definition segments %+v", defs)
 	}
-	// One event per detector: it names both kinds and the tool, with the
-	// strongest action taken.
-	if len(out.ComplianceEvents) != 1 || !strings.Contains(strings.Join(out.ComplianceEvents[0].Metadata["kinds"].([]string), ","), guardrails.KindToolDefinition) {
-		t.Errorf("events %+v", out.ComplianceEvents)
+	// o4a.2: one event per detector and action, so each says what
+	// happened to its own segments: the definition removed, the result
+	// quarantined (sorted by action).
+	if len(out.ComplianceEvents) != 2 {
+		t.Fatalf("events %+v", out.ComplianceEvents)
+	}
+	for i, want := range []struct{ action, kind, where string }{
+		{guardrails.ActionQuarantine, guardrails.KindToolResult, "in tool result;"},
+		{guardrails.ActionRemove, guardrails.KindToolDefinition, "in tool definition;"},
+	} {
+		ev := out.ComplianceEvents[i]
+		if ev.Metadata["action"] != want.action || strings.Join(ev.Metadata["kinds"].([]string), ",") != want.kind ||
+			!strings.Contains(ev.Description, want.where) || !strings.HasSuffix(ev.Description, "action "+want.action) {
+			t.Errorf("event %d = %+v, want %s of %s", i, ev, want.action, want.kind)
+		}
+	}
+	if names, _ := out.ComplianceEvents[1].Metadata["tool_names"].([]string); len(names) != 1 || names[0] != "evil" {
+		t.Errorf("the removal names the removed tool only: %+v", out.ComplianceEvents[1].Metadata)
 	}
 
 	// Alone, the removal is the event's action.
@@ -93,6 +107,11 @@ func TestGuardrailToolDefinitions_Remove(t *testing.T) {
 	out = runOpenAI(t, toolCallFilter(t, p2, guardrails.ActionBlock, map[string]any{"tool_results": map[string]any{"scan": false}, "tool_definitions": map[string]any{"scan": true}}), definitionsBody)
 	if len(out.ComplianceEvents) != 1 || out.ComplianceEvents[0].Metadata["action"] != guardrails.ActionRemove || out.Message != "guardrail removed tool definitions" {
 		t.Errorf("removal alone: %+v", out)
+	}
+	// o4a.3: a tool definition reaches the provider as system text, but the
+	// event says where it was, not "in system".
+	if d := out.ComplianceEvents[0].Description; !strings.Contains(d, "in tool definition;") || strings.Contains(d, "system") {
+		t.Errorf("removal alone: description %q", d)
 	}
 }
 
