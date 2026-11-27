@@ -285,7 +285,13 @@ Plan:
        base URL.
    - The connection detail page gets a **Nodes** panel listing address,
      version, reachable, in sync / pending / unreachable, last reconcile, and
-     error.
+     error. A register, push or delete records each node it wrote from the
+     write's own read-back (the node's MCP list after the reload, which
+     replaced the single-proxy read: no extra call), against the desired
+     state, so the panel shows the change without waiting for the next sync;
+     a node that missed the write stays pending for the sync to fix. With
+     shared storage the group reload spreads the write, and the sync
+     records the nodes.
    - "Tyk Dashboard" strings become "Tyk" where they are shared.
 
 ## 7. "MCP only" guardrails (enforced in code and tested)

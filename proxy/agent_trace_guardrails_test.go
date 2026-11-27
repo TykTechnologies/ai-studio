@@ -45,7 +45,16 @@ func TestGuardrailOutcome(t *testing.T) {
 		{"block wins", scripting.ScriptOutput{Block: true, ComplianceEvents: []scripting.ComplianceEventOutput{
 			finding("pii.email", "redact", []string{"text"}, nil),
 			finding("secrets.aws", "block", []string{"text"}, nil),
-		}}, agenttrace.OutcomeBlock, "pii.email, secrets.aws in text; block", true},
+		}}, agenttrace.OutcomeBlock, "secrets.aws in text; block; pii.email in text; redact", true},
+		// o4a.2: a removed definition and a quarantined result, each with
+		// its own action; a removal modifies the request.
+		{"quarantine and removal", scripting.ScriptOutput{ComplianceEvents: []scripting.ComplianceEventOutput{
+			finding("tool_metadata.poisoning", "remove", []string{"tool_definition"}, []string{"lookup_weather"}),
+			finding("tool_metadata.poisoning", "quarantine", []string{"tool_result"}, []string{"search_kb"}),
+		}}, agenttrace.OutcomeModify, "tool_metadata.poisoning in tool_result (search_kb); quarantine; tool_metadata.poisoning in tool_definition (lookup_weather); remove", true},
+		{"removal alone", scripting.ScriptOutput{ComplianceEvents: []scripting.ComplianceEventOutput{
+			finding("tool_metadata.poisoning", "remove", []string{"tool_definition"}, []string{"evil"}),
+		}}, agenttrace.OutcomeModify, "tool_metadata.poisoning in tool_definition (evil); remove", true},
 		{"fail-closed block", scripting.ScriptOutput{Block: true}, agenttrace.OutcomeBlock, "block", true},
 	}
 	for _, tc := range cases {
