@@ -14,7 +14,7 @@ import (
 func TestFromProtoAllowlistsAttributes(t *testing.T) {
 	assert.Equal(t, []string{
 		"http.request.method", "mcp.method.name", "mcp.protocol.version",
-		"tyk.content.withheld", "tyk.server_tool_calls",
+		"tyk.content.withheld", "tyk.request.id", "tyk.server_tool_calls",
 	}, CaptureAttributeKeys(), "a new capture attribute must be added here and to the allowlist on purpose")
 
 	attrs := map[string]string{
@@ -23,6 +23,7 @@ func TestFromProtoAllowlistsAttributes(t *testing.T) {
 		"http.request.method":        "POST",
 		"tyk.server_tool_calls":      "2",
 		"tyk.content.withheld":       WithheldEdgeLinkUnverifiedTLS,
+		"tyk.request.id":             "tyai_0123456789abcdef0123456789abcdef",
 		"tyk.attribution.rule":       "catalogue_unique",
 		"tyk.attribution.confidence": "exact",
 		"tyk.tools.offered":          `["x"]`,
@@ -39,6 +40,7 @@ func TestFromProtoAllowlistsAttributes(t *testing.T) {
 		"http.request.method":   "POST",
 		"tyk.server_tool_calls": "2",
 		"tyk.content.withheld":  WithheldEdgeLinkUnverifiedTLS,
+		"tyk.request.id":        "tyai_0123456789abcdef0123456789abcdef",
 	}, got)
 
 	bad := map[string]string{
@@ -46,6 +48,7 @@ func TestFromProtoAllowlistsAttributes(t *testing.T) {
 		"http.request.method":   "post; drop",
 		"tyk.server_tool_calls": "many",
 		"tyk.content.withheld":  "because I said so",
+		"tyk.request.id":        "tyai_<script>",
 	}
 	assert.Nil(t, boundAttributes(bad), "invalid values are dropped")
 	assert.Nil(t, boundAttributes(nil))

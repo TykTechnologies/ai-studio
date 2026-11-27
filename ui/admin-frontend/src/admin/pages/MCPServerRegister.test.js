@@ -225,6 +225,25 @@ describe("MCPServerRegister", () => {
 
       const body = await dryRunBody();
       expect(body.allowed_tools).toEqual(["get_order"]);
+      // The discovered list goes along, so AI Studio knows the server's tools.
+      expect(body.discovered_tools).toEqual([
+        { name: "get_order", title: undefined, description: "Fetch one order" },
+        { name: "list_orders", title: undefined, description: "List orders" },
+      ]);
+    });
+
+    it("sends the discovered tools when every tool is allowed", async () => {
+      apiClient.post.mockImplementation((path) =>
+        path === "/mcp-servers/discover-tools"
+          ? Promise.resolve({ data: { endpoint: "https://orders.example.com/mcp", tools: [{ name: "get_order", description: "Fetch one order" }] } })
+          : Promise.resolve({ data: { server: { id: 9 }, definition: {}, warnings: [], endpoint_url: "" } })
+      );
+      await toProxyDetails();
+      fireEvent.click(screen.getByTestId("discover-tools"));
+      await screen.findByTestId("discovered-tools");
+      const body = await dryRunBody();
+      expect(body.allowed_tools).toEqual([]);
+      expect(body.discovered_tools).toEqual([{ name: "get_order", title: undefined, description: "Fetch one order" }]);
     });
 
     it("keeps typed names across discovery and flags the ones the server lacks", async () => {
@@ -281,6 +300,9 @@ describe("MCPServerRegister", () => {
     const remote = { kind: "remote", tool_access: "all", allowed_tools: [], manual_tools: "", primitives: [], gateway_tags: [] };
     expect(buildPayload({ ...remote, allow_internal_host: true }).allow_internal_host).toBe(true);
     expect(buildPayload(remote)).not.toHaveProperty("allow_internal_host");
+    // Without a finished discovery there is no tool list to keep.
+    expect(buildPayload(remote)).not.toHaveProperty("discovered_tools");
+    expect(buildPayload(remote, [])).not.toHaveProperty("discovered_tools");
     expect(body.tags).toEqual(["a", "b"]);
     expect(body.privacy_score).toBeUndefined();
     expect(body.gateway_tags).toEqual(["edge-eu"]);

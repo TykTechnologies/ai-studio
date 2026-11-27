@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -601,8 +602,10 @@ func (a *API) getViolationRecords(c *gin.Context) {
 // @Param app_id query int false "Filter by app ID"
 // @Param event_type query string false "Filter by event type"
 // @Param severity query string false "Filter by severity (info, warning, critical)"
-// @Param limit query int false "Maximum number of records, defaults to 100"
-// @Param offset query int false "Pagination offset, defaults to 0"
+// @Param page_size query int false "Events per page, defaults to 100, at most 1000"
+// @Param page query int false "Page number (1-based), defaults to 1"
+// @Param limit query int false "Older form of page_size, used only without page_size and page"
+// @Param offset query int false "Older form of page: events to skip, used only without page_size and page"
 // @Success 200 {object} compliance.ComplianceEventsData
 // @Failure 400 {object} models.ErrorResponse
 // @Failure 403 {object} models.ErrorResponse
@@ -658,18 +661,15 @@ func (a *API) getComplianceEvents(c *gin.Context) {
 		}
 	}
 
-	limit := 100
-	if limitStr := c.Query("limit"); limitStr != "" {
-		if parsed, err := strconv.Atoi(limitStr); err == nil && parsed > 0 {
-			limit = parsed
-		}
-	}
-
-	offset := 0
-	if offsetStr := c.Query("offset"); offsetStr != "" {
-		if parsed, err := strconv.Atoi(offsetStr); err == nil && parsed >= 0 {
-			offset = parsed
-		}
+	limit, offset, page, err := complianceEventsPaging(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: "Bad Request", Detail: err.Error()}},
+		})
+		return
 	}
 
 	data, err := complianceService.GetComplianceEvents(startDate, endDate, appID, eventType, severity, limit, offset)
@@ -692,7 +692,123 @@ func (a *API) getComplianceEvents(c *gin.Context) {
 		return
 	}
 
+	data.Meta = &compliance.PageMeta{
+		TotalCount: data.TotalCount,
+		TotalPages: int((data.TotalCount + int64(limit) - 1) / int64(limit)),
+		PageSize:   limit,
+		PageNumber: page,
+		Offset:     offset,
+	}
 	c.JSON(http.StatusOK, data)
+}
+
+// Compliance events paging: page/page_size like the other list endpoints,
+// or the older limit/offset (the Filter Events tab and existing scripts).
+const (
+	complianceEventsDefaultPageSize = 100
+	complianceEventsMaxPageSize     = 1000
+)
+
+// complianceEventsPaging returns the SQL limit and offset for a compliance
+// events request, and the 1-based page they make. page_size and page win
+// over limit and offset when either is given. A page size over the maximum
+// is capped; a malformed or non-positive page or page_size is a 400.
+func complianceEventsPaging(c *gin.Context) (limit, offset, page int, err error) {
+	positive := func(name string, min int) (int, bool, error) {
+		raw, ok := c.GetQuery(name)
+		if !ok || raw == "" {
+			return 0, false, nil
+		}
+		v, convErr := strconv.Atoi(raw)
+		if convErr != nil || v < min {
+			return 0, false, fmt.Errorf("%s must be an integer of at least %d", name, min)
+		}
+		return v, true, nil
+	}
+	pageSize, hasSize, err := positive("page_size", 1)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	pageNum, hasPage, err := positive("page", 1)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	if hasSize || hasPage {
+		if !hasSize {
+			pageSize = complianceEventsDefaultPageSize
+		}
+		if !hasPage {
+			pageNum = 1
+		}
+		pageSize = min(pageSize, complianceEventsMaxPageSize)
+		// The offset must not overflow (a huge page would wrap negative).
+		if pageNum-1 > (math.MaxInt32-pageSize)/pageSize {
+			return 0, 0, 0, fmt.Errorf("page is too large")
+		}
+		return pageSize, (pageNum - 1) * pageSize, pageNum, nil
+	}
+
+	// limit and offset keep their old leniency: a malformed or out-of-range
+	// value falls back to the default.
+	limit = complianceEventsDefaultPageSize
+	if v, convErr := strconv.Atoi(c.Query("limit")); convErr == nil && v > 0 {
+		limit = min(v, complianceEventsMaxPageSize)
+	}
+	if v, convErr := strconv.Atoi(c.Query("offset")); convErr == nil && v >= 0 {
+		offset = v
+	}
+	return limit, offset, offset/limit + 1, nil
+}
+
+// complianceEventsByRequestResponse is the by-request lookup's answer.
+type complianceEventsByRequestResponse struct {
+	Events []compliance.ComplianceEventRecord `json:"events"`
+}
+
+// getComplianceEventsByRequest godoc
+// @Summary Find the compliance events of one gateway request
+// @Description The App's compliance events that record request_id (the gateway's X-Tyk-AI-Request-ID) in their metadata, recorded within 10 minutes of at, oldest first, at most 20 (Enterprise). An agent trace's guardrail outcome links to them.
+// @Tags Compliance
+// @Produce json
+// @Param request_id query string true "Gateway request id (tyai_ followed by 32 hex digits)"
+// @Param app_id query int true "App ID"
+// @Param at query string true "When the request ran (RFC 3339)"
+// @Success 200 {object} complianceEventsByRequestResponse
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 403 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
+// @Router /compliance/events-by-request [get]
+// @Security BearerAuth
+func (a *API) getComplianceEventsByRequest(c *gin.Context) {
+	fail := func(code int, title, detail string) {
+		c.JSON(code, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: title, Detail: detail}},
+		})
+	}
+	appID, err := strconv.ParseUint(c.Query("app_id"), 10, 32)
+	if err != nil || appID == 0 {
+		fail(http.StatusBadRequest, "Bad Request", "app_id must be a positive integer")
+		return
+	}
+	at, err := time.Parse(time.RFC3339Nano, c.Query("at"))
+	if err != nil {
+		fail(http.StatusBadRequest, "Bad Request", "at must be an RFC 3339 time")
+		return
+	}
+	events, err := compliance.EventsByRequest(a.service.DB, uint(appID), c.Query("request_id"), at)
+	switch {
+	case errors.Is(err, compliance.ErrInvalidRequestID):
+		fail(http.StatusBadRequest, "Bad Request", err.Error())
+	case errors.Is(err, compliance.ErrEnterpriseFeature):
+		fail(http.StatusForbidden, "Enterprise Feature", err.Error())
+	case err != nil:
+		fail(http.StatusInternalServerError, "Internal Server Error", "Failed to find the compliance events")
+	default:
+		c.JSON(http.StatusOK, complianceEventsByRequestResponse{Events: events})
+	}
 }
 
 // getComplianceEvent godoc
