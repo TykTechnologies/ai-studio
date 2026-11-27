@@ -286,11 +286,13 @@ func GoogleAIModelExtractor(r *http.Request, body []byte) (string, error) {
 
 func VertexModelExtractor(r *http.Request, body []byte) (string, error) {
 	// Vertex AI typically includes model in the URL path
-	// Format: .../projects/{project}/locations/{location}/publishers/google/models/{model}
+	// Format: .../projects/{project}/locations/{location}/publishers/google/models/{model}:{method}
 	parts := strings.Split(r.URL.Path, "/")
 	for i, part := range parts {
 		if part == "models" && i+1 < len(parts) {
-			return parts[i+1], nil
+			// The method (:generateContent) is not part of the model's name.
+			model, _, _ := strings.Cut(parts[i+1], ":")
+			return model, nil
 		}
 	}
 

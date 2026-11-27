@@ -300,3 +300,16 @@ func TestModelValidationMiddleware_AllowedModels(t *testing.T) {
 		assert.Equal(t, "claude-3-5-sonnet-20241022", capturedModel)
 	})
 }
+
+// The Vertex model is the path's model segment without the :method after it.
+func TestVertexModelExtractor_StripsMethod(t *testing.T) {
+	for path, want := range map[string]string{
+		"/llm/rest/v/v1/projects/p/locations/l/publishers/google/models/gemini-2.5-flash:generateContent":         "gemini-2.5-flash",
+		"/llm/stream/v/v1/projects/p/locations/l/publishers/google/models/gemini-2.5-flash:streamGenerateContent": "gemini-2.5-flash",
+		"/llm/rest/v/v1/projects/p/locations/l/publishers/google/models/gemini-2.5-flash":                         "gemini-2.5-flash",
+	} {
+		got, err := VertexModelExtractor(httptest.NewRequest(http.MethodPost, path, nil), nil)
+		require.NoError(t, err, path)
+		assert.Equal(t, want, got, path)
+	}
+}

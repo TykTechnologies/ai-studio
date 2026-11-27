@@ -64,8 +64,16 @@ var defaultAPIEndpoints = map[models.Vendor]string{
 }
 
 // UpstreamEndpoint is the API base the proxy forwards an LLM's traffic to:
-// its configured endpoint, or the vendor's default when none is set.
+// its configured endpoint, or the vendor's default when none is set. A Vertex
+// endpoint names a project and location (project:location), so it maps to
+// that location's service URL (vertexVendor.UpstreamBaseURL); a malformed one
+// is returned as it is and fails the caller's URL checks.
 func UpstreamEndpoint(llm *models.LLM) string {
+	if llm.Vendor == models.VERTEX {
+		if base, err := vertexVendor.UpstreamBaseURL(llm); err == nil {
+			return base
+		}
+	}
 	if llm.APIEndpoint != "" {
 		return llm.APIEndpoint
 	}
