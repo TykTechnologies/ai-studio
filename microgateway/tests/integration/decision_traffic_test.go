@@ -326,8 +326,9 @@ func TestEdgeDecisions_ModelListing(t *testing.T) {
 		caps[m.ID] = m.Capabilities
 	}
 	assert.Equal(t, []string{"decisions"}, caps["jev/jev-latest"])
-	assert.Contains(t, caps["luna/gpt-6-luna"], "decisions")
-	assert.Contains(t, caps["luna/gpt-6-luna"], "chat")
+	// Capabilities are per model: on an OpenAI route gpt-6-luna is a
+	// decision model, not a chat one (tkg.5).
+	assert.Equal(t, []string{"decisions"}, caps["luna/gpt-6-luna"])
 	_, hidden := caps["hidden-jev/jev-latest"]
 	assert.False(t, hidden, "an ungranted route is never listed")
 }

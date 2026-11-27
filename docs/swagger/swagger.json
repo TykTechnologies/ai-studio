@@ -8625,13 +8625,25 @@
                     },
                     {
                         "type": "integer",
-                        "description": "Maximum number of records, defaults to 100",
+                        "description": "Events per page, defaults to 100, at most 1000",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (1-based), defaults to 1",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Older form of page_size, used only without page_size and page",
                         "name": "limit",
                         "in": "query"
                     },
                     {
                         "type": "integer",
-                        "description": "Pagination offset, defaults to 0",
+                        "description": "Older form of page: events to skip, used only without page_size and page",
                         "name": "offset",
                         "in": "query"
                     }
@@ -8641,6 +8653,72 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/compliance.ComplianceEventsData"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/compliance/events-by-request": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "The App's compliance events that record request_id (the gateway's X-Tyk-AI-Request-ID) in their metadata, recorded within 10 minutes of at, oldest first, at most 20 (Enterprise). An agent trace's guardrail outcome links to them.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "Find the compliance events of one gateway request",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Gateway request id (tyai_ followed by 32 hex digits)",
+                        "name": "request_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "app_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "When the request ran (RFC 3339)",
+                        "name": "at",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.complianceEventsByRequestResponse"
                         }
                     },
                     "400": {
@@ -35197,6 +35275,17 @@
                 }
             }
         },
+        "api.complianceEventsByRequestResponse": {
+            "type": "object",
+            "properties": {
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/compliance.ComplianceEventRecord"
+                    }
+                }
+            }
+        },
         "api.createWebhookTargetResponse": {
             "type": "object",
             "properties": {
@@ -35826,6 +35915,14 @@
                         "$ref": "#/definitions/compliance.ComplianceEventRecord"
                     }
                 },
+                "meta": {
+                    "description": "Meta is the page the API returned, as on the other list endpoints;\nset by the handler.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/compliance.PageMeta"
+                        }
+                    ]
+                },
                 "timeline": {
                     "type": "array",
                     "items": {
@@ -35954,6 +36051,27 @@
                     "type": "string"
                 },
                 "risk_score": {
+                    "type": "integer"
+                }
+            }
+        },
+        "compliance.PageMeta": {
+            "type": "object",
+            "properties": {
+                "offset": {
+                    "description": "Offset is the number of rows skipped (limit/offset requests may not\nfall on a page boundary).",
+                    "type": "integer"
+                },
+                "page_number": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                },
+                "total_pages": {
                     "type": "integer"
                 }
             }
