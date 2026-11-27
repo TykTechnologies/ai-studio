@@ -90,7 +90,7 @@ Decision spend counts against App, LLM and team budgets like any other spend, an
 
 ## Analytics
 
-Every decision call is recorded with its token usage and cost, plus how many questions it asked and how many the model refused. The **Decision Models** panel on the Dashboard shows calls, questions answered, refusal rate, cost and cost per thousand calls per model for the selected period. It appears once there is decision traffic. The same report is available from the API:
+Every decision call is recorded with its token usage and cost, plus how many questions it asked and how many the model refused. The **Decision Models** panel on the Dashboard shows calls, questions answered, refusal rate, cost and cost per thousand calls per model for the selected period. It appears once there is decision traffic. A call that came back without answers (an upstream error such as `404 model_not_found`, a spent budget, a policy block) is counted under **Failed calls**, not as a decision call, and its questions are left out of the questions answered. The same report is available from the API:
 
 ```
 GET /api/v1/analytics/decisions?start_date=2026-10-01&end_date=2026-10-08[&llm_id=3][&app_id=7]

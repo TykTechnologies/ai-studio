@@ -66,3 +66,48 @@ func TestGetDecisionUsage(t *testing.T) {
 	assert.Empty(t, usage.ByModel)
 	assert.Empty(t, usage.ByDay.Labels)
 }
+
+// A decision call the model did not answer (an upstream 404 model_not_found,
+// a budget denial) is recorded with the questions it asked and no answers.
+// The report counts it as a failed call and keeps its questions out of the
+// answered ratio, rather than reading it as a decision call with every
+// question unanswered.
+func TestGetDecisionUsageSeparatesFailedCalls(t *testing.T) {
+	db := setupStatsTest(t)
+
+	day := time.Date(2026, 10, 1, 10, 0, 0, 0, time.UTC)
+	recs := []models.LLMChatRecord{
+		{LLMID: 1, Vendor: "openai", Name: "gpt-6-luna", PromptTokens: 100, Choices: 2, Cost: 0.5, Currency: "USD", TimeStamp: day,
+			RequestKind: models.DecisionRequest, DecisionQuestions: 3, DecisionRefusals: 1},
+		// Two failed calls on a model the vendor does not serve.
+		{LLMID: 1, Vendor: "openai", Name: "gpt-5.6-luna", Currency: "USD", TimeStamp: day,
+			RequestKind: models.DecisionRequest, DecisionQuestions: 3},
+		{LLMID: 1, Vendor: "openai", Name: "gpt-5.6-luna", Currency: "USD", TimeStamp: day,
+			RequestKind: models.DecisionRequest, DecisionQuestions: 3},
+	}
+	require.NoError(t, db.Create(&recs).Error)
+
+	usage, err := GetDecisionUsage(db, day.Add(-time.Hour), day.Add(time.Hour), nil, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, int64(1), usage.Totals.Requests, "only the answered call is a decision call")
+	assert.Equal(t, int64(2), usage.Totals.Failed)
+	assert.Equal(t, int64(3), usage.Totals.Questions, "failed calls' questions are not counted as asked")
+	assert.Equal(t, int64(2), usage.Totals.Answered)
+	assert.Equal(t, int64(1), usage.Totals.Refusals)
+
+	assert.Equal(t, []int64{1}, usage.ByDay.Requests)
+	assert.Equal(t, []int64{2}, usage.ByDay.Failed)
+	assert.Equal(t, []int64{3}, usage.ByDay.Questions)
+
+	require.Len(t, usage.ByModel, 2)
+	assert.Equal(t, "gpt-6-luna", usage.ByModel[0].Model)
+	assert.Equal(t, int64(1), usage.ByModel[0].Requests)
+	assert.Equal(t, int64(0), usage.ByModel[0].Failed)
+	assert.InDelta(t, 0.5/10000*1000, usage.ByModel[0].CostPerThousand, 1e-12)
+	assert.Equal(t, "gpt-5.6-luna", usage.ByModel[1].Model)
+	assert.Equal(t, int64(0), usage.ByModel[1].Requests)
+	assert.Equal(t, int64(2), usage.ByModel[1].Failed)
+	assert.Equal(t, int64(0), usage.ByModel[1].Questions)
+	assert.Equal(t, float64(0), usage.ByModel[1].CostPerThousand)
+}

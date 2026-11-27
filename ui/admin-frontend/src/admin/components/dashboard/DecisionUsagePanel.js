@@ -17,7 +17,7 @@ const formatCost = (value) =>
   value === undefined || value === null ? "-" : `$${Number(value).toFixed(4)}`;
 
 const Stat = ({ label, value, testId }) => (
-  <Grid item xs={6} sm={3}>
+  <Grid item xs={6} sm={4} md>
     <Typography variant="body2" color="text.secondary">
       {label}
     </Typography>
@@ -30,6 +30,8 @@ const Stat = ({ label, value, testId }) => (
 // DecisionUsagePanel answers "what are decision models doing for me?" over the
 // dashboard's date range: decision calls (/v1/decisions, /v1/systemone), the
 // questions they asked, how many the models refused, and what they cost.
+// Calls that came back without answers (an upstream error, a budget denial)
+// are counted as failed, apart from the decision calls and their questions.
 // Decision spend is also in the dashboard's cost totals; this splits it out.
 // The panel stays hidden until there is decision traffic.
 const DecisionUsagePanel = ({ startDate, endDate }) => {
@@ -60,9 +62,11 @@ const DecisionUsagePanel = ({ startDate, endDate }) => {
       </Paper>
     );
   }
-  if (!usage || !usage.totals || usage.totals.requests === 0) return null;
-
+  if (!usage || !usage.totals) return null;
   const { totals } = usage;
+  const failed = totals.failed || 0;
+  if (totals.requests === 0 && failed === 0) return null;
+
   const totalCost = Object.values(totals.cost_by_currency || {}).reduce((a, b) => a + b, 0);
   const refusalRate = totals.questions > 0 ? (totals.refusals / totals.questions) * 100 : 0;
 
@@ -73,6 +77,7 @@ const DecisionUsagePanel = ({ startDate, endDate }) => {
       </Typography>
       <Grid container spacing={2} sx={{ mb: 2 }}>
         <Stat label="Decision calls" value={totals.requests.toLocaleString()} testId="decision-usage-requests" />
+        <Stat label="Failed calls" value={failed.toLocaleString()} testId="decision-usage-failed" />
         <Stat label="Questions answered" value={`${totals.answered.toLocaleString()} / ${totals.questions.toLocaleString()}`} testId="decision-usage-questions" />
         <Stat label="Refusal rate" value={`${refusalRate.toFixed(1)}%`} testId="decision-usage-refusals" />
         <Stat label="Cost" value={formatCost(totalCost)} testId="decision-usage-cost" />
@@ -83,6 +88,7 @@ const DecisionUsagePanel = ({ startDate, endDate }) => {
             <TableRow>
               <TableCell>Model</TableCell>
               <TableCell align="right">Calls</TableCell>
+              <TableCell align="right">Failed</TableCell>
               <TableCell align="right">Questions</TableCell>
               <TableCell align="right">Refused</TableCell>
               <TableCell align="right">Input tokens</TableCell>
@@ -100,6 +106,7 @@ const DecisionUsagePanel = ({ startDate, endDate }) => {
                   </Typography>
                 </TableCell>
                 <TableCell align="right">{m.requests.toLocaleString()}</TableCell>
+                <TableCell align="right">{(m.failed || 0).toLocaleString()}</TableCell>
                 <TableCell align="right">{m.questions.toLocaleString()}</TableCell>
                 <TableCell align="right">{m.refusals.toLocaleString()}</TableCell>
                 <TableCell align="right">{m.input_tokens.toLocaleString()}</TableCell>
