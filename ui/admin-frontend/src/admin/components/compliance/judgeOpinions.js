@@ -30,14 +30,23 @@ export const judgeOf = (metadata) => {
 
 export const hasOpinion = (j) => !!j && j.verdict !== "none" && !!VERDICTS[j.verdict];
 
+// verdictText is the opinion's verdict as prose ("an attack"), "" without one.
+export const verdictText = (j) => (hasOpinion(j) ? VERDICTS[j.verdict] : "");
+
+// reasonText is the opinion's reason as prose ("quoted example"), "" without one.
+export const reasonText = (j) => (typeof j?.reason === "string" && j.reason ? j.reason.replace(/_/g, " ") : "");
+
+// noOpinionText is why the judge gave no opinion, "" when unknown.
+export const noOpinionText = (j) => ERRORS[j?.error] || (typeof j?.error === "string" ? j.error : "");
+
 // opinionLabel is one line saying what the judge thought.
 export const opinionLabel = (j) => {
   if (!j) return "";
   if (!hasOpinion(j)) {
-    const why = ERRORS[j.error] || (typeof j.error === "string" ? j.error : "");
+    const why = noOpinionText(j);
     return why ? `Judge: no opinion (${why})` : "Judge: no opinion";
   }
-  const reason = typeof j.reason === "string" && j.reason ? ` (${j.reason.replace(/_/g, " ")})` : "";
+  const reason = reasonText(j) ? ` (${reasonText(j)})` : "";
   return `Judge: ${VERDICTS[j.verdict]}${reason}`;
 };
 
