@@ -169,6 +169,35 @@ describe('SyncStatusProvider', () => {
       expect(screen.getByTestId('reminder')).toHaveTextContent('none');
     });
 
+    it('is raised when the server marks edges pending only after the first refresh', async () => {
+      syncStatusService.getSyncStatus.mockResolvedValue(inSync);
+      render(<SyncStatusProvider><Probe /></SyncStatusProvider>);
+      await flush();
+      await saveThenRefresh(true);
+      expect(screen.getByTestId('reminder')).toHaveTextContent('none');
+
+      // The change event is handled: the edges are now pending.
+      syncStatusService.getSyncStatus.mockResolvedValue(pending);
+      await act(async () => {
+        jest.advanceTimersByTime(1600);
+      });
+      await flush();
+      expect(screen.getByTestId('reminder')).toHaveTextContent('shown');
+    });
+
+    it('does not look again when no edge is registered', async () => {
+      syncStatusService.getSyncStatus.mockResolvedValue({ has_pending: false, data: [] });
+      render(<SyncStatusProvider><Probe /></SyncStatusProvider>);
+      await flush();
+      await saveThenRefresh(true);
+      const calls = syncStatusService.getSyncStatus.mock.calls.length;
+      await act(async () => {
+        jest.advanceTimersByTime(5000);
+      });
+      await flush();
+      expect(syncStatusService.getSyncStatus.mock.calls.length).toBe(calls);
+    });
+
     it('is not raised by a change that was not a save', async () => {
       render(<SyncStatusProvider><Probe /></SyncStatusProvider>);
       await flush();
