@@ -1669,7 +1669,9 @@ func (s *ControlServer) extractVendorFromEvent(event *pb.AnalyticsEvent) string 
 		if strings.Contains(event.Endpoint, "anthropic") {
 			return "anthropic"
 		}
-		if strings.Contains(event.Endpoint, "vertex") {
+		// Vertex's service hosts: {region}-aiplatform.googleapis.com,
+		// aiplatform.{us|eu}.rep.googleapis.com and aiplatform.googleapis.com.
+		if strings.Contains(event.Endpoint, "vertex") || strings.Contains(event.Endpoint, "aiplatform.") {
 			return "vertex"
 		}
 	}

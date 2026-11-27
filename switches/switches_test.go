@@ -474,3 +474,19 @@ func TestFetchDriver_WithHTTPClient_AllVendors(t *testing.T) {
 		})
 	}
 }
+
+// A Vertex endpoint names a project and location, so the proxy's upstream
+// is that location's service URL; a URL endpoint passes through.
+func TestUpstreamEndpoint_Vertex(t *testing.T) {
+	for endpoint, want := range map[string]string{
+		"p:us-central1":         "https://us-central1-aiplatform.googleapis.com",
+		"p:us":                  "https://aiplatform.us.rep.googleapis.com",
+		"p:eu":                  "https://aiplatform.eu.rep.googleapis.com",
+		"p:global":              "https://aiplatform.googleapis.com",
+		"https://vertex.test/x": "https://vertex.test/x",
+		// Malformed: returned as it is, for the caller's URL checks to refuse.
+		"not-an-endpoint": "not-an-endpoint",
+	} {
+		assert.Equal(t, want, UpstreamEndpoint(&models.LLM{Vendor: models.VERTEX, APIEndpoint: endpoint}), endpoint)
+	}
+}

@@ -16,6 +16,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms/googleai"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms/googleai/vertex"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/schema"
+	googleaiVendor "github.com/TykTechnologies/midsommar/v2/vendors/googleai"
 )
 
 type Vertex struct{}
@@ -78,25 +79,48 @@ func (v *Vertex) AnalyzeResponse(llm *models.LLM, app *models.App, statusCode in
 	return llm, app, response, nil
 }
 
+// AnalyzeStreamingResponse reads a streamGenerateContent response. Vertex
+// streams the Gemini wire format (alt=sse or a JSON array), so the Google AI
+// parser records the tokens and the model, which it takes from the response
+// or else from the .../publishers/google/models/{model} path.
 func (v *Vertex) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, statusCode int, resps []byte, r *http.Request, chunks [][]byte) (*models.LLM, *models.App, models.ITokenResponse, error) {
-	return llm, app, &responses.DummyResponse{
-		Model: "vertex"}, nil
+	return geminiStreamParser.AnalyzeStreamingResponse(llm, app, statusCode, resps, r, chunks)
 }
+
+// geminiStreamParser reads Vertex streams (the Google AI vendor is stateless).
+var geminiStreamParser = googleaiVendor.New()
 
 // ProxySetAuthHeader sets a Google OAuth2 access token from the LLM's
 // credential chain (see credentials.go). On error the header is left unset
-// and the caller must not send the request.
+// and the caller must not send the request. A Gemini API key the caller sent
+// (x-goog-api-key, key=) is dropped, so the LLM's token is the only
+// credential Vertex sees.
 func (v *Vertex) ProxySetAuthHeader(r *http.Request, llm *models.LLM) error {
 	token, err := AccessToken(llm)
 	if err != nil {
 		return err
 	}
 	r.Header.Set("Authorization", "Bearer "+token)
+	r.Header.Del("x-goog-api-key")
+	if q := r.URL.Query(); q.Has("key") {
+		q.Del("key")
+		r.URL.RawQuery = q.Encode()
+	}
 	return nil
 }
 
+// ProxyScreenRequest checks the request suits the route: Vertex's REST API is
+// JSON over HTTPS, and a :streamGenerateContent path is a stream, so it
+// belongs on /llm/stream and every other path on /llm/rest, as for Google AI.
 func (v *Vertex) ProxyScreenRequest(llm *models.LLM, r *http.Request, isStreamingChannel bool) error {
-	return fmt.Errorf("vertex APIs are strongly tied to the gcloud client libraries and use gRPC, so they are not available in the proxy")
+	isStream := strings.Contains(strings.ToLower(r.URL.Path), ":streamgeneratecontent")
+	if isStreamingChannel && !isStream {
+		return fmt.Errorf("streaming is required for this endpoint")
+	}
+	if !isStreamingChannel && isStream {
+		return fmt.Errorf("streaming is not allowed for this endpoint")
+	}
+	return nil
 }
 
 func (v *Vertex) ProvidesEmbedder() bool {

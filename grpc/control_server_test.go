@@ -1341,6 +1341,20 @@ func TestControlServer_extractVendorFromEvent(t *testing.T) {
 			expected: "vertex",
 		},
 		{
+			name: "extract from vertex regional service endpoint",
+			event: &pb.AnalyticsEvent{
+				Endpoint: "https://us-central1-aiplatform.googleapis.com/v1/projects/p/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent",
+			},
+			expected: "vertex",
+		},
+		{
+			name: "extract from vertex multi-regional service endpoint",
+			event: &pb.AnalyticsEvent{
+				Endpoint: "https://aiplatform.eu.rep.googleapis.com/v1/projects/p/locations/eu/publishers/google/models/gemini-2.5-flash:generateContent",
+			},
+			expected: "vertex",
+		},
+		{
 			name: "unknown endpoint",
 			event: &pb.AnalyticsEvent{
 				Endpoint: "https://unknown-provider.com/api",
