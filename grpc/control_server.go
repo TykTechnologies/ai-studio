@@ -96,6 +96,11 @@ type EdgeInstanceConnection struct {
 type ControlServer struct {
 	pb.UnimplementedConfigurationSyncServiceServer
 
+	// edgeExceptionHits records the guardrail exception hits edges report
+	// (exceptionHitRecorder).
+	edgeExceptionHitsOnce sync.Once
+	edgeExceptionHits     *services.GuardrailExceptionHits
+
 	db     *gorm.DB
 	config *Config
 
@@ -867,7 +872,7 @@ func (s *ControlServer) SubscribeToChanges(stream pb.ConfigurationSyncService_Su
 					edgeConnection.mu.Unlock()
 
 					s.recordEdgeTemplateMatches(edgeID, m.Heartbeat.MatchedPromptTemplateIds)
-					s.recordEdgeGuardrailExceptionHits(edgeID, edgeConnection.Namespace, m.Heartbeat.HitGuardrailExceptionIds)
+					s.recordEdgeGuardrailExceptionHits(edgeID, edgeConnection.Namespace, m.Heartbeat.HitGuardrailExceptionIds, m.Heartbeat.GuardrailExceptionHitCounts)
 
 					// Get loaded config info from heartbeat
 					loadedChecksum := m.Heartbeat.LoadedConfigChecksum
@@ -1097,7 +1102,7 @@ func (s *ControlServer) SendHeartbeat(ctx context.Context, req *pb.HeartbeatRequ
 		return nil, status.Error(codes.Unavailable, "failed to record heartbeat")
 	}
 	s.recordEdgeTemplateMatches(req.EdgeId, req.MatchedPromptTemplateIds)
-	s.recordEdgeGuardrailExceptionHits(req.EdgeId, edgeInstance.Namespace, req.HitGuardrailExceptionIds)
+	s.recordEdgeGuardrailExceptionHits(req.EdgeId, edgeInstance.Namespace, req.HitGuardrailExceptionIds, req.GuardrailExceptionHitCounts)
 
 	// This replica holds the edge's stream: keep its view current too.
 	s.edgeMutex.RLock()

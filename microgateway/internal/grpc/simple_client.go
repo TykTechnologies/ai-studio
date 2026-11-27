@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -83,10 +84,10 @@ type SimpleEdgeClient struct {
 	// matched since the last heartbeat (services.PromptTemplateMatches);
 	// guarded by configMu.
 	templateMatches TemplateMatchSource
-	// exceptionHits, when set, holds the guardrail exceptions that applied
+	// exceptionHits, when set, counts the guardrail exceptions that applied
 	// since the last heartbeat (services.GuardrailExceptionHits); guarded
 	// by configMu.
-	exceptionHits TemplateMatchSource
+	exceptionHits ExceptionHitSource
 
 	// Build information
 	version   string
@@ -440,10 +441,19 @@ func (c *SimpleEdgeClient) SetTemplateMatchSource(source TemplateMatchSource) {
 	c.templateMatches = source
 }
 
+// ExceptionHitSource counts the guardrail exceptions that applied on this
+// edge between heartbeats.
+type ExceptionHitSource interface {
+	// DrainCounts returns the hits per exception id since the last call.
+	DrainCounts() map[uint32]uint32
+	// RequeueCounts puts back counts a heartbeat failed to deliver.
+	RequeueCounts(counts map[uint32]uint32)
+}
+
 // SetExceptionHitSource makes heartbeats report the guardrail exceptions
-// that applied since the last one, so the hub's expiry and hit counts
-// include edge traffic.
-func (c *SimpleEdgeClient) SetExceptionHitSource(source TemplateMatchSource) {
+// that applied since the last one, and how often (o4a.13), so the hub's
+// expiry and hit counts include edge traffic.
+func (c *SimpleEdgeClient) SetExceptionHitSource(source ExceptionHitSource) {
 	c.configMu.Lock()
 	defer c.configMu.Unlock()
 	c.exceptionHits = source
@@ -1224,14 +1234,23 @@ func (c *SimpleEdgeClient) sendHeartbeatMessage() {
 	matches := c.templateMatches
 	hits := c.exceptionHits
 	c.configMu.RUnlock()
-	var matched, hit []uint32
+	var matched []uint32
+	var hit map[uint32]uint32
 	if matches != nil {
 		matched = matches.DrainMatched()
 		heartbeat.GetHeartbeat().MatchedPromptTemplateIds = matched
 	}
 	if hits != nil {
-		hit = hits.DrainMatched()
-		heartbeat.GetHeartbeat().HitGuardrailExceptionIds = hit
+		if hit = hits.DrainCounts(); len(hit) > 0 {
+			// The ids for hubs that predate the counts, the counts for the rest.
+			ids := make([]uint32, 0, len(hit))
+			for id := range hit {
+				ids = append(ids, id)
+			}
+			sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+			heartbeat.GetHeartbeat().HitGuardrailExceptionIds = ids
+			heartbeat.GetHeartbeat().GuardrailExceptionHitCounts = hit
+		}
 	}
 
 	if err := c.send(heartbeat); err != nil {
@@ -1239,7 +1258,7 @@ func (c *SimpleEdgeClient) sendHeartbeatMessage() {
 			matches.Requeue(matched)
 		}
 		if len(hit) > 0 {
-			hits.Requeue(hit)
+			hits.RequeueCounts(hit)
 		}
 		log.Error().Err(err).Msg("Failed to send heartbeat")
 	} else {

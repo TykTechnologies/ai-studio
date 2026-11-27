@@ -36098,8 +36098,21 @@ const docTemplate = `{
                 "app_name": {
                     "type": "string"
                 },
+                "blocks": {
+                    "description": "Blocks are the app's refused requests (proxy_logs 4xx, as\nTotalBlocks) and Events its warning and critical filter and\nguardrail events, most of which let the request go on; Count is\ntheir sum. EventsByAction splits Events by the action taken (see\nPolicyViolationsData.EventsByAction).",
+                    "type": "integer"
+                },
                 "count": {
                     "type": "integer"
+                },
+                "events": {
+                    "type": "integer"
+                },
+                "events_by_action": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
                 },
                 "last_occurred": {
                     "type": "string"
@@ -36116,7 +36129,15 @@ const docTemplate = `{
         "compliance.PolicyViolationsData": {
             "type": "object",
             "properties": {
+                "events_by_action": {
+                    "description": "EventsByAction splits TotalFlagged by the action the filter or\nguardrail took: block, quarantine, remove, redact, alert, log, or\nother (an event that names no action, such as a filter script's).",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
                 "filter_blocks": {
+                    "description": "FilterBlocks is per app: its blocked requests and its filter and\nguardrail events (most of which let the request go on), despite the\nname, which the API keeps.",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/compliance.PolicyViolation"
@@ -36129,6 +36150,19 @@ const docTemplate = `{
                     }
                 },
                 "timeline": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/compliance.TimelineData"
+                    }
+                },
+                "timeline_blocks": {
+                    "description": "TimelineBlocks and TimelineEvents split Timeline (their daily sum)\ninto blocked requests and filter and guardrail events.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/compliance.TimelineData"
+                    }
+                },
+                "timeline_events": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/compliance.TimelineData"

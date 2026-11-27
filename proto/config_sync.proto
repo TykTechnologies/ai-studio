@@ -125,6 +125,11 @@ message HeartbeatRequest {
   // hit counts include edge traffic. The hub accepts only exceptions in the
   // edge's own namespace.
   repeated uint32 hit_guardrail_exception_ids = 9;
+  // How many requests each of those exceptions applied to (o4a.13),
+  // keyed by id. An id in hit_guardrail_exception_ids without an entry
+  // counts once, as from an edge that predates this field; a hub that
+  // predates it reads only the ids.
+  map<uint32, uint32> guardrail_exception_hit_counts = 10;
 }
 
 // HeartbeatResponse acknowledges heartbeat and may contain control directives

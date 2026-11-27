@@ -125,7 +125,7 @@ The approved, unexpired [guardrail exceptions](./guardrails.md#exceptions-soften
 
 - **Every change reaches an edge only at the next push.** Approving, changing or retiring an exception, attesting or resetting an App's capability, and an exception lapsing all mark the namespace's edges **Pending**; until an administrator pushes, an edge keeps applying its old set.
 - **Expiry.** AI Studio checks for exceptions that have gone `expires_after_days` without a hit every hour, so on an edge a lapsed exception stops applying after that check plus the next push.
-- **Hits.** Edges report the exceptions that applied in their heartbeats, and AI Studio counts only exceptions the edge's own namespace snapshot carries. A reported exception counts once per heartbeat, so an exception's hit count is the number of heartbeats in which it applied, not of requests; its last hit keeps it from lapsing. Hits are attributed by the namespace the edge declares.
+- **Hits.** Edges report the exceptions that applied in their heartbeats, and AI Studio counts only exceptions the edge's own namespace snapshot carries. Edges report how many requests each exception applied to, so an exception's hit count includes edge requests (an edge older than 2.3 reports only which exceptions applied, and each counts once per heartbeat). Its last hit, recorded to within about a minute, keeps it from lapsing. Hits are attributed by the namespace the edge declares.
 - An edge from before this release ignores exceptions and applies the filters' own actions.
 
 Two properties keep the checksum meaningful:
