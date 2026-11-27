@@ -182,6 +182,20 @@ type ComplianceEventsData struct {
 	ByType     map[string]int          `json:"by_type"`
 	ByFilter   map[string]int          `json:"by_filter"`
 	Timeline   []TimelineData          `json:"timeline"`
+	// Meta is the page the API returned, as on the other list endpoints;
+	// set by the handler.
+	Meta *PageMeta `json:"meta,omitempty"`
+}
+
+// PageMeta describes one page of a paged list.
+type PageMeta struct {
+	TotalCount int64 `json:"total_count"`
+	TotalPages int   `json:"total_pages"`
+	PageSize   int   `json:"page_size"`
+	PageNumber int   `json:"page_number"`
+	// Offset is the number of rows skipped (limit/offset requests may not
+	// fall on a page boundary).
+	Offset int `json:"offset"`
 }
 
 // Service defines the interface for compliance management.

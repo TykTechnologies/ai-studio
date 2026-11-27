@@ -79,6 +79,18 @@ export const exceptionActionLabel = (action) => ACTION_LABELS[action] || action;
 // guardrail.alert.<name>, and a name is unique across filters and exceptions.
 export const ALERT_EVENT_PATTERN = /^[a-z0-9][a-z0-9_-]{1,63}$/;
 
+// alertTopic is the webhook topic an alert with event name raises
+// (guardrail.alert.<name>), "" while the name is not a valid one.
+export const alertTopic = (name) => {
+  const n = typeof name === "string" ? name.trim() : "";
+  return ALERT_EVENT_PATTERN.test(n) ? `guardrail.alert.${n}` : "";
+};
+
+// alertTopicText names that topic for help text: the topic itself once the
+// name is valid, otherwise how it is formed (o4a.12: never the literal
+// placeholder guardrail.alert.<name>).
+export const alertTopicText = (name) => alertTopic(name) || "guardrail.alert. followed by this name";
+
 // exceptionActionText is the action as the tables show it, with the event an
 // alert raises.
 export const exceptionActionText = (e) =>

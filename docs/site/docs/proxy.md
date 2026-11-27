@@ -355,6 +355,8 @@ Where the id appears:
 | Plugins and hooks | the `request_id` value of the request context, `PluginContext.RequestID` |
 | Analytics plugins on edges | `gateway_request_id`, `client_request_id` on `AnalyticsData` (`request_id` there is the analytics row's own key) |
 
+A request log row shows **Not stored** where it has no body. AI Studio stores bodies unless the LLM's **Disable Request/Response Body Logging** option (`dont_log_bodies`) is on. A request served by an edge gateway has bodies only when that edge stores them (`ANALYTICS_STORE_REQUESTS`, `ANALYTICS_STORE_RESPONSES`) and its analytics pulse forwards them (`include_request_response_data`). Both are off by default, so edge rows normally show **Not stored**.
+
 Requests that produce no usage (a policy block, a vendor or gateway error) are request log rows too, from edges as well as from AI Studio's gateway: an edge sends them to AI Studio on the analytics pulse marked `no_usage`, and AI Studio records them without a chat record or spend.
 
 ## Configuration & Security

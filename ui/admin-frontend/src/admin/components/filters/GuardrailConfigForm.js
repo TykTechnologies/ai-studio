@@ -1068,12 +1068,21 @@ const GuardrailConfigForm = ({ value, onChange, responseFilter = false, errors =
               inputProps={{ "data-testid": "guardrail-fail-mode" }}
             >
               {/* Server default: closed for request filters, open for response filters. */}
-              <MenuItem value="">{responseFilter ? "Let the response through (default)" : "Block the request (default)"}</MenuItem>
-              <MenuItem value="closed">{responseFilter ? "Block the response" : "Block the request"}</MenuItem>
-              <MenuItem value="open">{responseFilter ? "Let the response through" : "Let the request through"}</MenuItem>
+              {/* o4a.8: a shadow filter never changes traffic; its fail mode only labels guardrail.error events. */}
+              <MenuItem value="">
+                {config.shadow
+                  ? `Record as ${responseFilter ? "open" : "closed"} (default)`
+                  : responseFilter
+                  ? "Let the response through (default)"
+                  : "Block the request (default)"}
+              </MenuItem>
+              <MenuItem value="closed">{config.shadow ? "Record as closed" : responseFilter ? "Block the response" : "Block the request"}</MenuItem>
+              <MenuItem value="open">{config.shadow ? "Record as open" : responseFilter ? "Let the response through" : "Let the request through"}</MenuItem>
             </Select>
-            <FormHelperText>
-              Fail closed blocks every request while the provider is unreachable. A timeout or error records a compliance event either way.
+            <FormHelperText data-testid="guardrail-fail-mode-help">
+              {config.shadow
+                ? "A shadow filter never blocks or changes traffic, even when its provider fails: the fail mode only labels the guardrail.error events it records."
+                : `Fail closed blocks every ${responseFilter ? "response" : "request"} while the provider is unreachable. A timeout or error records a compliance event either way.`}
             </FormHelperText>
           </FormControl>
         </Grid>
