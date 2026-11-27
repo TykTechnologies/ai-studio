@@ -93,12 +93,16 @@ func TestGetDecisionUsage_Postgres(t *testing.T) {
 	require.NoError(t, db.Create(&[]models.LLMChatRecord{
 		{LLMID: 1, AppID: 10, Vendor: "systemone", Name: "jev-1.13.0", PromptTokens: 200, Choices: 2, Cost: 0.084, Currency: "USD", TimeStamp: day,
 			RequestKind: models.DecisionRequest, DecisionQuestions: 3, DecisionRefusals: 1},
+		// A failed call (no answers): the CASE aggregates must scan too.
+		{LLMID: 1, AppID: 10, Vendor: "systemone", Name: "jev-1.13.0", Currency: "USD", TimeStamp: day,
+			RequestKind: models.DecisionRequest, DecisionQuestions: 3},
 		{LLMID: 1, AppID: 10, Vendor: "openai", Name: "gpt-4o", PromptTokens: 50, Cost: 5, Currency: "USD", TimeStamp: day},
 	}).Error)
 
 	usage, err := GetDecisionUsage(db, day.Add(-time.Hour), day.Add(time.Hour), nil, nil)
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), usage.Totals.Requests)
+	assert.Equal(t, int64(1), usage.Totals.Failed)
 	assert.Equal(t, int64(3), usage.Totals.Questions)
 	assert.Equal(t, int64(2), usage.Totals.Answered)
 	assert.Equal(t, int64(1), usage.Totals.Refusals)
