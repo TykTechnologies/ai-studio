@@ -81,6 +81,23 @@ var supportedCredentialTypes = map[string]google.CredentialsType{
 // point credentials at local fake endpoints.
 var credentialURLAllowed = isGoogleEndpoint
 
+// credentialSourceURLAllowed reports whether an external_account
+// credential_source URL may be fetched. Tests replace it.
+var credentialSourceURLAllowed = isInstanceMetadataURL
+
+// isInstanceMetadataURL accepts http(s) URLs on the AWS, Azure and GCP
+// instance metadata hosts.
+func isInstanceMetadataURL(u *url.URL) bool {
+	if (u.Scheme != "http" && u.Scheme != "https") || u.User != nil {
+		return false
+	}
+	switch strings.ToLower(u.Hostname()) {
+	case "169.254.169.254", "fd00:ec2::254", "metadata.google.internal":
+		return true
+	}
+	return false
+}
+
 // tokenHTTPClient fetches tokens. Tests may replace it.
 var tokenHTTPClient = &http.Client{Timeout: tokenFetchTimeout}
 
@@ -164,7 +181,10 @@ func validateCredentialJSON(raw []byte, depth int) (google.CredentialsType, erro
 			return "", fmt.Errorf("%w: external_account credential has no token_url", ErrInvalidCredential)
 		}
 		var src struct {
-			Executable json.RawMessage `json:"executable"`
+			Executable            json.RawMessage `json:"executable"`
+			URL                   string          `json:"url"`
+			RegionURL             string          `json:"region_url"`
+			IMDSv2SessionTokenURL string          `json:"imdsv2_session_token_url"`
 		}
 		if len(f.CredentialSource) > 0 {
 			if err := json.Unmarshal(f.CredentialSource, &src); err != nil {
@@ -173,6 +193,25 @@ func validateCredentialJSON(raw []byte, depth int) (google.CredentialsType, erro
 		}
 		if len(src.Executable) > 0 && string(src.Executable) != "null" {
 			return "", fmt.Errorf("%w: executable-sourced external_account credentials are not supported", ErrInvalidCredential)
+		}
+		// The gateway fetches these URLs itself, so they are limited to the
+		// cloud instance metadata services WIF reads (AWS, Azure, GCP):
+		// anything else would let the key make the gateway request any
+		// internal URL. A file source is allowed (Kubernetes projected
+		// tokens): its content only ever goes to the pinned Google STS
+		// token_url above, and token errors are never returned to callers.
+		for field, raw := range map[string]string{
+			"credential_source.url":                      src.URL,
+			"credential_source.region_url":               src.RegionURL,
+			"credential_source.imdsv2_session_token_url": src.IMDSv2SessionTokenURL,
+		} {
+			if raw == "" {
+				continue
+			}
+			u, err := url.Parse(raw)
+			if err != nil || !credentialSourceURLAllowed(u) {
+				return "", fmt.Errorf("%w: %s must point at the cloud instance metadata service (169.254.169.254, fd00:ec2::254 or metadata.google.internal)", ErrInvalidCredential, field)
+			}
 		}
 	case google.ImpersonatedServiceAccount:
 		if f.ServiceAccountImpersonationURL == "" || len(f.SourceCredentials) == 0 {
@@ -231,9 +270,15 @@ func SetTokenSourceOverride(fn TokenSourceFunc) (restore func()) {
 // cachedSource is one LLM's token source, valid while the key hashes to
 // keyHash.
 type cachedSource struct {
-	keyHash [sha256.Size]byte
-	ts      oauth2.TokenSource
+	keyHash  [sha256.Size]byte
+	ts       oauth2.TokenSource
+	lastUsed time.Time
 }
+
+// cacheIdleTTL drops the source of an LLM unused this long (a deleted LLM,
+// or one no longer routed), so the cache holds only LLMs in use. Rebuilding
+// a dropped source costs one token mint.
+const cacheIdleTTL = time.Hour
 
 var (
 	cacheMu sync.Mutex
@@ -266,17 +311,36 @@ func TokenSource(llm *models.LLM) (oauth2.TokenSource, error) {
 	}
 
 	hash := sha256.Sum256([]byte(key))
+	now := time.Now()
 	cacheMu.Lock()
-	defer cacheMu.Unlock()
 	if c, ok := cache[llm.ID]; ok && c.keyHash == hash {
+		c.lastUsed = now
+		cacheMu.Unlock()
 		return c.ts, nil
 	}
+	cacheMu.Unlock()
+
+	// Parsing and key validation run outside the lock. Two concurrent
+	// misses for one LLM both build a source; the later one is kept, at the
+	// cost of at most one extra token mint.
 	ts, err := newCredentialTokenSource(key)
 	if err != nil {
 		return nil, fmt.Errorf("LLM %q: %w", llm.Name, err)
 	}
+
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	if c, ok := cache[llm.ID]; ok && c.keyHash == hash {
+		c.lastUsed = now
+		return c.ts, nil // a concurrent miss won
+	}
+	for id, c := range cache {
+		if now.Sub(c.lastUsed) > cacheIdleTTL {
+			delete(cache, id)
+		}
+	}
 	// A rotated key replaces the LLM's previous source.
-	cache[llm.ID] = &cachedSource{keyHash: hash, ts: ts}
+	cache[llm.ID] = &cachedSource{keyHash: hash, ts: ts, lastUsed: now}
 	return ts, nil
 }
 

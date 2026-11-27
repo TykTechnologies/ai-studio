@@ -171,6 +171,26 @@ func TestProxySetAuthHeader_RotatedKeyGetsNewSource(t *testing.T) {
 	assert.Equal(t, "Bearer sa-3", h)
 }
 
+func TestTokenSource_IdleEntriesEvicted(t *testing.T) {
+	allowLocalEndpoints(t)
+	g := newFakeGoogle(t)
+	key := mustJSON(t, serviceAccountJSON(t, g.srv.URL+"/token"))
+	_, err := TokenSource(&models.LLM{ID: 20, Name: "old", APIKey: key})
+	require.NoError(t, err)
+	cacheMu.Lock()
+	cache[20].lastUsed = time.Now().Add(-2 * cacheIdleTTL)
+	cacheMu.Unlock()
+
+	_, err = TokenSource(&models.LLM{ID: 21, Name: "new", APIKey: key})
+	require.NoError(t, err)
+	cacheMu.Lock()
+	_, stale := cache[20]
+	_, fresh := cache[21]
+	cacheMu.Unlock()
+	assert.False(t, stale, "an LLM unused for longer than the idle TTL is dropped")
+	assert.True(t, fresh)
+}
+
 func TestProxySetAuthHeader_ExternalAccountUsesSTS(t *testing.T) {
 	allowLocalEndpoints(t)
 	g := newFakeGoogle(t)
@@ -251,6 +271,9 @@ func TestProxySetAuthHeader_InvalidKeysErrorWithoutKeyMaterial(t *testing.T) {
 		"http google host":   `{"type":"service_account","private_key":"` + secret + `","token_uri":"http://oauth2.googleapis.com/token"}`,
 		"lookalike host":     `{"type":"service_account","private_key":"` + secret + `","token_uri":"https://oauth2.googleapis.com.evil.example/token"}`,
 		"executable source":  `{"type":"external_account","audience":"x","subject_token_type":"y","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"executable":{"command":"/bin/echo ` + secret + `"}}}`,
+		"ssrf url source":    `{"type":"external_account","audience":"x","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"url":"http://10.0.0.5/admin?` + secret + `"}}`,
+		"ssrf aws region":    `{"type":"external_account","audience":"x","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"environment_id":"aws1","region_url":"http://internal.example/` + secret + `"}}`,
+		"ssrf imdsv2":        `{"type":"external_account","audience":"x","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"environment_id":"aws1","imdsv2_session_token_url":"http://127.0.0.1/` + secret + `"}}`,
 		"foreign sts":        `{"type":"external_account","audience":"x","token_url":"https://sts.evil.example/v1/token","credential_source":{"file":"/etc/` + secret + `"}}`,
 		"foreign impersonat": `{"type":"impersonated_service_account","service_account_impersonation_url":"https://evil.example/x","source_credentials":{"type":"service_account","private_key":"` + secret + `"}}`,
 		"bad source type":    `{"type":"impersonated_service_account","service_account_impersonation_url":"https://iamcredentials.googleapis.com/v1/x:generateAccessToken","source_credentials":{"type":"nope","private_key":"` + secret + `"}}`,
@@ -303,5 +326,11 @@ func TestValidateCredentialJSON_ProductionHosts(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = ValidateCredentialJSON(`{"type":"external_account","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"environment_id":"aws1","region_url":"http://169.254.169.254/latest/meta-data/placement/availability-zone"}}`)
-	require.NoError(t, err, "AWS WIF reads the instance metadata server; only Google endpoints are pinned")
+	require.NoError(t, err, "AWS WIF reads the instance metadata server")
+
+	_, err = ValidateCredentialJSON(`{"type":"external_account","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"url":"http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01","headers":{"Metadata":"True"}}}`)
+	require.NoError(t, err, "Azure WIF reads IMDS")
+
+	_, err = ValidateCredentialJSON(`{"type":"external_account","token_url":"https://sts.googleapis.com/v1/token","credential_source":{"file":"/var/run/secrets/tokens/gcp-ksa/token"}}`)
+	require.NoError(t, err, "Kubernetes projected token file")
 }
