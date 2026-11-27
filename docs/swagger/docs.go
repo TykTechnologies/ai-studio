@@ -29291,6 +29291,13 @@ const docTemplate = `{
                 "created_by": {
                     "type": "integer"
                 },
+                "edited_at": {
+                    "description": "EditedAt and EditedBy: the last in-place change to this proposed\nversion's parts or placement; null when there was none.",
+                    "type": "string"
+                },
+                "edited_by": {
+                    "type": "integer"
+                },
                 "expires_after_days": {
                     "type": "integer"
                 },
@@ -38353,7 +38360,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "target_url": {
-                    "description": "TargetURLSnapshot is the URL at enqueue time, kept so the log stays\nmeaningful after the target is edited or deleted.",
+                    "description": "TargetURLSnapshot is the URL at enqueue time, kept so the log stays\nmeaningful after the target is edited or deleted. It is stored and\nreturned masked (MaskWebhookURL): deliveries never need the full URL,\nand a chat webhook URL is a credential.",
                     "type": "string"
                 },
                 "topic": {
@@ -38536,6 +38543,9 @@ const docTemplate = `{
                 },
                 "url": {
                     "type": "string"
+                },
+                "url_masked": {
+                    "type": "boolean"
                 }
             }
         },
