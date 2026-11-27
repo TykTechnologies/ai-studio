@@ -6,6 +6,7 @@ import { MemoryRouter, Routes, Route } from "react-router-dom";
 import testTheme from "../../utils/testTheme";
 import apiClient from "../../utils/apiClient";
 import LLMDetails from "./LLMDetails";
+import { BODY_NOT_STORED_HELP } from "../common/BodyNotStored";
 import { PermissionsProvider } from "../../context/PermissionsContext";
 import { clearIdentity } from "../../utils/identityStore";
 
@@ -240,7 +241,7 @@ describe("LLMDetails proxy log bodies", () => {
     renderWith(["llms:read"]);
     const notStored = await screen.findByTestId("body-not-stored");
     expect(notStored).toHaveTextContent("Not stored");
-    expect(notStored.getAttribute("title")).toMatch(/ANALYTICS_STORE_REQUESTS/);
+    expect(notStored.getAttribute("title")).toBe(BODY_NOT_STORED_HELP);
     expect(screen.getAllByTestId("body-not-stored")).toHaveLength(1);
   });
 });
