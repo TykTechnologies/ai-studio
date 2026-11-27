@@ -285,7 +285,11 @@ Plan:
        base URL.
    - The connection detail page gets a **Nodes** panel listing address,
      version, reachable, in sync / pending / unreachable, last reconcile, and
-     error.
+     error. A register, push or delete refreshes the node rows straight
+     after its write (`observeGatewayNodes`: hello and MCP list per node,
+     recorded against the desired state, no writes), so the panel shows the
+     change without waiting for the next sync; a node that missed the write
+     stays pending for the sync to fix.
    - "Tyk Dashboard" strings become "Tyk" where they are shared.
 
 ## 7. "MCP only" guardrails (enforced in code and tested)
