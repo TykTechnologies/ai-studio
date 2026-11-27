@@ -8631,13 +8631,25 @@ const docTemplate = `{
                     },
                     {
                         "type": "integer",
-                        "description": "Maximum number of records, defaults to 100",
+                        "description": "Events per page, defaults to 100, at most 1000",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (1-based), defaults to 1",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Older form of page_size, used only without page_size and page",
                         "name": "limit",
                         "in": "query"
                     },
                     {
                         "type": "integer",
-                        "description": "Pagination offset, defaults to 0",
+                        "description": "Older form of page: events to skip, used only without page_size and page",
                         "name": "offset",
                         "in": "query"
                     }
@@ -35911,6 +35923,14 @@ const docTemplate = `{
                         "$ref": "#/definitions/compliance.ComplianceEventRecord"
                     }
                 },
+                "meta": {
+                    "description": "Meta is the page the API returned, as on the other list endpoints;\nset by the handler.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/compliance.PageMeta"
+                        }
+                    ]
+                },
                 "timeline": {
                     "type": "array",
                     "items": {
@@ -36039,6 +36059,27 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "risk_score": {
+                    "type": "integer"
+                }
+            }
+        },
+        "compliance.PageMeta": {
+            "type": "object",
+            "properties": {
+                "offset": {
+                    "description": "Offset is the number of rows skipped (limit/offset requests may not\nfall on a page boundary).",
+                    "type": "integer"
+                },
+                "page_number": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total_count": {
+                    "type": "integer"
+                },
+                "total_pages": {
                     "type": "integer"
                 }
             }
