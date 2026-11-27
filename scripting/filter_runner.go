@@ -1645,11 +1645,23 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 	groups := map[string]*group{}
 	order := []string{}
 	for _, f := range findings {
-		g, ok := groups[f.Detector]
+		// The request's outcome where the finding names no segment, else
+		// the action applied to the segment it flagged.
+		a := o.overall
+		if f.SegmentIndex >= 0 && f.SegmentIndex < len(segments) {
+			if sa, ok := o.actions[f.SegmentIndex]; ok && o.overall != guardrails.ActionBlock {
+				a = sa
+			}
+		}
+		// One event per detector and action (o4a.2): a removed tool
+		// definition and a quarantined tool result flagged by the same
+		// detector are two events, each with the action its segments got.
+		key := f.Detector + "\x00" + a
+		g, ok := groups[key]
 		if !ok {
 			g = &group{f: f, severity: f.Severity, roles: map[string]bool{}, tools: map[string]bool{}, kinds: map[string]bool{}, wheres: map[string]bool{}, seen: map[string]bool{}}
-			groups[f.Detector] = g
-			order = append(order, f.Detector)
+			groups[key] = g
+			order = append(order, key)
 		}
 		g.count++
 		if f.Score > g.maxScore {
@@ -1658,9 +1670,6 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 		if severityRank(f.Severity) > severityRank(g.severity) {
 			g.severity = f.Severity
 		}
-		// The request's outcome where the finding names no segment, else
-		// the strongest action applied to the segments it flagged.
-		a := o.overall
 		if f.SegmentIndex >= 0 && f.SegmentIndex < len(segments) {
 			seg := segments[f.SegmentIndex]
 			if j, ok := o.judged[f.SegmentIndex]; ok && actionRank[j.from] > actionRank[g.judgedFrom] {
@@ -1704,9 +1713,6 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 			if name := safeLabel(seg.ToolName); name != "" {
 				g.tools[name] = true
 			}
-			if sa, ok := o.actions[f.SegmentIndex]; ok && o.overall != guardrails.ActionBlock {
-				a = sa
-			}
 		}
 		if actionRank[a] > actionRank[g.action] {
 			g.action = a
@@ -1715,8 +1721,9 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 	sort.Strings(order)
 
 	events := make([]ComplianceEventOutput, 0, len(order))
-	for _, det := range order {
-		g := groups[det]
+	for _, key := range order {
+		g := groups[key]
+		det := g.f.Detector
 		roles := sortedKeys(g.roles)
 		tools := sortedKeys(g.tools)
 		action := g.action
