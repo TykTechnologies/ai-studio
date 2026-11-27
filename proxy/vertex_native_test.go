@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -139,6 +140,7 @@ func TestVertexNative_MintedToken(t *testing.T) {
 	require.Len(t, calls, 2)
 	for _, c := range calls {
 		assert.Equal(t, "Bearer minted-token", c.Headers.Get("Authorization"), c.Path)
+		assertNoAppCredential(t, h, c)
 	}
 }
 
@@ -201,4 +203,30 @@ func TestVertexNative_URLEndpointWithProjectLocation(t *testing.T) {
 	calls := h.primaryVendor.calls()
 	require.Len(t, calls, 1)
 	assert.Equal(t, vertexNativePath, calls[0].Path)
+}
+
+// failingTokenSource is a credential whose token request fails (a revoked
+// key, an unreachable token endpoint).
+type failingTokenSource struct{}
+
+func (failingTokenSource) Token() (*oauth2.Token, error) {
+	return nil, errors.New("oauth2: cannot fetch token: 400 invalid_grant")
+}
+
+// A token that cannot be minted answers 502 on both routes, and the request
+// is never sent upstream unauthenticated (auth is set at RoundTrip).
+func TestVertexNative_TokenMintFailure(t *testing.T) {
+	requireSerial(t)
+	restore := vertexVendor.SetTokenSourceOverride(func(*models.LLM) (oauth2.TokenSource, error) {
+		return failingTokenSource{}, nil
+	})
+	t.Cleanup(restore)
+	h := newFailoverHarness(t, serveVertex, serveOpenAIText("never"), vertexPrimary(`{"type":"service_account"}`))
+
+	for _, path := range []string{"/llm/rest/primary" + vertexNativePath, "/llm/stream/primary" + vertexStreamPath + "?alt=sse"} {
+		resp, body := h.post(path, vertexNativeBody)
+		assert.Equal(t, http.StatusBadGateway, resp.StatusCode, "%s: %s", path, body)
+		assert.NotContains(t, string(body), "invalid_grant", "the token endpoint's detail is logged, not returned")
+	}
+	assert.Empty(t, h.primaryVendor.calls(), "nothing reached the upstream")
 }
