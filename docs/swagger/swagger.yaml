@@ -4806,6 +4806,13 @@ definitions:
       type:
         type: string
     type: object
+  api.complianceEventsByRequestResponse:
+    properties:
+      events:
+        items:
+          $ref: '#/definitions/compliance.ComplianceEventRecord'
+        type: array
+    type: object
   api.createWebhookTargetResponse:
     properties:
       signing_secret:
@@ -5255,6 +5262,12 @@ definitions:
         items:
           $ref: '#/definitions/compliance.ComplianceEventRecord'
         type: array
+      meta:
+        allOf:
+        - $ref: '#/definitions/compliance.PageMeta'
+        description: |-
+          Meta is the page the API returned, as on the other list endpoints;
+          set by the handler.
       timeline:
         items:
           $ref: '#/definitions/compliance.TimelineData'
@@ -5344,6 +5357,22 @@ definitions:
         description: HIGH, MEDIUM, LOW
         type: string
       risk_score:
+        type: integer
+    type: object
+  compliance.PageMeta:
+    properties:
+      offset:
+        description: |-
+          Offset is the number of rows skipped (limit/offset requests may not
+          fall on a page boundary).
+        type: integer
+      page_number:
+        type: integer
+      page_size:
+        type: integer
+      total_count:
+        type: integer
+      total_pages:
         type: integer
     type: object
   compliance.PolicyViolation:
@@ -14428,11 +14457,20 @@ paths:
         in: query
         name: severity
         type: string
-      - description: Maximum number of records, defaults to 100
+      - description: Events per page, defaults to 100, at most 1000
+        in: query
+        name: page_size
+        type: integer
+      - description: Page number (1-based), defaults to 1
+        in: query
+        name: page
+        type: integer
+      - description: Older form of page_size, used only without page_size and page
         in: query
         name: limit
         type: integer
-      - description: Pagination offset, defaults to 0
+      - description: 'Older form of page: events to skip, used only without page_size
+          and page'
         in: query
         name: offset
         type: integer
@@ -14456,6 +14494,52 @@ paths:
           schema:
             $ref: '#/definitions/models.ErrorResponse'
       summary: Get script-reported compliance events
+      tags:
+      - Compliance
+  /compliance/events-by-request:
+    get:
+      description: The App's compliance events that record request_id (the gateway's
+        X-Tyk-AI-Request-ID) in their metadata, recorded within 10 minutes of at,
+        oldest first, at most 20 (Enterprise). An agent trace's guardrail outcome
+        links to them.
+      parameters:
+      - description: Gateway request id (tyai_ followed by 32 hex digits)
+        in: query
+        name: request_id
+        required: true
+        type: string
+      - description: App ID
+        in: query
+        name: app_id
+        required: true
+        type: integer
+      - description: When the request ran (RFC 3339)
+        in: query
+        name: at
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.complianceEventsByRequestResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Find the compliance events of one gateway request
       tags:
       - Compliance
   /compliance/events/{id}:

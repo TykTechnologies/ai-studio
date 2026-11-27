@@ -63,7 +63,7 @@ The per-provider path `/ai/llm-slug/v1/decisions` takes the same request with a 
 
 **Native pass-through.** Callers that already speak a provider's own format can keep using `/llm/rest/llm-slug/v1/decisions` (OpenAI) or `/llm/rest/llm-slug/v1/systemone` (System One). These calls are governed and recorded exactly like bridged ones.
 
-**Model discovery.** `GET /v1/models` lists every route the App can use. Each entry carries a `capabilities` field (`chat`, `embeddings`, `decisions`) so clients can find decision-capable routes. Standard OpenAI clients ignore it.
+**Model discovery.** `GET /v1/models` lists every model the App can use. Each entry carries a `capabilities` field (`chat`, `embeddings`, `decisions`) so clients can find decision models. Standard OpenAI clients ignore it. On an OpenAI provider, which serves both kinds, the field is per model: OpenAI's decision models (the `gpt-6-luna` family, including dated snapshots) list `decisions`, and every other model lists `chat` and `embeddings`. A decision model OpenAI releases later can be called before AI Studio knows its name, but it is listed without `decisions` until then.
 
 **Failover.** An LLM's failover waterfall applies to decision calls. Rungs whose provider serves no decision models, or cannot take the request (image input to a text-only System One model), are skipped, and the request is re-shaped for each rung's provider, so a System One primary can fail over to an OpenAI fallback. Chat requests likewise skip decision-only fallbacks, and the LLM form only offers fallbacks that serve a request kind the primary serves. Model Routers and Semantic Routers do not route decision calls yet.
 

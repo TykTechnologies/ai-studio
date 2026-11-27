@@ -171,7 +171,11 @@ describe("SoftenDialog: Log and raise event", () => {
     fireEvent.click(within(await screen.findByRole("listbox")).getByText("Log and raise event"));
     fireEvent.change(screen.getByTestId("soften-justification"), { target: { value: "PR fixtures" } });
     expect(screen.getByTestId("soften-submit")).toBeDisabled();
+    // o4a.12: the help text names how the topic is formed, never the literal placeholder.
+    expect(screen.getByText(/Webhooks subscribe to guardrail\.alert\. followed by this name/)).toBeInTheDocument();
+    expect(screen.queryByText(/guardrail\.alert\.<name>/)).not.toBeInTheDocument();
     fireEvent.change(screen.getByTestId("soften-alert-event"), { target: { value: "visor-pr-flag" } });
+    expect(screen.getByText(/Webhooks subscribe to guardrail\.alert\.visor-pr-flag to hear/)).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("soften-submit"));
     await waitFor(() =>
       expect(apiClient.post).toHaveBeenCalledWith(

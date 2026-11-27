@@ -29,6 +29,15 @@ func TestDecisionCapabilities(t *testing.T) {
 	assert.Equal(t, []string{"decisions"}, VendorCapabilities(models.SYSTEMONE))
 	assert.Equal(t, []string{"chat"}, VendorCapabilities(models.ANTHROPIC))
 
+	// Per model: OpenAI tells its decision models from its chat models.
+	assert.Equal(t, []string{"decisions"}, ModelCapabilities(models.OPENAI, "gpt-6-luna"))
+	assert.Equal(t, []string{"decisions"}, ModelCapabilities(models.OPENAI, "GPT-6-Luna-2026-09-01"), "a dated snapshot")
+	assert.Equal(t, []string{"chat", "embeddings"}, ModelCapabilities(models.OPENAI, "gpt-5.6-luna"))
+	assert.Equal(t, []string{"chat", "embeddings"}, ModelCapabilities(models.OPENAI, "gpt-6-lunatic"))
+	assert.Equal(t, []string{"decisions"}, ModelCapabilities(models.SYSTEMONE, "jev-latest"))
+	assert.Equal(t, []string{"chat"}, ModelCapabilities(models.ANTHROPIC, "claude-luna"))
+	assert.Nil(t, ModelCapabilities("nope", "x"))
+
 	// A decisions-only vendor is not offered as an embedder or chat driver.
 	assert.NotContains(t, EmbeddingVendors(), models.SYSTEMONE)
 	assert.NotContains(t, AVAILABLE_LLM_DRIVERS, models.SYSTEMONE)
