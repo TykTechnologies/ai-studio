@@ -73,10 +73,21 @@ type PolicyViolation struct {
 	ViolationTypes []string  `json:"violation_types"` // filter_block, model_access, budget_exceeded, auth_failure
 	Count          int       `json:"count"`
 	LastOccurred   time.Time `json:"last_occurred"`
+	// Blocks are the app's refused requests (proxy_logs 4xx, as
+	// TotalBlocks) and Events its warning and critical filter and
+	// guardrail events, most of which let the request go on; Count is
+	// their sum. EventsByAction splits Events by the action taken (see
+	// PolicyViolationsData.EventsByAction).
+	Blocks         int            `json:"blocks"`
+	Events         int            `json:"events"`
+	EventsByAction map[string]int `json:"events_by_action,omitempty"`
 }
 
 // PolicyViolationsData contains aggregated policy violation data
 type PolicyViolationsData struct {
+	// FilterBlocks is per app: its blocked requests and its filter and
+	// guardrail events (most of which let the request go on), despite the
+	// name, which the API keeps.
 	FilterBlocks    []PolicyViolation `json:"filter_blocks"`
 	ModelViolations []PolicyViolation `json:"model_violations"`
 	Timeline        []TimelineData    `json:"timeline"`
@@ -86,6 +97,14 @@ type PolicyViolationsData struct {
 	// where the request was allowed through but the filter raised a concern
 	// (e.g. PII redaction, content rewrite).
 	TotalFlagged int `json:"total_flagged"`
+	// EventsByAction splits TotalFlagged by the action the filter or
+	// guardrail took: block, quarantine, remove, redact, alert, log, or
+	// other (an event that names no action, such as a filter script's).
+	EventsByAction map[string]int `json:"events_by_action"`
+	// TimelineBlocks and TimelineEvents split Timeline (their daily sum)
+	// into blocked requests and filter and guardrail events.
+	TimelineBlocks []TimelineData `json:"timeline_blocks"`
+	TimelineEvents []TimelineData `json:"timeline_events"`
 }
 
 // BudgetAlert represents an app/LLM approaching or exceeding budget

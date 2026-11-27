@@ -7,7 +7,7 @@ model router changes, plus topics published by enterprise plugins such as the
 asset catalog) can be delivered to an administrator-approved URL as a signed
 JSON payload, with retries, a dead-letter queue and a searchable delivery log.
 
-`webhook_targets.url` is stored encrypted at rest (`$ENC/`, like `headers`; schema 48, o4a.21). The column is `text`, because the ciphertext outgrows `varchar(2048)`. `WebhookTarget.AfterFind` decrypts it for the dispatcher and the API, and the API masks it again. A start-up migration (`encryptStoredTargetURLs`) encrypts rows written before, the FIPS credential sweep covers the column, and `ListTargets` searches name, description and the shown url in Go: the column is never queried, so its trigram index is dropped. The minimum reader schema is 48: older code would post to the ciphertext.
+Target URLs are also credentials (a Slack, Discord or Teams incoming-webhook URL lets anyone post to the channel), so the URL leaves the `webhook_targets` row only masked by `models.MaskWebhookURL`. That covers `WebhookTargetResponse.url` (with `url_masked`), the delivery snapshot (stored masked, and masked on read by `WebhookDelivery.AfterFind` for older rows), transport errors (`maskURLError`; `MaskWebhookURLsInText` on stored errors), notifications and logs. A start-up sweep (`maskStoredURLs`) rewrites delivery and attempt rows written before. An update that sends the masked URL back keeps the stored one, and a changed URL that still contains `***` is refused.
 
 Target URLs are an exfiltration vector, so the feature is built around
 approval: a target never receives a delivery until an administrator approves
@@ -123,7 +123,19 @@ rendered against a sample event on save; rendering is capped at 2 s and 1 MB.
 Template data: `.Event{ID,Topic,Origin,ReceivedAt}`, `.ObjectType`,
 `.Action`, `.ObjectID`, `.ActorUserID`, `.Timestamp`, `.Object` (redacted
 map), `.Payload` (redacted map), `.Target{ID,Name}`,
-`.Delivery{ID,Attempt}`, `.Studio{Edition,Version}`.
+`.Delivery{ID,Attempt}`, `.Studio{Edition,Version}`, `.StudioLink`, and
+`.Summary{Title,Who,What,Where,Link}` (`summary.go`). Summary is who, what and
+where in words, and the `slack` preset is built from it:
+- **Guardrail alert or outcome:** the App, the outcome with the detector,
+  kinds, score and judge verdict, and the filter, request and compliance
+  event.
+- **Object event:** the acting user's name (looked up in `users`; else
+  `user #N`, else `system`), the change, and the object. Link is
+  `SITE_URL/admin/<llms|apps|datasources|tools|users>/<id>`, except for a
+  deleted object. The id is the event's numeric object id (formatted with
+  `%d`, so it cannot carry a path), the collection comes from a fixed map,
+  and `SITE_URL` is used only when it parses as an absolute `http(s)` URL
+  (`adminLink`); otherwise there is no link.
 
 Functions: `toJson`, `toPrettyJson`, `jsonStr`, `upper`, `lower`, `title`,
 `trim`, `default`, `coalesce`, `now`, `date`, `unixTime`, `truncate`,

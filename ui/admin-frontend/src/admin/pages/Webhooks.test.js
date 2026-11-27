@@ -181,6 +181,27 @@ describe("Webhooks", () => {
     expect(await screen.findByText(/Ops Slack: approve done/)).toBeInTheDocument();
   });
 
+  it("shows a Slack URL masked and keeps it when the edit form sends it back", async () => {
+    const masked = { ...targets[0], url: "https://hooks.slack.com/services/***", url_masked: true };
+    mockApi({ list: [masked, targets[1]] });
+    renderPage();
+    await screen.findByText("Ops Slack");
+    expect(screen.getByText("https://hooks.slack.com/services/***")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("actions for Ops Slack"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Approve" }));
+    expect(await screen.findByText(/the secret part of the URL is hidden/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    fireEvent.click(screen.getByLabelText("actions for Ops Slack"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
+    expect(await screen.findByTestId("webhook-url")).toHaveValue("https://hooks.slack.com/services/***");
+    expect(screen.getByText(/The secret part of this URL is hidden/)).toBeInTheDocument();
+    // Replacing the URL drops the hint.
+    fireEvent.change(screen.getByTestId("webhook-url"), { target: { value: "https://hooks.slack.com/services/T/B/new" } });
+    expect(screen.queryByText(/The secret part of this URL is hidden/)).not.toBeInTheDocument();
+  });
+
   it("does not offer approve for an approved target but offers pause, test and revoke", async () => {
     mockApi();
     renderPage();
@@ -218,6 +239,28 @@ describe("Webhooks", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Preview" }));
     await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith("/webhooks/templates/preview", expect.objectContaining({ template_preset: "standard" })));
     expect(await screen.findByTestId("template-preview")).toHaveTextContent("evt_sample");
+  });
+
+  it("previews a sample of the target's own topic, and of the one picked", async () => {
+    const guarded = { ...targets[0], topic_filters: ["guardrail.alert.secret-pasted", "guardrail.outcome.quarantined"] };
+    mockApi({ list: [guarded, targets[1]] });
+    renderPage();
+    await screen.findByText("Ops Slack");
+    fireEvent.click(screen.getByLabelText("actions for Ops Slack"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Preview" }));
+    await waitFor(() =>
+      expect(apiClient.post).toHaveBeenCalledWith("/webhooks/templates/preview", expect.objectContaining({ topic: "guardrail.alert.secret-pasted" }))
+    );
+
+    const picker = screen.getByTestId("preview-topic");
+    fireEvent.mouseDown(picker.parentElement.querySelector('[role="combobox"]') || picker.parentElement);
+    fireEvent.click(await screen.findByRole("option", { name: "guardrail.outcome.quarantined" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    await waitFor(() =>
+      expect(apiClient.post).toHaveBeenCalledWith("/webhooks/templates/preview", expect.objectContaining({ topic: "guardrail.outcome.quarantined" }))
+    );
   });
 
   it("expands a target to show statistics and audit history", async () => {

@@ -80,12 +80,16 @@ const TargetForm = ({ open, target, presets, topics, onClose, onSaved, initialTo
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [preview, setPreview] = useState(null);
+  // The subscribed topic the preview renders a sample of (wildcards are
+  // turned into a sample topic by the server). Empty: the first one.
+  const [previewTopic, setPreviewTopic] = useState("");
   const [headersTouched, setHeadersTouched] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setError(null);
     setPreview(null);
+    setPreviewTopic("");
     setHeadersTouched(false);
     if (target) {
       setForm({
@@ -115,7 +119,7 @@ const TargetForm = ({ open, target, presets, topics, onClose, onSaved, initialTo
       const res = await apiClient.post("/webhooks/templates/preview", {
         template_preset: form.template_preset,
         template_body: form.template_body,
-        topic: (form.topic_filters[0] || "").includes("*") ? "" : form.topic_filters[0],
+        topic: form.topic_filters.includes(previewTopic) ? previewTopic : form.topic_filters[0] || "",
       });
       setPreview(res.data);
     } catch (err) {
@@ -200,7 +204,12 @@ const TargetForm = ({ open, target, presets, topics, onClose, onSaved, initialTo
               value={form.url}
               onChange={set("url")}
               required
-              helperText="http or https. Internal addresses are rejected unless WEBHOOKS_ALLOW_INTERNAL_TARGETS is set."
+              inputProps={{ "data-testid": "webhook-url" }}
+              helperText={
+                editing && target?.url_masked && form.url === target.url
+                  ? "The secret part of this URL is hidden (***). Leave it as it is to keep the stored URL, or replace the whole URL."
+                  : "http or https. Internal addresses are rejected unless WEBHOOKS_ALLOW_INTERNAL_TARGETS is set."
+              }
             />
           </Grid>
           <Grid item xs={12}>
@@ -250,6 +259,23 @@ const TargetForm = ({ open, target, presets, topics, onClose, onSaved, initialTo
               {presets.find((p) => p.name === form.template_preset)?.description ||
                 "Go text/template producing JSON. Secrets in the event are redacted before rendering."}
             </Typography>
+            {form.topic_filters.length > 1 && (
+              <TextField
+                select
+                size="small"
+                label="Preview topic"
+                value={form.topic_filters.includes(previewTopic) ? previewTopic : form.topic_filters[0]}
+                onChange={(e) => setPreviewTopic(e.target.value)}
+                sx={{ minWidth: 200 }}
+                inputProps={{ "data-testid": "preview-topic" }}
+              >
+                {form.topic_filters.map((t) => (
+                  <MenuItem key={t} value={t}>
+                    {t}
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
             <Button size="small" onClick={runPreview}>
               Preview
             </Button>
@@ -390,7 +416,8 @@ const ReasonDialog = ({ action, target, onClose, onConfirm }) => {
       <DialogContent>
         {isApprove ? (
           <Alert severity="warning" sx={{ mb: 2 }}>
-            Approving allows AI Studio to POST event data to <code>{target?.url}</code>. Custom header
+            Approving allows AI Studio to POST event data to <code>{target?.url}</code>
+            {target?.url_masked ? " (the secret part of the URL is hidden)" : ""}. Custom header
             values are stored encrypted and are not shown here; only their names are:{" "}
             {(target?.header_names || []).join(", ") || "none"}.
           </Alert>

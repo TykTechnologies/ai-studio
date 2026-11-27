@@ -25,8 +25,16 @@ webhook target goes through an approval step:
 3. Another administrator (or the same one, unless
    `WEBHOOKS_REQUIRE_DIFFERENT_APPROVER=true`) reviews the URL and approves
    it. Header values are stored encrypted and never displayed, only their
-   names. The URL is stored encrypted too, because a chat webhook URL is
-   itself the credential.
+   names.
+
+   The URL is shown with its credentials hidden, because a chat webhook URL
+   is itself the credential: anyone who has it can post to the channel. The
+   target list, the Approve dialog, the edit form, the Deliveries log and
+   the API all show the scheme and host but replace the secret part with
+   `***`. That covers the path of Slack, Discord, Teams, Google Chat and
+   Zapier hooks, any query value, and any token-like path segment. To keep
+   the URL when you edit a target, leave the field as it is. To change it,
+   enter the whole new URL.
 4. Deliveries start. Changing the URL or the headers of an approved target
    sends it back to pending; revoking stops it and cancels queued deliveries.
 
@@ -100,12 +108,31 @@ compliance).
 Choose a preset or write a template:
 
 - **standard** – a full envelope: event id, type, timestamps, the object
-  (with secrets redacted), the actor and delivery metadata.
-- **slack** – a Slack incoming-webhook message summarising the event; for a
-  guardrail alert or outcome event it links to the event in AI Studio.
+  (with secrets redacted), the actor and delivery metadata. For a guardrail
+  alert whose filter opts in with **include_excerpt**, the object carries
+  `excerpts`, the alert's masked excerpts of the flagged text. That is the
+  one place flagged text can leave AI Studio in a webhook, and only with the
+  standard preset or a custom template that reads it.
+- **slack** – a Slack incoming-webhook message that says who, what, where
+  and when:
+  - For a guardrail alert or outcome: the App; the detector, the kinds of
+    finding (labels such as `injection` or `pii.email`), the score, the
+    action and any judge verdict; and the filter, the request id and the
+    compliance event. It never includes the flagged text or the request's
+    content, not even the masked excerpts an alert can carry. It links to
+    the event in AI Studio, where reading it needs permission.
+  - For a change to an object: the user who made it, the change, and the
+    object. When `SITE_URL` is set, it links to the object's page (except
+    for a deleted object).
 - **minimal** – identifiers only.
 - **custom** – a Go `text/template` that must render to JSON. Use
   **Preview** in the editor to render it against a sample event.
+
+**Preview** renders a sample event for one of the target's own topics: the
+first one, or the one you pick under **Preview topic** when the target has
+several. A guardrail topic gets a sample guardrail alert or outcome,
+shaped like a real one and with its **Open in AI Studio** link. A wildcard
+gets a sample of a matching topic.
 
 Example custom template:
 
@@ -116,6 +143,12 @@ Example custom template:
   "object": {{ toJson .Object }}
 }
 ```
+
+A template can use `.Summary`, the words the Slack preset is built from:
+`.Summary.Title`, `.Summary.Who`, `.Summary.What`, `.Summary.Where` and
+`.Summary.Link`. In a Slack message, pass names and other free text through
+`slackEscape`, which escapes `&`, `<` and `>`, so a name cannot add a link or
+an `@channel` mention.
 
 A template can use `.StudioLink`: the AI Studio page the event links to, set
 only for guardrail alerts and outcome events (topics only AI Studio raises)
