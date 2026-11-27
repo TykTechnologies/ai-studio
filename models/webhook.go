@@ -208,12 +208,17 @@ func (t *WebhookTarget) IsDeliverable() bool {
 }
 
 // WebhookTargetResponse is the API shape of a target. Secret values are never
-// included: custom headers appear as names only and the signing secret as a flag.
+// included: custom headers appear as names only, the signing secret as a
+// flag, and the URL with its credentials masked (MaskWebhookURL: a Slack,
+// Discord or Teams webhook URL is itself the credential). URLMasked says the
+// URL shown is not the full one; an update that sends it back unchanged
+// keeps the stored URL.
 type WebhookTargetResponse struct {
 	ID                  string     `json:"id"`
 	Name                string     `json:"name"`
 	Description         string     `json:"description"`
 	URL                 string     `json:"url"`
+	URLMasked           bool       `json:"url_masked"`
 	Status              string     `json:"status"`
 	Paused              bool       `json:"paused"`
 	TopicFilters        []string   `json:"topic_filters"`
@@ -248,7 +253,7 @@ func (t *WebhookTarget) ToResponse() WebhookTargetResponse {
 		filters = []string{}
 	}
 	return WebhookTargetResponse{
-		ID: t.ID, Name: t.Name, Description: t.Description, URL: t.URL,
+		ID: t.ID, Name: t.Name, Description: t.Description, URL: MaskWebhookURL(t.URL), URLMasked: MaskWebhookURL(t.URL) != t.URL,
 		Status: t.Status, Paused: t.Paused, TopicFilters: filters,
 		TemplatePreset: t.TemplatePreset, TemplateBody: t.TemplateBody,
 		HeaderNames: t.HeaderNames(), HasSigningSecret: t.SigningSecret != "",
@@ -292,7 +297,9 @@ type WebhookDelivery struct {
 	TargetID string `gorm:"size:36;index:idx_webhook_deliveries_target_created,priority:1" json:"target_id"`
 	Topic    string `gorm:"size:200;index:idx_webhook_deliveries_topic_created,priority:1" json:"topic"`
 	// TargetURLSnapshot is the URL at enqueue time, kept so the log stays
-	// meaningful after the target is edited or deleted.
+	// meaningful after the target is edited or deleted. It is stored and
+	// returned masked (MaskWebhookURL): deliveries never need the full URL,
+	// and a chat webhook URL is a credential.
 	TargetURLSnapshot string `gorm:"size:2048" json:"target_url"`
 
 	Status         string     `gorm:"size:16;index:idx_webhook_deliveries_status_next,priority:1" json:"status"`
@@ -324,6 +331,22 @@ type WebhookDelivery struct {
 }
 
 func (WebhookDelivery) TableName() string { return "webhook_deliveries" }
+
+// AfterFind masks the URL snapshot (and URLs quoted in the last error) of
+// rows written before they were stored masked, so no read path (API,
+// export, logs) sees a credential.
+func (d *WebhookDelivery) AfterFind(tx *gorm.DB) error {
+	d.TargetURLSnapshot = MaskWebhookURL(d.TargetURLSnapshot)
+	d.LastError = MaskWebhookURLsInText(d.LastError)
+	return nil
+}
+
+// AfterFind masks URLs quoted in an attempt's error (a transport error names
+// the URL it called) on rows written before errors were stored masked.
+func (a *WebhookDeliveryAttempt) AfterFind(tx *gorm.DB) error {
+	a.Error = MaskWebhookURLsInText(a.Error)
+	return nil
+}
 
 // IsTerminal reports whether the delivery will not be attempted again.
 func (d *WebhookDelivery) IsTerminal() bool {

@@ -1786,8 +1786,6 @@ definitions:
             type: string
           last_sync_ack:
             type: string
-          license_state:
-            type: string
           loaded_checksum:
             type: string
           loaded_version:
@@ -1796,6 +1794,7 @@ definitions:
             additionalProperties: true
             type: object
           namespace:
+            description: Always "default" in CE
             type: string
           owner_label:
             description: |-
@@ -6936,7 +6935,9 @@ definitions:
       target_url:
         description: |-
           TargetURLSnapshot is the URL at enqueue time, kept so the log stays
-          meaningful after the target is edited or deleted.
+          meaningful after the target is edited or deleted. It is stored and
+          returned masked (MaskWebhookURL): deliveries never need the full URL,
+          and a chat webhook URL is a credential.
         type: string
       topic:
         type: string
@@ -7059,6 +7060,8 @@ definitions:
         type: string
       url:
         type: string
+      url_masked:
+        type: boolean
     type: object
   rbac.PermissionSource:
     properties:

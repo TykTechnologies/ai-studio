@@ -200,7 +200,12 @@ const TargetForm = ({ open, target, presets, topics, onClose, onSaved, initialTo
               value={form.url}
               onChange={set("url")}
               required
-              helperText="http or https. Internal addresses are rejected unless WEBHOOKS_ALLOW_INTERNAL_TARGETS is set."
+              inputProps={{ "data-testid": "webhook-url" }}
+              helperText={
+                editing && target?.url_masked && form.url === target.url
+                  ? "The secret part of this URL is hidden (***). Leave it as it is to keep the stored URL, or replace the whole URL."
+                  : "http or https. Internal addresses are rejected unless WEBHOOKS_ALLOW_INTERNAL_TARGETS is set."
+              }
             />
           </Grid>
           <Grid item xs={12}>
@@ -390,7 +395,8 @@ const ReasonDialog = ({ action, target, onClose, onConfirm }) => {
       <DialogContent>
         {isApprove ? (
           <Alert severity="warning" sx={{ mb: 2 }}>
-            Approving allows AI Studio to POST event data to <code>{target?.url}</code>. Custom header
+            Approving allows AI Studio to POST event data to <code>{target?.url}</code>
+            {target?.url_masked ? " (the secret part of the URL is hidden)" : ""}. Custom header
             values are stored encrypted and are not shown here; only their names are:{" "}
             {(target?.header_names || []).join(", ") || "none"}.
           </Alert>

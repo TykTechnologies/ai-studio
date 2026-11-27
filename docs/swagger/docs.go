@@ -30903,9 +30903,6 @@ const docTemplate = `{
                         "last_sync_ack": {
                             "type": "string"
                         },
-                        "license_state": {
-                            "type": "string"
-                        },
                         "loaded_checksum": {
                             "type": "string"
                         },
@@ -30917,6 +30914,7 @@ const docTemplate = `{
                             "additionalProperties": true
                         },
                         "namespace": {
+                            "description": "Always \"default\" in CE",
                             "type": "string"
                         },
                         "owner_label": {
@@ -38233,7 +38231,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "target_url": {
-                    "description": "TargetURLSnapshot is the URL at enqueue time, kept so the log stays\nmeaningful after the target is edited or deleted.",
+                    "description": "TargetURLSnapshot is the URL at enqueue time, kept so the log stays\nmeaningful after the target is edited or deleted. It is stored and\nreturned masked (MaskWebhookURL): deliveries never need the full URL,\nand a chat webhook URL is a credential.",
                     "type": "string"
                 },
                 "topic": {
@@ -38416,6 +38414,9 @@ const docTemplate = `{
                 },
                 "url": {
                     "type": "string"
+                },
+                "url_masked": {
+                    "type": "boolean"
                 }
             }
         },
