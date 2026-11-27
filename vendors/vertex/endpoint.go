@@ -12,7 +12,7 @@ import (
 
 // ErrInvalidEndpoint is returned when a Vertex LLM's API endpoint is neither
 // "project:location" nor an http(s) URL.
-var ErrInvalidEndpoint = errors.New("vertex API endpoint must be project:location (for example my-project:us-central1) or an https URL")
+var ErrInvalidEndpoint = errors.New("vertex API endpoint must be project:location (for example my-project:us-central1) or an https URL, optionally ending in /v1/projects/{project}/locations/{location}")
 
 // locationPattern is a Google Cloud location ID: a region (us-central1), a
 // multi-region (us, eu) or global. It becomes part of a host name, so nothing
@@ -36,10 +36,59 @@ func ParseProjectLocation(endpoint string) (project, location string, ok bool) {
 		return "", "", false
 	}
 	project, location = endpoint[:i], endpoint[i+1:]
-	if !locationPattern.MatchString(location) {
+	if !projectPattern.MatchString(project) || !locationPattern.MatchString(location) {
 		return "", "", false
 	}
 	return project, location, true
+}
+
+// projectPattern is a project ID or number, domain-scoped ones
+// (example.com:my-project) included. It becomes part of the upstream path.
+var projectPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.:_-]*$`)
+
+// apiVersionPattern is a Vertex API version segment (v1, v1beta1).
+var apiVersionPattern = regexp.MustCompile(`^v[0-9]+((alpha|beta)[0-9]*)?$`)
+
+// ParseURLEndpoint splits a URL endpoint into the base the proxy sends to
+// and, when its path ends in [/v1]/projects/{project}/locations/{location}
+// (a trailing slash allowed), that project and location:
+//
+//	https://vertex.example/v1/projects/p/locations/us-central1 -> https://vertex.example, p, us-central1
+//	https://gw.example/vertex/projects/p/locations/eu          -> https://gw.example/vertex, p, eu
+//	https://vertex.example                                     -> https://vertex.example, "", ""
+//
+// Whatever precedes the version (or projects) segment is a path prefix and
+// stays in the base. A path with a projects segment of any other shape, or
+// with an invalid project or location, is ErrInvalidEndpoint.
+func ParseURLEndpoint(endpoint string) (base, project, location string, err error) {
+	u, perr := url.Parse(strings.TrimSpace(endpoint))
+	if perr != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.RawQuery != "" || u.Fragment != "" {
+		return "", "", "", ErrInvalidEndpoint
+	}
+	segs := strings.Split(strings.Trim(u.Path, "/"), "/")
+	at := -1
+	for i, seg := range segs {
+		if seg == "projects" {
+			at = i
+			break
+		}
+	}
+	if at < 0 {
+		return strings.TrimSpace(endpoint), "", "", nil
+	}
+	if len(segs) != at+4 || segs[at+2] != "locations" ||
+		!projectPattern.MatchString(segs[at+1]) || !locationPattern.MatchString(segs[at+3]) {
+		return "", "", "", ErrInvalidEndpoint
+	}
+	prefix := segs[:at]
+	if len(prefix) > 0 && apiVersionPattern.MatchString(prefix[len(prefix)-1]) {
+		prefix = prefix[:len(prefix)-1]
+	}
+	base = u.Scheme + "://" + u.Host
+	if len(prefix) > 0 {
+		base += "/" + strings.Join(prefix, "/")
+	}
+	return base, segs[at+1], segs[at+3], nil
 }
 
 // UpstreamBaseURL is the base URL the proxy forwards a Vertex LLM's native
@@ -51,9 +100,11 @@ func ParseProjectLocation(endpoint string) (project, location string, ok bool) {
 //   - global: https://aiplatform.googleapis.com
 //
 // An endpoint that is already an http(s) URL (a private service connect
-// endpoint, a test server) is returned as it is. The path the caller sends
-// (/v1/projects/{p}/locations/{l}/publishers/google/models/{m}:generateContent)
-// is appended to it unchanged.
+// endpoint, a test server) is used as it is, except that a trailing
+// [/v1]/projects/{p}/locations/{l} in its path (see ParseURLEndpoint) names
+// the project and location and is not part of the base. The path the caller
+// sends (/v1/projects/{p}/locations/{l}/publishers/google/models/{m}:generateContent)
+// is appended to the base unchanged.
 func UpstreamBaseURL(llm *models.LLM) (string, error) {
 	return UpstreamBaseURLFor(llm.APIEndpoint)
 }
@@ -62,11 +113,8 @@ func UpstreamBaseURL(llm *models.LLM) (string, error) {
 func UpstreamBaseURLFor(endpoint string) (string, error) {
 	endpoint = strings.TrimSpace(endpoint)
 	if strings.Contains(endpoint, "://") {
-		u, err := url.Parse(endpoint)
-		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
-			return "", ErrInvalidEndpoint
-		}
-		return endpoint, nil
+		base, _, _, err := ParseURLEndpoint(endpoint)
+		return base, err
 	}
 	_, location, ok := ParseProjectLocation(endpoint)
 	if !ok {

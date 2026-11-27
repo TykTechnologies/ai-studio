@@ -186,3 +186,19 @@ func TestVertexNative_EndpointHostAndOverride(t *testing.T) {
 		})
 	}
 }
+
+// A URL endpoint carrying the project and location in its path sends the
+// caller's Vertex path to the URL's host, without repeating that path.
+func TestVertexNative_URLEndpointWithProjectLocation(t *testing.T) {
+	t.Parallel()
+	h := newFailoverHarness(t, serveVertex, serveOpenAIText("never"), vertexPrimary(vertexTestToken))
+	h.primary.APIEndpoint = h.primaryVendor.server.URL + "/v1/projects/p/locations/us-central1/"
+	require.NoError(t, h.db.Save(h.primary).Error)
+	require.NoError(t, h.proxy.loadResources())
+
+	resp, body := h.post("/llm/rest/primary"+vertexNativePath, vertexNativeBody)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+	calls := h.primaryVendor.calls()
+	require.Len(t, calls, 1)
+	assert.Equal(t, vertexNativePath, calls[0].Path)
+}

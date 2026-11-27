@@ -84,8 +84,11 @@ func (v *Vertex) AnalyzeResponse(llm *models.LLM, app *models.App, statusCode in
 // parser records the tokens and the model, which it takes from the response
 // or else from the .../publishers/google/models/{model} path.
 func (v *Vertex) AnalyzeStreamingResponse(llm *models.LLM, app *models.App, statusCode int, resps []byte, r *http.Request, chunks [][]byte) (*models.LLM, *models.App, models.ITokenResponse, error) {
-	return googleaiVendor.New().AnalyzeStreamingResponse(llm, app, statusCode, resps, r, chunks)
+	return geminiStreamParser.AnalyzeStreamingResponse(llm, app, statusCode, resps, r, chunks)
 }
+
+// geminiStreamParser reads Vertex streams (the Google AI vendor is stateless).
+var geminiStreamParser = googleaiVendor.New()
 
 // ProxySetAuthHeader sets a Google OAuth2 access token from the LLM's
 // credential chain (see credentials.go). On error the header is left unset

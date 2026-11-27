@@ -26,6 +26,10 @@ func TestUpstreamBaseURL(t *testing.T) {
 		{"https://us-central1-aiplatform.googleapis.com", "https://us-central1-aiplatform.googleapis.com"},
 		{"https://psc.example.internal/vertex", "https://psc.example.internal/vertex"},
 		{"http://127.0.0.1:8089", "http://127.0.0.1:8089"},
+		// A trailing [/v1]/projects/{p}/locations/{l} is not part of the base.
+		{"https://vertex.example/v1/projects/p/locations/us-central1", "https://vertex.example"},
+		{"http://127.0.0.1:8089/v1/projects/p/locations/eu/", "http://127.0.0.1:8089"},
+		{"https://gw.example/vertex/projects/p/locations/global", "https://gw.example/vertex"},
 	} {
 		t.Run(tc.endpoint, func(t *testing.T) {
 			got, err := UpstreamBaseURL(&models.LLM{Vendor: models.VERTEX, APIEndpoint: tc.endpoint})
@@ -47,6 +51,14 @@ func TestUpstreamBaseURL_Invalid(t *testing.T) {
 		"my-project:a",
 		"ftp://example.com",
 		"https://",
+		"https://vertex.example/v1/projects/p",
+		"https://vertex.example/v1/projects/p/locations",
+		"https://vertex.example/v1/projects/p/regions/us-central1",
+		"https://vertex.example/v1/projects/p/locations/us-central1/publishers/google",
+		"https://vertex.example/v1/projects/p/locations/US",
+		"https://vertex.example/v1/projects/p/locations/us-central1?x=1",
+		"https://vertex.example/v1/projects/%2e%2e/locations/us-central1",
+		"my%project:us-central1",
 	} {
 		t.Run(endpoint, func(t *testing.T) {
 			_, err := UpstreamBaseURL(&models.LLM{Vendor: models.VERTEX, APIEndpoint: endpoint})
@@ -88,4 +100,26 @@ func TestAnalyzeStreamingResponse(t *testing.T) {
 	assert.Equal(t, 5, resp.GetPromptTokens())
 	assert.Equal(t, 3, resp.GetResponseTokens())
 	assert.Equal(t, "gemini-2.5-flash", resp.GetModel(), "taken from the path when the stream names none")
+}
+
+func TestParseURLEndpoint(t *testing.T) {
+	for _, tc := range []struct {
+		endpoint, base, project, location string
+	}{
+		{"https://vertex.example/v1/projects/p/locations/us-central1", "https://vertex.example", "p", "us-central1"},
+		{"https://vertex.example/projects/p/locations/us-central1", "https://vertex.example", "p", "us-central1"},
+		{"https://vertex.example/v1/projects/p/locations/us-central1/", "https://vertex.example", "p", "us-central1"},
+		{"http://127.0.0.1:8089/v1beta1/projects/123456/locations/global", "http://127.0.0.1:8089", "123456", "global"},
+		{"https://gw.example/vertex/v1/projects/example.com:p/locations/eu", "https://gw.example/vertex", "example.com:p", "eu"},
+		{"https://vertex.example", "https://vertex.example", "", ""},
+		{"https://vertex.example/prefix/", "https://vertex.example/prefix/", "", ""},
+	} {
+		t.Run(tc.endpoint, func(t *testing.T) {
+			base, project, location, err := ParseURLEndpoint(tc.endpoint)
+			require.NoError(t, err)
+			assert.Equal(t, tc.base, base)
+			assert.Equal(t, tc.project, project)
+			assert.Equal(t, tc.location, location)
+		})
+	}
 }
