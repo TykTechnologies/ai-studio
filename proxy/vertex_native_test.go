@@ -230,3 +230,80 @@ func TestVertexNative_TokenMintFailure(t *testing.T) {
 	}
 	assert.Empty(t, h.primaryVendor.calls(), "nothing reached the upstream")
 }
+
+// A Vertex LLM with no key (and host ADC not enabled) is refused with the
+// reason, never sent upstream unauthenticated.
+func TestVertexNative_EmptyKeyRefused(t *testing.T) {
+	t.Parallel()
+	h := newFailoverHarness(t, serveVertex, serveOpenAIText("never"), vertexPrimary(""))
+
+	for _, path := range []string{"/llm/rest/primary" + vertexNativePath, "/llm/stream/primary" + vertexStreamPath + "?alt=sse"} {
+		resp, body := h.post(path, vertexNativeBody)
+		assert.GreaterOrEqual(t, resp.StatusCode, 400, "%s: %s", path, body)
+		assert.Contains(t, string(body), vertexVendor.ADCSetting, path)
+	}
+	assert.Empty(t, h.primaryVendor.calls(), "nothing reached the upstream")
+}
+
+// The stream's query reaches the upstream: without alt=sse Vertex answers a
+// JSON array, not the SSE the client asked for.
+func TestVertexNative_StreamQueryForwarded(t *testing.T) {
+	t.Parallel()
+	queries := make(chan string, 1)
+	serve := func(w http.ResponseWriter, r *http.Request) {
+		queries <- r.URL.RawQuery
+		serveVertex(w, r)
+	}
+	h := newFailoverHarness(t, serve, serveOpenAIText("never"), vertexPrimary(vertexTestToken))
+
+	resp, body := h.post("/llm/stream/primary"+vertexStreamPath+"?alt=sse", vertexNativeBody)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+	assert.Equal(t, "alt=sse", <-queries)
+}
+
+// A rotated key is used from the next request after the LLM reloads: the
+// proxy keeps no auth of its own past a reload.
+func TestVertexNative_KeyRotation(t *testing.T) {
+	t.Parallel()
+	h := newFailoverHarness(t, serveVertex, serveOpenAIText("never"), vertexPrimary("ya29.first"))
+
+	resp, body := h.post("/llm/rest/primary"+vertexNativePath, vertexNativeBody)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+
+	h.primary.APIKey = "ya29.second"
+	require.NoError(t, h.db.Save(h.primary).Error)
+	require.NoError(t, h.proxy.loadResources())
+	for _, path := range []string{"/llm/rest/primary" + vertexNativePath, "/llm/stream/primary" + vertexStreamPath + "?alt=sse"} {
+		resp, body = h.post(path, vertexNativeBody)
+		require.Equal(t, http.StatusOK, resp.StatusCode, "%s: %s", path, body)
+	}
+
+	calls := h.primaryVendor.calls()
+	require.Len(t, calls, 3)
+	assert.Equal(t, "Bearer ya29.first", calls[0].Headers.Get("Authorization"))
+	assert.Equal(t, "Bearer ya29.second", calls[1].Headers.Get("Authorization"))
+	assert.Equal(t, "Bearer ya29.second", calls[2].Headers.Get("Authorization"))
+}
+
+// Google credentials a caller sends are not forwarded: the LLM's token
+// replaces a caller's Authorization, and a Gemini API key (header or key=)
+// is dropped, so the upstream sees exactly one credential, the LLM's.
+func TestVertexNative_CallerGoogleCredentialsDropped(t *testing.T) {
+	t.Parallel()
+	queries := make(chan string, 2)
+	serve := func(w http.ResponseWriter, r *http.Request) {
+		queries <- r.URL.RawQuery
+		serveVertex(w, r)
+	}
+	h := newFailoverHarness(t, serve, serveOpenAIText("never"), vertexPrimary(vertexTestToken))
+
+	for _, path := range []string{"/llm/rest/primary" + vertexNativePath + "?key=caller-key", "/llm/stream/primary" + vertexStreamPath + "?alt=sse&key=caller-key"} {
+		resp, body := h.post(path, vertexNativeBody, "x-goog-api-key", "caller-key")
+		require.Equal(t, http.StatusOK, resp.StatusCode, "%s: %s", path, body)
+		assert.NotContains(t, <-queries, "key=", path)
+	}
+	for _, c := range h.primaryVendor.calls() {
+		assert.Equal(t, []string{"Bearer " + vertexTestToken}, c.Headers.Values("Authorization"), c.Path)
+		assert.Empty(t, c.Headers.Get("x-goog-api-key"), c.Path)
+	}
+}

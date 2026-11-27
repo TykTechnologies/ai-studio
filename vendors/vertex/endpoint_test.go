@@ -147,3 +147,13 @@ func TestParseURLEndpoint(t *testing.T) {
 		})
 	}
 }
+
+func TestProxySetAuthHeader_DropsCallerGeminiKey(t *testing.T) {
+	r := httptest.NewRequest("POST", "https://us-central1-aiplatform.googleapis.com/v1/projects/p/locations/l/publishers/google/models/m:streamGenerateContent?alt=sse&key=caller", nil)
+	r.Header.Set("x-goog-api-key", "caller")
+	r.Header.Set("Authorization", "Bearer caller")
+	require.NoError(t, (&Vertex{}).ProxySetAuthHeader(r, &models.LLM{Vendor: models.VERTEX, APIKey: "ya29.llm"}))
+	assert.Equal(t, []string{"Bearer ya29.llm"}, r.Header.Values("Authorization"))
+	assert.Empty(t, r.Header.Get("x-goog-api-key"))
+	assert.Equal(t, "alt=sse", r.URL.RawQuery)
+}

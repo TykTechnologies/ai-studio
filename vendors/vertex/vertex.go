@@ -92,13 +92,20 @@ var geminiStreamParser = googleaiVendor.New()
 
 // ProxySetAuthHeader sets a Google OAuth2 access token from the LLM's
 // credential chain (see credentials.go). On error the header is left unset
-// and the caller must not send the request.
+// and the caller must not send the request. A Gemini API key the caller sent
+// (x-goog-api-key, key=) is dropped, so the LLM's token is the only
+// credential Vertex sees.
 func (v *Vertex) ProxySetAuthHeader(r *http.Request, llm *models.LLM) error {
 	token, err := AccessToken(llm)
 	if err != nil {
 		return err
 	}
 	r.Header.Set("Authorization", "Bearer "+token)
+	r.Header.Del("x-goog-api-key")
+	if q := r.URL.Query(); q.Has("key") {
+		q.Del("key")
+		r.URL.RawQuery = q.Encode()
+	}
 	return nil
 }
 
