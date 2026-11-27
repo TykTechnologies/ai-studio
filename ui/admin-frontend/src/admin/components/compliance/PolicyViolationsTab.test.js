@@ -75,5 +75,7 @@ describe("PolicyViolationsTab", () => {
   it("orders the breakdown by action and leaves out zeros", () => {
     expect(actionBreakdown({ other: 1, block: 2, quarantine: 0, redact: 3 })).toBe("2 blocked · 3 redacted · 1 other");
     expect(actionBreakdown(undefined)).toBe("");
+    // An action this page does not know yet is shown by name, after the known ones.
+    expect(actionBreakdown({ throttle: 4, log: 1, alpha: 2 })).toBe("1 logged · 2 alpha · 4 throttle");
   });
 });

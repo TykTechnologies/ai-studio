@@ -35,11 +35,19 @@ export const ACTION_LABELS = {
 };
 const ACTION_ORDER = ["block", "quarantine", "remove", "redact", "alert", "log", "other"];
 
-/** actionBreakdown renders {quarantine: 2, block: 1} as "1 blocked · 2 quarantined". */
-export const actionBreakdown = (byAction) =>
-  ACTION_ORDER.filter((a) => (byAction || {})[a] > 0)
-    .map((a) => `${byAction[a]} ${ACTION_LABELS[a]}`)
+/**
+ * actionBreakdown renders {quarantine: 2, block: 1} as "1 blocked · 2
+ * quarantined": the known actions in order, then any other the server
+ * sends, by name.
+ */
+export const actionBreakdown = (byAction) => {
+  const counts = byAction || {};
+  const unknown = Object.keys(counts).filter((a) => !ACTION_ORDER.includes(a)).sort();
+  return [...ACTION_ORDER, ...unknown]
+    .filter((a) => counts[a] > 0)
+    .map((a) => `${counts[a]} ${ACTION_LABELS[a] || a}`)
     .join(" · ");
+};
 
 const PolicyViolationsTab = ({ data, onAppClick, startDate, endDate }) => {
   // Track expanded rows and their loaded records
@@ -174,6 +182,8 @@ const PolicyViolationsTab = ({ data, onAppClick, startDate, endDate }) => {
     }
   };
 
+  const totalBreakdown = actionBreakdown(data.events_by_action);
+
   // Count unique apps (not unique app+type combinations)
   const uniqueApps = new Set(data.filter_blocks?.map(v => v.app_id) || []).size;
 
@@ -202,9 +212,9 @@ const PolicyViolationsTab = ({ data, onAppClick, startDate, endDate }) => {
             <Typography variant="body2" color="text.secondary">
               Filter and guardrail events
             </Typography>
-            {actionBreakdown(data.events_by_action) && (
+            {totalBreakdown && (
               <Typography variant="caption" color="text.secondary" data-testid="events-by-action">
-                {actionBreakdown(data.events_by_action)}
+                {totalBreakdown}
               </Typography>
             )}
           </StyledPaper>
@@ -258,6 +268,7 @@ const PolicyViolationsTab = ({ data, onAppClick, startDate, endDate }) => {
                 const isExpanded = expandedRows[rowKey];
                 const records = rowRecords[rowKey] || [];
                 const isLoading = loadingRows[rowKey];
+                const rowBreakdown = actionBreakdown(violation.events_by_action);
 
                 return (
                   <React.Fragment key={idx}>
@@ -305,9 +316,9 @@ const PolicyViolationsTab = ({ data, onAppClick, startDate, endDate }) => {
                       </StyledTableCell>
                       <StyledTableCell align="right">
                         <Typography fontWeight="bold">{violation.events ?? violation.count}</Typography>
-                        {actionBreakdown(violation.events_by_action) && (
+                        {rowBreakdown && (
                           <Typography variant="caption" color="text.secondary" component="div">
-                            {actionBreakdown(violation.events_by_action)}
+                            {rowBreakdown}
                           </Typography>
                         )}
                       </StyledTableCell>
