@@ -108,15 +108,19 @@ compliance).
 Choose a preset or write a template:
 
 - **standard** – a full envelope: event id, type, timestamps, the object
-  (with secrets redacted), the actor and delivery metadata.
+  (with secrets redacted), the actor and delivery metadata. For a guardrail
+  alert whose filter opts in with **include_excerpt**, the object carries
+  `excerpts`, the alert's masked excerpts of the flagged text. That is the
+  one place flagged text can leave AI Studio in a webhook, and only with the
+  standard preset or a custom template that reads it.
 - **slack** – a Slack incoming-webhook message that says who, what, where
   and when:
-  - For a guardrail alert or outcome: the App, what the guardrail did (with
-    its detector, the kinds of finding such as `injection` or
-    `pii.email`, the score and any judge verdict), and the filter, request
-    id and compliance event. It never includes the flagged text or the
-    request's content, not even the masked excerpts an alert can carry. It
-    links to the event in AI Studio, where reading it needs permission.
+  - For a guardrail alert or outcome: the App; the detector, the kinds of
+    finding (labels such as `injection` or `pii.email`), the score, the
+    action and any judge verdict; and the filter, the request id and the
+    compliance event. It never includes the flagged text or the request's
+    content, not even the masked excerpts an alert can carry. It links to
+    the event in AI Studio, where reading it needs permission.
   - For a change to an object: the user who made it, the change, and the
     object. When `SITE_URL` is set, it links to the object's page (except
     for a deleted object).
