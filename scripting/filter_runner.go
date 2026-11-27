@@ -1629,6 +1629,11 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 		action   string
 		refs     []map[string]any
 		seen     map[string]bool
+		// wheres name where the findings were, for the description: a text
+		// segment by its role, any other by its kind (o4a.3: a tool
+		// definition reaches the provider as system text, but is not the
+		// system prompt).
+		wheres map[string]bool
 		// exceptions are the guardrail exceptions that softened this
 		// detector's findings; alerts the alert events they raise.
 		exceptions map[uint]bool
@@ -1642,7 +1647,7 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 	for _, f := range findings {
 		g, ok := groups[f.Detector]
 		if !ok {
-			g = &group{f: f, severity: f.Severity, roles: map[string]bool{}, tools: map[string]bool{}, kinds: map[string]bool{}, seen: map[string]bool{}}
+			g = &group{f: f, severity: f.Severity, roles: map[string]bool{}, tools: map[string]bool{}, kinds: map[string]bool{}, wheres: map[string]bool{}, seen: map[string]bool{}}
 			groups[f.Detector] = g
 			order = append(order, f.Detector)
 		}
@@ -1675,6 +1680,11 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 			}
 			g.roles[seg.Role] = true
 			g.kinds[segmentKind(seg)] = true
+			if k := segmentKind(seg); k == guardrails.KindText {
+				g.wheres[seg.Role] = true
+			} else {
+				g.wheres[strings.ReplaceAll(k, "_", " ")] = true
+			}
 			if len(g.refs) < maxEvidenceSegments {
 				ref := segmentEvidence(seg, f.SegmentIndex, f, ec)
 				if t := ec.templates.templateRef(f.SegmentIndex); t != nil {
@@ -1744,7 +1754,11 @@ func complianceEvents(filterName string, cfg guardrails.Config, findings []guard
 		if len(g.refs) > 0 {
 			metadata["segments"] = g.refs
 		}
-		description := fmt.Sprintf("guardrail %q (%s): %s detected (%d) in %s; action %s", filterName, cfg.Provider, label, g.count, strings.Join(roles, ","), action)
+		where := sortedKeys(g.wheres)
+		if len(where) == 0 {
+			where = roles
+		}
+		description := fmt.Sprintf("guardrail %q (%s): %s detected (%d) in %s; action %s", filterName, cfg.Provider, label, g.count, strings.Join(where, ","), action)
 		if len(g.exceptions) > 0 {
 			ids := make([]uint, 0, len(g.exceptions))
 			for id := range g.exceptions {

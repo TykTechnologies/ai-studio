@@ -94,6 +94,11 @@ func TestGuardrailToolDefinitions_Remove(t *testing.T) {
 	if len(out.ComplianceEvents) != 1 || out.ComplianceEvents[0].Metadata["action"] != guardrails.ActionRemove || out.Message != "guardrail removed tool definitions" {
 		t.Errorf("removal alone: %+v", out)
 	}
+	// o4a.3: a tool definition reaches the provider as system text, but the
+	// event says where it was, not "in system".
+	if d := out.ComplianceEvents[0].Description; !strings.Contains(d, "in tool definition;") || strings.Contains(d, "system") {
+		t.Errorf("removal alone: description %q", d)
+	}
 }
 
 // block refuses the request; log records it; a removal that would leave no
