@@ -23,6 +23,7 @@ import { attrNames, attributionOf, attrsOf, catalogueMatchText, formatBytes, ms,
 import { formatCost, formatDuration, formatTokens } from "./sessionFilters";
 import { RedactedText } from "./SpanDrawer";
 import CapturedMarkdown from "./CapturedMarkdown";
+import ComplianceEventLink from "./ComplianceEventLink";
 
 // The Transcript ("Trajectory") view, the default (spec §6.2 View 1): the
 // session read like a conversation, turn by turn. Rows are virtualised with
@@ -92,6 +93,10 @@ const EventChip = ({ span }) => {
   return (
     <SelectableBox span={span} component="span" sx={{ display: "inline-block", mr: 0.5, mb: 0.5 }}>
       <Chip size="small" label={text} color={severity} variant={severity === "default" ? "outlined" : "filled"} data-testid="gateway-chip" />
+      {/* tkg.2: the guardrail's compliance events on Filter Events. */}
+      <Box component="span" sx={{ ml: 0.5 }}>
+        <ComplianceEventLink span={span} />
+      </Box>
     </SelectableBox>
   );
 };
