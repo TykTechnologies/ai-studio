@@ -3,7 +3,6 @@ package vertexVendor
 import (
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/secrets"
@@ -13,11 +12,6 @@ import (
 // update) and the Microgateway (its management API). It never contacts
 // Google and never quotes the key.
 
-// projectIDPattern is a Google Cloud project ID, optionally domain-scoped
-// (example.com:my-project). It is stricter than endpoint.go's
-// projectPattern, which only guards the upstream path.
-var projectIDPattern = regexp.MustCompile(`^([a-z0-9-]+(\.[a-z0-9-]+)+:)?[a-z][a-z0-9-]*[a-z0-9]$`)
-
 // ErrKeylessGatewayRoutes is returned by ValidateKey as a warning, not a
 // rejection: a key-less Vertex LLM works in Studio chat (host ADC, for now)
 // but is refused on gateway routes unless the operator enabled
@@ -25,24 +19,17 @@ var projectIDPattern = regexp.MustCompile(`^([a-z0-9-]+(\.[a-z0-9-]+)+:)?[a-z][a
 var ErrKeylessGatewayRoutes = fmt.Errorf("no credential: gateway routes (/llm, /ai, /v1) refuse this Vertex LLM unless the operator sets %s=true", ADCSetting)
 
 // ValidateEndpoint checks a Vertex API endpoint: "project:location" with a
-// region (us-central1), a multi-region (us, eu) or global, or an http(s)
-// URL.
+// region (us-central1), a multi-region (us, eu) or global, a domain-scoped
+// project allowed (example.com:my-project:us-central1), or an http(s) URL,
+// optionally ending in [/v1]/projects/{project}/locations/{location}. The
+// rules are the native route's (UpstreamBaseURLFor), so a value accepted
+// here is one the proxy can serve.
 func ValidateEndpoint(endpoint string) error {
-	endpoint = strings.TrimSpace(endpoint)
-	if endpoint == "" {
+	if strings.TrimSpace(endpoint) == "" {
 		return fmt.Errorf("%w (it is empty)", ErrInvalidEndpoint)
 	}
-	if _, err := UpstreamBaseURLFor(endpoint); err != nil {
-		return err
-	}
-	if strings.Contains(endpoint, "://") {
-		return nil
-	}
-	project, _, _ := ParseProjectLocation(endpoint)
-	if !projectIDPattern.MatchString(project) {
-		return fmt.Errorf("%w: %q is not a Google Cloud project ID", ErrInvalidEndpoint, project)
-	}
-	return nil
+	_, err := UpstreamBaseURLFor(endpoint)
+	return err
 }
 
 // ValidateKey checks a Vertex LLM's key: a Google credential JSON of a

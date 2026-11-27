@@ -13,12 +13,16 @@ func TestValidateEndpoint(t *testing.T) {
 		"my-project:us-central1", "my-project:global", "my-project:us", "my-project:eu",
 		"example.com:my-project:europe-west4", " my-proj:asia-northeast1 ",
 		"https://us-central1-aiplatform.googleapis.com", "https://psc.internal.example",
+		// The fake-upstream form tests and local stacks use.
+		"http://127.0.0.1:8089/v1/projects/p-1/locations/us-central1",
+		"https://gw.example/vertex/projects/example.com:my-proj/locations/eu",
 	} {
 		assert.NoError(t, ValidateEndpoint(ok), ok)
 	}
 	for _, bad := range []string{
-		"", "proj", "a:b:c", ":us-central1", "proj:", "Proj:us-central1", "proj:US-CENTRAL1",
-		"proj:us-central1/extra", "ftp://host", "https://", "proj:us_central1",
+		"", "proj", "a:b:c", "a:b:us-central1", ":us-central1", "proj:", "Proj:us-central1", "proj:US-CENTRAL1",
+		"proj:us-central1/extra", "ftp://x", "https://", "proj:us_central1",
+		"https://vertex.example/v1/projects/p/locations",
 	} {
 		err := ValidateEndpoint(bad)
 		require.Error(t, err, bad)

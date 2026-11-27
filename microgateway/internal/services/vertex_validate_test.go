@@ -3,12 +3,15 @@ package services
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/TykTechnologies/midsommar/microgateway/internal/database"
+	pb "github.com/TykTechnologies/midsommar/v2/proto"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // A standalone edge validates a Vertex LLM's endpoint and key as AI Studio
@@ -36,6 +39,14 @@ func TestManagementService_VertexLLMValidation(t *testing.T) {
 	require.NoError(t, err, "key-less is accepted with a warning")
 	_, err = svc.CreateLLM(&CreateLLMRequest{Name: "vx-url", Vendor: "vertex", Endpoint: "https://us-central1-aiplatform.googleapis.com", APIKey: "ya29.t", DefaultModel: "gemini-2.5-flash"})
 	require.NoError(t, err)
+	_, err = svc.CreateLLM(&CreateLLMRequest{Name: "vx-local", Vendor: "vertex", Endpoint: "http://127.0.0.1:8089/v1/projects/p/locations/us-central1", APIKey: "ya29.t", DefaultModel: "gemini-2.5-flash"})
+	require.NoError(t, err, "the fake-upstream URL form")
+	_, err = svc.CreateLLM(&CreateLLMRequest{Name: "vx-us", Vendor: "vertex", Endpoint: "my-proj:us", APIKey: "ya29.t", DefaultModel: "gemini-2.5-flash"})
+	require.NoError(t, err)
+	for i, bad := range []string{"ftp://x", "https://"} {
+		_, err := svc.CreateLLM(&CreateLLMRequest{Name: fmt.Sprintf("vx-badurl-%d", i), Vendor: "vertex", Endpoint: bad, APIKey: "ya29.t", DefaultModel: "gemini-2.5-flash"})
+		require.Error(t, err, bad)
+	}
 
 	bad := "a:b:c"
 	_, err = svc.UpdateLLM(llm.ID, &UpdateLLMRequest{Endpoint: &bad})
@@ -47,4 +58,29 @@ func TestManagementService_VertexLLMValidation(t *testing.T) {
 	name := "vx-renamed"
 	_, err = svc.UpdateLLM(llm.ID, &UpdateLLMRequest{Name: &name})
 	require.NoError(t, err, "an update that leaves endpoint and key alone is not re-checked")
+}
+
+// Config sync from the hub never runs the management API's validation: a
+// snapshot carrying a Vertex LLM saved before the new rules (a malformed
+// endpoint, no key) is applied like any other, so one old row cannot fail
+// the whole sync.
+func TestEdgeSyncService_LegacyVertexLLMApplied(t *testing.T) {
+	db := setupToolsSyncTestDB(t)
+	now := timestamppb.New(time.Now())
+	snapshot := &pb.ConfigurationSnapshot{
+		Version:      "1.0.0",
+		SnapshotTime: timestamppb.Now(),
+		Llms: []*pb.LLMConfig{
+			{Id: 1, Name: "legacy-vertex", Slug: "legacy-vertex", Vendor: "vertex", Endpoint: "a:b:c", IsActive: true, CreatedAt: now, UpdatedAt: now},
+			{Id: 2, Name: "keyless-vertex", Slug: "keyless-vertex", Vendor: "vertex", Endpoint: "my-proj:us-central1", IsActive: true, CreatedAt: now, UpdatedAt: now},
+			{Id: 3, Name: "gpt", Slug: "gpt", Vendor: "openai", Endpoint: "https://x", IsActive: true, CreatedAt: now, UpdatedAt: now},
+		},
+	}
+	require.NoError(t, NewEdgeSyncService(db, "").SyncConfiguration(snapshot))
+	var n int64
+	require.NoError(t, db.Model(&database.LLM{}).Count(&n).Error)
+	assert.EqualValues(t, 3, n)
+	var legacy database.LLM
+	require.NoError(t, db.First(&legacy, 1).Error)
+	assert.Equal(t, "a:b:c", legacy.Endpoint)
 }

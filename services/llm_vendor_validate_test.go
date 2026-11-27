@@ -42,7 +42,8 @@ func TestCreateLLM_VertexEndpointValidated(t *testing.T) {
 		assert.True(t, errors.As(err, &verr), "a 400, not a 500: %v", err)
 		assert.Contains(t, err.Error(), "project:location")
 	}
-	for i, ok := range []string{"my-proj:us-central1", "my-proj:global", "my-proj:eu", "https://us-central1-aiplatform.googleapis.com"} {
+	for i, ok := range []string{"my-proj:us-central1", "my-proj:global", "my-proj:eu", "my-proj:us", "example.com:my-proj:us-central1",
+		"https://us-central1-aiplatform.googleapis.com", "http://127.0.0.1:8089/v1/projects/p/locations/us-central1"} {
 		_, err := createVertexLLM(svc, "ok"+string(rune('a'+i)), testVertexSAKey, ok)
 		require.NoError(t, err, ok)
 	}
@@ -72,21 +73,34 @@ func TestCreateLLM_VertexKeyValidatedWithoutEcho(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestUpdateLLM_VertexKeptKeyNotRechecked(t *testing.T) {
+func TestUpdateLLM_VertexStoredValuesNotRechecked(t *testing.T) {
 	db := setupTestDB(t)
 	svc := NewService(db)
-	// An LLM saved before validation existed, with a key Vertex never used.
-	legacy := &models.LLM{Name: "legacy", Vendor: models.VERTEX, APIEndpoint: "my-proj:us-central1", APIKey: "old-unused-key", Active: true}
+	// An LLM saved before validation existed: an endpoint and a key the new
+	// rules refuse.
+	legacy := &models.LLM{Name: "legacy", Vendor: models.VERTEX, APIEndpoint: "a:b:c", APIKey: "old-unused-key", Active: true}
 	require.NoError(t, db.Create(legacy).Error)
 
-	_, err := svc.UpdateLLM(legacy.ID, "legacy", "[redacted]", "my-proj:us-central1", 0, "", "", "", models.VERTEX, true, nil, "", nil, nil, nil, "", false, nil, nil)
-	require.NoError(t, err, "keeping the stored key does not re-check it")
+	update := func(name, key, endpoint string, active bool, allowed []string) error {
+		_, err := svc.UpdateLLM(legacy.ID, name, key, endpoint, 0, "", "", "", models.VERTEX, active, nil, "", allowed, nil, nil, "", false, nil, nil)
+		return err
+	}
+	require.NoError(t, update("legacy-renamed", "[redacted]", "a:b:c", true, nil), "rename keeps the stored endpoint and key")
+	require.NoError(t, update("legacy-renamed", "[redacted]", "a:b:c", false, nil), "toggling active")
+	require.NoError(t, update("legacy-renamed", "[redacted]", "a:b:c", false, []string{"gemini-*"}), "editing allowed models")
 
-	_, err = svc.UpdateLLM(legacy.ID, "legacy", "still-not-a-credential", "my-proj:us-central1", 0, "", "", "", models.VERTEX, true, nil, "", nil, nil, nil, "", false, nil, nil)
-	require.Error(t, err, "a newly supplied key is checked")
+	require.Error(t, update("legacy-renamed", "still-not-a-credential", "a:b:c", false, nil), "a newly supplied key is checked")
+	err := update("legacy-renamed", "[redacted]", "proj", false, nil)
+	require.Error(t, err, "a changed endpoint is checked")
+	var verr *LLMValidationError
+	assert.True(t, errors.As(err, &verr))
+	require.NoError(t, update("legacy-renamed", "[redacted]", "my-proj:us-central1", false, nil), "fixing the endpoint")
 
-	_, err = svc.UpdateLLM(legacy.ID, "legacy", "[redacted]", "proj", 0, "", "", "", models.VERTEX, true, nil, "", nil, nil, nil, "", false, nil, nil)
-	require.Error(t, err, "the endpoint is always checked")
+	// Switching another vendor's LLM to Vertex checks everything.
+	oai := &models.LLM{Name: "oai", Vendor: models.OPENAI, APIEndpoint: "https://api.openai.com/v1", APIKey: "sk-x"}
+	require.NoError(t, db.Create(oai).Error)
+	_, err = svc.UpdateLLM(oai.ID, "oai", "[redacted]", "https://api.openai.com/v1", 0, "", "", "", models.VERTEX, true, nil, "", nil, nil, nil, "", false, nil, nil)
+	require.Error(t, err, "the stored OpenAI key is not a Vertex credential")
 }
 
 func TestCreateLLM_OtherVendorsUnaffected(t *testing.T) {
