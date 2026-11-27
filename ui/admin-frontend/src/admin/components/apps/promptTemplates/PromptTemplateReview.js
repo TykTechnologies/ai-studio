@@ -181,7 +181,8 @@ const PromptTemplateReview = ({ open, appId, template, all, canApprove, userName
     ["Status", <PromptTemplateStatus status={template.status} />],
     ["Proposed", `${formatTime(template.created_at)} by ${name(template.created_by)}`],
     ["Approved", template.approved_at ? `${formatTime(template.approved_at)} by ${name(template.approved_by)}` : "Not approved"],
-    ["Last matched", formatTime(template.last_matched_at)],
+    // o4a.13: written at most every 10 minutes (expiry counts days).
+    ["Last matched", template.last_matched_at ? `${formatTime(template.last_matched_at)} (to within 10 minutes)` : formatTime(template.last_matched_at)],
     [
       "Expires",
       template.status === "approved"

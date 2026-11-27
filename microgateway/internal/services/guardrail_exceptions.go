@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
@@ -35,7 +36,7 @@ func (s *edgeExceptionSource) AppExceptions(_ context.Context, appID uint) *guar
 // in the next heartbeat.
 func (s *edgeExceptionSource) Hit(id uint) {
 	if id != 0 {
-		GuardrailExceptionHits.add(uint32(id))
+		GuardrailExceptionHits.addN(uint32(id), 1)
 	}
 }
 
@@ -93,9 +94,49 @@ func InstalledGuardrailExceptions(appID uint) int {
 	return 0
 }
 
-// GuardrailExceptionHits holds the IDs of the guardrail exceptions that
-// applied since the last heartbeat (grpc.TemplateMatchSource).
-var GuardrailExceptionHits = &templateMatches{}
+// GuardrailExceptionHits counts the guardrail exceptions that applied since
+// the last heartbeat, per exception (grpc.ExceptionHitSource), so the hub's
+// hit counts count requests, not heartbeats with a hit (o4a.13).
+var GuardrailExceptionHits = &exceptionHitCounts{}
+
+// exceptionHitCounts is a count per exception id, bounded like the template
+// matches: at most maxPendingTemplateMatches ids, each saturating.
+type exceptionHitCounts struct {
+	mu sync.Mutex
+	n  map[uint32]uint32
+}
+
+func (c *exceptionHitCounts) addN(id, n uint32) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.n == nil {
+		c.n = map[uint32]uint32{}
+	}
+	cur, ok := c.n[id]
+	if !ok && len(c.n) >= maxPendingTemplateMatches {
+		return
+	}
+	if cur+n < cur {
+		n = ^uint32(0) - cur // saturate
+	}
+	c.n[id] = cur + n
+}
+
+// DrainCounts returns the hits per exception since the last call.
+func (c *exceptionHitCounts) DrainCounts() map[uint32]uint32 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := c.n
+	c.n = nil
+	return out
+}
+
+// RequeueCounts puts back counts a heartbeat failed to deliver.
+func (c *exceptionHitCounts) RequeueCounts(counts map[uint32]uint32) {
+	for id, n := range counts {
+		c.addN(id, n)
+	}
+}
 
 // edgeCapabilitySource serves one applied snapshot's capability list
 // (scripting.CapabilitySource), which counts in the checksum, so a

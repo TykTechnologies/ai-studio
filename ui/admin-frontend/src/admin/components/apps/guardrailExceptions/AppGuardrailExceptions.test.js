@@ -102,6 +102,8 @@ describe("AppGuardrailExceptions (midsommar-clean-9u1j.6)", () => {
     expect(other).toHaveTextContent("Remove the flagged part");
     expect(other).toHaveTextContent("Never");
     expect(screen.getByText(/1 of at most 20 approved/)).toBeInTheDocument();
+    // o4a.13: last hit is written at most once a minute.
+    expect(screen.getByText("Last hit (±1 min)")).toHaveAttribute("title", "Recorded to within a minute");
   });
 
   it("offers approval of a proposed exception to a full administrator only", async () => {

@@ -1,13 +1,13 @@
 package grpc
 
 import (
-	"sync"
 	"time"
 
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/logger"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	pb "github.com/TykTechnologies/midsommar/v2/proto"
+	"github.com/TykTechnologies/midsommar/v2/services"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
 )
 
@@ -79,22 +79,30 @@ func snapshotGuardrailCapabilities(apps []models.App) []*pb.AppGuardrailCapabili
 	return out
 }
 
-// edgeExceptionHitFlushEvery bounds how often one exception's edge hits are
-// written on this replica.
-const edgeExceptionHitFlushEvery = time.Minute
+// maxEdgeExceptionHitsPerHeartbeat caps the count an edge may report for
+// one exception in one heartbeat: a count only feeds the hit count shown on
+// the App page (expiry reads last_hit_at), so a lying edge can inflate it no
+// further than this.
+const maxEdgeExceptionHitsPerHeartbeat = 1 << 20
 
-// edgeExceptionHitWritten is when each exception's edge hits were last
-// written on this replica.
-var edgeExceptionHitWritten sync.Map // uint -> time.Time
+// exceptionHitRecorder counts the hits edges report and writes them as the
+// hub's own are (services.GuardrailExceptionHits): at most once a minute per
+// exception, holding the hits in between instead of dropping them (o4a.13:
+// edge hit counts counted minutes with a hit, not hits).
+func (s *ControlServer) exceptionHitRecorder() *services.GuardrailExceptionHits {
+	s.edgeExceptionHitsOnce.Do(func() { s.edgeExceptionHits = services.NewGuardrailExceptionHits(s.db) })
+	return s.edgeExceptionHits
+}
 
 // recordEdgeGuardrailExceptionHits records the exceptions an edge reported
 // applying since its last heartbeat. Only exceptions the edge's own
 // snapshot carries count: approved, unlapsed, within the floor, of an
 // active App and a filter in the edge's namespace. Anything else an edge
 // reports (a compromised edge keeping another namespace's exception from
-// lapsing) is dropped. Each counts as one hit per heartbeat, written at most
-// once per edgeExceptionHitFlushEvery.
-func (s *ControlServer) recordEdgeGuardrailExceptionHits(edgeID, namespace string, ids []uint32) {
+// lapsing) is dropped. Each counts as the number of hits the edge reports in
+// counts (one for an id without a count, from an edge that predates them),
+// summed and written through exceptionHitRecorder.
+func (s *ControlServer) recordEdgeGuardrailExceptionHits(edgeID, namespace string, ids []uint32, counts map[uint32]uint32) {
 	if len(ids) == 0 {
 		return
 	}
@@ -136,13 +144,14 @@ func (s *ControlServer) recordEdgeGuardrailExceptionHits(edgeID, namespace strin
 			continue
 		}
 		accepted++
-		if last, ok := edgeExceptionHitWritten.Load(e.ID); ok && now.Sub(last.(time.Time)) < edgeExceptionHitFlushEvery {
-			continue
+		n := int64(counts[uint32(e.ID)])
+		if n <= 0 {
+			n = 1
 		}
-		edgeExceptionHitWritten.Store(e.ID, now)
-		if err := models.AddGuardrailExceptionHits(s.db, e.ID, 1, now); err != nil {
-			logger.Log.Debug().Err(err).Str("edge_id", edgeID).Msg("Failed to record a guardrail exception hit from an edge")
+		if n > maxEdgeExceptionHitsPerHeartbeat {
+			n = maxEdgeExceptionHitsPerHeartbeat
 		}
+		s.exceptionHitRecorder().Hit(e.ID, n)
 	}
 	if dropped := len(want) - accepted; dropped > 0 {
 		logger.Log.Warn().Str("edge_id", edgeID).Int("dropped", dropped).Msg("Edge reported guardrail exception hits outside its snapshot; ignored")

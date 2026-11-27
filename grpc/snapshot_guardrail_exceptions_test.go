@@ -140,31 +140,38 @@ func TestEdgeGuardrailExceptionHitsRecorded(t *testing.T) {
 	proposed := createGuardrailException(t, db, apps[0].ID, global.ID, "text_system", "log", models.GuardrailExceptionProposed)
 	lapsed := createGuardrailException(t, db, apps[0].ID, global.ID, "tool_call", "log", models.GuardrailExceptionApproved)
 	require.NoError(t, db.Model(lapsed).Update("approved_at", time.Now().Add(-40*24*time.Hour)).Error)
-	ids := []uint{ok.ID, euOnly.ID, proposed.ID, lapsed.ID}
-	for _, id := range ids {
-		edgeExceptionHitWritten.Delete(id)
-	}
-	t.Cleanup(func() {
-		for _, id := range ids {
-			edgeExceptionHitWritten.Delete(id)
-		}
-	})
 	hits := func(id uint) int64 {
+		server.exceptionHitRecorder().Flush()
 		var e models.GuardrailException
 		require.NoError(t, db.First(&e, id).Error)
 		return e.HitCount
 	}
+	eventually := func(id uint, want int64, msg string) {
+		t.Helper()
+		// The first hit of an exception is written off the caller's goroutine.
+		require.Eventually(t, func() bool { return hits(id) == want }, 5*time.Second, 10*time.Millisecond, msg)
+	}
 
-	server.recordEdgeGuardrailExceptionHits("edge-default", "default", []uint32{uint32(ok.ID), uint32(euOnly.ID), uint32(proposed.ID), uint32(lapsed.ID), 0, 99999})
-	assert.EqualValues(t, 1, hits(ok.ID))
+	server.recordEdgeGuardrailExceptionHits("edge-default", "default", []uint32{uint32(ok.ID), uint32(euOnly.ID), uint32(proposed.ID), uint32(lapsed.ID), 0, 99999}, nil)
+	eventually(ok.ID, 1, "an id without a count counts once (an edge before counts)")
 	assert.EqualValues(t, 0, hits(euOnly.ID), "another namespace's exception is not counted")
 	assert.EqualValues(t, 0, hits(proposed.ID))
 	assert.EqualValues(t, 0, hits(lapsed.ID), "a lapsed exception is not revived by an edge")
 
-	server.recordEdgeGuardrailExceptionHits("edge-eu", "eu", []uint32{uint32(euOnly.ID)})
-	assert.EqualValues(t, 1, hits(euOnly.ID))
-	server.recordEdgeGuardrailExceptionHits("edge-default", "default", []uint32{uint32(ok.ID)})
-	assert.EqualValues(t, 1, hits(ok.ID), "throttled")
+	server.recordEdgeGuardrailExceptionHits("edge-eu", "eu", []uint32{uint32(euOnly.ID)}, map[uint32]uint32{uint32(euOnly.ID): 3})
+	eventually(euOnly.ID, 3, "the edge's count")
+
+	// o4a.13: hits inside the write interval are summed, not dropped.
+	server.recordEdgeGuardrailExceptionHits("edge-default", "default", []uint32{uint32(ok.ID)}, map[uint32]uint32{uint32(ok.ID): 2})
+	server.recordEdgeGuardrailExceptionHits("edge-default", "default", []uint32{uint32(ok.ID)}, nil)
+	eventually(ok.ID, 4, "1 + 2 + 1 across three heartbeats")
+
+	// A count is capped; a count for an exception outside the edge's
+	// snapshot is ignored with it.
+	server.recordEdgeGuardrailExceptionHits("edge-default", "default", []uint32{uint32(ok.ID), uint32(euOnly.ID)},
+		map[uint32]uint32{uint32(ok.ID): 1 << 30, uint32(euOnly.ID): 50})
+	eventually(ok.ID, 4+maxEdgeExceptionHitsPerHeartbeat, "capped")
+	assert.EqualValues(t, 3, hits(euOnly.ID))
 }
 
 // .52: an exception that lapses with no hub traffic is lapsed by the
