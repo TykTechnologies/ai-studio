@@ -196,7 +196,11 @@ const ToolCard = ({ item }) => {
     attr.catalogue_type && attr.catalogue_id
       ? resourceName(resources, { resource_type: attr.catalogue_type, resource_id: attr.catalogue_id })
       : "";
-  const noResult = !span.end_time || (clientSide && !resultPart);
+  // "No result observed" means the call was abandoned (the turn closed
+  // without its result) or is still open. A client-side tool's result is
+  // never stored on its span (it lives in the next request), so a missing
+  // tool_result part says nothing about whether the result came back.
+  const noResult = !span.end_time || span.error_type === "abandoned";
   return (
     <Box sx={{ mb: 0.5 }}>
       <SelectableBox
