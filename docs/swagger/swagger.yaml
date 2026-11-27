@@ -6978,7 +6978,9 @@ definitions:
       target_url:
         description: |-
           TargetURLSnapshot is the URL at enqueue time, kept so the log stays
-          meaningful after the target is edited or deleted.
+          meaningful after the target is edited or deleted. It is stored and
+          returned masked (MaskWebhookURL): deliveries never need the full URL,
+          and a chat webhook URL is a credential.
         type: string
       topic:
         type: string
@@ -7101,6 +7103,8 @@ definitions:
         type: string
       url:
         type: string
+      url_masked:
+        type: boolean
     type: object
   rbac.PermissionSource:
     properties:
