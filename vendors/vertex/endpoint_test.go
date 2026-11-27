@@ -193,7 +193,12 @@ func TestNativePathFromGeminiAPI(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "/v1/projects/example.com:proj/locations/global/publishers/google/models/m:generateContent", got)
 
-	// A URL endpoint names no project or location.
+	// A URL endpoint may name them in its path.
+	got, _, err = NativePathFromGeminiAPI(&models.LLM{APIEndpoint: "http://127.0.0.1:8089/v1/projects/my-project/locations/us-central1/"}, "/v1beta/models/gemini-2.5-flash:generateContent")
+	require.NoError(t, err)
+	assert.Equal(t, native+"generateContent", got)
+
+	// A bare URL endpoint names no project or location.
 	_, _, err = NativePathFromGeminiAPI(&models.LLM{APIEndpoint: "https://vertex.example"}, "/v1beta/models/m:generateContent")
 	assert.ErrorIs(t, err, ErrNoProjectLocation)
 	_, changed, err := NativePathFromGeminiAPI(&models.LLM{APIEndpoint: "https://vertex.example"}, native+"generateContent")

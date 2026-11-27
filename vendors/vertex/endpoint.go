@@ -134,9 +134,9 @@ func UpstreamBaseURLFor(endpoint string) (string, error) {
 }
 
 // ErrNoProjectLocation is returned when a Gemini API path cannot be mapped to
-// a Vertex path because the LLM's endpoint is a URL, which names neither the
-// project nor the location.
-var ErrNoProjectLocation = errors.New("vertex LLM endpoint is a URL, so a Gemini API path cannot be mapped to a Vertex path; set the endpoint to project:location or call the Vertex path (/v1/projects/{project}/locations/{location}/publishers/google/models/{model}:{method})")
+// a Vertex path because the LLM's endpoint is a URL whose path names no
+// project and location.
+var ErrNoProjectLocation = errors.New("vertex LLM endpoint names no project and location, so a Gemini API path cannot be mapped to a Vertex path; set the endpoint to project:location or to a URL ending in /v1/projects/{project}/locations/{location}, or call the Vertex path (/v1/projects/{project}/locations/{location}/publishers/google/models/{model}:{method})")
 
 // geminiAPIPath matches a Gemini API (generativelanguage) model call:
 // /v1beta/models/{model}:{method} or /v1/models/{model}:{method}.
@@ -155,9 +155,19 @@ func NativePathFromGeminiAPI(llm *models.LLM, path string) (native string, chang
 	if m == nil {
 		return path, false, nil
 	}
-	project, location, ok := ParseProjectLocation(llm.APIEndpoint)
+	project, location, ok := ProjectLocation(llm)
 	if !ok {
 		return path, false, ErrNoProjectLocation
 	}
 	return fmt.Sprintf("/v1/projects/%s/locations/%s/publishers/google/models/%s:%s", project, location, m[2], m[3]), true, nil
+}
+
+// ProjectLocation is the project and location an LLM's endpoint names:
+// project:location, or a URL ending in [/v1]/projects/{p}/locations/{l}.
+func ProjectLocation(llm *models.LLM) (project, location string, ok bool) {
+	if strings.Contains(llm.APIEndpoint, "://") {
+		_, project, location, err := ParseURLEndpoint(llm.APIEndpoint)
+		return project, location, err == nil && project != ""
+	}
+	return ParseProjectLocation(llm.APIEndpoint)
 }

@@ -62,7 +62,7 @@ func TestVertexCall_AllowedModels(t *testing.T) {
 	assert.Len(t, h.primaryVendor.calls(), 1)
 }
 
-// A URL endpoint names no project or location, so a Gemini API path is
+// A bare URL endpoint names no project or location, so a Gemini API path is
 // refused with the reason rather than sent where Vertex cannot serve it.
 func TestVertexCall_URLEndpointRefusesGeminiPath(t *testing.T) {
 	t.Parallel()
@@ -90,4 +90,23 @@ func TestVertexCall_GoogleAIUntouched(t *testing.T) {
 	calls := h.primaryVendor.calls()
 	require.Len(t, calls, 1)
 	assert.True(t, strings.HasPrefix(calls[0].Path, "/v1beta/models/gemini-2.5-flash:generateContent"), calls[0].Path)
+}
+
+// A URL endpoint naming the project and location in its path maps Gemini API
+// paths to it (how a test server or private endpoint is pointed at).
+func TestVertexCall_URLEndpointWithProjectLocation(t *testing.T) {
+	t.Parallel()
+	h := newFailoverHarness(t, serveVertex, serveOpenAIText("never"), vertexPrimary(vertexTestToken))
+	h.primary.APIEndpoint = h.primaryVendor.server.URL + "/v1/projects/p/locations/us-central1"
+	require.NoError(t, h.db.Save(h.primary).Error)
+	require.NoError(t, h.proxy.loadResources())
+
+	resp, body := h.post("/llm/call/primary/v1beta/models/gemini-2.5-flash:generateContent", vertexNativeBody)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+	resp, body = h.post("/llm/call/primary/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse", vertexNativeBody)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+	calls := h.primaryVendor.calls()
+	require.Len(t, calls, 2)
+	assert.Equal(t, vertexNativePath, calls[0].Path)
+	assert.Equal(t, vertexStreamPath, calls[1].Path)
 }
