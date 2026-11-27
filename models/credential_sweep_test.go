@@ -82,7 +82,8 @@ func testReencryptStoredCredentials(t *testing.T, db *gorm.DB) {
 	secrets.ForceFIPSModeForTest(t)
 	n, err = ReencryptStoredCredentials(db)
 	require.NoError(t, err)
-	assert.Equal(t, 5, n, "api_key, two metadata credentials, the LLM's resource signing secret, the webhook signing secret")
+	assert.Equal(t, 6, n, "api_key, two metadata credentials, the LLM's resource signing secret, the webhook url and signing secret")
+	assert.Equal(t, "v3", encVersion(rawColumn(t, db, "webhook_targets", "url", w.ID)))
 	assert.Equal(t, "v3", encVersion(rawColumn(t, db, "llms", "resource_signing_secret", l.ID)))
 
 	assert.Equal(t, "v3", encVersion(rawColumn(t, db, "llms", "api_key", l.ID)))
@@ -100,6 +101,7 @@ func testReencryptStoredCredentials(t *testing.T, db *gorm.DB) {
 	var gw WebhookTarget
 	require.NoError(t, db.First(&gw, w.ID).Error)
 	assert.Equal(t, "whsec-unit-test-signing", gw.SigningSecret)
+	assert.Equal(t, "https://example.com/hook", gw.URL)
 
 	n, err = ReencryptStoredCredentials(db)
 	require.NoError(t, err)
