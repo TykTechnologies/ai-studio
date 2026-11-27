@@ -35,4 +35,35 @@ describe('ScopeReviewSection group headings', () => {
     expect(screen.getByText('Foo Bar')).toBeInTheDocument();
     expect(screen.queryByText('Foo-bar')).not.toBeInTheDocument();
   });
+
+  // o4a.19: every scope the plugin SDKs define has its own description, so the
+  // install review never falls back to the generic text. Keep this list in
+  // step with pkg/ai_studio_sdk AvailableScopes, the scopes in
+  // pkg/gatewayplugin/sdk/service_api.go and docs plugins-manifests.md.
+  it('describes every service scope the SDKs define', () => {
+    const sdkScopes = [
+      'plugins.read', 'plugins.write', 'plugins.config',
+      'llms.read', 'llms.write', 'llms.proxy',
+      'tools.read', 'tools.write', 'tools.operations', 'tools.execute',
+      'apps.read', 'apps.write', 'apps.lifecycle',
+      'kv.read', 'kv.readwrite',
+      'analytics.read', 'analytics.write',
+      'datasources.read', 'datasources.write', 'datasources.query', 'datasources.embeddings',
+      'tags.read', 'tags.write', 'filters.read', 'filters.write',
+      'pricing.read', 'pricing.write', 'data-catalogues.read', 'data-catalogues.write',
+      'scheduler.manage', 'metadata.read', 'metadata.write', 'notifications.write',
+      'resource-types.manage', 'rbac.register', 'resource-access.manage',
+      'audit.read', 'mcp-servers.read', 'routers.read',
+      'control.send', 'budget.read', 'credentials.validate',
+    ];
+    sdkScopes.forEach((scope) => expect([scope, SCOPE_DESCRIPTIONS[scope]]).toEqual([scope, expect.any(String)]));
+
+    // The Prompt Compressor's request (o4a.17): no generic text, no raw group slugs.
+    render(<ScopeReviewSection scopes={['kv.readwrite', 'control.send', 'pricing.read', 'apps.read', 'llms.read']} />);
+    expect(screen.queryByText('Standard access permission')).not.toBeInTheDocument();
+    expect(screen.getByText(SCOPE_DESCRIPTIONS['control.send'])).toBeInTheDocument();
+    expect(screen.getByText(SCOPE_DESCRIPTIONS['pricing.read'])).toBeInTheDocument();
+    expect(screen.getByText('Edge to AI Studio')).toBeInTheDocument();
+    expect(screen.getByText('Model prices')).toBeInTheDocument();
+  });
 });
