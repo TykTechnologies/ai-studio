@@ -37,9 +37,10 @@ describe('ScopeReviewSection group headings', () => {
   });
 
   // o4a.19: every scope the plugin SDKs define has its own description, so the
-  // install review never falls back to the generic text. Keep this list in
-  // step with pkg/ai_studio_sdk AvailableScopes, the scopes in
-  // pkg/gatewayplugin/sdk/service_api.go and docs plugins-manifests.md.
+  // install review never falls back to the generic text. The source of truth
+  // is checked from Go (pkg/ai_studio_sdk/scope_descriptions_test.go reads
+  // AvailableScopes and pkg/gatewayplugin/sdk/service_api.go); this list
+  // pins the render.
   it('describes every service scope the SDKs define', () => {
     const sdkScopes = [
       'plugins.read', 'plugins.write', 'plugins.config',
