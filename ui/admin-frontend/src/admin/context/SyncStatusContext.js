@@ -12,6 +12,9 @@ const SyncStatusContext = createContext();
 // often, for at most this long, until nothing is pending any more.
 export const POST_PUSH_POLL_INTERVAL_MS = 3000;
 export const POST_PUSH_POLL_TIMEOUT_MS = 30000;
+// After a save that left nothing pending yet, look again at these delays:
+// the server marks edges pending asynchronously.
+export const SAVE_RECHECK_DELAYS_MS = [1500, 4000];
 
 /**
  * SyncStatusProvider manages the global sync status state and provides
@@ -165,16 +168,51 @@ export const SyncStatusProvider = ({ children }) => {
   // push reminder (#506): the banner alone is easy to miss while looking at
   // the form. Pending namespaces only exist where edges are registered, so
   // has_pending already implies "edges exist and need a push".
-  useEffect(
-    () =>
-      registerSyncStatusRefresh(async ({ saved = false } = {}) => {
-        const status = await refreshSyncStatus();
-        if (saved && status?.has_pending) {
-          setPushReminder({ id: Date.now() });
-        }
-      }),
-    [refreshSyncStatus]
-  );
+  //
+  // The server marks edges pending when it handles the change event, which
+  // can land after this first refresh (a filter save recomputes every
+  // namespace's snapshot). So when edges exist but nothing is pending yet,
+  // look again a little later before concluding there is nothing to push;
+  // otherwise the reminder was lost and only the 30-second poll showed the
+  // banner (o4a.1).
+  // One recheck at a time, in order; a new save, or unmounting, bumps the
+  // generation so an answer that arrives late raises nothing.
+  const recheck = useRef({ timer: null, generation: 0 });
+  useEffect(() => {
+    const cancelRechecks = () => {
+      clearTimeout(recheck.current.timer);
+      recheck.current.timer = null;
+      recheck.current.generation += 1;
+    };
+    const unregister = registerSyncStatusRefresh(async ({ saved = false } = {}) => {
+      cancelRechecks();
+      const generation = recheck.current.generation;
+      const status = await refreshSyncStatus();
+      if (!saved || generation !== recheck.current.generation) return;
+      if (status?.has_pending) {
+        setPushReminder({ id: Date.now() });
+        return;
+      }
+      if (!(status?.data || []).length) return; // no edges: nothing will be pending
+      const next = (i, previousDelay) => {
+        if (i >= SAVE_RECHECK_DELAYS_MS.length) return;
+        recheck.current.timer = setTimeout(async () => {
+          const later = await refreshSyncStatus();
+          if (generation !== recheck.current.generation) return;
+          if (later?.has_pending) {
+            setPushReminder({ id: Date.now() });
+            return;
+          }
+          next(i + 1, SAVE_RECHECK_DELAYS_MS[i]);
+        }, SAVE_RECHECK_DELAYS_MS[i] - previousDelay);
+      };
+      next(0, 0);
+    });
+    return () => {
+      cancelRechecks();
+      unregister();
+    };
+  }, [refreshSyncStatus]);
 
   // Calculate derived values
   const hasPendingSync = syncStatus?.has_pending || false;
