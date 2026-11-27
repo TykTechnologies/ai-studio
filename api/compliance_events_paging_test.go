@@ -76,7 +76,7 @@ func TestComplianceEventsPaging(t *testing.T) {
 		assert.Equal(t, int64(90), body.TotalCount, tc.q)
 	}
 
-	for _, q := range []string{"?page_size=0", "?page_size=x", "?page=0", "?page=-2"} {
+	for _, q := range []string{"?page_size=0", "?page_size=x", "?page=0", "?page=-2", "?page_size=1000&page=9223372036854775807", "?page=99999999999999999999"} {
 		w, _ := get(q)
 		assert.Equal(t, http.StatusBadRequest, w.Code, q)
 	}

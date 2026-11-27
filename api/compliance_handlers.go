@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -740,6 +741,10 @@ func complianceEventsPaging(c *gin.Context) (limit, offset, page int, err error)
 			pageNum = 1
 		}
 		pageSize = min(pageSize, complianceEventsMaxPageSize)
+		// The offset must not overflow (a huge page would wrap negative).
+		if pageNum-1 > (math.MaxInt32-pageSize)/pageSize {
+			return 0, 0, 0, fmt.Errorf("page is too large")
+		}
 		return pageSize, (pageNum - 1) * pageSize, pageNum, nil
 	}
 
