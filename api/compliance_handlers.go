@@ -695,6 +695,57 @@ func (a *API) getComplianceEvents(c *gin.Context) {
 	c.JSON(http.StatusOK, data)
 }
 
+// complianceEventsByRequestResponse is the by-request lookup's answer.
+type complianceEventsByRequestResponse struct {
+	Events []compliance.ComplianceEventRecord `json:"events"`
+}
+
+// getComplianceEventsByRequest godoc
+// @Summary Find the compliance events of one gateway request
+// @Description The App's compliance events that record request_id (the gateway's X-Tyk-AI-Request-ID) in their metadata, recorded within 10 minutes of at, oldest first, at most 20 (Enterprise). An agent trace's guardrail outcome links to them.
+// @Tags Compliance
+// @Produce json
+// @Param request_id query string true "Gateway request id (tyai_ followed by 32 hex digits)"
+// @Param app_id query int true "App ID"
+// @Param at query string true "When the request ran (RFC 3339)"
+// @Success 200 {object} complianceEventsByRequestResponse
+// @Failure 400 {object} models.ErrorResponse
+// @Failure 403 {object} models.ErrorResponse
+// @Failure 500 {object} models.ErrorResponse
+// @Router /compliance/events-by-request [get]
+// @Security BearerAuth
+func (a *API) getComplianceEventsByRequest(c *gin.Context) {
+	fail := func(code int, title, detail string) {
+		c.JSON(code, models.ErrorResponse{
+			Errors: []struct {
+				Title  string `json:"title"`
+				Detail string `json:"detail"`
+			}{{Title: title, Detail: detail}},
+		})
+	}
+	appID, err := strconv.ParseUint(c.Query("app_id"), 10, 32)
+	if err != nil || appID == 0 {
+		fail(http.StatusBadRequest, "Bad Request", "app_id must be a positive integer")
+		return
+	}
+	at, err := time.Parse(time.RFC3339Nano, c.Query("at"))
+	if err != nil {
+		fail(http.StatusBadRequest, "Bad Request", "at must be an RFC 3339 time")
+		return
+	}
+	events, err := compliance.EventsByRequest(a.service.DB, uint(appID), c.Query("request_id"), at)
+	switch {
+	case errors.Is(err, compliance.ErrInvalidRequestID):
+		fail(http.StatusBadRequest, "Bad Request", err.Error())
+	case errors.Is(err, compliance.ErrEnterpriseFeature):
+		fail(http.StatusForbidden, "Enterprise Feature", err.Error())
+	case err != nil:
+		fail(http.StatusInternalServerError, "Internal Server Error", "Failed to find the compliance events")
+	default:
+		c.JSON(http.StatusOK, complianceEventsByRequestResponse{Events: events})
+	}
+}
+
 // getComplianceEvent godoc
 // @Summary Get one compliance event
 // @Description Get a script-reported compliance event by id, as the events list returns it (Enterprise). Guardrail alerts and outcome events link to it.

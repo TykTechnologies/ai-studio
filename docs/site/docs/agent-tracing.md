@@ -413,7 +413,7 @@ A call's gateway decisions are child spans of it, shown as chips in the transcri
 | Decision | What it records |
 |---|---|
 | Attempt, fallback | Each provider attempt of an `/ai/` or failover call, and why the gateway moved to the next one |
-| Guardrail | A guardrail that found something: blocked (`denied`), quarantined or redacted (`modified`), or only logged or alerted (`allowed`). It names the guardrail and lists the detectors and where they matched, for example `injection.instruction_override in tool_result (search_kb); quarantine`. The matched text is never recorded. Compliance events hold the full finding, the judge's verdict and the request id. A guardrail that finds nothing records nothing |
+| Guardrail | A guardrail that found something: blocked (`denied`), quarantined or redacted (`modified`), or only logged or alerted (`allowed`). It names the guardrail and lists the detectors and where they matched, for example `injection.instruction_override in tool_result (search_kb); quarantine`. The matched text is never recorded. Compliance events hold the full finding, the judge's verdict and the request id. The event's **Compliance event** link opens them on the Compliance page's Filter Events tab (with `compliance:read`; otherwise the request id is shown to search for). A guardrail that finds nothing records nothing |
 | Filter | A script filter that blocked the call, by name |
 | Budget, rate limit | A budget or rate limit that refused the call |
 
@@ -684,6 +684,7 @@ From the Tyk Weaver registry the exporter is checked against:
 | `tyk.mcp.server` | string | MCP server the tool belongs to. |
 | `tyk.openai.previous_response_id` | string | OpenAI Responses previous_response_id the request chained to. |
 | `tyk.policy.id` | string | Policy of a policy event. |
+| `tyk.request.id` | string | The gateway's request id (`X-Tyk-AI-Request-ID`) on an LLM span where a guardrail or filter acted, the id its compliance events record as `metadata.request_id`. |
 | `tyk.rollup.cost_micros` | int | Cost under an agent span, in micro-units. |
 | `tyk.rollup.errors` | int | Errors under an agent span. |
 | `tyk.rollup.llm_calls` | int | LLM calls under an agent span. |
