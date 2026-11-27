@@ -3,6 +3,8 @@ package agenttrace
 import (
 	"sort"
 	"unicode/utf8"
+
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 )
 
 // Extract bounds, the same as the extraction library applies at capture
@@ -104,7 +106,14 @@ var captureAttributes = map[string]func(string) bool{
 	"http.request.method":   isHTTPMethod,
 	"tyk.server_tool_calls": isDigits,
 	"tyk.content.withheld":  func(v string) bool { return withheldReasons[v] },
+	// The gateway's request id (X-Tyk-AI-Request-ID), the one the request's
+	// compliance events record as metadata.request_id: it links a guardrail
+	// outcome on the trace to its compliance event (tkg.2).
+	AttrRequestID: requestid.Valid,
 }
+
+// AttrRequestID is the capture attribute holding the gateway's request id.
+const AttrRequestID = "tyk.request.id"
 
 // WithheldEdgeLinkUnverifiedTLS is the tyk.content.withheld reason of an
 // edge whose link to the hub is not verified TLS (jyx.164).

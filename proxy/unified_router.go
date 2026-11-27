@@ -195,9 +195,10 @@ type unifiedModelInfo struct {
 	ID      string `json:"id"`
 	Object  string `json:"object"`
 	OwnedBy string `json:"owned_by"`
-	// Capabilities is a gateway extension: what the route serves ("chat",
-	// "embeddings", "decisions"), so clients can find decision-model routes.
-	// OpenAI clients ignore unknown fields.
+	// Capabilities is a gateway extension: what the model serves ("chat",
+	// "embeddings", "decisions"), so clients can find decision models. On a
+	// provider that serves both kinds (OpenAI) it is per model
+	// (switches.ModelCapabilities). OpenAI clients ignore unknown fields.
 	Capabilities []string `json:"capabilities,omitempty"`
 }
 
@@ -239,7 +240,7 @@ func (p *Proxy) handleUnifiedListModels(w http.ResponseWriter, r *http.Request) 
 				ID:           routeSlug + "/" + m,
 				Object:       "model",
 				OwnedBy:      string(conf.Vendor),
-				Capabilities: switches.VendorCapabilities(conf.Vendor),
+				Capabilities: switches.ModelCapabilities(conf.Vendor, m),
 			})
 		}
 	}

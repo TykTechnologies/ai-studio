@@ -9,6 +9,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/guardrails"
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
+	"github.com/TykTechnologies/midsommar/v2/pkg/requestid"
 	"github.com/TykTechnologies/midsommar/v2/scripting"
 )
 
@@ -28,6 +29,7 @@ func recordFilterOutcome(ctx context.Context, filter *models.Filter, out *script
 	if !filter.IsGuardrail() {
 		if out.Block {
 			recordGatewayEvent(ctx, agenttrace.GatewayEvent{Type: agenttrace.GatewayEventFilter, Outcome: agenttrace.OutcomeBlock, Name: filter.Name})
+			noteRequestID(ctx, rec, out)
 		}
 		return
 	}
@@ -36,6 +38,34 @@ func recordFilterOutcome(ctx context.Context, filter *models.Filter, out *script
 		return
 	}
 	recordGatewayEvent(ctx, agenttrace.GatewayEvent{Type: agenttrace.GatewayEventGuardrail, Outcome: outcome, Name: filter.Name, Detail: detail})
+	noteRequestID(ctx, rec, out)
+}
+
+// noteRequestID puts the gateway's request id on the capture (tkg.2), so a
+// filter outcome on the trace leads to its compliance events, which record
+// the same id as metadata.request_id. It is the id the events carry; a
+// filter that reported none falls back to the request's context. It never
+// mints one: an id nothing recorded would link to nothing.
+func noteRequestID(ctx context.Context, rec *agenttrace.Recorder, out *scripting.ScriptOutput) {
+	id := ""
+	for _, ce := range out.ComplianceEvents {
+		if s, _ := ce.Metadata["request_id"].(string); requestid.Valid(s) {
+			id = s
+			break
+		}
+	}
+	if id == "" {
+		id = requestid.FromContext(ctx)
+	}
+	if !requestid.Valid(id) {
+		return
+	}
+	rec.Update(func(ev *agenttrace.Event) {
+		if ev.Attributes == nil {
+			ev.Attributes = map[string]string{}
+		}
+		ev.Attributes[agenttrace.AttrRequestID] = id
+	})
 }
 
 // guardrailOutcome summarises a guardrail's run from its detection events:

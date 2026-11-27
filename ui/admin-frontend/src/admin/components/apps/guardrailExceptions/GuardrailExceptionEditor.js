@@ -17,6 +17,7 @@ import {
 import { PrimaryButton, SecondaryOutlineButton } from "../../../styles/sharedStyles";
 import {
   ALERT_EVENT_PATTERN,
+  alertTopicText,
   allowedActions,
   apiErrorMessage,
   channelLabel,
@@ -218,7 +219,7 @@ const GuardrailExceptionEditor = ({ open, appId, exception, filters, meta, capab
                 value={form.alert_event}
                 onChange={(e) => set({ alert_event: e.target.value })}
                 error={!!form.alert_event && alertInvalid}
-                helperText="Webhooks subscribe to guardrail.alert.<name>. Lowercase letters, digits, - and _; unique across filters and exceptions."
+                helperText={`Webhooks subscribe to ${alertTopicText(form.alert_event)}. Lowercase letters, digits, - and _; unique across filters and exceptions.`}
                 inputProps={{ "data-testid": "gx-alert-event" }}
               />
             </Grid>
