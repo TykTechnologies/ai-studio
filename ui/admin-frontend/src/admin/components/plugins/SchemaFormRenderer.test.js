@@ -1,7 +1,7 @@
 import React from "react";
 import { render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom";
-import SchemaFormRenderer, { fieldUiSchemas, hasRedactedValue, REDACTED_VALUE } from "./SchemaFormRenderer";
+import SchemaFormRenderer, { fieldUiSchemas, hasRedactedValue, REDACTED_VALUE, withPatternProperties } from "./SchemaFormRenderer";
 
 // midsommar-clean-yyo: a string field with a description over 100 characters
 // was turned into a textarea, which overrode format "password" and showed
@@ -232,5 +232,86 @@ describe("SchemaFormRenderer with secrets redacted by the API", () => {
 
     render(<SchemaFormRenderer schema={redactedSchema} formData={{ redis_addr: "redis:6379" }} onChange={() => {}} />);
     expect(screen.queryByTestId("plugin-config-redacted-note")).not.toBeInTheDocument();
+  });
+});
+
+// RJSF does not render patternProperties, so settings a plugin keeps at the
+// top level under user-chosen names (Prompt Compressor's engine_<name>_url
+// and engine_<name>_token) had no field in the form.
+describe("SchemaFormRenderer with patternProperties", () => {
+  const engineSchema = {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      mode: { type: "string", title: "Mode" },
+    },
+    patternProperties: {
+      "^engine_[a-z0-9]+_url$": { type: "string", description: "Engine URL" },
+      "^engine_[a-z0-9]+_token$": { type: "string", writeOnly: true, description: "Engine token" },
+    },
+  };
+
+  it("adds configured keys that match a pattern as properties with the pattern's schema", () => {
+    const out = withPatternProperties(engineSchema, {
+      mode: "enforce",
+      engine_lingua_url: "https://lingua.example.com",
+      engine_lingua_token: "$SECRET/LINGUA_TOKEN",
+      unrelated: "x",
+    });
+    expect(out.properties.engine_lingua_url).toEqual({
+      title: "engine_lingua_url",
+      type: "string",
+      description: "Engine URL",
+    });
+    expect(out.properties.engine_lingua_token.writeOnly).toBe(true);
+    expect(out.properties.unrelated).toBeUndefined();
+    // The declared properties are kept.
+    expect(out.properties.mode).toEqual(engineSchema.properties.mode);
+  });
+
+  it("lets a closed schema add keys whose names match a pattern", () => {
+    const out = withPatternProperties(engineSchema, { mode: "audit" });
+    expect(out.additionalProperties).toEqual({
+      anyOf: [engineSchema.patternProperties["^engine_[a-z0-9]+_url$"], engineSchema.patternProperties["^engine_[a-z0-9]+_token$"]],
+    });
+    expect(out.propertyNames).toEqual({
+      anyOf: [
+        { enum: ["mode"] },
+        { pattern: "^engine_[a-z0-9]+_url$" },
+        { pattern: "^engine_[a-z0-9]+_token$" },
+      ],
+    });
+  });
+
+  it("uses the pattern's schema directly when there is one pattern", () => {
+    const one = { ...engineSchema, patternProperties: { "^x_[a-z]+$": { type: "string" } } };
+    expect(withPatternProperties(one, {}).additionalProperties).toEqual({ type: "string" });
+  });
+
+  it("leaves an open schema's additionalProperties alone", () => {
+    const open = { ...engineSchema, additionalProperties: undefined };
+    const out = withPatternProperties(open, { engine_h_url: "http://h" });
+    expect(out.properties.engine_h_url.type).toBe("string");
+    expect(out.additionalProperties).toBeUndefined();
+    expect(out.propertyNames).toBeUndefined();
+  });
+
+  it("returns the schema unchanged without usable patterns", () => {
+    const plain = { type: "object", properties: { a: { type: "string" } } };
+    expect(withPatternProperties(plain, { a: "1" })).toBe(plain);
+    const broken = { type: "object", additionalProperties: false, patternProperties: { "([": { type: "string" } } };
+    expect(withPatternProperties(broken, { "([": "1" })).toBe(broken);
+  });
+
+  it("renders the matching keys, masking the secret ones", () => {
+    render(
+      <SchemaFormRenderer
+        schema={engineSchema}
+        formData={{ mode: "enforce", engine_lingua_url: "https://lingua.example.com", engine_lingua_token: "tok-lingua" }}
+        onChange={() => {}}
+      />
+    );
+    expect(screen.getByDisplayValue("https://lingua.example.com")).toHaveAttribute("type", "text");
+    expect(screen.getByDisplayValue("tok-lingua")).toHaveAttribute("type", "password");
   });
 });
