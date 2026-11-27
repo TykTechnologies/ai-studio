@@ -58,6 +58,13 @@ func TestManagementService_VertexLLMValidation(t *testing.T) {
 	name := "vx-renamed"
 	_, err = svc.UpdateLLM(llm.ID, &UpdateLLMRequest{Name: &name})
 	require.NoError(t, err, "an update that leaves endpoint and key alone is not re-checked")
+
+	// An empty api_key on update keeps the stored key, so it is neither a
+	// key-less change nor checked.
+	empty := ""
+	updated, err := svc.UpdateLLM(llm.ID, &UpdateLLMRequest{APIKey: &empty})
+	require.NoError(t, err)
+	assert.NotEmpty(t, updated.APIKeyEncrypted, "the stored key is kept")
 }
 
 // Config sync from the hub never runs the management API's validation: a

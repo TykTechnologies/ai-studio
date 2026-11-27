@@ -137,15 +137,21 @@ func (s *ManagementService) UpdateLLM(id uint, req *UpdateLLMRequest) (*database
 		return nil, fmt.Errorf("LLM not found: %w", err)
 	}
 
+	// Vertex rules for the fields this update changes. UpdateLLMRequest has
+	// no vendor field, so the stored vendor is the LLM's vendor after the
+	// update too. An empty api_key keeps the stored key (see below: it is
+	// only replaced when non-empty), so it is not a change to check.
 	if llm.Vendor == "vertex" {
+		endpointChanges := req.Endpoint != nil
+		keyChanges := req.APIKey != nil && *req.APIKey != ""
 		endpoint, key := llm.Endpoint, ""
-		if req.Endpoint != nil {
+		if endpointChanges {
 			endpoint = *req.Endpoint
 		}
-		if req.APIKey != nil {
+		if keyChanges {
 			key = *req.APIKey
 		}
-		if err := validateVertexLLM(llm.Name, endpoint, key, req.Endpoint != nil, req.APIKey != nil && *req.APIKey != ""); err != nil {
+		if err := validateVertexLLM(llm.Name, endpoint, key, endpointChanges, keyChanges); err != nil {
 			return nil, err
 		}
 	}
