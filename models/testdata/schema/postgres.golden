@@ -335,6 +335,8 @@ TABLE app_prompt_templates
   column approved_at timestamp with time zone(timestamptz) nullable=YES
   column expires_after_days bigint(int8) nullable=NO precision=64 scale=0 default=30
   column last_matched_at timestamp with time zone(timestamptz) nullable=YES
+  column edited_at timestamp with time zone(timestamptz) nullable=YES
+  column edited_by bigint(int8) nullable=YES precision=64 scale=0
 TABLE app_semantic_routers
   constraint app_semantic_routers_pkey PRIMARY KEY (app_id, semantic_router_id)
   constraint fk_app_semantic_routers_app FOREIGN KEY (app_id) REFERENCES apps(id)

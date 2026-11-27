@@ -46,6 +46,12 @@ type AppPromptTemplate struct {
 	// match before it drops back to proposed.
 	ExpiresAfterDays int        `json:"expires_after_days" gorm:"not null;default:30"`
 	LastMatchedAt    *time.Time `json:"last_matched_at"`
+	// EditedAt and EditedBy record the last in-place change to a proposed
+	// version's parts or placement: such a version keeps its id, version
+	// and proposal time, so a reviewer needs to see it changed (o4a.11).
+	// Nil when the trusted content never changed after it was proposed.
+	EditedAt *time.Time `json:"edited_at"`
+	EditedBy *uint      `json:"edited_by"`
 }
 
 // TableName is the table's name.
