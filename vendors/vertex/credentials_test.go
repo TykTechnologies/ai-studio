@@ -183,14 +183,14 @@ func TestTokenSource_IdleEntriesEvicted(t *testing.T) {
 	_, err := TokenSource(&models.LLM{ID: 20, Name: "old", APIKey: key})
 	require.NoError(t, err)
 	cacheMu.Lock()
-	cache[20].lastUsed = time.Now().Add(-2 * cacheIdleTTL)
+	cache[cacheKey{"llm", 20}].lastUsed = time.Now().Add(-2 * cacheIdleTTL)
 	cacheMu.Unlock()
 
 	_, err = TokenSource(&models.LLM{ID: 21, Name: "new", APIKey: key})
 	require.NoError(t, err)
 	cacheMu.Lock()
-	_, stale := cache[20]
-	_, fresh := cache[21]
+	_, stale := cache[cacheKey{"llm", 20}]
+	_, fresh := cache[cacheKey{"llm", 21}]
 	cacheMu.Unlock()
 	assert.False(t, stale, "an LLM unused for longer than the idle TTL is dropped")
 	assert.True(t, fresh)
