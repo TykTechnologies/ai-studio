@@ -150,7 +150,7 @@ func (p *Proxy) handleBedrockAnthropicMessages(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		f := classifyBedrockError(err, nil).withLoopback(relay)
 		respondAnthropicAttemptFailure(w, f, "Bedrock Converse failed")
-		p.captureOuterCallAs(r, requestFilterFormatAnthropic, llmAttempt{}, 1, f.statusOr(http.StatusBadGateway), reqBody, nil)
+		p.captureOuterFailure(r, requestFilterFormatAnthropic, a, 1, f.statusOr(http.StatusBadGateway), reqBody)
 		return
 	}
 
@@ -191,7 +191,7 @@ func (p *Proxy) handleBedrockAnthropicMessagesStream(w http.ResponseWriter, r *h
 		// only event says the request was refused.
 		f := classifyBedrockError(err, nil).withLoopback(relay)
 		respondAnthropicAttemptFailure(w, f, "Bedrock ConverseStream failed")
-		p.captureOuterCallAs(r, requestFilterFormatAnthropic, llmAttempt{}, 1, f.statusOr(http.StatusBadGateway), reqBody, nil)
+		p.captureOuterFailure(r, requestFilterFormatAnthropic, a, 1, f.statusOr(http.StatusBadGateway), reqBody)
 		return
 	}
 

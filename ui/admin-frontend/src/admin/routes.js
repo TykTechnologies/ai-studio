@@ -236,6 +236,9 @@ const mainAdminRoutes = [
   { path: "tyk-connections", element: <TykConnections />, permission: P.TYK_CONNECTIONS_READ },
   { path: "tyk-connections/new", element: <TykConnectionForm />, permission: P.TYK_CONNECTIONS_WRITE },
   { path: "tyk-connections/edit/:id", element: <TykConnectionForm />, permission: P.TYK_CONNECTIONS_WRITE },
+  // A connection has no read-only detail page: its id URL opens the form.
+  { path: "tyk-connections/:id", element: <EditRedirect to="tyk-connections/edit" /> },
+  { path: "tyk-connections/:id/edit", element: <EditRedirect to="tyk-connections/edit" /> },
   { path: "mcp-servers", element: <MCPServers />, permission: P.MCP_SERVERS_READ },
   { path: "mcp-servers/register", element: <MCPServerRegister />, permission: P.MCP_SERVERS_EXECUTE },
   { path: "mcp-servers/:id", element: <MCPServerDetail />, permission: P.MCP_SERVERS_READ },

@@ -31,7 +31,7 @@ import Section from "../components/common/Section";
 import RelationshipPicker from "../components/common/relationship-picker";
 import { TitleBox, ContentBox, PrimaryButton, SecondaryLinkButton, SecondaryOutlineButton } from "../styles/sharedStyles";
 import { apiErrorDetail, preStyle } from "./webhookShared";
-import { TykUpsell, TykDisabledNotice } from "./tykShared";
+import { TykUpsell, TykDisabledNotice, productName } from "./tykShared";
 import { TOOL_VS_MCP_SERVER } from "../components/tools/toolsVsMcpServers";
 import AllowInternalHostSwitch from "../components/common/AllowInternalHostSwitch";
 import WorkspaceSelect from "../components/workspaces/WorkspaceSelect";
@@ -316,6 +316,9 @@ const MCPServerRegister = () => {
 
   const connection = useMemo(() => connections.find((c) => String(c.id) === String(form.connection_id)), [connections, form.connection_id]);
   const restSupported = connection?.capabilities?.rest_to_mcp_supported?.state === "ok";
+  // "Dashboard" or "Gateway": what the chosen connection talks to. A Tyk
+  // OSS Gateway connection has no Dashboard.
+  const product = productName(connection?.kind);
 
   // Deployment targets and source APIs follow the chosen connection.
   useEffect(() => {
@@ -342,7 +345,7 @@ const MCPServerRegister = () => {
         const apis = await apiClient.get(`/tyk-connections/${form.connection_id}/apis`);
         if (!cancelled) setSourceAPIs(apis.data || []);
       } catch (err) {
-        if (!cancelled) setError(apiErrorDetail(err, "Failed to list the Dashboard's APIs"));
+        if (!cancelled) setError(apiErrorDetail(err, "Failed to list the connection's APIs"));
       }
     })();
     return () => {
@@ -453,7 +456,7 @@ const MCPServerRegister = () => {
         setStep(3);
       } catch (err) {
         if (showWorkspaceError(err)) return;
-        setError(apiErrorDetail(err, "The Dashboard rejected the definition"));
+        setError(apiErrorDetail(err, `The ${product} rejected the definition`));
       } finally {
         setBusy(false);
       }
@@ -498,8 +501,10 @@ const MCPServerRegister = () => {
       </TitleBox>
       <Box sx={{ p: 3 }}>
         <Typography variant="bodyLargeDefault" color="text.defaultSubdued">
-          Create an MCP proxy on a connected Tyk Dashboard from here. The Tyk Gateway serves it; AI Studio catalogues it, publishes it to tool
-          catalogs and mints keys for the Apps that use it.
+          {connection
+            ? `Create an MCP proxy on a connected Tyk ${product} from here.`
+            : "Create an MCP proxy on a connected Tyk Dashboard or Tyk Gateway from here."}{" "}
+          The Tyk Gateway serves it; AI Studio catalogues it, publishes it to tool catalogs and mints keys for the Apps that use it.
         </Typography>
       </Box>
       <ContentBox sx={{ pt: 0 }}>
@@ -529,7 +534,7 @@ const MCPServerRegister = () => {
                 </TextField>
                 {connections.length === 0 && (
                   <Alert severity="info" sx={{ mt: 2 }}>
-                    No connection runs in full mode. Registration needs a Dashboard user that may create APIs and policies; set the connection's mode to full under Settings → Tyk Connections.
+                    No connection runs in full mode. Registration needs a connection in full mode (on a Tyk Dashboard, a user that may create APIs and policies); set the connection's mode to full under Settings → Tyk Connections.
                   </Alert>
                 )}
               </Grid>
@@ -772,12 +777,12 @@ const MCPServerRegister = () => {
         )}
 
         {step === 3 && preview && (
-          <Section title="Review" description="The definition AI Studio sends to the Dashboard, upstream credentials masked.">
+          <Section title="Review" description={`The definition AI Studio sends to the ${product}, upstream credentials masked.`}>
             <Box data-testid="preview">
               <Typography variant="body2" sx={{ mb: 1 }}>
                 {preview.dashboard_validated
-                  ? "The Tyk Dashboard validated this definition."
-                  : "AI Studio validated this definition; the Dashboard validates it when the proxy is created."}{" "}
+                  ? `The Tyk ${product} validated this definition.`
+                  : `AI Studio validated this definition; the ${product} validates it when the proxy is created.`}{" "}
                 Clients will reach the server at <code>{preview.endpoint_url || "(set a gateway base URL on the connection)"}</code>.
               </Typography>
               {(preview.warnings || []).map((wng) => (
@@ -802,7 +807,7 @@ const MCPServerRegister = () => {
             </PrimaryButton>
           ) : (
             <PrimaryButton variant="contained" onClick={create} disabled={busy} data-testid="create">
-              Create on the Dashboard
+              {`Create on the ${product}`}
             </PrimaryButton>
           )}
         </Box>

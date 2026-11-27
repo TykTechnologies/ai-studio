@@ -28392,6 +28392,12 @@ const docTemplate = `{
                         "type": "number"
                     }
                 },
+                "failed": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
                 "labels": {
                     "type": "array",
                     "items": {
@@ -28425,11 +28431,14 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "cost_per_thousand": {
-                    "description": "CostPerThousand is the cost of a thousand decision requests at this\nperiod's average, the number decision pricing is usually compared on.",
+                    "description": "CostPerThousand is the cost of a thousand answered decision requests\nat this period's average, the number decision pricing is usually\ncompared on.",
                     "type": "number"
                 },
                 "currency": {
                     "type": "string"
+                },
+                "failed": {
+                    "type": "integer"
                 },
                 "input_tokens": {
                     "type": "integer"
@@ -28462,6 +28471,9 @@ const docTemplate = `{
                     "additionalProperties": {
                         "type": "number"
                     }
+                },
+                "failed": {
+                    "type": "integer"
                 },
                 "input_tokens": {
                     "type": "integer"

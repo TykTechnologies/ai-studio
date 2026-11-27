@@ -4,6 +4,8 @@
 // reasons that led to the outcome, and at most two fixes. Returns null for
 // events that are not guardrail events.
 
+import { JUDGE_EVENT_TYPE, hasOpinion, judgeOf, noOpinionText, reasonText, verdictText } from "./judgeOpinions";
+
 const fmt = (n) => (typeof n === "number" ? n.toLocaleString("en-US") : String(n ?? "?"));
 
 export const where = (seg) => {
@@ -134,6 +136,87 @@ const UNSCANNED_CAUSE = {
 const finish = (g, m) => {
   const shadow = m.shadow ? " (shadow: traffic unchanged)" : "";
   return { ...g, headline: g.headline + shadow, fix: g.fix.slice(0, 2) };
+};
+
+// A filter action as the object of "the ... verdict".
+const VERDICT_NOUN = {
+  block: "block",
+  quarantine: "quarantine",
+  remove: "tool removal",
+  redact: "redaction",
+  log: "log-only",
+};
+
+const JUDGE_LLM_DOWN_FIX = () => "Check the judge LLM is up, reachable from the gateway, and its credentials are valid.";
+
+// Why the judge gave no opinion, as the fix that fits it.
+const JUDGE_ERROR_FIX = {
+  timeout: (filter) => `Raise the judge's timeout on ${filter}, or pick a faster judge model.`,
+  call_failed: JUDGE_LLM_DOWN_FIX,
+  judge_unavailable: JUDGE_LLM_DOWN_FIX,
+  unparseable: () => "The judge model's answer could not be read: pick a stronger judge model.",
+  privacy: () => "Pick a judge LLM whose privacy score is at least the request's LLM's.",
+  over_budget: () => "The judge LLM is over its budget: raise the budget or pick another judge LLM.",
+  dropped: () => "The judge queue was full: give the gateway more capacity, or send it less traffic.",
+  over_segment_cap: () => "Only the first flagged segments of a request are judged; nothing to change unless this recurs.",
+  category: () => "Secrets and personal data are never sent to the judge; nothing to fix.",
+};
+
+// judgeGuide is the triage of a guardrail.judge event: the judge's second
+// opinion on the verdict of the filter (j.action), not a detection, so the
+// detector triage does not fit it (tkg.6). It says what the judge thought,
+// whether that confirmed, disputed or softened the verdict, and why.
+const judgeGuide = (j, filter) => {
+  const verdict = `the ${VERDICT_NOUN[j.action] || j.action || "filter's"} verdict`;
+  const detectors = Array.isArray(j.detectors) ? j.detectors.filter((d) => typeof d === "string" && d) : [];
+  const flagged = detectors.length ? `Flagged by ${detectors.join(", ")}` : "";
+  const asked = j.model
+    ? `Asked ${j.model}${typeof j.latency_ms === "number" ? ` (${fmt(j.latency_ms)} ms${j.cached ? ", cached" : ""})` : j.cached ? " (cached)" : ""}`
+    : j.cached
+    ? "Cached opinion"
+    : "";
+  if (!hasOpinion(j)) {
+    const why = noOpinionText(j);
+    const fix = JUDGE_ERROR_FIX[j.error];
+    return {
+      code: "",
+      headline: `Judge gave no opinion on ${verdict}${why ? ` (${why})` : ""}`,
+      why: [flagged, `${verdict.charAt(0).toUpperCase()}${verdict.slice(1)} stands`].filter(Boolean),
+      fix: [fix ? fix(filter) : "Check the judge LLM's configuration and logs at this time."],
+    };
+  }
+  const opinion = `${verdictText(j)}${reasonText(j) ? ` (${reasonText(j)})` : ""}`;
+  if (j.agreed !== false) {
+    return {
+      code: "",
+      headline: `Judge confirmed ${verdict}: ${opinion}`,
+      why: [flagged, asked].filter(Boolean),
+      fix: ["Nothing to fix: the judge backs the filter."],
+    };
+  }
+  if (j.softened_to) {
+    const to = VERDICT_NOUN[j.softened_to] || j.softened_to;
+    return {
+      code: "",
+      headline: `Judge softened ${verdict} to ${to}: ${opinion}`,
+      why: [flagged, `Soften mode: a benign opinion on everything flagged lowers the action to ${to}`, asked].filter(Boolean),
+      fix: [`If the judge was wrong here, set the judge on ${filter} back to record mode.`],
+    };
+  }
+  const stands =
+    j.coverage === "partial"
+      ? "The judge was not shown everything flagged, so its opinion cannot soften the verdict"
+      : j.mode === "soften"
+      ? "The verdict stands: the filter allows no softer action here"
+      : "Record mode: the opinion is kept beside the verdict, which stands";
+  const fix = [`If the judge is right, the detector is too strict: raise its threshold or exclude it on ${filter}.`];
+  if (j.mode !== "soften") fix.push(`To let the judge soften such verdicts, set the judge on ${filter} to soften mode.`);
+  return {
+    code: "",
+    headline: `Judge disputed ${verdict}: ${opinion}`,
+    why: [flagged, stands, asked].filter(Boolean),
+    fix,
+  };
 };
 
 export const eventGuide = (eventType, metadata, filterName) => {
@@ -271,6 +354,8 @@ export const eventGuide = (eventType, metadata, filterName) => {
       m
     );
   }
+
+  if (eventType === JUDGE_EVENT_TYPE) return finish(judgeGuide(judgeOf(m) || {}, filter), m);
 
   // A detection: guardrail.<detector>.
   const detector = m.detector || eventType.slice("guardrail.".length);

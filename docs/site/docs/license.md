@@ -32,9 +32,9 @@ Nothing that exists is taken away. If a new licence has lower limits than what i
 
 ## Near-limit notices
 
-When a limit is close (one short of its maximum, or at it), a banner appears at the top of the admin area for users with admin access, naming the limit and its usage. Portal users see a banner when they are close to their own App quota.
+When a limit is close (one short of its maximum, or at it), a banner appears at the top of the admin area for users with admin access, naming the limit and its usage. A user's own App quota has no banner: the portal's create-app page shows how many of their quota they are using, and why a create over it is refused.
 
-Each banner can be dismissed with its close button, and stays dismissed for that user. A licence with a different number for that limit shows the banner again.
+Each banner can be dismissed with its close button, and stays dismissed for that user, even if they leave the page straight away. A licence with a different number for that limit shows the banner again.
 
 ## The License page
 

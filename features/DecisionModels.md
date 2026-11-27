@@ -55,7 +55,7 @@ There is no new resource: decision models are `LLM` records, because Apps call t
 - Pricing: `proxy.priceForExchange` prices by the model the vendor reported and, when that model has no price, by the model the caller asked for. Jev answers the alias `jev-latest` as `jev-1.13.0`; without the fallback a call priced under the alias was recorded at zero cost (found by the live conformance suite).
 - Budgets need no new code: decision requests pass `CheckBudget` on the native hop and their cost flows into App, LLM and team spend.
 - Upgrade: the new columns default to `''`, so rows written before the upgrade read as generative, never NULL (tested on SQLite and Postgres; the analytics package is in CI's Postgres job).
-- `GET /api/v1/analytics/decisions` (`analytics.GetDecisionUsage`): totals, per-day series, per-model with cost per thousand calls; optional `llm_id`, `app_id`. A dedicated endpoint rather than a filter on every stats query, whose signatures are shared with the plugin service layer. Dashboard panel `DecisionUsagePanel`.
+- `GET /api/v1/analytics/decisions` (`analytics.GetDecisionUsage`): totals, per-day series, per-model with cost per thousand calls; optional `llm_id`, `app_id`. Failed calls (records with neither choices nor refusals: upstream errors, budget denials, policy blocks, which the gateway still records with the request's question count) are counted as `failed`, apart from `requests`, and their questions are left out of `questions`. A dedicated endpoint rather than a filter on every stats query, whose signatures are shared with the plugin service layer. Dashboard panel `DecisionUsagePanel`.
 - Metric `aistudio_decision_questions_total{vendor, model, outcome}`.
 
 ## UI

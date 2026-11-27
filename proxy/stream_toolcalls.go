@@ -413,7 +413,7 @@ func unscannedHeldCalls(llm *models.LLM, calls []*heldCall, reason string, r *ht
 		}
 		// Alert is log for the traffic; unscanned calls raise no alert.
 		action := guardrails.LogIfAlert(cfg.ActionFor(guardrails.KindToolCall))
-		scripting.RecordComplianceEvents(r.Context(), &scripting.ScriptOutput{ComplianceEvents: []scripting.ComplianceEventOutput{{
+		out := &scripting.ScriptOutput{Block: action == guardrails.ActionBlock, ComplianceEvents: []scripting.ComplianceEventOutput{{
 			EventType:   "guardrail.unscanned",
 			Severity:    map[bool]string{true: "critical", false: "warning"}[action == guardrails.ActionBlock],
 			Description: fmt.Sprintf("guardrail %q (%s): %d streamed tool call(s) not scanned (held_call_%s); action %s", f.Name, cfg.Provider, len(calls), reason, action),
@@ -422,7 +422,9 @@ func unscannedHeldCalls(llm *models.LLM, calls []*heldCall, reason string, r *ht
 				"action": action, "kinds": []string{guardrails.KindToolCall}, "tool_names": names,
 				scripting.FilterIDKey: f.ID,
 			},
-		}}}, f.Name, "proxy_response", 0, 0, llm.ID, string(llm.Vendor), "")
+		}}}
+		scripting.RecordComplianceEvents(r.Context(), out, f.Name, "proxy_response", 0, 0, llm.ID, string(llm.Vendor), "")
+		recordFilterOutcome(r.Context(), f, out)
 		if action == guardrails.ActionBlock {
 			return true, cfg.BlockMessage, nil
 		}
