@@ -221,6 +221,13 @@ Batches nobody downloads are accounted by a background reconciler on the gateway
 
 A batch's `results_url` uses `PROXY_URL` (Microgateway: `GATEWAY_PUBLIC_URL`) as its base when set, and is a relative path otherwise. See [Proxy & API Gateway](./proxy.md#message-batches-and-other-native-api-operations).
 
+### Gemini Platform (Vertex) host credentials
+A Gemini Platform (Vertex) LLM normally carries its own Google credential in its API key, as a service account key or a Workload Identity Federation config. If an operator wants key-less Vertex LLMs to use the host's Google identity instead, they can opt in:
+
+*   Use the host's Application Default Credentials for Vertex LLMs with an empty API key (`AI_STUDIO_VERTEX_ADC`): default `false`. When it is on, the lookup order is `GOOGLE_APPLICATION_CREDENTIALS`, then gcloud user credentials, then the GCP metadata server (GKE Workload Identity, Cloud Run, Compute Engine).
+
+The setting is off by default because it is a deliberate exception to the rule that the gateway never reads vendor credentials from the host. An LLM's own credential always takes precedence. When the setting is off, a key-less Vertex LLM is refused on gateway routes with an error that names this setting. The Microgateway reads the same variable, and each edge then needs its own GCP identity with access to Vertex AI. The startup log of AI Studio and of each edge says whether the setting is on and whether host credentials were found. It never logs the credentials themselves.
+
 ### Trusted prompt templates
 *   Shortest constant at an anchored edge of a [trusted prompt template](./guardrails.md#trusted-prompt-templates) (`PROMPT_TEMPLATE_MIN_ANCHORED_CONST_BYTES`): default `16`, from `8` to `32`. This is the first part of a template anchored at the start, or the last of one anchored at the end; every other constant needs 32 bytes. Raise it to `32` for one rule everywhere. Edge gateways accept whatever their AI Studio approved, so the setting is only needed on AI Studio.
 

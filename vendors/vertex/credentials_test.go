@@ -247,6 +247,7 @@ func TestProxySetAuthHeader_EmptyKeyRefusedWithoutHostLookup(t *testing.T) {
 	adcFile := filepath.Join(t.TempDir(), "adc.json")
 	require.NoError(t, os.WriteFile(adcFile, []byte(mustJSON(t, serviceAccountJSON(t, g.srv.URL+"/token"))), 0o600))
 	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", adcFile)
+	t.Setenv(ADCSetting, "")
 
 	h, err := authHeader(t, &models.LLM{ID: 6, Name: "empty", Vendor: models.VERTEX})
 	require.Error(t, err)

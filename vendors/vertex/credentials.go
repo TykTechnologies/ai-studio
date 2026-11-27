@@ -8,8 +8,8 @@ package vertexVendor
 //     or authorized_user. Tokens are minted with golang.org/x/oauth2/google.
 //  2. A raw access token ("ya29." prefix), passed through as-is: tests and
 //     short manual use only, it expires within the hour.
-//  3. Host Application Default Credentials, only when an operator opts in
-//     (a separate task; until then an empty key is refused).
+//  3. Host Application Default Credentials, only when the key is empty and
+//     an operator opted in with AI_STUDIO_VERTEX_ADC=true (adc.go).
 //  4. Otherwise an error naming both options. A request is never sent
 //     unauthenticated.
 //
@@ -302,6 +302,8 @@ func TokenSource(llm *models.LLM) (oauth2.TokenSource, error) {
 
 	key := strings.TrimSpace(llm.APIKey)
 	switch {
+	case key == "" && ADCEnabled():
+		return adcTokenSource()
 	case key == "":
 		return nil, fmt.Errorf("%w for LLM %q: set its API key to a Google credential JSON (a service account key or a Workload Identity Federation config), or have the operator enable host Application Default Credentials with %s=true", ErrNoCredential, llm.Name, ADCSetting)
 	case IsAccessToken(key):
