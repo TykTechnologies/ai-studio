@@ -126,4 +126,13 @@ describe("QuotaNagBar", () => {
     await waitFor(() => expect(pubClient.post).toHaveBeenCalled());
     await waitFor(() => expect(window.localStorage.getItem(PENDING_KEY)).toBeNull());
   });
+
+  it("ignores malformed or oversized pending keys in storage", async () => {
+    window.localStorage.setItem(PENDING_KEY, JSON.stringify(["x".repeat(300), 7, appsNotice.key]));
+    pubClient.get.mockResolvedValue({ data: { data: [{ ...appsNotice, key: "x".repeat(300) }, quotaNotice] } });
+    renderBar();
+    expect(await screen.findByText(quotaNotice.message)).toBeInTheDocument();
+    expect(screen.getByText(appsNotice.message)).toBeInTheDocument();
+    expect(pubClient.post).not.toHaveBeenCalled();
+  });
 });

@@ -11,10 +11,17 @@ import pubClient from "../../utils/pubClient";
 // clears localStorage, so one user's pending dismissals never reach another.
 export const PENDING_KEY = "quotaNagBar.pendingDismissals";
 
+// The server refuses keys over 255 characters; a user has a handful of
+// notices at most. Anything else in storage is ignored.
+const MAX_KEY_LENGTH = 255;
+const MAX_PENDING = 20;
+
 const readPending = () => {
   try {
     const parsed = JSON.parse(window.localStorage.getItem(PENDING_KEY) || "[]");
-    return Array.isArray(parsed) ? parsed.filter((k) => typeof k === "string") : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((k) => typeof k === "string" && k.length > 0 && k.length <= MAX_KEY_LENGTH).slice(-MAX_PENDING)
+      : [];
   } catch {
     return [];
   }
