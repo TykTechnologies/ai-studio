@@ -69,11 +69,16 @@ func noteRequestID(ctx context.Context, rec *agenttrace.Recorder, out *scripting
 }
 
 // guardrailOutcome summarises a guardrail's run from its detection events:
-// the strongest action taken (block, then quarantine or redact, then log or
-// alert), and a detail such as "injection.instruction_override in
-// tool_result (search_kb); quarantine". ok is false when no detector matched.
+// the strongest action taken (block, then quarantine, removal or redaction,
+// then log or alert), and a detail per action, strongest first, such as
+// "injection.instruction_override in tool_result (search_kb); quarantine" or,
+// when one run quarantined a result and removed a definition (o4a.2),
+// "tool_metadata.poisoning in tool_result (search_kb); quarantine;
+// tool_metadata.poisoning in tool_definition (lookup_weather); remove".
+// ok is false when no detector matched.
 func guardrailOutcome(out *scripting.ScriptOutput) (outcome, detail string, ok bool) {
-	var detectors, kinds, tools []string
+	type part struct{ detectors, kinds, tools []string }
+	parts := map[string]*part{}
 	strongest := ""
 	for _, ce := range out.ComplianceEvents {
 		det, _ := ce.Metadata["detector"].(string)
@@ -81,13 +86,18 @@ func guardrailOutcome(out *scripting.ScriptOutput) (outcome, detail string, ok b
 		if det == "" || action == "" {
 			continue // judge verdicts and errors
 		}
-		detectors = append(detectors, det)
+		p := parts[action]
+		if p == nil {
+			p = &part{}
+			parts[action] = p
+		}
+		p.detectors = append(p.detectors, det)
 		where := metaStrings(ce.Metadata["kinds"])
 		if len(where) == 0 {
 			where = metaStrings(ce.Metadata["roles"])
 		}
-		kinds = append(kinds, where...)
-		tools = append(tools, metaStrings(ce.Metadata["tool_names"])...)
+		p.kinds = append(p.kinds, where...)
+		p.tools = append(p.tools, metaStrings(ce.Metadata["tool_names"])...)
 		if actionRank(action) > actionRank(strongest) {
 			strongest = action
 		}
@@ -101,23 +111,39 @@ func guardrailOutcome(out *scripting.ScriptOutput) (outcome, detail string, ok b
 	switch strongest {
 	case guardrails.ActionBlock:
 		outcome = agenttrace.OutcomeBlock
-	case guardrails.ActionQuarantine, guardrails.ActionRedact:
+	case guardrails.ActionQuarantine, guardrails.ActionRemove, guardrails.ActionRedact:
 		outcome = agenttrace.OutcomeModify
 	default:
 		outcome = agenttrace.OutcomeAllow // logged or alerted: the request went on as it was
 	}
-	if len(detectors) == 0 {
+	if len(parts) == 0 {
 		return outcome, strongest, true // a block with no finding (fail closed)
 	}
+	actions := make([]string, 0, len(parts))
+	for a := range parts {
+		actions = append(actions, a)
+	}
+	sort.Slice(actions, func(i, j int) bool {
+		if ri, rj := actionRank(actions[i]), actionRank(actions[j]); ri != rj {
+			return ri > rj
+		}
+		return actions[i] < actions[j]
+	})
 	var b strings.Builder
-	b.WriteString(strings.Join(uniqueSorted(detectors), ", "))
-	if k := uniqueSorted(kinds); len(k) > 0 {
-		b.WriteString(" in " + strings.Join(k, ", "))
+	for i, a := range actions {
+		p := parts[a]
+		if i > 0 {
+			b.WriteString("; ")
+		}
+		b.WriteString(strings.Join(uniqueSorted(p.detectors), ", "))
+		if k := uniqueSorted(p.kinds); len(k) > 0 {
+			b.WriteString(" in " + strings.Join(k, ", "))
+		}
+		if t := uniqueSorted(p.tools); len(t) > 0 {
+			b.WriteString(" (" + strings.Join(t, ", ") + ")")
+		}
+		fmt.Fprintf(&b, "; %s", a)
 	}
-	if t := uniqueSorted(tools); len(t) > 0 {
-		b.WriteString(" (" + strings.Join(t, ", ") + ")")
-	}
-	fmt.Fprintf(&b, "; %s", strongest)
 	return outcome, b.String(), true
 }
 
@@ -125,7 +151,7 @@ func actionRank(action string) int {
 	switch action {
 	case guardrails.ActionBlock:
 		return 4
-	case guardrails.ActionQuarantine:
+	case guardrails.ActionQuarantine, guardrails.ActionRemove:
 		return 3
 	case guardrails.ActionRedact:
 		return 2
