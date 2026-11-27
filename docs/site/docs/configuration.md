@@ -34,7 +34,7 @@ The pre-created LLM configs reference these secrets using the format `$SECRET/OP
 
 ### Adding More LLM Providers
 
-To connect additional providers (Google Vertex AI, Ollama, Azure, etc.):
+To connect additional providers (Gemini Platform (Vertex), Ollama, Azure, etc.):
 
 1.  Navigate to **LLM Management** in the sidebar and click **Add LLM Configuration**.
 2.  Select the provider and enter the configuration details (name, model identifiers, base URL if applicable).

@@ -32,7 +32,7 @@ const BODY_FORMATS = [
   { value: "openai", label: "OpenAI chat completions" },
   { value: "anthropic", label: "Anthropic messages" },
   { value: "google_ai", label: "Google AI (Gemini)" },
-  { value: "vertex", label: "Vertex AI" },
+  { value: "vertex", label: "Gemini Platform (Vertex)" },
   { value: "ollama", label: "Ollama" },
   { value: "bedrock", label: "Bedrock Converse" },
 ];

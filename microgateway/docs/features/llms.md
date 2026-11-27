@@ -5,7 +5,7 @@ The microgateway supports multiple LLM providers through a unified interface, al
 ## Overview
 
 LLM management features:
-- **Multi-Provider Support**: OpenAI, Anthropic, Google AI, Vertex AI, Ollama
+- **Multi-Provider Support**: OpenAI, Anthropic, Google AI, Gemini Platform (Vertex), Ollama
 - **Dynamic Configuration**: Hot-reload configurations without restart
 - **Vendor Abstraction**: Unified interface across different providers
 - **Usage Tracking**: Per-LLM analytics and performance metrics
@@ -52,9 +52,9 @@ mgw llm create \
   --budget=300.0
 ```
 
-### Vertex AI
+### Gemini Platform (Vertex)
 ```bash
-# Create Vertex AI LLM
+# Create a Gemini Platform (Vertex) LLM
 mgw llm create \
   --name="Vertex Gemini" \
   --vendor=vertex \

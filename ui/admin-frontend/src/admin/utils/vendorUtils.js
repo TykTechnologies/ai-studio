@@ -18,7 +18,7 @@ let embedders = [
   },
   {
     code: "vertex",
-    name: "Vertex AI",
+    name: "Gemini Platform (Vertex)",
     logo: withBase("/logos/vertex.png"),
     helpText:
       "The Vertex Embed client requires a project name and a region, add this as the Database Connection string as {project:location} (project ID followed by a colon, followed by the region)",

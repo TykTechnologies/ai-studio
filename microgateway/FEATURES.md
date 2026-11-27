@@ -5,7 +5,7 @@ This document provides a comprehensive overview of the microgateway's features a
 ## Core Features
 
 ### 🚀 **AI Gateway Proxy**
-- **Multi-Provider Support**: OpenAI, Anthropic, Google AI, Vertex AI, Ollama
+- **Multi-Provider Support**: OpenAI, Anthropic, Google AI, Gemini Platform (Vertex), Ollama
 - **Real-Time Proxying**: REST and streaming API support
 - **Request/Response Processing**: Automatic request routing and response handling
 - **Protocol Support**: HTTP/HTTPS with full OpenAI API compatibility

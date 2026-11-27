@@ -55,7 +55,7 @@ var catalogSorts = map[string]bool{"newest": true, "name": true, "privacy_asc": 
 // Display names for the built-in LLM vendor codes, so "aws" finds Bedrock
 // providers the way the UI labels them.
 var catalogVendorNames = map[string]string{
-	"openai": "OpenAI", "anthropic": "Anthropic", "vertex": "Vertex AI", "google_ai": "Google AI",
+	"openai": "OpenAI", "anthropic": "Anthropic", "vertex": "Gemini Platform (Vertex)", "google_ai": "Google AI",
 	"huggingface": "HuggingFace", "ollama": "Ollama", "bedrock": "AWS Bedrock",
 }
 

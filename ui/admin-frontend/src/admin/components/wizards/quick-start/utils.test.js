@@ -179,9 +179,9 @@ describe('Quick Start Wizard Utils', () => {
     });
 
     test('returns Vertex curl example', () => {
-      const result = getCurlExample('vertex', 'Vertex AI');
+      const result = getCurlExample('vertex', 'Vertex Gemini');
       
-      expect(result).toContain('curl -X POST "https://example.com/llm/rest/vertex-ai/v1/models/gemini-pro:generateContent"');
+      expect(result).toContain('curl -X POST "https://example.com/llm/rest/vertex-gemini/v1/models/gemini-pro:generateContent"');
       expect(result).toContain('"model": "gemini-pro"');
     });
 
