@@ -279,7 +279,7 @@ api/tykmcp_handlers.go, api/tykmcp_portal_handlers.go
 
 ### 7.1 Discovery: Dashboard → Studio (all modes)
 
-**Scheduling.** The unit of work is a connection, not a request. A node claims a connection by CAS on (`sync_lease_owner`, `sync_lease_until`, `lock_version`) when `next_sync_at ≤ now`; the lease is `max(sync_interval, estimated run)` and is **heartbeat-extended every 25 requests**; a failed CAS aborts the run before any write. "Sync now" (`POST /api/v1/tyk-connections/:id/sync`, `execute`) sets `next_sync_at = now`, so whichever node polls next runs it (a local `wakeUp` only helps the local node). Multi-node safe by construction; single-node dev needs nothing.
+**Scheduling.** The unit of work is a connection, not a request. A node claims a connection by CAS on the lease (`sync_lease_owner`, `sync_lease_until`: free or expired, or already this node's for a manual run) when `next_sync_at ≤ now`. Claiming does not bump `lock_version`, which guards the user-editable record only: a scheduled sync, "Sync now" or a probe must not make an open connection form stale. Probe findings are written as status columns without the bump, and `saveWithLock` leaves the scheduler's columns (lease, `last_sync_*`) alone so a save never clears a running sync's lease; the lease is `max(sync_interval, estimated run)` and is **heartbeat-extended every 25 requests**; a failed CAS aborts the run before any write. "Sync now" (`POST /api/v1/tyk-connections/:id/sync`, `execute`) sets `next_sync_at = now`, so whichever node polls next runs it (a local `wakeUp` only helps the local node). Multi-node safe by construction; single-node dev needs nothing.
 
 **Run.**
 1. `GET /api/mcps?p=0,1,…` until `pages` is reached (`p=-1` is not documented for this endpoint). For each doc: canonicalise, hash (unmasked), upsert `mcp_servers` by (`connection_id`, `info.id`). New rows: `origin=dashboard`, `is_active=false` (unless `auto_publish`), derived fields filled, `definition` stored masked. Changed hash: update derived fields, keep Studio-owned fields, emit `updated`; if `auth_mode`/`brokerable` changed, re-evaluate every live credential on that server (§7.4 drift). Not returned: `dashboard_state=missing`, unpublish, **suspend** its credentials, notify. Same id seen again after `missing`: `resumed`, but only after re-running the brokerable check and drift evaluation; a proxy recreated under a new id is a new asset.
@@ -448,7 +448,7 @@ Admin pages, built on the platform's list/detail/form primitives (`DataTable` + 
 | Org mismatch | `degraded`, no writes |
 | Connection deleted | needs zero live credentials, or explicit "revoke all N keys"; assets soft-deleted; grants closed |
 | App owner leaves (orphaned App) | existing orphan flow suspends; reassignment resumes |
-| Two Studio nodes | connection lease + heartbeat + `lock_version` CAS |
+| Two Studio nodes | connection lease CAS + heartbeat |
 | Dashboard 429 | backoff honours `Retry-After`; run marked partial |
 | Keyless proxy | catalogued and publishable; not brokerable, so not bindable to an App and no Build app in the portal; detail page says no credential is needed |
 | OAuth 2.1 / external OAuth / JWT / mTLS proxy | catalogued and publishable; not brokerable, so not bindable and no Build app; detail page shows PRM / authorization servers and how to connect directly |
