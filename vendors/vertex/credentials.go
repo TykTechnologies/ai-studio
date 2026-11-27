@@ -344,42 +344,71 @@ type cachedSource struct {
 // a dropped source costs one token mint.
 const cacheIdleTTL = time.Hour
 
+// cacheKey identifies the owner of a cached source: an LLM or an embedder.
+type cacheKey struct {
+	kind string
+	id   uint
+}
+
 var (
 	cacheMu sync.Mutex
-	cache   = map[uint]*cachedSource{}
+	cache   = map[cacheKey]*cachedSource{}
 )
 
 // TokenSource returns the token source for a Vertex LLM's credential: a
 // cached, self-refreshing source for a credential JSON, a static source for
-// an access token. One source is kept per LLM ID; a changed key replaces it.
-// Building a source does not contact Google: the first Token call does.
+// an access token, the host's credentials for an empty key when the
+// operator enabled AI_STUDIO_VERTEX_ADC. One source is kept per LLM ID; a
+// changed key replaces it. Building a source does not contact Google: the
+// first Token call does.
 func TokenSource(llm *models.LLM) (oauth2.TokenSource, error) {
 	if llm == nil {
 		return nil, fmt.Errorf("%w: no LLM", ErrNoCredential)
 	}
-	overrideMu.RLock()
-	fn := override
-	overrideMu.RUnlock()
-	if fn != nil {
+	if fn := currentOverride(); fn != nil {
 		return fn(llm)
 	}
+	return tokenSourceFor(cacheKey{kind: "llm", id: llm.ID}, fmt.Sprintf("LLM %q", llm.Name), llm.APIKey)
+}
 
-	key := strings.TrimSpace(llm.APIKey)
+// EmbedderTokenSource is TokenSource for an embedder: its key, cached per
+// embedder ID. The test override sees it as an LLM named "embedder <ID>".
+func EmbedderTokenSource(spec *models.EmbedderSpec) (oauth2.TokenSource, error) {
+	if spec == nil {
+		return nil, fmt.Errorf("%w: no embedder", ErrNoCredential)
+	}
+	name := fmt.Sprintf("embedder %d", spec.EmbedderID)
+	if fn := currentOverride(); fn != nil {
+		return fn(&models.LLM{Name: name, Vendor: models.VERTEX, APIKey: spec.APIKey})
+	}
+	return tokenSourceFor(cacheKey{kind: "embedder", id: spec.EmbedderID}, name, spec.APIKey)
+}
+
+func currentOverride() TokenSourceFunc {
+	overrideMu.RLock()
+	defer overrideMu.RUnlock()
+	return override
+}
+
+// tokenSourceFor resolves one credential through the chain; owner names
+// the LLM or embedder in errors.
+func tokenSourceFor(ck cacheKey, owner, rawKey string) (oauth2.TokenSource, error) {
+	key := strings.TrimSpace(rawKey)
 	switch {
 	case key == "" && ADCEnabled():
 		return adcTokenSource()
 	case key == "":
-		return nil, fmt.Errorf("%w for LLM %q: set its API key to a Google credential JSON (a service account key or a Workload Identity Federation config), or have the operator enable host Application Default Credentials with %s=true", ErrNoCredential, llm.Name, ADCSetting)
+		return nil, fmt.Errorf("%w for %s: set its API key to a Google credential JSON (a service account key or a Workload Identity Federation config), or have the operator enable host Application Default Credentials with %s=true", ErrNoCredential, owner, ADCSetting)
 	case IsAccessToken(key):
 		return oauth2.StaticTokenSource(&oauth2.Token{AccessToken: key, TokenType: "Bearer"}), nil
 	case !LooksLikeCredentialJSON(key):
-		return nil, fmt.Errorf("%w for LLM %q: the API key must be a Google credential JSON (a service account key or a Workload Identity Federation config) or an access token starting with %q", ErrInvalidCredential, llm.Name, AccessTokenPrefix)
+		return nil, fmt.Errorf("%w for %s: the API key must be a Google credential JSON (a service account key or a Workload Identity Federation config) or an access token starting with %q", ErrInvalidCredential, owner, AccessTokenPrefix)
 	}
 
 	hash := sha256.Sum256([]byte(key))
 	now := time.Now()
 	cacheMu.Lock()
-	if c, ok := cache[llm.ID]; ok && c.keyHash == hash {
+	if c, ok := cache[ck]; ok && c.keyHash == hash {
 		c.lastUsed = now
 		cacheMu.Unlock()
 		return c.ts, nil
@@ -391,22 +420,22 @@ func TokenSource(llm *models.LLM) (oauth2.TokenSource, error) {
 	// cost of at most one extra token mint.
 	ts, err := newCredentialTokenSource(key)
 	if err != nil {
-		return nil, fmt.Errorf("LLM %q: %w", llm.Name, err)
+		return nil, fmt.Errorf("%s: %w", owner, err)
 	}
 
 	cacheMu.Lock()
 	defer cacheMu.Unlock()
-	if c, ok := cache[llm.ID]; ok && c.keyHash == hash {
+	if c, ok := cache[ck]; ok && c.keyHash == hash {
 		c.lastUsed = now
 		return c.ts, nil // a concurrent miss won
 	}
-	for id, c := range cache {
+	for k, c := range cache {
 		if now.Sub(c.lastUsed) > cacheIdleTTL {
-			delete(cache, id)
+			delete(cache, k)
 		}
 	}
-	// A rotated key replaces the LLM's previous source.
-	cache[llm.ID] = &cachedSource{keyHash: hash, ts: ts, lastUsed: now}
+	// A rotated key replaces the owner's previous source.
+	cache[ck] = &cachedSource{keyHash: hash, ts: ts, lastUsed: now}
 	return ts, nil
 }
 
@@ -456,6 +485,6 @@ func AccessToken(llm *models.LLM) (string, error) {
 // resetTokenSourceCache drops every cached source. Tests only.
 func resetTokenSourceCache() {
 	cacheMu.Lock()
-	cache = map[uint]*cachedSource{}
+	cache = map[cacheKey]*cachedSource{}
 	cacheMu.Unlock()
 }

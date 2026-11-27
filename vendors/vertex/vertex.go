@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/TykTechnologies/midsommar/v2/helpers"
 	"github.com/TykTechnologies/midsommar/v2/models"
@@ -17,6 +20,8 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms/googleai/vertex"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/schema"
 	googleaiVendor "github.com/TykTechnologies/midsommar/v2/vendors/googleai"
+	"golang.org/x/oauth2"
+	"google.golang.org/api/option"
 )
 
 type Vertex struct{}
@@ -150,10 +155,19 @@ func setupVertexDriver(connDef *models.LLM, llmSettings *models.LLMSettings) (ll
 	// be bound to a short timeout.
 	ctx := context.Background()
 
+	auth, err := driverAuth(connDef.APIKey, fmt.Sprintf("LLM %q (ID %d)", connDef.Name, connDef.ID), "llm:"+strconv.FormatUint(uint64(connDef.ID), 10), func() (oauth2.TokenSource, error) {
+		return TokenSource(connDef)
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	llm, err := vertex.New(
 		ctx,
-		googleai.WithCloudProject(project),
-		googleai.WithCloudLocation(location),
+		append([]googleai.Option{
+			googleai.WithCloudProject(project),
+			googleai.WithCloudLocation(location),
+		}, auth...)...,
 	)
 
 	if err != nil {
@@ -177,11 +191,19 @@ func setupVertexEmbedClient(spec *models.EmbedderSpec) (embeddings.EmbedderClien
 	// be bound to a short timeout.
 	ctx := context.Background()
 
+	auth, err := driverAuth(spec.APIKey, fmt.Sprintf("embedder %d", spec.EmbedderID), "embedder:"+strconv.FormatUint(uint64(spec.EmbedderID), 10), func() (oauth2.TokenSource, error) {
+		return EmbedderTokenSource(spec)
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	llm, err := vertex.New(
 		ctx,
-		googleai.WithCloudProject(project),
-		googleai.WithCloudLocation(location),
-		googleai.WithAPIKey(spec.APIKey),
+		append([]googleai.Option{
+			googleai.WithCloudProject(project),
+			googleai.WithCloudLocation(location),
+		}, auth...)...,
 	)
 
 	if err != nil {
@@ -189,6 +211,38 @@ func setupVertexEmbedClient(spec *models.EmbedderSpec) (embeddings.EmbedderClien
 	}
 
 	return llm, nil
+}
+
+// adcDeprecationWarned holds the owners already warned about silent ADC.
+var adcDeprecationWarned sync.Map
+
+// driverAuth returns the auth options for a Studio chat or embedder client.
+// A key, or an empty key with AI_STUDIO_VERTEX_ADC on, goes through the
+// credential chain (credentials.go) like the gateway routes. An empty key
+// with the setting off keeps the SDK's own host-ADC lookup, as before, for
+// one more release, with a deprecation warning once per owner.
+func driverAuth(key, owner, warnKey string, source func() (oauth2.TokenSource, error)) ([]googleai.Option, error) {
+	if strings.TrimSpace(key) == "" && !ADCEnabled() && currentOverride() == nil {
+		if _, warned := adcDeprecationWarned.LoadOrStore(warnKey, true); !warned {
+			slog.Warn("vertex: "+owner+" has no API key and uses the host's Google credentials (Application Default Credentials). "+
+				"This is deprecated: in the next release a key-less Vertex LLM or embedder needs "+ADCSetting+"=true. "+
+				"Set its API key to a Google credential JSON, or ask the operator to enable "+ADCSetting+".",
+				"owner", owner)
+		}
+		return nil, nil
+	}
+	ts, err := source()
+	if err != nil {
+		return nil, err
+	}
+	return []googleai.Option{withTokenSource(ts)}, nil
+}
+
+// withTokenSource authenticates the client with ts.
+func withTokenSource(ts oauth2.TokenSource) googleai.Option {
+	return func(o *googleai.Options) {
+		o.ClientOptions = append(o.ClientOptions, option.WithTokenSource(ts))
+	}
 }
 
 func extractModelIDFromVertexURL(url string) (string, error) {
