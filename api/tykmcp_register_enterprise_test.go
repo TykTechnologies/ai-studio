@@ -227,6 +227,17 @@ func TestTykMCPEnterprise_RegistrationFlow(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 	assert.Contains(t, w.Body.String(), "already used")
 
+	// A discovery list longer than discovery returns is refused.
+	tools := make([]map[string]string, 1001)
+	for i := range tools {
+		tools[i] = map[string]string{"name": fmt.Sprintf("t%d", i)}
+	}
+	long := map[string]interface{}{"connection_id": conn.ID, "kind": "remote", "name": "Long", "upstream_url": "https://x.example.com",
+		"listen_path": "/long-mcp/", "gateway_tags": []string{"edge-eu"}, "discovered_tools": tools}
+	w = apitest.PerformAuthRequest(r, "POST", "/api/v1/mcp-servers/register?dry_run=1", long, key)
+	assert.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "more than 1000 tools")
+
 	// Minimal policy creator: access + consumption, pinned in one go.
 	w = apitest.PerformAuthRequest(r, "POST", "/api/v1/tyk-connections/"+cid+"/policies", map[string]interface{}{"kind": "access", "name": "Weather access", "server_id": srv.ID, "pin": true}, key)
 	require.Equal(t, http.StatusCreated, w.Code, w.Body.String())

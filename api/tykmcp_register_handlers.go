@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -9,6 +10,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 )
+
+// maxRegisterDiscoveredTools bounds RegisterInput.DiscoveredTools: tool
+// discovery lists at most this many (mcpintrospect's default cap).
+const maxRegisterDiscoveredTools = 1000
 
 func isDryRun(c *gin.Context) bool {
 	v, _ := strconv.ParseBool(c.Query("dry_run"))
@@ -53,6 +58,12 @@ func (a *API) registerMCPServer(c *gin.Context) {
 		return
 	}
 	if _, ok := allowInternalHostUpdate(c, false, in.AllowInternalHost); !ok {
+		return
+	}
+	// The wizard's discovery list is capped where it is listed (1,000
+	// tools); a longer one did not come from it.
+	if len(in.DiscoveredTools) > maxRegisterDiscoveredTools {
+		webhookBadRequest(c, fmt.Sprintf("discovered_tools lists more than %d tools", maxRegisterDiscoveredTools))
 		return
 	}
 	dryRun := isDryRun(c)
