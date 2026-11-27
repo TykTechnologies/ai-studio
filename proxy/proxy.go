@@ -2125,16 +2125,12 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	injectUpstreamTrace(upstreamReq.Context(), upstreamReq.Header, llm)
 	if err := p.setVendorAuthHeader(upstreamReq, llm); err != nil {
 		status, msg := http.StatusInternalServerError, "failed to set vendor auth header for streaming"
-		switch {
-		case errors.Is(err, vertexVendor.ErrTokenMint):
-			status = http.StatusBadGateway // Google's token endpoint failed
-			msg = "LLM credential not usable: " + err.Error()
-		case errors.Is(err, vertexVendor.ErrNoCredential), errors.Is(err, vertexVendor.ErrInvalidCredential):
-			// The LLM's configuration, as for an unusable key above. The
-			// errors carry no key material, and name the fix: the /ai/ and
-			// /v1 bridges relay only the message.
-			status = http.StatusBadGateway
-			msg = "LLM credential not usable: " + err.Error()
+		// Google's token endpoint failed, or the LLM's credential is missing
+		// or unusable. The errors carry no key material and name the fix;
+		// the /ai/ and /v1 bridges relay only the message.
+		if errors.Is(err, vertexVendor.ErrTokenMint) || errors.Is(err, vertexVendor.ErrNoCredential) ||
+			errors.Is(err, vertexVendor.ErrInvalidCredential) {
+			status, msg = http.StatusBadGateway, "LLM credential not usable: "+err.Error()
 		}
 		respondWithError(w, status, msg, err, false)
 		return
