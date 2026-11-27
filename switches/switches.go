@@ -284,6 +284,33 @@ func VendorCapabilities(vendor models.Vendor) []string {
 	return caps
 }
 
+// ModelCapabilities lists what one model of a vendor serves. A vendor that
+// serves chat and decision models under one provider and can tell them
+// apart (models.DecisionModelClassifier) gives a decision model
+// ["decisions"] and every other model its remaining capabilities; any other
+// vendor's models share VendorCapabilities.
+func ModelCapabilities(vendor models.Vendor, model string) []string {
+	caps := VendorCapabilities(vendor)
+	v, ok := VendorMap[vendor]
+	if !ok {
+		return caps
+	}
+	classifier, ok := v().(models.DecisionModelClassifier)
+	if !ok || len(caps) < 2 {
+		return caps
+	}
+	if classifier.IsDecisionModel(model) {
+		return []string{"decisions"}
+	}
+	out := make([]string, 0, len(caps))
+	for _, c := range caps {
+		if c != "decisions" {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 // SupportsEmbeddings reports whether the vendor's driver can embed.
 func SupportsEmbeddings(vendor models.Vendor) bool {
 	v, ok := VendorMap[vendor]

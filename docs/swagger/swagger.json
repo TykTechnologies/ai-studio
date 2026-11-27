@@ -8664,6 +8664,72 @@
                 }
             }
         },
+        "/compliance/events-by-request": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "The App's compliance events that record request_id (the gateway's X-Tyk-AI-Request-ID) in their metadata, recorded within 10 minutes of at, oldest first, at most 20 (Enterprise). An agent trace's guardrail outcome links to them.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Compliance"
+                ],
+                "summary": "Find the compliance events of one gateway request",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Gateway request id (tyai_ followed by 32 hex digits)",
+                        "name": "request_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "App ID",
+                        "name": "app_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "When the request ran (RFC 3339)",
+                        "name": "at",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.complianceEventsByRequestResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/compliance/events/{id}": {
             "get": {
                 "security": [
@@ -35194,6 +35260,17 @@
                 },
                 "type": {
                     "type": "string"
+                }
+            }
+        },
+        "api.complianceEventsByRequestResponse": {
+            "type": "object",
+            "properties": {
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/compliance.ComplianceEventRecord"
+                    }
                 }
             }
         },

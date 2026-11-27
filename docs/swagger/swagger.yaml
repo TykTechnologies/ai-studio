@@ -4798,6 +4798,13 @@ definitions:
       type:
         type: string
     type: object
+  api.complianceEventsByRequestResponse:
+    properties:
+      events:
+        items:
+          $ref: '#/definitions/compliance.ComplianceEventRecord'
+        type: array
+    type: object
   api.createWebhookTargetResponse:
     properties:
       signing_secret:
@@ -14452,6 +14459,52 @@ paths:
           schema:
             $ref: '#/definitions/models.ErrorResponse'
       summary: Get script-reported compliance events
+      tags:
+      - Compliance
+  /compliance/events-by-request:
+    get:
+      description: The App's compliance events that record request_id (the gateway's
+        X-Tyk-AI-Request-ID) in their metadata, recorded within 10 minutes of at,
+        oldest first, at most 20 (Enterprise). An agent trace's guardrail outcome
+        links to them.
+      parameters:
+      - description: Gateway request id (tyai_ followed by 32 hex digits)
+        in: query
+        name: request_id
+        required: true
+        type: string
+      - description: App ID
+        in: query
+        name: app_id
+        required: true
+        type: integer
+      - description: When the request ran (RFC 3339)
+        in: query
+        name: at
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.complianceEventsByRequestResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Find the compliance events of one gateway request
       tags:
       - Compliance
   /compliance/events/{id}:
