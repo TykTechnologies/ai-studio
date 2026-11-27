@@ -76,12 +76,11 @@ func MaskWebhookURL(raw string) string {
 	for i, seg := range segments {
 		b.WriteString("/")
 		if i >= keep || looksLikeToken(seg) {
+			// Everything from the first secret segment on is masked as
+			// one: what follows a token can name what it unlocks.
 			b.WriteString(WebhookURLMask)
-			// Everything past the first secret segment is masked as one.
-			if i >= keep {
-				break
-			}
-			continue
+			keep = i
+			break
 		}
 		b.WriteString(seg)
 	}
