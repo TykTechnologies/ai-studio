@@ -132,7 +132,10 @@ where in words, and the `slack` preset is built from it:
 - **Object event:** the acting user's name (looked up in `users`; else
   `user #N`, else `system`), the change, and the object. Link is
   `SITE_URL/admin/<llms|apps|datasources|tools|users>/<id>`, except for a
-  deleted object.
+  deleted object. The id is the event's numeric object id (formatted with
+  `%d`, so it cannot carry a path), the collection comes from a fixed map,
+  and `SITE_URL` is used only when it parses as an absolute `http(s)` URL
+  (`adminLink`); otherwise there is no link.
 
 Functions: `toJson`, `toPrettyJson`, `jsonStr`, `upper`, `lower`, `title`,
 `trim`, `default`, `coalesce`, `now`, `date`, `unixTime`, `truncate`,
