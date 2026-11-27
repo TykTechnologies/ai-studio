@@ -368,6 +368,12 @@ func convertAndStreamFromIterator(
 	candidate := &genai.Candidate{
 		Content: &genai.Content{},
 	}
+	// Tyk: the usage is the last chunk's that carries counts. The SDK's
+	// MergedResponse keeps the FIRST chunk's UsageMetadata; the Gemini API
+	// repeats the running counts on every chunk, but Vertex sends them only
+	// on the last (earlier chunks carry a usageMetadata with just its
+	// trafficType), so the merged usage read zero for every Vertex stream.
+	var usage *genai.UsageMetadata
 DoStream:
 	for {
 		resp, err := iter.Next()
@@ -376,6 +382,9 @@ DoStream:
 		}
 		if err != nil {
 			return nil, fmt.Errorf("error in stream mode: %w", err)
+		}
+		if u := resp.UsageMetadata; u != nil && (u.PromptTokenCount > 0 || u.CandidatesTokenCount > 0 || u.TotalTokenCount > 0) {
+			usage = u
 		}
 
 		if len(resp.Candidates) != 1 {
@@ -401,8 +410,12 @@ DoStream:
 			}
 		}
 	}
-	mresp := iter.MergedResponse()
-	return convertCandidates([]*genai.Candidate{candidate}, mresp.UsageMetadata)
+	if usage == nil { // Tyk: no chunk carried counts; keep the SDK's view
+		if mresp := iter.MergedResponse(); mresp != nil {
+			usage = mresp.UsageMetadata
+		}
+	}
+	return convertCandidates([]*genai.Candidate{candidate}, usage)
 }
 
 // convertSchemaRecursive recursively converts a schema map to a genai.Schema

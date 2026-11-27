@@ -52,25 +52,34 @@ func (f *fakeVertex) handler(w http.ResponseWriter, r *http.Request) {
 	f.calls = append(f.calls, vertexUpstreamCall{path: r.URL.Path, query: r.URL.RawQuery, header: r.Header.Clone(), body: body})
 	f.mu.Unlock()
 
-	part := `{"text":"hello from vertex"}`
-	finish := `"STOP"`
-	if strings.Contains(r.URL.Query().Get("$alt"), "enum-encoding=int") {
-		finish = "1" // STOP, as Vertex encodes it when asked for numbers
+	// Two chunks, as Vertex streams them: the usage counts come only on the
+	// last; the first carries a usageMetadata with just the (Vertex-only)
+	// trafficType. Enums are numbers when the client asks for them.
+	numeric := strings.Contains(r.URL.Query().Get("$alt"), "enum-encoding=int")
+	finish, traffic, modality := `"STOP"`, `"ON_DEMAND"`, `"TEXT"`
+	if numeric {
+		finish, traffic, modality = "1", "1", "1"
 	}
+	first, last := `{"text":"hello "}`, `{"text":"from vertex"}`
 	if _, ok := body["tools"]; ok {
-		part = `{"functionCall":{"name":"get_time","args":{"zone":"UTC"}}}`
+		first, last = `{"text":""}`, `{"functionCall":{"name":"get_time","args":{"zone":"UTC"}}}`
 	}
-	usage := `"usageMetadata":{"promptTokenCount":9,"candidatesTokenCount":4,"totalTokenCount":13},"modelVersion":"gemini-2.5-flash"`
-	chunk := `{"candidates":[{"content":{"role":"model","parts":[` + part + `]},"finishReason":` + finish + `}],` + usage + `}`
+	chunk0 := `{"candidates":[{"content":{"role":"model","parts":[` + first + `]}}],` +
+		`"usageMetadata":{"trafficType":` + traffic + `},"modelVersion":"gemini-2.5-flash"}`
+	chunk1 := `{"candidates":[{"content":{"role":"model","parts":[` + last + `]},"finishReason":` + finish + `}],` +
+		`"usageMetadata":{"promptTokenCount":9,"candidatesTokenCount":4,"totalTokenCount":13,"trafficType":` + traffic +
+		`,"promptTokensDetails":[{"modality":` + modality + `,"tokenCount":9}]},"modelVersion":"gemini-2.5-flash"}`
+	chunk := `{"candidates":[{"content":{"role":"model","parts":[{"text":"hello "},` + last + `]},"finishReason":` + finish + `}],` +
+		`"usageMetadata":{"promptTokenCount":9,"candidatesTokenCount":4,"totalTokenCount":13},"modelVersion":"gemini-2.5-flash"}`
 	switch {
 	case strings.Contains(r.URL.Path, ":streamGenerateContent") && r.URL.Query().Get("alt") == "sse":
 		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = w.Write([]byte("data: " + chunk + "\r\n\r\n"))
+		_, _ = w.Write([]byte("data: " + chunk0 + "\r\n\r\ndata: " + chunk1 + "\r\n\r\n"))
 		return
 	case strings.Contains(r.URL.Path, ":streamGenerateContent"):
 		// Without alt=sse Vertex streams a JSON array.
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte("[" + chunk + "]"))
+		_, _ = w.Write([]byte("[" + chunk0 + "\n,\r\n" + chunk1 + "\n]"))
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -160,7 +169,9 @@ func TestVertexUnified_ChatCompletionsStream(t *testing.T) {
 	resp, out := h.post("/ai/primary/v1/chat/completions", `{"model":"gemini-2.5-flash","stream":true,"messages":[{"role":"user","content":"hi"}]}`)
 	require.Equal(t, http.StatusOK, resp.StatusCode, string(out))
 	assert.Contains(t, resp.Header.Get("Content-Type"), "text/event-stream")
-	assert.Contains(t, string(out), "hello from vertex")
+	assert.Contains(t, string(out), `"content":"hello "`)
+	assert.Contains(t, string(out), `"content":"from vertex"`)
+	assert.Contains(t, string(out), `"usage":{"prompt_tokens":9,"completion_tokens":4,"total_tokens":13}`, "the stream's usage")
 	assert.Contains(t, string(out), "data: [DONE]")
 
 	calls := fake.snapshot()
@@ -242,7 +253,7 @@ func TestVertexUnified_FailoverOpenAIToVertex(t *testing.T) {
 	for _, body := range []string{failoverChatBody, failoverStreamBody} {
 		resp, out := h.post("/ai/primary/v1/chat/completions", body)
 		require.Equal(t, http.StatusOK, resp.StatusCode, string(out))
-		assert.Contains(t, string(out), "hello from vertex")
+		assert.Contains(t, string(out), "from vertex")
 		assert.Equal(t, "fallback", resp.Header.Get(hdrServedLLM))
 	}
 
