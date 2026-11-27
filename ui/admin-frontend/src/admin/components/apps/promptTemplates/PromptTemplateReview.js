@@ -18,6 +18,7 @@ import PlacementDiagram from "./PlacementDiagram";
 import PromptTemplateStatus from "./PromptTemplateStatus";
 import { constBytes, expiresAt, isConst, placementLabel, previousApproved } from "./promptTemplateText";
 import { diffParts, isSmallEdit, samePlacement } from "./templateDiff";
+import { rememberSeen } from "./reviewSeen";
 import {
   approvePromptTemplate,
   apiErrorMessage,
@@ -112,6 +113,15 @@ const Changes = ({ template, previous }) => {
   );
 };
 
+// SinceLastSeen says a version changed since this reviewer last opened it in
+// this browser: a proposed version is edited in place, keeping its id,
+// version and proposal time. Only the hash is remembered, never the text.
+export const SinceLastSeen = ({ template, seen }) => (
+  <Alert severity="warning" sx={{ mb: 2 }} data-testid="changed-since-seen">
+    Changed since you last reviewed it ({formatTime(seen.at)}). Review every character again.
+  </Alert>
+);
+
 const PromptTemplateReview = ({ open, appId, template, all, canApprove, userName, onClose, onApproved, onReload }) => {
   const [confirming, setConfirming] = useState(false);
   const [checked, setChecked] = useState(false);
@@ -124,6 +134,15 @@ const PromptTemplateReview = ({ open, appId, template, all, canApprove, userName
     setStale(false);
     setError(null);
   }, [template?.id, template?.content_hash]);
+
+  // What this reviewer saw of this version last time (this browser), then
+  // remember what they see now.
+  const [seen, setSeen] = useState(null);
+  useEffect(() => {
+    if (!open || !template?.id) return;
+    setSeen(rememberSeen(appId, template));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, appId, template?.id, template?.content_hash]);
 
   if (!template) return null;
   const previous = previousApproved(template, all);
@@ -180,6 +199,8 @@ const PromptTemplateReview = ({ open, appId, template, all, canApprove, userName
   const facts = [
     ["Status", <PromptTemplateStatus status={template.status} />],
     ["Proposed", `${formatTime(template.created_at)} by ${name(template.created_by)}`],
+    // A proposed version is edited in place: its proposal time stays.
+    ...(template.edited_at ? [["Edited", `${formatTime(template.edited_at)} by ${name(template.edited_by)}`]] : []),
     ["Approved", template.approved_at ? `${formatTime(template.approved_at)} by ${name(template.approved_by)}` : "Not approved"],
     ["Last matched", formatTime(template.last_matched_at)],
     [
@@ -225,6 +246,8 @@ const PromptTemplateReview = ({ open, appId, template, all, canApprove, userName
               </React.Fragment>
             ))}
           </Grid>
+
+          {seen && seen.hash !== template.content_hash && <SinceLastSeen template={template} seen={seen} />}
 
           <Typography variant="headingSmall" component="h3" sx={{ mb: 1 }}>
             Where it sits

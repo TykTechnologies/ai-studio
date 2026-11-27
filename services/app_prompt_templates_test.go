@@ -342,3 +342,48 @@ func TestAppPromptTemplates_EmitChangeEvents(t *testing.T) {
 		assert.Equal(t, appID, payload.ObjectID)
 	}
 }
+
+// o4a.11: an in-place change to a proposed version's parts or placement is
+// recorded (edited_at, edited_by), so the review can show it next to the
+// proposal time. An expiry-only change and a change to an approved version
+// (a new version) do not set it.
+func TestAppPromptTemplates_RecordsInPlaceEdits(t *testing.T) {
+	svc, appID := setupPromptTemplateService(t)
+	tpl, err := svc.CreateAppPromptTemplate(appID, 2, prReviewSpec("pr-review"))
+	require.NoError(t, err)
+	assert.Nil(t, tpl.EditedAt)
+	assert.Nil(t, tpl.EditedBy)
+
+	days := 60
+	expiry, err := svc.UpdateAppPromptTemplate(appID, tpl.ID, 3, PromptTemplateSpec{ExpiresAfterDays: &days})
+	require.NoError(t, err)
+	assert.Nil(t, expiry.EditedAt, "an expiry change is not an edit of the text")
+
+	before := time.Now()
+	edited, err := svc.UpdateAppPromptTemplate(appID, tpl.ID, 4, PromptTemplateSpec{Parts: []templates.Part{{Const: ptIntro}, {Slot: "diff"}, {Const: ptOutro + "Be brief.\n"}}})
+	require.NoError(t, err)
+	require.Equal(t, tpl.ID, edited.ID)
+	row, err := svc.GetAppPromptTemplate(appID, tpl.ID)
+	require.NoError(t, err)
+	require.NotNil(t, row.EditedAt)
+	require.NotNil(t, row.EditedBy)
+	assert.Equal(t, uint(4), *row.EditedBy)
+	assert.False(t, row.EditedAt.Before(before.Add(-time.Second)))
+	assert.Equal(t, uint(2), row.CreatedBy, "the proposer stays")
+	assert.Equal(t, edited.ContentHash(), row.ContentHash(), "the edit record is not content")
+
+	// Placement counts too.
+	_, err = svc.UpdateAppPromptTemplate(appID, tpl.ID, 5, PromptTemplateSpec{Placement: &templates.Placement{Role: "system"}})
+	require.NoError(t, err)
+	row, err = svc.GetAppPromptTemplate(appID, tpl.ID)
+	require.NoError(t, err)
+	assert.Equal(t, uint(5), *row.EditedBy)
+
+	// An approved version changes by a new version, which starts unedited.
+	approved, err := svc.ApproveAppPromptTemplate(appID, tpl.ID, 1, row.ContentHash())
+	require.NoError(t, err)
+	v2, err := svc.UpdateAppPromptTemplate(appID, approved.ID, 6, PromptTemplateSpec{Parts: prReviewSpec("").Parts})
+	require.NoError(t, err)
+	assert.NotEqual(t, approved.ID, v2.ID)
+	assert.Nil(t, v2.EditedAt)
+}

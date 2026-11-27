@@ -181,6 +181,27 @@ describe("Webhooks", () => {
     expect(await screen.findByText(/Ops Slack: approve done/)).toBeInTheDocument();
   });
 
+  it("shows a Slack URL masked and keeps it when the edit form sends it back", async () => {
+    const masked = { ...targets[0], url: "https://hooks.slack.com/services/***", url_masked: true };
+    mockApi({ list: [masked, targets[1]] });
+    renderPage();
+    await screen.findByText("Ops Slack");
+    expect(screen.getByText("https://hooks.slack.com/services/***")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("actions for Ops Slack"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Approve" }));
+    expect(await screen.findByText(/the secret part of the URL is hidden/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    fireEvent.click(screen.getByLabelText("actions for Ops Slack"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
+    expect(await screen.findByTestId("webhook-url")).toHaveValue("https://hooks.slack.com/services/***");
+    expect(screen.getByText(/The secret part of this URL is hidden/)).toBeInTheDocument();
+    // Replacing the URL drops the hint.
+    fireEvent.change(screen.getByTestId("webhook-url"), { target: { value: "https://hooks.slack.com/services/T/B/new" } });
+    expect(screen.queryByText(/The secret part of this URL is hidden/)).not.toBeInTheDocument();
+  });
+
   it("does not offer approve for an approved target but offers pause, test and revoke", async () => {
     mockApi();
     renderPage();
