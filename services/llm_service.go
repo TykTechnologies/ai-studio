@@ -101,6 +101,9 @@ func (s *Service) CreateLLM(name, apiKey, apiEndpoint string, privacyScore int,
 	if err := applyLLMOptions(llm, opts); err != nil {
 		return nil, err
 	}
+	if err := validateLLMVendorConfig(llm, true, true); err != nil {
+		return nil, err
+	}
 	if err := s.ValidateLLMFailover(llm, llm.Failover); err != nil {
 		return nil, err
 	}
@@ -205,6 +208,9 @@ func (s *Service) CreateLLMWithNamespace(name, apiKey, apiEndpoint string, priva
 	if err := applyLLMOptions(llm, opts); err != nil {
 		return nil, err
 	}
+	if err := validateLLMVendorConfig(llm, true, true); err != nil {
+		return nil, err
+	}
 	if err := s.ValidateLLMFailover(llm, llm.Failover); err != nil {
 		return nil, err
 	}
@@ -300,6 +306,11 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 			return nil, err
 		}
 	}
+	// A Vertex LLM's stored endpoint and key are re-checked only when they
+	// change (or the LLM becomes a Vertex LLM).
+	becomesVertex := llm.Vendor != vendor
+	endpointChanged := becomesVertex || llm.APIEndpoint != apiEndpoint
+	keyChanged := becomesVertex || apiKey != "[redacted]"
 	llm.Name = name
 	// Smart API key update logic
 	if apiKey == "[redacted]" {
@@ -336,6 +347,9 @@ func (s *Service) UpdateLLM(id uint, name, apiKey, apiEndpoint string,
 		llm.Failover = *failover
 	}
 	if err := applyLLMOptions(llm, opts); err != nil {
+		return nil, err
+	}
+	if err := validateLLMVendorConfig(llm, endpointChanged, keyChanged); err != nil {
 		return nil, err
 	}
 	if err := s.ValidateLLMFailover(llm, llm.Failover); err != nil {

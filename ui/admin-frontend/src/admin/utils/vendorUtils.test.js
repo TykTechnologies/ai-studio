@@ -12,6 +12,8 @@ import {
   getVendorData,
   getEmbedderCodes,
   getVectorStoreCodes,
+  getLLMFieldHelp,
+  VERTEX_LLM_HELP,
 } from './vendorUtils';
 
 // Mock apiClient
@@ -58,8 +60,8 @@ describe('vendorUtils', () => {
   describe('getEmbedderHelpText', () => {
     test('should return help text for vertex embedder', () => {
       const helpText = getEmbedderHelpText('vertex');
-      expect(helpText).toContain('project name');
-      expect(helpText).toContain('region');
+      expect(helpText).toContain('project:location');
+      expect(helpText).toContain('credential JSON');
     });
 
     test('should return empty string for embedder with no help text', () => {
@@ -247,6 +249,25 @@ describe('vendorUtils', () => {
       expect(newEmbedder).toBeDefined();
       expect(newEmbedder.name).toBe('new_embedder');
       expect(newEmbedder.logo).toBeNull();
+    });
+  });
+  describe('getLLMFieldHelp', () => {
+    test('explains the Vertex endpoint and credential formats', () => {
+      const help = getLLMFieldHelp('vertex');
+      expect(help).toBe(VERTEX_LLM_HELP);
+      expect(help.endpoint).toContain('project:location');
+      expect(help.endpoint).toContain('us-central1');
+      expect(help.endpoint).toContain('global');
+      expect(help.apiKey).toContain('service account key');
+      expect(help.apiKey).toContain('Workload Identity Federation');
+      expect(help.apiKey).toContain('AI_STUDIO_VERTEX_ADC');
+      expect(help.keylessWarning).toContain('AI_STUDIO_VERTEX_ADC=true');
+      expect(help.keylessWarning).toContain('deprecated');
+    });
+
+    test('has no extra help for other vendors', () => {
+      expect(getLLMFieldHelp('openai')).toBeNull();
+      expect(getLLMFieldHelp(undefined)).toBeNull();
     });
   });
 });
