@@ -14,6 +14,7 @@ AI Studio 2.3 is built for teams running AI agents. You can now **see what your 
 - **Native SDK features**: Anthropic Message Batches and `count_tokens`, and OpenAI Responses, Conversations, Batches and Files, governed like any chat call.
 - **Tyk OSS Gateway connections and MCP analytics** (Enterprise): manage MCP proxies and keys on open-source Tyk Gateways, and see how your MCP servers are used.
 - **Plugins work on Bedrock everywhere**: plugins attached to a Bedrock LLM now run on every endpoint.
+- **Gemini Platform (Vertex) on every endpoint**: Vertex LLMs work on the native, OpenAI-compatible and `/v1` endpoints, on AI Studio and edges, with their own Google credential.
 - **Active-active control planes**: run AI Studio in two sites over one replicated PostgreSQL. It follows a database failover without a restart, and edges move between control planes, start without one, and (Enterprise) validate keys from a hashed list while none answers.
 - **Workspaces and service accounts** (Enterprise): give a team or automation a role within a Workspace so it manages only that Workspace's objects; service accounts for automation such as the Tyk Operator, and pushes that refuse to carry other Workspaces' changes.
 - **Safer by default**: internal network addresses are blocked unless you allow them, plugin signatures are required, credentials are encrypted at rest, and plugins get only the access they declare.
@@ -27,14 +28,15 @@ AI Studio 2.3 is built for teams running AI agents. You can now **see what your 
 2. **Internal addresses are blocked by default.** If an LLM, embedder, tool, data source, vector store or guardrail provider runs on your own network (a local Ollama, an in-cluster model server), allow it first. [Details](#network-access).
 3. **`$ENV/` references only resolve for names you allow.** List them in `AI_STUDIO_ENV_REF_ALLOWLIST`, or move those credentials to the secret store. [Details](#credentials-and-secrets).
 4. **Vendor keys are no longer read from environment variables** such as `OPENAI_API_KEY`. Set keys and endpoints on each LLM, embedder and data source. [Details](#credentials-and-secrets).
-5. **Set `TYK_AI_SECRET_KEY`** if you use SSO, and so that LLM credentials and App keys are encrypted at rest. Never change it afterwards: App keys stop validating. [Details](#credentials-and-secrets).
-6. **Using the quickstart?** Replace its placeholder secrets before the first start. [Details](#credentials-and-secrets).
-7. **OCI plugins must be signed** (Enterprise), and plugins no longer inherit the host's environment. [Details](#plugins).
-8. **Upgrade the shipped plugins** to their 2.3.0 versions, and rebuild your own request-path plugins on the 2.3 SDK. When you point a plugin at a new build by changing its command, in the admin UI or with `PATCH /api/v1/plugins/{id}`, AI Studio stops the old process, loads the new binary and withdraws the approval of its service scopes: its service access is off in AI Studio until an administrator approves the scopes again, even when they are unchanged. The edit form shows that step after you save. Edges do not wait for that approval: see [Known issues](#known-issues). On edges, a plugin that cannot be loaded now stops its LLM's traffic, so check that every attached plugin loads there. [Details](#plugins) and [Plugin releases](#plugin-releases).
-9. **Existing guardrails start scanning tool results** (Enterprise), and remote guardrail providers start receiving tool output. [Details](#guardrails).
-10. **Take a database backup** before the first 2.3 start. Restoring it is the only way to roll back. An older AI Studio still starts on a database 2.3 has migrated, but its LLMs with literal keys then fail and it refuses every App key. [Details](#database).
-11. **Stop every older AI Studio replica before the first 2.3 replica starts**, in every site: the upgrade to 2.3 is not rolling, because an older replica on a 2.3 database refuses every App key. What you lose: AI Studio is down in every site from when its last older replica stops until a 2.3 replica is ready, so schedule a maintenance window for it. With the Helm chart and `replicaCount` above 1, set `midsommar.strategy.type: Recreate` (or scale to one replica) for this upgrade. [Details](#database).
-12. **Upgrade edges together with AI Studio.** Several features and credential changes need both on 2.3. [Details](#edges).
+5. **Give Gemini Platform (Vertex) LLMs their own Google credential** (formerly shown as Vertex AI). Paste a service account key JSON into each Vertex LLM's API key; the gateway routes refuse a Vertex LLM without one unless you opt in to host credentials with `AI_STUDIO_VERTEX_ADC=true`. Workload Identity Federation credentials need that setting on AI Studio and on every edge. [Details](#gemini-platform-vertex).
+6. **Set `TYK_AI_SECRET_KEY`** if you use SSO, and so that LLM credentials and App keys are encrypted at rest. Never change it afterwards: App keys stop validating. [Details](#credentials-and-secrets).
+7. **Using the quickstart?** Replace its placeholder secrets before the first start. [Details](#credentials-and-secrets).
+8. **OCI plugins must be signed** (Enterprise), and plugins no longer inherit the host's environment. [Details](#plugins).
+9. **Upgrade the shipped plugins** to their 2.3.0 versions, and rebuild your own request-path plugins on the 2.3 SDK. When you point a plugin at a new build by changing its command, in the admin UI or with `PATCH /api/v1/plugins/{id}`, AI Studio stops the old process, loads the new binary and withdraws the approval of its service scopes: its service access is off in AI Studio until an administrator approves the scopes again, even when they are unchanged. The edit form shows that step after you save. Edges do not wait for that approval: see [Known issues](#known-issues). On edges, a plugin that cannot be loaded now stops its LLM's traffic, so check that every attached plugin loads there. [Details](#plugins) and [Plugin releases](#plugin-releases).
+10. **Existing guardrails start scanning tool results** (Enterprise), and remote guardrail providers start receiving tool output. [Details](#guardrails).
+11. **Take a database backup** before the first 2.3 start. Restoring it is the only way to roll back. An older AI Studio still starts on a database 2.3 has migrated, but its LLMs with literal keys then fail and it refuses every App key. [Details](#database).
+12. **Stop every older AI Studio replica before the first 2.3 replica starts**, in every site: the upgrade to 2.3 is not rolling, because an older replica on a 2.3 database refuses every App key. What you lose: AI Studio is down in every site from when its last older replica stops until a 2.3 replica is ready, so schedule a maintenance window for it. With the Helm chart and `replicaCount` above 1, set `midsommar.strategy.type: Recreate` (or scale to one replica) for this upgrade. [Details](#database).
+13. **Upgrade edges together with AI Studio.** Several features and credential changes need both on 2.3. [Details](#edges).
 
 ---
 
@@ -149,6 +151,18 @@ Until now, only authentication plugins ran when clients reached a Bedrock LLM th
 - New Plugin SDK helpers (`RequestModel`, `IsStreamingRequest`, `ResponseUsage`) read the model, streaming flag and token usage in every vendor's format.
 
 This changes what plugins and filter scripts see for Bedrock traffic. Read the [Bedrock upgrade notes](#bedrock) before upgrading.
+
+### Gemini Platform (Vertex) on every endpoint
+
+Vertex LLMs, now shown as **Gemini Platform (Vertex)**, work on every gateway endpoint. That covers the vendor-native routes (`/llm/call`, `/llm/rest`, `/llm/stream`), the OpenAI-compatible `/ai/{slug}/v1`, the unified `/v1` and routers, on AI Studio's embedded gateway and on edges. Before, the native routes answered `400` for Vertex LLMs and the OpenAI-compatible endpoints refused them.
+
+- **Their own Google credential.** Each Vertex LLM carries a Google credential JSON in its API key: a service account key, or a Workload Identity Federation config. The gateway mints short-lived access tokens from it, caches them and refreshes them, on AI Studio and on every edge. An App's key never reaches Google.
+- **Host credentials, only if you opt in.** `AI_STUDIO_VERTEX_ADC=true` lets a key-less Vertex LLM use the host's Application Default Credentials (GKE Workload Identity, Cloud Run, the metadata server). It also allows Workload Identity Federation credentials, which act with the host's identity. Off by default.
+- **Endpoints.** `project:location` with a region (`us-central1`), a multi-region (`us`, `eu`) or `global`, or a URL that names the project and location, for Private Service Connect.
+- **OpenAI SDKs and agent frameworks** work against Gemini on Vertex unchanged: tools, streaming and usage are translated, and failover waterfalls can mix Vertex with other vendors. Filters, guardrails, plugins, budgets and analytics run on the native Vertex request.
+- **Clear errors.** A Vertex request whose credential can't be used is answered `502` (`LLM credential not usable`) with the reason, and nothing is sent to Google.
+
+See [Gemini Platform (Vertex)](docs/site/docs/proxy.md#gemini-platform-vertex) and [Vertex credentials](docs/site/docs/llm-management.md#gemini-platform-vertex-credentials), and read the [upgrade notes](#gemini-platform-vertex) if you already have Vertex LLMs.
 
 ### Active-active control planes and edge resilience
 
@@ -433,6 +447,17 @@ Plugins attached to a Bedrock LLM now run on `/ai/`, `/v1`, routers and `/anthro
 - **Request logs** show the LLM's name as the model for buffered Bedrock calls on these endpoints. Chat records keep the model id.
 - **AI Studio's embedded gateway** applies budgets, filters and analytics to Bedrock the same way.
 
+### Gemini Platform (Vertex)
+
+The vendor formerly shown as **Vertex AI** is now **Gemini Platform (Vertex)**. Its vendor code is still `vertex` in the API, the database and the Microgateway CLI. Before upgrading, check each Vertex LLM:
+
+- **Gateway routes need a credential on the LLM.** Set its API key to a service account key JSON (the service account needs the Vertex AI User role, `roles/aiplatform.user`). Or set `AI_STUDIO_VERTEX_ADC=true` on AI Studio and on each edge to use the host's Application Default Credentials for key-less Vertex LLMs. Otherwise a request on `/llm/`, `/ai/`, `/v1` or a router answers `502` with an error naming the setting. The gateway never reads Google credentials from the host without the setting. This is a deliberate security default.
+- **Workload Identity Federation needs the setting.** An `external_account` credential (or an impersonated one whose source is one) is refused, when saved and when used, unless `AI_STUDIO_VERTEX_ADC=true` is set on AI Studio and on every edge that serves the LLM.
+- **Studio Chat and embedders** without a key still use the host's credentials for one more release, and log a deprecation warning. Give them a credential, or set the setting, before that fallback is removed. An embedder key that is a Google API key (not a credential JSON or access token) is now refused.
+- **The endpoint is validated when an LLM is saved**: `project:location` (region, `us`, `eu` or `global`) or a URL. A URL without `/v1/projects/{project}/locations/{location}` works only on the native routes with a full Vertex path; on `/ai/` and `/v1` it answers `400`. An existing LLM is checked only when you change its endpoint or key.
+- **An access token** (`ya29.…`) in the key is still sent as it is, for tests only: it expires within an hour.
+- **Usage on `/ai/` and `/v1`** reports prompt and output tokens. Thinking tokens are not in the OpenAI-shaped `usage` yet; analytics and budgets count them.
+
 ### Guardrails
 
 - **Existing request guardrails scan tool results** (Enterprise). A guardrail saved before 2.3 inspects every tool result after the upgrade, and a `block` action becomes `quarantine` for tool results. For the seeded filters:
@@ -458,6 +483,7 @@ Upgrade edges together with AI Studio. Edges older than 2.3:
 - **block guardrailed traffic**, even under `fail_mode: open`, because guardrail credentials now reach edges only encrypted;
 - **fail Bedrock calls**, because AWS credentials now reach edges only encrypted (an old edge never falls back to its own AWS credentials);
 - **can't serve decision models** (the `systemone` vendor), and don't record OpenAI decision calls;
+- **can't serve Gemini Platform (Vertex) LLMs** on any route;
 - **don't scan tool results**, and block where a 2.3 edge would quarantine;
 - **don't enforce LLM budgets**, ignore **Allow internal host**, and don't verify resource ids minted by AI Studio.
 

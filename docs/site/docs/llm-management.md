@@ -22,9 +22,11 @@ Administrators can configure connections to different LLM providers through the 
     *   **Name:** A user-friendly name for this configuration (e.g., "OpenAI GPT-4 Turbo").
     *   **Vendor:** Select the LLM vendor. Supported vendors: `openai`, `anthropic`, `vertex` (Gemini Platform (Vertex); formerly shown as Vertex AI), `google_ai`, `huggingface`, `ollama`.
     *   **API Key/Credentials:** Securely provide the necessary authentication credentials. Use the **Secrets Management** system (`$SECRET/YourSecretName`) for best practice.
-        AI Studio and the Microgateway never read a vendor key, base URL or host from their own environment (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `HF_TOKEN`, `OLLAMA_HOST` and the like). A provider that needs a key and has none is refused rather than filled in from the host. The same applies to embedders and to Pinecone and Chroma data sources. Gemini Platform (Vertex) is unchanged: it authenticates with the host's Google Cloud credentials.
+        AI Studio and the Microgateway never read a vendor key, base URL or host from their own environment (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, `HF_TOKEN`, `OLLAMA_HOST` and the like). A provider that needs a key and has none is refused rather than filled in from the host. The same applies to embedders and to Pinecone and Chroma data sources. The one exception is Gemini Platform (Vertex), and only when an operator opts in with `AI_STUDIO_VERTEX_ADC=true`: see [Gemini Platform (Vertex) credentials](#gemini-platform-vertex-credentials).
     *   **Base URL (Optional):** Override the default API endpoint if needed (e.g., for self-hosted models or custom endpoints).
         Since 2.3 the gateway refuses a Base URL on an internal address (a local Ollama at `http://localhost:11434`, a model server on a private IP or in the cluster). An administrator can turn on **Allow internal host** for the LLM, which exempts its own endpoint (on every route, in Studio chat and on edges, and for its linked embedders), or name the host in `LLM_UPSTREAM_ALLOWED_INTERNAL_HOSTS`. See [Outbound network policy](./proxy.md#outbound-network-policy).
+
+    *   **Gemini Platform (Vertex):** the API endpoint is the Google Cloud project and location, `project:location` (for example `my-project:us-central1`, `my-project:eu` or `my-project:global`), or a URL ending in `/v1/projects/{project}/locations/{location}`. The API key is a Google credential JSON. See [Gemini Platform (Vertex) credentials](#gemini-platform-vertex-credentials).
 
 4.  **Model Selection:**
     *   **Allowed Models:** Specify the exact model names from the vendor that can be used via this configuration (e.g., `gpt-4-turbo`, `claude-3-opus-20240229`).
@@ -141,3 +143,21 @@ Tyk AI Studio allows setting monthly spending limits to control AI costs.
 *   **App Budget:** Set the `MonthlyBudget` field when creating/editing an App configuration.
 
 By combining LLM configuration, pricing, and budgeting, administrators gain granular control over AI model access and expenditure within Tyk AI Studio.
+
+## Gemini Platform (Vertex) credentials
+
+A Gemini Platform (Vertex) LLM (vendor code `vertex`) authenticates to Vertex with short-lived Google access tokens. The gateway mints them from the LLM's API key and refreshes them before they expire, on AI Studio and on every edge gateway that serves the LLM. The key is stored encrypted and synced to edges like any other LLM credential. The Google identity needs the **Vertex AI User** role (`roles/aiplatform.user`) on the project.
+
+The API key is checked in this order:
+
+1.  **A Google credential JSON**, pasted whole into the API key (or stored in a secret and referenced as `$SECRET/...`):
+    *   a **service account key** (`"type": "service_account"`), the usual choice. It needs no other setting.
+    *   a **Workload Identity Federation** config (`"type": "external_account"`, or an `impersonated_service_account` whose source is one), which exchanges an identity the host supplies (a Kubernetes projected token, the instance metadata service, the AWS environment or certificate files) for a Google token, so no long-lived key is stored. Because it acts with the host's identity, every Workload Identity Federation credential is refused unless the operator sets `AI_STUDIO_VERTEX_ADC=true` on AI Studio **and on every edge gateway** that serves the LLM. This is a deliberate security default: anyone who can edit an LLM could otherwise borrow the identity of the machine the gateway runs on.
+    *   `authorized_user` credentials (from `gcloud auth application-default login`), for development.
+
+    Token endpoints in the JSON must be Google's own (`https://*.googleapis.com`, `https://accounts.google.com`), and executable credential sources are refused.
+2.  **An access token** starting with `ya29.`, sent as it is. It expires within an hour, so use it only for tests and short manual checks, never in production.
+3.  **No key**: the host's Application Default Credentials, only when the operator sets `AI_STUDIO_VERTEX_ADC=true`. The lookup order is `GOOGLE_APPLICATION_CREDENTIALS`, then gcloud user credentials, then the GCP metadata server (GKE Workload Identity, Cloud Run, Compute Engine). Each edge then needs its own Google identity with access to Vertex. See [Gemini Platform (Vertex) host credentials](./configuration.md#gemini-platform-vertex-host-credentials).
+4.  Otherwise the LLM is refused. When it is saved, a key that is not a supported credential is refused (`400`), and a missing key is accepted with a warning. A request on a gateway route (`/llm/`, `/ai/`, `/v1`, routers) whose credential cannot be used is answered `502` with `LLM credential not usable` and the reason, which names `AI_STUDIO_VERTEX_ADC` where it applies. Nothing is sent to Vertex, and no credential value is ever included in an error or a log.
+
+**Studio Chat and embedders** use the same credentials. A key-less Vertex LLM or embedder in Studio Chat still falls back to the host's Application Default Credentials without `AI_STUDIO_VERTEX_ADC`, for one more release, and logs a deprecation warning once per LLM or embedder. Give it a credential JSON, or set `AI_STUDIO_VERTEX_ADC=true`, before that fallback is removed. An embedder key that is neither a credential JSON nor an access token (a Google API key, for example) is refused.
