@@ -90,6 +90,10 @@ func (p *Proxy) runDriverAttempt(ctx context.Context, r *http.Request, a llmAtte
 	// Create internal routing HTTP client
 	// This routes SDK requests through /llm/call/ for plugin hook execution
 	internalClient := p.newInternalRoutingClient(r.Header.Get("Authorization"), withClientLoopbackHeaders(r, p.loopbackHeaders(r.Context(), a)))
+	if a.conf.Vendor == models.GOOGLEAI || a.conf.Vendor == models.VERTEX {
+		// Gemini 3 tool calls need their thought signatures on the next turn.
+		internalClient.Transport.(*InternalRoutingTransport).thoughtSignatures = true
+	}
 
 	// Create a modified LLM config with internal endpoint
 	// The SDK will route to /llm/call/{slug} instead of the external vendor

@@ -27,6 +27,9 @@ type InternalRoutingTransport struct {
 	// extra headers to add to every loopback request; the failover marker
 	// rides here so the inner hop can grant inherited access to a fallback.
 	extra http.Header
+	// thoughtSignatures carries Gemini thought signatures past the Google AI
+	// client (gemini_thought_signatures.go); set for Google AI and Vertex.
+	thoughtSignatures bool
 }
 
 // NewInternalRoutingTransport creates a transport that passes through the original
@@ -116,6 +119,11 @@ func (t *InternalRoutingTransport) RoundTrip(req *http.Request) (*http.Response,
 	// never what is enforced, so it needs no trust.
 	req.Header.Set(hdrInternalHop, internalHopToken)
 	setLoopbackRequestIDs(req)
+	if t.thoughtSignatures {
+		if err := withThoughtSignaturesRestored(req); err != nil {
+			return nil, err
+		}
+	}
 
 	resp, err := loopbackRoundTrip(t.underlying, req)
 	if relay := loopbackRelayFrom(req.Context()); relay != nil {
@@ -129,6 +137,11 @@ func (t *InternalRoutingTransport) RoundTrip(req *http.Request) (*http.Response,
 		case resp.StatusCode >= http.StatusBadRequest:
 			relay.captureFailure(resp)
 		}
+	}
+	if t.thoughtSignatures && err == nil && resp.StatusCode < http.StatusMultipleChoices && resp.Body != nil {
+		resp.Body = newSignatureCarrier(resp.Body)
+		resp.ContentLength = -1 // the rewrite changes the length
+		resp.Header.Del("Content-Length")
 	}
 	return resp, err
 }
