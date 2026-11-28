@@ -16,6 +16,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"strings"
 )
 
@@ -88,4 +89,27 @@ func ShortSignatureID(id string) string {
 func usableSignature(v any) (string, bool) {
 	sig, ok := v.(string)
 	return sig, ok && sig != "" && len(sig) <= MaxThoughtSignatureBytes
+}
+
+// StripThoughtSignatureArg removes ThoughtSignatureArg from a call's JSON
+// arguments, for a vendor other than Gemini: the key is the proxy's own and
+// never meant for a tool. Arguments without it, or that are not a JSON
+// object, are returned as they are.
+func StripThoughtSignatureArg(arguments string) string {
+	if !strings.Contains(arguments, ThoughtSignatureArg) {
+		return arguments
+	}
+	var args map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(arguments), &args); err != nil {
+		return arguments
+	}
+	if _, ok := args[ThoughtSignatureArg]; !ok {
+		return arguments
+	}
+	delete(args, ThoughtSignatureArg)
+	out, err := json.Marshal(args)
+	if err != nil {
+		return arguments
+	}
+	return string(out)
 }

@@ -83,3 +83,10 @@ func TestThoughtSignatureClientSuppliedKey(t *testing.T) {
 	assert.NotContains(t, parts[2].(genai.FunctionCall).Args, ThoughtSignatureArg, "over the cap")
 	assert.Equal(t, "FROM_ID", parts[3].(genai.FunctionCall).Args[ThoughtSignatureArg])
 }
+
+func TestStripThoughtSignatureArg(t *testing.T) {
+	assert.JSONEq(t, `{"x":1}`, StripThoughtSignatureArg(`{"x":1,"`+ThoughtSignatureArg+`":"S"}`))
+	for _, kept := range []string{`{"x":1}`, `not json`, `["` + ThoughtSignatureArg + `"]`, `{"x":"` + ThoughtSignatureArg + `"}`} {
+		assert.Equal(t, kept, StripThoughtSignatureArg(kept))
+	}
+}

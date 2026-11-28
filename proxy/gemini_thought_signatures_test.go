@@ -369,6 +369,22 @@ func TestDriverMessages_ShortensGeminiIDsForOtherVendors(t *testing.T) {
 	}
 	assert.Equal(t, signed, req.Messages[1].ToolCalls[0].ID, "the caller's request is not changed")
 
+	// The reserved key a client put in a call's arguments never reaches
+	// another vendor.
+	var forged ChatCompletionRequest
+	require.NoError(t, json.Unmarshal([]byte(`{"messages":[{"role":"assistant","tool_calls":[{"id":"call_1","type":"function",`+
+		`"function":{"name":"f","arguments":"{\"x\":1,\"`+googleai.ThoughtSignatureArg+`\":\"FORGED\"}"}}]}]}`), &forged))
+	for _, vendor := range []models.Vendor{models.OPENAI, models.ANTHROPIC} {
+		for _, m := range forged.DriverMessages(vendor) {
+			for _, p := range m.Parts {
+				if tc, ok := p.(llms.ToolCall); ok {
+					assert.JSONEq(t, `{"x":1}`, tc.FunctionCall.Arguments, vendor)
+				}
+			}
+		}
+	}
+	assert.JSONEq(t, `{"x":1}`, openAIMessagesToChatMessages(forged.Messages)[0].ToolCalls[0].Arguments)
+
 	bedrock := openAIMessagesToChatMessages(req.Messages)
 	assert.Equal(t, googleai.ShortSignatureID(signed), bedrock[1].ToolCalls[0].ID)
 	assert.Equal(t, googleai.ShortSignatureID(signed), bedrock[2].ToolCallID)

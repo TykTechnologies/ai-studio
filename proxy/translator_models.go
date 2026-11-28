@@ -560,7 +560,8 @@ func (r *ChatCompletionRequest) GetMessages() []llms.MessageContent {
 // can reach another vendor (a failover, a router, a client switching
 // models), whose IDs are limited in length, so for any vendor but Google AI
 // and Vertex such IDs are shortened, the same way in the tool calls and the
-// tool results (googleai.ShortSignatureID).
+// tool results (googleai.ShortSignatureID), and the proxy's reserved
+// signature key is removed from their arguments.
 func (r *ChatCompletionRequest) DriverMessages(vendor models.Vendor) []llms.MessageContent {
 	plain := r.GetMessages()
 	switch vendor {
@@ -570,8 +571,10 @@ func (r *ChatCompletionRequest) DriverMessages(vendor models.Vendor) []llms.Mess
 	}
 	names := map[string]string{}
 	toolCallID := func(id string) string { return id }
+	toolArgs := func(args string) string { return args }
 	if vendor != models.GOOGLEAI && vendor != models.VERTEX {
 		toolCallID = googleai.ShortSignatureID
+		toolArgs = googleai.StripThoughtSignatureArg
 	}
 	out := make([]llms.MessageContent, 0, len(plain))
 	for i, msg := range r.Messages {
@@ -581,7 +584,7 @@ func (r *ChatCompletionRequest) DriverMessages(vendor models.Vendor) []llms.Mess
 			for _, c := range msg.ToolCalls {
 				c.ID = toolCallID(c.ID)
 				names[c.ID] = c.Function.Name
-				args := c.Function.Arguments
+				args := toolArgs(c.Function.Arguments)
 				if strings.TrimSpace(args) == "" {
 					args = "{}"
 				}

@@ -413,7 +413,7 @@ func openAIMessagesToChatMessages(messages []Message) []bedrockVendor.ChatMessag
 			ToolCallID: googleai.ShortSignatureID(msg.ToolCallID), // see DriverMessages
 		}
 		for _, c := range msg.ToolCalls {
-			cm.ToolCalls = append(cm.ToolCalls, bedrockVendor.ChatToolCall{ID: googleai.ShortSignatureID(c.ID), Name: c.Function.Name, Arguments: c.Function.Arguments})
+			cm.ToolCalls = append(cm.ToolCalls, bedrockVendor.ChatToolCall{ID: googleai.ShortSignatureID(c.ID), Name: c.Function.Name, Arguments: googleai.StripThoughtSignatureArg(c.Function.Arguments)})
 		}
 		result = append(result, cm)
 	}
