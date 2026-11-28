@@ -118,6 +118,24 @@ A single OpenAI-compatible endpoint at the root of the gateway, fronting every L
       }'
     ```
 
+#### Gemini Platform (Vertex)
+
+A Gemini Platform (Vertex) LLM serves Google's Gemini models from a Google Cloud project. From AI Studio 2.3 it works on every gateway endpoint: the vendor-native routes, the OpenAI-compatible `/ai/{llmSlug}/v1` endpoint, the Main Ingress `/v1` and routers, in AI Studio's embedded gateway and on edge gateways. Before 2.3 the native routes answered `400` for Vertex LLMs and the OpenAI-compatible endpoints refused them.
+
+*   **Native path.** Send the path the Vertex SDKs send, `/v1/projects/{project}/locations/{location}/publishers/google/models/{model}:generateContent`, or `:streamGenerateContent` for a stream (with `?alt=sse` for Server-Sent Events). For example, `POST /llm/call/{llmSlug}/v1/projects/my-project/locations/us-central1/publishers/google/models/gemini-2.5-flash:generateContent` with a Gemini request body (`contents`, `systemInstruction`, `tools`, `generationConfig`). On `/llm/call/` a Gemini API path (`/v1beta/models/{model}:generateContent`) is accepted too, and mapped to the Vertex path with the LLM's project and location.
+*   **Endpoint.** The LLM's API endpoint is `project:location`. The location sets the Vertex host:
+
+    | Endpoint | Vertex host |
+    |---|---|
+    | `my-project:us-central1` (a region) | `https://us-central1-aiplatform.googleapis.com` |
+    | `my-project:us` or `my-project:eu` (a multi-region) | `https://aiplatform.us.rep.googleapis.com`, `https://aiplatform.eu.rep.googleapis.com` |
+    | `my-project:global` | `https://aiplatform.googleapis.com` |
+    | `https://host/v1/projects/my-project/locations/us-central1` | `https://host`, for example a Private Service Connect endpoint |
+
+    A URL that ends in `/v1/projects/{project}/locations/{location}` names the project and location, so it works on every endpoint. A URL without them (`https://host`) works only on the native routes with a full Vertex path. On `/ai/` and `/v1` it is refused with `400`, because the gateway cannot build the Vertex path. A malformed endpoint (`my-project`, `a:b:c`) is refused when the LLM is saved.
+*   **Credentials.** The gateway authenticates to Vertex with a short-lived Google access token, minted from the LLM's own credential. An App's key never reaches Google. See [LLM Management](./llm-management.md#gemini-platform-vertex-credentials) for what the API key holds. A request whose credential cannot be used (no key, a refused credential, or a token Google would not issue) is answered `502` with `LLM credential not usable` and the reason, on every endpoint, and nothing is sent to Vertex.
+*   **Partner models** on Vertex (Anthropic via `:rawPredict`, Llama and other Model-as-a-Service models) use other wire formats. They are not translated on `/ai/` and `/v1`.
+
 #### Claude Code and the Anthropic SDKs
 
 Point an Anthropic client at the vendor-native endpoint of an Anthropic LLM and authenticate with the App's API key. Everything the SDK sends to `/v1/messages`, streaming or not, passes through as it would to Anthropic.
@@ -214,7 +232,7 @@ The operations are counted in the `aistudio_native_*` metrics (see [Observabilit
 *   **Purpose:** accepts OpenAI-format requests and translates them to the target vendor's API, translating the response back. Unlike the Main Ingress it is pinned to one LLM by its URL, so the `model` field takes a plain vendor model name — or can be omitted, falling back to the default model configured on that LLM.
 *   **Use it when** a client should only ever reach a single LLM, or when a tool cannot be made to send a namespaced `{llmSlug}/{model}` model string.
 *   **Tradeoff:** vendor-specific features not expressible in the OpenAI schema are unavailable.
-*   **Vendors:** **Vertex and Hugging Face LLMs are not supported** here or on the unified `/v1` endpoint: a request returns **400** with code `unsupported_vendor`, and no request reaches the vendor. Call them through the vendor-native endpoint (`/llm/rest/{llmSlug}` or `/llm/stream/{llmSlug}`). In a failover waterfall, such a rung is skipped and the next one is tried.
+*   **Vendors:** **Hugging Face LLMs are not supported** here or on the unified `/v1` endpoint: a request returns **400** with code `unsupported_vendor`, and no request reaches the vendor. Call them through the vendor-native endpoint (`/llm/rest/{llmSlug}` or `/llm/stream/{llmSlug}`). In a failover waterfall, such a rung is skipped and the next one is tried. Gemini Platform (Vertex) LLMs are served here and on `/v1` from AI Studio 2.3, when their endpoint names the project and location: see [Gemini Platform (Vertex)](#gemini-platform-vertex).
 
     ```python
     # Example using OpenAI Python SDK, pinned to one LLM
@@ -234,7 +252,7 @@ The operations are counted in the `aistudio_native_*` metrics (see [Observabilit
 
 *   **Request parameters:** on this endpoint and on the Main Ingress, the parameters of an OpenAI chat completion request reach the vendor as follows. "As sent" means the value goes into the vendor request unchanged; "not sent" means the vendor has no equivalent the gateway translates, so the parameter is left out on purpose.
 
-    | Parameter | OpenAI | Anthropic | Google AI | Bedrock (Converse) |
+    | Parameter | OpenAI | Anthropic | Google AI and Vertex | Bedrock (Converse) |
     |---|---|---|---|---|
     | `stop` (string or list) | as sent | `stop_sequences` | `stopSequences` | `inferenceConfig.stopSequences` |
     | `top_p` | as sent | `top_p` | `topP` | `inferenceConfig.topP` |
@@ -250,7 +268,7 @@ The operations are counted in the `aistudio_native_*` metrics (see [Observabilit
 
 *   **`tool_choice`:** on this endpoint and on the Main Ingress, OpenAI's `tool_choice` is translated for vendors that do not speak it:
 
-    | `tool_choice` | Anthropic | Google AI | Bedrock (Converse) |
+    | `tool_choice` | Anthropic | Google AI and Vertex | Bedrock (Converse) |
     |---|---|---|---|
     | `"auto"` | `{"type":"auto"}` | mode `AUTO` | `toolChoice.auto` |
     | `"required"` | `{"type":"any"}` | mode `ANY` | `toolChoice.any` |
@@ -311,6 +329,8 @@ The OpenAI-compatible endpoints (`/ai/{llmSlug}`, the Main Ingress `/v1`, router
 *   **Request logs.** A buffered Bedrock call's request log names the LLM in its model column, as for every vendor on the vendor-native endpoint; the chat record keeps the model ID. Cache read and write tokens are priced. A failed native Bedrock stream leaves a request log row.
 
 AI Studio's embedded gateway shares this code, so Studio's own `/ai/` traffic to Bedrock takes the internal hop too. Studio Chat does not support Bedrock LLMs: a chat session on one fails to start. Plugins do not run on the embedded gateway, but its budget check, filters and analytics for Bedrock run on the internal hop, on the Converse body.
+
+**Gemini Platform (Vertex).** Vertex speaks the Gemini API's wire format, so `/ai/`, `/v1` and routers reach a Vertex LLM with the same translation as a Google AI LLM. On the internal hop the Gemini API path is mapped to the Vertex path (`/v1/projects/{project}/locations/{location}/publishers/google/models/{model}:{method}`) with the project and location from the LLM's endpoint. Model checks, filters, plugins, budgets and analytics then run on the native Vertex request, and the gateway sets the Vertex access token. Token usage on the OpenAI-shaped response counts prompt and output tokens. Thinking tokens are not included in it yet, though analytics and budgets count them with the output.
 
 ### 5. Legacy Endpoints (`/llm/rest/...`, `/llm/stream/...`)
 
