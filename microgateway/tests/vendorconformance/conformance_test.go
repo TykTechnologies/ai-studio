@@ -199,6 +199,19 @@ func sendToolResults(t *testing.T, h *harness, c vc.Case, url string, req vc.Cha
 
 	ctx, cancel := h.CallContext(context.Background())
 	defer cancel()
+	if next.IsStreaming() {
+		stream, meta, err := h.postStream(ctx, url, next.JSON(), vendorHeaders(c.Surface, c.Vendor))
+		require.NoError(t, err, "POST %s (streamed tool results, rewritten IDs: %v)", url, rewriteIDs)
+		if !assertUpstreamOK(t, h, c, meta) {
+			return
+		}
+		require.NotNil(t, stream, "the tool-result turn was not streamed:\n%s", bodyExcerpt(meta.Body))
+		if errBody, isErr := streamCarriedUpstreamError(stream); isErr {
+			t.Fatalf("the tool-result stream carried an upstream error:\n%s", bodyExcerpt(errBody))
+		}
+		assert.NotEmpty(t, stream.FinishReason, "the tool-result stream must say why it ended")
+		return
+	}
 	resp, err := h.post(ctx, url, next.JSON(), vendorHeaders(c.Surface, c.Vendor))
 	require.NoError(t, err, "POST %s (tool results, rewritten IDs: %v)", url, rewriteIDs)
 	if !assertUpstreamOK(t, h, c, resp) {
@@ -289,6 +302,25 @@ func runStreamingCase(t *testing.T, h *harness, c vc.Case, url string, req vc.Ch
 	}
 
 	assertEnvelope(t, c, env)
+
+	if expectTools && openAIConventions && c.Surface != vc.SurfaceSDK && !t.Failed() {
+		// The streamed tool calls, as a client reassembles and echoes them.
+		var calls []any
+		for i := 0; i < len(stream.ToolCalls); i++ {
+			tc, ok := stream.ToolCalls[i]
+			if !ok {
+				continue
+			}
+			calls = append(calls, map[string]any{"id": tc.ID, "type": "function",
+				"function": map[string]any{"name": tc.Name, "arguments": tc.Arguments}})
+		}
+		require.NotEmpty(t, calls, "expected streamed tool calls to answer")
+		assistant := map[string]any{"role": "assistant", "content": nil, "tool_calls": calls}
+		sendToolResults(t, h, c, url, req, assistant, calls, false)
+		if c.Vendor.Vendor == "google_ai" || c.Vendor.Vendor == "vertex" {
+			sendToolResults(t, h, c, url, req, assistant, calls, true)
+		}
+	}
 
 	if c.Scenario == vc.ScenarioUsage {
 		// The reason this scenario exists: clients that ask for usage and do not
