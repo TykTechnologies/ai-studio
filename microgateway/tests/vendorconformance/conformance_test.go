@@ -148,6 +148,36 @@ func runToolResultTurn(t *testing.T, h *harness, c vc.Case, url string, req vc.C
 	calls, _ := assistant["tool_calls"].([]any)
 	require.NotEmpty(t, calls, "expected tool calls to answer")
 
+	sendToolResults(t, h, c, url, req, assistant, calls, false)
+	if c.Vendor.Vendor == "google_ai" || c.Vendor.Vendor == "vertex" {
+		// A client that rewrites tool call IDs loses Gemini's thought
+		// signature; the gateway sends a placeholder, so the turn still works.
+		sendToolResults(t, h, c, url, req, assistant, calls, true)
+	}
+}
+
+// sendToolResults sends one tool-result turn; with rewriteIDs the echoed tool
+// calls and the tool messages use IDs of the client's own.
+func sendToolResults(t *testing.T, h *harness, c vc.Case, url string, req vc.ChatRequest, assistant map[string]any, calls []any, rewriteIDs bool) {
+	t.Helper()
+	if rewriteIDs {
+		echoed := make([]any, len(calls))
+		for i, call := range calls {
+			cp := map[string]any{}
+			for k, v := range call.(map[string]any) {
+				cp[k] = v
+			}
+			cp["id"] = fmt.Sprintf("call_client_%d", i)
+			echoed[i] = cp
+		}
+		msg := map[string]any{}
+		for k, v := range assistant {
+			msg[k] = v
+		}
+		msg["tool_calls"] = echoed
+		assistant, calls = msg, echoed
+	}
+
 	messages, _ := req["messages"].([]any)
 	if messages == nil { // built with typed messages: go through JSON
 		var decoded struct {
@@ -170,7 +200,7 @@ func runToolResultTurn(t *testing.T, h *harness, c vc.Case, url string, req vc.C
 	ctx, cancel := h.CallContext(context.Background())
 	defer cancel()
 	resp, err := h.post(ctx, url, next.JSON(), vendorHeaders(c.Surface, c.Vendor))
-	require.NoError(t, err, "POST %s (tool results)", url)
+	require.NoError(t, err, "POST %s (tool results, rewritten IDs: %v)", url, rewriteIDs)
 	if !assertUpstreamOK(t, h, c, resp) {
 		return
 	}
