@@ -125,6 +125,60 @@ func runBufferedCase(t *testing.T, h *harness, c vc.Case, url string, req vc.Cha
 
 	assertEnvelope(t, c, env)
 	assertScenarioSpecifics(t, c, env, resp.Body)
+	if c.Scenario == vc.ScenarioTools && c.Surface != vc.SurfaceSDK && !t.Failed() {
+		runToolResultTurn(t, h, c, url, req, resp.Body)
+	}
+}
+
+// runToolResultTurn sends the tool results back, as an agent loop does: the
+// assistant message is echoed as it came (a client keeps the tool calls,
+// their IDs included, unchanged), followed by one tool message per call. The
+// vendor must answer it. Gemini 3 refuses this turn when a call's thought
+// signature did not survive the round trip.
+func runToolResultTurn(t *testing.T, h *harness, c vc.Case, url string, req vc.ChatRequest, body []byte) {
+	t.Helper()
+	var first struct {
+		Choices []struct {
+			Message map[string]any `json:"message"`
+		} `json:"choices"`
+	}
+	require.NoError(t, json.Unmarshal(body, &first))
+	require.NotEmpty(t, first.Choices)
+	assistant := first.Choices[0].Message
+	calls, _ := assistant["tool_calls"].([]any)
+	require.NotEmpty(t, calls, "expected tool calls to answer")
+
+	messages, _ := req["messages"].([]any)
+	if messages == nil { // built with typed messages: go through JSON
+		var decoded struct {
+			Messages []any `json:"messages"`
+		}
+		require.NoError(t, json.Unmarshal(req.JSON(), &decoded))
+		messages = decoded.Messages
+	}
+	messages = append(append([]any{}, messages...), assistant)
+	for _, call := range calls {
+		id, _ := call.(map[string]any)["id"].(string)
+		messages = append(messages, map[string]any{"role": "tool", "tool_call_id": id, "content": `{"temperature_c":18,"conditions":"sunny"}`})
+	}
+	next := vc.ChatRequest{}
+	for k, v := range req {
+		next[k] = v
+	}
+	next["messages"] = messages
+
+	ctx, cancel := h.CallContext(context.Background())
+	defer cancel()
+	resp, err := h.post(ctx, url, next.JSON(), vendorHeaders(c.Surface, c.Vendor))
+	require.NoError(t, err, "POST %s (tool results)", url)
+	if !assertUpstreamOK(t, h, c, resp) {
+		return
+	}
+	format := responseFormat(c.Surface, c.Vendor)
+	env, err := vc.Normalize(format, resp.Body)
+	require.NoError(t, err, "normalizing the tool-result answer:\n%s", bodyExcerpt(resp.Body))
+	assert.Equal(t, "assistant", env.Role, "the tool-result answer must carry role=assistant")
+	assert.NotEmpty(t, env.FinishReason, "the tool-result answer must say why it ended")
 }
 
 // runStreamingCase covers the streaming scenarios. Every frame is validated
