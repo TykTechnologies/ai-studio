@@ -146,7 +146,7 @@ By combining LLM configuration, pricing, and budgeting, administrators gain gran
 
 ## Gemini Platform (Vertex) credentials
 
-A Gemini Platform (Vertex) LLM (vendor code `vertex`) authenticates to Vertex AI with short-lived Google access tokens. The gateway mints them from the LLM's API key and refreshes them before they expire, on AI Studio and on every edge gateway that serves the LLM. The key is stored encrypted and synced to edges like any other LLM credential. The Google identity needs the **Vertex AI User** role (`roles/aiplatform.user`) on the project.
+A Gemini Platform (Vertex) LLM (vendor code `vertex`) authenticates to Vertex with short-lived Google access tokens. The gateway mints them from the LLM's API key and refreshes them before they expire, on AI Studio and on every edge gateway that serves the LLM. The key is stored encrypted and synced to edges like any other LLM credential. The Google identity needs the **Vertex AI User** role (`roles/aiplatform.user`) on the project.
 
 The API key is checked in this order:
 
