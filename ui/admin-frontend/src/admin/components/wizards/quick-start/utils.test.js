@@ -178,11 +178,15 @@ describe('Quick Start Wizard Utils', () => {
       expect(result).toContain('"maxOutputTokens": 1000');
     });
 
-    test('returns Vertex curl example', () => {
-      const result = getCurlExample('vertex', 'Vertex Gemini');
-      
-      expect(result).toContain('curl -X POST "https://example.com/llm/rest/vertex-gemini/v1/models/gemini-pro:generateContent"');
-      expect(result).toContain('"model": "gemini-pro"');
+    test('returns Vertex curl example on the OpenAI-compatible route', () => {
+      const result = getCurlExample('vertex', 'Vertex Gemini', 'app-secret');
+
+      expect(result).toContain('curl -X POST "https://example.com/ai/vertex-gemini/v1/chat/completions"');
+      expect(result).toContain('-H "Authorization: Bearer app-secret"');
+      expect(result).toContain('"model": "gemini-2.5-flash"');
+      expect(result).toContain('"messages": [');
+      expect(result).not.toContain('/llm/rest/');
+      expect(result).not.toContain('generateContent');
     });
 
     test('returns Ollama curl example', () => {

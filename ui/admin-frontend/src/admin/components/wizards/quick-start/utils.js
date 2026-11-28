@@ -64,14 +64,17 @@ const PROVIDER_CONFIG = {
     ],
     formatBody: 'google'
   },
+  // Vertex's native path names the Google Cloud project and location, which
+  // the wizard does not know, so the example uses the OpenAI-compatible route.
   vertex: {
-    defaultModel: 'gemini-pro',
-    getEndpointPath: (endpoint, model) => `${endpoint}v1/models/${model}:generateContent`,
+    defaultModel: 'gemini-2.5-flash',
+    basePath: '/ai/',
+    getEndpointPath: (endpoint) => `${endpoint}v1/chat/completions`,
     headers: () => [
       '-H "Content-Type: application/json"',
       '-H "Authorization: Bearer YOUR_SECRET"'
     ],
-    formatBody: 'google'
+    formatBody: 'openai'
   },
   ollama: {
     defaultModel: 'llama3',
@@ -128,7 +131,7 @@ export const getCurlExample = (llmProvider = 'openai', llmName = 'OpenAI', secre
   const formatter = formatBody[config.formatBody];
   const requestBody = formatter(defaultModel, promptText, temperature, maxTokens);
   
-  const endpoint = generateEndpointUrl('/llm/rest/', llmName);
+  const endpoint = generateEndpointUrl(config.basePath || '/llm/rest/', llmName);
   const fullEndpointPath = config.getEndpointPath(endpoint, defaultModel);
   const headers = config.headers();
   
