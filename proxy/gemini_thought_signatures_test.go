@@ -72,6 +72,33 @@ func TestRestoreThoughtSignatures(t *testing.T) {
 	assert.NotContains(t, parts[1], "thoughtSignature")
 	assert.Equal(t, 0.5, req.GenerationConfig["temperature"])
 
+	// A model turn whose first call has nothing to restore gets the
+	// placeholder on that call only; a user turn is never touched.
+	noSig := `{"contents":[{"role":"model","parts":[{"text":"x"},{"functionCall":{"name":"f","args":{}}},{"functionCall":{"name":"g","args":{}}}]},` +
+		`{"role":"user","parts":[{"functionCall":{"name":"h","args":{"` + googleai.ThoughtSignatureArg + `":"S"}}}]}]}`
+	var fallback struct {
+		Contents []struct {
+			Parts []map[string]any `json:"parts"`
+		} `json:"contents"`
+	}
+	require.NoError(t, json.Unmarshal(restoreThoughtSignatures([]byte(noSig)), &fallback))
+	assert.NotContains(t, fallback.Contents[0].Parts[0], "thoughtSignature")
+	assert.Equal(t, placeholderThoughtSignature, fallback.Contents[0].Parts[1]["thoughtSignature"])
+	assert.NotContains(t, fallback.Contents[0].Parts[2], "thoughtSignature")
+	assert.NotContains(t, fallback.Contents[1].Parts[0], "thoughtSignature", "only role:model parts")
+	assert.Equal(t, map[string]any{}, fallback.Contents[1].Parts[0]["functionCall"].(map[string]any)["args"], "the reserved key is dropped anyway")
+
+	// Gemini 1.x and 2.x get no placeholder; a real signature is still restored.
+	for _, model := range []string{"models/gemini-2.5-flash", "gemini-1.5-pro"} {
+		older := `{"model":"` + model + `","contents":[{"role":"model","parts":[{"functionCall":{"name":"f","args":{}}}]},` +
+			`{"role":"model","parts":[{"functionCall":{"name":"g","args":{"` + googleai.ThoughtSignatureArg + `":"S"}}}]}]}`
+		got := string(restoreThoughtSignatures([]byte(older)))
+		assert.NotContains(t, got, placeholderThoughtSignature, model)
+		assert.Contains(t, got, `"thoughtSignature":"S"`, model)
+	}
+	assert.True(t, placeholderAllowed("models/gemini-3.5-flash"))
+	assert.True(t, placeholderAllowed("gemini-3.1-flash-lite"))
+
 	unchanged := `{"contents":[{"role":"user","parts":[{"text":"hi"}]}]}`
 	assert.Equal(t, unchanged, string(restoreThoughtSignatures([]byte(unchanged))))
 }
@@ -114,7 +141,7 @@ func (f *fakeGemini3) handler(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, p := range c.Parts {
 			if _, ok := p["functionCall"]; ok {
-				if p["thoughtSignature"] != gemini3Signature {
+				if p["thoughtSignature"] != gemini3Signature && p["thoughtSignature"] != placeholderThoughtSignature {
 					w.WriteHeader(http.StatusBadRequest)
 					_, _ = w.Write([]byte(`{"error":{"code":400,"message":"Function call is missing a thought_signature in functionCall parts.","status":"INVALID_ARGUMENT"}}`))
 					return
@@ -255,4 +282,45 @@ func TestGemini3ToolRoundTrip_UnifiedRoute(t *testing.T) {
 		`{"role":"tool","tool_call_id":"`+calls[0].ID+`","content":"12:00"},{"role":"tool","tool_call_id":"`+calls[1].ID+`","content":"sunny"}],`+gemini3Tools+`}`)
 	require.Equal(t, http.StatusOK, resp.StatusCode, string(out))
 	assert.Contains(t, string(out), "12:00, sunny")
+}
+
+// When the signature cannot be recovered from the ID (a client rewrote it,
+// the ID is garbage, or its signature is over the cap), the turn's first call
+// goes upstream with the placeholder and the request is served.
+func TestGemini3ToolRoundTrip_PlaceholderFallback(t *testing.T) {
+	t.Parallel()
+	for name, id := range map[string]string{
+		"rewritten id": "call_client_renamed_1",
+		"garbage id":   "call_gs1_zzzzzzzz_***",
+		"oversize id":  googleai.EncodeSignatureID(strings.Repeat("s", googleai.MaxThoughtSignatureBytes+1)),
+	} {
+		for _, vendor := range []models.Vendor{models.VERTEX, models.GOOGLEAI} {
+			t.Run(name+"/"+string(vendor), func(t *testing.T) {
+				fake := &fakeGemini3{}
+				h := newFailoverHarness(t, fake.handler, serveOpenAIText("never"), func(primary, _ *models.LLM) {
+					primary.Vendor = vendor
+					primary.APIKey = vertexTestToken
+					if vendor == models.VERTEX {
+						primary.APIEndpoint += vertexEndpointSuffix
+					}
+					primary.DefaultModel = "gemini-3.5-flash"
+					primary.Failover = models.LLMFailover{}
+				})
+				turn2 := `{"model":"gemini-3.5-flash","messages":[{"role":"user","content":"time and weather?"},` +
+					`{"role":"assistant","content":null,"tool_calls":[` +
+					`{"id":"` + id + `","type":"function","function":{"name":"get_time","arguments":"{\"zone\":\"UTC\"}"}},` +
+					`{"id":"call_2","type":"function","function":{"name":"get_weather","arguments":"{\"city\":\"Paris\"}"}}]},` +
+					`{"role":"tool","tool_call_id":"` + id + `","content":"12:00"},{"role":"tool","tool_call_id":"call_2","content":"sunny"}],` + gemini3Tools + `}`
+				resp, out := h.post("/ai/primary/v1/chat/completions", turn2)
+				require.Equal(t, http.StatusOK, resp.StatusCode, string(out))
+
+				fake.mu.Lock()
+				defer fake.mu.Unlock()
+				require.Len(t, fake.bodies, 1)
+				assert.Contains(t, fake.bodies[0], `"thoughtSignature":"`+placeholderThoughtSignature+`"`)
+				assert.Equal(t, 1, strings.Count(fake.bodies[0], `"thoughtSignature"`), "only the turn's first call")
+				assert.NotContains(t, fake.bodies[0], googleai.ThoughtSignatureArg)
+			})
+		}
+	}
 }

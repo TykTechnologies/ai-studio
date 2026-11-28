@@ -28,6 +28,10 @@ const ThoughtSignatureArg = "__tyk_thought_signature"
 // call_gs1_{8 hex}_{base64url(signature)}.
 const signatureIDPrefix = "call_gs1_"
 
+// MaxThoughtSignatureBytes caps a signature read back from a tool call ID,
+// far above what Gemini sends. A larger one is treated as absent.
+const MaxThoughtSignatureBytes = 64 << 10
+
 // EncodeSignatureID returns a tool call ID carrying sig. The random part keeps
 // IDs unique within a turn.
 func EncodeSignatureID(sig string) string {
@@ -37,17 +41,25 @@ func EncodeSignatureID(sig string) string {
 }
 
 // DecodeSignatureID returns the thought signature a tool call ID carries, or
-// ok false for any other ID.
+// ok false for any other ID: one without the prefix, a malformed one (the
+// random part must be 8 hex digits, the rest strict unpadded base64url) or one
+// whose signature is empty or over MaxThoughtSignatureBytes.
 func DecodeSignatureID(id string) (sig string, ok bool) {
 	rest, found := strings.CutPrefix(id, signatureIDPrefix)
 	if !found {
 		return "", false
 	}
-	_, encoded, found := strings.Cut(rest, "_")
-	if !found || encoded == "" {
+	random, encoded, found := strings.Cut(rest, "_")
+	if !found || encoded == "" || len(random) != 8 {
 		return "", false
 	}
-	raw, err := base64.RawURLEncoding.DecodeString(encoded)
+	if _, err := hex.DecodeString(random); err != nil {
+		return "", false
+	}
+	if base64.RawURLEncoding.DecodedLen(len(encoded)) > MaxThoughtSignatureBytes {
+		return "", false
+	}
+	raw, err := base64.RawURLEncoding.Strict().DecodeString(encoded)
 	if err != nil || len(raw) == 0 {
 		return "", false
 	}

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms/googleai"
 )
@@ -21,21 +22,33 @@ import (
 // googleai.ThoughtSignatureArg, where the langchaingo driver moves it into the
 // tool call's ID (an OpenAI-shaped client echoes tool calls back unchanged); on
 // the next request the driver puts it back in the args and the transport
-// restores it on the part. The reserved args key never reaches the caller,
+// restores it on the part. When a turn's first call has no signature to
+// restore, it is sent with Google's placeholder instead, so the request is
+// never refused for it. The reserved args key never reaches the caller,
 // /llm/ or the API.
 
 const thoughtSignatureField = "thoughtSignature"
 
 var (
 	thoughtSignatureFieldBytes = []byte(`"` + thoughtSignatureField + `"`)
-	thoughtSignatureArgBytes   = []byte(`"` + googleai.ThoughtSignatureArg + `"`)
+	functionCallBytes          = []byte(`"functionCall"`)
 )
 
-// restoreThoughtSignatures moves a functionCall's args[ThoughtSignatureArg]
-// back onto its part as thoughtSignature, in a Gemini generateContent request
-// body. A body without the key is returned as it is.
+// placeholderThoughtSignature is Google's documented stand-in for a signature
+// that cannot be recovered: it lets the request through, without the
+// reasoning context the real one carries.
+const placeholderThoughtSignature = "skip_thought_signature_validator"
+
+// restoreThoughtSignatures puts the thought signatures back on a Gemini
+// generateContent request body's role:model functionCall parts: a call's
+// args[ThoughtSignatureArg] (decoded from its tool call ID) moves onto its
+// part. Gemini signs the first call of each model turn, so when that one has
+// no signature to restore (a client rewrote the ID, the history predates
+// this, the ID was malformed) it gets the placeholder (not on Gemini 1.x and
+// 2.x, see placeholderAllowed); other calls are left as they are. A body
+// without function calls is returned as it is.
 func restoreThoughtSignatures(body []byte) []byte {
-	if !bytes.Contains(body, thoughtSignatureArgBytes) {
+	if !bytes.Contains(body, functionCallBytes) {
 		return body
 	}
 	var req map[string]any
@@ -43,21 +56,38 @@ func restoreThoughtSignatures(body []byte) []byte {
 		return body
 	}
 	changed := false
+	model, _ := req["model"].(string)
+	placeholder := placeholderAllowed(model)
 	contents, _ := req["contents"].([]any)
 	for _, c := range contents {
 		content, _ := c.(map[string]any)
 		parts, _ := content["parts"].([]any)
+		isModel := content["role"] == "model"
+		first := true
 		for _, p := range parts {
 			part, _ := p.(map[string]any)
-			fc, _ := part["functionCall"].(map[string]any)
-			args, _ := fc["args"].(map[string]any)
-			sig, ok := args[googleai.ThoughtSignatureArg].(string)
+			fc, ok := part["functionCall"].(map[string]any)
 			if !ok {
 				continue
 			}
-			delete(args, googleai.ThoughtSignatureArg)
-			part[thoughtSignatureField] = sig
-			changed = true
+			args, _ := fc["args"].(map[string]any)
+			sig, hasSig := args[googleai.ThoughtSignatureArg].(string)
+			if _, present := args[googleai.ThoughtSignatureArg]; present {
+				delete(args, googleai.ThoughtSignatureArg) // never sent on, whatever the role
+				changed = true
+			}
+			if !isModel {
+				continue
+			}
+			switch {
+			case hasSig && sig != "":
+				part[thoughtSignatureField] = sig
+				changed = true
+			case first && placeholder && part[thoughtSignatureField] == nil:
+				part[thoughtSignatureField] = placeholderThoughtSignature
+				changed = true
+			}
+			first = false
 		}
 	}
 	if !changed {
@@ -112,6 +142,15 @@ func carryThoughtSignatures(chunk []byte) []byte {
 		return chunk
 	}
 	return out
+}
+
+// placeholderAllowed reports whether a model gets the placeholder for a
+// signature it cannot have back. Gemini 1.x and 2.x models do not require
+// signatures and their acceptance of the placeholder is unverified, so they
+// get none; real signatures are restored for every model.
+func placeholderAllowed(model string) bool {
+	model = strings.TrimPrefix(model, "models/")
+	return !strings.HasPrefix(model, "gemini-1") && !strings.HasPrefix(model, "gemini-2")
 }
 
 func decodeJSONNumbers(b []byte, v any) error {

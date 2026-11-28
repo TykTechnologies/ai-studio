@@ -3,6 +3,7 @@ package googleai
 // Tyk: tests for thought_signature.go.
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/generative-ai-go/genai"
@@ -20,7 +21,12 @@ func TestSignatureIDRoundTrip(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, sig, got)
 
-	for _, other := range []string{"", "call_123", "call_gs1_", "call_gs1_abcd", "call_gs1_abcd_!!!", "toolu_01"} {
+	oversize := EncodeSignatureID(strings.Repeat("x", MaxThoughtSignatureBytes+1))
+	atCap := EncodeSignatureID(strings.Repeat("x", MaxThoughtSignatureBytes))
+	_, ok = DecodeSignatureID(atCap)
+	assert.True(t, ok, "a signature at the cap is kept")
+	for _, other := range []string{"", "call_123", "call_gs1_", "call_gs1_abcd", "call_gs1_abcd_!!!", "toolu_01",
+		"call_gs1_abcdefgh_c2ln", "call_gs1_0123456_c2ln", "call_gs1_01234567_c2ln=", "call_gs1_01234567_c2l+", oversize} {
 		_, ok := DecodeSignatureID(other)
 		assert.False(t, ok, other)
 	}
