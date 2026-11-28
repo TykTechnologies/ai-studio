@@ -95,6 +95,13 @@ func (t *InternalRoutingTransport) RoundTrip(req *http.Request) (*http.Response,
 	// from stored LLM credentials via vendor.ProxySetAuthHeader()
 	req.Header.Del("x-api-key")     // Anthropic
 	req.Header.Del("Authorization") // OpenAI/others (SDK may set this)
+	// The Google AI client (Google AI and Vertex LLMs) carries the dummy key
+	// as x-goog-api-key or key=; it is never a credential for /llm/.
+	req.Header.Del("x-goog-api-key")
+	if q := req.URL.Query(); q.Has("key") {
+		q.Del("key")
+		req.URL.RawQuery = q.Encode()
+	}
 
 	// Pass through the original client auth so /llm/ can authenticate
 	if t.originalAuth != "" {

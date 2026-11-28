@@ -2124,11 +2124,15 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	// Continue the trace into the upstream, as the non-streaming director does.
 	injectUpstreamTrace(upstreamReq.Context(), upstreamReq.Header, llm)
 	if err := p.setVendorAuthHeader(upstreamReq, llm); err != nil {
-		status := http.StatusInternalServerError
-		if errors.Is(err, vertexVendor.ErrTokenMint) {
-			status = http.StatusBadGateway // Google's token endpoint failed
+		status, msg := http.StatusInternalServerError, "failed to set vendor auth header for streaming"
+		// Google's token endpoint failed, or the LLM's credential is missing
+		// or unusable. The errors carry no key material and name the fix;
+		// the /ai/ and /v1 bridges relay only the message.
+		if errors.Is(err, vertexVendor.ErrTokenMint) || errors.Is(err, vertexVendor.ErrNoCredential) ||
+			errors.Is(err, vertexVendor.ErrInvalidCredential) {
+			status, msg = http.StatusBadGateway, "LLM credential not usable: "+err.Error()
 		}
-		respondWithError(w, status, "failed to set vendor auth header for streaming", err, false)
+		respondWithError(w, status, msg, err, false)
 		return
 	}
 
