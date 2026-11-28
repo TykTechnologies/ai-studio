@@ -263,9 +263,14 @@ type vertexEdge struct {
 // Vertex LLM whose key is credentialJSON, encrypted as the hub sends it.
 func startVertexEdge(t *testing.T, upstreamURL, credentialJSON string, llmID uint32) *vertexEdge {
 	t.Helper()
-	dsn := fmt.Sprintf("file:vertexedge_%d?mode=memory&cache=shared", time.Now().UnixNano())
+	// A file database in WAL mode with a busy timeout, as an edge runs it: the
+	// server writes analytics concurrently, and a shared-cache in-memory
+	// database answers concurrent writers with "table is locked" instead of
+	// waiting.
+	dsn := filepath.Join(t.TempDir(), "edge.db") + "?_busy_timeout=5000&_journal_mode=WAL"
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = mgwdb.Close(db) }) // registered first, so it runs after the server stops
 	require.NoError(t, mgwdb.Migrate(db))
 
 	// The control plane sends the key encrypted with the shared key; the
