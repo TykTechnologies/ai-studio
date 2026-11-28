@@ -9,6 +9,7 @@ import (
 
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms/googleai"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms/openai"
 	"github.com/google/uuid"
 )
@@ -553,6 +554,14 @@ func (r *ChatCompletionRequest) GetMessages() []llms.MessageContent {
 // tool parts (Ollama) get GetMessages, as before.
 //
 // GetMessages itself is unchanged: script filters read its text parts.
+//
+// A tool call ID minted for a Gemini turn carries its thought signature and
+// can be kilobytes long (gemini_thought_signatures.go). A history holding one
+// can reach another vendor (a failover, a router, a client switching
+// models), whose IDs are limited in length, so for any vendor but Google AI
+// and Vertex such IDs are shortened, the same way in the tool calls and the
+// tool results (googleai.ShortSignatureID), and the proxy's reserved
+// signature key is removed from their arguments.
 func (r *ChatCompletionRequest) DriverMessages(vendor models.Vendor) []llms.MessageContent {
 	plain := r.GetMessages()
 	switch vendor {
@@ -561,14 +570,21 @@ func (r *ChatCompletionRequest) DriverMessages(vendor models.Vendor) []llms.Mess
 		return plain
 	}
 	names := map[string]string{}
+	toolCallID := func(id string) string { return id }
+	toolArgs := func(args string) string { return args }
+	if vendor != models.GOOGLEAI && vendor != models.VERTEX {
+		toolCallID = googleai.ShortSignatureID
+		toolArgs = googleai.StripThoughtSignatureArg
+	}
 	out := make([]llms.MessageContent, 0, len(plain))
 	for i, msg := range r.Messages {
 		mc := plain[i]
 		switch {
 		case msg.Role == "assistant" && len(msg.ToolCalls) > 0:
 			for _, c := range msg.ToolCalls {
+				c.ID = toolCallID(c.ID)
 				names[c.ID] = c.Function.Name
-				args := c.Function.Arguments
+				args := toolArgs(c.Function.Arguments)
 				if strings.TrimSpace(args) == "" {
 					args = "{}"
 				}
@@ -585,7 +601,8 @@ func (r *ChatCompletionRequest) DriverMessages(vendor models.Vendor) []llms.Mess
 					text.WriteString(t.Text)
 				}
 			}
-			part := llms.ToolCallResponse{ToolCallID: msg.ToolCallID, Name: names[msg.ToolCallID], Content: text.String()}
+			id := toolCallID(msg.ToolCallID)
+			part := llms.ToolCallResponse{ToolCallID: id, Name: names[id], Content: text.String()}
 			if n := len(out); n > 0 && out[n-1].Role == llms.ChatMessageTypeTool {
 				out[n-1].Parts = append(out[n-1].Parts, part)
 				continue

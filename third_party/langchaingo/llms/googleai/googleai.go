@@ -153,11 +153,27 @@ func convertCandidates(candidates []*genai.Candidate, usage *genai.UsageMetadata
 						return nil, err
 					}
 				case genai.FunctionCall:
+					// Tyk: a thought signature the transport put in the args
+					// moves to the tool call's ID (thought_signature.go).
+					id := ""
+					if sig, ok := v.Args[ThoughtSignatureArg].(string); ok {
+						args := make(map[string]any, len(v.Args))
+						for k, a := range v.Args {
+							if k != ThoughtSignatureArg {
+								args[k] = a
+							}
+						}
+						v.Args = args
+						if sig != "" {
+							id = EncodeSignatureID(sig)
+						}
+					}
 					b, err := json.Marshal(v.Args)
 					if err != nil {
 						return nil, err
 					}
 					toolCall := llms.ToolCall{
+						ID: id,
 						FunctionCall: &llms.FunctionCall{
 							Name:      v.Name,
 							Arguments: string(b),
@@ -232,6 +248,22 @@ func convertParts(parts []llms.ContentPart) ([]genai.Part, error) {
 			var argsMap map[string]any
 			if err := json.Unmarshal([]byte(fc.Arguments), &argsMap); err != nil {
 				return convertedParts, err
+			}
+			// Tyk: a tool call ID carrying a thought signature hands it back
+			// in the args, for the transport to restore on the part. A value a
+			// client put under the reserved key itself counts only if it is
+			// a usable signature, and an ID's signature takes precedence.
+			if v, present := argsMap[ThoughtSignatureArg]; present {
+				delete(argsMap, ThoughtSignatureArg)
+				if sig, ok := usableSignature(v); ok {
+					argsMap[ThoughtSignatureArg] = sig
+				}
+			}
+			if sig, ok := DecodeSignatureID(p.ID); ok {
+				if argsMap == nil {
+					argsMap = map[string]any{}
+				}
+				argsMap[ThoughtSignatureArg] = sig
 			}
 			out = genai.FunctionCall{
 				Name: fc.Name,

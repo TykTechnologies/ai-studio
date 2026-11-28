@@ -125,6 +125,103 @@ func runBufferedCase(t *testing.T, h *harness, c vc.Case, url string, req vc.Cha
 
 	assertEnvelope(t, c, env)
 	assertScenarioSpecifics(t, c, env, resp.Body)
+	if c.Scenario == vc.ScenarioTools && c.Surface != vc.SurfaceSDK && !t.Failed() {
+		runToolResultTurn(t, h, c, url, req, resp.Body)
+	}
+}
+
+// runToolResultTurn sends the tool results back, as an agent loop does: the
+// assistant message is echoed as it came (a client keeps the tool calls,
+// their IDs included, unchanged), followed by one tool message per call. The
+// vendor must answer it. Gemini 3 refuses this turn when a call's thought
+// signature did not survive the round trip.
+func runToolResultTurn(t *testing.T, h *harness, c vc.Case, url string, req vc.ChatRequest, body []byte) {
+	t.Helper()
+	var first struct {
+		Choices []struct {
+			Message map[string]any `json:"message"`
+		} `json:"choices"`
+	}
+	require.NoError(t, json.Unmarshal(body, &first))
+	require.NotEmpty(t, first.Choices)
+	assistant := first.Choices[0].Message
+	calls, _ := assistant["tool_calls"].([]any)
+	require.NotEmpty(t, calls, "expected tool calls to answer")
+
+	sendToolResults(t, h, c, url, req, assistant, calls, false)
+	if c.Vendor.Vendor == "google_ai" || c.Vendor.Vendor == "vertex" {
+		// A client that rewrites tool call IDs loses Gemini's thought
+		// signature; the gateway sends a placeholder, so the turn still works.
+		sendToolResults(t, h, c, url, req, assistant, calls, true)
+	}
+}
+
+// sendToolResults sends one tool-result turn; with rewriteIDs the echoed tool
+// calls and the tool messages use IDs of the client's own.
+func sendToolResults(t *testing.T, h *harness, c vc.Case, url string, req vc.ChatRequest, assistant map[string]any, calls []any, rewriteIDs bool) {
+	t.Helper()
+	if rewriteIDs {
+		echoed := make([]any, len(calls))
+		for i, call := range calls {
+			cp := map[string]any{}
+			for k, v := range call.(map[string]any) {
+				cp[k] = v
+			}
+			cp["id"] = fmt.Sprintf("call_client_%d", i)
+			echoed[i] = cp
+		}
+		msg := map[string]any{}
+		for k, v := range assistant {
+			msg[k] = v
+		}
+		msg["tool_calls"] = echoed
+		assistant, calls = msg, echoed
+	}
+
+	messages, _ := req["messages"].([]any)
+	if messages == nil { // built with typed messages: go through JSON
+		var decoded struct {
+			Messages []any `json:"messages"`
+		}
+		require.NoError(t, json.Unmarshal(req.JSON(), &decoded))
+		messages = decoded.Messages
+	}
+	messages = append(append([]any{}, messages...), assistant)
+	for _, call := range calls {
+		id, _ := call.(map[string]any)["id"].(string)
+		messages = append(messages, map[string]any{"role": "tool", "tool_call_id": id, "content": `{"temperature_c":18,"conditions":"sunny"}`})
+	}
+	next := vc.ChatRequest{}
+	for k, v := range req {
+		next[k] = v
+	}
+	next["messages"] = messages
+
+	ctx, cancel := h.CallContext(context.Background())
+	defer cancel()
+	if next.IsStreaming() {
+		stream, meta, err := h.postStream(ctx, url, next.JSON(), vendorHeaders(c.Surface, c.Vendor))
+		require.NoError(t, err, "POST %s (streamed tool results, rewritten IDs: %v)", url, rewriteIDs)
+		if !assertUpstreamOK(t, h, c, meta) {
+			return
+		}
+		require.NotNil(t, stream, "the tool-result turn was not streamed:\n%s", bodyExcerpt(meta.Body))
+		if errBody, isErr := streamCarriedUpstreamError(stream); isErr {
+			t.Fatalf("the tool-result stream carried an upstream error:\n%s", bodyExcerpt(errBody))
+		}
+		assert.NotEmpty(t, stream.FinishReason, "the tool-result stream must say why it ended")
+		return
+	}
+	resp, err := h.post(ctx, url, next.JSON(), vendorHeaders(c.Surface, c.Vendor))
+	require.NoError(t, err, "POST %s (tool results, rewritten IDs: %v)", url, rewriteIDs)
+	if !assertUpstreamOK(t, h, c, resp) {
+		return
+	}
+	format := responseFormat(c.Surface, c.Vendor)
+	env, err := vc.Normalize(format, resp.Body)
+	require.NoError(t, err, "normalizing the tool-result answer:\n%s", bodyExcerpt(resp.Body))
+	assert.Equal(t, "assistant", env.Role, "the tool-result answer must carry role=assistant")
+	assert.NotEmpty(t, env.FinishReason, "the tool-result answer must say why it ended")
 }
 
 // runStreamingCase covers the streaming scenarios. Every frame is validated
@@ -205,6 +302,25 @@ func runStreamingCase(t *testing.T, h *harness, c vc.Case, url string, req vc.Ch
 	}
 
 	assertEnvelope(t, c, env)
+
+	if expectTools && openAIConventions && c.Surface != vc.SurfaceSDK && !t.Failed() {
+		// The streamed tool calls, as a client reassembles and echoes them.
+		var calls []any
+		for i := 0; i < len(stream.ToolCalls); i++ {
+			tc, ok := stream.ToolCalls[i]
+			if !ok {
+				continue
+			}
+			calls = append(calls, map[string]any{"id": tc.ID, "type": "function",
+				"function": map[string]any{"name": tc.Name, "arguments": tc.Arguments}})
+		}
+		require.NotEmpty(t, calls, "expected streamed tool calls to answer")
+		assistant := map[string]any{"role": "assistant", "content": nil, "tool_calls": calls}
+		sendToolResults(t, h, c, url, req, assistant, calls, false)
+		if c.Vendor.Vendor == "google_ai" || c.Vendor.Vendor == "vertex" {
+			sendToolResults(t, h, c, url, req, assistant, calls, true)
+		}
+	}
 
 	if c.Scenario == vc.ScenarioUsage {
 		// The reason this scenario exists: clients that ask for usage and do not
