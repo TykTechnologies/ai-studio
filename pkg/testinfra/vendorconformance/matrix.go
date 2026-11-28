@@ -72,9 +72,7 @@ var matrix = map[string]vendorMatrix{
 	"vertex": {
 		surfaces: map[Surface]Support{
 			SurfaceChat: Supported, SurfaceShim: Supported,
-			// APIEndpoint is "project:location", not a URL, so /llm/call/ has
-			// nothing to proxy to. See vendors/vertex/vertex.go:100.
-			SurfaceSDK: Unsupported, SurfaceUniversal: Supported,
+			SurfaceSDK: Supported, SurfaceUniversal: Supported,
 		},
 		scenarios: allScenariosSupported(nil),
 	},

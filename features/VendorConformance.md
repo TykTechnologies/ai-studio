@@ -75,7 +75,7 @@ an unsupported combination is a **declared skip**, never a silent pass:
 | openai | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | anthropic | ✓ | ✓ | ✓ | ✓ | ✓ | — | ✓ |
 | google_ai | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| vertex | ✓ | ✓ | — | ✓ | ✓ | ✓ | ✓ |
+| vertex | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | bedrock | ✓ | ✓ | ✓ | ✓ | ✓ | — | ✓ |
 | ollama | ✓ | ✓ | ✓ | ✓ | model-dep. | ✓ | model-dep. |
 | huggingface | ✓ | ✓ | ✓ | ✓ | model-dep. | — | — |
