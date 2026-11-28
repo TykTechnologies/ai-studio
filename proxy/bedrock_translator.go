@@ -12,6 +12,7 @@ import (
 	"github.com/TykTechnologies/midsommar/v2/models"
 	"github.com/TykTechnologies/midsommar/v2/pkg/agenttrace"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms/googleai"
 	bedrockVendor "github.com/TykTechnologies/midsommar/v2/vendors/bedrock"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
@@ -409,10 +410,10 @@ func openAIMessagesToChatMessages(messages []Message) []bedrockVendor.ChatMessag
 		cm := bedrockVendor.ChatMessage{
 			Role:       msg.Role,
 			Content:    content,
-			ToolCallID: msg.ToolCallID,
+			ToolCallID: googleai.ShortSignatureID(msg.ToolCallID), // see DriverMessages
 		}
 		for _, c := range msg.ToolCalls {
-			cm.ToolCalls = append(cm.ToolCalls, bedrockVendor.ChatToolCall{ID: c.ID, Name: c.Function.Name, Arguments: c.Function.Arguments})
+			cm.ToolCalls = append(cm.ToolCalls, bedrockVendor.ChatToolCall{ID: googleai.ShortSignatureID(c.ID), Name: c.Function.Name, Arguments: c.Function.Arguments})
 		}
 		result = append(result, cm)
 	}

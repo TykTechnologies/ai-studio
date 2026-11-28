@@ -250,7 +250,15 @@ func convertParts(parts []llms.ContentPart) ([]genai.Part, error) {
 				return convertedParts, err
 			}
 			// Tyk: a tool call ID carrying a thought signature hands it back
-			// in the args, for the transport to restore on the part.
+			// in the args, for the transport to restore on the part. A value a
+			// client put under the reserved key itself counts only if it is
+			// a usable signature, and an ID's signature takes precedence.
+			if v, present := argsMap[ThoughtSignatureArg]; present {
+				delete(argsMap, ThoughtSignatureArg)
+				if sig, ok := usableSignature(v); ok {
+					argsMap[ThoughtSignatureArg] = sig
+				}
+			}
 			if sig, ok := DecodeSignatureID(p.ID); ok {
 				if argsMap == nil {
 					argsMap = map[string]any{}

@@ -53,3 +53,33 @@ func TestThoughtSignatureThroughTheDriver(t *testing.T) {
 	assert.Equal(t, map[string]any{"x": 1.0, ThoughtSignatureArg: "SIG"}, parts[0].(genai.FunctionCall).Args)
 	assert.Equal(t, map[string]any{"y": 2.0}, parts[1].(genai.FunctionCall).Args)
 }
+
+func TestShortSignatureID(t *testing.T) {
+	id := EncodeSignatureID(strings.Repeat("s", 4096))
+	short := ShortSignatureID(id)
+	assert.Len(t, short, len("call_gs1_")+8)
+	assert.True(t, strings.HasPrefix(id, short+"_"))
+	assert.Equal(t, short, ShortSignatureID(id), "deterministic")
+	for _, other := range []string{"call_123", "toolu_01", "call_gs1_abc_x", ""} {
+		assert.Equal(t, other, ShortSignatureID(other))
+	}
+}
+
+// A value a client put under the reserved key in a call's arguments is
+// treated as a signature only if usable; an ID's signature wins over it.
+func TestThoughtSignatureClientSuppliedKey(t *testing.T) {
+	call := func(id, args string) llms.ContentPart {
+		return llms.ToolCall{ID: id, FunctionCall: &llms.FunctionCall{Name: "f", Arguments: args}}
+	}
+	parts, err := convertParts([]llms.ContentPart{
+		call("call_1", `{"x":1,"`+ThoughtSignatureArg+`":"CLIENT"}`),
+		call("call_2", `{"`+ThoughtSignatureArg+`":42}`),
+		call("call_3", `{"`+ThoughtSignatureArg+`":"`+strings.Repeat("s", MaxThoughtSignatureBytes+1)+`"}`),
+		call(EncodeSignatureID("FROM_ID"), `{"`+ThoughtSignatureArg+`":"CLIENT"}`),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "CLIENT", parts[0].(genai.FunctionCall).Args[ThoughtSignatureArg])
+	assert.NotContains(t, parts[1].(genai.FunctionCall).Args, ThoughtSignatureArg, "not a string")
+	assert.NotContains(t, parts[2].(genai.FunctionCall).Args, ThoughtSignatureArg, "over the cap")
+	assert.Equal(t, "FROM_ID", parts[3].(genai.FunctionCall).Args[ThoughtSignatureArg])
+}

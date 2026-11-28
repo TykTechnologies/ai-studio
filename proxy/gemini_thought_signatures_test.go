@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/TykTechnologies/midsommar/v2/models"
+	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms"
 	"github.com/TykTechnologies/midsommar/v2/third_party/langchaingo/llms/googleai"
 )
 
@@ -46,6 +47,14 @@ func TestSignatureCarrier(t *testing.T) {
 			assert.NotContains(t, parts[1].(map[string]any)["functionCall"], "args", "an unsigned call is left alone")
 		})
 	}
+
+	// An object over the buffer limit is passed on unchanged, and the next
+	// one is carried again.
+	big := `{"candidates":[{"content":{"parts":[{"text":"` + strings.Repeat("x", maxCarriedObject) + `"},{"functionCall":{"name":"f"},"thoughtSignature":"SIG"}]}}]}`
+	out2, err := io.ReadAll(newSignatureCarrier(io.NopCloser(strings.NewReader("[" + big + "," + signed + "]"))))
+	require.NoError(t, err)
+	assert.Equal(t, "["+big+",", string(out2[:len(big)+2]))
+	assert.Contains(t, string(out2[len(big)+2:]), googleai.ThoughtSignatureArg)
 
 	// A single object (not an array) is carried too.
 	out, err := io.ReadAll(newSignatureCarrier(io.NopCloser(strings.NewReader(signed))))
@@ -322,5 +331,152 @@ func TestGemini3ToolRoundTrip_PlaceholderFallback(t *testing.T) {
 				assert.NotContains(t, fake.bodies[0], googleai.ThoughtSignatureArg)
 			})
 		}
+	}
+}
+
+// A history holding Gemini's signed tool call IDs, sent to another vendor:
+// the IDs are shortened, the same way in the calls and the results, so they
+// still pair up and stay within OpenAI's 40-character limit.
+func TestDriverMessages_ShortensGeminiIDsForOtherVendors(t *testing.T) {
+	signed := googleai.EncodeSignatureID(strings.Repeat("s", 2048))
+	var req ChatCompletionRequest
+	require.NoError(t, json.Unmarshal([]byte(`{"messages":[{"role":"user","content":"time?"},`+
+		`{"role":"assistant","tool_calls":[{"id":"`+signed+`","type":"function","function":{"name":"get_time","arguments":"{}"}}]},`+
+		`{"role":"tool","tool_call_id":"`+signed+`","content":"12:00"}]}`), &req))
+	ids := func(vendor models.Vendor) (call, result string) {
+		for _, m := range req.DriverMessages(vendor) {
+			for _, p := range m.Parts {
+				switch v := p.(type) {
+				case llms.ToolCall:
+					call = v.ID
+				case llms.ToolCallResponse:
+					result = v.ToolCallID
+				}
+			}
+		}
+		return call, result
+	}
+	for _, vendor := range []models.Vendor{models.OPENAI, models.ANTHROPIC} {
+		call, result := ids(vendor)
+		assert.Equal(t, googleai.ShortSignatureID(signed), call, vendor)
+		assert.Equal(t, call, result, vendor)
+		assert.LessOrEqual(t, len(call), 40, vendor)
+	}
+	for _, vendor := range []models.Vendor{models.GOOGLEAI, models.VERTEX} {
+		call, result := ids(vendor)
+		assert.Equal(t, signed, call, vendor)
+		assert.Equal(t, signed, result, vendor)
+	}
+	assert.Equal(t, signed, req.Messages[1].ToolCalls[0].ID, "the caller's request is not changed")
+
+	bedrock := openAIMessagesToChatMessages(req.Messages)
+	assert.Equal(t, googleai.ShortSignatureID(signed), bedrock[1].ToolCalls[0].ID)
+	assert.Equal(t, googleai.ShortSignatureID(signed), bedrock[2].ToolCallID)
+}
+
+// A Gemini turn's signed IDs survive a failover to OpenAI on the next turn:
+// the OpenAI rung serves it, and sees only short IDs.
+func TestGemini3ToolRoundTrip_FailoverToOpenAI(t *testing.T) {
+	t.Parallel()
+	openai := &capturingVendor{serve: serveOpenAIText("from openai")}
+	h := newFailoverHarness(t, serveStatus(http.StatusServiceUnavailable), openai.handler, func(primary, _ *models.LLM) {
+		primary.Vendor = models.VERTEX
+		primary.APIKey = vertexTestToken
+		primary.APIEndpoint += vertexEndpointSuffix
+		primary.DefaultModel = "gemini-3.5-flash"
+	})
+	signed := googleai.EncodeSignatureID(strings.Repeat("s", 2048))
+	turn2 := `{"model":"gemini-3.5-flash","messages":[{"role":"user","content":"time?"},` +
+		`{"role":"assistant","content":null,"tool_calls":[{"id":"` + signed + `","type":"function","function":{"name":"get_time","arguments":"{}"}},` +
+		`{"id":"call_plain","type":"function","function":{"name":"get_weather","arguments":"{}"}}]},` +
+		`{"role":"tool","tool_call_id":"` + signed + `","content":"12:00"},{"role":"tool","tool_call_id":"call_plain","content":"sunny"}],` + gemini3Tools + `}`
+	for _, stream := range []bool{false, true} {
+		body := turn2
+		if stream {
+			body = strings.Replace(turn2, `"model":"gemini-3.5-flash",`, `"model":"gemini-3.5-flash","stream":true,`, 1)
+		}
+		resp, out := h.post("/ai/primary/v1/chat/completions", body)
+		require.Equal(t, http.StatusOK, resp.StatusCode, string(out))
+		assert.Contains(t, string(out), "openai")
+		assert.Equal(t, "fallback", resp.Header.Get(hdrServedLLM))
+	}
+
+	openai.mu.Lock()
+	defer openai.mu.Unlock()
+	require.Len(t, openai.bodies, 2)
+	for _, b := range openai.bodies {
+		var sent struct {
+			Messages []struct {
+				ToolCallID string `json:"tool_call_id"`
+				ToolCalls  []struct {
+					ID string `json:"id"`
+				} `json:"tool_calls"`
+			} `json:"messages"`
+		}
+		require.NoError(t, json.Unmarshal(b, &sent), string(b))
+		var seen []string
+		for _, m := range sent.Messages {
+			for _, c := range m.ToolCalls {
+				seen = append(seen, c.ID)
+			}
+			if m.ToolCallID != "" {
+				seen = append(seen, m.ToolCallID)
+			}
+		}
+		assert.Equal(t, []string{googleai.ShortSignatureID(signed), "call_plain", googleai.ShortSignatureID(signed), "call_plain"}, seen)
+		for _, id := range seen {
+			assert.LessOrEqual(t, len(id), 40, id)
+		}
+	}
+}
+
+// A client that puts the reserved key in a call's arguments itself: the key
+// never reaches the API as an argument; a usable string value is sent as the
+// model turn's signature, anything else falls back to the placeholder.
+func TestGemini3ToolRoundTrip_ClientSuppliedReservedKey(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct{ value, want string }{
+		"string":     {`"FORGED"`, "FORGED"},
+		"not string": {`{"x":1}`, placeholderThoughtSignature},
+		"oversize":   {`"` + strings.Repeat("s", googleai.MaxThoughtSignatureBytes+1) + `"`, placeholderThoughtSignature},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var mu sync.Mutex
+			var bodies []string
+			serve := func(w http.ResponseWriter, r *http.Request) {
+				raw, _ := io.ReadAll(r.Body)
+				mu.Lock()
+				bodies = append(bodies, string(raw))
+				mu.Unlock()
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`[{"candidates":[{"content":{"role":"model","parts":[{"text":"ok"}]},"finishReason":1}]}]`))
+			}
+			h := newFailoverHarness(t, serve, serveOpenAIText("never"), func(primary, _ *models.LLM) {
+				primary.Vendor = models.VERTEX
+				primary.APIKey = vertexTestToken
+				primary.APIEndpoint += vertexEndpointSuffix
+				primary.DefaultModel = "gemini-3.5-flash"
+				primary.Failover = models.LLMFailover{}
+			})
+			args, err := json.Marshal(`{"zone":"UTC","` + googleai.ThoughtSignatureArg + `":` + tc.value + `}`)
+			require.NoError(t, err)
+			resp, out := h.post("/ai/primary/v1/chat/completions", `{"model":"gemini-3.5-flash","messages":[{"role":"user","content":"time?"},`+
+				`{"role":"assistant","content":null,"tool_calls":[{"id":"call_1","type":"function","function":{"name":"get_time","arguments":`+string(args)+`}}]},`+
+				`{"role":"tool","tool_call_id":"call_1","content":"12:00"}],`+gemini3Tools+`}`)
+			require.Equal(t, http.StatusOK, resp.StatusCode, string(out))
+			mu.Lock()
+			defer mu.Unlock()
+			require.Len(t, bodies, 1)
+			assert.NotContains(t, bodies[0], googleai.ThoughtSignatureArg)
+			var req struct {
+				Contents []struct {
+					Role  string           `json:"role"`
+					Parts []map[string]any `json:"parts"`
+				} `json:"contents"`
+			}
+			require.NoError(t, json.Unmarshal([]byte(bodies[0]), &req))
+			assert.Equal(t, "model", req.Contents[1].Role)
+			assert.Equal(t, tc.want, req.Contents[1].Parts[0]["thoughtSignature"])
+		})
 	}
 }

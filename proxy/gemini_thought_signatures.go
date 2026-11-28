@@ -72,6 +72,7 @@ func restoreThoughtSignatures(body []byte) []byte {
 			}
 			args, _ := fc["args"].(map[string]any)
 			sig, hasSig := args[googleai.ThoughtSignatureArg].(string)
+			hasSig = hasSig && len(sig) <= googleai.MaxThoughtSignatureBytes
 			if _, present := args[googleai.ThoughtSignatureArg]; present {
 				delete(args, googleai.ThoughtSignatureArg) // never sent on, whatever the role
 				changed = true
@@ -192,8 +193,15 @@ type signatureCarrier struct {
 	// the current top-level object started (-1: none).
 	depth, objDepth int
 	inString, esc   bool
-	err             error
+	// passthrough is set when the current object outgrew maxCarriedObject:
+	// the rest of it is passed on as it is, unbuffered.
+	passthrough bool
+	err         error
 }
+
+// maxCarriedObject bounds one buffered response object. A Gemini chunk is far
+// smaller; a larger one is passed on unchanged rather than held in memory.
+const maxCarriedObject = 16 << 20
 
 func newSignatureCarrier(body io.ReadCloser) *signatureCarrier {
 	return &signatureCarrier{src: bufio.NewReader(body), body: body, objDepth: -1}
@@ -244,7 +252,16 @@ func (s *signatureCarrier) step(b byte) {
 		s.out.WriteByte(b)
 		return
 	}
-	s.obj.WriteByte(b)
+	if s.passthrough {
+		s.out.WriteByte(b)
+	} else {
+		s.obj.WriteByte(b)
+		if s.obj.Len() > maxCarriedObject {
+			s.out.Write(s.obj.Bytes())
+			s.obj.Reset()
+			s.passthrough = true
+		}
+	}
 	switch {
 	case s.esc:
 		s.esc = false
@@ -261,9 +278,12 @@ func (s *signatureCarrier) step(b byte) {
 	case b == '}' || b == ']':
 		s.depth--
 		if s.depth == s.objDepth {
-			s.out.Write(carryThoughtSignatures(s.obj.Bytes()))
+			if !s.passthrough {
+				s.out.Write(carryThoughtSignatures(s.obj.Bytes()))
+			}
 			s.obj.Reset()
 			s.objDepth = -1
+			s.passthrough = false
 		}
 	}
 }

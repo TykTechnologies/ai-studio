@@ -65,3 +65,27 @@ func DecodeSignatureID(id string) (sig string, ok bool) {
 	}
 	return string(raw), true
 }
+
+// ShortSignatureID is a signed tool call ID without its signature
+// (call_gs1_{8 hex}), for a vendor other than Gemini, whose IDs are limited
+// in length (OpenAI's to 40 characters). The same ID always shortens to the
+// same string, so a tool call and its result still pair up. Any other ID is
+// returned as it is.
+func ShortSignatureID(id string) string {
+	rest, found := strings.CutPrefix(id, signatureIDPrefix)
+	if !found {
+		return id
+	}
+	random, _, found := strings.Cut(rest, "_")
+	if !found || len(random) != 8 {
+		return id
+	}
+	return signatureIDPrefix + random
+}
+
+// usableSignature reports whether sig may be sent as a thought signature: a
+// non-empty string of at most MaxThoughtSignatureBytes.
+func usableSignature(v any) (string, bool) {
+	sig, ok := v.(string)
+	return sig, ok && sig != "" && len(sig) <= MaxThoughtSignatureBytes
+}
