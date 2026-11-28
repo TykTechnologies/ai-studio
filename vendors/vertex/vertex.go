@@ -245,9 +245,13 @@ func withTokenSource(ts oauth2.TokenSource) googleai.Option {
 	}
 }
 
+// extractModelIDFromVertexURL returns the model of a Vertex path ending in
+// .../models/{model}:{method}. The method (:generateContent) is not part of
+// the model's name: analytics and model prices are keyed by the name, as
+// VertexModelExtractor does for validation.
 func extractModelIDFromVertexURL(url string) (string, error) {
 	// Regular expression pattern to match the MODEL_ID at the end of the URL
-	pattern := `/models/([^/]+)$`
+	pattern := `/models/([^/:]+)(?::[^/]*)?$`
 
 	// Compile the regular expression
 	re, err := regexp.Compile(pattern)

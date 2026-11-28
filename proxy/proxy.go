@@ -1267,6 +1267,13 @@ func (p *Proxy) handleLLMRequest(w http.ResponseWriter, r *http.Request) {
 		// timeout and left respStatus at 200, so metrics and the span
 		// recorded a success.
 		ErrorHandler: func(w http.ResponseWriter, req *http.Request, err error) {
+			// A Vertex credential refused or not minted at RoundTrip
+			// (authAtRoundTrip) answers as the streaming route does.
+			if credMsg, ok := vendorCredentialErrorMessage(err); ok {
+				respStatus = http.StatusBadGateway
+				respondWithError(w, respStatus, credMsg, err, false)
+				return
+			}
 			respStatus = loopbackAwareTransportStatus(req, err)
 			respondWithError(w, respStatus, upstreamErrorMessage("failed to make upstream request", err), err, false)
 		},
@@ -2125,12 +2132,8 @@ func (p *Proxy) handleStreamingLLMRequest(w http.ResponseWriter, r *http.Request
 	injectUpstreamTrace(upstreamReq.Context(), upstreamReq.Header, llm)
 	if err := p.setVendorAuthHeader(upstreamReq, llm); err != nil {
 		status, msg := http.StatusInternalServerError, "failed to set vendor auth header for streaming"
-		// Google's token endpoint failed, or the LLM's credential is missing
-		// or unusable. The errors carry no key material and name the fix;
-		// the /ai/ and /v1 bridges relay only the message.
-		if errors.Is(err, vertexVendor.ErrTokenMint) || errors.Is(err, vertexVendor.ErrNoCredential) ||
-			errors.Is(err, vertexVendor.ErrInvalidCredential) {
-			status, msg = http.StatusBadGateway, "LLM credential not usable: "+err.Error()
+		if credMsg, ok := vendorCredentialErrorMessage(err); ok {
+			status, msg = http.StatusBadGateway, credMsg
 		}
 		respondWithError(w, status, msg, err, false)
 		return
@@ -2553,6 +2556,21 @@ func (p *Proxy) WaitForAnalytics(ctx context.Context) error {
 
 func (p *Proxy) analyzeResponse(llm *models.LLM, app *models.App, statusCode int, body []byte, reqBody []byte, r *http.Request) {
 	AnalyzeResponse(p.gatewayService, llm, app, statusCode, body, reqBody, r)
+}
+
+// vendorCredentialErrorMessage is the client message for an upstream auth
+// error that means the LLM's credential is missing, refused or could not be
+// turned into a token (Google's token endpoint failed), with ok false for
+// any other error. These errors carry no key material and name the fix
+// (the credential JSON, AI_STUDIO_VERTEX_ADC), and the /ai/ and /v1
+// bridges relay only the message, so it includes the error text. Every
+// gateway route answers it with 502.
+func vendorCredentialErrorMessage(err error) (string, bool) {
+	if errors.Is(err, vertexVendor.ErrTokenMint) || errors.Is(err, vertexVendor.ErrNoCredential) ||
+		errors.Is(err, vertexVendor.ErrInvalidCredential) {
+		return "LLM credential not usable: " + err.Error(), true
+	}
+	return "", false
 }
 
 // authAtRoundTrip reports whether the vendor's auth header is set by the
