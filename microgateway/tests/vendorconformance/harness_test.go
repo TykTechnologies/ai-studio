@@ -33,9 +33,11 @@ import (
 	mgwdb "github.com/TykTechnologies/midsommar/microgateway/internal/database"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/server"
 	"github.com/TykTechnologies/midsommar/microgateway/internal/services"
+	"github.com/TykTechnologies/midsommar/v2/models"
 	vc "github.com/TykTechnologies/midsommar/v2/pkg/testinfra/vendorconformance"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/driver/sqlite"
 	"github.com/TykTechnologies/midsommar/v2/third_party/gorm.io/gorm"
+	vertexVendor "github.com/TykTechnologies/midsommar/v2/vendors/vertex"
 	"github.com/stretchr/testify/require"
 )
 
@@ -355,6 +357,13 @@ func (h *harness) boot() error {
 	if err != nil {
 		return fmt.Errorf("building service container: %w", err)
 	}
+	for _, v := range h.cfg.Vendors {
+		if v.Vendor == models.VERTEX {
+			if err := setVertexCredentialMode(v); err != nil {
+				return err
+			}
+		}
+	}
 
 	app := &mgwdb.App{Name: "Vendor Conformance", IsActive: true}
 	if err := db.Create(app).Error; err != nil {
@@ -442,6 +451,21 @@ func (h *harness) waitHealthy() error {
 		time.Sleep(100 * time.Millisecond)
 	}
 	return fmt.Errorf("gateway never became healthy at %s", h.baseURL)
+}
+
+// setVertexCredentialMode sets the gateway's host-credential switch for the
+// run. By default the credential JSON is the LLM's key, and the switch is
+// cleared so a value in the shell cannot let host credentials stand in for
+// it. With VT_VERTEX_USE_ADC=true the key is empty, and the gateway finds the
+// same file as host Application Default Credentials.
+func setVertexCredentialMode(v vc.VendorConfig) error {
+	if v.Extra["use_adc"] != "true" {
+		return os.Unsetenv(vertexVendor.ADCSetting)
+	}
+	if err := os.Setenv(vertexVendor.ADCSetting, "true"); err != nil {
+		return err
+	}
+	return os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", v.Extra["credentials_file"])
 }
 
 // seedLLM writes one vendor's configuration as a data-plane LLM row.
@@ -587,6 +611,11 @@ func nativePath(v vc.VendorConfig) string {
 			return "models/{model}:generateContent"
 		}
 		return version + "/models/{model}:generateContent"
+	case "vertex":
+		// What the Vertex SDKs send: the project and location are in the path,
+		// and the endpoint ("project:location") names only the host.
+		return "v1/projects/" + v.Extra["project"] + "/locations/" + v.Extra["location"] +
+			"/publishers/google/models/{model}:generateContent"
 	default:
 		// OpenAI-wire vendors: the configured endpoint already carries /v1.
 		if endsWithVersion("v1") {
@@ -780,7 +809,7 @@ func responseFormat(surface vc.Surface, v vc.VendorConfig) vc.Format {
 	switch v.Vendor {
 	case "anthropic":
 		return vc.FormatAnthropicMessage
-	case "google_ai":
+	case "google_ai", "vertex":
 		return vc.FormatGeminiGenerate
 	default:
 		return vc.FormatOpenAICompletion

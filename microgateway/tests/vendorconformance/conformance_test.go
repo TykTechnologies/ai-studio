@@ -357,6 +357,8 @@ func assertUsageSane(t *testing.T, u vc.Usage) {
 	if !u.Consistent() {
 		// Reported, not failed: some vendors fold reasoning or cache tokens into
 		// the total. A mismatch is worth eyes, not an automatic red build.
+		// Google AI and Vertex on the OpenAI-shaped surfaces report total as
+		// prompt+completion, without thinking tokens (midsommar-clean-a2i).
 		t.Logf("note: usage does not sum (%s); expected prompt+completion == total", u)
 	}
 }
@@ -463,8 +465,9 @@ func adaptForNativeSurface(url string, req vc.ChatRequest, c vc.Case) (string, v
 		}
 		return url, out, false
 
-	case "google_ai":
-		// Gemini puts the model in the path and uses contents/parts, not messages.
+	case "google_ai", "vertex":
+		// Gemini (and Vertex, the same wire format) puts the model in the path
+		// and uses contents/parts, not messages.
 		url = strings.ReplaceAll(url, "{model}", c.Model)
 		contents := []any{}
 		if msgs, ok := req["messages"].([]any); ok {

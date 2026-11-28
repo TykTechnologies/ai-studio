@@ -98,7 +98,8 @@ type VendorConfig struct {
 	// Vendor is the platform vendor enum this config is seeded as.
 	Vendor models.Vendor
 	// APIKey is the credential stored on LLM.APIKey. Empty for vendors that
-	// authenticate out of band (bedrock via Metadata, vertex via ADC).
+	// authenticate out of band (bedrock via Metadata, vertex in its
+	// VT_VERTEX_USE_ADC mode). For vertex it is the credential JSON's content.
 	APIKey string
 	// Endpoint is stored verbatim on LLM.APIEndpoint. Its meaning is
 	// vendor-specific: a base URL for most, "project:location" for vertex, a
@@ -406,16 +407,28 @@ func loadVertex() (VendorConfig, string) {
 	case model == "":
 		return VendorConfig{}, "VT_VERTEX_MODEL_LATEST not set"
 	}
-	if _, err := os.Stat(creds); err != nil {
+	// The credential JSON is the LLM's key, as an operator configures it
+	// (path 1 of the Vertex credential chain). With VT_VERTEX_USE_ADC=true the
+	// key stays empty and the gateway finds the same file through host
+	// Application Default Credentials instead (path 3); the harness then sets
+	// AI_STUDIO_VERTEX_ADC=true and GOOGLE_APPLICATION_CREDENTIALS for the run.
+	data, err := os.ReadFile(creds)
+	if err != nil {
 		return VendorConfig{}, fmt.Sprintf("VT_VERTEX_CREDENTIALS_FILE %s is not readable: %v", creds, err)
+	}
+	useADC, _ := strconv.ParseBool(env("VT_VERTEX_USE_ADC"))
+	apiKey := strings.TrimSpace(string(data))
+	if useADC {
+		apiKey = ""
 	}
 	location := envOr("VT_VERTEX_LOCATION", "us-central1")
 	return VendorConfig{
 		Key:       "vertex",
 		EnvPrefix: "VT_VERTEX",
 		Vendor:    models.VERTEX,
-		// vendors/vertex/vertex.go splits APIEndpoint on ":" into project and
-		// location. It is not a URL.
+		APIKey:    apiKey,
+		// "project:location"; the gateway derives the regional, multi-regional
+		// or global Vertex host from the location.
 		Endpoint: project + ":" + location,
 		Models: nonEmpty(map[ModelSlot]string{
 			ModelLatest: model,
@@ -425,6 +438,7 @@ func loadVertex() (VendorConfig, string) {
 			"credentials_file": creds,
 			"project":          project,
 			"location":         location,
+			"use_adc":          strconv.FormatBool(useADC),
 		},
 	}, ""
 }
